@@ -1,21 +1,6 @@
-from pathlib import Path
+import pytest
 
-from news_dashboard.db import describe_database, init_db, insert_duplicate_article_sql
-from news_dashboard.ingest import ingest_all, list_articles
-
-
-def test_sqlite_file_database_reports_path_and_persists_between_connections(tmp_path: Path) -> None:
-    db_path = tmp_path / "durable.db"
-
-    init_db(db_path)
-    first = ingest_all(db_path)
-    second = ingest_all(db_path)
-
-    assert db_path.exists()
-    assert sum(value for value in first.values() if value > 0) >= 0
-    assert sum(value for value in second.values() if value > 0) == 0
-    assert list_articles(limit=1, db_path=db_path) or first == second
-    assert describe_database(db_path) == str(db_path)
+from news_dashboard.db import active_database_url, describe_database, insert_article_sql, insert_duplicate_article_sql
 
 
 def test_postgres_url_is_reported_without_password() -> None:
@@ -24,10 +9,30 @@ def test_postgres_url_is_reported_without_password() -> None:
     assert describe_database(database_url=dsn) == "postgresql://news_dashboard:***@postgres:5432/news_dashboard"
 
 
-def test_duplicate_article_insert_uses_postgres_conflict_syntax(monkeypatch) -> None:
-    monkeypatch.setenv("DATABASE_URL", "postgresql://news_dashboard:secret@postgres:5432/news_dashboard")
+def test_database_url_is_required(monkeypatch) -> None:
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    monkeypatch.delenv("POSTGRES_HOST", raising=False)
 
+    with pytest.raises(RuntimeError, match="Postgres is required"):
+        active_database_url()
+
+
+def test_non_postgres_database_url_is_rejected() -> None:
+    with pytest.raises(RuntimeError, match="DATABASE_URL must start"):
+        active_database_url("sqlite:///tmp/news.db")
+
+
+def test_article_insert_sql_is_postgres_only() -> None:
+    sql = insert_article_sql()
+
+    assert "ON CONFLICT (url) DO NOTHING" in sql
+    assert "%s" in sql
+    assert "INSERT OR IGNORE" not in sql
+
+
+def test_duplicate_article_insert_sql_is_postgres_only() -> None:
     sql = insert_duplicate_article_sql()
 
     assert "ON CONFLICT (url) DO NOTHING" in sql
+    assert "%s" in sql
     assert "INSERT OR IGNORE" not in sql

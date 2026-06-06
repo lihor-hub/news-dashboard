@@ -2,8 +2,8 @@
 
 Embedding model : text-embedding-3-small (OpenAI)
 Answer model    : claude-haiku-4-5 (Anthropic)
-Storage         : articles.embedding BLOB (serialized float32 numpy array)
-Retrieval       : pure-Python cosine similarity (no sqlite-vss needed)
+Storage         : articles.embedding BYTEA (serialized float32 numpy array)
+Retrieval       : pure-Python cosine similarity
 """
 from __future__ import annotations
 
@@ -59,7 +59,7 @@ def ensure_article_embedded(article_id: int, db_path: Any = None) -> None:
     init_db(db_path)
     with connect(db_path) as conn:
         row = conn.execute(
-            "SELECT id, title, summary, embedding FROM articles WHERE id=?",
+            "SELECT id, title, summary, embedding FROM articles WHERE id=%s",
             (article_id,),
         ).fetchone()
         if row is None or row["embedding"] is not None:
@@ -70,7 +70,7 @@ def ensure_article_embedded(article_id: int, db_path: Any = None) -> None:
         vector = _embed(text)
         blob = _pack(vector)
         conn.execute(
-            "UPDATE articles SET embedding=? WHERE id=?",
+            "UPDATE articles SET embedding=%s WHERE id=%s",
             (blob, article_id),
         )
 
@@ -100,7 +100,7 @@ def embed_all_eligible(db_path: Any = None) -> int:
         from .db import connect as _connect
         with _connect(db_path) as conn:
             conn.execute(
-                "UPDATE articles SET embedding=? WHERE id=?",
+                "UPDATE articles SET embedding=%s WHERE id=%s",
                 (blob, row["id"]),
             )
         count += 1

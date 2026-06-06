@@ -47,9 +47,6 @@ spec:
                     secretKeyRef:
                       name: {{ include "news-dashboard.fullname" . }}-postgres
                       key: POSTGRES_PASSWORD
-{{- else }}
-                - name: NEWS_DASHBOARD_DB
-                  value: {{ .Values.app.databasePath | quote }}
 {{- end }}
               volumeMounts:
                 - name: data

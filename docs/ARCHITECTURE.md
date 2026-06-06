@@ -5,7 +5,7 @@ This project is a private personal news dashboard for `news.lihor.ro`. It collec
 The system is not a large microservice platform. It is best understood as a modular monolith with a small number of runtime units:
 
 - `news-dashboard`: the FastAPI backend, which also serves the built React frontend in container and Kubernetes deployments.
-- `postgres`: the durable production database.
+- `postgres`: the durable application database.
 - `news-dashboard-ingest`: a Kubernetes CronJob batch workload that runs ingestion on a schedule.
 - Optional external integrations: RSS/Atom feeds, a scraped Anthropic News page, SMTP, GHCR, GitHub Actions, and host-level Caddy.
 
@@ -18,7 +18,7 @@ flowchart TB
   subgraph LocalDev["Local development"]
     Vite["Vite React dev server<br/>localhost:5173"]
     FastAPIDev["FastAPI backend<br/>uvicorn news_dashboard.main:app"]
-    SQLite["SQLite fallback<br/>NEWS_DASHBOARD_DB"]
+    LocalPostgres["Postgres<br/>docker compose"]
   end
 
   subgraph Container["Docker / Production image"]
@@ -126,7 +126,7 @@ sequenceDiagram
     Ingest->>Ingest: infer tags
     Ingest->>Ingest: create summary/reason
     Ingest->>Ingest: calculate importance_score
-    Ingest->>DB: INSERT article ON CONFLICT/IGNORE
+    Ingest->>DB: INSERT article ON CONFLICT
     Ingest->>DB: update source health
   end
 

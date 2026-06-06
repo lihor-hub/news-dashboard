@@ -8,8 +8,7 @@ RUN npm run build
 
 FROM python:3.11-slim AS runtime
 ENV PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1 \
-    NEWS_DASHBOARD_DB=/data/news-dashboard.db
+    PYTHONUNBUFFERED=1
 WORKDIR /app
 RUN adduser --disabled-password --gecos '' appuser && mkdir -p /data && chown -R appuser:appuser /data
 COPY pyproject.toml ./

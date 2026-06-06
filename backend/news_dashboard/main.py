@@ -117,12 +117,12 @@ def set_source_enabled(slug: str, payload: EnabledUpdate) -> dict:
     init_db()
     with connect() as conn:
         cursor = conn.execute(
-            "UPDATE sources SET enabled=? WHERE slug=?",
+            "UPDATE sources SET enabled=%s WHERE slug=%s",
             (1 if payload.enabled else 0, slug),
         )
         if cursor.rowcount == 0:
             raise HTTPException(status_code=404, detail="source not found")
-        row = conn.execute("SELECT * FROM sources WHERE slug=?", (slug,)).fetchone()
+        row = conn.execute("SELECT * FROM sources WHERE slug=%s", (slug,)).fetchone()
         return row_to_dict(row)
 
 

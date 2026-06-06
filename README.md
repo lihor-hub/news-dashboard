@@ -28,9 +28,15 @@ python -m venv .venv
 source .venv/bin/activate
 pip install -e '.[dev]'
 npm install
-NEWS_DASHBOARD_DB=./data/news-dashboard.db news-dashboard init
-NEWS_DASHBOARD_DB=./data/news-dashboard.db news-dashboard ingest
-NEWS_DASHBOARD_DB=./data/news-dashboard.db uvicorn news_dashboard.main:app --reload --app-dir backend
+docker compose up -d postgres
+export POSTGRES_HOST=localhost
+export POSTGRES_PORT=5432
+export POSTGRES_DB=news_dashboard
+export POSTGRES_USER=news_dashboard
+export POSTGRES_PASSWORD=news-dashboard-local-password
+news-dashboard init
+news-dashboard ingest
+uvicorn news_dashboard.main:app --reload --app-dir backend
 npm run dev
 ```
 
@@ -46,13 +52,13 @@ Open `http://localhost:8080`.
 
 ## Durable database
 
-The Kubernetes deployment uses PostgreSQL by default, backed by durable host storage on the local single-node cluster:
+The application uses PostgreSQL. The Kubernetes deployment provisions `postgres:16-alpine` by default, backed by durable host storage on the local single-node cluster:
 
 ```text
 /home/ioachim-minipc/news-dashboard-postgres-data
 ```
 
-SQLite remains only a local/test fallback. Existing SQLite data can be migrated with:
+SQLite is not a runtime database. Existing legacy SQLite data can be migrated into PostgreSQL with:
 
 ```bash
 news-dashboard-migrate /data/news-dashboard.db

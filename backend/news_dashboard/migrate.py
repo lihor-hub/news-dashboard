@@ -52,7 +52,7 @@ def sqlite_to_postgres(sqlite_path: Path = typer.Argument(..., help="Existing SQ
                   slug, name, url, category, kind, priority, enabled, last_checked_at,
                   last_success_at, last_error, last_fetched_count, last_inserted_count
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 ON CONFLICT(slug) DO UPDATE SET
                   name=excluded.name,
                   url=excluded.url,
@@ -76,7 +76,7 @@ def sqlite_to_postgres(sqlite_path: Path = typer.Argument(..., help="Existing SQ
                   url, canonical_url, title, source_slug, source_name, category, kind, published_at,
                   summary, reason, importance_score, tags, status, discovered_at, read_at, saved_at,
                   skipped_at, archived_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 ON CONFLICT (url) DO UPDATE SET
                   title=excluded.title,
                   source_slug=excluded.source_slug,
