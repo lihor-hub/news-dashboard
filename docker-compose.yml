@@ -26,7 +26,6 @@ services:
       POSTGRES_USER: news_dashboard
       POSTGRES_PASSWORD: news-dashboard-local-password
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
-      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
     depends_on:
       postgres:
         condition: service_healthy

@@ -1,7 +1,7 @@
 """AI Q&A feature: embedding generation and retrieval-augmented answering.
 
 Embedding model : text-embedding-3-small (OpenAI)
-Answer model    : claude-haiku-4-5 (Anthropic)
+Answer model    : gpt-4o-mini (OpenAI)
 Storage         : articles.embedding BLOB (serialized float32 numpy array)
 Retrieval       : pure-Python cosine similarity (no sqlite-vss needed)
 """
@@ -13,6 +13,7 @@ from typing import Any
 
 MIN_ARTICLES = 5   # refuse to answer if fewer than this many articles are embedded
 TOP_K = 8          # articles to include as context
+DEFAULT_ANSWER_MODEL = "gpt-4o-mini"
 
 
 class MissingAICredentialsError(RuntimeError):
@@ -51,6 +52,22 @@ def _embed(text: str) -> list[float]:
         input=text,
     )
     return response.data[0].embedding
+
+
+def _answer(system_prompt: str, user_prompt: str) -> str:
+    """Generate an answer with OpenAI using the same key as embeddings."""
+    from openai import OpenAI  # lazy import — optional dep at import time
+
+    client = OpenAI(api_key=_require_env("OPENAI_API_KEY", "use Ask AI"))
+    response = client.chat.completions.create(
+        model=os.getenv("OPENAI_ANSWER_MODEL", DEFAULT_ANSWER_MODEL),
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ],
+        max_tokens=1024,
+    )
+    return response.choices[0].message.content or ""
 
 
 # ── Cosine similarity ──────────────────────────────────────────────────────
@@ -188,19 +205,8 @@ def ask(query: str, db_path: Any = None) -> dict:
         f"Question: {query}"
     )
 
-    # 6. Call claude-haiku-4-5 for the answer
-    import anthropic  # lazy import
-
-    client = anthropic.Anthropic(
-        api_key=_require_env("ANTHROPIC_API_KEY", "generate answers")
-    )
-    message = client.messages.create(
-        model="claude-haiku-4-5",
-        max_tokens=1024,
-        system=system_prompt,
-        messages=[{"role": "user", "content": user_prompt}],
-    )
-    answer_text = message.content[0].text if message.content else ""
+    # 6. Call OpenAI for the answer
+    answer_text = _answer(system_prompt, user_prompt)
 
     # 7. Return answer + deduplicated source list (top-k order)
     sources = [

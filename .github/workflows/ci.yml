@@ -122,7 +122,6 @@ jobs:
           GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
           GHCR_ACTOR: ${{ github.actor }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
           set -euo pipefail
 
@@ -143,9 +142,6 @@ jobs:
           ai_secret_args=()
           if [ -n "$OPENAI_API_KEY" ]; then
             ai_secret_args+=(--from-literal=OPENAI_API_KEY="$OPENAI_API_KEY")
-          fi
-          if [ -n "$ANTHROPIC_API_KEY" ]; then
-            ai_secret_args+=(--from-literal=ANTHROPIC_API_KEY="$ANTHROPIC_API_KEY")
           fi
 
           ai_helm_args=()

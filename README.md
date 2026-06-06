@@ -36,11 +36,10 @@ npm run dev
 
 Open `http://localhost:5173`.
 
-Ask AI requires both provider keys in the backend environment:
+Ask AI requires an OpenAI key in the backend environment:
 
 ```bash
 export OPENAI_API_KEY=...
-export ANTHROPIC_API_KEY=...
 ```
 
 ## Container
@@ -55,8 +54,7 @@ For Kubernetes, create a Secret and point Helm at it:
 
 ```bash
 kubectl create secret generic news-dashboard-ai \
-  --from-literal=OPENAI_API_KEY=... \
-  --from-literal=ANTHROPIC_API_KEY=...
+  --from-literal=OPENAI_API_KEY=...
 
 helm upgrade --install news-dashboard ./helm/news-dashboard \
   --set app.ai.existingSecret=news-dashboard-ai

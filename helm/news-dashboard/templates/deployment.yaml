@@ -63,12 +63,6 @@ spec:
                   name: {{ .Values.app.ai.existingSecret | quote }}
                   key: {{ .Values.app.ai.openaiApiKeyKey | quote }}
                   optional: true
-            - name: ANTHROPIC_API_KEY
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .Values.app.ai.existingSecret | quote }}
-                  key: {{ .Values.app.ai.anthropicApiKeyKey | quote }}
-                  optional: true
 {{- end }}
           ports:
             - containerPort: 8080

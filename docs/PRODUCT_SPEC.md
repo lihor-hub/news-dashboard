@@ -103,7 +103,7 @@ After ≥ 100 saved/read articles exist:
 
 ### Embeddings / vector search (v1.2)
 
-- Embed title + summary via a local model (e.g., `sentence-transformers`) or the Anthropic API.
+- Embed title + summary via OpenAI.
 - Store in a separate `article_embeddings` table as a BLOB or via SQLite-VSS.
 - Enables semantic search and similarity grouping.
 
@@ -121,13 +121,13 @@ POST /api/ask
 Implementation:
 1. Run `/api/search?q=<question_keywords>` to retrieve candidate articles.
 2. Bundle up to N articles (title + summary + date + source) into a prompt.
-3. Call Claude with the bundle and question.
+3. Call OpenAI with the bundle and question.
 4. Return answer + article IDs used as citations.
 
 Privacy/security:
 - Endpoint is internal-only (behind Caddy basic_auth).
 - No article content is sent to external APIs unless the user explicitly enables the AI hook.
-- Anthropic API key stored as an environment secret, never in source.
+- OpenAI API key stored as an environment secret, never in source.
 - The AI hook is behind an `AI_ENABLED=1` env flag — disabled by default.
 
 ### Privacy/security boundaries
