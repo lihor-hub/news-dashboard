@@ -259,7 +259,24 @@ def insert_article_sql() -> str:
             INSERT INTO articles(
               url, canonical_url, title, source_slug, source_name, category, kind,
               published_at, summary, reason, importance_score, tags
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            ON CONFLICT (url) DO NOTHING
+            """
+    return """
+        INSERT OR IGNORE INTO articles(
+          url, canonical_url, title, source_slug, source_name, category, kind,
+          published_at, summary, reason, importance_score, tags
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """
+
+
+def insert_duplicate_article_sql() -> str:
+    if is_postgres():
+        return """
+            INSERT INTO articles(
+              url, canonical_url, title, source_slug, source_name, category, kind,
+              published_at, summary, reason, importance_score, tags
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             ON CONFLICT (url) DO NOTHING
             """
     return """
