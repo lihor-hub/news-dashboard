@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import re
+import threading
+import time
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
 from html import unescape
@@ -10,7 +13,8 @@ from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
 import feedparser
 
-from .db import connect, init_db, insert_article_sql, row_to_dict, search_articles_sql
+from .db import connect, init_db, insert_article_sql, is_postgres, row_to_dict, search_articles_sql
+from .ingest_events import ingest_events
 from .sources import DEFAULT_SOURCES, SourceDefinition
 
 try:
@@ -32,6 +36,16 @@ except ImportError:
         return len(sa & sb) / len(sa | sb)
 
 DEDUP_TITLE_THRESHOLD = 0.85
+_INGEST_RUN_LOCK = threading.Lock()
+
+
+@dataclass(frozen=True)
+class SourceIngestOutcome:
+    source_name: str
+    articles_found: int
+    articles_new: int
+    duration_seconds: float
+    error_message: str | None = None
 
 TRACKING_PARAMS = {
     "utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content",
@@ -210,13 +224,14 @@ def sync_sources(db_path: Path | None = None) -> None:
             )
 
 
-def ingest_source(source: SourceDefinition, db_path: Path | None = None) -> int:
+def _ingest_source(source: SourceDefinition, db_path: Path | None = None) -> SourceIngestOutcome:
     """Fetch and insert articles for a single source. Returns count inserted."""
     from .scraper import scrape_source
 
     checked_at = now_iso()
     inserted = 0
     fetched = 0
+    started = time.perf_counter()
 
     try:
         if source.kind == "scraped_page":
@@ -276,8 +291,11 @@ def ingest_source(source: SourceDefinition, db_path: Path | None = None) -> int:
                         (now_iso(), canonical_id),
                     )
                 else:
+                    sql = insert_article_sql()
+                    if not is_postgres():
+                        sql = sql.replace("%s", "?")
                     cursor = conn.execute(
-                        insert_article_sql(),
+                        sql,
                         (url, url, title, source.slug, source.name, source.category, source.kind,
                          entry.get("date"), summary, reason, score, tags),
                     )
@@ -301,21 +319,125 @@ def ingest_source(source: SourceDefinition, db_path: Path | None = None) -> int:
                    WHERE slug=?""",
                 (checked_at, error_msg, source.slug),
             )
-        raise
+        return SourceIngestOutcome(
+            source_name=source.name,
+            articles_found=fetched,
+            articles_new=0,
+            duration_seconds=time.perf_counter() - started,
+            error_message=error_msg,
+        )
 
-    return inserted
+    return SourceIngestOutcome(
+        source_name=source.name,
+        articles_found=fetched,
+        articles_new=inserted,
+        duration_seconds=time.perf_counter() - started,
+    )
+
+
+def ingest_source(source: SourceDefinition, db_path: Path | None = None) -> int:
+    """Fetch and insert articles for a single source. Returns count inserted."""
+    outcome = _ingest_source(source, db_path)
+    if outcome.error_message is not None:
+        raise RuntimeError(outcome.error_message)
+    return outcome.articles_new
+
+
+def _row_value(row: Any, key: str, index: int) -> Any:
+    if isinstance(row, dict):
+        return row[key]
+    try:
+        return row[key]
+    except Exception:
+        return row[index]
+
+
+def _create_ingest_run(db_path: Path | None, started_at: str) -> int:
+    init_db(db_path)
+    with connect(db_path) as conn:
+        row = conn.execute(
+            "INSERT INTO ingest_runs(started_at) VALUES (?) RETURNING id",
+            (started_at,),
+        ).fetchone()
+    return int(_row_value(row, "id", 0))
+
+
+def _record_ingest_source(run_id: int, outcome: SourceIngestOutcome, db_path: Path | None) -> None:
+    with connect(db_path) as conn:
+        conn.execute(
+            """
+            INSERT INTO ingest_run_sources(run_id, source_name, articles_found, articles_new, error_message)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (
+                run_id,
+                outcome.source_name,
+                outcome.articles_found,
+                outcome.articles_new,
+                outcome.error_message,
+            ),
+        )
+
+
+def _finish_ingest_run(
+    run_id: int,
+    db_path: Path | None,
+    finished_at: str,
+    duration_ms: int,
+    total_new: int,
+    total_errors: int,
+) -> None:
+    with connect(db_path) as conn:
+        conn.execute(
+            """
+            UPDATE ingest_runs
+               SET finished_at=?, duration_ms=?, total_new=?, total_errors=?
+             WHERE id=?
+            """,
+            (finished_at, duration_ms, total_new, total_errors, run_id),
+        )
+
+
+def _format_source_log(outcome: SourceIngestOutcome) -> str:
+    if outcome.error_message:
+        return f"✗ {outcome.source_name} — {outcome.error_message}"
+    article_word = "article" if outcome.articles_new == 1 else "articles"
+    return f"✓ {outcome.source_name} — {outcome.articles_new} new {article_word} ({outcome.duration_seconds:.1f}s)"
 
 
 def ingest_all(db_path: Path | None = None) -> dict[str, int]:
-    sync_sources(db_path)
-    results: dict[str, int] = {}
-    for source in DEFAULT_SOURCES:
-        if not source.enabled:
-            continue
+    with _INGEST_RUN_LOCK:
+        sync_sources(db_path)
+        run_started_at = now_iso()
+        run_started = time.perf_counter()
+        run_id = _create_ingest_run(db_path, run_started_at)
+        ingest_events.start_run(run_id, f"Ingest run #{run_id} started at {run_started_at}")
+
+        results: dict[str, int] = {}
+        total_new = 0
+        total_errors = 0
         try:
-            results[source.slug] = ingest_source(source, db_path)
-        except Exception:
-            results[source.slug] = -1
+            for source in DEFAULT_SOURCES:
+                if not source.enabled:
+                    continue
+                outcome = _ingest_source(source, db_path)
+                _record_ingest_source(run_id, outcome, db_path)
+                ingest_events.append_line(_format_source_log(outcome))
+                if outcome.error_message is not None:
+                    results[source.slug] = -1
+                    total_errors += 1
+                else:
+                    results[source.slug] = outcome.articles_new
+                    total_new += outcome.articles_new
+        finally:
+            duration_seconds = time.perf_counter() - run_started
+            duration_ms = int(duration_seconds * 1000)
+            _finish_ingest_run(run_id, db_path, now_iso(), duration_ms, total_new, total_errors)
+            article_word = "article" if total_new == 1 else "articles"
+            error_text = f", {total_errors} error{'s' if total_errors != 1 else ''}" if total_errors else ""
+            ingest_events.complete_run(
+                f"Summary — {total_new} new {article_word}{error_text} ({duration_seconds:.1f}s)"
+            )
     return results
 
 

@@ -429,6 +429,46 @@ interface SchedulerTabProps {
   ingesting: boolean
 }
 
+function IngestTerminal() {
+  const [lines, setLines] = useState<string[]>([])
+  const [connected, setConnected] = useState(false)
+  const terminalRef = useRef<HTMLPreElement | null>(null)
+
+  useEffect(() => {
+    const events = new EventSource('/api/ingest/stream')
+
+    events.onopen = () => setConnected(true)
+    events.onerror = () => setConnected(false)
+    events.addEventListener('reset', () => setLines([]))
+    events.addEventListener('line', (event) => {
+      setLines((prev) => [...prev, event.data])
+    })
+
+    return () => events.close()
+  }, [])
+
+  useEffect(() => {
+    const terminal = terminalRef.current
+    if (terminal) {
+      terminal.scrollTop = terminal.scrollHeight
+    }
+  }, [lines])
+
+  return (
+    <div className="scheduler-card scheduler-terminal-card">
+      <div className="scheduler-terminal-header">
+        <h3 className="scheduler-card-title">Ingest Terminal</h3>
+        <span className={`scheduler-terminal-status${connected ? ' connected' : ''}`}>
+          {connected ? 'Live' : 'Connecting'}
+        </span>
+      </div>
+      <pre className="scheduler-terminal" ref={terminalRef} aria-live="polite">
+        {lines.length ? lines.join('\n') : 'Waiting for ingest output...'}
+      </pre>
+    </div>
+  )
+}
+
 function SchedulerTab({ onFetchNow, ingesting }: SchedulerTabProps) {
   const [status, setStatus] = useState<SchedulerStatus | null>(null)
   const [loadingStatus, setLoadingStatus] = useState(true)
@@ -602,6 +642,8 @@ function SchedulerTab({ onFetchNow, ingesting }: SchedulerTabProps) {
           </button>
         </div>
       </div>
+
+      <IngestTerminal />
     </div>
   )
 }
