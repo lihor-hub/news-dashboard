@@ -6,10 +6,12 @@ from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from .db import connect, describe_database, init_db, row_to_dict
+from .ingest_events import stream_ingest_events
 from .ingest import ingest_all, list_articles, search_articles, set_article_status, sync_sources
 from .scheduler import (
     get_interval_minutes,
@@ -66,6 +68,11 @@ def health() -> dict:
 def ingest() -> dict:
     results = ingest_all()
     return {"results": results, "inserted": sum(v for v in results.values() if v > 0)}
+
+
+@app.get("/api/ingest/stream")
+def ingest_stream() -> StreamingResponse:
+    return StreamingResponse(stream_ingest_events(), media_type="text/event-stream")
 
 
 @app.get("/api/articles")

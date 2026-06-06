@@ -59,6 +59,24 @@ CREATE TABLE IF NOT EXISTS articles (
   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS ingest_runs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  started_at TEXT NOT NULL,
+  finished_at TEXT,
+  duration_ms INTEGER,
+  total_new INTEGER,
+  total_errors INTEGER
+);
+
+CREATE TABLE IF NOT EXISTS ingest_run_sources (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  run_id INTEGER REFERENCES ingest_runs(id),
+  source_name TEXT NOT NULL,
+  articles_found INTEGER,
+  articles_new INTEGER,
+  error_message TEXT
+);
+
 CREATE INDEX IF NOT EXISTS idx_articles_status ON articles(status);
 CREATE INDEX IF NOT EXISTS idx_articles_category ON articles(category);
 CREATE INDEX IF NOT EXISTS idx_articles_discovered ON articles(discovered_at DESC);
@@ -149,6 +167,26 @@ POSTGRES_SCHEMA = [
     "CREATE INDEX IF NOT EXISTS idx_articles_category ON articles(category)",
     "CREATE INDEX IF NOT EXISTS idx_articles_discovered ON articles(discovered_at DESC)",
     "CREATE INDEX IF NOT EXISTS idx_articles_source ON articles(source_slug)",
+    """
+    CREATE TABLE IF NOT EXISTS ingest_runs (
+      id           SERIAL PRIMARY KEY,
+      started_at   TIMESTAMPTZ NOT NULL,
+      finished_at  TIMESTAMPTZ,
+      duration_ms  INTEGER,
+      total_new    INTEGER,
+      total_errors INTEGER
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS ingest_run_sources (
+      id             SERIAL PRIMARY KEY,
+      run_id         INTEGER REFERENCES ingest_runs(id),
+      source_name    TEXT NOT NULL,
+      articles_found INTEGER,
+      articles_new   INTEGER,
+      error_message  TEXT
+    )
+    """,
     # PostgreSQL FTS via tsvector — added as a generated column if not present
     "ALTER TABLE articles ADD COLUMN IF NOT EXISTS fts_vector tsvector GENERATED ALWAYS AS (to_tsvector('english', coalesce(title,'') || ' ' || coalesce(summary,'') || ' ' || coalesce(tags,''))) STORED",
     "CREATE INDEX IF NOT EXISTS idx_articles_fts ON articles USING gin(fts_vector)",

@@ -2010,6 +2010,56 @@ kbd {
   cursor: not-allowed;
 }
 
+.scheduler-terminal-card {
+  padding: 0;
+  overflow: hidden;
+}
+
+.scheduler-terminal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 18px 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.scheduler-terminal-header .scheduler-card-title {
+  margin-bottom: 0;
+}
+
+.scheduler-terminal-status {
+  flex: 0 0 auto;
+  border: 1px solid var(--border);
+  border-radius: var(--r-full);
+  padding: 3px 9px;
+  background: var(--surface-alt);
+  color: var(--text-2);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.scheduler-terminal-status.connected {
+  border-color: transparent;
+  background: var(--s-read-bg);
+  color: var(--s-read-fg);
+}
+
+.scheduler-terminal {
+  min-height: 240px;
+  max-height: 420px;
+  margin: 0;
+  padding: 16px 18px;
+  overflow: auto;
+  background: #10151f;
+  color: #e5edf7;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font-size: 12px;
+  line-height: 1.65;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 @media (max-width: 980px) {
   .stats-overview-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
