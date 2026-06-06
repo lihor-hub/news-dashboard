@@ -1,4 +1,4 @@
-import type { Article, ArticleStatus, AskResponse, Source, Summary } from './types'
+import type { Article, ArticleStatus, AskResponse, Source, SourceHealth, Summary } from './types'
 
 async function requestJson<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, {
@@ -30,6 +30,11 @@ export async function searchArticles(q: string, limit = 50): Promise<Article[]> 
 
 export async function fetchSources(): Promise<Source[]> {
   const data = await requestJson<{ items: Source[] }>('/api/sources')
+  return data.items
+}
+
+export async function fetchSourceHealth(): Promise<SourceHealth[]> {
+  const data = await requestJson<{ items: SourceHealth[] }>('/api/sources/health')
   return data.items
 }
 

@@ -4,6 +4,7 @@ import {
   askAI,
   fetchArticles,
   fetchSchedulerStatus,
+  fetchSourceHealth,
   fetchSources,
   fetchSummary,
   ingestNow,
@@ -15,7 +16,7 @@ import {
   updateSourceEnabled,
 } from './api'
 import type { SchedulerStatus } from './api'
-import type { Article, ArticleStatus, AskResponse, Source, Summary } from './types'
+import type { Article, ArticleStatus, AskResponse, Source, SourceHealth, Summary } from './types'
 
 type ActiveTab = 'inbox' | 'saved' | 'read' | 'skipped' | 'archived' | 'sources' | 'scheduler'
 
@@ -429,9 +430,78 @@ interface SchedulerTabProps {
   ingesting: boolean
 }
 
+function SourceHealthTable({ items, loading }: { items: SourceHealth[]; loading: boolean }) {
+  const sorted = useMemo(() => {
+    return [...items].sort((a, b) => {
+      if (b.error_streak !== a.error_streak) return b.error_streak - a.error_streak
+      if (a.status !== b.status) return a.status === 'ERROR' ? -1 : 1
+      return a.name.localeCompare(b.name)
+    })
+  }, [items])
+
+  if (loading) {
+    return (
+      <div className="source-health-loading">
+        <div className="skeleton sk-line" style={{ width: '70%' }} />
+        <div className="skeleton sk-line" style={{ width: '55%' }} />
+        <div className="skeleton sk-line" style={{ width: '62%' }} />
+      </div>
+    )
+  }
+
+  if (sorted.length === 0) {
+    return <p className="source-health-empty">No sources configured.</p>
+  }
+
+  return (
+    <div className="source-health-table-wrap">
+      <table className="source-health-table">
+        <thead>
+          <tr>
+            <th>Source name</th>
+            <th>Last checked</th>
+            <th>Status</th>
+            <th>Articles last run</th>
+            <th>Error streak</th>
+          </tr>
+        </thead>
+        <tbody>
+          {sorted.map((source) => (
+            <tr key={source.slug} className={source.status === 'ERROR' ? 'source-health-row-error' : undefined}>
+              <td>
+                <span className="source-health-name">{source.name}</span>
+                <span className="source-health-category">{source.category.replace(/-/g, ' ')}</span>
+              </td>
+              <td>{source.last_checked_at ? relativeTime(source.last_checked_at) : 'Never'}</td>
+              <td>
+                <span className={`source-health-status ${source.status.toLowerCase()}`}>
+                  {source.status}
+                </span>
+              </td>
+              <td>{source.articles_last_run}</td>
+              <td>
+                <span className="source-health-streak" title={source.last_error ?? undefined}>
+                  {source.error_streak}
+                </span>
+                {source.last_error && (
+                  <span className="source-health-last-error" title={source.last_error}>
+                    {source.last_error}
+                  </span>
+                )}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
 function SchedulerTab({ onFetchNow, ingesting }: SchedulerTabProps) {
   const [status, setStatus] = useState<SchedulerStatus | null>(null)
   const [loadingStatus, setLoadingStatus] = useState(true)
+  const [sourceHealth, setSourceHealth] = useState<SourceHealth[]>([])
+  const [loadingSourceHealth, setLoadingSourceHealth] = useState(true)
   const [customMinutes, setCustomMinutes] = useState('')
   const [actionPending, setActionPending] = useState(false)
   const [tabMessage, setTabMessage] = useState<{ text: string; kind: 'success' | 'error' } | null>(null)
@@ -448,8 +518,20 @@ function SchedulerTab({ onFetchNow, ingesting }: SchedulerTabProps) {
     }
   }
 
+  async function loadHealth() {
+    setLoadingSourceHealth(true)
+    try {
+      setSourceHealth(await fetchSourceHealth())
+    } catch (err) {
+      setTabMessage({ text: err instanceof Error ? err.message : 'Failed to load source health', kind: 'error' })
+    } finally {
+      setLoadingSourceHealth(false)
+    }
+  }
+
   useEffect(() => {
     void loadStatus()
+    void loadHealth()
   }, [])
 
   useEffect(() => {
@@ -503,6 +585,11 @@ function SchedulerTab({ onFetchNow, ingesting }: SchedulerTabProps) {
     } finally {
       setActionPending(false)
     }
+  }
+
+  async function handleFetchNow() {
+    await onFetchNow()
+    await loadHealth()
   }
 
   if (loadingStatus) {
@@ -595,12 +682,17 @@ function SchedulerTab({ onFetchNow, ingesting }: SchedulerTabProps) {
           </button>
           <button
             className="scheduler-fetch-btn"
-            onClick={() => void onFetchNow()}
+            onClick={() => void handleFetchNow()}
             disabled={ingesting || actionPending}
           >
             {ingesting ? '⟳ Fetching…' : '↻ Fetch now'}
           </button>
         </div>
+      </div>
+
+      <div className="scheduler-card scheduler-card--wide">
+        <h3 className="scheduler-card-title">Source Health</h3>
+        <SourceHealthTable items={sourceHealth} loading={loadingSourceHealth} />
       </div>
     </div>
   )
