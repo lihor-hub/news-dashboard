@@ -9,6 +9,15 @@ The system is not a large microservice platform. It is best understood as a modu
 - `news-dashboard-ingest`: a Kubernetes CronJob batch workload that runs ingestion on a schedule.
 - Optional external integrations: RSS/Atom feeds, a scraped Anthropic News page, SMTP, GHCR, GitHub Actions, and host-level Caddy.
 
+## Database Contract
+
+PostgreSQL is the application database. Runtime code should be written directly for PostgreSQL and psycopg:
+
+- Use `%s` parameters, PostgreSQL functions/operators, and `ON CONFLICT` upserts.
+- Do not add SQLite fallbacks, database-type sniffing, placeholder translation, or generic multi-database SQL.
+- Configure the app with `DATABASE_URL` or `POSTGRES_HOST`, `POSTGRES_PORT`, `POSTGRES_DB`, `POSTGRES_USER`, and `POSTGRES_PASSWORD`.
+- SQLite is allowed only as an input format for legacy migration tooling that imports old local data into PostgreSQL.
+
 ## Runtime Topology
 
 ```mermaid
