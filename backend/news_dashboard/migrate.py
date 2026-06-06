@@ -11,7 +11,8 @@ from .db import connect, init_db, insert_article_sql
 
 app = typer.Typer(help="Migration helpers for news-dashboard")
 
-SOURCE_COLUMNS = ["slug", "name", "url", "category", "kind", "priority", "enabled", "last_checked_at"]
+SOURCE_COLUMNS = ["slug", "name", "url", "category", "kind", "priority", "enabled", "last_checked_at",
+                  "last_success_at", "last_error", "last_fetched_count", "last_inserted_count"]
 ARTICLE_COLUMNS = [
     "url", "canonical_url", "title", "source_slug", "source_name", "category", "kind", "published_at",
     "summary", "reason", "importance_score", "tags", "status", "discovered_at", "read_at", "saved_at",
@@ -40,11 +41,18 @@ def sqlite_to_postgres(sqlite_path: Path = typer.Argument(..., help="Existing SQ
     articles = sqlite_rows(sqlite_path, "articles")
     with connect() as conn:
         for row in sources:
-            values = tuple(row[column] for column in SOURCE_COLUMNS)
+            # Gracefully handle older SQLite dumps that lack new health columns
+            values = tuple(
+                row[c] if c in row.keys() else None
+                for c in SOURCE_COLUMNS
+            )
             conn.execute(
                 """
-                INSERT INTO sources(slug, name, url, category, kind, priority, enabled, last_checked_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO sources(
+                  slug, name, url, category, kind, priority, enabled, last_checked_at,
+                  last_success_at, last_error, last_fetched_count, last_inserted_count
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(slug) DO UPDATE SET
                   name=excluded.name,
                   url=excluded.url,
@@ -52,7 +60,11 @@ def sqlite_to_postgres(sqlite_path: Path = typer.Argument(..., help="Existing SQ
                   kind=excluded.kind,
                   priority=excluded.priority,
                   enabled=excluded.enabled,
-                  last_checked_at=excluded.last_checked_at
+                  last_checked_at=excluded.last_checked_at,
+                  last_success_at=excluded.last_success_at,
+                  last_error=excluded.last_error,
+                  last_fetched_count=excluded.last_fetched_count,
+                  last_inserted_count=excluded.last_inserted_count
                 """,
                 values,
             )

@@ -8,9 +8,9 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from .db import connect, describe_database, init_db, row_to_dict
-from .ingest import ingest_all, list_articles, set_article_status, sync_sources
+from .ingest import ingest_all, list_articles, search_articles, set_article_status, sync_sources
 
-app = FastAPI(title="News Dashboard", version="0.1.0")
+app = FastAPI(title="News Dashboard", version="0.2.0")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
@@ -44,9 +44,17 @@ def ingest() -> dict:
 def articles(
     status: str | None = Query(default=None),
     category: str | None = Query(default=None),
-    limit: int = Query(default=100, ge=1, le=250),
+    limit: int = Query(default=100, ge=1, le=500),
 ) -> dict:
     return {"items": list_articles(status=status, category=category, limit=limit)}
+
+
+@app.get("/api/search")
+def search(
+    q: str = Query(default="", min_length=1, description="Space-separated search terms"),
+    limit: int = Query(default=50, ge=1, le=200),
+) -> dict:
+    return {"items": search_articles(q=q.strip(), limit=limit)}
 
 
 @app.patch("/api/articles/{article_id}/status")
@@ -64,7 +72,9 @@ def update_status(article_id: int, payload: StatusUpdate) -> dict:
 def sources() -> dict:
     init_db()
     with connect() as conn:
-        rows = conn.execute("SELECT * FROM sources ORDER BY category, priority DESC, name").fetchall()
+        rows = conn.execute(
+            "SELECT * FROM sources ORDER BY category, priority DESC, name"
+        ).fetchall()
         return {"items": [row_to_dict(row) for row in rows]}
 
 
@@ -72,10 +82,14 @@ def sources() -> dict:
 def summary() -> dict:
     init_db()
     with connect() as conn:
-        status_rows = conn.execute("SELECT status, COUNT(*) AS count FROM articles GROUP BY status").fetchall()
-        category_rows = conn.execute("SELECT category, COUNT(*) AS count FROM articles GROUP BY category").fetchall()
+        status_rows = conn.execute(
+            "SELECT status, COUNT(*) AS count FROM articles GROUP BY status"
+        ).fetchall()
+        category_rows = conn.execute(
+            "SELECT category, COUNT(*) AS count FROM articles GROUP BY category"
+        ).fetchall()
     return {
-        "byStatus": {row["status"]: row["count"] for row in status_rows},
+        "byStatus":   {row["status"]:   row["count"] for row in status_rows},
         "byCategory": {row["category"]: row["count"] for row in category_rows},
     }
 
