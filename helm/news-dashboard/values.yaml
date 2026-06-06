@@ -21,12 +21,15 @@ service:
   # Example override: helm upgrade --set service.type=NodePort,service.nodePort=30088
   nodePort: ""
 
-# Postgres persistent volume settings.
+# SQLite fallback only. Production/local-k8s uses PostgreSQL below.
 persistence:
   enabled: true
   size: 1Gi
   storageClassName: ""
   hostPath: ""
+
+app:
+  databasePath: /data/news-dashboard.db
 
 postgresql:
   enabled: true
