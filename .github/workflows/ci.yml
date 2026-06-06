@@ -121,6 +121,8 @@ jobs:
           IMG: ${{ env.IMAGE }}
           GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
           GHCR_ACTOR: ${{ github.actor }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
           set -euo pipefail
 
@@ -138,6 +140,16 @@ jobs:
             --docker-password="$GHCR_TOKEN" \
             --dry-run=client -o yaml | kubectl apply -f -
 
+          if [ -z "${OPENAI_API_KEY}" ] || [ -z "${ANTHROPIC_API_KEY}" ]; then
+            echo "OPENAI_API_KEY and ANTHROPIC_API_KEY GitHub Actions secrets are required for Ask AI." >&2
+            exit 1
+          fi
+
+          kubectl -n news-dashboard create secret generic news-dashboard-ai \
+            --from-literal=OPENAI_API_KEY="$OPENAI_API_KEY" \
+            --from-literal=ANTHROPIC_API_KEY="$ANTHROPIC_API_KEY" \
+            --dry-run=client -o yaml | kubectl apply -f -
+
           # Sync Helm chart changes from the repo.
           cd ~/news-dashboard && git pull --ff-only
 
@@ -152,6 +164,7 @@ jobs:
             --set service.nodePort=30088 \
             --set persistence.hostPath=/home/ioachim-minipc/news-dashboard-data \
             --set postgresql.persistence.hostPath=/home/ioachim-minipc/news-dashboard-postgres-data \
+            --set app.ai.existingSecret=news-dashboard-ai \
             --set ingress.enabled=false
 
           # Wait for the new pods to become ready.
