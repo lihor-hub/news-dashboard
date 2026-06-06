@@ -5,10 +5,17 @@
 # Usage:
 #   ./scripts/deploy-local-k8s.sh [TAG]
 #
+# Ask AI requires OPENAI_API_KEY and ANTHROPIC_API_KEY in this shell.
+#
 # TAG defaults to the current git SHA.  Pass 'latest' only for quick local
 # testing — never rely on 'latest' for real deploys (imagePullPolicy won't
 # re-pull if the tag is already cached).
 set -euo pipefail
+
+if [[ -z "${OPENAI_API_KEY:-}" || -z "${ANTHROPIC_API_KEY:-}" ]]; then
+  echo "OPENAI_API_KEY and ANTHROPIC_API_KEY must be set before deploying Ask AI." >&2
+  exit 1
+fi
 
 REPO="${REPO:-localhost:5000/news-dashboard}"
 TAG="${1:-$(git rev-parse --short HEAD)}"
@@ -18,6 +25,12 @@ echo "→ Building ${IMAGE}"
 docker build -t "${IMAGE}" .
 echo "→ Pushing ${IMAGE}"
 docker push "${IMAGE}"
+
+echo "→ Applying AI credentials secret"
+kubectl -n news-dashboard create secret generic news-dashboard-ai \
+  --from-literal=OPENAI_API_KEY="${OPENAI_API_KEY}" \
+  --from-literal=ANTHROPIC_API_KEY="${ANTHROPIC_API_KEY}" \
+  --dry-run=client -o yaml | kubectl apply -f -
 
 echo "→ Deploying with Helm (tag=${TAG})"
 helm upgrade --install news-dashboard ./helm/news-dashboard \
@@ -29,6 +42,7 @@ helm upgrade --install news-dashboard ./helm/news-dashboard \
   --set service.nodePort=30088 \
   --set persistence.hostPath=/home/ioachim-minipc/news-dashboard-data \
   --set postgresql.persistence.hostPath=/home/ioachim-minipc/news-dashboard-postgres-data \
+  --set app.ai.existingSecret=news-dashboard-ai \
   --set ingress.enabled=false
 
 echo "→ Waiting for Postgres"

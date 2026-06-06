@@ -62,6 +62,10 @@ helm upgrade --install news-dashboard ./helm/news-dashboard \
   --set app.ai.existingSecret=news-dashboard-ai
 ```
 
+The GitHub Actions deployment expects repository secrets named
+`OPENAI_API_KEY` and `ANTHROPIC_API_KEY`; it creates the Kubernetes Secret
+automatically during deploy.
+
 ## Durable database
 
 The Kubernetes deployment uses PostgreSQL by default, backed by durable host storage on the local single-node cluster:

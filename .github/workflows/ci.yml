@@ -140,21 +140,15 @@ jobs:
             --docker-password="$GHCR_TOKEN" \
             --dry-run=client -o yaml | kubectl apply -f -
 
-          ai_secret_args=()
-          if [ -n "$OPENAI_API_KEY" ]; then
-            ai_secret_args+=(--from-literal=OPENAI_API_KEY="$OPENAI_API_KEY")
-          fi
-          if [ -n "$ANTHROPIC_API_KEY" ]; then
-            ai_secret_args+=(--from-literal=ANTHROPIC_API_KEY="$ANTHROPIC_API_KEY")
+          if [ -z "${OPENAI_API_KEY}" ] || [ -z "${ANTHROPIC_API_KEY}" ]; then
+            echo "OPENAI_API_KEY and ANTHROPIC_API_KEY GitHub Actions secrets are required for Ask AI." >&2
+            exit 1
           fi
 
-          ai_helm_args=()
-          if [ ${#ai_secret_args[@]} -gt 0 ]; then
-            kubectl -n news-dashboard create secret generic news-dashboard-ai \
-              "${ai_secret_args[@]}" \
-              --dry-run=client -o yaml | kubectl apply -f -
-            ai_helm_args+=(--set app.ai.existingSecret=news-dashboard-ai)
-          fi
+          kubectl -n news-dashboard create secret generic news-dashboard-ai \
+            --from-literal=OPENAI_API_KEY="$OPENAI_API_KEY" \
+            --from-literal=ANTHROPIC_API_KEY="$ANTHROPIC_API_KEY" \
+            --dry-run=client -o yaml | kubectl apply -f -
 
           # Sync Helm chart changes from the repo.
           cd ~/news-dashboard && git pull --ff-only
@@ -171,8 +165,8 @@ jobs:
             --set service.nodePort=30088
             --set persistence.hostPath=/home/ioachim-minipc/news-dashboard-data
             --set postgresql.persistence.hostPath=/home/ioachim-minipc/news-dashboard-postgres-data
+            --set app.ai.existingSecret=news-dashboard-ai
             --set ingress.enabled=false
-            "${ai_helm_args[@]}"
           )
           helm "${helm_args[@]}"
 
