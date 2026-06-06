@@ -1,6 +1,11 @@
 from pathlib import Path
 
-from news_dashboard.db import describe_database, init_db
+from news_dashboard.db import (
+    POSTGRES_SCHEMA,
+    SQLITE_COLUMN_MIGRATIONS,
+    describe_database,
+    init_db,
+)
 from news_dashboard.ingest import ingest_all, list_articles
 
 
@@ -22,3 +27,11 @@ def test_postgres_url_is_reported_without_password() -> None:
     dsn = "postgresql://news_dashboard:secret-password@postgres:5432/news_dashboard"
 
     assert describe_database(database_url=dsn) == "postgresql://news_dashboard:***@postgres:5432/news_dashboard"
+
+
+def test_postgres_articles_schema_includes_embedding_column() -> None:
+    postgres_schema = "\n".join(POSTGRES_SCHEMA).lower()
+
+    assert ("articles", "embedding", "BLOB") in SQLITE_COLUMN_MIGRATIONS
+    assert "embedding bytea" in postgres_schema
+    assert "alter table articles add column if not exists embedding bytea" in postgres_schema

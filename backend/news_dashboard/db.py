@@ -118,6 +118,7 @@ POSTGRES_SCHEMA = [
       saved_at TEXT,
       skipped_at TEXT,
       archived_at TEXT,
+      embedding BYTEA,
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     )
     """,
@@ -135,6 +136,8 @@ POSTGRES_SCHEMA = [
     "ALTER TABLE sources ADD COLUMN IF NOT EXISTS last_inserted_count INTEGER NOT NULL DEFAULT 0",
     # Deduplication column
     "ALTER TABLE articles ADD COLUMN IF NOT EXISTS canonical_id BIGINT REFERENCES articles(id)",
+    # AI Q&A embeddings for saved/read article retrieval
+    "ALTER TABLE articles ADD COLUMN IF NOT EXISTS embedding BYTEA",
 ]
 
 
