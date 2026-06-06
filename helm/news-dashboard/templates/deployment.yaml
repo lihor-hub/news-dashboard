@@ -19,6 +19,10 @@ spec:
     spec:
       securityContext:
         fsGroup: 1000
+      {{- if .Values.image.pullSecretName }}
+      imagePullSecrets:
+        - name: {{ .Values.image.pullSecretName | quote }}
+      {{- end }}
       containers:
         - name: news-dashboard
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"

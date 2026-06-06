@@ -2,8 +2,16 @@ replicaCount: 1
 
 image:
   repository: ghcr.io/ioachim-hub/news-dashboard
+  # CI overrides this with the commit SHA so Kubernetes always pulls the exact
+  # image that was just built.  'latest' is only used for manual local deploys.
   tag: latest
+  # IfNotPresent is correct because CI pins an immutable SHA tag.
+  # Never use 'latest' + 'IfNotPresent' together — Kubernetes won't re-pull.
   pullPolicy: IfNotPresent
+  # Name of a pre-existing kubernetes.io/dockerconfigjson Secret that gives the
+  # cluster pull access to GHCR.  The CI deploy job creates/refreshes this
+  # secret automatically.  Leave empty only if the GHCR package is public.
+  pullSecretName: ghcr-pull-secret
 
 service:
   type: ClusterIP
