@@ -68,6 +68,27 @@ CREATE VIRTUAL TABLE IF NOT EXISTS articles_fts USING fts5(
   title, summary, reason, tags, source_name,
   content=articles, content_rowid=id
 );
+
+CREATE TABLE IF NOT EXISTS ingest_runs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  started_at TEXT NOT NULL,
+  finished_at TEXT,
+  duration_ms INTEGER,
+  total_new INTEGER,
+  total_errors INTEGER
+);
+
+CREATE TABLE IF NOT EXISTS ingest_run_sources (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  run_id INTEGER REFERENCES ingest_runs(id),
+  source_name TEXT NOT NULL,
+  articles_found INTEGER,
+  articles_new INTEGER,
+  error_message TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_ingest_runs_started ON ingest_runs(started_at);
+CREATE INDEX IF NOT EXISTS idx_ingest_run_sources_run ON ingest_run_sources(run_id);
 """
 
 # Additive columns to add when upgrading existing databases
@@ -145,6 +166,29 @@ POSTGRES_SCHEMA = [
     "ALTER TABLE articles ADD COLUMN IF NOT EXISTS canonical_id BIGINT REFERENCES articles(id)",
     # AI Q&A embeddings for saved/read article retrieval
     "ALTER TABLE articles ADD COLUMN IF NOT EXISTS embedding BYTEA",
+    # Ingest run telemetry from issue #50. Stats endpoints read these tables.
+    """
+    CREATE TABLE IF NOT EXISTS ingest_runs (
+      id BIGSERIAL PRIMARY KEY,
+      started_at TIMESTAMPTZ NOT NULL,
+      finished_at TIMESTAMPTZ,
+      duration_ms INTEGER,
+      total_new INTEGER,
+      total_errors INTEGER
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS ingest_run_sources (
+      id BIGSERIAL PRIMARY KEY,
+      run_id INTEGER REFERENCES ingest_runs(id),
+      source_name TEXT NOT NULL,
+      articles_found INTEGER,
+      articles_new INTEGER,
+      error_message TEXT
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_ingest_runs_started ON ingest_runs(started_at)",
+    "CREATE INDEX IF NOT EXISTS idx_ingest_run_sources_run ON ingest_run_sources(run_id)",
 ]
 
 
