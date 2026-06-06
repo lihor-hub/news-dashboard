@@ -1,11 +1,23 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from 'recharts'
 import './styles.css'
 import {
   askAI,
+  fetchArticlesOverTime,
   fetchArticles,
   fetchSchedulerStatus,
   fetchSourceHealth,
   fetchSources,
+  fetchSourcesVolume,
+  fetchStatsOverview,
   fetchSummary,
   ingestNow,
   pauseScheduler,
@@ -16,7 +28,16 @@ import {
   updateSourceEnabled,
 } from './api'
 import type { SchedulerStatus } from './api'
-import type { Article, ArticleStatus, AskResponse, Source, SourceHealth, Summary } from './types'
+import type {
+  Article,
+  ArticleStatus,
+  ArticlesOverTimePoint,
+  AskResponse,
+  Source,
+  SourceVolumePoint,
+  StatsOverview,
+  Summary,
+} from './types'
 
 type ActiveTab = 'inbox' | 'saved' | 'read' | 'skipped' | 'archived' | 'sources' | 'scheduler'
 
@@ -412,6 +433,67 @@ const INTERVAL_PRESETS = [
   { label: '6h',  value: 360 },
 ]
 
+type StatsRangeId = 'today' | 'last7' | 'last30' | 'last90'
+
+const STATS_RANGE_OPTIONS: { id: StatsRangeId; label: string }[] = [
+  { id: 'today',  label: 'Today' },
+  { id: 'last7',  label: 'Last 7 days' },
+  { id: 'last30', label: 'Last 30 days' },
+  { id: 'last90', label: 'Last 90 days' },
+]
+
+function startOfUtcDay(date: Date): Date {
+  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()))
+}
+
+function addDays(date: Date, days: number): Date {
+  const next = new Date(date)
+  next.setUTCDate(next.getUTCDate() + days)
+  return next
+}
+
+function statsRange(range: StatsRangeId): { from: string; to: string } {
+  const now = new Date()
+  const today = startOfUtcDay(now)
+  const starts: Record<StatsRangeId, Date> = {
+    today,
+    last7: addDays(today, -6),
+    last30: addDays(today, -29),
+    last90: addDays(today, -89),
+  }
+  return { from: starts[range].toISOString(), to: now.toISOString() }
+}
+
+function formatInteger(value: number): string {
+  return new Intl.NumberFormat().format(value)
+}
+
+function formatDuration(ms: number): string {
+  if (!ms) return '0s'
+  if (ms < 1000) return `${ms}ms`
+  const seconds = ms / 1000
+  if (seconds < 60) return `${seconds.toFixed(seconds < 10 ? 1 : 0)}s`
+  const minutes = Math.floor(seconds / 60)
+  const rem = Math.round(seconds % 60)
+  return rem ? `${minutes}m ${rem}s` : `${minutes}m`
+}
+
+function formatTimeBucket(value: string, range: StatsRangeId): string {
+  if (range === 'today') {
+    return new Date(value).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', timeZone: 'UTC' })
+  }
+  const [year, month, day] = value.split('-').map(Number)
+  return new Date(year, month - 1, day).toLocaleDateString([], { month: 'short', day: 'numeric' })
+}
+
+function formatRangeDate(value: string): string {
+  return new Date(value).toLocaleDateString([], { timeZone: 'UTC' })
+}
+
+function formatSourceLabel(value: string): string {
+  return value.length > 18 ? `${value.slice(0, 17)}…` : value
+}
+
 function relativeCountdown(isoStr: string | null): string {
   if (!isoStr) return '—'
   const ms = new Date(isoStr).getTime() - Date.now()
@@ -506,6 +588,22 @@ function SchedulerTab({ onFetchNow, ingesting }: SchedulerTabProps) {
   const [actionPending, setActionPending] = useState(false)
   const [tabMessage, setTabMessage] = useState<{ text: string; kind: 'success' | 'error' } | null>(null)
   const [countdown, setCountdown] = useState<string>('—')
+  const [rangeId, setRangeId] = useState<StatsRangeId>('last7')
+  const [overview, setOverview] = useState<StatsOverview | null>(null)
+  const [articlesSeries, setArticlesSeries] = useState<ArticlesOverTimePoint[]>([])
+  const [sourceVolumes, setSourceVolumes] = useState<SourceVolumePoint[]>([])
+  const [statsLoading, setStatsLoading] = useState(true)
+  const [statsError, setStatsError] = useState<string | null>(null)
+
+  const selectedRange = useMemo(() => statsRange(rangeId), [rangeId])
+  const articlesChartData = useMemo(
+    () => articlesSeries.map((row) => ({
+      ...row,
+      label: formatTimeBucket(row.date, rangeId),
+    })),
+    [articlesSeries, rangeId],
+  )
+  const topSourceVolumes = useMemo(() => sourceVolumes.slice(0, 12), [sourceVolumes])
 
   async function loadStatus() {
     try {
@@ -529,10 +627,33 @@ function SchedulerTab({ onFetchNow, ingesting }: SchedulerTabProps) {
     }
   }
 
+  async function loadStats() {
+    setStatsLoading(true)
+    setStatsError(null)
+    try {
+      const [nextOverview, nextArticlesSeries, nextSourceVolumes] = await Promise.all([
+        fetchStatsOverview(selectedRange.from, selectedRange.to),
+        fetchArticlesOverTime(selectedRange.from, selectedRange.to),
+        fetchSourcesVolume(selectedRange.from, selectedRange.to),
+      ])
+      setOverview(nextOverview)
+      setArticlesSeries(nextArticlesSeries)
+      setSourceVolumes(nextSourceVolumes)
+    } catch (err) {
+      setStatsError(err instanceof Error ? err.message : 'Failed to load statistics')
+    } finally {
+      setStatsLoading(false)
+    }
+  }
+
   useEffect(() => {
     void loadStatus()
     void loadHealth()
   }, [])
+
+  useEffect(() => {
+    void loadStats()
+  }, [selectedRange.from, selectedRange.to])
 
   useEffect(() => {
     if (!status) return
@@ -590,6 +711,7 @@ function SchedulerTab({ onFetchNow, ingesting }: SchedulerTabProps) {
   async function handleFetchNow() {
     await onFetchNow()
     await loadHealth()
+    await loadStats()
   }
 
   if (loadingStatus) {
@@ -609,6 +731,108 @@ function SchedulerTab({ onFetchNow, ingesting }: SchedulerTabProps) {
           <button className="dismiss" onClick={() => setTabMessage(null)} aria-label="Dismiss">×</button>
         </div>
       )}
+
+      <div className="stats-dashboard">
+        <div className="stats-toolbar">
+          <div>
+            <h3 className="stats-title">Statistics</h3>
+            <p className="stats-range-label">
+              {formatRangeDate(selectedRange.from)} – {formatRangeDate(selectedRange.to)}
+            </p>
+          </div>
+          <div className="stats-range-picker" role="group" aria-label="Statistics time range">
+            {STATS_RANGE_OPTIONS.map((option) => (
+              <button
+                key={option.id}
+                className={`stats-range-btn${rangeId === option.id ? ' active' : ''}`}
+                onClick={() => setRangeId(option.id)}
+                aria-pressed={rangeId === option.id}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {statsError && (
+          <div className="message-banner error stats-error" role="status">
+            <span>{statsError}</span>
+          </div>
+        )}
+
+        <div className="stats-overview-grid">
+          {[
+            { label: 'Total articles', value: overview ? formatInteger(overview.total_articles) : '—' },
+            { label: 'Total new', value: overview ? formatInteger(overview.total_new) : '—' },
+            { label: 'Total errors', value: overview ? formatInteger(overview.total_errors) : '—' },
+            { label: 'Avg run duration', value: overview ? formatDuration(overview.avg_duration_ms) : '—' },
+            {
+              label: 'Healthy sources',
+              value: overview ? formatInteger(overview.healthy_sources) : '—',
+            },
+            {
+              label: 'Erroring sources',
+              value: overview ? formatInteger(overview.erroring_sources) : '—',
+            },
+          ].map((metric) => (
+            <div className="stats-metric-card" key={metric.label}>
+              <span className="stats-metric-label">{metric.label}</span>
+              <span className="stats-metric-value">{statsLoading ? '…' : metric.value}</span>
+            </div>
+          ))}
+        </div>
+
+        <div className="stats-charts-grid">
+          <div className="stats-chart-card">
+            <h3 className="stats-chart-title">Articles Ingested Over Time</h3>
+            <div className="stats-chart-frame">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={articlesChartData} margin={{ top: 8, right: 8, left: 0, bottom: 4 }}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                  <XAxis dataKey="label" tick={{ fontSize: 11 }} tickLine={false} axisLine={false} />
+                  <YAxis allowDecimals={false} tick={{ fontSize: 11 }} tickLine={false} axisLine={false} width={36} />
+                  <Tooltip
+                    cursor={{ fill: 'rgba(37, 99, 235, 0.08)' }}
+                    formatter={(value) => [formatInteger(Number(value)), 'New articles']}
+                    labelFormatter={(_, payload) => payload?.[0]?.payload?.date ?? ''}
+                  />
+                  <Bar dataKey="new_articles" fill="var(--accent)" radius={[4, 4, 0, 0]} minPointSize={2} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+
+          <div className="stats-chart-card">
+            <h3 className="stats-chart-title">Sources Ranked by Volume</h3>
+            <div className="stats-chart-frame">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart
+                  data={topSourceVolumes}
+                  layout="vertical"
+                  margin={{ top: 8, right: 8, left: 8, bottom: 4 }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+                  <XAxis type="number" allowDecimals={false} tick={{ fontSize: 11 }} tickLine={false} axisLine={false} />
+                  <YAxis
+                    dataKey="source_name"
+                    type="category"
+                    tick={{ fontSize: 11 }}
+                    tickFormatter={formatSourceLabel}
+                    tickLine={false}
+                    axisLine={false}
+                    width={118}
+                  />
+                  <Tooltip
+                    cursor={{ fill: 'rgba(37, 99, 235, 0.08)' }}
+                    formatter={(value) => [formatInteger(Number(value)), 'New articles']}
+                  />
+                  <Bar dataKey="total_new" fill="var(--accent-muted)" radius={[0, 4, 4, 0]} minPointSize={2} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+        </div>
+      </div>
 
       <div className="scheduler-card">
         <h3 className="scheduler-card-title">Status</h3>

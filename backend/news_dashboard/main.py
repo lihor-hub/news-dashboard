@@ -21,6 +21,7 @@ from .scheduler import (
     start_scheduler,
     stop_scheduler,
 )
+from .stats import articles_over_time, sources_volume, stats_overview
 from .source_health import list_source_health
 
 app = FastAPI(title="News Dashboard", version="0.3.0")
@@ -174,6 +175,39 @@ def scheduler_pause() -> dict:
 def scheduler_resume() -> dict:
     resume_scheduler()
     return {"paused": False, "next_run_at": get_next_ingest_at()}
+
+
+@app.get("/api/stats/overview")
+def stats_overview_endpoint(
+    from_: str = Query(..., alias="from"),
+    to: str = Query(...),
+) -> dict:
+    try:
+        return stats_overview(from_, to)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.get("/api/stats/articles-over-time")
+def stats_articles_over_time_endpoint(
+    from_: str = Query(..., alias="from"),
+    to: str = Query(...),
+) -> dict:
+    try:
+        return {"items": articles_over_time(from_, to)}
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.get("/api/stats/sources-volume")
+def stats_sources_volume_endpoint(
+    from_: str = Query(..., alias="from"),
+    to: str = Query(...),
+) -> dict:
+    try:
+        return {"items": sources_volume(from_, to)}
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 class AskRequest(BaseModel):

@@ -1,4 +1,13 @@
-import type { Article, ArticleStatus, AskResponse, Source, SourceHealth, Summary } from './types'
+import type {
+  Article,
+  ArticleStatus,
+  ArticlesOverTimePoint,
+  AskResponse,
+  Source,
+  SourceVolumePoint,
+  StatsOverview,
+  Summary,
+} from './types'
 
 async function requestJson<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, {
@@ -90,4 +99,26 @@ export async function pauseScheduler(): Promise<{ paused: boolean }> {
 
 export async function resumeScheduler(): Promise<{ paused: boolean; next_run_at: string | null }> {
   return requestJson('/api/scheduler/resume', { method: 'POST' })
+}
+
+function statsParams(from: string, to: string): string {
+  return new URLSearchParams({ from, to }).toString()
+}
+
+export async function fetchStatsOverview(from: string, to: string): Promise<StatsOverview> {
+  return requestJson<StatsOverview>(`/api/stats/overview?${statsParams(from, to)}`)
+}
+
+export async function fetchArticlesOverTime(from: string, to: string): Promise<ArticlesOverTimePoint[]> {
+  const data = await requestJson<{ items: ArticlesOverTimePoint[] }>(
+    `/api/stats/articles-over-time?${statsParams(from, to)}`,
+  )
+  return data.items
+}
+
+export async function fetchSourcesVolume(from: string, to: string): Promise<SourceVolumePoint[]> {
+  const data = await requestJson<{ items: SourceVolumePoint[] }>(
+    `/api/stats/sources-volume?${statsParams(from, to)}`,
+  )
+  return data.items
 }

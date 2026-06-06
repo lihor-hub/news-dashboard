@@ -1648,7 +1648,7 @@ kbd {
 /* ===== SCHEDULER TAB ===== */
 
 .scheduler-panel {
-  max-width: 600px;
+  max-width: 1100px;
   margin: 0 auto;
   padding: 16px;
   display: flex;
@@ -1657,10 +1657,156 @@ kbd {
 }
 
 .scheduler-card {
+  width: 100%;
+  max-width: 600px;
+  margin: 0 auto;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--r-lg);
   padding: 16px 20px;
+  box-shadow: var(--shadow-card);
+}
+
+.stats-dashboard {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.stats-toolbar {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.stats-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-0);
+  margin: 0 0 2px;
+}
+
+.stats-range-label {
+  font-size: 12px;
+  color: var(--text-3);
+}
+
+.stats-range-picker {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.stats-range-btn {
+  min-height: 32px;
+  padding: 6px 12px;
+  border-radius: var(--r-md);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-1);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background var(--t) var(--ease), border-color var(--t) var(--ease), color var(--t) var(--ease);
+}
+
+.stats-range-btn:hover {
+  background: var(--surface-hover);
+  border-color: var(--border-strong);
+}
+
+.stats-range-btn.active {
+  background: var(--accent-pale);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.stats-error {
+  margin: 0;
+}
+
+.stats-overview-grid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.stats-metric-card {
+  min-height: 86px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-card);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.stats-metric-label {
+  color: var(--text-3);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  line-height: 1.3;
+  text-transform: uppercase;
+}
+
+.stats-metric-value {
+  color: var(--text-0);
+  font-size: 24px;
+  font-weight: 750;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.stats-charts-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
+  gap: 16px;
+}
+
+.stats-chart-card {
+  min-width: 0;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  padding: 16px;
+  box-shadow: var(--shadow-card);
+}
+
+.stats-chart-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-1);
+  margin: 0 0 12px;
+}
+
+.stats-chart-frame {
+  height: 280px;
+  min-width: 0;
+}
+
+.stats-chart-card .recharts-cartesian-grid line {
+  stroke: var(--border);
+}
+
+.stats-chart-card .recharts-text {
+  fill: var(--text-2);
+}
+
+.stats-chart-card .recharts-tooltip-wrapper {
+  outline: none;
+}
+
+.stats-chart-card .recharts-default-tooltip {
+  border-color: var(--border) !important;
+  border-radius: var(--r-md);
+  background: var(--surface) !important;
+  color: var(--text-1) !important;
   box-shadow: var(--shadow-card);
 }
 
@@ -1862,4 +2008,54 @@ kbd {
 .scheduler-fetch-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+@media (max-width: 980px) {
+  .stats-overview-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .stats-charts-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .scheduler-panel {
+    padding: 12px 0;
+  }
+
+  .stats-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .stats-range-picker {
+    justify-content: flex-start;
+  }
+
+  .stats-range-btn {
+    flex: 1 1 calc(50% - 6px);
+  }
+
+  .stats-overview-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .stats-metric-card {
+    min-height: 78px;
+    padding: 12px;
+  }
+
+  .stats-metric-value {
+    font-size: 20px;
+  }
+
+  .stats-chart-card {
+    padding: 12px 8px 12px 10px;
+  }
+
+  .stats-chart-frame {
+    height: 240px;
+  }
 }

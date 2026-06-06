@@ -54,6 +54,25 @@ export interface Summary {
   byCategory: Record<string, number>
 }
 
+export interface StatsOverview {
+  total_articles: number
+  total_new: number
+  total_errors: number
+  avg_duration_ms: number
+  healthy_sources: number
+  erroring_sources: number
+}
+
+export interface ArticlesOverTimePoint {
+  date: string
+  new_articles: number
+}
+
+export interface SourceVolumePoint {
+  source_name: string
+  total_new: number
+}
+
 export interface AskSource {
   id: number
   title: string
