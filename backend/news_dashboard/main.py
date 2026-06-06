@@ -126,6 +126,25 @@ def set_source_enabled(slug: str, payload: EnabledUpdate) -> dict:
         return row_to_dict(row)
 
 
+class AskRequest(BaseModel):
+    query: str
+
+
+@app.post("/api/ask")
+def ask_ai(payload: AskRequest) -> dict:
+    """Answer a natural-language question using saved/read articles as context."""
+    from .embeddings import ask
+
+    q = payload.query.strip()
+    if not q:
+        raise HTTPException(status_code=400, detail="query must not be empty")
+    try:
+        return ask(q)
+    except Exception as exc:
+        # Surface errors clearly (missing API keys, etc.)
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
 @app.get("/api/summary")
 def summary() -> dict:
     init_db()

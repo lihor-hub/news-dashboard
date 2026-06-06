@@ -48,6 +48,52 @@
   --font: 'Inter', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 }
 
+/* ===== DARK MODE TOKENS ===== */
+[data-theme="dark"] {
+  --bg:            #0f0d0b;
+  --surface:       #1a1714;
+  --surface-alt:   #221e1a;
+  --surface-hover: #262119;
+  --border:        #2e2822;
+  --border-strong: #3d3530;
+
+  --text-0:  #f5ede4;
+  --text-1:  #d4c4b8;
+  --text-2:  #9e8477;
+  --text-3:  #6b5548;
+
+  --accent:       #c4845a;
+  --accent-hover: #d49a72;
+  --accent-pale:  #2a1c12;
+  --accent-muted: #a06040;
+
+  --s-new-bg:      #1e2d45; --s-new-fg:      #93c5fd;
+  --s-saved-bg:    #2d2008; --s-saved-fg:    #fde68a;
+  --s-read-bg:     #0d2b1e; --s-read-fg:     #6ee7b7;
+  --s-skipped-bg:  #1f2125; --s-skipped-fg:  #9ca3af;
+  --s-archived-bg: #1e1b3a; --s-archived-fg: #c4b5fd;
+
+  --cat-python-bg:      #2a2000; --cat-python-fg:      #fde68a;
+  --cat-ai-llm-bg:      #1e1b3a; --cat-ai-llm-fg:      #c4b5fd;
+  --cat-agents-bg:      #2a0f1e; --cat-agents-fg:      #f9a8d4;
+  --cat-cloud-infra-bg: #0c2233; --cat-cloud-infra-fg: #7dd3fc;
+  --cat-engineering-bg: #0d2b1e; --cat-engineering-fg: #6ee7b7;
+  --cat-trending-bg:    #2a1400; --cat-trending-fg:    #fdba74;
+  --cat-repositories-bg:#0f2e16; --cat-repositories-fg:#86efac;
+
+  --shadow-card:  0 1px 3px rgba(0,0,0,.3), 0 4px 12px rgba(0,0,0,.2);
+  --shadow-hover: 0 2px 6px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.3);
+  --shadow-top:   0 2px 12px rgba(0,0,0,.4);
+}
+
+/* Issue #16: smooth theme transition */
+html {
+  transition: background-color 0.2s, color 0.2s;
+}
+body {
+  transition: background-color 0.2s, color 0.2s;
+}
+
 /* ===== RESET ===== */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -87,6 +133,10 @@ ul { list-style: none; }
   border-bottom: 1px solid var(--border);
   padding: 10px 0;
   margin: 0 -16px;
+  transition: background-color 0.2s;
+}
+[data-theme="dark"] .topbar {
+  background: rgba(15,13,11,.92);
 }
 
 .topbar-inner {
@@ -858,4 +908,437 @@ ul { list-style: none; }
   .tabs-wrap { margin: 0 -12px; padding: 0 12px; }
   .card-actions  { gap: 6px; }
   .action-btn    { min-width: 48px; font-size: 11px; padding: 0 8px; }
+}
+
+/* ===== ISSUE #16: DARK MODE TOGGLE BUTTON ===== */
+.theme-toggle {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: var(--r-full);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-2);
+  cursor: pointer;
+  font-size: 15px;
+  transition: background var(--t) var(--ease), color var(--t) var(--ease), border-color var(--t) var(--ease);
+}
+.theme-toggle:hover {
+  background: var(--surface-hover);
+  color: var(--accent);
+  border-color: var(--border-strong);
+}
+
+/* ===== ISSUE #14: KEYBOARD FOCUS RING ===== */
+.article-card--focused {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-color: var(--accent);
+  box-shadow: var(--shadow-hover), 0 0 0 3px rgba(124,74,46,.18);
+}
+
+/* ===== ISSUE #14: SHORTCUT OVERLAY ===== */
+.overlay-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 500;
+  background: rgba(0,0,0,.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+}
+.overlay-panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-xl);
+  padding: 24px;
+  min-width: 320px;
+  max-width: 440px;
+  width: 90vw;
+  box-shadow: 0 8px 40px rgba(0,0,0,.18);
+}
+.overlay-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+.overlay-header h2 {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-0);
+}
+.overlay-close {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 20px;
+  color: var(--text-3);
+  padding: 2px 6px;
+  border-radius: var(--r-sm);
+  transition: color var(--t) var(--ease);
+}
+.overlay-close:hover { color: var(--text-1); }
+
+.shortcut-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.shortcut-table tr + tr td { border-top: 1px solid var(--border); }
+.shortcut-table td {
+  padding: 8px 4px;
+  font-size: 13px;
+  color: var(--text-2);
+  vertical-align: middle;
+}
+.shortcut-table td:first-child { width: 72px; }
+kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  height: 24px;
+  padding: 0 6px;
+  background: var(--bg);
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+  font-family: var(--font);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-1);
+  box-shadow: 0 1px 0 var(--border-strong);
+}
+
+/* ===== ISSUE #15: BULK SELECTION ===== */
+/* Checkbox on card */
+.card-checkbox {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  display: none;
+  cursor: pointer;
+}
+.article-card {
+  position: relative;
+}
+.article-card:hover .card-checkbox,
+.article-card--selected .card-checkbox {
+  display: block;
+}
+.card-checkbox input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+  accent-color: var(--accent);
+}
+
+/* Selected card highlight */
+.article-card--selected {
+  border-color: var(--accent-muted);
+  background: var(--accent-pale);
+}
+
+/* Select-all checkbox in filter bar */
+.select-all-label {
+  flex: none;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  margin-right: 2px;
+}
+.select-all-label input[type="checkbox"] {
+  width: 15px;
+  height: 15px;
+  cursor: pointer;
+  accent-color: var(--accent);
+}
+
+/* Bulk action bar */
+.bulk-bar {
+  position: fixed;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-xl);
+  box-shadow: 0 4px 24px rgba(0,0,0,.15);
+  white-space: nowrap;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+.bulk-count {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-1);
+  padding-right: 4px;
+}
+.bulk-btn {
+  padding: 6px 12px;
+  border-radius: var(--r-full);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  border: 1px solid var(--border);
+  background: var(--surface-alt);
+  color: var(--text-2);
+  transition: all var(--t) var(--ease);
+}
+.bulk-btn:hover { border-color: var(--border-strong); color: var(--text-1); }
+.bulk-btn.bulk-read:hover     { background: var(--s-read-bg);     color: var(--s-read-fg);     border-color: #6ee7b7; }
+.bulk-btn.bulk-saved:hover    { background: var(--s-saved-bg);    color: var(--s-saved-fg);    border-color: #fde68a; }
+.bulk-btn.bulk-skipped:hover  { background: var(--s-skipped-bg);  color: var(--s-skipped-fg);  border-color: #d1d5db; }
+.bulk-btn.bulk-archived:hover { background: var(--s-archived-bg); color: var(--s-archived-fg); border-color: #c4b5fd; }
+.bulk-clear {
+  padding: 6px 10px;
+  border-radius: var(--r-full);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  border: none;
+  background: none;
+  color: var(--text-3);
+  transition: color var(--t) var(--ease);
+}
+.bulk-clear:hover { color: var(--text-1); }
+
+/* ===== ISSUE #17: READ TIME IN CARD HEADER ===== */
+.card-read-time {
+  margin-right: 6px;
+  color: var(--text-3);
+  font-size: 11px;
+}
+
+/* Mobile: always show checkbox */
+@media (max-width: 640px) {
+  .card-checkbox { display: block; }
+  .bulk-bar { bottom: 12px; padding: 8px 12px; gap: 6px; }
+  .bulk-btn { padding: 5px 10px; font-size: 11px; }
+}
+
+/* ===== ISSUE #18: LOAD MORE BUTTON ===== */
+.load-more-wrap {
+  display: flex;
+  justify-content: center;
+  padding: 24px 0 8px;
+}
+.load-more-btn {
+  padding: 10px 32px;
+  border-radius: var(--r-full);
+  border: 1.5px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text-1);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background var(--t) var(--ease), border-color var(--t) var(--ease);
+}
+.load-more-btn:hover:not(:disabled) { background: var(--surface-3); border-color: var(--accent); }
+.load-more-btn:disabled { opacity: 0.6; cursor: default; }
+
+/* ===== ISSUE #19: ALSO FROM (DUPLICATE SOURCES) ===== */
+.card-also-from {
+  color: var(--text-3);
+  font-size: 11px;
+}
+
+/* ===== ISSUE #20: SOURCE ENABLE TOGGLE ===== */
+.source-toggle {
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+.source-toggle input[type="checkbox"] {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+.source-toggle-track {
+  display: inline-block;
+  width: 32px;
+  height: 18px;
+  border-radius: 9px;
+  background: var(--border);
+  position: relative;
+  transition: background var(--t) var(--ease);
+}
+.source-toggle-track::after {
+  content: '';
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #fff;
+  transition: transform var(--t) var(--ease);
+}
+.source-toggle input:checked + .source-toggle-track {
+  background: var(--accent);
+}
+.source-toggle input:checked + .source-toggle-track::after {
+  transform: translateX(14px);
+}
+.source-item--disabled {
+  opacity: 0.55;
+}
+.source-item--disabled a {
+  text-decoration: line-through;
+  text-decoration-color: var(--text-3);
+}
+
+/* ===== AI ASK MODE (issue #23) ===== */
+
+.search-mode-toggle {
+  display: flex;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-full);
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.search-mode-btn {
+  background: none;
+  border: none;
+  padding: 4px 12px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-2);
+  cursor: pointer;
+  transition: background var(--t) var(--ease), color var(--t) var(--ease);
+}
+
+.search-mode-btn.active {
+  background: var(--accent);
+  color: #fff;
+}
+
+.search-mode-btn:hover:not(.active) {
+  background: var(--accent-pale);
+  color: var(--accent);
+}
+
+.ask-form {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  gap: 6px;
+}
+
+.ask-form input[type="text"] {
+  flex: 1;
+  background: none;
+  border: none;
+  outline: none;
+  font-size: 14px;
+  color: var(--text-0);
+  padding: 4px 0;
+}
+
+.ask-form input[type="text"]::placeholder {
+  color: var(--text-3);
+}
+
+.ask-submit-btn {
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: var(--r-sm);
+  padding: 4px 10px;
+  font-size: 14px;
+  cursor: pointer;
+  transition: background var(--t) var(--ease);
+}
+
+.ask-submit-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.ask-submit-btn:not(:disabled):hover {
+  background: var(--accent-hover);
+}
+
+/* Ask result panel */
+
+.ask-panel {
+  margin: 0 auto;
+  max-width: 860px;
+  padding: 20px 24px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-card);
+  margin-top: 16px;
+  margin-bottom: 4px;
+}
+
+.ask-loading {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.ask-answer {
+  font-size: 15px;
+  line-height: 1.65;
+  color: var(--text-0);
+  margin: 0 0 16px;
+  white-space: pre-wrap;
+}
+
+.ask-sources {
+  border-top: 1px solid var(--border);
+  padding-top: 12px;
+}
+
+.ask-sources-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-3);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin: 0 0 8px;
+}
+
+.ask-sources-list {
+  margin: 0;
+  padding-left: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ask-sources-list li {
+  font-size: 13px;
+  color: var(--text-1);
+}
+
+.ask-source-num {
+  color: var(--text-3);
+  margin-right: 4px;
+  font-variant-numeric: tabular-nums;
+}
+
+.ask-sources-list a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.ask-sources-list a:hover {
+  text-decoration: underline;
 }

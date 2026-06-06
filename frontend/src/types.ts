@@ -18,6 +18,8 @@ export interface Article {
   saved_at?: string | null
   skipped_at?: string | null
   archived_at?: string | null
+  also_from?: string[]
+  canonical_id?: number | null
 }
 
 export interface Source {
@@ -38,4 +40,15 @@ export interface Source {
 export interface Summary {
   byStatus: Record<string, number>
   byCategory: Record<string, number>
+}
+
+export interface AskSource {
+  id: number
+  title: string
+  url: string
+}
+
+export interface AskResponse {
+  answer: string
+  sources: AskSource[]
 }

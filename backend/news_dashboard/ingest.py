@@ -13,6 +13,26 @@ import feedparser
 from .db import connect, init_db, insert_article_sql, row_to_dict, search_articles_sql
 from .sources import DEFAULT_SOURCES, SourceDefinition
 
+try:
+    from rapidfuzz.distance import Levenshtein
+    def _title_similarity(a: str, b: str) -> float:
+        a, b = a.lower().strip(), b.lower().strip()
+        if not a or not b:
+            return 0.0
+        max_len = max(len(a), len(b))
+        dist = Levenshtein.distance(a, b)
+        return 1.0 - dist / max_len
+except ImportError:
+    def _title_similarity(a: str, b: str) -> float:  # type: ignore[misc]
+        # Fallback: simple token-overlap Jaccard similarity
+        sa = set(a.lower().split())
+        sb = set(b.lower().split())
+        if not sa or not sb:
+            return 0.0
+        return len(sa & sb) / len(sa | sb)
+
+DEDUP_TITLE_THRESHOLD = 0.85
+
 TRACKING_PARAMS = {
     "utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content",
     "ref", "fbclid", "gclid", "yclid",
@@ -145,6 +165,32 @@ def _should_include(title: str, description: str, source_slug: str) -> bool:
     return any(kw in haystack for kw in rule["keywords"])
 
 
+def _find_canonical(conn: Any, canonical_url: str, title: str) -> int | None:
+    """Return the id of an existing canonical article that matches by URL or fuzzy title, or None."""
+    # Exact URL match (canonical_url already stripped of tracking params)
+    row = conn.execute(
+        "SELECT id FROM articles WHERE canonical_url=? AND (canonical_id IS NULL OR canonical_id=id) LIMIT 1",
+        (canonical_url,),
+    ).fetchone()
+    if row:
+        return row["id"] if isinstance(row, dict) else row[0]
+
+    # Fuzzy title match against recent articles (last 7 days) that are canonical
+    rows = conn.execute(
+        """SELECT id, title FROM articles
+           WHERE canonical_id IS NULL
+             AND discovered_at >= datetime('now', '-7 days')
+           ORDER BY discovered_at DESC
+           LIMIT 200""",
+    ).fetchall()
+    for r in rows:
+        existing_title = r["title"] if isinstance(r, dict) else r[1]
+        existing_id = r["id"] if isinstance(r, dict) else r[0]
+        if _title_similarity(title, existing_title) >= DEDUP_TITLE_THRESHOLD:
+            return existing_id
+    return None
+
+
 def sync_sources(db_path: Path | None = None) -> None:
     init_db(db_path)
     with connect(db_path) as conn:
@@ -210,12 +256,32 @@ def ingest_source(source: SourceDefinition, db_path: Path | None = None) -> int:
                     continue
 
                 summary, reason, score, tags = make_summary(title, description, source)
-                cursor = conn.execute(
-                    insert_article_sql(),
-                    (url, url, title, source.slug, source.name, source.category, source.kind,
-                     entry.get("date"), summary, reason, score, tags),
-                )
-                inserted += cursor.rowcount
+
+                # Deduplication: check if this article is a duplicate of an existing canonical
+                canonical_id = _find_canonical(conn, url, title)
+                if canonical_id is not None:
+                    # Insert as archived duplicate pointing to canonical
+                    conn.execute(
+                        """INSERT OR IGNORE INTO articles(
+                             url, canonical_url, title, source_slug, source_name, category, kind,
+                             published_at, summary, reason, importance_score, tags,
+                             status, canonical_id
+                           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'archived', ?)""",
+                        (url, url, title, source.slug, source.name, source.category, source.kind,
+                         entry.get("date"), summary, reason, score, tags, canonical_id),
+                    )
+                    # Tag canonical article's source list (stored in reason prefix)
+                    conn.execute(
+                        """UPDATE articles SET updated_at=? WHERE id=? AND canonical_id IS NULL""",
+                        (now_iso(), canonical_id),
+                    )
+                else:
+                    cursor = conn.execute(
+                        insert_article_sql(),
+                        (url, url, title, source.slug, source.name, source.category, source.kind,
+                         entry.get("date"), summary, reason, score, tags),
+                    )
+                    inserted += cursor.rowcount
 
             conn.execute(
                 """UPDATE sources SET
@@ -257,10 +323,11 @@ def list_articles(
     status: str | None = None,
     category: str | None = None,
     limit: int = 100,
+    offset: int = 0,
     db_path: Path | None = None,
 ) -> list[dict]:
     init_db(db_path)
-    clauses: list[str] = []
+    clauses: list[str] = ["(canonical_id IS NULL OR status != 'archived')"]
     params: list[object] = []
     if status:
         clauses.append("status = ?")
@@ -268,14 +335,32 @@ def list_articles(
     if category:
         clauses.append("category = ?")
         params.append(category)
-    where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
-    params.append(limit)
+    where = f"WHERE {' AND '.join(clauses)}"
+    params.extend([limit, offset])
     with connect(db_path) as conn:
         rows = conn.execute(
-            f"SELECT * FROM articles {where} ORDER BY discovered_at DESC, id DESC LIMIT ?",
+            f"SELECT * FROM articles {where} ORDER BY discovered_at DESC, id DESC LIMIT ? OFFSET ?",
             params,
         ).fetchall()
-        return [row_to_dict(row) for row in rows]
+        articles = [row_to_dict(row) for row in rows]
+
+        # Attach duplicate source names to canonical articles
+        article_ids = [a["id"] for a in articles]
+        if article_ids:
+            placeholders = ",".join("?" * len(article_ids))
+            dup_rows = conn.execute(
+                f"SELECT canonical_id, source_name FROM articles WHERE canonical_id IN ({placeholders}) AND status='archived'",
+                article_ids,
+            ).fetchall()
+            from collections import defaultdict
+            dupes_by_canonical: dict[int, list[str]] = defaultdict(list)
+            for dr in dup_rows:
+                d = row_to_dict(dr)
+                dupes_by_canonical[d["canonical_id"]].append(d["source_name"])
+            for article in articles:
+                article["also_from"] = dupes_by_canonical.get(article["id"], [])
+
+        return articles
 
 
 def search_articles(q: str, limit: int = 50, db_path: Path | None = None) -> list[dict]:
@@ -309,4 +394,14 @@ def set_article_status(article_id: int, status: str, db_path: Path | None = None
                 (status, now_iso(), article_id),
             )
         row = conn.execute("SELECT * FROM articles WHERE id=?", (article_id,)).fetchone()
-        return row_to_dict(row) if row else None
+        result = row_to_dict(row) if row else None
+
+    # Lazily embed articles when they become saved/read (fire-and-forget; ignore errors)
+    if result and status in {"saved", "read"}:
+        try:
+            from .embeddings import ensure_article_embedded
+            ensure_article_embedded(article_id, db_path)
+        except Exception:
+            pass  # embedding is optional — don't break the status update
+
+    return result

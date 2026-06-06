@@ -76,6 +76,8 @@ SQLITE_COLUMN_MIGRATIONS = [
     ("sources", "last_error",          "TEXT"),
     ("sources", "last_fetched_count",  "INTEGER NOT NULL DEFAULT 0"),
     ("sources", "last_inserted_count", "INTEGER NOT NULL DEFAULT 0"),
+    ("articles", "canonical_id",       "INTEGER REFERENCES articles(id)"),
+    ("articles", "embedding",          "BLOB"),
 ]
 
 POSTGRES_SCHEMA = [
@@ -131,6 +133,8 @@ POSTGRES_SCHEMA = [
     "ALTER TABLE sources ADD COLUMN IF NOT EXISTS last_error TEXT",
     "ALTER TABLE sources ADD COLUMN IF NOT EXISTS last_fetched_count INTEGER NOT NULL DEFAULT 0",
     "ALTER TABLE sources ADD COLUMN IF NOT EXISTS last_inserted_count INTEGER NOT NULL DEFAULT 0",
+    # Deduplication column
+    "ALTER TABLE articles ADD COLUMN IF NOT EXISTS canonical_id BIGINT REFERENCES articles(id)",
 ]
 
 
