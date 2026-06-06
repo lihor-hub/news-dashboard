@@ -10,8 +10,8 @@
 # re-pull if the tag is already cached).
 set -euo pipefail
 
-REPO="ghcr.io/ioachim-hub/news-dashboard"
-TAG="${1:-$(git rev-parse HEAD)}"
+REPO="${REPO:-localhost:5000/news-dashboard}"
+TAG="${1:-$(git rev-parse --short HEAD)}"
 IMAGE="${REPO}:${TAG}"
 
 echo "→ Building ${IMAGE}"
@@ -22,6 +22,7 @@ docker push "${IMAGE}"
 echo "→ Deploying with Helm (tag=${TAG})"
 helm upgrade --install news-dashboard ./helm/news-dashboard \
   --namespace news-dashboard --create-namespace \
+  --set image.repository="${REPO}" \
   --set image.tag="${TAG}" \
   --set service.type=NodePort \
   --set service.nodePort=30088 \

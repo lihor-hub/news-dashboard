@@ -178,18 +178,28 @@ jobs:
           # Pull eagerly — surfaces auth failures before touching the cluster.
           docker pull "${IMG}:${SHA}"
 
+          # Let Kubernetes pull the private GHCR image during rollout.
+          kubectl -n news-dashboard create secret docker-registry ghcr-pull-secret \
+            --docker-server=ghcr.io \
+            --docker-username="$GHCR_ACTOR" \
+            --docker-password="$GHCR_TOKEN" \
+            --dry-run=client -o yaml | kubectl apply -f -
+
           # Sync Helm chart changes from the repo.
           cd ~/news-dashboard && git pull --ff-only
 
-          # Upgrade (or install on first run). --set image.tag pins the exact
-          # image; add any other --set overrides your values.yaml needs.
+          # Upgrade (or install on first run). Keep the host Caddy route stable
+          # by preserving the NodePort and local durable hostPath storage.
           helm upgrade --install news-dashboard ./helm/news-dashboard \
             --namespace news-dashboard --create-namespace \
-            --set "image.tag=${SHA}"
-            # CONFIGURE: uncomment / add any extra overrides, e.g.:
-            # --set service.type=NodePort \
-            # --set service.nodePort=30088 \
-            # --set persistence.hostPath=/your/data/path
+            --set "image.repository=${IMG}" \
+            --set "image.tag=${SHA}" \
+            --set image.pullSecretName=ghcr-pull-secret \
+            --set service.type=NodePort \
+            --set service.nodePort=30088 \
+            --set persistence.hostPath=/home/ioachim-minipc/news-dashboard-data \
+            --set postgresql.persistence.hostPath=/home/ioachim-minipc/news-dashboard-postgres-data \
+            --set ingress.enabled=false
 
           # Wait for the new pods to become ready.
           # CONFIGURE: replace the deployment name if yours differs.
@@ -238,4 +248,4 @@ jobs:
               -o BatchMode=yes \
               "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
               "curl -sf --max-time 10 --retry 6 --retry-delay 5 \
-                 http://localhost:8080/api/health | grep '\"status\":\"ok\"'"
+                 http://localhost:30088/api/health | grep '\"status\":\"ok\"'"
