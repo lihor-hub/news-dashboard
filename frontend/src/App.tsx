@@ -1,11 +1,25 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import './styles.css'
-import { askAI, fetchArticles, fetchSources, fetchSummary, ingestNow, searchArticles, updateArticleStatus, updateSourceEnabled } from './api'
+import {
+  askAI,
+  fetchArticles,
+  fetchSchedulerStatus,
+  fetchSources,
+  fetchSummary,
+  ingestNow,
+  pauseScheduler,
+  resumeScheduler,
+  searchArticles,
+  setSchedulerInterval,
+  updateArticleStatus,
+  updateSourceEnabled,
+} from './api'
+import type { SchedulerStatus } from './api'
 import type { Article, ArticleStatus, AskResponse, Source, Summary } from './types'
 
-type ActiveTab = 'inbox' | 'saved' | 'read' | 'skipped' | 'archived' | 'sources'
+type ActiveTab = 'inbox' | 'saved' | 'read' | 'skipped' | 'archived' | 'sources' | 'scheduler'
 
-const TAB_STATUS: Record<Exclude<ActiveTab, 'sources'>, ArticleStatus> = {
+const TAB_STATUS: Record<Exclude<ActiveTab, 'sources' | 'scheduler'>, ArticleStatus> = {
   inbox: 'new',
   saved: 'saved',
   read: 'read',
@@ -14,12 +28,13 @@ const TAB_STATUS: Record<Exclude<ActiveTab, 'sources'>, ArticleStatus> = {
 }
 
 const TABS: { id: ActiveTab; label: string }[] = [
-  { id: 'inbox',    label: 'Inbox'    },
-  { id: 'saved',    label: 'Saved'    },
-  { id: 'read',     label: 'Read'     },
-  { id: 'skipped',  label: 'Skipped'  },
-  { id: 'archived', label: 'Archived' },
-  { id: 'sources',  label: 'Sources'  },
+  { id: 'inbox',     label: 'Inbox'     },
+  { id: 'saved',     label: 'Saved'     },
+  { id: 'read',      label: 'Read'      },
+  { id: 'skipped',   label: 'Skipped'   },
+  { id: 'archived',  label: 'Archived'  },
+  { id: 'sources',   label: 'Sources'   },
+  { id: 'scheduler', label: 'Scheduler' },
 ]
 
 const CATEGORIES = [
@@ -384,6 +399,212 @@ function AskPanel({ result, loading }: AskPanelProps) {
 
 // ===== App =====
 
+
+// ===== SchedulerTab =====
+
+const INTERVAL_PRESETS = [
+  { label: '15m', value: 15 },
+  { label: '30m', value: 30 },
+  { label: '1h',  value: 60 },
+  { label: '3h',  value: 180 },
+  { label: '6h',  value: 360 },
+]
+
+function relativeCountdown(isoStr: string | null): string {
+  if (!isoStr) return '—'
+  const ms = new Date(isoStr).getTime() - Date.now()
+  if (ms <= 0) return 'now'
+  const totalSecs = Math.floor(ms / 1000)
+  const h = Math.floor(totalSecs / 3600)
+  const m = Math.floor((totalSecs % 3600) / 60)
+  const s = totalSecs % 60
+  if (h > 0) return `${h}h ${m}m`
+  if (m > 0) return `${m}m ${s}s`
+  return `${s}s`
+}
+
+interface SchedulerTabProps {
+  onFetchNow: () => Promise<void>
+  ingesting: boolean
+}
+
+function SchedulerTab({ onFetchNow, ingesting }: SchedulerTabProps) {
+  const [status, setStatus] = useState<SchedulerStatus | null>(null)
+  const [loadingStatus, setLoadingStatus] = useState(true)
+  const [customMinutes, setCustomMinutes] = useState('')
+  const [actionPending, setActionPending] = useState(false)
+  const [tabMessage, setTabMessage] = useState<{ text: string; kind: 'success' | 'error' } | null>(null)
+  const [countdown, setCountdown] = useState<string>('—')
+
+  async function loadStatus() {
+    try {
+      const s = await fetchSchedulerStatus()
+      setStatus(s)
+    } catch (err) {
+      setTabMessage({ text: err instanceof Error ? err.message : 'Failed to load scheduler status', kind: 'error' })
+    } finally {
+      setLoadingStatus(false)
+    }
+  }
+
+  useEffect(() => {
+    void loadStatus()
+  }, [])
+
+  useEffect(() => {
+    if (!status) return
+    if (status.paused) { setCountdown('Paused'); return }
+    setCountdown(relativeCountdown(status.next_run_at))
+    const timer = setInterval(() => {
+      setCountdown(relativeCountdown(status.next_run_at))
+    }, 1000)
+    return () => clearInterval(timer)
+  }, [status])
+
+  async function handlePreset(minutes: number) {
+    setActionPending(true)
+    try {
+      const res = await setSchedulerInterval(minutes)
+      setStatus((prev) => prev ? { ...prev, interval_minutes: minutes, next_run_at: res.next_run_at } : prev)
+      setTabMessage({ text: `Interval set to ${minutes} minutes.`, kind: 'success' })
+    } catch (err) {
+      setTabMessage({ text: err instanceof Error ? err.message : 'Failed to set interval', kind: 'error' })
+    } finally {
+      setActionPending(false)
+    }
+  }
+
+  async function handleCustomSave() {
+    const mins = parseInt(customMinutes, 10)
+    if (!mins || mins < 1) {
+      setTabMessage({ text: 'Enter a valid number of minutes (≥ 1).', kind: 'error' })
+      return
+    }
+    await handlePreset(mins)
+    setCustomMinutes('')
+  }
+
+  async function handleTogglePause() {
+    if (!status) return
+    setActionPending(true)
+    try {
+      if (status.paused) {
+        const res = await resumeScheduler()
+        setStatus((prev) => prev ? { ...prev, paused: false, next_run_at: res.next_run_at ?? prev.next_run_at } : prev)
+        setTabMessage({ text: 'Scheduler resumed.', kind: 'success' })
+      } else {
+        await pauseScheduler()
+        setStatus((prev) => prev ? { ...prev, paused: true, next_run_at: null } : prev)
+        setTabMessage({ text: 'Scheduler paused.', kind: 'success' })
+      }
+    } catch (err) {
+      setTabMessage({ text: err instanceof Error ? err.message : 'Failed to toggle pause', kind: 'error' })
+    } finally {
+      setActionPending(false)
+    }
+  }
+
+  if (loadingStatus) {
+    return (
+      <div className="scheduler-panel">
+        <div className="skeleton sk-line" style={{ width: '60%', marginBottom: 12 }} />
+        <div className="skeleton sk-line" style={{ width: '40%' }} />
+      </div>
+    )
+  }
+
+  return (
+    <div className="scheduler-panel">
+      {tabMessage && (
+        <div className={`message-banner ${tabMessage.kind}`} role="status" style={{ marginBottom: 16 }}>
+          <span>{tabMessage.text}</span>
+          <button className="dismiss" onClick={() => setTabMessage(null)} aria-label="Dismiss">×</button>
+        </div>
+      )}
+
+      <div className="scheduler-card">
+        <h3 className="scheduler-card-title">Status</h3>
+        <div className="scheduler-status-row">
+          <span className={`scheduler-status-badge${status?.paused ? ' paused' : ' running'}`}>
+            {status?.paused ? '⏸ Paused' : '▶ Running'}
+          </span>
+          <span className="scheduler-status-detail">
+            {status?.paused ? 'No runs scheduled' : `Next run in ${countdown}`}
+          </span>
+        </div>
+        <div className="scheduler-status-row">
+          <span className="scheduler-label">Interval:</span>
+          <span className="scheduler-value">{status?.interval_minutes ?? '—'} minutes</span>
+        </div>
+        {!status?.paused && status?.next_run_at && (
+          <div className="scheduler-status-row">
+            <span className="scheduler-label">Next run at:</span>
+            <span className="scheduler-value scheduler-value--muted">
+              {new Date(status.next_run_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+            </span>
+          </div>
+        )}
+      </div>
+
+      <div className="scheduler-card">
+        <h3 className="scheduler-card-title">Change Interval</h3>
+        <div className="scheduler-presets">
+          {INTERVAL_PRESETS.map((p) => (
+            <button
+              key={p.value}
+              className={`scheduler-preset-btn${status?.interval_minutes === p.value ? ' active' : ''}`}
+              onClick={() => void handlePreset(p.value)}
+              disabled={actionPending}
+            >
+              {p.label}
+            </button>
+          ))}
+        </div>
+        <div className="scheduler-custom-row">
+          <input
+            type="number"
+            className="scheduler-custom-input"
+            min={1}
+            placeholder="Custom minutes…"
+            value={customMinutes}
+            onChange={(e) => setCustomMinutes(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') void handleCustomSave() }}
+            disabled={actionPending}
+            aria-label="Custom interval in minutes"
+          />
+          <button
+            className="scheduler-save-btn"
+            onClick={() => void handleCustomSave()}
+            disabled={actionPending || !customMinutes}
+          >
+            Save
+          </button>
+        </div>
+      </div>
+
+      <div className="scheduler-card">
+        <h3 className="scheduler-card-title">Controls</h3>
+        <div className="scheduler-controls-row">
+          <button
+            className={`scheduler-toggle-btn${status?.paused ? ' resume' : ' pause'}`}
+            onClick={() => void handleTogglePause()}
+            disabled={actionPending}
+          >
+            {status?.paused ? '▶ Resume' : '⏸ Pause'}
+          </button>
+          <button
+            className="scheduler-fetch-btn"
+            onClick={() => void onFetchNow()}
+            disabled={ingesting || actionPending}
+          >
+            {ingesting ? '⟳ Fetching…' : '↻ Fetch now'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 /** #28 — Sources panel: bottom sheet on mobile, sidebar on desktop */
 function SourcesPanel({ sources, onToggleEnabled }: { sources: Source[]; onToggleEnabled: (slug: string, enabled: boolean) => Promise<void> }) {
   const [sheetOpen, setSheetOpen] = useState(false)
@@ -557,7 +778,9 @@ export default function App() {
   const [loadingMore, setLoadingMore] = useState(false)
 
   const currentStatus: ArticleStatus | undefined =
-    activeTab !== 'sources' ? TAB_STATUS[activeTab] : undefined
+    activeTab !== 'sources' && activeTab !== 'scheduler'
+      ? TAB_STATUS[activeTab as Exclude<ActiveTab, 'sources' | 'scheduler'>]
+      : undefined
 
   async function load(opts: { preserveMessage?: boolean } = {}) {
     setLoading(true)
@@ -565,7 +788,7 @@ export default function App() {
     setHasMore(false)
     try {
       const [nextArticles, nextSources, nextSummary] = await Promise.all([
-        activeTab !== 'sources'
+        activeTab !== 'sources' && activeTab !== 'scheduler'
           ? fetchArticles(currentStatus, category !== 'all' ? category : undefined, 0, PAGE_SIZE)
           : Promise.resolve<Article[]>([]),
         fetchSources(),
@@ -574,7 +797,7 @@ export default function App() {
       setArticles(nextArticles)
       setSources(nextSources)
       setSummary(nextSummary)
-      setHasMore(activeTab !== 'sources' && nextArticles.length === PAGE_SIZE)
+      setHasMore(activeTab !== 'sources' && activeTab !== 'scheduler' && nextArticles.length === PAGE_SIZE)
       if (!opts.preserveMessage) setMessage(null)
     } catch (err) {
       setMessage({ text: err instanceof Error ? err.message : 'Failed to load', kind: 'error' })
@@ -676,7 +899,7 @@ export default function App() {
   const [searchLoading, setSearchLoading] = useState(false)
 
   useEffect(() => {
-    if (!search.trim() || activeTab === 'sources') {
+    if (!search.trim() || activeTab === 'sources' || activeTab === 'scheduler') {
       setSearchResults(null)
       return
     }
@@ -714,7 +937,7 @@ export default function App() {
       return
     }
 
-    if (activeTab === 'sources') return
+    if (activeTab === 'sources' || activeTab === 'scheduler') return
 
     const len = displayedArticles.length
     if (len === 0) return
@@ -782,12 +1005,15 @@ export default function App() {
 
   function tabCount(tab: ActiveTab): number {
     if (tab === 'sources') return sources.length
-    const s = TAB_STATUS[tab as Exclude<ActiveTab, 'sources'>]
+    if (tab === 'scheduler') return 0
+    const s = TAB_STATUS[tab as Exclude<ActiveTab, 'sources' | 'scheduler'>]
     return (summary.byStatus as Record<string, number>)[s] ?? 0
   }
 
   const sectionTitle = activeTab === 'sources'
     ? 'News Sources'
+    : activeTab === 'scheduler'
+    ? 'Scheduler'
     : activeTab === 'inbox'
     ? 'Inbox'
     : activeTab.charAt(0).toUpperCase() + activeTab.slice(1)
@@ -814,7 +1040,7 @@ export default function App() {
             <div className="topbar-sub">news.lihor.ro · private</div>
           </div>
 
-          {activeTab !== 'sources' && (
+          {activeTab !== 'sources' && activeTab !== 'scheduler' && (
             <div className="topbar-search">
               <div className="search-mode-toggle" role="group" aria-label="Search mode">
                 <button
@@ -890,13 +1116,13 @@ export default function App() {
             aria-current={activeTab === tab.id ? 'page' : undefined}
           >
             {tab.label}
-            <span className="tab-count">{tabCount(tab.id)}</span>
+            {tab.id !== 'scheduler' && <span className="tab-count">{tabCount(tab.id)}</span>}
           </button>
         ))}
       </nav>
 
       {/* #29: filter bar — responsive, no overflow, safe-area handled in CSS */}
-      {activeTab !== 'sources' && (
+      {activeTab !== 'sources' && activeTab !== 'scheduler' && (
         <div className="filter-bar" role="toolbar" aria-label="Category filter">
           {/* Issue #15: select-all checkbox */}
           <label className="select-all-label" title="Select all on page">
@@ -940,7 +1166,14 @@ export default function App() {
       )}
 
       <main>
-        {activeTab === 'sources' ? (
+        {activeTab === 'scheduler' ? (
+          <>
+            <div className="section-header">
+              <h2 className="section-title">{sectionTitle}</h2>
+            </div>
+            <SchedulerTab onFetchNow={runIngest} ingesting={ingesting} />
+          </>
+        ) : activeTab === 'sources' ? (
           <>
             <div className="section-header">
               <h2 className="section-title">{sectionTitle}</h2>

@@ -11,7 +11,16 @@ from pydantic import BaseModel
 
 from .db import connect, describe_database, init_db, row_to_dict
 from .ingest import ingest_all, list_articles, search_articles, set_article_status, sync_sources
-from .scheduler import get_next_ingest_at, start_scheduler, stop_scheduler
+from .scheduler import (
+    get_interval_minutes,
+    get_next_ingest_at,
+    is_paused,
+    pause_scheduler,
+    resume_scheduler,
+    set_interval,
+    start_scheduler,
+    stop_scheduler,
+)
 
 app = FastAPI(title="News Dashboard", version="0.3.0")
 app.add_middleware(
@@ -124,6 +133,41 @@ def set_source_enabled(slug: str, payload: EnabledUpdate) -> dict:
             raise HTTPException(status_code=404, detail="source not found")
         row = conn.execute("SELECT * FROM sources WHERE slug=?", (slug,)).fetchone()
         return row_to_dict(row)
+
+
+class IntervalUpdate(BaseModel):
+    minutes: int
+
+
+@app.get("/api/scheduler/status")
+def scheduler_status() -> dict:
+    next_run = get_next_ingest_at()
+    paused = is_paused()
+    return {
+        "interval_minutes": get_interval_minutes(),
+        "paused": paused,
+        "next_run_at": next_run,
+    }
+
+
+@app.post("/api/scheduler/interval")
+def scheduler_set_interval(payload: IntervalUpdate) -> dict:
+    if payload.minutes < 1:
+        raise HTTPException(status_code=400, detail="minutes must be >= 1")
+    set_interval(payload.minutes)
+    return {"interval_minutes": payload.minutes, "next_run_at": get_next_ingest_at()}
+
+
+@app.post("/api/scheduler/pause")
+def scheduler_pause() -> dict:
+    pause_scheduler()
+    return {"paused": True}
+
+
+@app.post("/api/scheduler/resume")
+def scheduler_resume() -> dict:
+    resume_scheduler()
+    return {"paused": False, "next_run_at": get_next_ingest_at()}
 
 
 class AskRequest(BaseModel):

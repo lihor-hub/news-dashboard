@@ -61,3 +61,28 @@ export async function updateSourceEnabled(slug: string, enabled: boolean): Promi
     body: JSON.stringify({ enabled }),
   })
 }
+
+export interface SchedulerStatus {
+  interval_minutes: number
+  paused: boolean
+  next_run_at: string | null
+}
+
+export async function fetchSchedulerStatus(): Promise<SchedulerStatus> {
+  return requestJson<SchedulerStatus>('/api/scheduler/status')
+}
+
+export async function setSchedulerInterval(minutes: number): Promise<{ interval_minutes: number; next_run_at: string | null }> {
+  return requestJson('/api/scheduler/interval', {
+    method: 'POST',
+    body: JSON.stringify({ minutes }),
+  })
+}
+
+export async function pauseScheduler(): Promise<{ paused: boolean }> {
+  return requestJson('/api/scheduler/pause', { method: 'POST' })
+}
+
+export async function resumeScheduler(): Promise<{ paused: boolean; next_run_at: string | null }> {
+  return requestJson('/api/scheduler/resume', { method: 'POST' })
+}

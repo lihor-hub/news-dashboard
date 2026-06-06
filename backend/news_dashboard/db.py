@@ -129,6 +129,13 @@ POSTGRES_SCHEMA = [
     # PostgreSQL FTS via tsvector — added as a generated column if not present
     "ALTER TABLE articles ADD COLUMN IF NOT EXISTS fts_vector tsvector GENERATED ALWAYS AS (to_tsvector('english', coalesce(title,'') || ' ' || coalesce(summary,'') || ' ' || coalesce(tags,''))) STORED",
     "CREATE INDEX IF NOT EXISTS idx_articles_fts ON articles USING gin(fts_vector)",
+    # Settings table for persistent configuration
+    """
+    CREATE TABLE IF NOT EXISTS settings (
+      key   TEXT PRIMARY KEY,
+      value TEXT NOT NULL
+    )
+    """,
     # Source health columns (safe to run repeatedly)
     "ALTER TABLE sources ADD COLUMN IF NOT EXISTS last_success_at TEXT",
     "ALTER TABLE sources ADD COLUMN IF NOT EXISTS last_error TEXT",
@@ -260,6 +267,25 @@ def init_db(db_path: Path | None = None, database_url: str | None = None) -> Non
         conn.executescript(SQLITE_SCHEMA)
         _apply_sqlite_column_migrations(conn)
         _build_fts_index(conn)
+def get_setting(key: str, default: str | None = None) -> str | None:
+    """Read a value from the settings table."""
+    try:
+        with connect() as conn:
+            row = conn.execute("SELECT value FROM settings WHERE key=?", (key,)).fetchone()
+            if row:
+                return row["value"] if isinstance(row, dict) else row[0]
+    except Exception:
+        pass
+    return default
+
+
+def set_setting(key: str, value: str) -> None:
+    """Upsert a key/value pair in the settings table."""
+    with connect() as conn:
+        conn.execute(
+            "INSERT INTO settings(key, value) VALUES(?, ?) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value",
+            (key, value),
+        )
 
 
 def row_to_dict(row: Any) -> dict:

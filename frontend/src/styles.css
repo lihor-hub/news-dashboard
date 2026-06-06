@@ -1443,3 +1443,222 @@ kbd {
 .ask-sources-list a:hover {
   text-decoration: underline;
 }
+
+/* ===== SCHEDULER TAB ===== */
+
+.scheduler-panel {
+  max-width: 600px;
+  margin: 0 auto;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.scheduler-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  padding: 16px 20px;
+  box-shadow: var(--shadow-card);
+}
+
+.scheduler-card-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-2);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 12px;
+}
+
+.scheduler-status-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.scheduler-status-row:last-child {
+  margin-bottom: 0;
+}
+
+.scheduler-status-badge {
+  font-size: 13px;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: var(--r-full);
+}
+
+.scheduler-status-badge.running {
+  background: var(--s-read-bg);
+  color: var(--s-read-fg);
+}
+
+.scheduler-status-badge.paused {
+  background: var(--s-skipped-bg);
+  color: var(--s-skipped-fg);
+}
+
+.scheduler-status-detail {
+  font-size: 13px;
+  color: var(--text-2);
+}
+
+.scheduler-label {
+  font-size: 13px;
+  color: var(--text-2);
+  min-width: 100px;
+}
+
+.scheduler-value {
+  font-size: 13px;
+  color: var(--text-1);
+  font-weight: 500;
+}
+
+.scheduler-value--muted {
+  color: var(--text-2);
+  font-weight: 400;
+}
+
+.scheduler-presets {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.scheduler-preset-btn {
+  padding: 6px 14px;
+  border-radius: var(--r-md);
+  border: 1px solid var(--border);
+  background: var(--surface-alt);
+  color: var(--text-1);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background var(--t) var(--ease), border-color var(--t) var(--ease);
+}
+
+.scheduler-preset-btn:hover:not(:disabled) {
+  background: var(--surface-hover);
+  border-color: var(--border-strong);
+}
+
+.scheduler-preset-btn.active {
+  background: var(--accent-pale);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.scheduler-preset-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.scheduler-custom-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.scheduler-custom-input {
+  flex: 1;
+  padding: 6px 10px;
+  border-radius: var(--r-md);
+  border: 1px solid var(--border);
+  background: var(--surface-alt);
+  color: var(--text-1);
+  font-size: 13px;
+  min-width: 0;
+}
+
+.scheduler-custom-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.scheduler-save-btn {
+  padding: 6px 16px;
+  border-radius: var(--r-md);
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background var(--t) var(--ease);
+  white-space: nowrap;
+}
+
+.scheduler-save-btn:hover:not(:disabled) {
+  background: var(--accent-hover);
+}
+
+.scheduler-save-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.scheduler-controls-row {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.scheduler-toggle-btn {
+  padding: 7px 18px;
+  border-radius: var(--r-md);
+  border: 1px solid var(--border-strong);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background var(--t) var(--ease), color var(--t) var(--ease);
+}
+
+.scheduler-toggle-btn.pause {
+  background: var(--s-saved-bg);
+  color: var(--s-saved-fg);
+  border-color: transparent;
+}
+
+.scheduler-toggle-btn.pause:hover:not(:disabled) {
+  filter: brightness(0.95);
+}
+
+.scheduler-toggle-btn.resume {
+  background: var(--s-read-bg);
+  color: var(--s-read-fg);
+  border-color: transparent;
+}
+
+.scheduler-toggle-btn.resume:hover:not(:disabled) {
+  filter: brightness(0.95);
+}
+
+.scheduler-toggle-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.scheduler-fetch-btn {
+  padding: 7px 18px;
+  border-radius: var(--r-md);
+  border: 1px solid var(--border);
+  background: var(--surface-alt);
+  color: var(--text-1);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background var(--t) var(--ease);
+}
+
+.scheduler-fetch-btn:hover:not(:disabled) {
+  background: var(--surface-hover);
+}
+
+.scheduler-fetch-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
