@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import re
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime
 from html import unescape
 from pathlib import Path
@@ -176,12 +176,14 @@ def _find_canonical(conn: Any, canonical_url: str, title: str) -> int | None:
         return row["id"] if isinstance(row, dict) else row[0]
 
     # Fuzzy title match against recent articles (last 7 days) that are canonical
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
     rows = conn.execute(
         """SELECT id, title FROM articles
            WHERE canonical_id IS NULL
-             AND discovered_at >= datetime('now', '-7 days')
+             AND discovered_at >= ?
            ORDER BY discovered_at DESC
            LIMIT 200""",
+        (cutoff,),
     ).fetchall()
     for r in rows:
         existing_title = r["title"] if isinstance(r, dict) else r[1]
@@ -262,11 +264,12 @@ def ingest_source(source: SourceDefinition, db_path: Path | None = None) -> int:
                 if canonical_id is not None:
                     # Insert as archived duplicate pointing to canonical
                     conn.execute(
-                        """INSERT OR IGNORE INTO articles(
+                        """INSERT INTO articles(
                              url, canonical_url, title, source_slug, source_name, category, kind,
                              published_at, summary, reason, importance_score, tags,
                              status, canonical_id
-                           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'archived', ?)""",
+                           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'archived', ?)
+                           ON CONFLICT (url) DO NOTHING""",
                         (url, url, title, source.slug, source.name, source.category, source.kind,
                          entry.get("date"), summary, reason, score, tags, canonical_id),
                     )
