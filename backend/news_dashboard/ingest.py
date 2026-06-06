@@ -444,6 +444,22 @@ def ingest_all(db_path: Path | None = None) -> dict[str, int]:
     return results
 
 
+_INTERNAL_ARTICLE_COLUMNS = frozenset({"embedding", "fts_vector"})
+
+
+def _article_dict(row: Any) -> dict:
+    """Convert a DB row to a dict, stripping internal-only columns.
+
+    'embedding' (BLOB/BYTEA) contains binary float data that is not
+    UTF-8-safe and must never be sent to the frontend.  'fts_vector'
+    (Postgres GENERATED ALWAYS tsvector) is similarly internal.
+    """
+    d = row_to_dict(row)
+    for col in _INTERNAL_ARTICLE_COLUMNS:
+        d.pop(col, None)
+    return d
+
+
 def list_articles(
     status: str | None = None,
     category: str | None = None,
@@ -467,7 +483,7 @@ def list_articles(
             f"SELECT * FROM articles {where} ORDER BY discovered_at DESC, id DESC LIMIT ? OFFSET ?",
             params,
         ).fetchall()
-        articles = [row_to_dict(row) for row in rows]
+        articles = [_article_dict(row) for row in rows]
 
         # Attach duplicate source names to canonical articles
         article_ids = [a["id"] for a in articles]
@@ -494,7 +510,7 @@ def search_articles(q: str, limit: int = 50, db_path: Path | None = None) -> lis
     sql, params = search_articles_sql(terms, limit)
     with connect(db_path) as conn:
         rows = conn.execute(sql, params).fetchall()
-        return [row_to_dict(row) for row in rows]
+        return [_article_dict(row) for row in rows]
 
 
 def set_article_status(article_id: int, status: str, db_path: Path | None = None) -> dict | None:
@@ -519,7 +535,7 @@ def set_article_status(article_id: int, status: str, db_path: Path | None = None
                 (status, now_iso(), article_id),
             )
         row = conn.execute("SELECT * FROM articles WHERE id=?", (article_id,)).fetchone()
-        result = row_to_dict(row) if row else None
+        result = _article_dict(row) if row else None
 
     # Lazily embed articles when they become saved/read (fire-and-forget; ignore errors)
     if result and status in {"saved", "read"}:
