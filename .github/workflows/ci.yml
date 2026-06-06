@@ -121,6 +121,8 @@ jobs:
           IMG: ${{ env.IMAGE }}
           GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
           GHCR_ACTOR: ${{ github.actor }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
           set -euo pipefail
 
@@ -138,21 +140,41 @@ jobs:
             --docker-password="$GHCR_TOKEN" \
             --dry-run=client -o yaml | kubectl apply -f -
 
+          ai_secret_args=()
+          if [ -n "$OPENAI_API_KEY" ]; then
+            ai_secret_args+=(--from-literal=OPENAI_API_KEY="$OPENAI_API_KEY")
+          fi
+          if [ -n "$ANTHROPIC_API_KEY" ]; then
+            ai_secret_args+=(--from-literal=ANTHROPIC_API_KEY="$ANTHROPIC_API_KEY")
+          fi
+
+          ai_helm_args=()
+          if [ ${#ai_secret_args[@]} -gt 0 ]; then
+            kubectl -n news-dashboard create secret generic news-dashboard-ai \
+              "${ai_secret_args[@]}" \
+              --dry-run=client -o yaml | kubectl apply -f -
+            ai_helm_args+=(--set app.ai.existingSecret=news-dashboard-ai)
+          fi
+
           # Sync Helm chart changes from the repo.
           cd ~/news-dashboard && git pull --ff-only
 
           # Upgrade (or install on first run). Keep the host Caddy route stable
           # by preserving the NodePort and local durable hostPath storage.
-          helm upgrade --install news-dashboard ./helm/news-dashboard \
-            --namespace news-dashboard --create-namespace \
-            --set "image.repository=${IMG}" \
-            --set "image.tag=${SHA}" \
-            --set image.pullSecretName=ghcr-pull-secret \
-            --set service.type=NodePort \
-            --set service.nodePort=30088 \
-            --set persistence.hostPath=/home/ioachim-minipc/news-dashboard-data \
-            --set postgresql.persistence.hostPath=/home/ioachim-minipc/news-dashboard-postgres-data \
+          helm_args=(
+            upgrade --install news-dashboard ./helm/news-dashboard
+            --namespace news-dashboard --create-namespace
+            --set "image.repository=${IMG}"
+            --set "image.tag=${SHA}"
+            --set image.pullSecretName=ghcr-pull-secret
+            --set service.type=NodePort
+            --set service.nodePort=30088
+            --set persistence.hostPath=/home/ioachim-minipc/news-dashboard-data
+            --set postgresql.persistence.hostPath=/home/ioachim-minipc/news-dashboard-postgres-data
             --set ingress.enabled=false
+            "${ai_helm_args[@]}"
+          )
+          helm "${helm_args[@]}"
 
           # Wait for the new pods to become ready.
           kubectl -n news-dashboard rollout status \
