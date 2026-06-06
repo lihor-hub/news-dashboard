@@ -957,12 +957,41 @@ ul { list-style: none; }
   font-style: italic;
 }
 
-/* ===== MOBILE SMALL TWEAKS ===== */
+/* ===== RESPONSIVE ===== */
 @media (max-width: 767px) {
-  .topbar { padding: 8px 0; }
+  .topbar { padding: 6px 0; }
   .topbar-sub { display: none; }
-  .fetch-btn-label { display: none; }
-  .fetch-btn { padding: 0 11px; }
+
+  /* Two-row topbar on small screens (≤767 px):
+     Row 1: brand title (flex: 1) + fetch button (flex: none, right-aligned)
+     Row 2: search input (full width) */
+  .topbar-inner {
+    flex-wrap: wrap;
+    row-gap: 8px;
+    align-items: center;
+  }
+  .topbar-brand {
+    flex: 1 1 auto;
+  }
+  .fetch-btn {
+    flex: none;
+    order: 2;
+    padding: 0 14px;
+  }
+  .fetch-btn-label {
+    display: inline;
+    font-size: 12px;
+  }
+  .topbar-search {
+    order: 3;
+    flex: 1 1 100%;
+    min-width: 0;
+  }
+  .topbar-search input {
+    font-size: 15px;
+    min-height: 44px;
+  }
+
   .page { padding: 0 12px; padding-bottom: max(48px, calc(48px + env(safe-area-inset-bottom))); }
   .tabs-wrap { margin: 0 -12px; padding: 0 12px; }
   .section-header { padding: 14px 0 10px; }
