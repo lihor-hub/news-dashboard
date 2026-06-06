@@ -56,6 +56,18 @@ spec:
             - name: NEWS_DASHBOARD_DB
               value: {{ .Values.app.databasePath | quote }}
 {{- end }}
+{{- if .Values.app.ai.existingSecret }}
+            - name: OPENAI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.app.ai.existingSecret | quote }}
+                  key: {{ .Values.app.ai.openaiApiKeyKey | quote }}
+            - name: ANTHROPIC_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.app.ai.existingSecret | quote }}
+                  key: {{ .Values.app.ai.anthropicApiKeyKey | quote }}
+{{- end }}
           ports:
             - containerPort: 8080
               name: http

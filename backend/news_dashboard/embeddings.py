@@ -7,11 +7,25 @@ Retrieval       : pure-Python cosine similarity (no sqlite-vss needed)
 """
 from __future__ import annotations
 
+import os
 import struct
 from typing import Any
 
 MIN_ARTICLES = 5   # refuse to answer if fewer than this many articles are embedded
 TOP_K = 8          # articles to include as context
+
+
+class MissingAICredentialsError(RuntimeError):
+    """Raised when Ask AI is used without the required provider credentials."""
+
+
+def _require_env(name: str, purpose: str) -> str:
+    value = os.getenv(name)
+    if value:
+        return value
+    raise MissingAICredentialsError(
+        f"Ask AI requires {name} to {purpose}. Set {name} in the app environment."
+    )
 
 
 # ── Embedding serialisation ────────────────────────────────────────────────
@@ -31,7 +45,7 @@ def _embed(text: str) -> list[float]:
     """Embed *text* with text-embedding-3-small via the OpenAI SDK."""
     from openai import OpenAI  # lazy import — optional dep at import time
 
-    client = OpenAI()  # reads OPENAI_API_KEY from env
+    client = OpenAI(api_key=_require_env("OPENAI_API_KEY", "generate article embeddings"))
     response = client.embeddings.create(
         model="text-embedding-3-small",
         input=text,
@@ -177,7 +191,9 @@ def ask(query: str, db_path: Any = None) -> dict:
     # 6. Call claude-haiku-4-5 for the answer
     import anthropic  # lazy import
 
-    client = anthropic.Anthropic()
+    client = anthropic.Anthropic(
+        api_key=_require_env("ANTHROPIC_API_KEY", "generate answers")
+    )
     message = client.messages.create(
         model="claude-haiku-4-5",
         max_tokens=1024,

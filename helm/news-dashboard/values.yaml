@@ -30,6 +30,11 @@ persistence:
 
 app:
   databasePath: /data/news-dashboard.db
+  ai:
+    # Optional: pre-existing Secret with OPENAI_API_KEY and ANTHROPIC_API_KEY.
+    existingSecret: ""
+    openaiApiKeyKey: OPENAI_API_KEY
+    anthropicApiKeyKey: ANTHROPIC_API_KEY
 
 postgresql:
   enabled: true
