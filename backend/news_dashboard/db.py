@@ -267,8 +267,6 @@ def init_db(db_path: Path | None = None, database_url: str | None = None) -> Non
         conn.executescript(SQLITE_SCHEMA)
         _apply_sqlite_column_migrations(conn)
         _build_fts_index(conn)
-
-
 def get_setting(key: str, default: str | None = None) -> str | None:
     """Read a value from the settings table."""
     try:
