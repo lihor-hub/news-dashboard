@@ -1,10 +1,7 @@
 """Tests for source health tracking, better summaries, noise filters, and search."""
 from __future__ import annotations
 
-import os
 from pathlib import Path
-
-import pytest
 
 from news_dashboard.db import connect
 from news_dashboard.ingest import (
@@ -23,26 +20,17 @@ from news_dashboard.sources import DEFAULT_SOURCES, SourceDefinition
 # Source health tracking
 # ──────────────────────────────────────────────
 
-def _require_test_database(monkeypatch: pytest.MonkeyPatch) -> None:
-    database_url = os.getenv("TEST_DATABASE_URL")
-    if not database_url:
-        pytest.skip("set TEST_DATABASE_URL to run Postgres integration tests")
-    monkeypatch.setenv("DATABASE_URL", database_url)
-
-
 def _insert_article(conn, n: int = 1) -> None:
     """Insert a test article using a source that's already synced."""
     for i in range(n):
         conn.execute(
-            """INSERT INTO articles(url, canonical_url, title, source_slug, source_name, category, kind)
-               VALUES (%s, %s, %s, 'python-insider', 'Python Insider', 'python', 'rss_feed')
-               ON CONFLICT (url) DO NOTHING""",
+            """INSERT OR IGNORE INTO articles(url, canonical_url, title, source_slug, source_name, category, kind)
+               VALUES (?, ?, ?, 'python-insider', 'Python Insider', 'python', 'rss_feed')""",
             (f"https://example.com/art-{i}", f"https://example.com/art-{i}", f"Article {i}"),
         )
 
 
-def test_source_columns_present(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    _require_test_database(monkeypatch)
+def test_source_columns_present(tmp_path: Path) -> None:
     sync_sources(tmp_path / "health.db")
     with connect(tmp_path / "health.db") as conn:
         row = conn.execute("SELECT * FROM sources LIMIT 1").fetchone()
@@ -51,16 +39,15 @@ def test_source_columns_present(tmp_path: Path, monkeypatch: pytest.MonkeyPatch)
             assert col in keys, f"missing column: {col}"
 
 
-def test_source_error_tracked(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    _require_test_database(monkeypatch)
+def test_source_error_tracked(tmp_path: Path) -> None:
     from news_dashboard.sources import SourceDefinition
     bad = SourceDefinition("bad-feed", "Bad Feed", "http://localhost:0/nope", "python")
     db = tmp_path / "err.db"
     sync_sources(db)
     with connect(db) as conn:
         conn.execute(
-            "INSERT INTO sources(slug, name, url, category, kind, priority, enabled) "
-            "VALUES (%s, %s, %s, %s, %s, 50, 1) ON CONFLICT (slug) DO NOTHING",
+            "INSERT OR IGNORE INTO sources(slug, name, url, category, kind, priority, enabled) "
+            "VALUES (?, ?, ?, ?, ?, 50, 1)",
             (bad.slug, bad.name, bad.url, bad.category, bad.kind),
         )
 
@@ -71,7 +58,7 @@ def test_source_error_tracked(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -
         pass  # expected
 
     with connect(db) as conn:
-        row = conn.execute("SELECT last_error, last_checked_at FROM sources WHERE slug=%s", (bad.slug,)).fetchone()
+        row = conn.execute("SELECT last_error, last_checked_at FROM sources WHERE slug=?", (bad.slug,)).fetchone()
         assert row["last_error"] is not None, "last_error should be set on failure"
         assert row["last_checked_at"] is not None, "last_checked_at should be set even on failure"
 
@@ -133,8 +120,7 @@ def test_infer_tags_agents() -> None:
 # Search (issue #9)
 # ──────────────────────────────────────────────
 
-def test_search_returns_matching_articles(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    _require_test_database(monkeypatch)
+def test_search_returns_matching_articles(tmp_path: Path) -> None:
     db = tmp_path / "search.db"
     sync_sources(db)
     with connect(db) as conn:
@@ -153,8 +139,7 @@ def test_search_returns_matching_articles(tmp_path: Path, monkeypatch: pytest.Mo
         assert r["url"] != "https://ex.com/2", "Docker article should not appear in Python search"
 
 
-def test_search_empty_query_returns_empty(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    _require_test_database(monkeypatch)
+def test_search_empty_query_returns_empty(tmp_path: Path) -> None:
     db = tmp_path / "search2.db"
     sync_sources(db)
     # Single-char queries get filtered out

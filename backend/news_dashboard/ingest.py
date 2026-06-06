@@ -10,7 +10,7 @@ from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
 import feedparser
 
-from .db import connect, init_db, insert_article_sql, insert_duplicate_article_sql, row_to_dict, search_articles_sql
+from .db import connect, init_db, insert_article_sql, row_to_dict, search_articles_sql
 from .sources import DEFAULT_SOURCES, SourceDefinition
 
 try:
@@ -169,7 +169,7 @@ def _find_canonical(conn: Any, canonical_url: str, title: str) -> int | None:
     """Return the id of an existing canonical article that matches by URL or fuzzy title, or None."""
     # Exact URL match (canonical_url already stripped of tracking params)
     row = conn.execute(
-        "SELECT id FROM articles WHERE canonical_url=%s AND (canonical_id IS NULL OR canonical_id=id) LIMIT 1",
+        "SELECT id FROM articles WHERE canonical_url=? AND (canonical_id IS NULL OR canonical_id=id) LIMIT 1",
         (canonical_url,),
     ).fetchone()
     if row:
@@ -179,7 +179,7 @@ def _find_canonical(conn: Any, canonical_url: str, title: str) -> int | None:
     rows = conn.execute(
         """SELECT id, title FROM articles
            WHERE canonical_id IS NULL
-             AND discovered_at::timestamp >= NOW() - INTERVAL '7 days'
+             AND discovered_at >= datetime('now', '-7 days')
            ORDER BY discovered_at DESC
            LIMIT 200""",
     ).fetchall()
@@ -198,7 +198,7 @@ def sync_sources(db_path: Path | None = None) -> None:
             conn.execute(
                 """
                 INSERT INTO sources(slug, name, url, category, kind, priority, enabled)
-                VALUES (%s, %s, %s, %s, %s, %s, 1)
+                VALUES (?, ?, ?, ?, ?, ?, 1)
                 ON CONFLICT(slug) DO UPDATE SET
                   name=excluded.name,
                   url=excluded.url,
@@ -262,13 +262,17 @@ def ingest_source(source: SourceDefinition, db_path: Path | None = None) -> int:
                 if canonical_id is not None:
                     # Insert as archived duplicate pointing to canonical
                     conn.execute(
-                        insert_duplicate_article_sql(),
+                        """INSERT OR IGNORE INTO articles(
+                             url, canonical_url, title, source_slug, source_name, category, kind,
+                             published_at, summary, reason, importance_score, tags,
+                             status, canonical_id
+                           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'archived', ?)""",
                         (url, url, title, source.slug, source.name, source.category, source.kind,
                          entry.get("date"), summary, reason, score, tags, canonical_id),
                     )
                     # Tag canonical article's source list (stored in reason prefix)
                     conn.execute(
-                        """UPDATE articles SET updated_at=%s WHERE id=%s AND canonical_id IS NULL""",
+                        """UPDATE articles SET updated_at=? WHERE id=? AND canonical_id IS NULL""",
                         (now_iso(), canonical_id),
                     )
                 else:
@@ -281,9 +285,9 @@ def ingest_source(source: SourceDefinition, db_path: Path | None = None) -> int:
 
             conn.execute(
                 """UPDATE sources SET
-                     last_checked_at=%s, last_success_at=%s, last_error=NULL,
-                     last_fetched_count=%s, last_inserted_count=%s
-                   WHERE slug=%s""",
+                     last_checked_at=?, last_success_at=?, last_error=NULL,
+                     last_fetched_count=?, last_inserted_count=?
+                   WHERE slug=?""",
                 (checked_at, checked_at, fetched, inserted, source.slug),
             )
 
@@ -292,9 +296,9 @@ def ingest_source(source: SourceDefinition, db_path: Path | None = None) -> int:
         with connect(db_path) as conn:
             conn.execute(
                 """UPDATE sources SET
-                     last_checked_at=%s, last_error=%s,
+                     last_checked_at=?, last_error=?,
                      last_fetched_count=0, last_inserted_count=0
-                   WHERE slug=%s""",
+                   WHERE slug=?""",
                 (checked_at, error_msg, source.slug),
             )
         raise
@@ -326,16 +330,16 @@ def list_articles(
     clauses: list[str] = ["(canonical_id IS NULL OR status != 'archived')"]
     params: list[object] = []
     if status:
-        clauses.append("status = %s")
+        clauses.append("status = ?")
         params.append(status)
     if category:
-        clauses.append("category = %s")
+        clauses.append("category = ?")
         params.append(category)
     where = f"WHERE {' AND '.join(clauses)}"
     params.extend([limit, offset])
     with connect(db_path) as conn:
         rows = conn.execute(
-            f"SELECT * FROM articles {where} ORDER BY discovered_at DESC, id DESC LIMIT %s OFFSET %s",
+            f"SELECT * FROM articles {where} ORDER BY discovered_at DESC, id DESC LIMIT ? OFFSET ?",
             params,
         ).fetchall()
         articles = [row_to_dict(row) for row in rows]
@@ -343,9 +347,10 @@ def list_articles(
         # Attach duplicate source names to canonical articles
         article_ids = [a["id"] for a in articles]
         if article_ids:
+            placeholders = ",".join("?" * len(article_ids))
             dup_rows = conn.execute(
-                "SELECT canonical_id, source_name FROM articles WHERE canonical_id = ANY(%s) AND status='archived'",
-                (article_ids,),
+                f"SELECT canonical_id, source_name FROM articles WHERE canonical_id IN ({placeholders}) AND status='archived'",
+                article_ids,
             ).fetchall()
             from collections import defaultdict
             dupes_by_canonical: dict[int, list[str]] = defaultdict(list)
@@ -380,15 +385,15 @@ def set_article_status(article_id: int, status: str, db_path: Path | None = None
     with connect(db_path) as conn:
         if timestamp_column:
             conn.execute(
-                f"UPDATE articles SET status=%s, {timestamp_column}=%s, updated_at=%s WHERE id=%s",
+                f"UPDATE articles SET status=?, {timestamp_column}=?, updated_at=? WHERE id=?",
                 (status, now_iso(), now_iso(), article_id),
             )
         else:
             conn.execute(
-                "UPDATE articles SET status=%s, updated_at=%s WHERE id=%s",
+                "UPDATE articles SET status=?, updated_at=? WHERE id=?",
                 (status, now_iso(), article_id),
             )
-        row = conn.execute("SELECT * FROM articles WHERE id=%s", (article_id,)).fetchone()
+        row = conn.execute("SELECT * FROM articles WHERE id=?", (article_id,)).fetchone()
         result = row_to_dict(row) if row else None
 
     # Lazily embed articles when they become saved/read (fire-and-forget; ignore errors)
