@@ -25,8 +25,9 @@ def _insert_article(conn, n: int = 1) -> None:
     """Insert a test article using a source that's already synced."""
     for i in range(n):
         conn.execute(
-            """INSERT OR IGNORE INTO articles(url, canonical_url, title, source_slug, source_name, category, kind)
-               VALUES (?, ?, ?, 'python-insider', 'Python Insider', 'python', 'rss_feed')""",
+            """INSERT INTO articles(url, canonical_url, title, source_slug, source_name, category, kind)
+               VALUES (?, ?, ?, 'python-insider', 'Python Insider', 'python', 'rss_feed')
+               ON CONFLICT (url) DO NOTHING""",
             (f"https://example.com/art-{i}", f"https://example.com/art-{i}", f"Article {i}"),
         )
 
@@ -47,8 +48,8 @@ def test_source_error_tracked(tmp_path: Path) -> None:
     sync_sources(db)
     with connect(db) as conn:
         conn.execute(
-            "INSERT OR IGNORE INTO sources(slug, name, url, category, kind, priority, enabled) "
-            "VALUES (?, ?, ?, ?, ?, 50, 1)",
+            "INSERT INTO sources(slug, name, url, category, kind, priority, enabled) "
+            "VALUES (?, ?, ?, ?, ?, 50, 1) ON CONFLICT(slug) DO NOTHING",
             (bad.slug, bad.name, bad.url, bad.category, bad.kind),
         )
 
