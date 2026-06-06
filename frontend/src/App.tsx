@@ -212,7 +212,7 @@ function SourceHealthBadge({ source }: { source: Source }) {
   return <span className="source-health healthy">● ok</span>
 }
 
-function SourcesPanel({ sources, onToggleEnabled }: { sources: Source[]; onToggleEnabled: (slug: string, enabled: boolean) => Promise<void> }) {
+function SourcesContent({ sources, onToggleEnabled }: { sources: Source[]; onToggleEnabled: (slug: string, enabled: boolean) => Promise<void> }) {
   const grouped = useMemo(() => {
     return sources.reduce<Record<string, Source[]>>((acc, s) => {
       if (!acc[s.category]) acc[s.category] = []
@@ -371,6 +371,107 @@ function AskPanel({ result, loading }: AskPanelProps) {
 }
 
 // ===== App =====
+
+/** #28 — Sources panel: bottom sheet on mobile, sidebar on desktop */
+function SourcesPanel({ sources, onToggleEnabled }: { sources: Source[]; onToggleEnabled: (slug: string, enabled: boolean) => Promise<void> }) {
+  const [sheetOpen, setSheetOpen] = useState(false)
+
+  // Prevent body scroll while sheet is open
+  useEffect(() => {
+    if (sheetOpen) {
+      document.body.style.overflow = 'hidden'
+    } else {
+      document.body.style.overflow = ''
+    }
+    return () => { document.body.style.overflow = '' }
+  }, [sheetOpen])
+
+  const categories = useMemo(() => {
+    return Array.from(new Set(sources.map((s) => s.category)))
+  }, [sources])
+
+  const [activeCategory, setActiveCategory] = useState<string | null>(null)
+
+  const filteredSources = activeCategory
+    ? sources.filter((s) => s.category === activeCategory)
+    : sources
+
+  return (
+    <>
+      {/* ── Mobile: toggle button + bottom sheet ── */}
+      <button
+        className="sources-toggle-btn"
+        onClick={() => setSheetOpen(true)}
+        aria-expanded={sheetOpen}
+        aria-controls="sources-sheet"
+      >
+        <span>📋</span>
+        <span>View all {sources.length} sources</span>
+        <span style={{ marginLeft: 'auto', fontSize: 18 }}>›</span>
+      </button>
+
+      {/* Overlay */}
+      <div
+        className={`sources-sheet-overlay${sheetOpen ? ' open' : ''}`}
+        onClick={() => setSheetOpen(false)}
+        aria-hidden="true"
+      />
+
+      {/* Bottom sheet */}
+      <div
+        id="sources-sheet"
+        className={`sources-sheet${sheetOpen ? ' open' : ''}`}
+        role="dialog"
+        aria-modal="true"
+        aria-label="News sources"
+      >
+        <div className="sources-sheet-handle" aria-hidden="true" />
+        <div className="sources-sheet-header">
+          <span className="sources-sheet-title">News Sources ({sources.length})</span>
+          <button
+            className="sources-sheet-close"
+            onClick={() => setSheetOpen(false)}
+            aria-label="Close sources panel"
+          >
+            ×
+          </button>
+        </div>
+        <div className="sources-sheet-content">
+          <SourcesContent sources={sources} onToggleEnabled={onToggleEnabled} />
+        </div>
+      </div>
+
+      {/* ── Desktop: sidebar + main grid ── */}
+      <div className="sources-desktop-layout">
+        <aside className="sources-sidebar" aria-label="Filter by category">
+          <div className="sources-sidebar-title">Categories</div>
+          <button
+            className={`sources-sidebar-btn${activeCategory === null ? ' active' : ''}`}
+            onClick={() => setActiveCategory(null)}
+          >
+            All sources
+            <span style={{ marginLeft: 'auto', color: 'var(--text-3)', fontSize: 11 }}>{sources.length}</span>
+          </button>
+          {categories.map((cat) => (
+            <button
+              key={cat}
+              className={`sources-sidebar-btn${activeCategory === cat ? ' active' : ''}`}
+              onClick={() => setActiveCategory(cat)}
+            >
+              {cat.replace(/-/g, ' ')}
+              <span style={{ marginLeft: 'auto', color: 'var(--text-3)', fontSize: 11 }}>
+                {sources.filter((s) => s.category === cat).length}
+              </span>
+            </button>
+          ))}
+        </aside>
+        <div className="sources-main">
+          <SourcesContent sources={filteredSources} onToggleEnabled={onToggleEnabled} />
+        </div>
+      </div>
+    </>
+  )
+}
 
 export default function App() {
   const [articles, setArticles] = useState<Article[]>([])
@@ -782,6 +883,7 @@ export default function App() {
         ))}
       </nav>
 
+      {/* #29: filter bar — responsive, no overflow, safe-area handled in CSS */}
       {activeTab !== 'sources' && (
         <div className="filter-bar" role="toolbar" aria-label="Category filter">
           {/* Issue #15: select-all checkbox */}
@@ -840,6 +942,7 @@ export default function App() {
                 {isSearchMode ? `Search: "${search}"` : sectionTitle}
               </h2>
             </div>
+            {/* #26: CSS Grid, 1-col mobile / 2-col desktop */}
             <div className="articles-grid">
               {(loading && !isSearchMode) || searchLoading ? (
                 Array.from({ length: 6 }, (_, i) => <SkeletonCard key={i} />)
