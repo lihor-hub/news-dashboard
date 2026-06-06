@@ -2,7 +2,7 @@
 name = "news-dashboard"
 version = "0.1.0"
 description = "Private news inbox, reading tracker, summaries, and source dashboard"
-requires-python = ">=3.11"
+requires-python = ">=3.13"
 dependencies = [
   "fastapi>=0.115.0",
   "uvicorn[standard]>=0.30.0",

@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import os
+from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 
-from typing import Optional
+from typing import Any, AsyncIterator
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
@@ -29,7 +30,15 @@ from .scheduler import (
 from .stats import articles_over_time, sources_volume, stats_overview
 from .source_health import list_source_health
 
-app = FastAPI(title="News Dashboard", version="0.3.0")
+@asynccontextmanager
+async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+    sync_sources()
+    start_scheduler()
+    yield
+    stop_scheduler()
+
+
+app = FastAPI(title="News Dashboard", version="0.3.0", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
@@ -46,19 +55,8 @@ class EnabledUpdate(BaseModel):
     enabled: bool
 
 
-@app.on_event("startup")
-def startup() -> None:
-    sync_sources()
-    start_scheduler()
-
-
-@app.on_event("shutdown")
-def shutdown() -> None:
-    stop_scheduler()
-
-
 @app.get("/api/health")
-def health() -> dict:
+def health() -> dict[str, Any]:
     init_db()
     return {
         "status": "ok",
@@ -68,7 +66,7 @@ def health() -> dict:
 
 
 @app.post("/api/ingest")
-def ingest() -> dict:
+def ingest() -> dict[str, Any]:
     results = ingest_all()
     return {"results": results, "inserted": sum(v for v in results.values() if v > 0)}
 
@@ -80,16 +78,16 @@ def ingest_stream() -> StreamingResponse:
 
 @app.get("/api/ingest/runs")
 def ingest_runs(
-    from_: Optional[datetime] = Query(default=None, alias="from"),
-    to: Optional[datetime] = Query(default=None),
+    from_: datetime | None = Query(default=None, alias="from"),
+    to: datetime | None = Query(default=None),
     page: int = Query(default=1, ge=1),
     per_page: int = Query(default=20, ge=1, le=100),
-) -> dict:
+) -> dict[str, Any]:
     return list_ingest_runs(from_=from_, to=to, page=page, per_page=per_page)
 
 
 @app.get("/api/ingest/runs/{run_id}")
-def ingest_run_sources(run_id: int) -> dict:
+def ingest_run_sources(run_id: int) -> dict[str, Any]:
     sources = get_ingest_run_sources(run_id)
     if sources is None:
         raise HTTPException(status_code=404, detail="ingest run not found")
@@ -98,11 +96,11 @@ def ingest_run_sources(run_id: int) -> dict:
 
 @app.get("/api/articles")
 def articles(
-    status: Optional[str] = Query(default=None),
-    category: Optional[str] = Query(default=None),
+    status: str | None = Query(default=None),
+    category: str | None = Query(default=None),
     limit: int = Query(default=100, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
-) -> dict:
+) -> dict[str, Any]:
     return {"items": list_articles(status=status, category=category, limit=limit, offset=offset)}
 
 
@@ -110,12 +108,12 @@ def articles(
 def search(
     q: str = Query(default="", min_length=1, description="Space-separated search terms"),
     limit: int = Query(default=50, ge=1, le=200),
-) -> dict:
+) -> dict[str, Any]:
     return {"items": search_articles(q=q.strip(), limit=limit)}
 
 
 @app.patch("/api/articles/{article_id}/status")
-def update_status(article_id: int, payload: StatusUpdate) -> dict:
+def update_status(article_id: int, payload: StatusUpdate) -> dict[str, Any]:
     try:
         article = set_article_status(article_id, payload.status)
     except ValueError as exc:
@@ -126,7 +124,7 @@ def update_status(article_id: int, payload: StatusUpdate) -> dict:
 
 
 @app.get("/api/articles/{article_id}/read")
-def mark_read_via_token(article_id: int, token: str = Query(...)) -> dict:
+def mark_read_via_token(article_id: int, token: str = Query(...)) -> dict[str, Any]:
     """One-click mark-read endpoint for digest emails. Validates a signed token."""
     from .digest import verify_read_token
 
@@ -142,7 +140,7 @@ def mark_read_via_token(article_id: int, token: str = Query(...)) -> dict:
 
 
 @app.get("/api/sources")
-def sources() -> dict:
+def sources() -> dict[str, Any]:
     init_db()
     with connect() as conn:
         rows = conn.execute(
@@ -152,12 +150,12 @@ def sources() -> dict:
 
 
 @app.get("/api/sources/health")
-def sources_health() -> dict:
+def sources_health() -> dict[str, Any]:
     return {"items": list_source_health()}
 
 
 @app.patch("/api/sources/{slug}/enabled")
-def set_source_enabled(slug: str, payload: EnabledUpdate) -> dict:
+def set_source_enabled(slug: str, payload: EnabledUpdate) -> dict[str, Any]:
     init_db()
     with connect() as conn:
         cursor = conn.execute(
@@ -175,7 +173,7 @@ class IntervalUpdate(BaseModel):
 
 
 @app.get("/api/scheduler/status")
-def scheduler_status() -> dict:
+def scheduler_status() -> dict[str, Any]:
     next_run = get_next_ingest_at()
     paused = is_paused()
     return {
@@ -186,7 +184,7 @@ def scheduler_status() -> dict:
 
 
 @app.post("/api/scheduler/interval")
-def scheduler_set_interval(payload: IntervalUpdate) -> dict:
+def scheduler_set_interval(payload: IntervalUpdate) -> dict[str, Any]:
     if payload.minutes < 1:
         raise HTTPException(status_code=400, detail="minutes must be >= 1")
     set_interval(payload.minutes)
@@ -194,13 +192,13 @@ def scheduler_set_interval(payload: IntervalUpdate) -> dict:
 
 
 @app.post("/api/scheduler/pause")
-def scheduler_pause() -> dict:
+def scheduler_pause() -> dict[str, Any]:
     pause_scheduler()
     return {"paused": True}
 
 
 @app.post("/api/scheduler/resume")
-def scheduler_resume() -> dict:
+def scheduler_resume() -> dict[str, Any]:
     resume_scheduler()
     return {"paused": False, "next_run_at": get_next_ingest_at()}
 
@@ -209,7 +207,7 @@ def scheduler_resume() -> dict:
 def stats_overview_endpoint(
     from_: str = Query(..., alias="from"),
     to: str = Query(...),
-) -> dict:
+) -> dict[str, Any]:
     try:
         return stats_overview(from_, to)
     except ValueError as exc:
@@ -220,7 +218,7 @@ def stats_overview_endpoint(
 def stats_articles_over_time_endpoint(
     from_: str = Query(..., alias="from"),
     to: str = Query(...),
-) -> dict:
+) -> dict[str, Any]:
     try:
         return {"items": articles_over_time(from_, to)}
     except ValueError as exc:
@@ -231,7 +229,7 @@ def stats_articles_over_time_endpoint(
 def stats_sources_volume_endpoint(
     from_: str = Query(..., alias="from"),
     to: str = Query(...),
-) -> dict:
+) -> dict[str, Any]:
     try:
         return {"items": sources_volume(from_, to)}
     except ValueError as exc:
@@ -243,7 +241,7 @@ class AskRequest(BaseModel):
 
 
 @app.post("/api/ask")
-def ask_ai(payload: AskRequest) -> dict:
+def ask_ai(payload: AskRequest) -> dict[str, Any]:
     """Answer a natural-language question using saved/read articles as context."""
     from .embeddings import ask
 
@@ -258,7 +256,7 @@ def ask_ai(payload: AskRequest) -> dict:
 
 
 @app.get("/api/summary")
-def summary() -> dict:
+def summary() -> dict[str, Any]:
     init_db()
     with connect() as conn:
         status_rows = conn.execute(

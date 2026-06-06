@@ -1,4 +1,4 @@
-FROM node:22-bookworm-slim AS frontend
+FROM node:24-bookworm-slim AS frontend
 WORKDIR /app
 COPY package.json package-lock.json* ./
 RUN npm install
@@ -6,7 +6,7 @@ COPY index.html tsconfig.json vite.config.ts ./
 COPY frontend ./frontend
 RUN npm run build
 
-FROM python:3.11-slim AS runtime
+FROM python:3.13-slim AS runtime
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     NEWS_DASHBOARD_DB=/data/news-dashboard.db
