@@ -901,6 +901,118 @@ ul { list-style: none; }
   word-break: break-all;
 }
 
+/* ===== SCHEDULER SOURCE HEALTH ===== */
+.scheduler-card--wide {
+  grid-column: 1 / -1;
+}
+
+.source-health-loading {
+  display: grid;
+  gap: 10px;
+  padding: 6px 0;
+}
+
+.source-health-empty {
+  color: var(--text-3);
+  font-size: 13px;
+}
+
+.source-health-table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--surface);
+}
+
+.source-health-table {
+  width: 100%;
+  min-width: 760px;
+  border-collapse: collapse;
+}
+
+.source-health-table th,
+.source-health-table td {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  font-size: 12px;
+  vertical-align: top;
+}
+
+.source-health-table th {
+  color: var(--text-3);
+  background: var(--surface-alt);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  white-space: nowrap;
+}
+
+.source-health-table tr:last-child td {
+  border-bottom: 0;
+}
+
+.source-health-row-error {
+  background: #fff1f2;
+}
+
+[data-theme="dark"] .source-health-row-error {
+  background: rgba(127, 29, 29, .16);
+}
+
+.source-health-name,
+.source-health-category,
+.source-health-last-error {
+  display: block;
+}
+
+.source-health-name {
+  color: var(--text-1);
+  font-weight: 650;
+}
+
+.source-health-category {
+  margin-top: 2px;
+  color: var(--text-3);
+  font-size: 11px;
+}
+
+.source-health-status {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.source-health-status.ok {
+  background: #d1fae5;
+  color: #065f46;
+}
+
+.source-health-status.error {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.source-health-streak {
+  color: var(--text-1);
+  font-weight: 700;
+}
+
+.source-health-last-error {
+  max-width: 360px;
+  margin-top: 3px;
+  color: #b91c1c;
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* ===== SKELETON LOADER ===== */
 @keyframes shimmer {
   0%   { background-position: -400% 0; }

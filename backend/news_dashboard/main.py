@@ -21,6 +21,7 @@ from .scheduler import (
     start_scheduler,
     stop_scheduler,
 )
+from .source_health import list_source_health
 
 app = FastAPI(title="News Dashboard", version="0.3.0")
 app.add_middleware(
@@ -119,6 +120,11 @@ def sources() -> dict:
             "SELECT * FROM sources ORDER BY category, priority DESC, name"
         ).fetchall()
         return {"items": [row_to_dict(row) for row in rows]}
+
+
+@app.get("/api/sources/health")
+def sources_health() -> dict:
+    return {"items": list_source_health()}
 
 
 @app.patch("/api/sources/{slug}/enabled")

@@ -37,6 +37,18 @@ export interface Source {
   last_inserted_count?: number
 }
 
+export interface SourceHealth {
+  slug: string
+  name: string
+  category: string
+  enabled: number
+  last_checked_at?: string | null
+  last_error?: string | null
+  error_streak: number
+  articles_last_run: number
+  status: 'OK' | 'ERROR'
+}
+
 export interface Summary {
   byStatus: Record<string, number>
   byCategory: Record<string, number>

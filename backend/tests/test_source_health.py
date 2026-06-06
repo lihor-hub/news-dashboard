@@ -13,6 +13,7 @@ from news_dashboard.ingest import (
     set_article_status,
     sync_sources,
 )
+from news_dashboard.source_health import list_source_health
 from news_dashboard.sources import DEFAULT_SOURCES, SourceDefinition
 
 
@@ -61,6 +62,66 @@ def test_source_error_tracked(tmp_path: Path) -> None:
         row = conn.execute("SELECT last_error, last_checked_at FROM sources WHERE slug=?", (bad.slug,)).fetchone()
         assert row["last_error"] is not None, "last_error should be set on failure"
         assert row["last_checked_at"] is not None, "last_checked_at should be set even on failure"
+
+
+def test_source_health_error_streak_resets_after_success(tmp_path: Path) -> None:
+    db = tmp_path / "streak.db"
+    sync_sources(db)
+    with connect(db) as conn:
+        for run_id, error in ((1, "timeout"), (2, "HTTP 500"), (3, None)):
+            conn.execute(
+                "INSERT INTO ingest_runs(id, started_at) VALUES (?, ?)",
+                (run_id, f"2026-06-0{run_id}T00:00:00+00:00"),
+            )
+            conn.execute(
+                """
+                INSERT INTO ingest_run_sources(run_id, source_name, articles_found, articles_new, error_message)
+                VALUES (?, 'Python Insider', 10, ?, ?)
+                """,
+                (run_id, 3 if error is None else 0, error),
+            )
+
+    python = next(item for item in list_source_health(db) if item["slug"] == "python-insider")
+    assert python["error_streak"] == 0
+    assert python["articles_last_run"] == 3
+    assert python["status"] == "OK"
+
+
+def test_source_health_counts_leading_errors_and_sorts_first(tmp_path: Path) -> None:
+    db = tmp_path / "leading-errors.db"
+    sync_sources(db)
+    with connect(db) as conn:
+        for run_id in (1, 2, 3):
+            conn.execute(
+                "INSERT INTO ingest_runs(id, started_at) VALUES (?, ?)",
+                (run_id, f"2026-06-0{run_id}T00:00:00+00:00"),
+            )
+        conn.execute(
+            """
+            INSERT INTO ingest_run_sources(run_id, source_name, articles_found, articles_new, error_message)
+            VALUES (1, 'Python Insider', 8, 2, NULL)
+            """
+        )
+        conn.execute(
+            """
+            INSERT INTO ingest_run_sources(run_id, source_name, articles_found, articles_new, error_message)
+            VALUES (2, 'Python Insider', 0, 0, 'Feed fetch failed: timeout')
+            """
+        )
+        conn.execute(
+            """
+            INSERT INTO ingest_run_sources(run_id, source_name, articles_found, articles_new, error_message)
+            VALUES (3, 'Python Insider', 0, 0, 'Traceback (most recent call last):\n  File "feed.py", line 1\nTimeoutError: connection timed out')
+            """
+        )
+
+    items = list_source_health(db)
+    python = next(item for item in items if item["slug"] == "python-insider")
+    assert python["error_streak"] == 2
+    assert python["articles_last_run"] == 0
+    assert python["status"] == "ERROR"
+    assert python["last_error"] == "TimeoutError: connection timed out"
+    assert items[0]["slug"] == "python-insider"
 
 
 # ──────────────────────────────────────────────
