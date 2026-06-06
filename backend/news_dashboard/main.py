@@ -13,6 +13,7 @@ from pydantic import BaseModel
 from .db import connect, describe_database, init_db, row_to_dict
 from .ingest_events import stream_ingest_events
 from .ingest import ingest_all, list_articles, search_articles, set_article_status, sync_sources
+from .run_history import get_ingest_run_sources, list_ingest_runs
 from .scheduler import (
     get_interval_minutes,
     get_next_ingest_at,
@@ -73,6 +74,24 @@ def ingest() -> dict:
 @app.get("/api/ingest/stream")
 def ingest_stream() -> StreamingResponse:
     return StreamingResponse(stream_ingest_events(), media_type="text/event-stream")
+
+
+@app.get("/api/ingest/runs")
+def ingest_runs(
+    from_: datetime | None = Query(default=None, alias="from"),
+    to: datetime | None = Query(default=None),
+    page: int = Query(default=1, ge=1),
+    per_page: int = Query(default=20, ge=1, le=100),
+) -> dict:
+    return list_ingest_runs(from_=from_, to=to, page=page, per_page=per_page)
+
+
+@app.get("/api/ingest/runs/{run_id}")
+def ingest_run_sources(run_id: int) -> dict:
+    sources = get_ingest_run_sources(run_id)
+    if sources is None:
+        raise HTTPException(status_code=404, detail="ingest run not found")
+    return {"items": sources}
 
 
 @app.get("/api/articles")

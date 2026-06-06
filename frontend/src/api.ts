@@ -8,6 +8,8 @@ import type {
   SourceVolumePoint,
   StatsOverview,
   Summary,
+  IngestRunPage,
+  IngestRunSource,
 } from './types'
 
 async function requestJson<T>(url: string, init?: RequestInit): Promise<T> {
@@ -121,5 +123,15 @@ export async function fetchSourcesVolume(from: string, to: string): Promise<Sour
   const data = await requestJson<{ items: SourceVolumePoint[] }>(
     `/api/stats/sources-volume?${statsParams(from, to)}`,
   )
+  return data.items
+}
+
+export async function fetchIngestRuns(page = 1, perPage = 10): Promise<IngestRunPage> {
+  const params = new URLSearchParams({ page: String(page), per_page: String(perPage) })
+  return requestJson<IngestRunPage>(`/api/ingest/runs?${params}`)
+}
+
+export async function fetchIngestRunSources(runId: number): Promise<IngestRunSource[]> {
+  const data = await requestJson<{ items: IngestRunSource[] }>(`/api/ingest/runs/${runId}`)
   return data.items
 }

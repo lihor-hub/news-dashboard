@@ -83,3 +83,31 @@ export interface AskResponse {
   answer: string
   sources: AskSource[]
 }
+
+export interface IngestRun {
+  id: number
+  started_at: string
+  finished_at: string | null
+  duration_ms: number | null
+  sources_run: number
+  total_new: number
+  total_errors: number
+}
+
+export interface IngestRunSource {
+  id: number
+  run_id: number
+  source_name: string
+  articles_found: number
+  articles_new: number
+  duplicates: number
+  error_message?: string | null
+}
+
+export interface IngestRunPage {
+  items: IngestRun[]
+  page: number
+  per_page: number
+  total: number
+  has_more: boolean
+}
