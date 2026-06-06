@@ -2,7 +2,7 @@ name: CI / CD
 
 # Runs tests + typecheck on every PR.
 # On push to main: also builds the Docker image, pushes it to GHCR, and
-# deploys to the mini PC over SSH.
+# deploys to the mini PC via a self-hosted runner running directly on the machine.
 #
 # Branch is 'main'. If you rename it to 'master', update the two filters below.
 on:
@@ -84,30 +84,15 @@ jobs:
             ${{ env.IMAGE }}:latest
 
   # ── 3. DEPLOY ──────────────────────────────────────────────────────────────
-  # SSHes into the mini PC and updates the running service.
+  # Runs directly on the self-hosted runner (the mini PC itself) — no SSH hop
+  # needed. The runner process on the mini PC picks up the job and executes
+  # the deploy commands locally.
   #
   # Concurrency: cancel-in-progress: false means a second push waits rather
   # than racing.  Never cancel a deploy mid-flight.
   #
   # ┌──────────────────────────────────────────────────────────────────────┐
   # │  SECRETS — add in: GitHub repo → Settings → Secrets → Actions       │
-  # │                                                                      │
-  # │  DEPLOY_HOST      IP or hostname of the mini PC                      │
-  # │                   e.g. "192.168.1.42"  or  "minipc.example.com"      │
-  # │                                                                      │
-  # │  DEPLOY_USER      SSH login name on the mini PC                      │
-  # │                   e.g. "ioachim"                                     │
-  # │                                                                      │
-  # │  DEPLOY_SSH_KEY   The *private* half of an SSH key pair.             │
-  # │                   The *public* half must be in                       │
-  # │                   ~/.ssh/authorized_keys on the mini PC.             │
-  # │                                                                      │
-  # │                   Generate a dedicated deploy key (don't reuse your  │
-  # │                   personal key):                                      │
-  # │                     ssh-keygen -t ed25519 -C deploy -f /tmp/deploy   │
-  # │                     # /tmp/deploy     → DEPLOY_SSH_KEY secret        │
-  # │                     # /tmp/deploy.pub → append to mini PC            │
-  # │                     #                  ~/.ssh/authorized_keys         │
   # │                                                                      │
   # │  GHCR_TOKEN       A GitHub Personal Access Token with the            │
   # │                   *read:packages* scope (nothing else).               │
@@ -118,43 +103,18 @@ jobs:
   # │                   SHORTCUT: if you make the GHCR package public      │
   # │                   (repo Settings → Packages → Change visibility),    │
   # │                   you can skip GHCR_TOKEN entirely and remove the    │
-  # │                   docker-login lines from the deploy script below.   │
-  # │                                                                      │
-  # │  OPTIONAL variable (Settings → Variables, not Secrets):              │
-  # │  DEPLOY_PORT      SSH port if not 22  (e.g. "2222")                 │
+  # │                   docker-login lines from the deploy step below.     │
   # └──────────────────────────────────────────────────────────────────────┘
   deploy:
     name: Deploy to mini PC
     needs: publish
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted]
     environment: production
     concurrency:
       group: deploy-production
       cancel-in-progress: false
 
     steps:
-      # Lay down the private key and trust the host's key.
-      # ssh-keyscan does a live fetch from DEPLOY_HOST — this requires the
-      # SSH port to be reachable from GitHub's runner IPs. If your mini PC
-      # is only on a LAN, you'll need port-forwarding or a tunnel.
-      - name: Configure SSH
-        run: |
-          install -dm700 ~/.ssh
-          printf '%s\n' "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/id_deploy
-          chmod 600 ~/.ssh/id_deploy
-          ssh-keyscan -H -p "${{ vars.DEPLOY_PORT || '22' }}" \
-            "${{ secrets.DEPLOY_HOST }}" >> ~/.ssh/known_hosts
-
-      # ── Option A: Helm / Kubernetes ──────────────────────────────────────
-      # Assumes the mini PC has:
-      #   • The repo checked out at ~/news-dashboard  (git pull updates the chart)
-      #   • kubectl pointing at the local cluster
-      #   • helm installed
-      #
-      # CONFIGURE: adjust the --set flags (namespace, nodePort, hostPaths,
-      # etc.) to match your actual deployment. The deployment name below
-      # follows the Helm convention release-name + chart-name; verify yours
-      # with: kubectl -n <ns> get deploy
       - name: Deploy (Helm)
         env:
           SHA: ${{ github.sha }}
@@ -162,13 +122,6 @@ jobs:
           GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
           GHCR_ACTOR: ${{ github.actor }}
         run: |
-          ssh -i ~/.ssh/id_deploy \
-              -p "${{ vars.DEPLOY_PORT || '22' }}" \
-              -o StrictHostKeyChecking=yes \
-              -o BatchMode=yes \
-              "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
-              "SHA='${SHA}' IMG='${IMG}' GHCR_TOKEN='${GHCR_TOKEN}' GHCR_ACTOR='${GHCR_ACTOR}' bash -s" \
-              << 'REMOTE'
           set -euo pipefail
 
           # Authenticate to GHCR so the cluster node can pull the image.
@@ -202,50 +155,11 @@ jobs:
             --set ingress.enabled=false
 
           # Wait for the new pods to become ready.
-          # CONFIGURE: replace the deployment name if yours differs.
           kubectl -n news-dashboard rollout status \
             deployment/news-dashboard-news-dashboard --timeout=120s
-          REMOTE
-
-      # ── Option B: docker compose (use instead of Option A) ──────────────
-      # Assumes the repo is checked out at ~/news-dashboard and
-      # docker-compose.yml has an 'image:' key (not just 'build:').
-      # The IMAGE_TAG env var must be consumed by your compose file, e.g.:
-      #   image: ghcr.io/ioachim-hub/news-dashboard:${IMAGE_TAG:-latest}
-      #
-      # To switch to this option: comment out the "Deploy (Helm)" step above
-      # and uncomment the block below.
-      #
-      # - name: Deploy (docker compose)
-      #   env:
-      #     SHA: ${{ github.sha }}
-      #     IMG: ${{ env.IMAGE }}
-      #     GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
-      #     GHCR_ACTOR: ${{ github.actor }}
-      #   run: |
-      #     ssh -i ~/.ssh/id_deploy \
-      #         -p "${{ vars.DEPLOY_PORT || '22' }}" \
-      #         -o StrictHostKeyChecking=yes \
-      #         -o BatchMode=yes \
-      #         "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
-      #         "SHA='${SHA}' IMG='${IMG}' GHCR_TOKEN='${GHCR_TOKEN}' GHCR_ACTOR='${GHCR_ACTOR}' bash -s" \
-      #         << 'REMOTE'
-      #     set -euo pipefail
-      #     echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_ACTOR" --password-stdin
-      #     docker pull "${IMG}:${SHA}"
-      #     cd ~/news-dashboard && git pull --ff-only
-      #     IMAGE_TAG="${SHA}" docker compose up -d --no-build
-      #     REMOTE
 
       # Basic liveness check — verifies the new container is actually serving.
-      # CONFIGURE: change the URL/port to match your setup.
-      # Remove this step if the app isn't reachable on localhost from the mini PC.
       - name: Smoke test
         run: |
-          ssh -i ~/.ssh/id_deploy \
-              -p "${{ vars.DEPLOY_PORT || '22' }}" \
-              -o StrictHostKeyChecking=yes \
-              -o BatchMode=yes \
-              "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
-              "curl -sf --max-time 10 --retry 6 --retry-delay 5 \
-                 http://localhost:30088/api/health | grep '\"status\":\"ok\"'"
+          curl -sf --max-time 10 --retry 6 --retry-delay 5 \
+            http://localhost:30088/api/health | grep '"status":"ok"'
