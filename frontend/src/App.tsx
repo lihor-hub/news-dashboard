@@ -35,11 +35,19 @@ const STATUS_NEXT: Record<ArticleStatus, ArticleStatus[]> = {
 }
 
 const ACTION_LABELS: Record<ArticleStatus, string> = {
-  new:      '↩ Restore',
-  read:     '✓ Read',
-  saved:    '♡ Save',
-  skipped:  '✕ Skip',
-  archived: '⊠ Archive',
+  new:      'Restore',
+  read:     'Read',
+  saved:    'Save',
+  skipped:  'Skip',
+  archived: 'Archive',
+}
+
+const ACTION_ICONS: Record<ArticleStatus, string> = {
+  new:      '↩',
+  read:     '✓',
+  saved:    '☆',
+  skipped:  '×',
+  archived: '□',
 }
 
 // ===== Helpers =====
@@ -128,10 +136,12 @@ function ArticleCard({ article, onStatus, focused, cardRef, selected, onToggleSe
         </label>
       )}
       <div className="card-header">
-        <span className={`badge cat-${article.category}`}>
-          {article.category.replace(/-/g, '​-')}
-        </span>
-        <span className={`badge status-${article.status}`}>{article.status}</span>
+        <div className="card-badges">
+          <span className={`badge cat-${article.category}`}>
+            {article.category.replace(/-/g, ' ')}
+          </span>
+          <span className={`badge status-${article.status}`}>{article.status}</span>
+        </div>
         <span className="card-date">
           {rt !== null && <span className="card-read-time">~{rt} min</span>}
           {relativeTime(date)}
@@ -161,8 +171,10 @@ function ArticleCard({ article, onStatus, focused, cardRef, selected, onToggleSe
             onClick={() => handle(action)}
             disabled={pending !== null}
             title={ACTION_LABELS[action]}
+            aria-label={ACTION_LABELS[action]}
           >
-            {pending === action ? '…' : ACTION_LABELS[action]}
+            <span className="action-icon" aria-hidden="true">{pending === action ? '…' : ACTION_ICONS[action]}</span>
+            <span>{ACTION_LABELS[action]}</span>
           </button>
         ))}
       </div>
@@ -321,11 +333,11 @@ function BulkBar({ count, onAction, onClear }: BulkBarProps) {
   return (
     <div className="bulk-bar" role="toolbar" aria-label="Bulk actions">
       <span className="bulk-count">{count} selected</span>
-      <button className="bulk-btn bulk-read"     onClick={() => onAction('read')}>✓ Mark read</button>
-      <button className="bulk-btn bulk-saved"    onClick={() => onAction('saved')}>♡ Save</button>
-      <button className="bulk-btn bulk-skipped"  onClick={() => onAction('skipped')}>✕ Skip</button>
-      <button className="bulk-btn bulk-archived" onClick={() => onAction('archived')}>⊠ Archive</button>
-      <button className="bulk-clear" onClick={onClear} aria-label="Clear selection">✕ Clear</button>
+      <button className="bulk-btn bulk-read"     onClick={() => onAction('read')}><span aria-hidden="true">✓</span> Mark read</button>
+      <button className="bulk-btn bulk-saved"    onClick={() => onAction('saved')}><span aria-hidden="true">☆</span> Save</button>
+      <button className="bulk-btn bulk-skipped"  onClick={() => onAction('skipped')}><span aria-hidden="true">×</span> Skip</button>
+      <button className="bulk-btn bulk-archived" onClick={() => onAction('archived')}><span aria-hidden="true">□</span> Archive</button>
+      <button className="bulk-clear" onClick={onClear} aria-label="Clear selection">Clear</button>
     </div>
   )
 }
@@ -405,9 +417,9 @@ function SourcesPanel({ sources, onToggleEnabled }: { sources: Source[]; onToggl
         aria-expanded={sheetOpen}
         aria-controls="sources-sheet"
       >
-        <span>📋</span>
+        <span aria-hidden="true">☰</span>
         <span>View all {sources.length} sources</span>
-        <span style={{ marginLeft: 'auto', fontSize: 18 }}>›</span>
+        <span style={{ marginLeft: 'auto', fontSize: 18 }} aria-hidden="true">›</span>
       </button>
 
       {/* Overlay */}
