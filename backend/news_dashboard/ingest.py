@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import logging
 import re
 import threading
 import time
+from collections import defaultdict
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime
@@ -19,6 +21,7 @@ from .sources import DEFAULT_SOURCES, SourceDefinition
 
 try:
     from rapidfuzz.distance import Levenshtein
+
     def _title_similarity(a: str, b: str) -> float:
         a, b = a.lower().strip(), b.lower().strip()
         if not a or not b:
@@ -27,7 +30,8 @@ try:
         dist = Levenshtein.distance(a, b)
         return 1.0 - dist / max_len
 except ImportError:
-    def _title_similarity(a: str, b: str) -> float:  # type: ignore[misc]
+
+    def _title_similarity(a: str, b: str) -> float:
         # Fallback: simple token-overlap Jaccard similarity
         sa = set(a.lower().split())
         sb = set(b.lower().split())
@@ -35,8 +39,16 @@ except ImportError:
             return 0.0
         return len(sa & sb) / len(sa | sb)
 
+
+logger = logging.getLogger(__name__)
+
 DEDUP_TITLE_THRESHOLD = 0.85
+VALID_STATUSES = frozenset({"new", "read", "saved", "skipped", "archived"})
 _INGEST_RUN_LOCK = threading.Lock()
+
+
+class FeedFetchError(RuntimeError):
+    """Raised when a feed could not be fetched or parsed."""
 
 
 @dataclass(frozen=True)
@@ -47,34 +59,98 @@ class SourceIngestOutcome:
     duration_seconds: float
     error_message: str | None = None
 
+
 TRACKING_PARAMS = {
-    "utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content",
-    "ref", "fbclid", "gclid", "yclid",
+    "utm_source",
+    "utm_medium",
+    "utm_campaign",
+    "utm_term",
+    "utm_content",
+    "ref",
+    "fbclid",
+    "gclid",
+    "yclid",
 }
 
 KEYWORD_TAGS = {
-    "python":  ["python", "typing", "mypy", "pyright", "ruff", "uv", "pypi", "scipy", "sklearn", "pytorch", "tensorflow", "pip"],
-    "agents":  ["agent", "agents", "agentic", "langgraph", "langchain", "tool use", "workflow", "mcp", "multi-agent"],
-    "llm":     ["llm", "language model", "openai", "anthropic", "claude", "gemini", "rag", "retrieval", "embeddings", "transformer"],
-    "infra":   ["kubernetes", "k8s", "docker", "podman", "aws", "gcp", "azure", "container", "helm", "terraform"],
-    "data":    ["data", "analytics", "observability", "evaluation", "benchmark", "metrics", "dataset"],
-    "release": ["release", "v0.", "v1.", "v2.", "v3.", "v4.", "v5.", "changelog", "update", "new version"],
-    "security":["security", "vulnerability", "cve", "exploit", "patch", "advisory"],
-    "tutorial":["tutorial", "how to", "guide", "getting started", "introduction", "deep dive"],
+    "python": [
+        "python",
+        "typing",
+        "mypy",
+        "pyright",
+        "ruff",
+        "uv",
+        "pypi",
+        "scipy",
+        "sklearn",
+        "pytorch",
+        "tensorflow",
+        "pip",
+    ],
+    "agents": [
+        "agent",
+        "agents",
+        "agentic",
+        "langgraph",
+        "langchain",
+        "tool use",
+        "workflow",
+        "mcp",
+        "multi-agent",
+    ],
+    "llm": [
+        "llm",
+        "language model",
+        "openai",
+        "anthropic",
+        "claude",
+        "gemini",
+        "rag",
+        "retrieval",
+        "embeddings",
+        "transformer",
+    ],
+    "infra": [
+        "kubernetes",
+        "k8s",
+        "docker",
+        "podman",
+        "aws",
+        "gcp",
+        "azure",
+        "container",
+        "helm",
+        "terraform",
+    ],
+    "data": ["data", "analytics", "observability", "evaluation", "benchmark", "metrics", "dataset"],
+    "release": [
+        "release",
+        "v0.",
+        "v1.",
+        "v2.",
+        "v3.",
+        "v4.",
+        "v5.",
+        "changelog",
+        "update",
+        "new version",
+    ],
+    "security": ["security", "vulnerability", "cve", "exploit", "patch", "advisory"],
+    "tutorial": ["tutorial", "how to", "guide", "getting started", "introduction", "deep dive"],
 }
 
 # Per-source noise-filter rules: (max_items_per_run, keyword_include_list)
 # keyword_include_list: keep entry only if title/summary contains at least one keyword
 # None keyword_include = no filter
 NOISE_FILTERS: dict[str, dict[str, Any]] = {
-    "hacker-news-best":   {"max_items": 20, "keywords": None},
-    "hacker-news-ai":     {"max_items": 15, "keywords": None},
+    "hacker-news-best": {"max_items": 20, "keywords": None},
+    "hacker-news-ai": {"max_items": 15, "keywords": None},
     "github-trending-all": {"max_items": 15, "keywords": None},
     "github-trending-python": {"max_items": 10, "keywords": None},
     "github-trending-typescript": {"max_items": 10, "keywords": None},
-    "infoq-ai-ml":        {"max_items": 10, "keywords": None},
-    "import-ai":          {"max_items":  5, "keywords": None},
-    "latent-space":       {"max_items":  5, "keywords": None},
+    "infoq-ai-ml": {"max_items": 10, "keywords": None},
+    "import-ai": {"max_items": 5, "keywords": None},
+    "latent-space": {"max_items": 5, "keywords": None},
 }
 
 
@@ -92,7 +168,11 @@ def clean_html(value: str | None) -> str:
 
 def canonicalize_url(url: str) -> str:
     parsed = urlparse(url.strip())
-    query = [(k, v) for k, v in parse_qsl(parsed.query, keep_blank_values=True) if k.lower() not in TRACKING_PARAMS]
+    query = [
+        (k, v)
+        for k, v in parse_qsl(parsed.query, keep_blank_values=True)
+        if k.lower() not in TRACKING_PARAMS
+    ]
     parsed = parsed._replace(fragment="", query=urlencode(query, doseq=True))
     return urlunparse(parsed)
 
@@ -102,7 +182,12 @@ def parse_date(entry: Any) -> str | None:
         value = getattr(entry, key, None) or entry.get(key)
         if value:
             try:
-                return parsedate_to_datetime(value).astimezone(timezone.utc).replace(microsecond=0).isoformat()
+                return (
+                    parsedate_to_datetime(value)
+                    .astimezone(timezone.utc)
+                    .replace(microsecond=0)
+                    .isoformat()
+                )
             except Exception:
                 return str(value)
     return None
@@ -117,10 +202,10 @@ def infer_tags(text: str) -> list[str]:
     return tags
 
 
-def make_reason(title: str, text: str, source: SourceDefinition, tags: list[str]) -> str:
+def make_reason(  # noqa: PLR0911 - a flat "first match wins" rule chain is clearest here
+    title: str, source: SourceDefinition, tags: list[str]
+) -> str:
     """Generate a meaningful 'why this matters' blurb from content signals."""
-    t = (title + " " + text).lower()
-
     # Release feeds: mention version if detectable
     if source.kind in ("github_release_feed",) or "release" in tags:
         # Try to extract a version number like v1.2.3
@@ -139,7 +224,7 @@ def make_reason(title: str, text: str, source: SourceDefinition, tags: list[str]
 
     if source.kind == "trending_feed":
         if "hacker-news" in source.slug:
-            return f"Trending on Hacker News."
+            return "Trending on Hacker News."
         if "github" in source.slug:
             lang = source.slug.split("-")[-1].title()
             return f"Trending {lang} repository on GitHub today."
@@ -159,13 +244,13 @@ def make_reason(title: str, text: str, source: SourceDefinition, tags: list[str]
     return f"{cat_label.title()} — {source.name}."
 
 
-def make_summary(title: str, description: str, source: SourceDefinition) -> tuple[str, str, int, str]:
+def make_summary(
+    title: str, description: str, source: SourceDefinition
+) -> tuple[str, str, int, str]:
     text = clean_html(description)
     summary = text[:280] + ("…" if len(text) > 280 else "")
-    if not summary:
-        summary = ""
     tags = infer_tags(f"{title} {text} {source.category}")
-    reason = make_reason(title, text, source, tags)
+    reason = make_reason(title, source, tags)
     score = min(100, source.priority + (10 if tags else 0))
     return summary, reason, score, ",".join(tags)
 
@@ -180,14 +265,18 @@ def _should_include(title: str, description: str, source_slug: str) -> bool:
 
 
 def _find_canonical(conn: Any, canonical_url: str, title: str) -> int | None:
-    """Return the id of an existing canonical article that matches by URL or fuzzy title, or None."""
+    """Return the id of an existing canonical article matching by URL or fuzzy title, or None."""
     # Exact URL match (canonical_url already stripped of tracking params)
     row = conn.execute(
-        "SELECT id FROM articles WHERE canonical_url=? AND (canonical_id IS NULL OR canonical_id=id) LIMIT 1",
+        """
+        SELECT id FROM articles
+        WHERE canonical_url=? AND (canonical_id IS NULL OR canonical_id=id)
+        LIMIT 1
+        """,
         (canonical_url,),
     ).fetchone()
     if row:
-        return row["id"] if isinstance(row, dict) else row[0]
+        return int(row["id"] if isinstance(row, dict) else row[0])
 
     # Fuzzy title match against recent articles (last 7 days) that are canonical
     cutoff = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
@@ -200,8 +289,8 @@ def _find_canonical(conn: Any, canonical_url: str, title: str) -> int | None:
         (cutoff,),
     ).fetchall()
     for r in rows:
-        existing_title = r["title"] if isinstance(r, dict) else r[1]
-        existing_id = r["id"] if isinstance(r, dict) else r[0]
+        existing_title = str(r["title"] if isinstance(r, dict) else r[1])
+        existing_id = int(r["id"] if isinstance(r, dict) else r[0])
         if _title_similarity(title, existing_title) >= DEDUP_TITLE_THRESHOLD:
             return existing_id
     return None
@@ -222,8 +311,34 @@ def sync_sources(db_path: Path | None = None) -> None:
                   kind=excluded.kind,
                   priority=excluded.priority
                 """,
-                (source.slug, source.name, source.url, source.category, source.kind, source.priority),
+                (
+                    source.slug,
+                    source.name,
+                    source.url,
+                    source.category,
+                    source.kind,
+                    source.priority,
+                ),
             )
+
+
+def _fetch_feed_entries(source: SourceDefinition) -> list[dict[str, Any]]:
+    """Fetch and normalize feed entries, surfacing fetch failures as FeedFetchError."""
+    parsed = feedparser.parse(source.url, agent="news-dashboard/0.1 (personal; contact@lihor.ro)")
+    # feedparser swallows network errors via bozo; surface them so health tracking works
+    if parsed.bozo and not parsed.entries:
+        exc = getattr(parsed, "bozo_exception", None)
+        message = f"Feed fetch failed: {exc or 'no entries, bozo=True'}"
+        raise FeedFetchError(message)
+    return [
+        {
+            "url": e.get("link") or e.get("id") or "",
+            "title": e.get("title") or "Untitled",
+            "description": e.get("summary") or e.get("description") or "",
+            "date": parse_date(e),
+        }
+        for e in parsed.entries
+    ]
 
 
 def _ingest_source(source: SourceDefinition, db_path: Path | None = None) -> SourceIngestOutcome:
@@ -236,23 +351,9 @@ def _ingest_source(source: SourceDefinition, db_path: Path | None = None) -> Sou
     started = time.perf_counter()
 
     try:
-        if source.kind == "scraped_page":
-            entries = scrape_source(source)
-        else:
-            parsed = feedparser.parse(source.url, agent="news-dashboard/0.1 (personal; contact@lihor.ro)")
-            # feedparser swallows network errors via bozo; surface them so health tracking works
-            if parsed.bozo and not parsed.entries:
-                exc = getattr(parsed, "bozo_exception", None)
-                raise Exception(f"Feed fetch failed: {exc or 'no entries, bozo=True'}")
-            entries = [
-                {
-                    "url": e.get("link") or e.get("id") or "",
-                    "title": e.get("title") or "Untitled",
-                    "description": e.get("summary") or e.get("description") or "",
-                    "date": parse_date(e),
-                }
-                for e in parsed.entries
-            ]
+        entries = (
+            scrape_source(source) if source.kind == "scraped_page" else _fetch_feed_entries(source)
+        )
 
         # Apply per-source item limit
         noise_rule = NOISE_FILTERS.get(source.slug, {})
@@ -285,8 +386,21 @@ def _ingest_source(source: SourceDefinition, db_path: Path | None = None) -> Sou
                              status, canonical_id
                            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'archived', ?)
                            ON CONFLICT (url) DO NOTHING""",
-                        (url, url, title, source.slug, source.name, source.category, source.kind,
-                         entry.get("date"), summary, reason, score, tags, canonical_id),
+                        (
+                            url,
+                            url,
+                            title,
+                            source.slug,
+                            source.name,
+                            source.category,
+                            source.kind,
+                            entry.get("date"),
+                            summary,
+                            reason,
+                            score,
+                            tags,
+                            canonical_id,
+                        ),
                     )
                     # Tag canonical article's source list (stored in reason prefix)
                     conn.execute(
@@ -299,8 +413,20 @@ def _ingest_source(source: SourceDefinition, db_path: Path | None = None) -> Sou
                         sql = sql.replace("%s", "?")
                     cursor = conn.execute(
                         sql,
-                        (url, url, title, source.slug, source.name, source.category, source.kind,
-                         entry.get("date"), summary, reason, score, tags),
+                        (
+                            url,
+                            url,
+                            title,
+                            source.slug,
+                            source.name,
+                            source.category,
+                            source.kind,
+                            entry.get("date"),
+                            summary,
+                            reason,
+                            score,
+                            tags,
+                        ),
                     )
                     inserted += cursor.rowcount
 
@@ -369,7 +495,9 @@ def _record_ingest_source(run_id: int, outcome: SourceIngestOutcome, db_path: Pa
     with connect(db_path) as conn:
         conn.execute(
             """
-            INSERT INTO ingest_run_sources(run_id, source_name, articles_found, articles_new, error_message)
+            INSERT INTO ingest_run_sources(
+              run_id, source_name, articles_found, articles_new, error_message
+            )
             VALUES (?, ?, ?, ?, ?)
             """,
             (
@@ -405,7 +533,10 @@ def _format_source_log(outcome: SourceIngestOutcome) -> str:
     if outcome.error_message:
         return f"✗ {outcome.source_name} — {outcome.error_message}"
     article_word = "article" if outcome.articles_new == 1 else "articles"
-    return f"✓ {outcome.source_name} — {outcome.articles_new} new {article_word} ({outcome.duration_seconds:.1f}s)"
+    return (
+        f"✓ {outcome.source_name} — {outcome.articles_new} new {article_word} "
+        f"({outcome.duration_seconds:.1f}s)"
+    )
 
 
 def ingest_all(db_path: Path | None = None) -> dict[str, int]:
@@ -437,7 +568,9 @@ def ingest_all(db_path: Path | None = None) -> dict[str, int]:
             duration_ms = int(duration_seconds * 1000)
             _finish_ingest_run(run_id, db_path, now_iso(), duration_ms, total_new, total_errors)
             article_word = "article" if total_new == 1 else "articles"
-            error_text = f", {total_errors} error{'s' if total_errors != 1 else ''}" if total_errors else ""
+            error_text = (
+                f", {total_errors} error{'s' if total_errors != 1 else ''}" if total_errors else ""
+            )
             ingest_events.complete_run(
                 f"Summary — {total_new} new {article_word}{error_text} ({duration_seconds:.1f}s)"
             )
@@ -447,7 +580,7 @@ def ingest_all(db_path: Path | None = None) -> dict[str, int]:
 _INTERNAL_ARTICLE_COLUMNS = frozenset({"embedding", "fts_vector"})
 
 
-def _article_dict(row: Any) -> dict:
+def _article_dict(row: Any) -> dict[str, Any]:
     """Convert a DB row to a dict, stripping internal-only columns.
 
     'embedding' (BLOB/BYTEA) contains binary float data that is not
@@ -466,7 +599,7 @@ def list_articles(
     limit: int = 100,
     offset: int = 0,
     db_path: Path | None = None,
-) -> list[dict]:
+) -> list[dict[str, Any]]:
     init_db(db_path)
     clauses: list[str] = ["(canonical_id IS NULL OR status != 'archived')"]
     params: list[object] = []
@@ -490,10 +623,12 @@ def list_articles(
         if article_ids:
             placeholders = ",".join("?" * len(article_ids))
             dup_rows = conn.execute(
-                f"SELECT canonical_id, source_name FROM articles WHERE canonical_id IN ({placeholders}) AND status='archived'",
+                f"""
+                SELECT canonical_id, source_name FROM articles
+                WHERE canonical_id IN ({placeholders}) AND status='archived'
+                """,
                 article_ids,
             ).fetchall()
-            from collections import defaultdict
             dupes_by_canonical: dict[int, list[str]] = defaultdict(list)
             for dr in dup_rows:
                 d = row_to_dict(dr)
@@ -504,7 +639,7 @@ def list_articles(
         return articles
 
 
-def search_articles(q: str, limit: int = 50, db_path: Path | None = None) -> list[dict]:
+def search_articles(q: str, limit: int = 50, db_path: Path | None = None) -> list[dict[str, Any]]:
     init_db(db_path)
     terms = [t for t in q.split() if len(t) >= 2]
     sql, params = search_articles_sql(terms, limit)
@@ -513,9 +648,12 @@ def search_articles(q: str, limit: int = 50, db_path: Path | None = None) -> lis
         return [_article_dict(row) for row in rows]
 
 
-def set_article_status(article_id: int, status: str, db_path: Path | None = None) -> dict | None:
-    if status not in {"new", "read", "saved", "skipped", "archived"}:
-        raise ValueError("invalid status")
+def set_article_status(
+    article_id: int, status: str, db_path: Path | None = None
+) -> dict[str, Any] | None:
+    if status not in VALID_STATUSES:
+        message = f"invalid status: {status!r} (expected one of {sorted(VALID_STATUSES)})"
+        raise ValueError(message)
     timestamp_column = {
         "read": "read_at",
         "saved": "saved_at",
@@ -541,8 +679,9 @@ def set_article_status(article_id: int, status: str, db_path: Path | None = None
     if result and status in {"saved", "read"}:
         try:
             from .embeddings import ensure_article_embedded
+
             ensure_article_embedded(article_id, db_path)
-        except Exception:
-            pass  # embedding is optional — don't break the status update
+        except Exception:  # embedding is optional — don't break the status update
+            logger.debug("Skipping embedding for article %d", article_id, exc_info=True)
 
     return result

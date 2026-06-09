@@ -12,11 +12,12 @@ def parse_range(from_value: str, to_value: str) -> tuple[datetime, datetime]:
     start = _parse_datetime(from_value)
     end = _parse_datetime(to_value)
     if start > end:
-        raise ValueError("'from' must be before or equal to 'to'")
+        message = "'from' must be before or equal to 'to'"
+        raise ValueError(message)
     return start, end
 
 
-def stats_overview(from_value: str, to_value: str, db_path: Path | None = None) -> dict:
+def stats_overview(from_value: str, to_value: str, db_path: Path | None = None) -> dict[str, Any]:
     start, end = parse_range(from_value, to_value)
     runs, source_rows = _load_stats_rows(start, end, db_path)
 
@@ -28,7 +29,9 @@ def stats_overview(from_value: str, to_value: str, db_path: Path | None = None) 
     if total_errors == 0 and source_rows:
         total_errors = sum(1 for row in source_rows if _has_error(row.get("error_message")))
 
-    durations = [_int_value(row.get("duration_ms")) for row in runs if row.get("duration_ms") is not None]
+    durations = [
+        _int_value(row.get("duration_ms")) for row in runs if row.get("duration_ms") is not None
+    ]
     latest_by_source: dict[str, dict[str, Any]] = {}
     for row in source_rows:
         name = str(row["source_name"])
@@ -36,8 +39,12 @@ def stats_overview(from_value: str, to_value: str, db_path: Path | None = None) 
         if current is None or _row_sort_key(row) > _row_sort_key(current):
             latest_by_source[name] = row
 
-    erroring_sources = sum(1 for row in latest_by_source.values() if _has_error(row.get("error_message")))
-    healthy_sources = sum(1 for row in latest_by_source.values() if not _has_error(row.get("error_message")))
+    erroring_sources = sum(
+        1 for row in latest_by_source.values() if _has_error(row.get("error_message"))
+    )
+    healthy_sources = sum(
+        1 for row in latest_by_source.values() if not _has_error(row.get("error_message"))
+    )
 
     return {
         "total_articles": total_articles,
@@ -49,7 +56,9 @@ def stats_overview(from_value: str, to_value: str, db_path: Path | None = None) 
     }
 
 
-def articles_over_time(from_value: str, to_value: str, db_path: Path | None = None) -> list[dict]:
+def articles_over_time(
+    from_value: str, to_value: str, db_path: Path | None = None
+) -> list[dict[str, Any]]:
     start, end = parse_range(from_value, to_value)
     runs, _ = _load_stats_rows(start, end, db_path)
     hourly = end - start <= timedelta(days=1)
@@ -70,7 +79,9 @@ def articles_over_time(from_value: str, to_value: str, db_path: Path | None = No
     ]
 
 
-def sources_volume(from_value: str, to_value: str, db_path: Path | None = None) -> list[dict]:
+def sources_volume(
+    from_value: str, to_value: str, db_path: Path | None = None
+) -> list[dict[str, Any]]:
     start, end = parse_range(from_value, to_value)
     _, source_rows = _load_stats_rows(start, end, db_path)
     totals: dict[str, int] = defaultdict(int)
@@ -78,7 +89,9 @@ def sources_volume(from_value: str, to_value: str, db_path: Path | None = None) 
         totals[str(row["source_name"])] += _int_value(row.get("articles_new"))
     return [
         {"source_name": source_name, "total_new": total_new}
-        for source_name, total_new in sorted(totals.items(), key=lambda item: (-item[1], item[0].lower()))
+        for source_name, total_new in sorted(
+            totals.items(), key=lambda item: (-item[1], item[0].lower())
+        )
     ]
 
 
@@ -148,17 +161,15 @@ def _parse_datetime(value: str) -> datetime:
     try:
         parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
     except ValueError as exc:
-        raise ValueError(f"Invalid ISO datetime: {value}") from exc
+        message = f"Invalid ISO datetime: {value}"
+        raise ValueError(message) from exc
     if parsed.tzinfo is None:
         parsed = parsed.replace(tzinfo=timezone.utc)
     return parsed.astimezone(timezone.utc)
 
 
 def _coerce_datetime(value: Any) -> datetime:
-    if isinstance(value, datetime):
-        parsed = value
-    else:
-        parsed = _parse_datetime(str(value))
+    parsed = value if isinstance(value, datetime) else _parse_datetime(str(value))
     if parsed.tzinfo is None:
         parsed = parsed.replace(tzinfo=timezone.utc)
     return parsed.astimezone(timezone.utc)

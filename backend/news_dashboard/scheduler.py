@@ -1,4 +1,5 @@
 """Scheduler module: periodic ingest + daily digest email."""
+
 from __future__ import annotations
 
 import logging
@@ -8,8 +9,16 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
-_scheduler: Any = None  # APScheduler BackgroundScheduler instance
-_interval_minutes: int = 30  # current interval (may differ from env var after live update)
+
+class _SchedulerState:
+    """Holds the APScheduler instance and the live ingest interval."""
+
+    def __init__(self) -> None:
+        self.scheduler: Any = None  # APScheduler BackgroundScheduler instance
+        self.interval_minutes: int = 30  # may differ from env var after live update
+
+
+_state = _SchedulerState()
 
 
 def _run_ingest() -> None:
@@ -39,8 +48,6 @@ def _run_digest() -> None:
 
 
 def start_scheduler() -> None:
-    global _scheduler, _interval_minutes
-
     try:
         from apscheduler.schedulers.background import BackgroundScheduler
     except ImportError:
@@ -49,12 +56,13 @@ def start_scheduler() -> None:
 
     # Read settings from DB (overrides env var)
     from .db import get_setting, init_db
+
     init_db()
 
     env_interval = int(os.getenv("INGEST_INTERVAL_MINUTES", "30"))
     db_interval = get_setting("ingest_interval_minutes")
     interval_minutes = int(db_interval) if db_interval is not None else env_interval
-    _interval_minutes = interval_minutes
+    _state.interval_minutes = interval_minutes
 
     db_paused = get_setting("scheduler_paused")
     start_paused = db_paused == "true" if db_paused is not None else False
@@ -91,7 +99,7 @@ def start_scheduler() -> None:
     )
 
     scheduler.start()
-    _scheduler = scheduler
+    _state.scheduler = scheduler
 
     if start_paused:
         try:
@@ -109,35 +117,35 @@ def start_scheduler() -> None:
 
 
 def stop_scheduler() -> None:
-    global _scheduler
-    if _scheduler is not None:
+    if _state.scheduler is not None:
         try:
-            _scheduler.shutdown(wait=False)
+            _state.scheduler.shutdown(wait=False)
             logger.info("Scheduler stopped.")
         except Exception:
             logger.exception("Error stopping scheduler")
-        _scheduler = None
+        _state.scheduler = None
 
 
 def get_next_ingest_at() -> str | None:
     """Return ISO timestamp of next scheduled ingest, or None if not running."""
-    if _scheduler is None:
+    if _state.scheduler is None:
         return None
     try:
-        job = _scheduler.get_job("ingest")
+        job = _state.scheduler.get_job("ingest")
         if job and job.next_run_time:
-            return job.next_run_time.astimezone(timezone.utc).replace(microsecond=0).isoformat()
-    except Exception:
-        pass
+            next_run: datetime = job.next_run_time
+            return next_run.astimezone(timezone.utc).replace(microsecond=0).isoformat()
+    except Exception:  # scheduler state is advisory only
+        logger.debug("Could not read next ingest run time", exc_info=True)
     return None
 
 
 def is_paused() -> bool:
     """Return True if the ingest job is currently paused."""
-    if _scheduler is None:
+    if _state.scheduler is None:
         return False
     try:
-        job = _scheduler.get_job("ingest")
+        job = _state.scheduler.get_job("ingest")
         if job is None:
             return False
         return job.next_run_time is None
@@ -147,21 +155,20 @@ def is_paused() -> bool:
 
 def get_interval_minutes() -> int:
     """Return the current ingest interval in minutes."""
-    return _interval_minutes
+    return _state.interval_minutes
 
 
 def set_interval(minutes: int) -> None:
     """Reschedule the ingest job with a new interval and persist it."""
-    global _interval_minutes
     from .db import set_setting
 
-    _interval_minutes = minutes
+    _state.interval_minutes = minutes
     set_setting("ingest_interval_minutes", str(minutes))
 
-    if _scheduler is None:
+    if _state.scheduler is None:
         return
     try:
-        _scheduler.reschedule_job("ingest", trigger="interval", minutes=minutes)
+        _state.scheduler.reschedule_job("ingest", trigger="interval", minutes=minutes)
         logger.info("Ingest interval updated to %d minutes", minutes)
     except Exception:
         logger.exception("Failed to reschedule ingest job")
@@ -172,10 +179,10 @@ def pause_scheduler() -> None:
     from .db import set_setting
 
     set_setting("scheduler_paused", "true")
-    if _scheduler is None:
+    if _state.scheduler is None:
         return
     try:
-        _scheduler.pause_job("ingest")
+        _state.scheduler.pause_job("ingest")
         logger.info("Ingest job paused")
     except Exception:
         logger.exception("Failed to pause ingest job")
@@ -186,10 +193,10 @@ def resume_scheduler() -> None:
     from .db import set_setting
 
     set_setting("scheduler_paused", "false")
-    if _scheduler is None:
+    if _state.scheduler is None:
         return
     try:
-        _scheduler.resume_job("ingest")
+        _state.scheduler.resume_job("ingest")
         logger.info("Ingest job resumed")
     except Exception:
         logger.exception("Failed to resume ingest job")

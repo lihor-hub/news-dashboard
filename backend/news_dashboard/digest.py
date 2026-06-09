@@ -1,4 +1,5 @@
 """Daily digest email: pick top-scored new articles and send via SMTP."""
+
 from __future__ import annotations
 
 import hashlib
@@ -10,6 +11,7 @@ import ssl
 from datetime import datetime, timezone
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+from typing import Any
 
 from .db import connect, init_db, row_to_dict
 
@@ -23,6 +25,7 @@ _TOKEN_SECRET = os.getenv("TOKEN_SECRET", "news-dashboard-default-secret-change-
 # ---------------------------------------------------------------------------
 # Token helpers
 # ---------------------------------------------------------------------------
+
 
 def _make_token(article_id: int) -> str:
     """Return a short HMAC token for the given article id."""
@@ -39,7 +42,8 @@ def verify_read_token(article_id: int, token: str) -> bool:
 # Article fetching
 # ---------------------------------------------------------------------------
 
-def _get_top_new_articles(limit: int = 10) -> list[dict]:
+
+def _get_top_new_articles(limit: int = 10) -> list[dict[str, Any]]:
     init_db()
     with connect() as conn:
         rows = conn.execute(
@@ -58,11 +62,12 @@ def _get_top_new_articles(limit: int = 10) -> list[dict]:
 # Email rendering
 # ---------------------------------------------------------------------------
 
+
 def _base_url() -> str:
     return os.getenv("APP_BASE_URL", "http://localhost:8000")
 
 
-def _render_html(articles: list[dict]) -> str:
+def _render_html(articles: list[dict[str, Any]]) -> str:
     base = _base_url()
     rows = ""
     for a in articles:
@@ -76,7 +81,9 @@ def _render_html(articles: list[dict]) -> str:
         rows += f"""
         <tr>
           <td style="padding:12px 0;border-bottom:1px solid #eee;">
-            <a href="{url}" style="font-size:15px;font-weight:bold;color:#1a1a1a;text-decoration:none;">{title}</a><br>
+            <a href="{url}"
+               style="font-size:15px;font-weight:bold;color:#1a1a1a;text-decoration:none;"
+            >{title}</a><br>
             <span style="font-size:12px;color:#888;">{source} &middot; score {score}</span><br>
             <p style="margin:6px 0;font-size:13px;color:#444;">{summary}</p>
             <a href="{mark_read_url}" style="font-size:12px;color:#0066cc;">Mark as read &rarr;</a>
@@ -87,7 +94,8 @@ def _render_html(articles: list[dict]) -> str:
     return f"""
     <html><body style="font-family:Arial,sans-serif;max-width:640px;margin:auto;padding:24px;">
       <h2 style="color:#1a1a1a;">News Digest &mdash; {date_str}</h2>
-      <p style="color:#555;">Your top {len(articles)} new article{"s" if len(articles) != 1 else ""} today:</p>
+      <p style="color:#555;">Your top {len(articles)}
+        new article{"s" if len(articles) != 1 else ""} today:</p>
       <table width="100%" cellpadding="0" cellspacing="0">{rows}</table>
       <p style="margin-top:24px;font-size:12px;color:#aaa;">
         You received this because you set up the News Dashboard digest.
@@ -96,7 +104,7 @@ def _render_html(articles: list[dict]) -> str:
     """
 
 
-def _render_text(articles: list[dict]) -> str:
+def _render_text(articles: list[dict[str, Any]]) -> str:
     base = _base_url()
     lines = [f"News Digest — {datetime.now(timezone.utc).strftime('%A, %B %d %Y')}", ""]
     for i, a in enumerate(articles, 1):
@@ -120,6 +128,7 @@ def _render_text(articles: list[dict]) -> str:
 # ---------------------------------------------------------------------------
 # SMTP sending
 # ---------------------------------------------------------------------------
+
 
 def _send_email(subject: str, html_body: str, text_body: str) -> None:
     smtp_host = os.getenv("SMTP_HOST", "")
@@ -163,6 +172,7 @@ def _send_email(subject: str, html_body: str, text_body: str) -> None:
 # Public entry point
 # ---------------------------------------------------------------------------
 
+
 def send_digest() -> bool:
     """Fetch top new articles and send digest email. Returns True if email sent."""
     digest_to = os.getenv("DIGEST_TO", "")
@@ -176,7 +186,9 @@ def send_digest() -> bool:
         return False
 
     date_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    subject = f"News Digest {date_str} — {len(articles)} new article{'s' if len(articles) != 1 else ''}"
+    subject = (
+        f"News Digest {date_str} — {len(articles)} new article{'s' if len(articles) != 1 else ''}"
+    )
     html_body = _render_html(articles)
     text_body = _render_text(articles)
 

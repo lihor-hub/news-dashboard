@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import queue
 import threading
+from collections.abc import Iterator
 from dataclasses import dataclass
-from typing import Iterator
 
 
 @dataclass(frozen=True)
@@ -23,8 +23,15 @@ class IngestEventHub:
     def subscribe(self) -> tuple[queue.Queue[IngestStreamEvent], list[IngestStreamEvent]]:
         subscriber: queue.Queue[IngestStreamEvent] = queue.Queue()
         with self._lock:
-            lines = self._current_lines if self._active_run_id is not None else self._last_completed_lines
-            replay = [IngestStreamEvent("reset"), *(IngestStreamEvent("line", line) for line in lines)]
+            lines = (
+                self._current_lines
+                if self._active_run_id is not None
+                else self._last_completed_lines
+            )
+            replay = [
+                IngestStreamEvent("reset"),
+                *(IngestStreamEvent("line", line) for line in lines),
+            ]
             self._subscribers.add(subscriber)
         return subscriber, replay
 
@@ -86,8 +93,7 @@ ingest_events = IngestEventHub()
 def format_sse_event(event: IngestStreamEvent) -> str:
     payload = [f"event: {event.event}"]
     if event.data:
-        for line in event.data.splitlines():
-            payload.append(f"data: {line}")
+        payload.extend(f"data: {line}" for line in event.data.splitlines())
     else:
         payload.append("data:")
     return "\n".join(payload) + "\n\n"

@@ -18,7 +18,9 @@ def _insert_run(
     with connect(db_path) as conn:
         conn.execute(
             """
-            INSERT INTO ingest_runs(id, started_at, finished_at, duration_ms, total_new, total_errors)
+            INSERT INTO ingest_runs(
+              id, started_at, finished_at, duration_ms, total_new, total_errors
+            )
             VALUES (?, ?, ?, ?, ?, ?)
             """,
             (run_id, started_at, started_at, duration_ms, total_new, total_errors),
@@ -26,7 +28,9 @@ def _insert_run(
         for source_name, found, new, error in sources:
             conn.execute(
                 """
-                INSERT INTO ingest_run_sources(run_id, source_name, articles_found, articles_new, error_message)
+                INSERT INTO ingest_run_sources(
+              run_id, source_name, articles_found, articles_new, error_message
+            )
                 VALUES (?, ?, ?, ?, ?)
                 """,
                 (run_id, source_name, found, new, error),

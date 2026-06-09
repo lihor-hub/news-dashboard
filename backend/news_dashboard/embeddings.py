@@ -5,14 +5,15 @@ Answer model    : gpt-4o-mini (OpenAI)
 Storage         : articles.embedding BLOB (serialized float32 numpy array)
 Retrieval       : pure-Python cosine similarity (no sqlite-vss needed)
 """
+
 from __future__ import annotations
 
 import os
 import struct
 from typing import Any
 
-MIN_ARTICLES = 5   # refuse to answer if fewer than this many articles are embedded
-TOP_K = 8          # articles to include as context
+MIN_ARTICLES = 5  # refuse to answer if fewer than this many articles are embedded
+TOP_K = 8  # articles to include as context
 DEFAULT_ANSWER_MODEL = "gpt-4o-mini"
 
 
@@ -24,12 +25,12 @@ def _require_env(name: str, purpose: str) -> str:
     value = os.getenv(name)
     if value:
         return value
-    raise MissingAICredentialsError(
-        f"Ask AI requires {name} to {purpose}. Set {name} in the app environment."
-    )
+    message = f"Ask AI requires {name} to {purpose}. Set {name} in the app environment."
+    raise MissingAICredentialsError(message)
 
 
 # ── Embedding serialisation ────────────────────────────────────────────────
+
 
 def _pack(vector: list[float]) -> bytes:
     return struct.pack(f"{len(vector)}f", *vector)
@@ -42,6 +43,7 @@ def _unpack(blob: bytes) -> list[float]:
 
 # ── OpenAI embedding ───────────────────────────────────────────────────────
 
+
 def _embed(text: str) -> list[float]:
     """Embed *text* with text-embedding-3-small via the OpenAI SDK."""
     from openai import OpenAI  # lazy import — optional dep at import time
@@ -51,7 +53,7 @@ def _embed(text: str) -> list[float]:
         model="text-embedding-3-small",
         input=text,
     )
-    return response.data[0].embedding
+    return list(response.data[0].embedding)
 
 
 def _answer(system_prompt: str, user_prompt: str) -> str:
@@ -72,16 +74,18 @@ def _answer(system_prompt: str, user_prompt: str) -> str:
 
 # ── Cosine similarity ──────────────────────────────────────────────────────
 
+
 def _cosine(a: list[float], b: list[float]) -> float:
-    dot = sum(x * y for x, y in zip(a, b))
+    dot = sum(x * y for x, y in zip(a, b, strict=False))
     norm_a = sum(x * x for x in a) ** 0.5
     norm_b = sum(x * x for x in b) ** 0.5
     if norm_a == 0 or norm_b == 0:
         return 0.0
-    return dot / (norm_a * norm_b)
+    return float(dot / (norm_a * norm_b))
 
 
 # ── Lazy embedding of saved/read articles ─────────────────────────────────
+
 
 def ensure_article_embedded(article_id: int, db_path: Any = None) -> None:
     """Generate and persist an embedding for *article_id* if not already set."""
@@ -129,6 +133,7 @@ def embed_all_eligible(db_path: Any = None) -> int:
         vector = _embed(text)
         blob = _pack(vector)
         from .db import connect as _connect
+
         with _connect(db_path) as conn:
             conn.execute(
                 "UPDATE articles SET embedding=? WHERE id=?",
@@ -140,7 +145,8 @@ def embed_all_eligible(db_path: Any = None) -> int:
 
 # ── Main Q&A entry-point ───────────────────────────────────────────────────
 
-def ask(query: str, db_path: Any = None) -> dict:
+
+def ask(query: str, db_path: Any = None) -> dict[str, Any]:
     """Answer *query* using RAG over saved/read articles.
 
     Returns:
@@ -168,8 +174,8 @@ def ask(query: str, db_path: Any = None) -> dict:
     if len(rows) < MIN_ARTICLES:
         return {
             "answer": (
-                f"Not enough articles yet — I need at least {MIN_ARTICLES} saved or read articles "
-                f"to answer questions. You currently have {len(rows)}."
+                f"Not enough articles yet — I need at least {MIN_ARTICLES} saved or read "
+                f"articles to answer questions. You currently have {len(rows)}."
             ),
             "sources": [],
         }
@@ -178,39 +184,31 @@ def ask(query: str, db_path: Any = None) -> dict:
     query_vec = _embed(query)
 
     # 4. Rank by cosine similarity and pick top-k
-    scored = [
-        (row, _cosine(query_vec, _unpack(bytes(row["embedding"]))))
-        for row in rows
-    ]
+    scored = [(row, _cosine(query_vec, _unpack(bytes(row["embedding"])))) for row in rows]
     scored.sort(key=lambda x: x[1], reverse=True)
     top = scored[:TOP_K]
 
     # 5. Build context for the prompt
     context_blocks = []
-    for i, (row, score) in enumerate(top, 1):
+    for i, (row, _score) in enumerate(top, 1):
         context_blocks.append(
             f"[{i}] Title: {row['title']}\nURL: {row['url']}\nSummary: {row['summary']}"
         )
     context_text = "\n\n".join(context_blocks)
 
     system_prompt = (
-        "You are a helpful assistant that answers questions based on the user's curated news articles. "
+        "You are a helpful assistant that answers questions based on the user's "
+        "curated news articles. "
         "Use only the provided article excerpts to answer. "
         "Cite articles by their bracketed number, e.g. [1], [2]. "
         "If the articles do not contain enough information, say so clearly. "
         "Be concise (2-4 sentences unless a longer answer is clearly needed)."
     )
-    user_prompt = (
-        f"Articles:\n\n{context_text}\n\n"
-        f"Question: {query}"
-    )
+    user_prompt = f"Articles:\n\n{context_text}\n\nQuestion: {query}"
 
     # 6. Call OpenAI for the answer
     answer_text = _answer(system_prompt, user_prompt)
 
     # 7. Return answer + deduplicated source list (top-k order)
-    sources = [
-        {"id": row["id"], "title": row["title"], "url": row["url"]}
-        for row, _ in top
-    ]
+    sources = [{"id": row["id"], "title": row["title"], "url": row["url"]} for row, _ in top]
     return {"answer": answer_text, "sources": sources}

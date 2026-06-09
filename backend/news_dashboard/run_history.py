@@ -93,7 +93,10 @@ def list_ingest_runs(
               (SELECT COUNT(*) FROM ingest_run_sources s WHERE s.run_id = r.id) AS sources_run,
               COALESCE(
                 r.total_new,
-                (SELECT COALESCE(SUM(COALESCE(s.articles_new, 0)), 0) FROM ingest_run_sources s WHERE s.run_id = r.id),
+                (
+                  SELECT COALESCE(SUM(COALESCE(s.articles_new, 0)), 0)
+                  FROM ingest_run_sources s WHERE s.run_id = r.id
+                ),
                 0
               ) AS total_new,
               COALESCE(
@@ -112,7 +115,7 @@ def list_ingest_runs(
             ORDER BY r.started_at DESC, r.id DESC
             LIMIT ? OFFSET ?
             """,
-            tuple(params + [per_page, offset]),
+            (*params, per_page, offset),
         ).fetchall()
 
     return {
@@ -124,7 +127,9 @@ def list_ingest_runs(
     }
 
 
-def get_ingest_run_sources(run_id: int, *, db_path: Path | None = None) -> list[dict[str, Any]] | None:
+def get_ingest_run_sources(
+    run_id: int, *, db_path: Path | None = None
+) -> list[dict[str, Any]] | None:
     init_db(db_path)
     with connect(db_path) as conn:
         exists = conn.execute("SELECT id FROM ingest_runs WHERE id=?", (run_id,)).fetchone()

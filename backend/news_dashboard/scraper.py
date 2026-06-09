@@ -3,6 +3,7 @@
 Uses stdlib only (urllib + html.parser) — no extra dependencies.
 Scrapers must be polite: single request, reasonable timeout, proper user-agent.
 """
+
 from __future__ import annotations
 
 import re
@@ -15,16 +16,20 @@ TIMEOUT_SECS = 15
 
 
 def _fetch_html(url: str) -> str:
-    req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
-    with urllib.request.urlopen(req, timeout=TIMEOUT_SECS) as resp:
-        raw = resp.read()
+    if not url.startswith(("http:", "https:")):
+        message = f"Refusing to fetch non-HTTP URL: {url!r}"
+        raise ValueError(message)
+    req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})  # noqa: S310 - scheme validated above
+    with urllib.request.urlopen(req, timeout=TIMEOUT_SECS) as resp:  # noqa: S310 - scheme validated above
+        raw: bytes = resp.read()
         charset = resp.headers.get_content_charset("utf-8") or "utf-8"
-        return raw.decode(charset, errors="replace")
+        return raw.decode(str(charset), errors="replace")
 
 
 # ──────────────────────────────────────────────
 # Anthropic news page scraper
 # ──────────────────────────────────────────────
+
 
 class _AnthropicParser(HTMLParser):
     """Extracts article cards from https://www.anthropic.com/news.
@@ -35,7 +40,7 @@ class _AnthropicParser(HTMLParser):
 
     def __init__(self) -> None:
         super().__init__()
-        self._entries: list[dict[str, str]] = []
+        self._entries: list[dict[str, Any]] = []
         self._in_link: bool = False
         self._current_href: str = ""
         self._current_title: str = ""
@@ -53,18 +58,20 @@ class _AnthropicParser(HTMLParser):
                 self._current_title = ""
                 self._capture_depth = self._depth
 
-    def handle_endtag(self, tag: str) -> None:
+    def handle_endtag(self, tag: str) -> None:  # noqa: ARG002 - signature fixed by HTMLParser
         if self._in_link and self._capture_depth == self._depth:
             if self._current_href and self._current_title.strip():
                 # deduplicate by href
                 existing = {e["url"] for e in self._entries}
                 if self._current_href not in existing:
-                    self._entries.append({
-                        "url": self._current_href,
-                        "title": self._current_title.strip(),
-                        "description": "",
-                        "date": None,
-                    })
+                    self._entries.append(
+                        {
+                            "url": self._current_href,
+                            "title": self._current_title.strip(),
+                            "description": "",
+                            "date": None,
+                        }
+                    )
             self._in_link = False
             self._capture_depth = None
         self._depth -= 1
@@ -74,7 +81,7 @@ class _AnthropicParser(HTMLParser):
             self._current_title += data
 
     @property
-    def entries(self) -> list[dict[str, str]]:
+    def entries(self) -> list[dict[str, Any]]:
         return self._entries
 
 
@@ -98,5 +105,7 @@ def scrape_source(source: Any) -> list[dict[str, Any]]:
     """Dispatch to the correct scraper by source slug."""
     fn = _SCRAPERS.get(source.slug)
     if fn is None:
-        raise NotImplementedError(f"No scraper registered for slug '{source.slug}'")
-    return fn(source.url)
+        message = f"No scraper registered for slug '{source.slug}'"
+        raise NotImplementedError(message)
+    entries: list[dict[str, Any]] = fn(source.url)
+    return entries

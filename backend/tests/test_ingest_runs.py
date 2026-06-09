@@ -1,12 +1,20 @@
 from __future__ import annotations
 
+from collections.abc import Generator
 from pathlib import Path
 from typing import Any
+
+import feedparser
 
 import news_dashboard.ingest as ingest_module
 from news_dashboard.db import connect
 from news_dashboard.ingest import ingest_all
-from news_dashboard.ingest_events import IngestStreamEvent, format_sse_event, ingest_events, stream_ingest_events
+from news_dashboard.ingest_events import (
+    IngestStreamEvent,
+    format_sse_event,
+    ingest_events,
+    stream_ingest_events,
+)
 from news_dashboard.main import app
 from news_dashboard.sources import SourceDefinition
 
@@ -18,7 +26,9 @@ class ParsedFeed:
         self.entries = entries
 
 
-def test_ingest_all_writes_run_rows_and_buffers_terminal_lines(tmp_path: Path, monkeypatch: Any) -> None:
+def test_ingest_all_writes_run_rows_and_buffers_terminal_lines(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
     db_path = tmp_path / "runs.db"
     source = SourceDefinition("test-feed", "Test Feed", "https://example.com/feed.xml", "python")
     ingest_events.reset_for_tests()
@@ -27,15 +37,17 @@ def test_ingest_all_writes_run_rows_and_buffers_terminal_lines(tmp_path: Path, m
     def parse(url: str, agent: str) -> ParsedFeed:
         assert url == source.url
         assert "news-dashboard" in agent
-        return ParsedFeed([
-            {
-                "link": "https://example.com/article?utm_source=test",
-                "title": "Python release notes",
-                "summary": "A useful release summary.",
-            }
-        ])
+        return ParsedFeed(
+            [
+                {
+                    "link": "https://example.com/article?utm_source=test",
+                    "title": "Python release notes",
+                    "summary": "A useful release summary.",
+                }
+            ]
+        )
 
-    monkeypatch.setattr(ingest_module.feedparser, "parse", parse)
+    monkeypatch.setattr(feedparser, "parse", parse)
 
     assert ingest_all(db_path) == {"test-feed": 1}
 
@@ -67,9 +79,10 @@ def test_ingest_all_records_source_errors(tmp_path: Path, monkeypatch: Any) -> N
     monkeypatch.setattr(ingest_module, "DEFAULT_SOURCES", [source])
 
     def parse(url: str, agent: str) -> ParsedFeed:
-        raise RuntimeError("connection timeout")
+        message = "connection timeout"
+        raise RuntimeError(message)
 
-    monkeypatch.setattr(ingest_module.feedparser, "parse", parse)
+    monkeypatch.setattr(feedparser, "parse", parse)
 
     assert ingest_all(db_path) == {"bad-feed": -1}
 
@@ -90,7 +103,7 @@ def test_ingest_all_records_source_errors(tmp_path: Path, monkeypatch: Any) -> N
 
 
 def test_ingest_stream_route_is_registered() -> None:
-    assert any(route.path == "/api/ingest/stream" for route in app.routes)
+    assert any(getattr(route, "path", None) == "/api/ingest/stream" for route in app.routes)
 
 
 def test_ingest_stream_replays_last_completed_run() -> None:
@@ -103,7 +116,8 @@ def test_ingest_stream_replays_last_completed_run() -> None:
     try:
         chunks = [next(stream) for _ in range(4)]
     finally:
-        stream.close()
+        if isinstance(stream, Generator):
+            stream.close()
 
     assert chunks[0] == format_sse_event(IngestStreamEvent("reset"))
     assert "data: Ingest run #7 started at 2026-06-06T12:00:00+00:00" in chunks[1]

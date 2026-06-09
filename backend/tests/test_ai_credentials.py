@@ -37,7 +37,7 @@ def test_answer_uses_openai_api_key_and_default_model(
         message = FakeMessage()
 
     class FakeResponse:
-        choices = [FakeChoice()]
+        choices = (FakeChoice(),)
 
     class FakeCompletions:
         def create(self, **kwargs: object) -> FakeResponse:

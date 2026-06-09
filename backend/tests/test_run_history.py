@@ -38,7 +38,9 @@ def _insert_source(
     with connect(db_path) as conn:
         conn.execute(
             """
-            INSERT INTO ingest_run_sources(run_id, source_name, articles_found, articles_new, error_message)
+            INSERT INTO ingest_run_sources(
+              run_id, source_name, articles_found, articles_new, error_message
+            )
             VALUES (?, ?, ?, ?, ?)
             """,
             (run_id, source_name, articles_found, articles_new, error_message),
@@ -80,7 +82,14 @@ def test_list_ingest_runs_is_completed_reverse_chronological_and_paginated(tmp_p
         finished_at=None,
     )
     _insert_source(db, run_id=first, source_name="Python Insider", articles_found=4, articles_new=3)
-    _insert_source(db, run_id=first, source_name="Broken Feed", articles_found=0, articles_new=0, error_message="timeout")
+    _insert_source(
+        db,
+        run_id=first,
+        source_name="Broken Feed",
+        articles_found=0,
+        articles_new=0,
+        error_message="timeout",
+    )
     _insert_source(db, run_id=second, source_name="Hacker News", articles_found=10, articles_new=2)
 
     page = list_ingest_runs(page=1, per_page=1, db_path=db)
@@ -135,8 +144,17 @@ def test_get_ingest_run_sources_includes_duplicate_counts(tmp_path: Path) -> Non
         started_at="2026-06-06T10:00:00+00:00",
         finished_at="2026-06-06T10:00:03+00:00",
     )
-    _insert_source(db, run_id=run_id, source_name="Python Insider", articles_found=5, articles_new=2)
-    _insert_source(db, run_id=run_id, source_name="Broken Feed", articles_found=0, articles_new=0, error_message="timeout")
+    _insert_source(
+        db, run_id=run_id, source_name="Python Insider", articles_found=5, articles_new=2
+    )
+    _insert_source(
+        db,
+        run_id=run_id,
+        source_name="Broken Feed",
+        articles_found=0,
+        articles_new=0,
+        error_message="timeout",
+    )
 
     sources = get_ingest_run_sources(run_id, db_path=db)
 

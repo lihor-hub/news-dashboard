@@ -1,7 +1,8 @@
 """Scraper tests using HTML fixtures — no live network calls."""
+
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
+import pytest
 
 from news_dashboard.scraper import _AnthropicParser, scrape_source
 from news_dashboard.sources import SourceDefinition
@@ -49,12 +50,20 @@ def test_anthropic_parser_excludes_external_links() -> None:
     parser = _AnthropicParser()
     parser.feed(ANTHROPIC_FIXTURE)
     for entry in parser.entries:
-        assert entry["url"].startswith("https://www.anthropic.com/news/"), \
+        assert entry["url"].startswith("https://www.anthropic.com/news/"), (
             f"unexpected URL: {entry['url']}"
+        )
 
 
-def test_scrape_source_uses_fixture(monkeypatch) -> None:
-    source = SourceDefinition("anthropic-news", "Anthropic News", "https://www.anthropic.com/news", "ai-llm", "scraped_page", 90)
+def test_scrape_source_uses_fixture(monkeypatch: pytest.MonkeyPatch) -> None:
+    source = SourceDefinition(
+        "anthropic-news",
+        "Anthropic News",
+        "https://www.anthropic.com/news",
+        "ai-llm",
+        "scraped_page",
+        90,
+    )
 
     def fake_fetch(url: str) -> str:
         return ANTHROPIC_FIXTURE
@@ -65,9 +74,8 @@ def test_scrape_source_uses_fixture(monkeypatch) -> None:
 
 
 def test_scrape_source_unknown_slug_raises() -> None:
-    source = SourceDefinition("no-scraper", "No Scraper", "https://example.com", "python", "scraped_page", 50)
-    try:
+    source = SourceDefinition(
+        "no-scraper", "No Scraper", "https://example.com", "python", "scraped_page", 50
+    )
+    with pytest.raises(NotImplementedError, match="no-scraper"):
         scrape_source(source)
-        raise AssertionError("should have raised NotImplementedError")
-    except NotImplementedError as exc:
-        assert "no-scraper" in str(exc)

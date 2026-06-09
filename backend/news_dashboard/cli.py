@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import typer
-from pathlib import Path
 
 from .ingest import ingest_all, list_articles, sync_sources
 
@@ -25,7 +24,9 @@ def ingest() -> None:
 @app.command()
 def articles(status: str | None = None, limit: int = 20) -> None:
     for article in list_articles(status=status, limit=limit):
-        typer.echo(f"[{article['id']}] {article['status']} {article['title']} — {article['source_name']}")
+        typer.echo(
+            f"[{article['id']}] {article['status']} {article['title']} — {article['source_name']}"
+        )
 
 
 if __name__ == "__main__":

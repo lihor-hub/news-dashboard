@@ -1,31 +1,33 @@
 """Tests for source health tracking, better summaries, noise filters, and search."""
+
 from __future__ import annotations
 
+import contextlib
 from pathlib import Path
+from typing import Any
 
 from news_dashboard.db import connect
 from news_dashboard.ingest import (
     infer_tags,
-    list_articles,
-    make_reason,
     make_summary,
     search_articles,
-    set_article_status,
     sync_sources,
 )
 from news_dashboard.source_health import list_source_health
-from news_dashboard.sources import DEFAULT_SOURCES, SourceDefinition
-
+from news_dashboard.sources import SourceDefinition
 
 # ──────────────────────────────────────────────
 # Source health tracking
 # ──────────────────────────────────────────────
 
-def _insert_article(conn, n: int = 1) -> None:
+
+def _insert_article(conn: Any, n: int = 1) -> None:
     """Insert a test article using a source that's already synced."""
     for i in range(n):
         conn.execute(
-            """INSERT INTO articles(url, canonical_url, title, source_slug, source_name, category, kind)
+            """INSERT INTO articles(
+                 url, canonical_url, title, source_slug, source_name, category, kind
+               )
                VALUES (?, ?, ?, 'python-insider', 'Python Insider', 'python', 'rss_feed')
                ON CONFLICT (url) DO NOTHING""",
             (f"https://example.com/art-{i}", f"https://example.com/art-{i}", f"Article {i}"),
@@ -43,6 +45,7 @@ def test_source_columns_present(tmp_path: Path) -> None:
 
 def test_source_error_tracked(tmp_path: Path) -> None:
     from news_dashboard.sources import SourceDefinition
+
     bad = SourceDefinition("bad-feed", "Bad Feed", "http://localhost:0/nope", "python")
     db = tmp_path / "err.db"
     sync_sources(db)
@@ -54,13 +57,14 @@ def test_source_error_tracked(tmp_path: Path) -> None:
         )
 
     from news_dashboard.ingest import ingest_source
-    try:
+
+    with contextlib.suppress(Exception):  # failure is the point of this fixture
         ingest_source(bad, db)
-    except Exception:
-        pass  # expected
 
     with connect(db) as conn:
-        row = conn.execute("SELECT last_error, last_checked_at FROM sources WHERE slug=?", (bad.slug,)).fetchone()
+        row = conn.execute(
+            "SELECT last_error, last_checked_at FROM sources WHERE slug=?", (bad.slug,)
+        ).fetchone()
         assert row["last_error"] is not None, "last_error should be set on failure"
         assert row["last_checked_at"] is not None, "last_checked_at should be set even on failure"
 
@@ -76,7 +80,9 @@ def test_source_health_error_streak_resets_after_success(tmp_path: Path) -> None
             )
             conn.execute(
                 """
-                INSERT INTO ingest_run_sources(run_id, source_name, articles_found, articles_new, error_message)
+                INSERT INTO ingest_run_sources(
+              run_id, source_name, articles_found, articles_new, error_message
+            )
                 VALUES (?, 'Python Insider', 10, ?, ?)
                 """,
                 (run_id, 3 if error is None else 0, error),
@@ -99,20 +105,30 @@ def test_source_health_counts_leading_errors_and_sorts_first(tmp_path: Path) -> 
             )
         conn.execute(
             """
-            INSERT INTO ingest_run_sources(run_id, source_name, articles_found, articles_new, error_message)
+            INSERT INTO ingest_run_sources(
+              run_id, source_name, articles_found, articles_new, error_message
+            )
             VALUES (1, 'Python Insider', 8, 2, NULL)
             """
         )
         conn.execute(
             """
-            INSERT INTO ingest_run_sources(run_id, source_name, articles_found, articles_new, error_message)
+            INSERT INTO ingest_run_sources(
+              run_id, source_name, articles_found, articles_new, error_message
+            )
             VALUES (2, 'Python Insider', 0, 0, 'Feed fetch failed: timeout')
             """
         )
         conn.execute(
             """
-            INSERT INTO ingest_run_sources(run_id, source_name, articles_found, articles_new, error_message)
-            VALUES (3, 'Python Insider', 0, 0, 'Traceback (most recent call last):\n  File "feed.py", line 1\nTimeoutError: connection timed out')
+            INSERT INTO ingest_run_sources(
+              run_id, source_name, articles_found, articles_new, error_message
+            )
+            VALUES (
+              3, 'Python Insider', 0, 0,
+              'Traceback (most recent call last):\n  File "feed.py", line 1\n'
+                || 'TimeoutError: connection timed out'
+            )
             """
         )
 
@@ -129,6 +145,7 @@ def test_source_health_counts_leading_errors_and_sorts_first(tmp_path: Path) -> 
 # Better summaries / reasons (issue #8)
 # ──────────────────────────────────────────────
 
+
 def test_release_reason() -> None:
     src = SourceDefinition("ruff-releases", "Ruff", "x", "python", "github_release_feed", 85)
     _, reason, _, _ = make_summary("ruff v0.9.3", "Bug fixes and performance improvements.", src)
@@ -136,14 +153,18 @@ def test_release_reason() -> None:
 
 
 def test_trending_reason_hn() -> None:
-    src = SourceDefinition("hacker-news-best", "Hacker News Best", "x", "trending", "trending_feed", 55)
+    src = SourceDefinition(
+        "hacker-news-best", "Hacker News Best", "x", "trending", "trending_feed", 55
+    )
     _, reason, _, _ = make_summary("Ask HN: What tools do you use?", "discussion", src)
     assert "Hacker News" in reason or "trending" in reason.lower()
 
 
 def test_security_reason() -> None:
     src = SourceDefinition("python-insider", "Python Insider", "x", "python", "rss_feed", 90)
-    _, reason, _, tags = make_summary("Critical security vulnerability in stdlib", "CVE-2025-1234 affects all versions.", src)
+    _, reason, _, tags = make_summary(
+        "Critical security vulnerability in stdlib", "CVE-2025-1234 affects all versions.", src
+    )
     assert "security" in tags
     assert "security" in reason.lower() or "Security" in reason
 
@@ -151,12 +172,15 @@ def test_security_reason() -> None:
 def test_generic_reason_not_tracked_under() -> None:
     src = SourceDefinition("astral-blog", "Astral Blog", "x", "python", "rss_feed", 85)
     _, reason, _, _ = make_summary("Introducing uv workspaces", "New feature announcement.", src)
-    assert not reason.startswith("Tracked under"), "generic 'Tracked under' reason should not appear"
+    assert not reason.startswith("Tracked under"), (
+        "generic 'Tracked under' reason should not appear"
+    )
 
 
 # ──────────────────────────────────────────────
 # Noise filters (issue #7)
 # ──────────────────────────────────────────────
+
 
 def test_infer_tags_python() -> None:
     tags = infer_tags("New Python 3.14 typing improvements with mypy support")
@@ -182,17 +206,30 @@ def test_infer_tags_agents() -> None:
 # Search (issue #9)
 # ──────────────────────────────────────────────
 
+
 def test_search_returns_matching_articles(tmp_path: Path) -> None:
     db = tmp_path / "search.db"
     sync_sources(db)
     with connect(db) as conn:
         conn.execute(
-            """INSERT INTO articles(url, canonical_url, title, source_slug, source_name, category, kind, summary)
-               VALUES ('https://ex.com/1','https://ex.com/1','Python typing guide','python-insider','Python Insider','python','rss_feed','How to use mypy and pyright together')""",
+            """INSERT INTO articles(
+                 url, canonical_url, title, source_slug, source_name, category, kind, summary
+               )
+               VALUES (
+                 'https://ex.com/1', 'https://ex.com/1', 'Python typing guide',
+                 'python-insider', 'Python Insider', 'python', 'rss_feed',
+                 'How to use mypy and pyright together'
+               )""",
         )
         conn.execute(
-            """INSERT INTO articles(url, canonical_url, title, source_slug, source_name, category, kind, summary)
-               VALUES ('https://ex.com/2','https://ex.com/2','Docker networking','docker-blog','Docker Blog','cloud-infra','rss_feed','Container networking basics')""",
+            """INSERT INTO articles(
+                 url, canonical_url, title, source_slug, source_name, category, kind, summary
+               )
+               VALUES (
+                 'https://ex.com/2', 'https://ex.com/2', 'Docker networking',
+                 'docker-blog', 'Docker Blog', 'cloud-infra', 'rss_feed',
+                 'Container networking basics'
+               )""",
         )
 
     results = search_articles("python mypy", db_path=db)

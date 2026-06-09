@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import logging
 import os
 import sqlite3
+from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any
 from urllib.parse import urlsplit, urlunsplit
 
 try:
@@ -16,6 +18,8 @@ except ImportError:  # pragma: no cover - optional unless DATABASE_URL is Postgr
 
 DB_PATH = Path(os.getenv("NEWS_DASHBOARD_DB", "/data/news-dashboard.db"))
 POSTGRES_PREFIXES = ("postgres:" + "//", "postgresql:" + "//")
+
+logger = logging.getLogger(__name__)
 
 SQLITE_SCHEMA = """
 PRAGMA journal_mode=WAL;
@@ -113,12 +117,12 @@ CREATE INDEX IF NOT EXISTS idx_ingest_run_sources_run ON ingest_run_sources(run_
 
 # Additive columns to add when upgrading existing databases
 SQLITE_COLUMN_MIGRATIONS = [
-    ("sources", "last_success_at",     "TEXT"),
-    ("sources", "last_error",          "TEXT"),
-    ("sources", "last_fetched_count",  "INTEGER NOT NULL DEFAULT 0"),
+    ("sources", "last_success_at", "TEXT"),
+    ("sources", "last_error", "TEXT"),
+    ("sources", "last_fetched_count", "INTEGER NOT NULL DEFAULT 0"),
     ("sources", "last_inserted_count", "INTEGER NOT NULL DEFAULT 0"),
-    ("articles", "canonical_id",       "INTEGER REFERENCES articles(id)"),
-    ("articles", "embedding",          "BLOB"),
+    ("articles", "canonical_id", "INTEGER REFERENCES articles(id)"),
+    ("articles", "embedding", "BLOB"),
 ]
 
 POSTGRES_SCHEMA = [
@@ -150,7 +154,8 @@ POSTGRES_SCHEMA = [
       kind TEXT NOT NULL,
       published_at TEXT,
       discovered_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      status TEXT NOT NULL DEFAULT 'new' CHECK(status IN ('new','read','saved','skipped','archived')),
+      status TEXT NOT NULL DEFAULT 'new'
+        CHECK(status IN ('new','read','saved','skipped','archived')),
       importance_score INTEGER NOT NULL DEFAULT 50,
       summary TEXT NOT NULL DEFAULT '',
       reason TEXT NOT NULL DEFAULT '',
@@ -188,7 +193,15 @@ POSTGRES_SCHEMA = [
     )
     """,
     # PostgreSQL FTS via tsvector — added as a generated column if not present
-    "ALTER TABLE articles ADD COLUMN IF NOT EXISTS fts_vector tsvector GENERATED ALWAYS AS (to_tsvector('english', coalesce(title,'') || ' ' || coalesce(summary,'') || ' ' || coalesce(tags,''))) STORED",
+    """
+    ALTER TABLE articles ADD COLUMN IF NOT EXISTS fts_vector tsvector
+      GENERATED ALWAYS AS (
+        to_tsvector(
+          'english',
+          coalesce(title, '') || ' ' || coalesce(summary, '') || ' ' || coalesce(tags, '')
+        )
+      ) STORED
+    """,
     "CREATE INDEX IF NOT EXISTS idx_articles_fts ON articles USING gin(fts_vector)",
     # Settings table for persistent configuration
     """
@@ -208,48 +221,32 @@ POSTGRES_SCHEMA = [
     "ALTER TABLE articles ADD COLUMN IF NOT EXISTS embedding BYTEA",
     # Ingest run telemetry from issue #50. Stats endpoints read these tables.
     """
-    CREATE TABLE IF NOT EXISTS ingest_runs (
-      id SERIAL PRIMARY KEY,
-      started_at TIMESTAMPTZ NOT NULL,
-      finished_at TIMESTAMPTZ,
-      duration_ms INTEGER,
-      total_new INTEGER,
-      total_errors INTEGER
-    )
+    CREATE INDEX IF NOT EXISTS idx_ingest_run_sources_source_run
+      ON ingest_run_sources(source_name, run_id DESC)
     """,
-    """
-    CREATE TABLE IF NOT EXISTS ingest_run_sources (
-      id SERIAL PRIMARY KEY,
-      run_id INTEGER REFERENCES ingest_runs(id),
-      source_name TEXT NOT NULL,
-      articles_found INTEGER,
-      articles_new INTEGER,
-      error_message TEXT
-    )
-    """,
-    "CREATE INDEX IF NOT EXISTS idx_ingest_run_sources_source_run ON ingest_run_sources(source_name, run_id DESC)",
     "CREATE INDEX IF NOT EXISTS idx_ingest_runs_started ON ingest_runs(started_at)",
     "CREATE INDEX IF NOT EXISTS idx_ingest_run_sources_run ON ingest_run_sources(run_id)",
 ]
 
 
+def _validate_postgres_url(url: str) -> str:
+    if not url.startswith(POSTGRES_PREFIXES):
+        message = f"DATABASE_URL must start with 'postgresql://' or 'postgres://'; got: {url!r}"
+        raise RuntimeError(message)
+    return url
+
+
 def active_database_url(database_url: str | None = None) -> str:
+    """Resolve the PostgreSQL DSN from arguments or environment variables."""
     if database_url is not None:
-        if not database_url.startswith(POSTGRES_PREFIXES):
-            raise RuntimeError(
-                f"DATABASE_URL must start with 'postgresql://' or 'postgres://'; got: {database_url!r}"
-            )
-        return database_url
+        return _validate_postgres_url(database_url)
     env_url = os.getenv("DATABASE_URL")
     if env_url:
-        if not env_url.startswith(POSTGRES_PREFIXES):
-            raise RuntimeError(
-                f"DATABASE_URL must start with 'postgresql://' or 'postgres://'; got: {env_url!r}"
-            )
-        return env_url
+        return _validate_postgres_url(env_url)
     host = os.getenv("POSTGRES_HOST")
     if not host:
-        raise RuntimeError("Postgres is required: set DATABASE_URL or POSTGRES_HOST")
+        message = "Postgres is required: set DATABASE_URL or POSTGRES_HOST"
+        raise RuntimeError(message)
     user = os.getenv("POSTGRES_USER", "news_dashboard")
     password = os.getenv("POSTGRES_PASSWORD", "")
     database = os.getenv("POSTGRES_DB", "news_dashboard")
@@ -280,7 +277,9 @@ def describe_database(db_path: Path | None = None, database_url: str | None = No
 
 
 class PostgresConnection:
-    def __init__(self, conn: Any):
+    """Thin adapter exposing a sqlite3-like ``execute`` API over a psycopg connection."""
+
+    def __init__(self, conn: Any) -> None:
         self.conn = conn
 
     def execute(self, sql: str, params: tuple[Any, ...] | list[Any] | None = None) -> Any:
@@ -300,10 +299,12 @@ def connect(db_path: Path | None = None, database_url: str | None = None) -> Ite
     except RuntimeError:
         url = None
     if url and url.startswith(POSTGRES_PREFIXES):
+        # psycopg is an optional import; mypy sees it as always present
         if psycopg is None:
-            raise RuntimeError("DATABASE_URL is PostgreSQL but psycopg is not installed")
-        conn = psycopg.connect(url, row_factory=dict_row)
-        wrapped = PostgresConnection(conn)
+            message = "DATABASE_URL is PostgreSQL but psycopg is not installed"  # type: ignore[unreachable]
+            raise RuntimeError(message)
+        pg_conn = psycopg.connect(url, row_factory=dict_row)
+        wrapped = PostgresConnection(pg_conn)
         try:
             yield wrapped
             wrapped.commit()
@@ -327,16 +328,16 @@ def _apply_sqlite_column_migrations(conn: Any) -> None:
     for table, column, typedef in SQLITE_COLUMN_MIGRATIONS:
         try:
             conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {typedef}")
-        except Exception:
-            pass  # column already exists
+        except sqlite3.OperationalError:
+            logger.debug("Column %s.%s already exists; skipping migration", table, column)
 
 
 def _build_fts_index(conn: Any) -> None:
     """Populate FTS index from existing articles (safe to re-run)."""
     try:
         conn.execute("INSERT INTO articles_fts(articles_fts) VALUES('rebuild')")
-    except Exception:
-        pass  # FTS table may not exist or already populated
+    except sqlite3.OperationalError:
+        logger.debug("FTS rebuild skipped: articles_fts not available")
 
 
 def init_db(db_path: Path | None = None, database_url: str | None = None) -> None:
@@ -345,22 +346,24 @@ def init_db(db_path: Path | None = None, database_url: str | None = None) -> Non
             for statement in POSTGRES_SCHEMA:
                 try:
                     conn.execute(statement)
-                except Exception:
-                    pass  # ignore IF NOT EXISTS / already-exists errors
+                except Exception:  # idempotent best-effort schema statements
+                    logger.debug("Schema statement skipped (already applied): %.80s", statement)
         return
     with connect(db_path, database_url) as conn:
         conn.executescript(SQLITE_SCHEMA)
         _apply_sqlite_column_migrations(conn)
         _build_fts_index(conn)
+
+
 def get_setting(key: str, default: str | None = None) -> str | None:
     """Read a value from the settings table."""
     try:
         with connect() as conn:
             row = conn.execute("SELECT value FROM settings WHERE key=?", (key,)).fetchone()
             if row:
-                return row["value"] if isinstance(row, dict) else row[0]
-    except Exception:
-        pass
+                return str(row["value"] if isinstance(row, dict) else row[0])
+    except Exception:  # settings are optional; fall back to the default
+        logger.debug("Could not read setting %r; using default", key)
     return default
 
 
@@ -368,28 +371,22 @@ def set_setting(key: str, value: str) -> None:
     """Upsert a key/value pair in the settings table."""
     with connect() as conn:
         conn.execute(
-            "INSERT INTO settings(key, value) VALUES(?, ?) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value",
+            """
+            INSERT INTO settings(key, value) VALUES(?, ?)
+            ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value
+            """,
             (key, value),
         )
 
 
-def row_to_dict(row: Any) -> dict:
+def row_to_dict(row: Any) -> dict[str, Any]:
+    """Convert a sqlite3.Row or psycopg dict row into a plain dict."""
     if isinstance(row, dict):
         return dict(row)
-    return {key: row[key] for key in row.keys()}
+    return {key: row[key] for key in row.keys()}  # noqa: SIM118 - sqlite3.Row is not a Mapping
 
 
 def insert_article_sql() -> str:
-    return """
-        INSERT INTO articles(
-          url, canonical_url, title, source_slug, source_name, category, kind,
-          published_at, summary, reason, importance_score, tags
-        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-        ON CONFLICT (url) DO NOTHING
-        """
-
-
-def insert_duplicate_article_sql() -> str:
     return """
         INSERT INTO articles(
           url, canonical_url, title, source_slug, source_name, category, kind,
@@ -407,8 +404,14 @@ def search_articles_sql(terms: list[str], limit: int) -> tuple[str, list[Any]]:
     params: list[Any] = []
     for term in terms:
         like = f"%{term}%"
-        clauses.append("(title LIKE ? OR summary LIKE ? OR tags LIKE ? OR source_name LIKE ? OR reason LIKE ?)")
+        clauses.append(
+            "(title LIKE ? OR summary LIKE ? OR tags LIKE ? OR source_name LIKE ? OR reason LIKE ?)"
+        )
         params.extend([like, like, like, like, like])
     params.append(limit)
     where = " AND ".join(clauses)
-    return f"SELECT * FROM articles WHERE {where} ORDER BY importance_score DESC, discovered_at DESC LIMIT ?", params
+    sql = (
+        f"SELECT * FROM articles WHERE {where} "
+        "ORDER BY importance_score DESC, discovered_at DESC LIMIT ?"
+    )
+    return sql, params

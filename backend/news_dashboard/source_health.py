@@ -84,17 +84,17 @@ def list_source_health(db_path: Path | None = None) -> list[dict[str, Any]]:
 
     for row in run_rows:
         run = row_to_dict(row)
-        slug = aliases.get(_source_key(run.get("source_name")))
-        if not slug:
+        run_slug = aliases.get(_source_key(run.get("source_name")))
+        if not run_slug:
             continue
 
-        item = health_by_slug[slug]
+        item = health_by_slug[run_slug]
         error = _clean_error(run.get("error_message"))
-        if slug not in latest_seen:
+        if run_slug not in latest_seen:
             item["articles_last_run"] = _as_int(run.get("articles_new"))
-            latest_seen.add(slug)
+            latest_seen.add(run_slug)
 
-        if slug in streak_closed:
+        if run_slug in streak_closed:
             continue
 
         if error:
@@ -102,7 +102,7 @@ def list_source_health(db_path: Path | None = None) -> list[dict[str, Any]]:
             if not item["last_error"]:
                 item["last_error"] = error
         else:
-            streak_closed.add(slug)
+            streak_closed.add(run_slug)
 
     for slug, item in health_by_slug.items():
         if slug in latest_seen:

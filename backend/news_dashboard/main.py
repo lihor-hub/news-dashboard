@@ -1,11 +1,10 @@
 from __future__ import annotations
 
-import os
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
-
-from typing import Any, AsyncIterator
+from typing import Annotated, Any
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
@@ -14,8 +13,8 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from .db import connect, describe_database, init_db, row_to_dict
-from .ingest_events import stream_ingest_events
 from .ingest import ingest_all, list_articles, search_articles, set_article_status, sync_sources
+from .ingest_events import stream_ingest_events
 from .run_history import get_ingest_run_sources, list_ingest_runs
 from .scheduler import (
     get_interval_minutes,
@@ -27,8 +26,9 @@ from .scheduler import (
     start_scheduler,
     stop_scheduler,
 )
-from .stats import articles_over_time, sources_volume, stats_overview
 from .source_health import list_source_health
+from .stats import articles_over_time, sources_volume, stats_overview
+
 
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
@@ -78,10 +78,10 @@ def ingest_stream() -> StreamingResponse:
 
 @app.get("/api/ingest/runs")
 def ingest_runs(
-    from_: datetime | None = Query(default=None, alias="from"),
-    to: datetime | None = Query(default=None),
-    page: int = Query(default=1, ge=1),
-    per_page: int = Query(default=20, ge=1, le=100),
+    from_: Annotated[datetime | None, Query(alias="from")] = None,
+    to: Annotated[datetime | None, Query()] = None,
+    page: Annotated[int, Query(ge=1)] = 1,
+    per_page: Annotated[int, Query(ge=1, le=100)] = 20,
 ) -> dict[str, Any]:
     return list_ingest_runs(from_=from_, to=to, page=page, per_page=per_page)
 
@@ -96,18 +96,18 @@ def ingest_run_sources(run_id: int) -> dict[str, Any]:
 
 @app.get("/api/articles")
 def articles(
-    status: str | None = Query(default=None),
-    category: str | None = Query(default=None),
-    limit: int = Query(default=100, ge=1, le=500),
-    offset: int = Query(default=0, ge=0),
+    status: Annotated[str | None, Query()] = None,
+    category: Annotated[str | None, Query()] = None,
+    limit: Annotated[int, Query(ge=1, le=500)] = 100,
+    offset: Annotated[int, Query(ge=0)] = 0,
 ) -> dict[str, Any]:
     return {"items": list_articles(status=status, category=category, limit=limit, offset=offset)}
 
 
 @app.get("/api/search")
 def search(
-    q: str = Query(default="", min_length=1, description="Space-separated search terms"),
-    limit: int = Query(default=50, ge=1, le=200),
+    q: Annotated[str, Query(min_length=1, description="Space-separated search terms")] = "",
+    limit: Annotated[int, Query(ge=1, le=200)] = 50,
 ) -> dict[str, Any]:
     return {"items": search_articles(q=q.strip(), limit=limit)}
 
@@ -124,7 +124,7 @@ def update_status(article_id: int, payload: StatusUpdate) -> dict[str, Any]:
 
 
 @app.get("/api/articles/{article_id}/read")
-def mark_read_via_token(article_id: int, token: str = Query(...)) -> dict[str, Any]:
+def mark_read_via_token(article_id: int, token: Annotated[str, Query()]) -> dict[str, Any]:
     """One-click mark-read endpoint for digest emails. Validates a signed token."""
     from .digest import verify_read_token
 
@@ -205,8 +205,8 @@ def scheduler_resume() -> dict[str, Any]:
 
 @app.get("/api/stats/overview")
 def stats_overview_endpoint(
-    from_: str = Query(..., alias="from"),
-    to: str = Query(...),
+    from_: Annotated[str, Query(alias="from")],
+    to: Annotated[str, Query()],
 ) -> dict[str, Any]:
     try:
         return stats_overview(from_, to)
@@ -216,8 +216,8 @@ def stats_overview_endpoint(
 
 @app.get("/api/stats/articles-over-time")
 def stats_articles_over_time_endpoint(
-    from_: str = Query(..., alias="from"),
-    to: str = Query(...),
+    from_: Annotated[str, Query(alias="from")],
+    to: Annotated[str, Query()],
 ) -> dict[str, Any]:
     try:
         return {"items": articles_over_time(from_, to)}
@@ -227,8 +227,8 @@ def stats_articles_over_time_endpoint(
 
 @app.get("/api/stats/sources-volume")
 def stats_sources_volume_endpoint(
-    from_: str = Query(..., alias="from"),
-    to: str = Query(...),
+    from_: Annotated[str, Query(alias="from")],
+    to: Annotated[str, Query()],
 ) -> dict[str, Any]:
     try:
         return {"items": sources_volume(from_, to)}
@@ -266,7 +266,7 @@ def summary() -> dict[str, Any]:
             "SELECT category, COUNT(*) AS count FROM articles GROUP BY category"
         ).fetchall()
     return {
-        "byStatus":   {row["status"]:   row["count"] for row in status_rows},
+        "byStatus": {row["status"]: row["count"] for row in status_rows},
         "byCategory": {row["category"]: row["count"] for row in category_rows},
     }
 

@@ -1,6 +1,8 @@
 from pathlib import Path
 
-from news_dashboard.ingest import ingest_all, list_articles, set_article_status, sync_sources
+import pytest
+
+from news_dashboard.ingest import list_articles, set_article_status, sync_sources
 
 
 def test_sync_sources_and_status_transition(tmp_path: Path) -> None:
@@ -14,8 +16,13 @@ def test_sync_sources_and_status_transition(tmp_path: Path) -> None:
     with connect(db_path) as conn:
         conn.execute(
             """
-            INSERT INTO articles(url, canonical_url, title, source_slug, source_name, category, kind)
-            VALUES ('https://example.com/a', 'https://example.com/a', 'Example', 'python-insider', 'Python Insider', 'python', 'rss_feed')
+            INSERT INTO articles(
+              url, canonical_url, title, source_slug, source_name, category, kind
+            )
+            VALUES (
+              'https://example.com/a', 'https://example.com/a', 'Example',
+              'python-insider', 'Python Insider', 'python', 'rss_feed'
+            )
             """
         )
 
@@ -32,9 +39,5 @@ def test_sync_sources_and_status_transition(tmp_path: Path) -> None:
 def test_invalid_status_rejected(tmp_path: Path) -> None:
     db_path = tmp_path / "news.db"
     sync_sources(db_path)
-    try:
+    with pytest.raises(ValueError, match="invalid status"):
         set_article_status(1, "maybe", db_path=db_path)
-    except ValueError as exc:
-        assert "invalid status" in str(exc)
-    else:
-        raise AssertionError("invalid status should fail")
