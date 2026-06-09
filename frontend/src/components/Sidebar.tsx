@@ -1,15 +1,15 @@
 import {
   Archive,
-  BookOpen,
-  Bot,
   BarChart2,
+  Bookmark,
+  Bot,
+  BookOpen,
   CalendarClock,
   ChevronLeft,
   ChevronRight,
   Inbox,
-  Bookmark,
-  SkipForward,
   Rss,
+  SkipForward,
 } from 'lucide-react';
 import { NavLink } from 'react-router-dom';
 import { cn } from '../lib/utils';
@@ -31,16 +31,16 @@ const CATEGORIES = [
   'repositories',
 ] as const;
 
-function NavCount({ n }: { n: number | undefined }) {
-  if (n === undefined || n === 0) return null;
+function Count({ n }: { n: number | undefined }) {
+  if (!n) return null;
   return (
-    <span className="ml-auto min-w-[1.25rem] rounded-full bg-[var(--primary)] px-1 text-center text-[10px] font-medium leading-5 text-[var(--primary-foreground)]">
+    <span className="ml-auto rounded px-1.5 py-0.5 text-[11px] tabular-nums leading-none text-[var(--muted-foreground)] bg-[var(--muted)]">
       {n > 999 ? '999+' : n}
     </span>
   );
 }
 
-function SidebarLink({
+function NavItem({
   to,
   icon: Icon,
   label,
@@ -48,7 +48,7 @@ function SidebarLink({
   collapsed,
 }: {
   to: string;
-  icon: React.ComponentType<{ size?: number; strokeWidth?: number }>;
+  icon: React.ComponentType<{ size?: number; strokeWidth?: number; className?: string }>;
   label: string;
   count?: number;
   collapsed: boolean;
@@ -59,28 +59,43 @@ function SidebarLink({
       title={collapsed ? label : undefined}
       className={({ isActive }) =>
         cn(
-          'group flex items-center gap-2.5 rounded-md px-2 py-1.5 text-sm transition-colors',
-          'text-[var(--sidebar-foreground)] hover:bg-[var(--sidebar-accent)]',
-          isActive && 'bg-[var(--sidebar-accent)] font-medium'
+          'flex items-center gap-2 rounded-md px-2 py-[5px] text-[13px] transition-colors select-none',
+          isActive
+            ? 'bg-[var(--sidebar-accent)] text-[var(--foreground)]'
+            : 'text-[var(--muted-foreground)] hover:bg-[var(--sidebar-accent)] hover:text-[var(--foreground)]'
         )
       }
     >
-      <Icon size={16} strokeWidth={1.75} />
-      {!collapsed && (
+      {({ isActive }) => (
         <>
-          <span className="truncate">{label}</span>
-          <NavCount n={count} />
+          <Icon
+            size={15}
+            strokeWidth={isActive ? 2 : 1.75}
+            className={isActive ? 'text-[var(--foreground)]' : 'text-[var(--muted-foreground)]'}
+          />
+          {!collapsed && (
+            <>
+              <span className={cn('truncate', isActive && 'font-medium')}>{label}</span>
+              <Count n={count} />
+            </>
+          )}
         </>
       )}
     </NavLink>
   );
 }
 
-function SectionLabel({ children, collapsed }: { children: React.ReactNode; collapsed: boolean }) {
-  if (collapsed) return <div className="my-1 h-px bg-[var(--sidebar-border)]" />;
+function SectionDivider({ collapsed }: { collapsed: boolean }) {
+  if (collapsed) {
+    return <div className="my-2 h-px bg-[var(--sidebar-border)]" />;
+  }
+  return <div className="my-1.5 h-px bg-[var(--sidebar-border)]" />;
+}
+
+function SectionLabel({ label }: { label: string }) {
   return (
-    <p className="mt-4 mb-1 px-2 text-[11px] font-semibold tracking-wider text-[var(--muted-foreground)] uppercase">
-      {children}
+    <p className="mt-3 mb-0.5 px-2 text-[10px] font-semibold uppercase tracking-widest text-[var(--muted-foreground)] opacity-60">
+      {label}
     </p>
   );
 }
@@ -93,19 +108,20 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
   return (
     <aside
       className={cn(
-        'flex h-full flex-col border-r border-[var(--sidebar-border)] bg-[var(--sidebar)] transition-all duration-200',
-        collapsed ? 'w-12' : 'w-56'
+        'app-sidebar flex h-full flex-col border-r border-[var(--sidebar-border)] bg-[var(--sidebar)]',
+        'transition-[width] duration-200 ease-in-out',
+        collapsed ? 'w-12' : 'w-52'
       )}
     >
-      {/* Logo row */}
+      {/* Header */}
       <div
         className={cn(
-          'flex h-12 shrink-0 items-center border-b border-[var(--sidebar-border)] px-3',
-          collapsed ? 'justify-center' : 'justify-between'
+          'flex h-11 shrink-0 items-center border-b border-[var(--sidebar-border)]',
+          collapsed ? 'justify-center px-0' : 'justify-between px-3'
         )}
       >
         {!collapsed && (
-          <span className="text-sm font-semibold tracking-tight text-[var(--foreground)]">
+          <span className="text-[13px] font-semibold tracking-tight text-[var(--foreground)]">
             News Dashboard
           </span>
         )}
@@ -113,45 +129,40 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
           type="button"
           onClick={onToggle}
           aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-          className="flex h-6 w-6 items-center justify-center rounded text-[var(--muted-foreground)] hover:bg-[var(--sidebar-accent)] hover:text-[var(--foreground)]"
+          className="flex h-6 w-6 items-center justify-center rounded text-[var(--muted-foreground)] hover:bg-[var(--sidebar-accent)] hover:text-[var(--foreground)] transition-colors"
         >
-          {collapsed ? <ChevronRight size={14} /> : <ChevronLeft size={14} />}
+          {collapsed ? <ChevronRight size={13} /> : <ChevronLeft size={13} />}
         </button>
       </div>
 
       {/* Nav */}
-      <nav className="flex-1 overflow-y-auto px-2 py-3" aria-label="Main navigation">
-        <SectionLabel collapsed={collapsed}>Views</SectionLabel>
+      <nav className="flex-1 overflow-y-auto px-1.5 py-2 space-y-0.5" aria-label="Main navigation">
+        {!collapsed && <SectionLabel label="Views" />}
+        {collapsed && <div className="h-1" />}
 
-        <SidebarLink
-          to="/inbox"
-          icon={Inbox}
-          label="New"
-          count={byStatus.new}
-          collapsed={collapsed}
-        />
-        <SidebarLink
+        <NavItem to="/inbox" icon={Inbox} label="New" count={byStatus.new} collapsed={collapsed} />
+        <NavItem
           to="/saved"
           icon={Bookmark}
           label="Saved"
           count={byStatus.saved}
           collapsed={collapsed}
         />
-        <SidebarLink
+        <NavItem
           to="/read"
           icon={BookOpen}
           label="Read"
           count={byStatus.read}
           collapsed={collapsed}
         />
-        <SidebarLink
+        <NavItem
           to="/skipped"
           icon={SkipForward}
           label="Skipped"
           count={byStatus.skipped}
           collapsed={collapsed}
         />
-        <SidebarLink
+        <NavItem
           to="/archived"
           icon={Archive}
           label="Archived"
@@ -161,40 +172,44 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
 
         {!collapsed && Object.keys(byCategory).length > 0 && (
           <>
-            <SectionLabel collapsed={collapsed}>Categories</SectionLabel>
+            <SectionDivider collapsed={collapsed} />
+            <SectionLabel label="Categories" />
             {CATEGORIES.filter((c) => byCategory[c] !== undefined).map((cat) => (
               <div
                 key={cat}
-                className="flex items-center gap-2.5 rounded-md px-2 py-1 text-sm text-[var(--muted-foreground)]"
+                className="flex items-center gap-2 rounded-md px-2 py-[5px] text-[13px] text-[var(--muted-foreground)]"
               >
-                <span className="h-1.5 w-1.5 rounded-full bg-[var(--muted-foreground)]" />
+                <span className="h-1 w-1 shrink-0 rounded-full bg-[var(--muted-foreground)] opacity-50" />
                 <span className="truncate">{cat.replace(/-/g, ' ')}</span>
-                <span className="ml-auto text-xs">{byCategory[cat]}</span>
+                <span className="ml-auto text-[11px] tabular-nums opacity-70">
+                  {byCategory[cat]}
+                </span>
               </div>
             ))}
           </>
         )}
 
-        <SectionLabel collapsed={collapsed}>Tools</SectionLabel>
+        <SectionDivider collapsed={collapsed} />
+        {!collapsed && <SectionLabel label="Tools" />}
 
-        <SidebarLink to="/sources" icon={Rss} label="Sources" collapsed={collapsed} />
-        <SidebarLink to="/scheduler" icon={CalendarClock} label="Scheduler" collapsed={collapsed} />
-        <SidebarLink to="/stats" icon={BarChart2} label="Stats" collapsed={collapsed} />
-        <SidebarLink to="/ask" icon={Bot} label="Ask AI" collapsed={collapsed} />
+        <NavItem to="/sources" icon={Rss} label="Sources" collapsed={collapsed} />
+        <NavItem to="/scheduler" icon={CalendarClock} label="Scheduler" collapsed={collapsed} />
+        <NavItem to="/stats" icon={BarChart2} label="Stats" collapsed={collapsed} />
+        <NavItem to="/ask" icon={Bot} label="Ask AI" collapsed={collapsed} />
       </nav>
 
-      {/* Footer */}
+      {/* Footer — theme switcher */}
       <div
         className={cn(
-          'shrink-0 border-t border-[var(--sidebar-border)] px-2 py-3',
-          collapsed ? 'flex justify-center' : ''
+          'shrink-0 border-t border-[var(--sidebar-border)] px-2 py-2.5',
+          collapsed && 'flex justify-center'
         )}
       >
         {collapsed ? (
           <ThemeSwitcher />
         ) : (
-          <div className="flex items-center justify-between">
-            <span className="text-xs text-[var(--muted-foreground)]">Theme</span>
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-[11px] text-[var(--muted-foreground)]">Theme</span>
             <ThemeSwitcher />
           </div>
         )}
