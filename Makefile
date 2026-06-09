@@ -25,9 +25,10 @@ typecheck:
 	mypy backend
 	npm run typecheck --silent
 
-## test: run the backend test suite with coverage
+## test: run backend + frontend test suites
 test:
 	pytest --cov --cov-report=term-missing
+	npm run test:frontend --silent
 
 ## check: everything CI runs — lint, typecheck, test, build
 check: lint typecheck test build

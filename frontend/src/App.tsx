@@ -158,16 +158,7 @@ function confidenceTier(score: number): 'high' | 'medium' | 'low' {
   return 'low';
 }
 
-// ===== Dark mode bootstrap (runs before React renders) =====
-function initTheme() {
-  const stored = localStorage.getItem('theme');
-  if (stored === 'dark' || stored === 'light') {
-    document.documentElement.setAttribute('data-theme', stored);
-  } else if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
-    document.documentElement.setAttribute('data-theme', 'dark');
-  }
-}
-initTheme();
+// Dark mode bootstrap is handled in main.tsx → lib/theme.ts
 
 // ===== ArticleCard =====
 
@@ -1481,11 +1472,21 @@ function SourcesPanel({
   );
 }
 
-export default function App() {
+interface AppProps {
+  initialTab?: ActiveTab;
+  hideLegacyNav?: boolean;
+  initialAskMode?: boolean;
+}
+
+export default function App({
+  initialTab = 'inbox',
+  hideLegacyNav = false,
+  initialAskMode = false,
+}: AppProps) {
   const [articles, setArticles] = useState<Article[]>([]);
   const [sources, setSources] = useState<Source[]>([]);
   const [summary, setSummary] = useState<Summary>({ byStatus: {}, byCategory: {} });
-  const [activeTab, setActiveTab] = useState<ActiveTab>('inbox');
+  const [activeTab, setActiveTab] = useState<ActiveTab>(initialTab);
   const [category, setCategory] = useState('all');
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
@@ -1496,7 +1497,7 @@ export default function App() {
   } | null>(null);
 
   // AI Ask mode (issue #23)
-  const [askMode, setAskMode] = useState(false);
+  const [askMode, setAskMode] = useState(initialAskMode);
   const [askQuery, setAskQuery] = useState('');
   const [askResult, setAskResult] = useState<AskResponse | null>(null);
   const [askLoading, setAskLoading] = useState(false);
@@ -1910,14 +1911,16 @@ export default function App() {
             </div>
           )}
 
-          <button
-            className="theme-toggle"
-            onClick={toggleTheme}
-            aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
-            title={theme === 'dark' ? 'Light mode' : 'Dark mode'}
-          >
-            {theme === 'dark' ? '☀' : '☾'}
-          </button>
+          {!hideLegacyNav && (
+            <button
+              className="theme-toggle"
+              onClick={toggleTheme}
+              aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+              title={theme === 'dark' ? 'Light mode' : 'Dark mode'}
+            >
+              {theme === 'dark' ? '☀' : '☾'}
+            </button>
+          )}
 
           <button
             className="fetch-btn"
@@ -1931,22 +1934,24 @@ export default function App() {
         </div>
       </header>
 
-      <nav className="tabs-wrap" aria-label="Sections">
-        {TABS.map((tab) => (
-          <button
-            key={tab.id}
-            className={`tab${activeTab === tab.id ? ' active' : ''}`}
-            onClick={() => {
-              setActiveTab(tab.id);
-              setSearch('');
-            }}
-            aria-current={activeTab === tab.id ? 'page' : undefined}
-          >
-            {tab.label}
-            {tab.id !== 'scheduler' && <span className="tab-count">{tabCount(tab.id)}</span>}
-          </button>
-        ))}
-      </nav>
+      {!hideLegacyNav && (
+        <nav className="tabs-wrap" aria-label="Sections">
+          {TABS.map((tab) => (
+            <button
+              key={tab.id}
+              className={`tab${activeTab === tab.id ? ' active' : ''}`}
+              onClick={() => {
+                setActiveTab(tab.id);
+                setSearch('');
+              }}
+              aria-current={activeTab === tab.id ? 'page' : undefined}
+            >
+              {tab.label}
+              {tab.id !== 'scheduler' && <span className="tab-count">{tabCount(tab.id)}</span>}
+            </button>
+          ))}
+        </nav>
+      )}
 
       {/* #29: filter bar — responsive, no overflow, safe-area handled in CSS */}
       {activeTab !== 'sources' && activeTab !== 'scheduler' && (

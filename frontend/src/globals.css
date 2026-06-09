@@ -1,0 +1,70 @@
+@import 'tailwindcss';
+
+/* Map Tailwind's dark: variant to [data-theme=dark] (matches existing legacy CSS) */
+@custom-variant dark (&:where([data-theme=dark], [data-theme=dark] *));
+
+/* Design tokens — Linear-style neutral palette */
+:root {
+  --background: oklch(100% 0 0);
+  --foreground: oklch(14.5% 0 0);
+  --muted: oklch(96.1% 0 0);
+  --muted-foreground: oklch(55.6% 0 0);
+  --border: oklch(91.6% 0 0);
+
+  --sidebar: oklch(98.4% 0 0);
+  --sidebar-foreground: oklch(14.5% 0 0);
+  --sidebar-border: oklch(91.6% 0 0);
+  --sidebar-accent: oklch(94% 0 0);
+  --sidebar-accent-foreground: oklch(20.5% 0 0);
+
+  --primary: oklch(52% 0.24 264);
+  --primary-foreground: oklch(100% 0 0);
+  --ring: oklch(52% 0.24 264);
+}
+
+[data-theme='dark'] {
+  --background: oklch(9.4% 0 0);
+  --foreground: oklch(98% 0 0);
+  --muted: oklch(15% 0 0);
+  --muted-foreground: oklch(63.7% 0 0);
+  --border: oklch(21% 0 0);
+
+  --sidebar: oklch(11.5% 0 0);
+  --sidebar-foreground: oklch(98% 0 0);
+  --sidebar-border: oklch(18% 0 0);
+  --sidebar-accent: oklch(17% 0 0);
+  --sidebar-accent-foreground: oklch(98% 0 0);
+
+  --primary: oklch(62% 0.23 264);
+  --primary-foreground: oklch(9.4% 0 0);
+  --ring: oklch(62% 0.23 264);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-border: var(--border);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-ring: var(--ring);
+}
+
+/* Global resets for the new shell */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}

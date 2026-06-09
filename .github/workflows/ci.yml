@@ -72,6 +72,8 @@ jobs:
           node-version: '26'
           cache: npm
       - run: npm install
+      - name: vitest (frontend tests)
+        run: npm run test:frontend --silent
       - run: npm run build   # includes tsc -b typecheck
 
   # ── 3. PUBLISH ─────────────────────────────────────────────────────────────
