@@ -18,7 +18,11 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
   "pytest>=8.0.0",
+  "pytest-cov>=5.0.0",
   "httpx>=0.27.0",
+  "ruff>=0.8.0",
+  "mypy>=1.13.0",
+  "pre-commit>=4.0.0",
 ]
 
 [project.scripts]
@@ -35,6 +39,98 @@ packages = ["backend/news_dashboard"]
 [tool.hatch.build.targets.editable]
 packages = ["backend/news_dashboard"]
 
+# ── pytest ───────────────────────────────────────────────────────────────────
 [tool.pytest.ini_options]
 pythonpath = ["backend"]
 testpaths = ["backend/tests"]
+addopts = "-ra --strict-markers --strict-config"
+filterwarnings = ["error::DeprecationWarning:news_dashboard.*"]
+
+[tool.coverage.run]
+source = ["news_dashboard"]
+branch = true
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true
+exclude_also = [
+  "if TYPE_CHECKING:",
+  "raise NotImplementedError",
+  "pragma: no cover",
+]
+
+# ── ruff (lint + format) ─────────────────────────────────────────────────────
+[tool.ruff]
+# py313, not py314: the formatter would otherwise rewrite except clauses to
+# PEP 758 syntax, which mypy's parser does not support yet.
+target-version = "py313"
+line-length = 100
+src = ["backend"]
+
+[tool.ruff.lint]
+select = [
+  "E", "W",     # pycodestyle
+  "F",          # pyflakes
+  "I",          # isort
+  "N",          # pep8-naming
+  "UP",         # pyupgrade
+  "B",          # flake8-bugbear
+  "A",          # flake8-builtins
+  "C4",         # flake8-comprehensions
+  "DTZ",        # flake8-datetimez
+  "EM",         # flake8-errmsg
+  "G",          # flake8-logging-format
+  "ISC",        # implicit string concatenation
+  "PIE",        # flake8-pie
+  "PT",         # flake8-pytest-style
+  "RET",        # flake8-return
+  "RSE",        # flake8-raise
+  "S",          # flake8-bandit (security)
+  "SIM",        # flake8-simplify
+  "T20",        # flake8-print
+  "TC",         # type-checking imports
+  "ARG",        # unused arguments
+  "PERF",       # perflint
+  "PL",         # pylint
+  "RUF",        # ruff-specific
+  "TRY",        # tryceratops
+]
+ignore = [
+  "UP017",   # keep `timezone.utc`: identical semantics, broader tooling compat
+  "TRY003",  # short messages inline in raise are fine at this project size
+  "TRY300",  # `return` in try block is often clearer than `else`
+  "PLR2004", # magic-value comparisons are mostly self-explanatory here
+  "S608",    # SQL built from trusted literal identifiers only (reviewed)
+  "TC001", "TC002", "TC003",  # runtime imports kept simple; no TYPE_CHECKING blocks
+  "ISC001",  # conflicts with the ruff formatter
+  "PLC0415", # lazy imports are deliberate (optional deps, startup cost, cycles)
+]
+
+[tool.ruff.lint.per-file-ignores]
+"backend/tests/*" = [
+  "S101",    # asserts are the point of tests
+  "ARG001",  # fixtures often unused directly
+  "PLR0915", # long test functions are acceptable
+]
+
+[tool.ruff.lint.pylint]
+max-args = 7
+
+[tool.ruff.format]
+docstring-code-format = true
+
+# ── mypy ─────────────────────────────────────────────────────────────────────
+[tool.mypy]
+python_version = "3.14"
+files = ["backend"]
+strict = true
+warn_unreachable = true
+pretty = true
+
+[[tool.mypy.overrides]]
+module = ["feedparser.*", "apscheduler.*"]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = ["tests.*"]
+disallow_untyped_decorators = false

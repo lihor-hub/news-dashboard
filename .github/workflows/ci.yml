@@ -23,7 +23,37 @@ permissions:
   packages: write
 
 jobs:
-  # ── 1. TEST ────────────────────────────────────────────────────────────────
+  # ── 1. LINT ────────────────────────────────────────────────────────────────
+  # Static analysis only — fails fast and in parallel with the test job.
+  lint:
+    name: Lint & typecheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.14'
+          cache: pip
+      - run: pip install -e '.[dev]'
+      - name: ruff (lint)
+        run: ruff check backend
+      - name: ruff (format check)
+        run: ruff format --check backend
+      - name: mypy
+        run: mypy backend
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '26'
+          cache: npm
+      - run: npm install
+      - name: eslint
+        run: npm run lint --silent
+      - name: prettier (format check)
+        run: npm run format:check --silent
+
+  # ── 2. TEST ────────────────────────────────────────────────────────────────
   test:
     name: Test & build
     runs-on: ubuntu-latest
@@ -35,7 +65,7 @@ jobs:
           python-version: '3.14'
           cache: pip
       - run: pip install -e '.[dev]'
-      - run: pytest -v
+      - run: pytest -v --cov --cov-report=term-missing
 
       - uses: actions/setup-node@v4
         with:
@@ -44,7 +74,7 @@ jobs:
       - run: npm install
       - run: npm run build   # includes tsc -b typecheck
 
-  # ── 2. PUBLISH ─────────────────────────────────────────────────────────────
+  # ── 3. PUBLISH ─────────────────────────────────────────────────────────────
   # Builds one image and pushes two tags:
   #   :<sha>    — immutable, pinned to this exact commit; used by the deploy step
   #   :latest   — floating convenience tag for manual pulls / rollback reference
@@ -57,7 +87,7 @@ jobs:
   # packages:write by default for the repo that owns the package.
   publish:
     name: Build & push image
-    needs: test
+    needs: [lint, test]
     runs-on: ubuntu-latest
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     outputs:
@@ -83,7 +113,7 @@ jobs:
             ${{ env.IMAGE }}:${{ github.sha }}
             ${{ env.IMAGE }}:latest
 
-  # ── 3. DEPLOY ──────────────────────────────────────────────────────────────
+  # ── 4. DEPLOY ──────────────────────────────────────────────────────────────
   # Runs directly on the self-hosted runner (the mini PC itself) — no SSH hop
   # needed. The runner process on the mini PC picks up the job and executes
   # the deploy commands locally.
