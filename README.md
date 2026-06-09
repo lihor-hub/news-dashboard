@@ -28,6 +28,7 @@ python -m venv .venv
 source .venv/bin/activate
 pip install -e '.[dev]'
 npm install
+pre-commit install   # optional: run linters automatically on commit
 NEWS_DASHBOARD_DB=./data/news-dashboard.db news-dashboard init
 NEWS_DASHBOARD_DB=./data/news-dashboard.db news-dashboard ingest
 NEWS_DASHBOARD_DB=./data/news-dashboard.db uvicorn news_dashboard.main:app --reload --app-dir backend
@@ -41,6 +42,22 @@ Ask AI requires an OpenAI key in the backend environment:
 ```bash
 export OPENAI_API_KEY=...
 ```
+
+## Code quality
+
+Tooling lives in `pyproject.toml` (ruff, mypy, pytest/coverage), `eslint.config.mjs`,
+and `.prettierrc.json`. CI runs all of it on every PR.
+
+```bash
+make lint        # ruff + eslint + prettier (check only)
+make format      # auto-format backend and frontend
+make typecheck   # mypy (strict) + tsc
+make test        # pytest with coverage
+make check       # everything CI runs
+```
+
+Pre-commit hooks (`.pre-commit-config.yaml`) run the same checks on staged files;
+enable them once with `pre-commit install`.
 
 ## Container
 

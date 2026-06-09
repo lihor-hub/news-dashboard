@@ -1,0 +1,44 @@
+# Run `pre-commit install` once after cloning; hooks then run on every commit.
+# Run all hooks manually with: pre-commit run --all-files
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+        args: [--allow-multiple-documents]
+        exclude: ^helm/  # Helm templates are not plain YAML
+      - id: check-toml
+      - id: check-json
+      - id: check-added-large-files
+      - id: check-merge-conflict
+      - id: detect-private-key
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.15.16
+    hooks:
+      - id: ruff
+        args: [--fix]
+      - id: ruff-format
+
+  - repo: local
+    hooks:
+      - id: mypy
+        name: mypy
+        entry: mypy backend
+        language: system
+        types: [python]
+        pass_filenames: false
+      - id: eslint
+        name: eslint
+        entry: npm run lint --silent
+        language: system
+        files: \.(ts|tsx|mjs)$
+        pass_filenames: false
+      - id: prettier
+        name: prettier
+        entry: npm run format:check --silent
+        language: system
+        files: \.(ts|tsx|css|html|json|mjs)$
+        pass_filenames: false
