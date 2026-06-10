@@ -3,7 +3,16 @@ from __future__ import annotations
 from pathlib import Path
 
 from news_dashboard.db import connect, init_db
-from news_dashboard.stats import articles_over_time, sources_volume, stats_overview
+from news_dashboard.stats import (
+    article_counts,
+    articles_over_time,
+    category_mix,
+    ingested_vs_handled,
+    source_quality,
+    sources_volume,
+    stats_overview,
+    triage_metrics,
+)
 
 
 def _insert_run(
@@ -153,10 +162,7 @@ def test_sources_volume_orders_by_total_new_descending(tmp_path: Path) -> None:
     ]
 
 
-from news_dashboard.stats import article_counts, category_mix, ingested_vs_handled, source_quality, triage_metrics
-
-
-def _insert_article(
+def _insert_article(  # noqa: PLR0913
     db_path: Path,
     *,
     url: str,
@@ -180,9 +186,24 @@ def _insert_article(
             ON CONFLICT (url) DO NOTHING
             """,
             (
-                url, url, "Test Article", "src-1", source_name, category, "article",
-                discovered_at, "summary", "reason", 5, "[]",
-                status, discovered_at, skipped_at, saved_at, read_at, archived_at,
+                url,
+                url,
+                "Test Article",
+                "src-1",
+                source_name,
+                category,
+                "article",
+                discovered_at,
+                "summary",
+                "reason",
+                5,
+                "[]",
+                status,
+                discovered_at,
+                skipped_at,
+                saved_at,
+                read_at,
+                archived_at,
             ),
         )
 
@@ -208,12 +229,20 @@ def test_triage_metrics_computes_handled_and_save_rates(tmp_path: Path) -> None:
     recent = "2026-06-09T10:00:00+00:00"
     _insert_article(db_path, url="u1", source_name="S", status="new", discovered_at=recent)
     _insert_article(
-        db_path, url="u2", source_name="S", status="skipped",
-        discovered_at=recent, skipped_at="2026-06-09T11:00:00+00:00"
+        db_path,
+        url="u2",
+        source_name="S",
+        status="skipped",
+        discovered_at=recent,
+        skipped_at="2026-06-09T11:00:00+00:00",
     )
     _insert_article(
-        db_path, url="u3", source_name="S", status="saved",
-        discovered_at=recent, saved_at="2026-06-09T12:00:00+00:00"
+        db_path,
+        url="u3",
+        source_name="S",
+        status="saved",
+        discovered_at=recent,
+        saved_at="2026-06-09T12:00:00+00:00",
     )
 
     result = triage_metrics(db_path)
