@@ -2,3 +2,5 @@ node_modules
 frontend/dist
 package-lock.json
 helm/news-dashboard/templates
+design/
+frontend/src/components/ui/

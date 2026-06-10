@@ -1,30 +1,78 @@
 import { createBrowserRouter, RouterProvider, Navigate } from 'react-router-dom';
 import { AppShell } from './components/AppShell';
 import { InboxPage } from './pages/InboxPage';
-import { SavedPage } from './pages/SavedPage';
-import { ReadPage } from './pages/ReadPage';
-import { SkippedPage } from './pages/SkippedPage';
-import { ArchivedPage } from './pages/ArchivedPage';
+import { LaterPage } from './pages/LaterPage';
+import { StarredPage } from './pages/StarredPage';
+import { SearchPage } from './pages/SearchPage';
+import { AskPage } from './pages/AskPage';
 import { SourcesPage } from './pages/SourcesPage';
 import { SchedulerPage } from './pages/SchedulerPage';
+import { FeedsRunsPage } from './pages/FeedsRunsPage';
+import { FeedsLogsPage } from './pages/FeedsLogsPage';
 import { StatsPage } from './pages/StatsPage';
-import { AskPage } from './pages/AskPage';
+import { ArchivePage } from './pages/ArchivePage';
+import { SettingsPage } from './pages/SettingsPage';
+import { ArticlePage } from './pages/ArticlePage';
+
+function NotFound() {
+  return (
+    <div className="flex min-h-[60vh] items-center justify-center px-4">
+      <div className="max-w-md text-center">
+        <h1 className="text-7xl font-bold text-foreground">404</h1>
+        <h2 className="mt-4 text-xl font-semibold text-foreground">Page not found</h2>
+        <p className="mt-2 text-sm text-muted-foreground">
+          The page you're looking for doesn't exist or has been moved.
+        </p>
+        <div className="mt-6">
+          <a
+            href="/"
+            className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+          >
+            Go home
+          </a>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 const router = createBrowserRouter([
+  {
+    path: '/a/:id',
+    element: <ArticlePage />,
+  },
   {
     path: '/',
     element: <AppShell />,
     children: [
-      { index: true, element: <Navigate to="/inbox" replace /> },
-      { path: 'inbox', element: <InboxPage /> },
-      { path: 'saved', element: <SavedPage /> },
-      { path: 'read', element: <ReadPage /> },
-      { path: 'skipped', element: <SkippedPage /> },
-      { path: 'archived', element: <ArchivedPage /> },
-      { path: 'sources', element: <SourcesPage /> },
-      { path: 'scheduler', element: <SchedulerPage /> },
-      { path: 'stats', element: <StatsPage /> },
+      { index: true, element: <InboxPage /> },
+      { path: 'later', element: <LaterPage /> },
+      { path: 'starred', element: <StarredPage /> },
+      { path: 'search', element: <SearchPage /> },
       { path: 'ask', element: <AskPage /> },
+      {
+        path: 'feeds',
+        children: [
+          { index: true, element: <SourcesPage /> },
+          { path: 'schedule', element: <SchedulerPage /> },
+          { path: 'runs', element: <FeedsRunsPage /> },
+          { path: 'logs', element: <FeedsLogsPage /> },
+        ],
+      },
+      { path: 'stats', element: <StatsPage /> },
+      { path: 'archive', element: <ArchivePage /> },
+      { path: 'settings', element: <SettingsPage /> },
+
+      /* Legacy route redirects — remove when each migration slice lands */
+      { path: 'inbox', element: <Navigate to="/" replace /> },
+      { path: 'saved', element: <Navigate to="/starred" replace /> },
+      { path: 'read', element: <Navigate to="/archive" replace /> },
+      { path: 'skipped', element: <Navigate to="/archive" replace /> },
+      { path: 'archived', element: <Navigate to="/archive" replace /> },
+      { path: 'sources', element: <Navigate to="/feeds" replace /> },
+      { path: 'scheduler', element: <Navigate to="/feeds/schedule" replace /> },
+
+      { path: '*', element: <NotFound /> },
     ],
   },
 ]);

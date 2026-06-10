@@ -1698,16 +1698,18 @@ export default function App({
       setSearchResults(null);
       return;
     }
-    const timer = setTimeout(async () => {
-      setSearchLoading(true);
-      try {
-        const results = await searchArticles(search);
-        setSearchResults(results);
-      } catch {
-        setSearchResults(null);
-      } finally {
-        setSearchLoading(false);
-      }
+    const timer = setTimeout(() => {
+      void (async () => {
+        setSearchLoading(true);
+        try {
+          const results = await searchArticles(search);
+          setSearchResults(results);
+        } catch {
+          setSearchResults(null);
+        } finally {
+          setSearchLoading(false);
+        }
+      })();
     }, 350);
     return () => clearTimeout(timer);
   }, [search, activeTab]);

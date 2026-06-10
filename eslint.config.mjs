@@ -5,7 +5,7 @@ import tseslint from 'typescript-eslint';
 import prettier from 'eslint-config-prettier';
 
 export default tseslint.config(
-  { ignores: ['frontend/dist', 'node_modules'] },
+  { ignores: ['frontend/dist', 'node_modules', 'design/', 'frontend/src/components/ui/**'] },
   {
     files: ['frontend/src/**/*.{ts,tsx}'],
     extends: [
