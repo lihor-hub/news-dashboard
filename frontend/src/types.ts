@@ -73,6 +73,40 @@ export interface SourceVolumePoint {
   total_new: number;
 }
 
+export interface ArticleCountsResult {
+  new: number;
+  saved: number;
+  read: number;
+  skipped: number;
+  archived: number;
+}
+
+export interface TriageMetrics {
+  articles_this_week: number;
+  handled_rate: number;
+  save_rate: number;
+  avg_triage_hours: number;
+}
+
+export interface SourceQualityRow {
+  source_name: string;
+  total: number;
+  skip_rate: number;
+  save_rate: number;
+  error_rate: number;
+}
+
+export interface CategoryMixPoint {
+  day: string;
+  [category: string]: string | number;
+}
+
+export interface IngestedVsHandledPoint {
+  day: string;
+  ingested: number;
+  handled: number;
+}
+
 export interface AskSource {
   id: number;
   title: string;

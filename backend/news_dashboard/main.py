@@ -27,7 +27,16 @@ from .scheduler import (
     stop_scheduler,
 )
 from .source_health import list_source_health
-from .stats import articles_over_time, sources_volume, stats_overview
+from .stats import (
+    article_counts,
+    articles_over_time,
+    category_mix,
+    ingested_vs_handled,
+    source_quality,
+    sources_volume,
+    stats_overview,
+    triage_metrics,
+)
 
 
 @asynccontextmanager
@@ -234,6 +243,31 @@ def stats_sources_volume_endpoint(
         return {"items": sources_volume(from_, to)}
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.get("/api/stats/article-counts")
+def stats_article_counts_endpoint() -> dict[str, Any]:
+    return article_counts()
+
+
+@app.get("/api/stats/triage-metrics")
+def stats_triage_metrics_endpoint() -> dict[str, Any]:
+    return triage_metrics()
+
+
+@app.get("/api/stats/source-quality")
+def stats_source_quality_endpoint() -> dict[str, Any]:
+    return {"items": source_quality()}
+
+
+@app.get("/api/stats/category-mix")
+def stats_category_mix_endpoint() -> dict[str, Any]:
+    return {"items": category_mix()}
+
+
+@app.get("/api/stats/ingested-vs-handled")
+def stats_ingested_vs_handled_endpoint() -> dict[str, Any]:
+    return {"items": ingested_vs_handled()}
 
 
 class AskRequest(BaseModel):

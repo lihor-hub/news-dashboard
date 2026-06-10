@@ -1,13 +1,18 @@
 import type {
   Article,
+  ArticleCountsResult,
   ArticleStatus,
   ArticlesOverTimePoint,
   AskResponse,
+  CategoryMixPoint,
+  IngestedVsHandledPoint,
   Source,
   SourceHealth,
+  SourceQualityRow,
   SourceVolumePoint,
   StatsOverview,
   Summary,
+  TriageMetrics,
   IngestRunPage,
   IngestRunSource,
 } from './types';
@@ -132,6 +137,31 @@ export async function fetchArticlesOverTime(
 export async function fetchSourcesVolume(from: string, to: string): Promise<SourceVolumePoint[]> {
   const data = await requestJson<{ items: SourceVolumePoint[] }>(
     `/api/stats/sources-volume?${statsParams(from, to)}`
+  );
+  return data.items;
+}
+
+export async function fetchArticleCounts(): Promise<ArticleCountsResult> {
+  return requestJson<ArticleCountsResult>('/api/stats/article-counts');
+}
+
+export async function fetchTriageMetrics(): Promise<TriageMetrics> {
+  return requestJson<TriageMetrics>('/api/stats/triage-metrics');
+}
+
+export async function fetchSourceQuality(): Promise<SourceQualityRow[]> {
+  const data = await requestJson<{ items: SourceQualityRow[] }>('/api/stats/source-quality');
+  return data.items;
+}
+
+export async function fetchCategoryMix(): Promise<CategoryMixPoint[]> {
+  const data = await requestJson<{ items: CategoryMixPoint[] }>('/api/stats/category-mix');
+  return data.items;
+}
+
+export async function fetchIngestedVsHandled(): Promise<IngestedVsHandledPoint[]> {
+  const data = await requestJson<{ items: IngestedVsHandledPoint[] }>(
+    '/api/stats/ingested-vs-handled'
   );
   return data.items;
 }

@@ -7,6 +7,9 @@ from typing import Any
 
 from .db import connect, init_db, row_to_dict
 
+# Status values that count as "handled" (not sitting in inbox)
+_HANDLED_STATUSES = ("read", "saved", "skipped", "archived")
+
 
 def parse_range(from_value: str, to_value: str) -> tuple[datetime, datetime]:
     start = _parse_datetime(from_value)
@@ -93,6 +96,208 @@ def sources_volume(
             totals.items(), key=lambda item: (-item[1], item[0].lower())
         )
     ]
+
+
+def ingested_vs_handled(db_path: Path | None = None, days: int = 14) -> list[dict[str, Any]]:
+    """Return per-day ingested and handled article counts for the last `days` days."""
+    since = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+    init_db(db_path)
+    with connect(db_path) as conn:
+        ingested_rows = [
+            row_to_dict(r)
+            for r in conn.execute(
+                "SELECT DATE(discovered_at) AS day, COUNT(*) AS n FROM articles "
+                "WHERE discovered_at >= ? GROUP BY day",
+                (since,),
+            ).fetchall()
+        ]
+        handled_rows = [
+            row_to_dict(r)
+            for r in conn.execute(
+                """
+                SELECT DATE(COALESCE(skipped_at, saved_at, read_at, archived_at)) AS day,
+                       COUNT(*) AS n
+                FROM articles
+                WHERE discovered_at >= ?
+                  AND (skipped_at IS NOT NULL OR saved_at IS NOT NULL
+                       OR read_at IS NOT NULL OR archived_at IS NOT NULL)
+                GROUP BY day
+                """,
+                (since,),
+            ).fetchall()
+        ]
+
+    ingested_by_day = {str(r["day"]): _int_value(r["n"]) for r in ingested_rows}
+    handled_by_day = {str(r["day"]): _int_value(r["n"]) for r in handled_rows}
+
+    today = datetime.now(timezone.utc).date()
+    return [
+        {
+            "day": (today - timedelta(days=days - 1 - i)).isoformat(),
+            "ingested": ingested_by_day.get((today - timedelta(days=days - 1 - i)).isoformat(), 0),
+            "handled": handled_by_day.get((today - timedelta(days=days - 1 - i)).isoformat(), 0),
+        }
+        for i in range(days)
+    ]
+
+
+def article_counts(db_path: Path | None = None) -> dict[str, int]:
+    """Return total article count per status across all time."""
+    init_db(db_path)
+    with connect(db_path) as conn:
+        rows = conn.execute("SELECT status, COUNT(*) AS n FROM articles GROUP BY status").fetchall()
+    counts = {r["status"]: r["n"] for r in [row_to_dict(row) for row in rows]}
+    for status in ("new", "read", "saved", "skipped", "archived"):
+        counts.setdefault(status, 0)
+    return counts
+
+
+def triage_metrics(db_path: Path | None = None) -> dict[str, Any]:
+    """Return habit metrics for articles discovered in the last 7 days."""
+    week_ago = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
+    init_db(db_path)
+    with connect(db_path) as conn:
+        total = row_to_dict(
+            conn.execute(
+                "SELECT COUNT(*) AS n FROM articles WHERE discovered_at >= ?",
+                (week_ago,),
+            ).fetchone()
+        )["n"]
+
+        handled = row_to_dict(
+            conn.execute(
+                f"SELECT COUNT(*) AS n FROM articles WHERE discovered_at >= ? AND status IN ({','.join('?' * len(_HANDLED_STATUSES))})",  # noqa: E501
+                (week_ago, *_HANDLED_STATUSES),
+            ).fetchone()
+        )["n"]
+
+        saved = row_to_dict(
+            conn.execute(
+                "SELECT COUNT(*) AS n FROM articles WHERE discovered_at >= ? AND status = 'saved'",
+                (week_ago,),
+            ).fetchone()
+        )["n"]
+
+        triage_rows = [
+            row_to_dict(r)
+            for r in conn.execute(
+                """
+                SELECT discovered_at,
+                       COALESCE(skipped_at, saved_at, read_at, archived_at) AS triaged_at
+                FROM articles
+                WHERE discovered_at >= ?
+                  AND (skipped_at IS NOT NULL OR saved_at IS NOT NULL
+                       OR read_at IS NOT NULL OR archived_at IS NOT NULL)
+                """,
+                (week_ago,),
+            ).fetchall()
+        ]
+
+    hours: list[float] = []
+    for row in triage_rows:
+        try:
+            t_discovered = _coerce_datetime(row["discovered_at"])
+            t_triaged = _coerce_datetime(row["triaged_at"])
+            diff_h = (t_triaged - t_discovered).total_seconds() / 3600
+            if diff_h >= 0:
+                hours.append(diff_h)
+        except Exception:  # noqa: S110
+            pass
+
+    avg_triage_hours = round(sum(hours) / len(hours), 1) if hours else 0.0
+    return {
+        "articles_this_week": total,
+        "handled_rate": round(handled / total * 100) if total else 0,
+        "save_rate": round(saved / total * 100) if total else 0,
+        "avg_triage_hours": avg_triage_hours,
+    }
+
+
+def source_quality(db_path: Path | None = None) -> list[dict[str, Any]]:
+    """Return per-source quality stats computed from the articles table."""
+    init_db(db_path)
+    with connect(db_path) as conn:
+        rows = [
+            row_to_dict(r)
+            for r in conn.execute(
+                """
+                SELECT
+                  source_name,
+                  COUNT(*) AS total,
+                  SUM(CASE WHEN status = 'skipped' THEN 1 ELSE 0 END) AS skipped,
+                  SUM(CASE WHEN status = 'saved'   THEN 1 ELSE 0 END) AS saved
+                FROM articles
+                GROUP BY source_name
+                ORDER BY total DESC, source_name
+                """
+            ).fetchall()
+        ]
+        error_rows = [
+            row_to_dict(r)
+            for r in conn.execute(
+                """
+                SELECT name AS source_name,
+                       CASE WHEN last_error IS NOT NULL AND last_error != '' THEN 1 ELSE 0 END
+                         AS has_error
+                FROM sources
+                """
+            ).fetchall()
+        ]
+    error_map = {r["source_name"]: bool(r["has_error"]) for r in error_rows}
+    result = []
+    for row in rows:
+        total = _int_value(row["total"])
+        skipped = _int_value(row["skipped"])
+        saved = _int_value(row["saved"])
+        has_error = error_map.get(str(row["source_name"]), False)
+        result.append(
+            {
+                "source_name": row["source_name"],
+                "total": total,
+                "skip_rate": round(skipped / total * 100) if total else 0,
+                "save_rate": round(saved / total * 100) if total else 0,
+                "error_rate": 100 if has_error else 0,
+            }
+        )
+    return result
+
+
+def category_mix(db_path: Path | None = None, days: int = 14) -> list[dict[str, Any]]:
+    """Return per-day article counts broken down by category for the last `days` days."""
+    since = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+    init_db(db_path)
+    with connect(db_path) as conn:
+        rows = [
+            row_to_dict(r)
+            for r in conn.execute(
+                """
+                SELECT DATE(discovered_at) AS day, category, COUNT(*) AS n
+                FROM articles
+                WHERE discovered_at >= ?
+                GROUP BY day, category
+                ORDER BY day ASC
+                """,
+                (since,),
+            ).fetchall()
+        ]
+
+    by_day: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
+    categories: set[str] = set()
+    for row in rows:
+        day = str(row["day"])
+        cat = str(row["category"])
+        by_day[day][cat] += _int_value(row["n"])
+        categories.add(cat)
+
+    today = datetime.now(timezone.utc).date()
+    result = []
+    for i in range(days):
+        day_str = (today - timedelta(days=days - 1 - i)).isoformat()
+        entry: dict[str, Any] = {"day": day_str}
+        for cat in sorted(categories):
+            entry[cat] = by_day[day_str].get(cat, 0)
+        result.append(entry)
+    return result
 
 
 def _load_stats_rows(
