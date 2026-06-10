@@ -1,5 +1,6 @@
 import { useLocation, useNavigate, Outlet, Link } from 'react-router-dom';
 import { useState, useEffect } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import {
   Inbox,
   Clock,
@@ -16,6 +17,20 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/co
 import { CommandPalette } from './CommandPalette';
 import { ShortcutOverlay } from './ShortcutOverlay';
 import { cn } from '@/lib/utils';
+import { fetchSummary } from '@/api';
+
+function useNavCounts() {
+  const { data } = useQuery({
+    queryKey: ['summary'],
+    queryFn: fetchSummary,
+    staleTime: 30_000,
+    refetchOnWindowFocus: false,
+  });
+  return {
+    today: data?.byStatus?.new ?? null,
+    starred: data?.byStatus?.saved ?? null,
+  };
+}
 
 const navItems: { to: string; label: string; icon: React.ComponentType<{ className?: string }> }[] =
   [
@@ -47,12 +62,17 @@ function currentTitle(p: string) {
 }
 
 function DesktopRail({ pathname }: { pathname: string }) {
+  const counts = useNavCounts();
+  const countFor = (to: string): number | null =>
+    to === '/' ? counts.today : to === '/starred' ? counts.starred : null;
+
   return (
     <aside className="hidden md:flex md:flex-col md:w-[200px] md:shrink-0 md:border-r md:border-border md:min-h-[calc(100vh-3rem)] md:sticky md:top-12 md:self-start">
       <nav className="flex flex-col p-2 gap-0.5">
         {navItems.map((n) => {
           const Icon = n.icon;
           const active = n.to === '/' ? pathname === '/' : pathname.startsWith(n.to);
+          const count = countFor(n.to);
           return (
             <Link
               key={n.to}
@@ -65,7 +85,12 @@ function DesktopRail({ pathname }: { pathname: string }) {
               )}
             >
               <Icon className="size-4" />
-              {n.label}
+              <span className="flex-1">{n.label}</span>
+              {count != null && count > 0 && (
+                <span className="text-[10px] font-medium tabular-nums text-muted-foreground">
+                  {count}
+                </span>
+              )}
             </Link>
           );
         })}
