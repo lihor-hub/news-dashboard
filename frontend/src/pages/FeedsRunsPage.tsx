@@ -74,19 +74,12 @@ export function FeedsRunsPage() {
     <div className="p-4 md:p-5">
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-[22px] font-semibold tracking-tight">Run History</h2>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => void loadRuns(page)}
-          disabled={loading}
-        >
+        <Button variant="outline" size="sm" onClick={() => void loadRuns(page)} disabled={loading}>
           ↻ Refresh
         </Button>
       </div>
 
-      {error && (
-        <p className="text-sm text-destructive mb-3">{error}</p>
-      )}
+      {error && <p className="text-sm text-destructive mb-3">{error}</p>}
 
       {loading ? (
         <div className="space-y-2">
@@ -135,9 +128,7 @@ export function FeedsRunsPage() {
                             {relativeTime(run.started_at)}
                           </span>
                         </TableCell>
-                        <TableCell className="text-sm">
-                          {formatDuration(run.duration_ms)}
-                        </TableCell>
+                        <TableCell className="text-sm">{formatDuration(run.duration_ms)}</TableCell>
                         <TableCell className="text-sm">{run.sources_run}</TableCell>
                         <TableCell className="text-sm">{run.total_new}</TableCell>
                         <TableCell className="text-sm">
@@ -184,9 +175,7 @@ export function FeedsRunsPage() {
                                       <TableCell className="text-sm">
                                         {source.articles_new}
                                       </TableCell>
-                                      <TableCell className="text-sm">
-                                        {source.duplicates}
-                                      </TableCell>
+                                      <TableCell className="text-sm">{source.duplicates}</TableCell>
                                       <TableCell className="text-sm">
                                         {source.error_message ? (
                                           <span className="text-destructive">

@@ -90,9 +90,7 @@ export function SchedulerPage() {
       if (status.paused) {
         const res = await resumeScheduler();
         setStatus((prev) =>
-          prev
-            ? { ...prev, paused: false, next_run_at: res.next_run_at ?? prev.next_run_at }
-            : prev
+          prev ? { ...prev, paused: false, next_run_at: res.next_run_at ?? prev.next_run_at } : prev
         );
         toast.success('Scheduler resumed');
       } else {
@@ -112,10 +110,9 @@ export function SchedulerPage() {
     const id = toast.loading('Running ingest…');
     try {
       const result = await ingestNow();
-      toast.success(
-        `Done — ${result.inserted} new article${result.inserted !== 1 ? 's' : ''}`,
-        { id }
-      );
+      toast.success(`Done — ${result.inserted} new article${result.inserted !== 1 ? 's' : ''}`, {
+        id,
+      });
     } catch {
       toast.error('Ingest failed', { id });
     } finally {
