@@ -758,8 +758,7 @@ def search_articles(  # noqa: PLR0913
     params.append(limit)
 
     sql = (
-        f"SELECT * FROM articles {where}"
-        " ORDER BY importance_score DESC, discovered_at DESC LIMIT ?"
+        f"SELECT * FROM articles {where} ORDER BY importance_score DESC, discovered_at DESC LIMIT ?"
     )
 
     with connect(db_path) as conn:

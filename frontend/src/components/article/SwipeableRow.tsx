@@ -14,6 +14,7 @@ const THRESHOLD = 80;
 export function SwipeableRow({ children, onSwipeRight, onSwipeLeft, disableLeft }: Props) {
   const [dx, setDx] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
+  const [committing, setCommitting] = useState(false);
   const startX = useRef<number | null>(null);
 
   const onStart = (x: number) => {
@@ -30,8 +31,17 @@ export function SwipeableRow({ children, onSwipeRight, onSwipeLeft, disableLeft 
   const onEnd = () => {
     if (!isDragging) return;
     setIsDragging(false);
-    if (dx > THRESHOLD) onSwipeRight?.();
-    else if (dx < -THRESHOLD && !disableLeft) onSwipeLeft?.();
+    const willFire =
+      (dx > THRESHOLD && !!onSwipeRight) || (dx < -THRESHOLD && !disableLeft && !!onSwipeLeft);
+    if (willFire) {
+      setCommitting(true);
+      const action = dx > THRESHOLD ? onSwipeRight : onSwipeLeft;
+      // Fire action after brief animation window
+      setTimeout(() => {
+        action?.();
+        setCommitting(false);
+      }, 180);
+    }
     setDx(0);
     startX.current = null;
   };
@@ -42,21 +52,45 @@ export function SwipeableRow({ children, onSwipeRight, onSwipeLeft, disableLeft 
   return (
     <div className="relative overflow-hidden">
       {showRight && (
-        <div className="absolute inset-y-0 left-0 flex items-center px-5 bg-star/15 text-star">
-          <Star className="size-5 fill-current" />
+        <div
+          className={cn(
+            'absolute inset-y-0 left-0 flex items-center px-5 text-star transition-all duration-150',
+            dx > THRESHOLD ? 'bg-star/25' : 'bg-star/15'
+          )}
+        >
+          <Star
+            className={cn(
+              'size-5 fill-current transition-transform duration-150',
+              dx > THRESHOLD && 'scale-110'
+            )}
+          />
         </div>
       )}
       {showLeft && (
-        <div className="absolute inset-y-0 right-0 flex items-center px-5 bg-destructive/15 text-destructive">
-          <X className="size-5" />
+        <div
+          className={cn(
+            'absolute inset-y-0 right-0 flex items-center px-5 text-destructive transition-all duration-150',
+            dx < -THRESHOLD ? 'bg-destructive/25' : 'bg-destructive/15'
+          )}
+        >
+          <X
+            className={cn(
+              'size-5 transition-transform duration-150',
+              dx < -THRESHOLD && 'scale-110'
+            )}
+          />
         </div>
       )}
       <div
         className={cn(
           'bg-background touch-pan-y',
-          isDragging ? '' : 'transition-transform duration-150'
+          committing
+            ? 'motion-swipe-confirm'
+            : isDragging
+              ? ''
+              : 'transition-transform duration-150'
         )}
-        style={{ transform: `translateX(${dx}px)` }}
+        style={committing ? undefined : { transform: `translateX(${dx}px)` }}
         onTouchStart={(e) => onStart(e.touches[0].clientX)}
         onTouchMove={(e) => onMove(e.touches[0].clientX)}
         onTouchEnd={onEnd}

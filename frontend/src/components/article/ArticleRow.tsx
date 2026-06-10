@@ -30,8 +30,8 @@ export function ArticleRow({ article, focused, showLaterUntil }: Props) {
       <Link
         to={`/a/${article.id}`}
         className={cn(
-          'block px-4 py-3 border-b border-border transition-colors hover:bg-surface md:px-5',
-          focused && 'bg-surface-2'
+          'motion-fade-up block px-4 py-3 border-b border-border transition-colors hover:bg-surface md:px-5',
+          focused && 'bg-surface-2 focus-row'
         )}
       >
         <div className="flex items-baseline justify-between gap-3 mb-1">

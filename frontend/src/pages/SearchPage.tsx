@@ -115,7 +115,14 @@ export function SearchPage() {
     );
   }
 
-  const hasFilters = q || states.length || categories.length || sources.length || starredOnly || includeArchived || dateRange !== 'all';
+  const hasFilters =
+    q ||
+    states.length ||
+    categories.length ||
+    sources.length ||
+    starredOnly ||
+    includeArchived ||
+    dateRange !== 'all';
 
   const { data: results = [], isLoading } = useQuery({
     queryKey: ['search', q, states, categories, sources, starredOnly, includeArchived, dateRange],
@@ -176,10 +183,7 @@ export function SearchPage() {
         {/* Filter chips */}
         <div className="mt-3 flex flex-wrap gap-1.5">
           {/* Starred */}
-          <Chip
-            active={starredOnly}
-            onClick={() => updateParams({ starredOnly: !starredOnly })}
-          >
+          <Chip active={starredOnly} onClick={() => updateParams({ starredOnly: !starredOnly })}>
             Starred
           </Chip>
 
@@ -224,9 +228,7 @@ export function SearchPage() {
       {/* Result count */}
       {hasFilters && (
         <div className="px-4 md:px-5 py-2 text-[11px] text-muted-foreground border-b border-border">
-          {isLoading
-            ? '…'
-            : `${results.length} ${results.length === 1 ? 'result' : 'results'}`}
+          {isLoading ? '…' : `${results.length} ${results.length === 1 ? 'result' : 'results'}`}
         </div>
       )}
 
@@ -240,7 +242,11 @@ export function SearchPage() {
       ) : isLoading ? (
         <SearchSkeleton />
       ) : results.length === 0 ? (
-        <EmptyState icon={SearchIcon} title="No results" subtitle="Try different search terms or filters." />
+        <EmptyState
+          icon={SearchIcon}
+          title="No results"
+          subtitle="Try different search terms or filters."
+        />
       ) : (
         <div>
           {results.map((a, i) => (
@@ -308,11 +314,12 @@ function FilterGroup({
   }, [open]);
 
   const isActive = selected.length > 0;
-  const badge = single && selected[0]
-    ? ` · ${render(selected[0])}`
-    : !single && selected.length > 0
-      ? ` · ${selected.length}`
-      : '';
+  const badge =
+    single && selected[0]
+      ? ` · ${render(selected[0])}`
+      : !single && selected.length > 0
+        ? ` · ${selected.length}`
+        : '';
 
   return (
     <div className="relative" ref={ref}>
@@ -325,7 +332,8 @@ function FilterGroup({
             : 'bg-surface border-border text-muted-foreground hover:text-foreground hover:border-border-strong'
         )}
       >
-        {label}{badge}
+        {label}
+        {badge}
       </button>
       {open && (
         <div className="absolute z-20 mt-1 min-w-[160px] max-h-64 overflow-y-auto rounded-md border border-border bg-popover shadow-md p-1">
@@ -360,7 +368,10 @@ function FilterGroup({
               >
                 Clear
               </button>
-              <button onClick={() => setOpen(false)} className="px-2 py-1 text-[11px] text-foreground">
+              <button
+                onClick={() => setOpen(false)}
+                className="px-2 py-1 text-[11px] text-foreground"
+              >
                 Done
               </button>
             </div>

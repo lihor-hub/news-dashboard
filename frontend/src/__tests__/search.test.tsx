@@ -88,11 +88,12 @@ describe('SearchPage — search flow', () => {
     const input = screen.getByPlaceholderText(/Search titles/);
     await userEvent.type(input, 'python');
 
-    await waitFor(() => {
-      expect(spy).toHaveBeenCalledWith(
-        expect.objectContaining({ q: 'python' })
-      );
-    }, { timeout: 1000 });
+    await waitFor(
+      () => {
+        expect(spy).toHaveBeenCalledWith(expect.objectContaining({ q: 'python' }));
+      },
+      { timeout: 1000 }
+    );
   });
 
   it('displays results when API returns articles', async () => {
@@ -146,9 +147,7 @@ describe('SearchPage — filter chips', () => {
     await userEvent.click(starredChip);
 
     await waitFor(() => {
-      expect(spy).toHaveBeenCalledWith(
-        expect.objectContaining({ starredOnly: true })
-      );
+      expect(spy).toHaveBeenCalledWith(expect.objectContaining({ starredOnly: true }));
     });
   });
 
@@ -163,9 +162,7 @@ describe('SearchPage — filter chips', () => {
     await userEvent.click(archivedChip);
 
     await waitFor(() => {
-      expect(spy).toHaveBeenCalledWith(
-        expect.objectContaining({ includeArchived: true })
-      );
+      expect(spy).toHaveBeenCalledWith(expect.objectContaining({ includeArchived: true }));
     });
   });
 });

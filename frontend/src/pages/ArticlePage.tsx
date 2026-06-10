@@ -254,7 +254,7 @@ export function ArticlePage() {
   const bodyLoading = bodyMutation.isPending || article.bodyStatus === 'missing';
 
   return (
-    <div className="min-h-screen bg-background flex flex-col">
+    <div className="min-h-screen bg-background flex flex-col motion-slide-in-right">
       {/* Sticky header */}
       <header className="sticky top-0 z-20 border-b border-border bg-background/90 backdrop-blur">
         <div className="mx-auto max-w-2xl flex h-12 items-center justify-between px-3">

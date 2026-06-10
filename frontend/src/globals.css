@@ -245,3 +245,78 @@
   color: inherit;
   text-decoration: none;
 }
+
+/* ── Motion ─────────────────────────────────────────────────────────────── */
+
+@keyframes slide-in-right {
+  from {
+    transform: translateX(20px);
+    opacity: 0.5;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+@keyframes fade-up {
+  from {
+    transform: translateY(5px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes dismiss-out {
+  to {
+    opacity: 0;
+    transform: translateX(-12px) scaleY(0.9);
+  }
+}
+
+@keyframes swipe-confirm {
+  0% {
+    opacity: 1;
+  }
+  60% {
+    opacity: 0.4;
+    transform: translateX(4px);
+  }
+  100% {
+    opacity: 0;
+    transform: translateX(0);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .motion-slide-in-right {
+    animation: slide-in-right 0.2s cubic-bezier(0.2, 0, 0.38, 0.9) both;
+  }
+  .motion-fade-up {
+    animation: fade-up 0.15s ease-out both;
+  }
+  .motion-dismiss {
+    animation: dismiss-out 0.18s ease-in forwards;
+    pointer-events: none;
+  }
+  .motion-swipe-confirm {
+    animation: swipe-confirm 0.22s ease-out forwards;
+  }
+}
+
+/* Bottom nav active indicator transition */
+.bottom-nav-item {
+  transition:
+    color 0.15s ease,
+    opacity 0.15s ease;
+}
+
+/* Desktop nav link hover */
+.nav-link-hover {
+  transition:
+    background-color 0.12s ease,
+    color 0.12s ease;
+}

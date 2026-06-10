@@ -3,7 +3,6 @@ import ReactDOM from 'react-dom/client';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { Toaster } from 'sonner';
 import './globals.css';
-import './styles.css';
 import { initTheme } from './lib/theme';
 import { queryClient } from './lib/queryClient';
 import { AppRouter } from './AppRouter';
