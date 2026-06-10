@@ -7,8 +7,6 @@ import threading
 from pathlib import Path
 from unittest.mock import patch
 
-import pytest
-
 from news_dashboard.body_fetch import extract_body, fetch_and_cache_body, get_article
 from news_dashboard.db import connect, init_db
 from news_dashboard.ingest import sync_sources
@@ -41,7 +39,7 @@ def _seed_article(db_path: Path) -> int:
 class _SimpleHTTPHandler(http.server.BaseHTTPRequestHandler):
     html = b""
 
-    def do_GET(self) -> None:  # noqa: N802
+    def do_GET(self) -> None:
         self.send_response(200)
         self.send_header("Content-Type", "text/html; charset=utf-8")
         self.end_headers()
@@ -62,6 +60,7 @@ def _start_server(html: bytes) -> tuple[str, threading.Thread]:
 
 
 # ── extract_body ──────────────────────────────────────────────────────────────
+
 
 def test_extract_body_ok() -> None:
     html = b"""
@@ -90,18 +89,19 @@ def test_extract_body_error_on_network_failure() -> None:
 
 
 def test_extract_body_rejects_non_http() -> None:
-    body, status = extract_body("file:///etc/passwd")
+    _body, status = extract_body("file:///etc/passwd")
     assert status == "error"
 
 
 def test_extract_body_empty_page_returns_error() -> None:
     url, thread = _start_server(b"<html><body></body></html>")
-    body, status = extract_body(url)
+    _body, status = extract_body(url)
     thread.join(timeout=2)
     assert status == "error"
 
 
 # ── fetch_and_cache_body ──────────────────────────────────────────────────────
+
 
 def test_fetch_and_cache_body_success(tmp_path: Path) -> None:
     db_path = _db(tmp_path)
@@ -174,6 +174,7 @@ def test_fetch_and_cache_body_not_found(tmp_path: Path) -> None:
 
 
 # ── get_article ───────────────────────────────────────────────────────────────
+
 
 def test_get_article_returns_article(tmp_path: Path) -> None:
     db_path = _db(tmp_path)

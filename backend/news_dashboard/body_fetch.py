@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Any
 
 from .db import connect, init_db, row_to_dict
-from .scraper import USER_AGENT, TIMEOUT_SECS
+from .scraper import TIMEOUT_SECS, USER_AGENT
 
 logger = logging.getLogger(__name__)
 
@@ -74,7 +74,7 @@ class _BodyExtractor(HTMLParser):
         self._chunks: list[str] = []
         self._current: list[str] = []
 
-    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+    def handle_starttag(self, tag: str, _attrs: list[tuple[str, str | None]]) -> None:
         if self._skip_depth or tag in _SKIP_TAGS:
             self._skip_depth += 1
             return
@@ -104,10 +104,10 @@ class _BodyExtractor(HTMLParser):
     def result(self) -> str:
         self._flush()
         paragraphs: list[str] = []
-        for chunk in self._chunks:
-            chunk = re.sub(r"\s+", " ", chunk).strip()
-            if len(chunk) > 40:
-                paragraphs.append(chunk)
+        for raw_chunk in self._chunks:
+            cleaned = re.sub(r"\s+", " ", raw_chunk).strip()
+            if len(cleaned) > 40:
+                paragraphs.append(cleaned)
         return "\n\n".join(paragraphs)
 
 
@@ -144,9 +144,7 @@ def extract_body(url: str) -> tuple[str, str]:
     return text, "ok"
 
 
-def fetch_and_cache_body(
-    article_id: int, db_path: Path | None = None
-) -> dict[str, Any] | None:
+def fetch_and_cache_body(article_id: int, db_path: Path | None = None) -> dict[str, Any] | None:
     """Fetch and store body for an article. Returns the updated article dict or None if not found.
 
     If body_status is already 'ok', returns the cached row immediately.
@@ -161,9 +159,7 @@ def fetch_and_cache_body(
             return None
         row_d = row_to_dict(row)
         if row_d.get("body_status") == "ok":
-            full_row = conn.execute(
-                "SELECT * FROM articles WHERE id = ?", (article_id,)
-            ).fetchone()
+            full_row = conn.execute("SELECT * FROM articles WHERE id = ?", (article_id,)).fetchone()
             return row_to_dict(full_row) if full_row else None
 
     url = row_d["url"]
@@ -171,12 +167,11 @@ def fetch_and_cache_body(
 
     with connect(db_path) as conn:
         conn.execute(
-            "UPDATE articles SET body = ?, body_status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+            "UPDATE articles SET body = ?, body_status = ?,"
+            " updated_at = CURRENT_TIMESTAMP WHERE id = ?",
             (body if status == "ok" else None, status, article_id),
         )
-        full_row = conn.execute(
-            "SELECT * FROM articles WHERE id = ?", (article_id,)
-        ).fetchone()
+        full_row = conn.execute("SELECT * FROM articles WHERE id = ?", (article_id,)).fetchone()
         if full_row is None:
             return None
         result = row_to_dict(full_row)
@@ -190,9 +185,7 @@ def get_article(article_id: int, db_path: Path | None = None) -> dict[str, Any] 
     """Fetch a single article by ID, stripping internal columns."""
     init_db(db_path)
     with connect(db_path) as conn:
-        row = conn.execute(
-            "SELECT * FROM articles WHERE id = ?", (article_id,)
-        ).fetchone()
+        row = conn.execute("SELECT * FROM articles WHERE id = ?", (article_id,)).fetchone()
         if row is None:
             return None
         d = row_to_dict(row)
