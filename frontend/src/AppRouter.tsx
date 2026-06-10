@@ -6,6 +6,7 @@ import { LaterPage } from './pages/LaterPage';
 import { StarredPage } from './pages/StarredPage';
 import { SearchPage } from './pages/SearchPage';
 import { AskPage } from './pages/AskPage';
+import { FeedsPage } from './pages/FeedsPage';
 import { SourcesPage } from './pages/SourcesPage';
 import { SchedulerPage } from './pages/SchedulerPage';
 import { FeedsRunsPage } from './pages/FeedsRunsPage';
@@ -53,6 +54,7 @@ const router = createBrowserRouter([
       { path: 'ask', element: <AskPage /> },
       {
         path: 'feeds',
+        element: <FeedsPage />,
         children: [
           { index: true, element: <SourcesPage /> },
           { path: 'schedule', element: <SchedulerPage /> },

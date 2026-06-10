@@ -8,8 +8,6 @@ import {
   fetchIngestRunSources,
   fetchIngestRuns,
   fetchSchedulerStatus,
-  fetchSourceHealth,
-  fetchSources,
   fetchSourcesVolume,
   fetchStatsOverview,
   fetchSummary,
@@ -19,7 +17,6 @@ import {
   searchArticles,
   setSchedulerInterval,
   updateArticleStatus,
-  updateSourceEnabled,
 } from './api';
 import type { SchedulerStatus } from './api';
 import type {
@@ -27,8 +24,6 @@ import type {
   ArticleStatus,
   ArticlesOverTimePoint,
   AskResponse,
-  Source,
-  SourceHealth,
   SourceVolumePoint,
   StatsOverview,
   Summary,
@@ -291,107 +286,6 @@ function SkeletonCard() {
         <div className="skeleton sk-bar" style={{ flex: 1 }} />
         <div className="skeleton sk-bar" style={{ flex: 1 }} />
       </div>
-    </div>
-  );
-}
-
-// ===== SourcesPanel =====
-
-function SourceHealthBadge({ source }: { source: Source }) {
-  const hoursSince = (iso?: string | null): number | null => {
-    if (!iso) return null;
-    // eslint-disable-next-line react-hooks/purity -- display-only "hours ago" label; staleness across renders is acceptable
-    const ms = Date.now() - new Date(iso).getTime();
-    return Math.floor(ms / 3600000);
-  };
-
-  if (source.last_error) {
-    return <span className="source-health error">● error</span>;
-  }
-  const h = hoursSince(source.last_success_at ?? source.last_checked_at);
-  if (h === null) return null;
-  if (h > 48) return <span className="source-health stale">● stale ({Math.floor(h / 24)}d)</span>;
-  return <span className="source-health healthy">● ok</span>;
-}
-
-function SourcesContent({
-  sources,
-  onToggleEnabled,
-}: {
-  sources: Source[];
-  onToggleEnabled: (slug: string, enabled: boolean) => Promise<void>;
-}) {
-  const grouped = useMemo(() => {
-    return sources.reduce<Record<string, Source[]>>((acc, s) => {
-      if (!acc[s.category]) acc[s.category] = [];
-      acc[s.category].push(s);
-      return acc;
-    }, {});
-  }, [sources]);
-
-  function kindClass(kind: string): string {
-    if (kind.startsWith('github')) return 'kind-github';
-    if (kind.startsWith('trending')) return 'kind-trending';
-    if (kind.startsWith('scraped')) return 'kind-scraped';
-    return 'kind-rss';
-  }
-  function kindLabel(kind: string): string {
-    return kind.replace(/_/g, ' ').replace('feed', '').trim() || 'rss';
-  }
-
-  return (
-    <div className="sources-grid">
-      {Object.entries(grouped).map(([cat, items]) => (
-        <article className="source-card" key={cat}>
-          <h3 className="source-category">{cat.replace(/-/g, ' ')}</h3>
-          <ul className="source-list">
-            {items.map((source) => (
-              <li
-                key={source.slug}
-                className={`source-item${!source.enabled ? ' source-item--disabled' : ''}`}
-              >
-                <div className="source-main">
-                  <a href={source.url} target="_blank" rel="noreferrer">
-                    {source.name}
-                  </a>
-                  <span className={`badge ${kindClass(source.kind)}`}>
-                    {kindLabel(source.kind)}
-                  </span>
-                  {/* Issue #20: enable/disable toggle */}
-                  <label
-                    className="source-toggle"
-                    title={source.enabled ? 'Disable source' : 'Enable source'}
-                  >
-                    <input
-                      type="checkbox"
-                      role="switch"
-                      aria-label={`${source.enabled ? 'Disable' : 'Enable'} ${source.name}`}
-                      checked={!!source.enabled}
-                      onChange={() => void onToggleEnabled(source.slug, !source.enabled)}
-                    />
-                    <span className="source-toggle-track" />
-                  </label>
-                </div>
-                <div className="source-meta">
-                  {source.last_checked_at && (
-                    <span className="source-checked">
-                      checked {relativeTime(source.last_checked_at)}
-                    </span>
-                  )}
-                  <SourceHealthBadge source={source} />
-                </div>
-                {source.last_error && (
-                  <p className="source-error-msg" title={source.last_error}>
-                    {source.last_error.length > 80
-                      ? source.last_error.slice(0, 80) + '…'
-                      : source.last_error}
-                  </p>
-                )}
-              </li>
-            ))}
-          </ul>
-        </article>
-      ))}
     </div>
   );
 }
@@ -830,76 +724,6 @@ interface SchedulerTabProps {
   ingesting: boolean;
 }
 
-function SourceHealthTable({ items, loading }: { items: SourceHealth[]; loading: boolean }) {
-  const sorted = useMemo(() => {
-    return [...items].sort((a, b) => {
-      if (b.error_streak !== a.error_streak) return b.error_streak - a.error_streak;
-      if (a.status !== b.status) return a.status === 'ERROR' ? -1 : 1;
-      return a.name.localeCompare(b.name);
-    });
-  }, [items]);
-
-  if (loading) {
-    return (
-      <div className="source-health-loading">
-        <div className="skeleton sk-line" style={{ width: '70%' }} />
-        <div className="skeleton sk-line" style={{ width: '55%' }} />
-        <div className="skeleton sk-line" style={{ width: '62%' }} />
-      </div>
-    );
-  }
-
-  if (sorted.length === 0) {
-    return <p className="source-health-empty">No sources configured.</p>;
-  }
-
-  return (
-    <div className="source-health-table-wrap">
-      <table className="source-health-table">
-        <thead>
-          <tr>
-            <th>Source name</th>
-            <th>Last checked</th>
-            <th>Status</th>
-            <th>Articles last run</th>
-            <th>Error streak</th>
-          </tr>
-        </thead>
-        <tbody>
-          {sorted.map((source) => (
-            <tr
-              key={source.slug}
-              className={source.status === 'ERROR' ? 'source-health-row-error' : undefined}
-            >
-              <td>
-                <span className="source-health-name">{source.name}</span>
-                <span className="source-health-category">{source.category.replace(/-/g, ' ')}</span>
-              </td>
-              <td>{source.last_checked_at ? relativeTime(source.last_checked_at) : 'Never'}</td>
-              <td>
-                <span className={`source-health-status ${source.status.toLowerCase()}`}>
-                  {source.status}
-                </span>
-              </td>
-              <td>{source.articles_last_run}</td>
-              <td>
-                <span className="source-health-streak" title={source.last_error ?? undefined}>
-                  {source.error_streak}
-                </span>
-                {source.last_error && (
-                  <span className="source-health-last-error" title={source.last_error}>
-                    {source.last_error}
-                  </span>
-                )}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
 function IngestTerminal() {
   const [lines, setLines] = useState<string[]>([]);
   const [connected, setConnected] = useState(false);
@@ -943,8 +767,6 @@ function IngestTerminal() {
 function SchedulerTab({ onFetchNow, ingesting }: SchedulerTabProps) {
   const [status, setStatus] = useState<SchedulerStatus | null>(null);
   const [loadingStatus, setLoadingStatus] = useState(true);
-  const [sourceHealth, setSourceHealth] = useState<SourceHealth[]>([]);
-  const [loadingSourceHealth, setLoadingSourceHealth] = useState(true);
   const [customMinutes, setCustomMinutes] = useState('');
   const [actionPending, setActionPending] = useState(false);
   const [tabMessage, setTabMessage] = useState<{ text: string; kind: 'success' | 'error' } | null>(
@@ -984,20 +806,6 @@ function SchedulerTab({ onFetchNow, ingesting }: SchedulerTabProps) {
     }
   }
 
-  async function loadHealth() {
-    setLoadingSourceHealth(true);
-    try {
-      setSourceHealth(await fetchSourceHealth());
-    } catch (err) {
-      setTabMessage({
-        text: err instanceof Error ? err.message : 'Failed to load source health',
-        kind: 'error',
-      });
-    } finally {
-      setLoadingSourceHealth(false);
-    }
-  }
-
   async function loadStats() {
     setStatsLoading(true);
     setStatsError(null);
@@ -1019,7 +827,6 @@ function SchedulerTab({ onFetchNow, ingesting }: SchedulerTabProps) {
 
   useEffect(() => {
     void loadStatus();
-    void loadHealth();
   }, []);
 
   useEffect(() => {
@@ -1095,7 +902,6 @@ function SchedulerTab({ onFetchNow, ingesting }: SchedulerTabProps) {
 
   async function handleFetchNow() {
     await onFetchNow();
-    await loadHealth();
     await loadStats();
     setHistoryRefresh((value) => value + 1);
   }
@@ -1349,126 +1155,9 @@ function SchedulerTab({ onFetchNow, ingesting }: SchedulerTabProps) {
         </div>
       </div>
 
-      <div className="scheduler-card scheduler-card--wide">
-        <h3 className="scheduler-card-title">Source Health</h3>
-        <SourceHealthTable items={sourceHealth} loading={loadingSourceHealth} />
-      </div>
       <IngestTerminal />
       <RunHistoryTable refreshToken={historyRefresh} />
     </div>
-  );
-}
-
-/** #28 — Sources panel: bottom sheet on mobile, sidebar on desktop */
-function SourcesPanel({
-  sources,
-  onToggleEnabled,
-}: {
-  sources: Source[];
-  onToggleEnabled: (slug: string, enabled: boolean) => Promise<void>;
-}) {
-  const [sheetOpen, setSheetOpen] = useState(false);
-
-  // Prevent body scroll while sheet is open
-  useEffect(() => {
-    if (sheetOpen) {
-      document.body.style.overflow = 'hidden';
-    } else {
-      document.body.style.overflow = '';
-    }
-    return () => {
-      document.body.style.overflow = '';
-    };
-  }, [sheetOpen]);
-
-  const categories = useMemo(() => {
-    return Array.from(new Set(sources.map((s) => s.category)));
-  }, [sources]);
-
-  const [activeCategory, setActiveCategory] = useState<string | null>(null);
-
-  const filteredSources = activeCategory
-    ? sources.filter((s) => s.category === activeCategory)
-    : sources;
-
-  return (
-    <>
-      {/* ── Mobile: toggle button + bottom sheet ── */}
-      <button
-        className="sources-toggle-btn"
-        onClick={() => setSheetOpen(true)}
-        aria-expanded={sheetOpen}
-        aria-controls="sources-sheet"
-      >
-        <span aria-hidden="true">☰</span>
-        <span>View all {sources.length} sources</span>
-        <span style={{ marginLeft: 'auto', fontSize: 18 }} aria-hidden="true">
-          ›
-        </span>
-      </button>
-
-      {/* Overlay */}
-      <div
-        className={`sources-sheet-overlay${sheetOpen ? ' open' : ''}`}
-        onClick={() => setSheetOpen(false)}
-        aria-hidden="true"
-      />
-
-      {/* Bottom sheet */}
-      <div
-        id="sources-sheet"
-        className={`sources-sheet${sheetOpen ? ' open' : ''}`}
-        role="dialog"
-        aria-modal="true"
-        aria-label="News sources"
-      >
-        <div className="sources-sheet-handle" aria-hidden="true" />
-        <div className="sources-sheet-header">
-          <span className="sources-sheet-title">News Sources ({sources.length})</span>
-          <button
-            className="sources-sheet-close"
-            onClick={() => setSheetOpen(false)}
-            aria-label="Close sources panel"
-          >
-            ×
-          </button>
-        </div>
-        <div className="sources-sheet-content">
-          <SourcesContent sources={sources} onToggleEnabled={onToggleEnabled} />
-        </div>
-      </div>
-
-      {/* ── Desktop: sidebar + main grid ── */}
-      <div className="sources-desktop-layout">
-        <aside className="sources-sidebar" aria-label="Filter by category">
-          <div className="sources-sidebar-title">Categories</div>
-          <button
-            className={`sources-sidebar-btn${activeCategory === null ? ' active' : ''}`}
-            onClick={() => setActiveCategory(null)}
-          >
-            All sources
-            <span style={{ marginLeft: 'auto', color: 'var(--text-3)', fontSize: 11 }}>
-              {sources.length}
-            </span>
-          </button>
-          {categories.map((cat) => (
-            <button
-              key={cat}
-              className={`sources-sidebar-btn${activeCategory === cat ? ' active' : ''}`}
-              onClick={() => setActiveCategory(cat)}
-            >
-              {cat.replace(/-/g, ' ')}
-              <span style={{ marginLeft: 'auto', color: 'var(--text-3)', fontSize: 11 }}>
-                {sources.filter((s) => s.category === cat).length}
-              </span>
-            </button>
-          ))}
-        </aside>
-        <div className="sources-main">
-          <SourcesContent sources={filteredSources} onToggleEnabled={onToggleEnabled} />
-        </div>
-      </div>
-    </>
   );
 }
 
@@ -1484,7 +1173,6 @@ export default function App({
   initialAskMode = false,
 }: AppProps) {
   const [articles, setArticles] = useState<Article[]>([]);
-  const [sources, setSources] = useState<Source[]>([]);
   const [summary, setSummary] = useState<Summary>({ byStatus: {}, byCategory: {} });
   const [activeTab, setActiveTab] = useState<ActiveTab>(initialTab);
   const [category, setCategory] = useState('all');
@@ -1564,15 +1252,13 @@ export default function App({
     setOffset(0);
     setHasMore(false);
     try {
-      const [nextArticles, nextSources, nextSummary] = await Promise.all([
+      const [nextArticles, nextSummary] = await Promise.all([
         activeTab !== 'sources' && activeTab !== 'scheduler'
           ? fetchArticles(currentStatus, category !== 'all' ? category : undefined, 0, PAGE_SIZE)
           : Promise.resolve<Article[]>([]),
-        fetchSources(),
         fetchSummary(),
       ]);
       setArticles(nextArticles);
-      setSources(nextSources);
       setSummary(nextSummary);
       setHasMore(
         activeTab !== 'sources' && activeTab !== 'scheduler' && nextArticles.length === PAGE_SIZE
@@ -1653,27 +1339,6 @@ export default function App({
   async function changeStatus(id: number, next: ArticleStatus) {
     await updateArticleStatus(id, next);
     await load();
-  }
-
-  // Issue #20: toggle source enabled (optimistic)
-  async function toggleSourceEnabled(slug: string, enabled: boolean) {
-    // Optimistic update
-    setSources((prev) =>
-      prev.map((s) => (s.slug === slug ? { ...s, enabled: enabled ? 1 : 0 } : s))
-    );
-    try {
-      const updated = await updateSourceEnabled(slug, enabled);
-      setSources((prev) => prev.map((s) => (s.slug === slug ? updated : s)));
-    } catch (err) {
-      // Rollback on error
-      setSources((prev) =>
-        prev.map((s) => (s.slug === slug ? { ...s, enabled: enabled ? 0 : 1 } : s))
-      );
-      setMessage({
-        text: err instanceof Error ? err.message : 'Failed to update source',
-        kind: 'error',
-      });
-    }
   }
 
   // Client-side search filter
@@ -1812,7 +1477,7 @@ export default function App({
   }
 
   function tabCount(tab: ActiveTab): number {
-    if (tab === 'sources') return sources.length;
+    if (tab === 'sources') return 0;
     if (tab === 'scheduler') return 0;
     const s = TAB_STATUS[tab];
     return summary.byStatus[s] ?? 0;
@@ -2008,13 +1673,6 @@ export default function App({
               <h2 className="section-title">{sectionTitle}</h2>
             </div>
             <SchedulerTab onFetchNow={runIngest} ingesting={ingesting} />
-          </>
-        ) : activeTab === 'sources' ? (
-          <>
-            <div className="section-header">
-              <h2 className="section-title">{sectionTitle}</h2>
-            </div>
-            <SourcesPanel sources={sources} onToggleEnabled={toggleSourceEnabled} />
           </>
         ) : (
           <>
