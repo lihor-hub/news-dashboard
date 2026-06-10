@@ -1,7 +1,12 @@
 import { useQueryClient, useMutation } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import type { WorkflowArticle, WorkflowState } from '../lib/workflowTypes';
-import { patchArticleState, patchArticleStar, snapshot } from '../api/workflowApi';
+import {
+  patchArticleState,
+  patchArticleStar,
+  patchArticleLater,
+  snapshot,
+} from '../api/workflowApi';
 
 // ─── Query key helpers ───────────────────────────────────────────────────────
 
@@ -86,16 +91,9 @@ export function useTriageMutations() {
     },
   });
 
-  // Later is client-only until #87; no API call made
   const sendLaterMutation = useMutation({
-    mutationFn: async ({
-      article: _article,
-      days: _days,
-    }: {
-      article: WorkflowArticle;
-      days?: number;
-    }) => {
-      // TODO(#87): call PATCH /api/articles/{id}/later when backend supports it
+    mutationFn: async ({ article, days = 1 }: { article: WorkflowArticle; days?: number }) => {
+      await patchArticleLater(article.id, days);
     },
 
     onMutate: async ({ article, days = 1 }) => {

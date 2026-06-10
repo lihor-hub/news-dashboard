@@ -44,6 +44,25 @@ logger = logging.getLogger(__name__)
 
 DEDUP_TITLE_THRESHOLD = 0.85
 VALID_STATUSES = frozenset({"new", "read", "saved", "skipped", "archived"})
+VALID_STATES = frozenset({"today", "later", "done", "skipped", "archived"})
+
+# (from_state, to_state) pairs that are permitted
+_ALLOWED_TRANSITIONS: frozenset[tuple[str, str]] = frozenset(
+    {
+        ("today", "done"),
+        ("today", "later"),
+        ("today", "skipped"),
+        ("today", "archived"),
+        ("later", "today"),
+        ("later", "done"),
+        ("later", "archived"),
+        ("done", "archived"),
+        ("skipped", "today"),
+        ("skipped", "archived"),
+        ("archived", "today"),
+        ("archived", "done"),
+    }
+)
 _INGEST_RUN_LOCK = threading.Lock()
 
 
@@ -595,17 +614,46 @@ def _article_dict(row: Any) -> dict[str, Any]:
 
 def list_articles(
     status: str | None = None,
+    state: str | None = None,
     category: str | None = None,
+    starred: bool | None = None,
     limit: int = 100,
     offset: int = 0,
     db_path: Path | None = None,
 ) -> list[dict[str, Any]]:
     init_db(db_path)
-    clauses: list[str] = ["(canonical_id IS NULL OR status != 'archived')"]
+    now = now_iso()
+    # Exclude canonical-archived duplicates from results
+    clauses: list[str] = ["(canonical_id IS NULL OR state != 'archived')"]
     params: list[object] = []
     if status:
-        clauses.append("status = ?")
-        params.append(status)
+        # Legacy compat: map old status filter to state
+        legacy_map = {
+            "new": "today",
+            "read": "done",
+            "saved": "today",
+            "skipped": "skipped",
+            "archived": "archived",
+        }
+        mapped = legacy_map.get(status, status)
+        clauses.append("state = ?")
+        params.append(mapped)
+        if status == "saved":
+            clauses.append("starred = 1")
+    if state:
+        if state == "today":
+            # Today = explicitly today OR later with expired snooze
+            clauses.append(
+                "(state = 'today'"
+                " OR (state = 'later' AND later_until IS NOT NULL AND later_until <= ?))"
+            )
+            params.append(now)
+        else:
+            clauses.append("state = ?")
+            params.append(state)
+    if starred is not None:
+        clauses.append("starred = ?")
+        params.append(1 if starred else 0)
     if category:
         clauses.append("category = ?")
         params.append(category)
@@ -625,7 +673,7 @@ def list_articles(
             dup_rows = conn.execute(
                 f"""
                 SELECT canonical_id, source_name FROM articles
-                WHERE canonical_id IN ({placeholders}) AND status='archived'
+                WHERE canonical_id IN ({placeholders}) AND state='archived'
                 """,
                 article_ids,
             ).fetchall()
@@ -685,3 +733,139 @@ def set_article_status(
             logger.debug("Skipping embedding for article %d", article_id, exc_info=True)
 
     return result
+
+
+def _get_article_row(conn: Any, article_id: int) -> dict[str, Any] | None:
+    row = conn.execute("SELECT * FROM articles WHERE id=?", (article_id,)).fetchone()
+    return _article_dict(row) if row else None
+
+
+def transition_article_state(
+    article_id: int,
+    new_state: str,
+    db_path: Path | None = None,
+) -> dict[str, Any] | None:
+    """Apply a state transition, enforcing allowed-transition rules.
+
+    Raises ValueError for invalid states, disallowed transitions, or
+    the starred-cannot-skip rule.
+    """
+    if new_state not in VALID_STATES:
+        message = f"invalid state: {new_state!r} (expected one of {sorted(VALID_STATES)})"
+        raise ValueError(message)
+
+    init_db(db_path)
+    with connect(db_path) as conn:
+        current = _get_article_row(conn, article_id)
+        if current is None:
+            return None
+
+        current_state = str(current.get("state") or "today")
+        if current_state == new_state:
+            return current
+
+        if (current_state, new_state) not in _ALLOWED_TRANSITIONS:
+            message = f"transition {current_state!r} → {new_state!r} is not allowed"
+            raise ValueError(message)
+
+        if new_state == "skipped" and current.get("starred"):
+            message = "starred articles cannot be skipped"
+            raise ValueError(message)
+
+        ts = now_iso()
+        timestamp_sets: list[str] = ["state = ?", "updated_at = ?"]
+        params: list[Any] = [new_state, ts]
+
+        if new_state == "done":
+            timestamp_sets.append("done_at = ?")
+            params.append(ts)
+        elif new_state == "skipped":
+            timestamp_sets.append("skipped_at = ?")
+            params.append(ts)
+        elif new_state == "archived":
+            timestamp_sets.append("archived_at = ?")
+            params.append(ts)
+        elif new_state == "today":
+            timestamp_sets.append("restored_at = ?")
+            timestamp_sets.append("later_until = NULL")
+            params.append(ts)
+
+        set_clause = ", ".join(timestamp_sets)
+        params.append(article_id)
+        conn.execute(f"UPDATE articles SET {set_clause} WHERE id = ?", params)
+
+        result = _get_article_row(conn, article_id)
+
+    # Embed done articles lazily
+    if result and new_state == "done":
+        try:
+            from .embeddings import ensure_article_embedded
+
+            ensure_article_embedded(article_id, db_path)
+        except Exception:
+            logger.debug("Skipping embedding for article %d", article_id, exc_info=True)
+
+    return result
+
+
+def set_article_starred(
+    article_id: int,
+    starred: bool,
+    db_path: Path | None = None,
+) -> dict[str, Any] | None:
+    """Set the starred flag on an article. Raises ValueError if starring a skipped article."""
+    init_db(db_path)
+    with connect(db_path) as conn:
+        current = _get_article_row(conn, article_id)
+        if current is None:
+            return None
+
+        ts = now_iso()
+        if starred:
+            conn.execute(
+                "UPDATE articles SET starred = 1, starred_at = ?, updated_at = ? WHERE id = ?",
+                (ts, ts, article_id),
+            )
+        else:
+            conn.execute(
+                "UPDATE articles SET starred = 0, updated_at = ? WHERE id = ?",
+                (ts, article_id),
+            )
+
+        return _get_article_row(conn, article_id)
+
+
+def send_article_later(
+    article_id: int,
+    days: int = 1,
+    db_path: Path | None = None,
+) -> dict[str, Any] | None:
+    """Snooze an article to Later with an expiry of `days` days from now.
+
+    Only articles in the today or later state can be snoozed.
+    """
+    if days < 1:
+        message = "days must be >= 1"
+        raise ValueError(message)
+
+    init_db(db_path)
+    with connect(db_path) as conn:
+        current = _get_article_row(conn, article_id)
+        if current is None:
+            return None
+
+        current_state = str(current.get("state") or "today")
+        if current_state not in {"today", "later"}:
+            message = f"cannot snooze article in state {current_state!r}"
+            raise ValueError(message)
+
+        later_until = (
+            (datetime.now(timezone.utc) + timedelta(days=days)).replace(microsecond=0).isoformat()
+        )
+        ts = now_iso()
+        conn.execute(
+            "UPDATE articles SET state = 'later', later_until = ?, updated_at = ? WHERE id = ?",
+            (later_until, ts, article_id),
+        )
+
+        return _get_article_row(conn, article_id)

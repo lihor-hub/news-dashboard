@@ -1,15 +1,20 @@
+import type { WorkflowState } from './lib/workflowTypes';
+
 export type ArticleStatus = 'new' | 'read' | 'saved' | 'skipped' | 'archived';
 
 export interface Article {
   id: number;
   url: string;
   title: string;
+  source_slug?: string;
   source_name: string;
   category: string;
   kind: string;
   published_at?: string | null;
   discovered_at: string;
   status: ArticleStatus;
+  state?: WorkflowState;
+  starred?: boolean | number;
   importance_score: number;
   summary: string;
   reason: string;
@@ -18,6 +23,10 @@ export interface Article {
   saved_at?: string | null;
   skipped_at?: string | null;
   archived_at?: string | null;
+  done_at?: string | null;
+  starred_at?: string | null;
+  later_until?: string | null;
+  restored_at?: string | null;
   also_from?: string[];
   canonical_id?: number | null;
   body?: string | null;

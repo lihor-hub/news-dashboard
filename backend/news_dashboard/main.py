@@ -14,7 +14,16 @@ from pydantic import BaseModel
 
 from .body_fetch import fetch_and_cache_body, get_article
 from .db import connect, describe_database, init_db, row_to_dict
-from .ingest import ingest_all, list_articles, search_articles, set_article_status, sync_sources
+from .ingest import (
+    ingest_all,
+    list_articles,
+    search_articles,
+    send_article_later,
+    set_article_starred,
+    set_article_status,
+    sync_sources,
+    transition_article_state,
+)
 from .ingest_events import stream_ingest_events
 from .run_history import get_ingest_run_sources, list_ingest_runs
 from .scheduler import (
@@ -59,6 +68,18 @@ app.add_middleware(
 
 class StatusUpdate(BaseModel):
     status: str
+
+
+class StateUpdate(BaseModel):
+    state: str
+
+
+class StarUpdate(BaseModel):
+    starred: bool
+
+
+class LaterUpdate(BaseModel):
+    days: int = 1
 
 
 class EnabledUpdate(BaseModel):
@@ -107,11 +128,22 @@ def ingest_run_sources(run_id: int) -> dict[str, Any]:
 @app.get("/api/articles")
 def articles(
     status: Annotated[str | None, Query()] = None,
+    state: Annotated[str | None, Query()] = None,
+    starred: Annotated[bool | None, Query()] = None,
     category: Annotated[str | None, Query()] = None,
     limit: Annotated[int, Query(ge=1, le=500)] = 100,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> dict[str, Any]:
-    return {"items": list_articles(status=status, category=category, limit=limit, offset=offset)}
+    return {
+        "items": list_articles(
+            status=status,
+            state=state,
+            starred=starred,
+            category=category,
+            limit=limit,
+            offset=offset,
+        )
+    }
 
 
 @app.get("/api/search")
@@ -143,6 +175,36 @@ def fetch_article_body(article_id: int) -> dict[str, Any]:
 def update_status(article_id: int, payload: StatusUpdate) -> dict[str, Any]:
     try:
         article = set_article_status(article_id, payload.status)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if not article:
+        raise HTTPException(status_code=404, detail="article not found")
+    return article
+
+
+@app.patch("/api/articles/{article_id}/state")
+def update_state(article_id: int, payload: StateUpdate) -> dict[str, Any]:
+    try:
+        article = transition_article_state(article_id, payload.state)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if not article:
+        raise HTTPException(status_code=404, detail="article not found")
+    return article
+
+
+@app.patch("/api/articles/{article_id}/star")
+def update_star(article_id: int, payload: StarUpdate) -> dict[str, Any]:
+    article = set_article_starred(article_id, payload.starred)
+    if not article:
+        raise HTTPException(status_code=404, detail="article not found")
+    return article
+
+
+@app.patch("/api/articles/{article_id}/later")
+def snooze_later(article_id: int, payload: LaterUpdate) -> dict[str, Any]:
+    try:
+        article = send_article_later(article_id, payload.days)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     if not article:

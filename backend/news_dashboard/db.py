@@ -125,6 +125,32 @@ SQLITE_COLUMN_MIGRATIONS = [
     ("articles", "embedding", "BLOB"),
     ("articles", "body", "TEXT"),
     ("articles", "body_status", "TEXT NOT NULL DEFAULT 'missing'"),
+    # #87 workflow state model
+    ("articles", "state", "TEXT NOT NULL DEFAULT 'today'"),
+    ("articles", "starred", "INTEGER NOT NULL DEFAULT 0"),
+    ("articles", "done_at", "TEXT"),
+    ("articles", "starred_at", "TEXT"),
+    ("articles", "later_until", "TEXT"),
+    ("articles", "restored_at", "TEXT"),
+]
+
+# Data-only migrations run after column additions (idempotent via WHERE guard)
+SQLITE_DATA_MIGRATIONS = [
+    # Migrate legacy status → state+starred (only touches rows that still need it)
+    """UPDATE articles SET state = CASE status
+         WHEN 'new'      THEN 'today'
+         WHEN 'read'     THEN 'done'
+         WHEN 'saved'    THEN 'today'
+         WHEN 'skipped'  THEN 'skipped'
+         WHEN 'archived' THEN 'archived'
+         ELSE 'today'
+       END
+       WHERE state = 'today' AND status != 'new'""",
+    "UPDATE articles SET starred = 1, starred_at = saved_at WHERE status = 'saved' AND starred = 0",
+    (
+        "UPDATE articles SET done_at = read_at"
+        " WHERE status = 'read' AND done_at IS NULL AND read_at IS NOT NULL"
+    ),
 ]
 
 POSTGRES_SCHEMA = [
@@ -224,6 +250,32 @@ POSTGRES_SCHEMA = [
     # Full body text extracted on first reader open (#79)
     "ALTER TABLE articles ADD COLUMN IF NOT EXISTS body TEXT",
     "ALTER TABLE articles ADD COLUMN IF NOT EXISTS body_status TEXT NOT NULL DEFAULT 'missing'",
+    # #87 workflow state model: new columns + data migration from legacy status
+    "ALTER TABLE articles ADD COLUMN IF NOT EXISTS state TEXT NOT NULL DEFAULT 'today'",
+    "ALTER TABLE articles ADD COLUMN IF NOT EXISTS starred INTEGER NOT NULL DEFAULT 0",
+    "ALTER TABLE articles ADD COLUMN IF NOT EXISTS done_at TEXT",
+    "ALTER TABLE articles ADD COLUMN IF NOT EXISTS starred_at TEXT",
+    "ALTER TABLE articles ADD COLUMN IF NOT EXISTS later_until TEXT",
+    "ALTER TABLE articles ADD COLUMN IF NOT EXISTS restored_at TEXT",
+    # Migrate existing status values to state + starred
+    """
+    UPDATE articles SET state = CASE status
+      WHEN 'new'      THEN 'today'
+      WHEN 'read'     THEN 'done'
+      WHEN 'saved'    THEN 'today'
+      WHEN 'skipped'  THEN 'skipped'
+      WHEN 'archived' THEN 'archived'
+      ELSE 'today'
+    END
+    WHERE state = 'today' AND status != 'new'
+    """,
+    "UPDATE articles SET starred = 1, starred_at = saved_at WHERE status = 'saved' AND starred = 0",
+    (
+        "UPDATE articles SET done_at = read_at"
+        " WHERE status = 'read' AND done_at IS NULL AND read_at IS NOT NULL"
+    ),
+    "CREATE INDEX IF NOT EXISTS idx_articles_state ON articles(state)",
+    "CREATE INDEX IF NOT EXISTS idx_articles_starred ON articles(starred)",
     # Ingest run telemetry from issue #50. Stats endpoints read these tables.
     """
     CREATE INDEX IF NOT EXISTS idx_ingest_run_sources_source_run
@@ -345,6 +397,15 @@ def _build_fts_index(conn: Any) -> None:
         logger.debug("FTS rebuild skipped: articles_fts not available")
 
 
+def _apply_sqlite_data_migrations(conn: Any) -> None:
+    """Idempotently run data-only migrations for SQLite (WHERE-guarded updates)."""
+    for sql in SQLITE_DATA_MIGRATIONS:
+        try:
+            conn.execute(sql)
+        except Exception:
+            logger.debug("Data migration skipped: %.80s", sql)
+
+
 def init_db(db_path: Path | None = None, database_url: str | None = None) -> None:
     if is_postgres(database_url):
         with connect(db_path, database_url) as conn:
@@ -357,6 +418,7 @@ def init_db(db_path: Path | None = None, database_url: str | None = None) -> Non
     with connect(db_path, database_url) as conn:
         conn.executescript(SQLITE_SCHEMA)
         _apply_sqlite_column_migrations(conn)
+        _apply_sqlite_data_migrations(conn)
         _build_fts_index(conn)
 
 
