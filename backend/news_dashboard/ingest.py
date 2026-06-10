@@ -15,7 +15,7 @@ from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
 import feedparser
 
-from .db import connect, init_db, insert_article_sql, is_postgres, row_to_dict, search_articles_sql
+from .db import connect, init_db, insert_article_sql, is_postgres, row_to_dict
 from .ingest_events import ingest_events
 from .sources import DEFAULT_SOURCES, SourceDefinition
 
@@ -687,10 +687,81 @@ def list_articles(
         return articles
 
 
-def search_articles(q: str, limit: int = 50, db_path: Path | None = None) -> list[dict[str, Any]]:
+def search_articles(  # noqa: PLR0913
+    q: str = "",
+    limit: int = 50,
+    db_path: Path | None = None,
+    states: list[str] | None = None,
+    categories: list[str] | None = None,
+    sources: list[str] | None = None,
+    starred_only: bool = False,
+    include_archived: bool = False,
+    date_range: str = "all",
+) -> list[dict[str, Any]]:
     init_db(db_path)
     terms = [t for t in q.split() if len(t) >= 2]
-    sql, params = search_articles_sql(terms, limit)
+
+    clauses: list[str] = []
+    params: list[Any] = []
+
+    # Full-text search across title, summary, reason, tags, source_name, body
+    for term in terms:
+        like = f"%{term}%"
+        clauses.append(
+            "(title LIKE ? OR summary LIKE ? OR reason LIKE ? OR tags LIKE ?"
+            " OR source_name LIKE ? OR (body IS NOT NULL AND body LIKE ?))"
+        )
+        params.extend([like, like, like, like, like, like])
+
+    # Archived exclusion — must come before state filter to avoid conflict
+    if not include_archived:
+        clauses.append("state != 'archived'")
+
+    # State filter (multi-select; overrides archived exclusion for explicit archived selection)
+    if states:
+        placeholders = ",".join("?" * len(states))
+        clauses.append(f"state IN ({placeholders})")
+        params.extend(states)
+        if include_archived is False and "archived" in states:
+            # User explicitly wants archived — remove the exclusion clause we just added
+            clauses.remove("state != 'archived'")
+
+    # Category filter
+    if categories:
+        placeholders = ",".join("?" * len(categories))
+        clauses.append(f"category IN ({placeholders})")
+        params.extend(categories)
+
+    # Source filter
+    if sources:
+        placeholders = ",".join("?" * len(sources))
+        clauses.append(f"source_slug IN ({placeholders})")
+        params.extend(sources)
+
+    # Starred filter
+    if starred_only:
+        clauses.append("starred = 1")
+
+    # Date range filter
+    now_ts = now_iso()
+    if date_range == "today":
+        clauses.append("discovered_at >= datetime(?, '-1 day')")
+        params.append(now_ts)
+    elif date_range == "week":
+        clauses.append("discovered_at >= datetime(?, '-7 days')")
+        params.append(now_ts)
+    elif date_range == "month":
+        clauses.append("discovered_at >= datetime(?, '-30 days')")
+        params.append(now_ts)
+
+    where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+    params.append(limit)
+
+    sql = (
+        f"SELECT * FROM articles {where}"
+        " ORDER BY importance_score DESC, discovered_at DESC LIMIT ?"
+    )
+
     with connect(db_path) as conn:
         rows = conn.execute(sql, params).fetchall()
         return [_article_dict(row) for row in rows]

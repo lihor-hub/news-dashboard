@@ -131,3 +131,31 @@ export async function patchArticleStar(id: string, starred: boolean): Promise<vo
 export function snapshot(article: WorkflowArticle): UndoSnapshot {
   return { article: { ...article } };
 }
+
+// ─── Search ─────────────────────────────────────────────────────────────────
+
+export interface SearchFilters {
+  q?: string;
+  states?: WorkflowState[];
+  categories?: string[];
+  sources?: string[];
+  starredOnly?: boolean;
+  includeArchived?: boolean;
+  dateRange?: 'all' | 'today' | 'week' | 'month';
+  limit?: number;
+}
+
+export async function searchArticlesFiltered(filters: SearchFilters): Promise<WorkflowArticle[]> {
+  const params = new URLSearchParams();
+  if (filters.q) params.set('q', filters.q);
+  if (filters.limit) params.set('limit', String(filters.limit));
+  if (filters.starredOnly) params.set('starred_only', 'true');
+  if (filters.includeArchived) params.set('include_archived', 'true');
+  if (filters.dateRange && filters.dateRange !== 'all') params.set('date_range', filters.dateRange);
+  filters.states?.forEach((s) => params.append('states', s));
+  filters.categories?.forEach((c) => params.append('categories', c));
+  filters.sources?.forEach((s) => params.append('sources', s));
+
+  const data = await requestJson<{ items: LegacyArticle[] }>(`/api/search?${params}`);
+  return data.items.map(adaptArticle);
+}

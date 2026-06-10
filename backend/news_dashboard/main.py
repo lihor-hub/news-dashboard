@@ -147,11 +147,28 @@ def articles(
 
 
 @app.get("/api/search")
-def search(
-    q: Annotated[str, Query(min_length=1, description="Space-separated search terms")] = "",
+def search(  # noqa: PLR0913
+    q: Annotated[str, Query(description="Space-separated search terms")] = "",
     limit: Annotated[int, Query(ge=1, le=200)] = 50,
+    states: Annotated[list[str] | None, Query()] = None,
+    categories: Annotated[list[str] | None, Query()] = None,
+    sources: Annotated[list[str] | None, Query()] = None,
+    starred_only: Annotated[bool, Query()] = False,
+    include_archived: Annotated[bool, Query()] = False,
+    date_range: Annotated[str, Query()] = "all",
 ) -> dict[str, Any]:
-    return {"items": search_articles(q=q.strip(), limit=limit)}
+    return {
+        "items": search_articles(
+            q=q.strip(),
+            limit=limit,
+            states=states,
+            categories=categories,
+            sources=sources,
+            starred_only=starred_only,
+            include_archived=include_archived,
+            date_range=date_range,
+        )
+    }
 
 
 @app.get("/api/articles/{article_id}")
