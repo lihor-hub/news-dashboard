@@ -75,10 +75,10 @@ export async function updateArticleStatus(id: number, status: ArticleStatus): Pr
   });
 }
 
-export async function askAI(query: string): Promise<AskResponse> {
+export async function askAI(query: string, includeAll = false): Promise<AskResponse> {
   return requestJson<AskResponse>('/api/ask', {
     method: 'POST',
-    body: JSON.stringify({ query }),
+    body: JSON.stringify({ query, include_all: includeAll }),
   });
 }
 

@@ -110,20 +110,21 @@ def ensure_article_embedded(article_id: int, db_path: Any = None) -> None:
         )
 
 
-def embed_all_eligible(db_path: Any = None) -> int:
-    """Embed all saved/read articles that don't have an embedding yet.
+def embed_all_eligible(db_path: Any = None, *, include_all: bool = False) -> int:
+    """Embed eligible articles that don't have an embedding yet.
 
     Called lazily on the first /api/ask request to backfill existing articles.
     Returns the number of articles newly embedded.
     """
     from .db import connect, init_db
 
+    status_filter = "status != 'archived'" if include_all else "status IN ('saved', 'read')"
     init_db(db_path)
     with connect(db_path) as conn:
-        rows = conn.execute(
-            "SELECT id, title, summary FROM articles "
-            "WHERE status IN ('saved', 'read') AND embedding IS NULL",
-        ).fetchall()
+        query = (
+            f"SELECT id, title, summary FROM articles WHERE {status_filter} AND embedding IS NULL"
+        )
+        rows = conn.execute(query).fetchall()
 
     count = 0
     for row in rows:
@@ -146,30 +147,34 @@ def embed_all_eligible(db_path: Any = None) -> int:
 # ── Main Q&A entry-point ───────────────────────────────────────────────────
 
 
-def ask(query: str, db_path: Any = None) -> dict[str, Any]:
+def ask(query: str, db_path: Any = None, *, include_all: bool = False) -> dict[str, Any]:
     """Answer *query* using RAG over saved/read articles.
+
+    Args:
+        include_all: When True, includes all non-archived articles instead of
+            only Starred (saved) + Done (read) articles.
 
     Returns:
         {
           "answer": str,
           "sources": [{"id": int, "title": str, "url": str}, ...]
         }
-
-    Raises:
-        ValueError if fewer than MIN_ARTICLES are embedded.
     """
     from .db import connect, init_db
 
     # 1. Backfill embeddings for any eligible articles not yet embedded
-    embed_all_eligible(db_path)
+    embed_all_eligible(db_path, include_all=include_all)
+
+    status_filter = "status != 'archived'" if include_all else "status IN ('saved', 'read')"
 
     # 2. Load embedded articles
     init_db(db_path)
     with connect(db_path) as conn:
-        rows = conn.execute(
+        query = (
             "SELECT id, title, url, summary, embedding FROM articles "
-            "WHERE status IN ('saved', 'read') AND embedding IS NOT NULL",
-        ).fetchall()
+            f"WHERE {status_filter} AND embedding IS NOT NULL"
+        )
+        rows = conn.execute(query).fetchall()
 
     if len(rows) < MIN_ARTICLES:
         return {

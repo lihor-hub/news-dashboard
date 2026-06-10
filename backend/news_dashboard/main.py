@@ -272,6 +272,7 @@ def stats_ingested_vs_handled_endpoint() -> dict[str, Any]:
 
 class AskRequest(BaseModel):
     query: str
+    include_all: bool = False
 
 
 @app.post("/api/ask")
@@ -283,7 +284,7 @@ def ask_ai(payload: AskRequest) -> dict[str, Any]:
     if not q:
         raise HTTPException(status_code=400, detail="query must not be empty")
     try:
-        return ask(q)
+        return ask(q, include_all=payload.include_all)
     except Exception as exc:
         # Surface errors clearly (missing API keys, etc.)
         raise HTTPException(status_code=500, detail=str(exc)) from exc

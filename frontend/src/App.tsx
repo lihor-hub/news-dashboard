@@ -1,14 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import './styles.css';
-import {
-  askAI,
-  fetchArticles,
-  fetchSummary,
-  ingestNow,
-  searchArticles,
-  updateArticleStatus,
-} from './api';
-import type { Article, ArticleStatus, AskResponse, Summary } from './types';
+import { fetchArticles, fetchSummary, ingestNow, searchArticles, updateArticleStatus } from './api';
+import type { Article, ArticleStatus, Summary } from './types';
 
 type ActiveTab = 'inbox' | 'saved' | 'read' | 'skipped' | 'archived' | 'sources' | 'scheduler';
 
@@ -361,60 +354,14 @@ function BulkBar({ count, onAction, onClear }: BulkBarProps) {
   );
 }
 
-// ===== AskPanel =====
-
-interface AskPanelProps {
-  result: AskResponse | null;
-  loading: boolean;
-}
-
-function AskPanel({ result, loading }: AskPanelProps) {
-  if (loading) {
-    return (
-      <div className="ask-panel">
-        <div className="ask-loading">
-          <span className="skeleton sk-line" style={{ width: '80%' }} />
-          <span className="skeleton sk-line" style={{ width: '60%' }} />
-        </div>
-      </div>
-    );
-  }
-  if (!result) return null;
-  return (
-    <div className="ask-panel">
-      <p className="ask-answer">{result.answer}</p>
-      {result.sources.length > 0 && (
-        <div className="ask-sources">
-          <p className="ask-sources-label">Sources</p>
-          <ol className="ask-sources-list">
-            {result.sources.map((s, i) => (
-              <li key={s.id}>
-                <span className="ask-source-num">[{i + 1}]</span>{' '}
-                <a href={s.url} target="_blank" rel="noreferrer">
-                  {s.title}
-                </a>
-              </li>
-            ))}
-          </ol>
-        </div>
-      )}
-    </div>
-  );
-}
-
 // ===== App =====
 
 interface AppProps {
   initialTab?: ActiveTab;
   hideLegacyNav?: boolean;
-  initialAskMode?: boolean;
 }
 
-export default function App({
-  initialTab = 'inbox',
-  hideLegacyNav = false,
-  initialAskMode = false,
-}: AppProps) {
+export default function App({ initialTab = 'inbox', hideLegacyNav = false }: AppProps) {
   const [articles, setArticles] = useState<Article[]>([]);
   const [summary, setSummary] = useState<Summary>({ byStatus: {}, byCategory: {} });
   const [activeTab, setActiveTab] = useState<ActiveTab>(initialTab);
@@ -426,37 +373,6 @@ export default function App({
     text: string;
     kind: 'info' | 'success' | 'error';
   } | null>(null);
-
-  // AI Ask mode (issue #23)
-  const [askMode, setAskMode] = useState(initialAskMode);
-  const [askQuery, setAskQuery] = useState('');
-  const [askResult, setAskResult] = useState<AskResponse | null>(null);
-  const [askLoading, setAskLoading] = useState(false);
-
-  async function submitAsk() {
-    const q = askQuery.trim();
-    if (!q || askLoading) return;
-    setAskLoading(true);
-    setAskResult(null);
-    try {
-      const result = await askAI(q);
-      setAskResult(result);
-    } catch (err) {
-      setAskResult({
-        answer: err instanceof Error ? `Error: ${err.message}` : 'Something went wrong.',
-        sources: [],
-      });
-    } finally {
-      setAskLoading(false);
-    }
-  }
-
-  function switchMode(mode: 'search' | 'ask') {
-    setAskMode(mode === 'ask');
-    setSearch('');
-    setAskQuery('');
-    setAskResult(null);
-  }
 
   // Issue #16: dark mode
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
@@ -763,61 +679,17 @@ export default function App({
 
           {activeTab !== 'sources' && activeTab !== 'scheduler' && (
             <div className="topbar-search">
-              <div className="search-mode-toggle" role="group" aria-label="Search mode">
-                <button
-                  className={`search-mode-btn${!askMode ? ' active' : ''}`}
-                  onClick={() => switchMode('search')}
-                  aria-pressed={!askMode}
-                >
-                  Search
-                </button>
-                <button
-                  className={`search-mode-btn${askMode ? ' active' : ''}`}
-                  onClick={() => switchMode('ask')}
-                  aria-pressed={askMode}
-                >
-                  Ask
-                </button>
-              </div>
-              {!askMode ? (
-                <>
-                  <span className="topbar-search-icon" aria-hidden>
-                    ⌕
-                  </span>
-                  <input
-                    ref={searchInputRef}
-                    type="search"
-                    placeholder="Search all articles…"
-                    value={search}
-                    onChange={(e) => setSearch(e.target.value)}
-                    aria-label="Search articles"
-                  />
-                </>
-              ) : (
-                <form
-                  className="ask-form"
-                  onSubmit={(e) => {
-                    e.preventDefault();
-                    void submitAsk();
-                  }}
-                >
-                  <input
-                    type="text"
-                    placeholder="Ask a question about your saved articles…"
-                    value={askQuery}
-                    onChange={(e) => setAskQuery(e.target.value)}
-                    aria-label="Ask AI"
-                    disabled={askLoading}
-                  />
-                  <button
-                    type="submit"
-                    className="ask-submit-btn"
-                    disabled={!askQuery.trim() || askLoading}
-                  >
-                    {askLoading ? '…' : '↵'}
-                  </button>
-                </form>
-              )}
+              <span className="topbar-search-icon" aria-hidden>
+                ⌕
+              </span>
+              <input
+                ref={searchInputRef}
+                type="search"
+                placeholder="Search all articles…"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                aria-label="Search articles"
+              />
             </div>
           )}
 
@@ -906,8 +778,6 @@ export default function App({
           </button>
         </div>
       )}
-
-      {askMode && <AskPanel result={askResult} loading={askLoading} />}
 
       <main>
         <>
