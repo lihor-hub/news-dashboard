@@ -4,6 +4,7 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
+from collections.abc import MutableMapping
 from typing import Annotated, Any
 
 from fastapi import FastAPI, HTTPException, Query
@@ -54,7 +55,7 @@ from .stats import (
 class SPAStaticFiles(StaticFiles):
     """Serve index.html for client-side routes while preserving API/static 404s."""
 
-    async def get_response(self, path: str, scope: dict[str, Any]) -> Response:
+    async def get_response(self, path: str, scope: MutableMapping[str, Any]) -> Response:
         try:
             return await super().get_response(path, scope)
         except StarletteHTTPException as exc:
