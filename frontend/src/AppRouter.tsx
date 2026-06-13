@@ -15,6 +15,7 @@ import { StatsPage } from './pages/StatsPage';
 import { ArchivePage } from './pages/ArchivePage';
 import { SettingsPage } from './pages/SettingsPage';
 import { ArticlePage } from './pages/ArticlePage';
+import { BriefPage } from './pages/BriefPage';
 
 function NotFound() {
   return (
@@ -52,6 +53,7 @@ const router = createBrowserRouter([
       { path: 'starred', element: <StarredPage /> },
       { path: 'search', element: <SearchPage /> },
       { path: 'ask', element: <AskPage /> },
+      { path: 'brief', element: <BriefPage /> },
       {
         path: 'feeds',
         element: <FeedsPage />,

@@ -4,6 +4,9 @@ import type {
   ArticleStatus,
   ArticlesOverTimePoint,
   AskResponse,
+  Briefing,
+  BriefingCreateResponse,
+  BriefingLatestResponse,
   CategoryMixPoint,
   IngestedVsHandledPoint,
   Source,
@@ -182,4 +185,21 @@ export async function fetchIngestRuns(page = 1, perPage = 10): Promise<IngestRun
 export async function fetchIngestRunSources(runId: number): Promise<IngestRunSource[]> {
   const data = await requestJson<{ items: IngestRunSource[] }>(`/api/ingest/runs/${runId}`);
   return data.items;
+}
+
+export async function fetchLatestBriefing(): Promise<BriefingLatestResponse> {
+  return requestJson<BriefingLatestResponse>('/api/briefings/latest');
+}
+
+export async function createBriefing(): Promise<BriefingCreateResponse> {
+  return requestJson<BriefingCreateResponse>('/api/briefings', { method: 'POST' });
+}
+
+export async function fetchBriefing(id: number): Promise<Briefing> {
+  return requestJson<Briefing>(`/api/briefings/${id}`);
+}
+
+export async function fetchBriefings(limit = 50, offset = 0): Promise<{ items: Briefing[] }> {
+  const params = new URLSearchParams({ limit: String(limit), offset: String(offset) });
+  return requestJson<{ items: Briefing[] }>(`/api/briefings?${params}`);
 }
