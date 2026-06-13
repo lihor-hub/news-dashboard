@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- Dark warm charcoal background -->
+  <rect width="32" height="32" rx="7" fill="#221f1a"/>
+
+  <!-- Headline bar -->
+  <rect x="5" y="5" width="22" height="4" rx="1.5" fill="#f0ede8"/>
+
+  <!-- Left column text lines -->
+  <rect x="5" y="12"  width="10" height="2"   rx="1" fill="#f0ede8" opacity="0.78"/>
+  <rect x="5" y="16"  width="10" height="2"   rx="1" fill="#f0ede8" opacity="0.60"/>
+  <rect x="5" y="20"  width="8"  height="2"   rx="1" fill="#f0ede8" opacity="0.44"/>
+  <rect x="5" y="24"  width="9"  height="2"   rx="1" fill="#f0ede8" opacity="0.28"/>
+
+  <!-- Right column image / card placeholder (warm amber) -->
+  <rect x="18" y="12" width="9"  height="9"   rx="2" fill="#c8a45e" opacity="0.82"/>
+  <!-- small caption line under image -->
+  <rect x="18" y="23" width="9"  height="1.5" rx="0.75" fill="#f0ede8" opacity="0.35"/>
+</svg>
