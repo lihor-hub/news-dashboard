@@ -146,6 +146,12 @@ export function AppShell() {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      // ⌘K/Ctrl+K toggles the palette even when an input is focused (e.g. to close it)
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        setPaletteOpen((v) => !v);
+        return;
+      }
       const target = e.target as HTMLElement;
       if (
         target?.tagName === 'INPUT' ||
@@ -153,10 +159,7 @@ export function AppShell() {
         target?.isContentEditable
       )
         return;
-      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
-        e.preventDefault();
-        setPaletteOpen((v) => !v);
-      } else if (e.key === '?') {
+      if (e.key === '?') {
         setShortcutsOpen((v) => !v);
       } else if (e.key === 'g') {
         const handler2 = (e2: KeyboardEvent) => {
