@@ -156,3 +156,44 @@ export interface IngestRunPage {
   total: number;
   has_more: boolean;
 }
+
+export interface BriefingSection {
+  title: string;
+  body: string;
+  citations: number[];
+}
+
+export interface BriefingContent {
+  sections: BriefingSection[];
+  worth_opening: number[];
+}
+
+export interface BriefingArticle {
+  id: number;
+  title: string;
+  url: string;
+  source_name: string;
+  category: string;
+  section_index: number | null;
+  citation_index: number | null;
+  importance_score?: number;
+  summary?: string;
+}
+
+export interface Briefing {
+  id: number;
+  created_at: string;
+  scope: string;
+  since_at: string;
+  until_at: string;
+  status: 'complete' | 'failed';
+  title: string;
+  summary: string;
+  content: BriefingContent | null;
+  model: string;
+  error: string | null;
+  articles: BriefingArticle[];
+}
+
+export type BriefingLatestResponse = Briefing | { status: 'empty' };
+export type BriefingCreateResponse = Briefing | { status: 'no_candidates' };
