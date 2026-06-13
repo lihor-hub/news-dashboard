@@ -58,7 +58,7 @@ _CANDIDATES_SQL = """
     SELECT id, title, url, source_name, category, summary, importance_score, discovered_at
     FROM articles
     WHERE state = 'today'
-      AND discovered_at >= %s
+      AND discovered_at::timestamptz >= %s
     ORDER BY importance_score DESC NULLS LAST, discovered_at DESC
     LIMIT %s
 """
