@@ -570,35 +570,50 @@ def test_generate_briefing_creates_briefing_row(pg_clean: str) -> None:
 
 def test_generate_briefing_links_section_citations(pg_clean: str) -> None:
     _seed_source(pg_clean)
-    a1 = _seed_article(pg_clean, url="https://example.com/b1", title="B1", state="today")
-    a2 = _seed_article(pg_clean, url="https://example.com/b2", title="B2", state="today")
+    # Use distinct importance scores so candidate ordering is deterministic
+    a1 = _seed_article(
+        pg_clean, url="https://example.com/b1", title="B1", state="today", importance_score=90
+    )
+    a2 = _seed_article(
+        pg_clean, url="https://example.com/b2", title="B2", state="today", importance_score=10
+    )
 
+    # _fake_ai puts candidates[0] (a1, score=90) and candidates[1] (a2, score=10) in citations
     result = generate_briefing(database_url=pg_clean, ai_fn=_fake_ai)
 
     article_ids = {a["id"] for a in result["articles"]}
     assert a1 in article_ids
     assert a2 in article_ids
 
-    # First article: cited in section 0 at index 0
     cited = {a["id"]: a for a in result["articles"]}
     assert cited[a1]["section_index"] == 0
-    assert cited[a1]["citation_index"] == 0
+    assert cited[a1]["citation_index"] == 0  # a1 is candidates[0] → citation index 0
+    assert cited[a2]["section_index"] == 0
+    assert cited[a2]["citation_index"] == 1  # a2 is candidates[1] → citation index 1
 
 
 def test_generate_briefing_worth_opening_gets_null_indices(pg_clean: str) -> None:
     _seed_source(pg_clean)
-    a1 = _seed_article(pg_clean, url="https://example.com/c1", title="C1", state="today")
-    _seed_article(pg_clean, url="https://example.com/c2", title="C2", state="today")
-    a3 = _seed_article(pg_clean, url="https://example.com/c3", title="C3", state="today")
+    # Seed with distinct importance scores for deterministic candidate order:
+    # candidates order will be: a1 (90), a2 (50), a3 (10)
+    a1 = _seed_article(
+        pg_clean, url="https://example.com/c1", title="C1", state="today", importance_score=90
+    )
+    a2 = _seed_article(
+        pg_clean, url="https://example.com/c2", title="C2", state="today", importance_score=50
+    )
+    a3 = _seed_article(
+        pg_clean, url="https://example.com/c3", title="C3", state="today", importance_score=10
+    )
 
+    # Use a closure so the AI references known IDs directly, ignoring candidate order
     def _ai_worth_only(candidates: list[dict[str, Any]], model: str) -> dict[str, Any]:
-        ids = [c["id"] for c in candidates]
         return {
             "title": "T",
             "summary": "S",
-            "sections": [{"title": "S0", "body": "B", "citations": [ids[0], ids[1]]}],
-            # a3 appears only in worth_opening (no section citation)
-            "worth_opening": [ids[2]],
+            # a1 and a2 are section citations; a3 appears only in worth_opening
+            "sections": [{"title": "S0", "body": "B", "citations": [a1, a2]}],
+            "worth_opening": [a3],
         }
 
     result = generate_briefing(database_url=pg_clean, ai_fn=_ai_worth_only)
@@ -609,6 +624,10 @@ def test_generate_briefing_worth_opening_gets_null_indices(pg_clean: str) -> Non
     assert by_id[a3]["citation_index"] is None
     assert a1 in by_id
     assert by_id[a1]["section_index"] == 0
+    assert by_id[a1]["citation_index"] == 0
+    assert a2 in by_id
+    assert by_id[a2]["section_index"] == 0
+    assert by_id[a2]["citation_index"] == 1
 
 
 def test_generate_briefing_persisted_to_db(pg_clean: str) -> None:
