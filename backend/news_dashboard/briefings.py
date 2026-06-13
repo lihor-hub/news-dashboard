@@ -6,6 +6,7 @@ Runtime SQL uses psycopg %s parameter style. No SQLite fallback.
 from __future__ import annotations
 
 import json
+import logging
 import os
 from collections.abc import Callable
 from datetime import datetime, timedelta, timezone
@@ -16,6 +17,9 @@ from .db import connect, row_to_dict
 
 CANDIDATE_LIMIT = 40
 DEFAULT_BRIEFING_MODEL = "gpt-4o-mini"
+IDEMPOTENCY_WINDOW_MINUTES = 10
+
+logger = logging.getLogger(__name__)
 
 # ── Error types ───────────────────────────────────────────────────────────────
 
@@ -264,6 +268,48 @@ def _save_briefing(
     return result
 
 
+def _find_recent_briefing(
+    window_minutes: int,
+    database_url: str | None = None,
+) -> dict[str, Any] | None:
+    """Return the most recent complete briefing if created within window_minutes, else None."""
+    cutoff = datetime.now(timezone.utc) - timedelta(minutes=window_minutes)
+    with connect(database_url=database_url) as conn:
+        row = conn.execute(
+            """
+            SELECT id FROM briefings
+            WHERE status = 'complete' AND created_at >= %s
+            ORDER BY created_at DESC
+            LIMIT 1
+            """,
+            (cutoff,),
+        ).fetchone()
+    if row is None:
+        return None
+    return get_briefing(int(row_to_dict(row)["id"]), database_url=database_url)
+
+
+def _save_failed_briefing(
+    since_at: datetime,
+    until_at: datetime,
+    exc: Exception,
+    model: str,
+    database_url: str | None = None,
+) -> None:
+    """Persist a failed-status row for observability; DB errors are swallowed."""
+    try:
+        with connect(database_url=database_url) as conn:
+            conn.execute(
+                """
+                INSERT INTO briefings(scope, since_at, until_at, status, model, error)
+                VALUES (%s, %s, %s, %s, %s, %s)
+                """,
+                ("since_last_briefing", since_at, until_at, "failed", model, str(exc)),
+            )
+    except Exception:
+        logger.exception("Failed to persist failed-briefing row — original error follows")
+
+
 # ── Public API ────────────────────────────────────────────────────────────────
 
 
@@ -282,8 +328,12 @@ def generate_briefing(
     *,
     model: str | None = None,
     ai_fn: AiFn | None = None,
+    idempotency_window_minutes: int = IDEMPOTENCY_WINDOW_MINUTES,
 ) -> dict[str, Any]:
     """Generate and persist a briefing from eligible Today articles.
+
+    If a complete briefing already exists within ``idempotency_window_minutes``,
+    return it immediately without calling the AI again.
 
     Returns the saved briefing dict on success, or ``{"status": "no_candidates"}``
     when no eligible articles are found.
@@ -292,6 +342,10 @@ def generate_briefing(
         BriefingAINotConfiguredError: OPENAI_API_KEY is not set.
         BriefingGenerationError: AI returned an invalid or unparseable response.
     """
+    recent = _find_recent_briefing(idempotency_window_minutes, database_url)
+    if recent is not None:
+        return recent
+
     _env_model = os.getenv("OPENAI_BRIEFING_MODEL", DEFAULT_BRIEFING_MODEL)
     resolved_model = model if model is not None else _env_model
     since_at = _get_since_at(database_url)
@@ -303,9 +357,12 @@ def generate_briefing(
 
     candidate_ids = {int(a["id"]) for a in candidates}
     call_ai: AiFn = ai_fn if ai_fn is not None else _call_openai
-    raw_content = call_ai(candidates, resolved_model)
-
-    content = _validate_content(raw_content, candidate_ids)
+    try:
+        raw_content = call_ai(candidates, resolved_model)
+        content = _validate_content(raw_content, candidate_ids)
+    except (BriefingAINotConfiguredError, BriefingGenerationError) as exc:
+        _save_failed_briefing(since_at, until_at, exc, resolved_model, database_url)
+        raise
     return _save_briefing(since_at, until_at, content, candidate_ids, resolved_model, database_url)
 
 

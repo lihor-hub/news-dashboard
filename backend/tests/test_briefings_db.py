@@ -17,6 +17,7 @@ import pytest
 
 from news_dashboard.briefings import (
     CANDIDATE_LIMIT,
+    IDEMPOTENCY_WINDOW_MINUTES,
     BriefingGenerationError,
     _get_since_at,
     _validate_content,
@@ -639,3 +640,109 @@ def test_generate_briefing_persisted_to_db(pg_clean: str) -> None:
     briefings = list_briefings(database_url=pg_clean)
     assert len(briefings) == 1
     assert briefings[0]["title"] == "Fake Briefing"
+
+
+# ── Failed-status persistence ─────────────────────────────────────────────────
+
+
+def test_generate_briefing_persists_failed_row_on_generation_error(pg_clean: str) -> None:
+    _seed_source(pg_clean)
+    _seed_article(pg_clean, url="https://example.com/e1", title="E1", state="today")
+
+    def _bad_ai(candidates: list[dict[str, Any]], model: str) -> dict[str, Any]:
+        msg = "simulated AI failure"
+        raise BriefingGenerationError(msg)
+
+    with pytest.raises(BriefingGenerationError):
+        generate_briefing(database_url=pg_clean, ai_fn=_bad_ai)
+
+    briefings = list_briefings(database_url=pg_clean)
+    assert len(briefings) == 1
+    assert briefings[0]["status"] == "failed"
+    assert "simulated AI failure" in (briefings[0]["error"] or "")
+
+
+def test_generate_briefing_failed_row_has_no_content(pg_clean: str) -> None:
+    _seed_source(pg_clean)
+    _seed_article(pg_clean, url="https://example.com/f1", title="F1", state="today")
+
+    def _bad_ai(candidates: list[dict[str, Any]], model: str) -> dict[str, Any]:
+        msg = "boom"
+        raise BriefingGenerationError(msg)
+
+    with pytest.raises(BriefingGenerationError):
+        generate_briefing(database_url=pg_clean, ai_fn=_bad_ai)
+
+    result = get_latest_briefing(database_url=pg_clean)
+    assert result is not None
+    assert result["status"] == "failed"
+    assert result["content"] is None
+    assert result["articles"] == []
+
+
+# ── Idempotency guard ─────────────────────────────────────────────────────────
+
+
+def test_generate_briefing_returns_recent_briefing_without_calling_ai(pg_clean: str) -> None:
+    _seed_source(pg_clean)
+    _seed_briefing(pg_clean, title="Existing Brief")  # created_at = NOW()
+
+    def _should_not_run(candidates: list[dict[str, Any]], model: str) -> dict[str, Any]:
+        msg = "AI was called inside idempotency window"
+        raise AssertionError(msg)
+
+    result = generate_briefing(
+        database_url=pg_clean,
+        ai_fn=_should_not_run,
+        idempotency_window_minutes=IDEMPOTENCY_WINDOW_MINUTES,
+    )
+    assert result["title"] == "Existing Brief"
+
+
+def test_generate_briefing_skips_idempotency_when_window_is_zero(pg_clean: str) -> None:
+    _seed_source(pg_clean)
+    _seed_briefing(pg_clean, title="Old Brief")
+    _seed_article(pg_clean, url="https://example.com/g1", title="G1", state="today")
+
+    result = generate_briefing(
+        database_url=pg_clean,
+        ai_fn=_fake_ai,
+        idempotency_window_minutes=0,
+    )
+    # A window of 0 minutes means no guard — a new briefing should be generated
+    assert result["title"] == "Fake Briefing"
+    assert len(list_briefings(database_url=pg_clean)) == 2  # old + new
+
+
+def test_generate_briefing_ignores_failed_rows_in_idempotency_check(pg_clean: str) -> None:
+    _seed_source(pg_clean)
+    a1 = _seed_article(pg_clean, url="https://example.com/h1", title="H1", state="today")
+
+    def _bad_then_good_ai(candidates: list[dict[str, Any]], model: str) -> dict[str, Any]:
+        # First call: fail; second call (outside the guard): succeed
+        return {
+            "title": "Recovery Brief",
+            "summary": "S",
+            "sections": [{"title": "S", "body": "B", "citations": [a1]}],
+            "worth_opening": [],
+        }
+
+    def _always_fail(candidates: list[dict[str, Any]], model: str) -> dict[str, Any]:
+        msg = "fail"
+        raise BriefingGenerationError(msg)
+
+    with pytest.raises(BriefingGenerationError):
+        generate_briefing(
+            database_url=pg_clean,
+            ai_fn=_always_fail,
+            idempotency_window_minutes=IDEMPOTENCY_WINDOW_MINUTES,
+        )
+
+    # Failed row exists — but it should NOT block a retry
+    result = generate_briefing(
+        database_url=pg_clean,
+        ai_fn=_bad_then_good_ai,
+        idempotency_window_minutes=IDEMPOTENCY_WINDOW_MINUTES,
+    )
+    assert result["status"] == "complete"
+    assert result["title"] == "Recovery Brief"

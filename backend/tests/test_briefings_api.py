@@ -308,3 +308,11 @@ def test_create_returns_content_and_articles_on_success(monkeypatch: Any) -> Non
     assert "sections" in data["content"]
     assert "articles" in data
     assert len(data["articles"]) > 0
+
+
+def test_create_returns_existing_briefing_inside_idempotency_window(monkeypatch: Any) -> None:
+    existing = dict(_SAMPLE_BRIEFING)
+    monkeypatch.setattr(main_mod, "generate_briefing", lambda: existing)
+    resp = client.post("/api/briefings")
+    assert resp.status_code == 200
+    assert resp.json()["id"] == existing["id"]
