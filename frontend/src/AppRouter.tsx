@@ -1,6 +1,7 @@
 import { createBrowserRouter, RouterProvider, Navigate } from 'react-router-dom';
 import { FocusedArticleProvider } from './contexts/focusedArticle';
 import { AppShell } from './components/AppShell';
+import { BriefPage } from './pages/BriefPage';
 import { InboxPage } from './pages/InboxPage';
 import { LaterPage } from './pages/LaterPage';
 import { StarredPage } from './pages/StarredPage';
@@ -15,7 +16,6 @@ import { StatsPage } from './pages/StatsPage';
 import { ArchivePage } from './pages/ArchivePage';
 import { SettingsPage } from './pages/SettingsPage';
 import { ArticlePage } from './pages/ArticlePage';
-import { BriefPage } from './pages/BriefPage';
 
 function NotFound() {
   return (
@@ -48,12 +48,12 @@ const router = createBrowserRouter([
     path: '/',
     element: <AppShell />,
     children: [
-      { index: true, element: <InboxPage /> },
+      { index: true, element: <BriefPage /> },
+      { path: 'today', element: <InboxPage /> },
       { path: 'later', element: <LaterPage /> },
       { path: 'starred', element: <StarredPage /> },
       { path: 'search', element: <SearchPage /> },
       { path: 'ask', element: <AskPage /> },
-      { path: 'brief', element: <BriefPage /> },
       {
         path: 'feeds',
         element: <FeedsPage />,
@@ -69,7 +69,7 @@ const router = createBrowserRouter([
       { path: 'settings', element: <SettingsPage /> },
 
       /* Legacy route redirects — remove when each migration slice lands */
-      { path: 'inbox', element: <Navigate to="/" replace /> },
+      { path: 'inbox', element: <Navigate to="/today" replace /> },
       { path: 'saved', element: <Navigate to="/starred" replace /> },
       { path: 'read', element: <Navigate to="/archive" replace /> },
       { path: 'skipped', element: <Navigate to="/archive" replace /> },

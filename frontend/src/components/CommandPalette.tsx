@@ -6,6 +6,7 @@ import { Command } from 'cmdk';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { toast } from 'sonner';
 import {
+  Newspaper,
   Inbox,
   Clock,
   Star,
@@ -34,7 +35,8 @@ interface Props {
 }
 
 const NAV_ITEMS = [
-  { icon: Inbox, label: 'Today', to: '/' },
+  { icon: Newspaper, label: 'Brief', to: '/' },
+  { icon: Inbox, label: 'Today', to: '/today' },
   { icon: Clock, label: 'Later', to: '/later' },
   { icon: Star, label: 'Starred', to: '/starred' },
   { icon: Search, label: 'Search', to: '/search' },

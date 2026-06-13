@@ -2,6 +2,7 @@ import { useLocation, useNavigate, Outlet, Link } from 'react-router-dom';
 import { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
+  Newspaper,
   Inbox,
   Clock,
   Star,
@@ -32,14 +33,23 @@ function useNavCounts() {
   };
 }
 
-const navItems: { to: string; label: string; icon: React.ComponentType<{ className?: string }> }[] =
-  [
-    { to: '/', label: 'Today', icon: Inbox },
-    { to: '/later', label: 'Later', icon: Clock },
-    { to: '/starred', label: 'Starred', icon: Star },
-    { to: '/search', label: 'Search', icon: Search },
-    { to: '/ask', label: 'Ask', icon: Sparkles },
-  ];
+interface NavItem {
+  to: string;
+  label: string;
+  icon: React.ComponentType<{ className?: string }>;
+}
+
+// Desktop rail shows all primary + ask; mobile nav shows only the first 5.
+const navItems: NavItem[] = [
+  { to: '/', label: 'Brief', icon: Newspaper },
+  { to: '/today', label: 'Today', icon: Inbox },
+  { to: '/later', label: 'Later', icon: Clock },
+  { to: '/starred', label: 'Starred', icon: Star },
+  { to: '/search', label: 'Search', icon: Search },
+  { to: '/ask', label: 'Ask', icon: Sparkles },
+];
+
+const mobileNavItems = navItems.slice(0, 5);
 
 const moreItems = [
   { to: '/feeds', label: 'Feeds', icon: Radio },
@@ -48,8 +58,14 @@ const moreItems = [
   { to: '/settings', label: 'Settings', icon: Settings },
 ];
 
+function isNavActive(to: string, pathname: string): boolean {
+  if (to === '/' || to === '/today') return pathname === to;
+  return pathname.startsWith(to);
+}
+
 function currentTitle(p: string) {
-  if (p === '/') return 'Today';
+  if (p === '/') return 'Brief';
+  if (p === '/today') return 'Today';
   if (p.startsWith('/later')) return 'Later';
   if (p.startsWith('/starred')) return 'Starred';
   if (p.startsWith('/search')) return 'Search';
@@ -64,14 +80,14 @@ function currentTitle(p: string) {
 function DesktopRail({ pathname }: { pathname: string }) {
   const counts = useNavCounts();
   const countFor = (to: string): number | null =>
-    to === '/' ? counts.today : to === '/starred' ? counts.starred : null;
+    to === '/today' ? counts.today : to === '/starred' ? counts.starred : null;
 
   return (
     <aside className="hidden md:flex md:flex-col md:w-[200px] md:shrink-0 md:border-r md:border-border md:min-h-[calc(100vh-3rem)] md:sticky md:top-12 md:self-start">
       <nav className="flex flex-col p-2 gap-0.5">
         {navItems.map((n) => {
           const Icon = n.icon;
-          const active = n.to === '/' ? pathname === '/' : pathname.startsWith(n.to);
+          const active = isNavActive(n.to, pathname);
           const count = countFor(n.to);
           return (
             <Link
@@ -145,7 +161,8 @@ export function AppShell() {
       } else if (e.key === 'g') {
         const handler2 = (e2: KeyboardEvent) => {
           const k = e2.key.toLowerCase();
-          if (k === 't') navigate('/');
+          if (k === 'b') navigate('/');
+          else if (k === 't') navigate('/today');
           else if (k === 'l') navigate('/later');
           else if (k === 's') navigate('/starred');
           else if (k === 'a') navigate('/ask');
@@ -253,9 +270,9 @@ export function AppShell() {
       {/* Mobile bottom nav */}
       <nav className="md:hidden fixed bottom-0 inset-x-0 z-30 border-t border-border bg-background/95 backdrop-blur pb-[env(safe-area-inset-bottom)]">
         <div className="grid grid-cols-5">
-          {navItems.map((n) => {
+          {mobileNavItems.map((n) => {
             const Icon = n.icon;
-            const active = n.to === '/' ? pathname === '/' : pathname.startsWith(n.to);
+            const active = isNavActive(n.to, pathname);
             return (
               <Link
                 key={n.to}
