@@ -15,7 +15,14 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.responses import Response
 
 from .body_fetch import fetch_and_cache_body, get_article
-from .briefings import get_briefing, get_latest_briefing, list_briefings
+from .briefings import (
+    BriefingAINotConfiguredError,
+    BriefingGenerationError,
+    generate_briefing,
+    get_briefing,
+    get_latest_briefing,
+    list_briefings,
+)
 from .db import connect, describe_database, init_db, row_to_dict
 from .ingest import (
     ingest_all,
@@ -406,6 +413,17 @@ def briefings_detail(briefing_id: int) -> dict[str, Any]:
     if briefing is None:
         raise HTTPException(status_code=404, detail="briefing not found")
     return briefing
+
+
+@app.post("/api/briefings")
+def briefings_create() -> dict[str, Any]:
+    """Generate a briefing from eligible Today articles and persist it."""
+    try:
+        return generate_briefing()
+    except BriefingAINotConfiguredError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except BriefingGenerationError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
 class AskRequest(BaseModel):

@@ -21,6 +21,7 @@ from typing import Any
 from fastapi.testclient import TestClient
 
 import news_dashboard.main as main_mod
+from news_dashboard.briefings import BriefingAINotConfiguredError, BriefingGenerationError
 from news_dashboard.db import init_db
 from news_dashboard.main import app
 
@@ -255,3 +256,55 @@ def test_detail_cited_article_has_section_and_citation_index(monkeypatch: Any) -
     article = resp.json()["articles"][0]
     assert "section_index" in article
     assert "citation_index" in article
+
+
+# ── POST /api/briefings — generate ───────────────────────────────────────────
+
+
+def test_create_returns_briefing_on_success(monkeypatch: Any) -> None:
+    monkeypatch.setattr(main_mod, "generate_briefing", lambda: dict(_SAMPLE_BRIEFING))
+    resp = client.post("/api/briefings")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["id"] == 1
+    assert data["status"] == "complete"
+    assert "articles" in data
+
+
+def test_create_returns_no_candidates_when_no_today_articles(monkeypatch: Any) -> None:
+    monkeypatch.setattr(main_mod, "generate_briefing", lambda: {"status": "no_candidates"})
+    resp = client.post("/api/briefings")
+    assert resp.status_code == 200
+    assert resp.json() == {"status": "no_candidates"}
+
+
+def test_create_returns_503_when_ai_not_configured(monkeypatch: Any) -> None:
+    def _raise() -> dict[str, Any]:
+        msg = "OPENAI_API_KEY not set"
+        raise BriefingAINotConfiguredError(msg)
+
+    monkeypatch.setattr(main_mod, "generate_briefing", _raise)
+    resp = client.post("/api/briefings")
+    assert resp.status_code == 503
+    assert "OPENAI_API_KEY" in resp.json()["detail"]
+
+
+def test_create_returns_500_when_generation_fails(monkeypatch: Any) -> None:
+    def _raise() -> dict[str, Any]:
+        msg = "AI returned invalid JSON"
+        raise BriefingGenerationError(msg)
+
+    monkeypatch.setattr(main_mod, "generate_briefing", _raise)
+    resp = client.post("/api/briefings")
+    assert resp.status_code == 500
+    assert "invalid JSON" in resp.json()["detail"]
+
+
+def test_create_returns_content_and_articles_on_success(monkeypatch: Any) -> None:
+    monkeypatch.setattr(main_mod, "generate_briefing", lambda: dict(_SAMPLE_BRIEFING))
+    resp = client.post("/api/briefings")
+    data = resp.json()
+    assert "content" in data
+    assert "sections" in data["content"]
+    assert "articles" in data
+    assert len(data["articles"]) > 0

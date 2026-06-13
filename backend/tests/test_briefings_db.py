@@ -9,12 +9,23 @@ fixture (started by testcontainers) and are skipped when Docker is unavailable.
 from __future__ import annotations
 
 import json
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 import psycopg
 import pytest
 
-from news_dashboard.briefings import get_briefing, get_latest_briefing, list_briefings
+from news_dashboard.briefings import (
+    CANDIDATE_LIMIT,
+    BriefingGenerationError,
+    _get_since_at,
+    _validate_content,
+    generate_briefing,
+    get_briefing,
+    get_latest_briefing,
+    list_briefings,
+    select_candidates,
+)
 from news_dashboard.db import connect
 
 # ── Seeding helpers ───────────────────────────────────────────────────────────
@@ -39,18 +50,36 @@ def _seed_article(
     title: str = "Test Article",
     source_slug: str = "test-source",
     importance_score: int = 50,
+    state: str = "new",
+    discovered_at: str | None = None,
 ) -> int:
+    extra_cols = ""
+    extra_vals: tuple[object, ...] = ()
+    if discovered_at is not None:
+        extra_cols = ", discovered_at"
+        extra_vals = (discovered_at,)
     with connect(database_url=pg_url) as conn:
         row = conn.execute(
-            """
+            f"""
             INSERT INTO articles(
               url, canonical_url, title, source_slug, source_name,
-              category, kind, importance_score
+              category, kind, importance_score, state{extra_cols}
             )
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s{", %s" if discovered_at else ""})
             RETURNING id
             """,
-            (url, url, title, source_slug, "Test Source", "tech", "rss_feed", importance_score),
+            (
+                url,
+                url,
+                title,
+                source_slug,
+                "Test Source",
+                "tech",
+                "rss_feed",
+                importance_score,
+                state,
+                *extra_vals,
+            ),
         ).fetchone()
     assert row is not None
     return int(row["id"])
@@ -357,3 +386,237 @@ def test_cited_articles_nulls_last_in_citation_index(pg_clean: str) -> None:
     assert result is not None
     titles = [a["title"] for a in result["articles"]]
     assert titles == ["Cite 0", "No Cite Index"]
+
+
+# ── _get_since_at ─────────────────────────────────────────────────────────────
+
+
+def test_get_since_at_returns_24h_ago_when_no_briefings(pg_clean: str) -> None:
+    before = datetime.now(timezone.utc) - timedelta(hours=24, seconds=5)
+    result = _get_since_at(database_url=pg_clean)
+    after = datetime.now(timezone.utc) - timedelta(hours=24) + timedelta(seconds=5)
+    assert before <= result <= after
+
+
+def test_get_since_at_returns_previous_briefing_until_at(pg_clean: str) -> None:
+    _seed_source(pg_clean)
+    _seed_briefing(pg_clean)
+    result = _get_since_at(database_url=pg_clean)
+    # _seed_briefing sets until_at = "2026-06-13T00:00:00+00:00"
+    expected = datetime(2026, 6, 13, 0, 0, 0, tzinfo=timezone.utc)
+    assert result == expected
+
+
+def test_get_since_at_uses_most_recent_briefing(pg_clean: str) -> None:
+    _seed_source(pg_clean)
+    _seed_briefing(pg_clean, created_at="2026-06-11T00:00:00+00:00")
+    _seed_briefing(pg_clean, created_at="2026-06-13T00:00:00+00:00")
+    # Both briefings have until_at = "2026-06-13T00:00:00+00:00" (seeded default)
+    # Most recent by created_at is the second one
+    result = _get_since_at(database_url=pg_clean)
+    assert isinstance(result, datetime)
+    assert result.tzinfo is not None
+
+
+# ── select_candidates ─────────────────────────────────────────────────────────
+
+
+def test_select_candidates_returns_only_today_articles(pg_clean: str) -> None:
+    _seed_source(pg_clean)
+    since_at = datetime.now(timezone.utc) - timedelta(hours=1)
+    _seed_article(pg_clean, url="https://example.com/today-1", title="Today 1", state="today")
+    _seed_article(pg_clean, url="https://example.com/later-1", title="Later 1", state="later")
+    _seed_article(pg_clean, url="https://example.com/new-1", title="New 1", state="new")
+
+    candidates = select_candidates(since_at, database_url=pg_clean)
+    titles = [a["title"] for a in candidates]
+    assert "Today 1" in titles
+    assert "Later 1" not in titles
+    assert "New 1" not in titles
+
+
+def test_select_candidates_filters_by_since_at(pg_clean: str) -> None:
+    _seed_source(pg_clean)
+    since_at = datetime.now(timezone.utc) - timedelta(hours=1)
+    recent_ts = (datetime.now(timezone.utc) - timedelta(minutes=10)).isoformat()
+    old_ts = (datetime.now(timezone.utc) - timedelta(hours=2)).isoformat()
+
+    _seed_article(
+        pg_clean,
+        url="https://example.com/recent",
+        title="Recent",
+        state="today",
+        discovered_at=recent_ts,
+    )
+    _seed_article(
+        pg_clean,
+        url="https://example.com/old",
+        title="Old",
+        state="today",
+        discovered_at=old_ts,
+    )
+
+    candidates = select_candidates(since_at, database_url=pg_clean)
+    titles = [a["title"] for a in candidates]
+    assert "Recent" in titles
+    assert "Old" not in titles
+
+
+def test_select_candidates_caps_at_limit(pg_clean: str) -> None:
+    _seed_source(pg_clean)
+    since_at = datetime.now(timezone.utc) - timedelta(hours=1)
+    for i in range(CANDIDATE_LIMIT + 5):
+        _seed_article(
+            pg_clean,
+            url=f"https://example.com/art-{i}",
+            title=f"Article {i}",
+            state="today",
+        )
+
+    candidates = select_candidates(since_at, database_url=pg_clean)
+    assert len(candidates) == CANDIDATE_LIMIT
+
+
+def test_select_candidates_ordered_by_importance_desc(pg_clean: str) -> None:
+    _seed_source(pg_clean)
+    since_at = datetime.now(timezone.utc) - timedelta(hours=1)
+    _seed_article(
+        pg_clean,
+        url="https://example.com/low",
+        title="Low",
+        state="today",
+        importance_score=10,
+    )
+    _seed_article(
+        pg_clean,
+        url="https://example.com/high",
+        title="High",
+        state="today",
+        importance_score=90,
+    )
+
+    candidates = select_candidates(since_at, database_url=pg_clean)
+    assert candidates[0]["title"] == "High"
+    assert candidates[1]["title"] == "Low"
+
+
+# ── _validate_content (pure unit tests, no DB required) ───────────────────────
+
+
+def test_validate_content_strips_unknown_citations() -> None:
+    raw = {
+        "title": "T",
+        "summary": "S",
+        "sections": [{"title": "A", "body": "B", "citations": [1, 2, 99]}],
+        "worth_opening": [1, 88],
+    }
+    result = _validate_content(raw, candidate_ids={1, 2})
+    assert result["sections"][0]["citations"] == [1, 2]
+    assert result["worth_opening"] == [1]
+
+
+def test_validate_content_raises_on_missing_title() -> None:
+    raw: dict[str, Any] = {"summary": "S", "sections": []}
+    with pytest.raises(BriefingGenerationError, match="missing required keys"):
+        _validate_content(raw, candidate_ids=set())
+
+
+def test_validate_content_raises_on_missing_sections() -> None:
+    raw: dict[str, Any] = {"title": "T", "summary": "S"}
+    with pytest.raises(BriefingGenerationError, match="missing required keys"):
+        _validate_content(raw, candidate_ids=set())
+
+
+def test_validate_content_handles_empty_worth_opening() -> None:
+    raw: dict[str, Any] = {"title": "T", "summary": "S", "sections": []}
+    result = _validate_content(raw, candidate_ids={1, 2})
+    assert result["worth_opening"] == []
+
+
+# ── generate_briefing (end-to-end with fake AI) ───────────────────────────────
+
+
+def _fake_ai(candidates: list[dict[str, Any]], model: str) -> dict[str, Any]:
+    """Minimal deterministic AI stub: puts the first two candidates in a section."""
+    ids = [c["id"] for c in candidates[:2]]
+    return {
+        "title": "Fake Briefing",
+        "summary": "A fake summary.",
+        "sections": [{"title": "Top Stories", "body": "Stuff happened.", "citations": ids}],
+        "worth_opening": ids[:1],
+    }
+
+
+def test_generate_briefing_no_candidates_returns_status(pg_clean: str) -> None:
+    # No articles seeded → no today candidates
+    result = generate_briefing(database_url=pg_clean, ai_fn=_fake_ai)
+    assert result == {"status": "no_candidates"}
+
+
+def test_generate_briefing_creates_briefing_row(pg_clean: str) -> None:
+    _seed_source(pg_clean)
+    _seed_article(pg_clean, url="https://example.com/a1", title="Article 1", state="today")
+    _seed_article(pg_clean, url="https://example.com/a2", title="Article 2", state="today")
+
+    result = generate_briefing(database_url=pg_clean, ai_fn=_fake_ai)
+
+    assert result["title"] == "Fake Briefing"
+    assert result["summary"] == "A fake summary."
+    assert result["status"] == "complete"
+    assert result["scope"] == "since_last_briefing"
+    assert result["since_at"] is not None
+    assert result["until_at"] is not None
+
+
+def test_generate_briefing_links_section_citations(pg_clean: str) -> None:
+    _seed_source(pg_clean)
+    a1 = _seed_article(pg_clean, url="https://example.com/b1", title="B1", state="today")
+    a2 = _seed_article(pg_clean, url="https://example.com/b2", title="B2", state="today")
+
+    result = generate_briefing(database_url=pg_clean, ai_fn=_fake_ai)
+
+    article_ids = {a["id"] for a in result["articles"]}
+    assert a1 in article_ids
+    assert a2 in article_ids
+
+    # First article: cited in section 0 at index 0
+    cited = {a["id"]: a for a in result["articles"]}
+    assert cited[a1]["section_index"] == 0
+    assert cited[a1]["citation_index"] == 0
+
+
+def test_generate_briefing_worth_opening_gets_null_indices(pg_clean: str) -> None:
+    _seed_source(pg_clean)
+    a1 = _seed_article(pg_clean, url="https://example.com/c1", title="C1", state="today")
+    _seed_article(pg_clean, url="https://example.com/c2", title="C2", state="today")
+    a3 = _seed_article(pg_clean, url="https://example.com/c3", title="C3", state="today")
+
+    def _ai_worth_only(candidates: list[dict[str, Any]], model: str) -> dict[str, Any]:
+        ids = [c["id"] for c in candidates]
+        return {
+            "title": "T",
+            "summary": "S",
+            "sections": [{"title": "S0", "body": "B", "citations": [ids[0], ids[1]]}],
+            # a3 appears only in worth_opening (no section citation)
+            "worth_opening": [ids[2]],
+        }
+
+    result = generate_briefing(database_url=pg_clean, ai_fn=_ai_worth_only)
+    by_id = {a["id"]: a for a in result["articles"]}
+
+    assert a3 in by_id
+    assert by_id[a3]["section_index"] is None
+    assert by_id[a3]["citation_index"] is None
+    assert a1 in by_id
+    assert by_id[a1]["section_index"] == 0
+
+
+def test_generate_briefing_persisted_to_db(pg_clean: str) -> None:
+    _seed_source(pg_clean)
+    _seed_article(pg_clean, url="https://example.com/d1", title="D1", state="today")
+
+    generate_briefing(database_url=pg_clean, ai_fn=_fake_ai)
+
+    briefings = list_briefings(database_url=pg_clean)
+    assert len(briefings) == 1
+    assert briefings[0]["title"] == "Fake Briefing"
