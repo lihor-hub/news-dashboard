@@ -11,7 +11,8 @@ const SECTIONS: { title: string; items: [string, string][] }[] = [
     items: [
       ['j / k', 'Move down / up in list'],
       ['Enter', 'Open selected article'],
-      ['g t / g l / g s', 'Go to Today / Later / Starred'],
+      ['g b / g t', 'Go to Brief / Today'],
+      ['g l / g s', 'Go to Later / Starred'],
       ['g a / g f', 'Go to Ask / Feeds'],
     ],
   },
