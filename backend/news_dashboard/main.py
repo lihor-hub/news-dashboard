@@ -1,10 +1,9 @@
 from __future__ import annotations
 
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, MutableMapping
 from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
-from collections.abc import MutableMapping
 from typing import Annotated, Any
 
 from fastapi import FastAPI, HTTPException, Query

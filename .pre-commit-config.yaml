@@ -42,3 +42,9 @@ repos:
         language: system
         files: \.(ts|tsx|css|html|json|mjs)$
         pass_filenames: false
+      - id: tsc
+        name: tsc (typecheck)
+        entry: npm run typecheck --silent
+        language: system
+        files: \.(ts|tsx)$
+        pass_filenames: false
