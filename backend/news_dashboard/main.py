@@ -11,6 +11,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
+from starlette.exceptions import HTTPException as StarletteHTTPException
+from starlette.responses import Response
 
 from .body_fetch import fetch_and_cache_body, get_article
 from .db import connect, describe_database, init_db, row_to_dict
@@ -47,6 +49,20 @@ from .stats import (
     stats_overview,
     triage_metrics,
 )
+
+
+class SPAStaticFiles(StaticFiles):
+    """Serve index.html for client-side routes while preserving API/static 404s."""
+
+    async def get_response(self, path: str, scope: dict[str, Any]) -> Response:
+        try:
+            return await super().get_response(path, scope)
+        except StarletteHTTPException as exc:
+            is_client_route = scope.get("method") == "GET" and not path.startswith("api/")
+            is_asset = path.startswith("assets/") or "." in Path(path).name
+            if exc.status_code != 404 or not is_client_route or is_asset:
+                raise
+            return await super().get_response("index.html", scope)
 
 
 @asynccontextmanager
@@ -405,4 +421,4 @@ def summary() -> dict[str, Any]:
 
 static_dir = Path(__file__).resolve().parents[2] / "frontend" / "dist"
 if static_dir.exists():
-    app.mount("/", StaticFiles(directory=static_dir, html=True), name="static")
+    app.mount("/", SPAStaticFiles(directory=static_dir, html=True), name="static")
