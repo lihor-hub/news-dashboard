@@ -14,8 +14,8 @@ from pydantic import BaseModel
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.responses import Response
 
-from . import briefings as briefings_module
 from .body_fetch import fetch_and_cache_body, get_article
+from .briefings import get_briefing, get_latest_briefing, list_briefings
 from .db import connect, describe_database, init_db, row_to_dict
 from .ingest import (
     ingest_all,
@@ -386,7 +386,7 @@ def stats_ingested_vs_handled_endpoint() -> dict[str, Any]:
 
 @app.get("/api/briefings/latest")
 def briefings_latest() -> dict[str, Any]:
-    briefing = briefings_module.get_latest_briefing()
+    briefing = get_latest_briefing()
     if briefing is None:
         return {"status": "empty"}
     return briefing
@@ -397,12 +397,12 @@ def briefings_list(
     limit: Annotated[int, Query(ge=1, le=200)] = 50,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> dict[str, Any]:
-    return {"items": briefings_module.list_briefings(limit=limit, offset=offset)}
+    return {"items": list_briefings(limit=limit, offset=offset)}
 
 
 @app.get("/api/briefings/{briefing_id}")
 def briefings_detail(briefing_id: int) -> dict[str, Any]:
-    briefing = briefings_module.get_briefing(briefing_id)
+    briefing = get_briefing(briefing_id)
     if briefing is None:
         raise HTTPException(status_code=404, detail="briefing not found")
     return briefing
