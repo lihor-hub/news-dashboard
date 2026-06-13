@@ -158,12 +158,6 @@ function json(data: unknown, status = 200) {
  * matching handler.
  */
 export async function mockApi(page: Page) {
-  // Stub external font CDN so tests don't depend on network access
-  await page.route('https://fonts.googleapis.com/**', (r) => r.fulfill({ status: 200, body: '' }));
-  await page.route('https://fonts.gstatic.com/**', (r) =>
-    r.fulfill({ status: 200, contentType: 'font/woff2', body: Buffer.alloc(0) })
-  );
-
   // Summary / counts
   await page.route('/api/summary', (r) => r.fulfill(json(SUMMARY_DATA)));
 
