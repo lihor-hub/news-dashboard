@@ -18,6 +18,7 @@ from news_dashboard.auth import (
     ensure_keycloak_user,
     get_user_by_id,
     hash_password,
+    init_auth,
     keycloak_auth_metadata,
     keycloak_authorization_url,
     list_users,
@@ -184,6 +185,28 @@ def test_password_login_disabled_when_keycloak_enabled(
     monkeypatch.setenv("KEYCLOAK_AUTH_ENABLED", "1")
     create_user("local", "pw")
     assert authenticate("local", "pw") is None
+
+
+def test_init_auth_requires_session_secret_for_keycloak(
+    tmp_db: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("KEYCLOAK_AUTH_ENABLED", "1")
+    monkeypatch.setenv("KEYCLOAK_SERVER_URL", "https://news.lihor.ro/keycloak")
+    monkeypatch.delenv("SESSION_SECRET", raising=False)
+    monkeypatch.delenv("TEST_SESSION_SECRET", raising=False)
+
+    with pytest.raises(RuntimeError, match="SESSION_SECRET env var is not set"):
+        init_auth()
+
+
+def test_init_auth_accepts_keycloak_when_session_secret_is_set(
+    tmp_db: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("KEYCLOAK_AUTH_ENABLED", "1")
+    monkeypatch.setenv("KEYCLOAK_SERVER_URL", "https://news.lihor.ro/keycloak")
+    monkeypatch.setenv("SESSION_SECRET", "test-secret")
+
+    init_auth()
 
 
 # ── Bootstrap ─────────────────────────────────────────────────────────────────

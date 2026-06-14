@@ -394,5 +394,11 @@ def keycloak_logout_url() -> str:
 def init_auth() -> None:
     """Initialise DB and bootstrap first admin on startup."""
     init_db()
-    if not keycloak_config().enabled:
-        bootstrap_admin()
+    config = keycloak_config()
+    if config.enabled:
+        _get_secret()
+        if not config.public_server_url or not config.internal_server_url:
+            message = "Keycloak authentication is enabled but KEYCLOAK_SERVER_URL is not set"
+            raise RuntimeError(message)
+        return
+    bootstrap_admin()
