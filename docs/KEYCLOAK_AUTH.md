@@ -19,7 +19,7 @@ The dashboard is a PWA, so the generated Workbox service worker can answer brows
 `vite.config.ts` therefore denies fallback handling for:
 
 ```ts
-navigateFallbackDenylist: [/^\/api\//, /^\/auth\//, /^\/keycloak\//]
+navigateFallbackDenylist: [/^\/api\//, /^\/auth\//, /^\/keycloak\//];
 ```
 
 Without this denylist, an already-installed PWA or a browser with an old service worker can open `/auth/login` and see the dashboard login shell again instead of following the backend `307` to Keycloak.
@@ -85,6 +85,56 @@ Recommended realm/client values:
 - Valid post-logout redirect URI: `https://news.lihor.ro`
 - Web origin: `https://news.lihor.ro`
 
+## Google sign-in
+
+Enable Google through Keycloak, not as a second auth implementation inside the
+dashboard. The app should keep talking only to Keycloak; Keycloak brokers the
+Google identity, then `/auth/callback` creates or reuses the same local
+dashboard user record as any other Keycloak login.
+
+### Google Cloud
+
+1. Open Google Cloud Console and create or select the project that should own
+   the OAuth client.
+2. Configure the OAuth consent screen for the app.
+3. Create an OAuth 2.0 Client ID with application type `Web application`.
+4. Add this authorized redirect URI:
+
+   ```text
+   https://news.lihor.ro/keycloak/realms/news-dashboard/broker/google/endpoint
+   ```
+
+5. Copy the generated client ID and client secret.
+
+### Keycloak
+
+1. Open the `news-dashboard` realm.
+2. Go to **Identity providers** and add **Google**.
+3. Use alias `google` so the broker callback path stays:
+
+   ```text
+   /realms/news-dashboard/broker/google/endpoint
+   ```
+
+4. Paste the Google client ID and client secret.
+5. Keep the default scopes unless the dashboard needs more profile data. The
+   app currently needs only standard OIDC identity fields such as username,
+   email, and display name.
+6. Save the provider, then open a private browser window and visit:
+
+   ```text
+   https://news.lihor.ro/auth/login
+   ```
+
+   The Keycloak login page should show the Google provider as an alternate
+   sign-in action. After Google redirects back to Keycloak, Keycloak redirects
+   to `https://news.lihor.ro/auth/callback`, and the dashboard session cookie is
+   issued by the app.
+
+No frontend or backend environment variable is required specifically for Google
+as long as `KEYCLOAK_AUTH_ENABLED=1` and the existing Keycloak settings point at
+the `news-dashboard` realm.
+
 ## Login theme
 
 The custom Keycloak theme lives in:
@@ -93,7 +143,10 @@ The custom Keycloak theme lives in:
 deploy/keycloak-theme/news-dashboard/login/
 ```
 
-It extends `keycloak.v2` and overrides only CSS. The CSS mirrors the new Radar Dashboard app shell: `RD` mark, compact centered card, warm OKLCH background/card colors, rounded inputs, dark foreground button, and dark-mode support.
+It extends `keycloak.v2` and overrides only CSS. The CSS mirrors the Radar
+Dashboard app shell: `RD` mark, compact centered card, warm OKLCH
+background/card colors, rounded inputs, app-style primary actions, social
+provider buttons, and dark-mode support.
 
 Mount it into the Keycloak container at:
 
@@ -106,7 +159,7 @@ Then set the realm login theme to `news-dashboard`.
 For local development/self-hosting, disable Keycloak theme caching while iterating:
 
 ```yaml
-KC_SPI_THEME_CACHE_THEMES: "false"
-KC_SPI_THEME_CACHE_TEMPLATES: "false"
-KC_SPI_THEME_STATIC_MAX_AGE: "-1"
+KC_SPI_THEME_CACHE_THEMES: 'false'
+KC_SPI_THEME_CACHE_TEMPLATES: 'false'
+KC_SPI_THEME_STATIC_MAX_AGE: '-1'
 ```

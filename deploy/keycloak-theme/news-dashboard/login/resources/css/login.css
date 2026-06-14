@@ -1,16 +1,23 @@
-/* Keycloak login theme for the new Radar Dashboard application. */
+/* Keycloak login theme for the Radar Dashboard application. */
 :root {
   --nd-radius: 0.5rem;
   --nd-background: oklch(0.985 0.003 80);
   --nd-foreground: oklch(0.2 0.012 70);
   --nd-surface: oklch(0.97 0.005 80);
+  --nd-surface-2: oklch(0.945 0.006 80);
   --nd-card: oklch(1 0 0);
   --nd-muted-foreground: oklch(0.5 0.012 70);
   --nd-subtle: oklch(0.62 0.012 70);
   --nd-border: oklch(0.9 0.008 80);
+  --nd-border-strong: oklch(0.82 0.01 80);
+  --nd-primary: oklch(0.32 0.04 60);
+  --nd-primary-foreground: oklch(0.98 0.005 80);
+  --nd-accent: oklch(0.55 0.13 45);
   --nd-ring: oklch(0.55 0.13 45);
   --nd-err: oklch(0.55 0.18 28);
-  --nd-font: 'Inter Variable', 'Inter', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --nd-font:
+    'Inter Variable', 'Inter', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+    'Segoe UI', sans-serif;
 }
 
 html,
@@ -25,6 +32,7 @@ body.login-pf {
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
   font-feature-settings: 'cv11', 'ss01', 'ss03';
+  letter-spacing: 0;
 }
 
 .login-pf-page,
@@ -54,7 +62,7 @@ body.login-pf {
   width: min(24rem, 100%);
   padding: 1.5rem;
   border: 1px solid var(--nd-border);
-  border-radius: 0.75rem;
+  border-radius: calc(var(--nd-radius) + 0.25rem);
   background: var(--nd-card);
   box-shadow: 0 1px 2px rgba(20, 23, 31, 0.05);
 }
@@ -62,7 +70,7 @@ body.login-pf {
 .pf-v5-c-login__main-header,
 .pf-v5-c-login__main-body,
 .pf-v5-c-login__main-footer {
-  padding: 0;
+  padding-inline: 0;
 }
 
 #kc-page-title,
@@ -82,12 +90,12 @@ body.login-pf {
   width: 2.5rem;
   height: 2.5rem;
   margin: 0 auto 0.5rem;
-  border-radius: 0.75rem;
+  border-radius: calc(var(--nd-radius) + 0.25rem);
   background: color-mix(in oklch, var(--nd-foreground) 90%, transparent);
   color: var(--nd-background);
   font-size: 0.875rem;
   font-weight: 700;
-  letter-spacing: -0.025em;
+  letter-spacing: 0;
 }
 
 #kc-page-title::after {
@@ -106,6 +114,10 @@ body.login-pf {
   gap: 1rem;
 }
 
+.pf-v5-c-form__group {
+  margin-bottom: 0;
+}
+
 .pf-v5-c-form__label-text,
 label {
   color: var(--nd-muted-foreground);
@@ -117,7 +129,8 @@ label {
 .pf-v5-c-form-control > input,
 input[type='text'],
 input[type='password'],
-input[type='email'] {
+input[type='email'],
+select {
   min-height: 2.5rem;
   padding: 0.5rem 0.75rem !important;
   border: 1px solid var(--nd-border) !important;
@@ -132,12 +145,14 @@ input[type='email'] {
 .pf-v5-c-form-control > input:focus,
 input[type='text']:focus,
 input[type='password']:focus,
-input[type='email']:focus {
+input[type='email']:focus,
+select:focus {
   outline: none !important;
   box-shadow: 0 0 0 2px var(--nd-ring) !important;
 }
 
-.pf-v5-c-button.pf-m-control {
+.pf-v5-c-button.pf-m-control,
+.pf-v5-c-input-group .pf-v5-c-button {
   min-height: 2.5rem;
   border-color: var(--nd-border) !important;
   border-radius: var(--nd-radius) !important;
@@ -154,8 +169,8 @@ input[type='email']:focus {
   min-height: 2.5rem;
   border: 0 !important;
   border-radius: var(--nd-radius) !important;
-  background: var(--nd-foreground) !important;
-  color: var(--nd-background) !important;
+  background: var(--nd-primary) !important;
+  color: var(--nd-primary-foreground) !important;
   font-size: 0.875rem;
   font-weight: 500;
   box-shadow: none !important;
@@ -165,6 +180,15 @@ input[type='email']:focus {
 .pf-v5-c-button.pf-m-primary:hover,
 #kc-login:hover {
   opacity: 0.9;
+}
+
+.pf-v5-c-button.pf-m-secondary,
+.pf-v5-c-button.pf-m-link {
+  min-height: 2.5rem;
+  border-radius: var(--nd-radius) !important;
+  color: var(--nd-foreground) !important;
+  font-size: 0.875rem;
+  font-weight: 500;
 }
 
 a {
@@ -190,15 +214,113 @@ a {
   text-align: center;
 }
 
+#kc-social-providers {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--nd-border);
+}
+
+#kc-social-providers h2,
+#kc-social-providers .pf-v5-c-title {
+  margin: 0 0 0.75rem !important;
+  color: var(--nd-muted-foreground) !important;
+  font-size: 0.75rem !important;
+  font-weight: 500 !important;
+  text-align: center;
+}
+
+#kc-social-providers ul,
+#kc-social-providers .pf-v5-c-login__main-footer-links {
+  display: grid;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+#kc-social-providers li {
+  margin: 0;
+}
+
+#kc-social-providers a,
+#kc-social-providers .pf-v5-c-button,
+.kc-social-provider-name {
+  text-decoration: none !important;
+}
+
+#kc-social-providers a,
+#kc-social-providers .pf-v5-c-button {
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  width: 100%;
+  min-height: 2.5rem;
+  border: 1px solid var(--nd-border) !important;
+  border-radius: var(--nd-radius) !important;
+  background: var(--nd-surface) !important;
+  color: var(--nd-foreground) !important;
+  font-size: 0.875rem;
+  font-weight: 500;
+  box-shadow: none !important;
+  transition:
+    border-color 150ms ease,
+    background-color 150ms ease,
+    color 150ms ease;
+}
+
+#kc-social-providers a:hover,
+#kc-social-providers .pf-v5-c-button:hover {
+  border-color: var(--nd-border-strong) !important;
+  background: var(--nd-surface-2) !important;
+}
+
+#kc-social-providers a:focus-visible,
+#kc-social-providers .pf-v5-c-button:focus-visible {
+  outline: none !important;
+  box-shadow: 0 0 0 2px var(--nd-ring) !important;
+}
+
+.kc-social-provider-name {
+  color: inherit;
+}
+
+.kc-social-provider-logo,
+#kc-social-providers i {
+  color: var(--nd-foreground);
+  font-size: 1rem;
+}
+
+.kc-social-google .kc-social-provider-logo,
+#kc-social-google i {
+  color: #4285f4;
+}
+
+.pf-v5-c-divider {
+  --pf-v5-c-divider--BackgroundColor: var(--nd-border);
+  margin-block: 1rem;
+}
+
+.pf-v5-c-check__label,
+.pf-v5-c-helper-text__item,
+.pf-v5-c-form__helper-text {
+  color: var(--nd-muted-foreground) !important;
+}
+
 @media (prefers-color-scheme: dark) {
   :root {
     --nd-background: oklch(0.155 0.008 80);
     --nd-foreground: oklch(0.94 0.005 80);
     --nd-surface: oklch(0.185 0.008 80);
+    --nd-surface-2: oklch(0.215 0.008 80);
     --nd-card: oklch(0.2 0.008 80);
     --nd-muted-foreground: oklch(0.65 0.01 80);
     --nd-subtle: oklch(0.55 0.01 80);
     --nd-border: oklch(0.28 0.008 80);
+    --nd-border-strong: oklch(0.36 0.01 80);
+    --nd-primary: oklch(0.92 0.005 80);
+    --nd-primary-foreground: oklch(0.18 0.008 80);
+    --nd-accent: oklch(0.68 0.13 45);
     --nd-ring: oklch(0.68 0.13 45);
     --nd-err: oklch(0.68 0.18 28);
   }
