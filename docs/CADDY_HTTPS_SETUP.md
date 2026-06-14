@@ -11,6 +11,8 @@ The app already runs as a Kubernetes NodePort service on `localhost:30088`.
 Caddy runs on the host (outside Kubernetes), listens on ports 80/443, obtains a
 free Let's Encrypt certificate automatically, and forwards requests to the app.
 
+Authentication is handled by the application itself (see `POST /api/auth/login`).
+
 ---
 
 ## Prerequisites — things only you can do
@@ -95,40 +97,16 @@ caddy version
 sudo systemctl status caddy    # should show "active (running)"
 ```
 
-### Step 5 — Generate a Basic Auth password hash
+### Step 5 — Deploy the Caddyfile
 
-The Caddyfile in this repo (`deploy/Caddyfile`) includes a `basicauth` block so
-the dashboard stays private.  Generate a bcrypt hash for your password:
-
-```bash
-caddy hash-password
-# Enter your password at the prompt — copy the $2a$... output
-```
-
-### Step 6 — Deploy the Caddyfile
-
-Copy the Caddyfile from the repo to the system Caddy config location and fill in
-your username and password hash:
+Copy the Caddyfile from the repo to the system Caddy config location:
 
 ```bash
 # From the repo root on the mini PC:
 sudo cp deploy/Caddyfile /etc/caddy/Caddyfile
-
-# Open it and replace the placeholder with your real username and hash:
-sudo nano /etc/caddy/Caddyfile
 ```
 
-The relevant section looks like:
-
-```
-basicauth {
-    ioachim $2a$14$<paste-your-hash-here>
-}
-```
-
-Replace `ioachim` with whatever username you want and paste the hash from Step 5.
-
-### Step 7 — Reload Caddy
+### Step 6 — Reload Caddy
 
 ```bash
 sudo systemctl reload caddy
@@ -146,16 +124,17 @@ sudo journalctl -u caddy -f
 You should see a line like `certificate obtained successfully`.  This takes
 10–30 seconds on the first run.
 
-### Step 8 — Verify
+### Step 7 — Verify
 
 ```bash
-curl -u ioachim:<your-password> https://news.lihor.ro/api/health
+curl https://news.lihor.ro/api/health
 # Expected: {"status":"ok","database":"PostgreSQL",...}
 ```
 
 Open `https://news.lihor.ro` in Chrome on your phone — you should see a padlock
-and, after a few seconds of visiting, an install prompt or the option in the
-browser menu to "Add to Home Screen" as a standalone app (no browser chrome).
+and the login page.  After logging in, you should see the dashboard, and after a
+few seconds, an install prompt or the option in the browser menu to "Add to Home
+Screen" as a standalone app (no browser chrome).
 
 ---
 
@@ -168,10 +147,6 @@ After any change, copy it to the mini PC and reload:
 sudo cp deploy/Caddyfile /etc/caddy/Caddyfile
 sudo systemctl reload caddy
 ```
-
-The password hash is **not** stored in the repo (it would be visible to anyone
-with repo access).  Keep a note of your password somewhere safe; regenerate the
-hash with `caddy hash-password` if you lose it.
 
 ---
 
@@ -217,7 +192,3 @@ Common remaining issues:
   then close and reopen it
 - A previous visit cached a non-HTTPS version — clear site data in Chrome
   settings and try again
-
-**Basic Auth prompt doesn't appear / returns 401**
-Re-generate the hash (`caddy hash-password`) and make sure there's no trailing
-whitespace when you paste it into the Caddyfile.  Then `sudo systemctl reload caddy`.
