@@ -16,6 +16,7 @@ export default defineConfig({
       // Only apply PWA in production builds — dev mode uses Vite HMR.
       devOptions: { enabled: false },
       includeAssets: [
+        'favicon.ico',
         'favicon.svg',
         'manifest.webmanifest',
         'icons/apple-touch-icon.png',
@@ -28,7 +29,7 @@ export default defineConfig({
         // Cache the app shell and static assets, but never let the service worker
         // answer backend/auth navigations.  Otherwise `/auth/login` can be served
         // as the SPA fallback and Keycloak redirects never reach the server.
-        globPatterns: ['**/*.{js,css,html,svg,woff2}'],
+        globPatterns: ['**/*.{js,css,html,svg,ico,woff2}'],
         navigateFallbackDenylist: [/^\/api\//, /^\/auth\//, /^\/keycloak\//],
         runtimeCaching: [
           {

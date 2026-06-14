@@ -10,7 +10,7 @@
 4. `/auth/callback` exchanges the code, reads Keycloak `userinfo`, creates or reuses a local app user, and sets the existing signed `nd_session` cookie.
 5. All existing authenticated API routes continue to use `require_auth`, so article state, source subscriptions, briefings, and admin routes remain scoped by local `user_id`.
 
-Keycloak-created users receive an unusable random local password because Keycloak owns authentication. The comma-separated `KEYCLOAK_ADMIN_USERNAMES` env var controls which Keycloak usernames become app admins on first login; the local default is `ioachim`.
+Keycloak-created users receive an unusable random local password because Keycloak owns authentication. The comma-separated `KEYCLOAK_ADMIN_USERNAMES` env var controls which Keycloak usernames become app admins on first login. If unset, no Keycloak user is granted admin on first login.
 
 ### PWA/service-worker routing
 
@@ -35,7 +35,7 @@ KEYCLOAK_SERVER_URL=https://news.lihor.ro/keycloak
 KEYCLOAK_INTERNAL_SERVER_URL=https://news.lihor.ro/keycloak
 KEYCLOAK_REALM=news-dashboard
 KEYCLOAK_CLIENT_ID=news-dashboard
-KEYCLOAK_ADMIN_USERNAMES=ioachim
+KEYCLOAK_ADMIN_USERNAMES=alice,bob   # comma-separated; omit to grant no admins via Keycloak
 SESSION_SECRET=<long random string>
 ```
 

@@ -81,7 +81,7 @@ def keycloak_auth_metadata() -> dict[str, Any]:
 
 
 def _keycloak_admin_usernames() -> set[str]:
-    raw = os.getenv("KEYCLOAK_ADMIN_USERNAMES", "ioachim")
+    raw = os.getenv("KEYCLOAK_ADMIN_USERNAMES", "")
     return {u.strip().lower() for u in raw.split(",") if u.strip()}
 
 
