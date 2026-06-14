@@ -7,7 +7,8 @@ from typing import Annotated, Any
 
 import typer
 
-from .db import connect, init_db
+from .auth import hash_password
+from .db import connect, init_db, row_to_dict
 
 app = typer.Typer(help="Migration helpers for news-dashboard")
 
@@ -132,6 +133,174 @@ def sqlite_to_postgres(
     typer.echo(
         f"Migrated {len(sources)} source(s) and {len(articles)} article(s) from {sqlite_path}"
     )
+
+
+def _check_prerequisites(conn: Any) -> list[str]:
+    """Return a list of missing prerequisite schema items."""
+    missing: list[str] = []
+    required_tables = ["users", "user_article_state", "user_sources"]
+    try:
+        existing = {
+            r[0]
+            for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
+        }
+        missing.extend(f"table '{t}'" for t in required_tables if t not in existing)
+    except Exception:
+        # PostgreSQL — check via information_schema
+        for tbl in required_tables:
+            row = conn.execute(
+                "SELECT 1 FROM information_schema.tables WHERE table_name = %s",
+                (tbl,),
+            ).fetchone()
+            if row is None:
+                missing.append(f"table '{tbl}'")
+
+    try:
+        conn.execute("SELECT user_id FROM briefings LIMIT 0")
+    except Exception:
+        missing.append("column 'briefings.user_id'")
+
+    return missing
+
+
+@app.command("migrate-multi-user")
+def migrate_multi_user(  # noqa: PLR0912, PLR0915
+    dry_run: Annotated[bool, typer.Option("--dry-run", help="Print planned actions only")] = False,
+) -> None:
+    """Promote existing single-tenant data to the first user account."""
+    db_path_env = os.getenv("NEWS_DASHBOARD_DB")
+    from pathlib import Path as _Path
+
+    db_path = _Path(db_path_env) if db_path_env else None
+
+    with connect(db_path) as conn:
+        # ── 1. Check prerequisites ─────────────────────────────────────────────
+        missing = _check_prerequisites(conn)
+        if missing:
+            typer.echo("ERROR: prerequisite schema missing:")
+            for item in missing:
+                typer.echo(f"  - {item}")
+            typer.echo("Run 'news-dashboard init' to apply schema migrations first.")
+            raise typer.Exit(code=1)
+
+        # ── 2. Seed user ───────────────────────────────────────────────────────
+        count_row = conn.execute("SELECT COUNT(*) FROM users").fetchone()
+        try:
+            user_count = int(row_to_dict(count_row).get("COUNT(*)", 0))
+        except Exception:
+            user_count = int(count_row[0]) if count_row else 0
+
+        if user_count > 0:
+            typer.echo(f"Users already exist ({user_count}); skipping seed user creation.")
+            seed_row = conn.execute("SELECT id, username FROM users ORDER BY id LIMIT 1").fetchone()
+            seed_uid = int(row_to_dict(seed_row)["id"])
+            seed_username = str(row_to_dict(seed_row)["username"])
+            typer.echo(f"Using existing first user: {seed_username!r} (id={seed_uid})")
+        else:
+            seed_username = os.getenv("SEED_USER") or typer.prompt("Seed username")
+            seed_password = os.getenv("SEED_PASSWORD") or typer.prompt(
+                "Seed password", hide_input=True, confirmation_prompt=True
+            )
+            if dry_run:
+                typer.echo(f"[dry-run] Would create user {seed_username!r}")
+                seed_uid = -1
+            else:
+                pw_hash = hash_password(seed_password)
+                row = conn.execute(
+                    "INSERT INTO users(username, password_hash, is_admin)"
+                    " VALUES(?, ?, 1) RETURNING id",
+                    (seed_username, pw_hash),
+                ).fetchone()
+                seed_uid = int(row_to_dict(row)["id"])
+                typer.echo(f"Created seed user {seed_username!r} (id={seed_uid}, is_admin=1)")
+
+        if dry_run and seed_uid == -1:
+            typer.echo("[dry-run] Skipping data migration steps (no real user id)")
+            raise typer.Exit(0)
+
+        # ── 3. Migrate article state ───────────────────────────────────────────
+        articles = conn.execute(
+            """
+            SELECT id, state, starred, done_at, starred_at, later_until, restored_at, skipped_at
+            FROM articles
+            WHERE (state != 'today' OR starred = 1 OR done_at IS NOT NULL OR starred_at IS NOT NULL)
+            """
+        ).fetchall()
+
+        uas_inserted = 0
+        for art in articles:
+            d = row_to_dict(art)
+            if dry_run:
+                uas_inserted += 1
+                continue
+            conn.execute(
+                """
+                INSERT INTO user_article_state(
+                  user_id, article_id, state, starred,
+                  done_at, starred_at, skipped_at, later_until, restored_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(user_id, article_id) DO NOTHING
+                """,
+                (
+                    seed_uid,
+                    d["id"],
+                    d.get("state", "today"),
+                    1 if d.get("starred") else 0,
+                    d.get("done_at"),
+                    d.get("starred_at"),
+                    d.get("skipped_at"),
+                    d.get("later_until"),
+                    d.get("restored_at"),
+                ),
+            )
+            uas_inserted += 1
+
+        action = "[dry-run] Would migrate" if dry_run else "Migrated"
+        typer.echo(f"{action} {uas_inserted} article state row(s) → user_article_state")
+
+        # ── 4. Migrate briefings ───────────────────────────────────────────────
+        null_briefings = conn.execute(
+            "SELECT COUNT(*) FROM briefings WHERE user_id IS NULL"
+        ).fetchone()
+        try:
+            briefing_count = int(row_to_dict(null_briefings).get("COUNT(*)", 0))
+        except Exception:
+            briefing_count = int(null_briefings[0]) if null_briefings else 0
+
+        if dry_run:
+            typer.echo(f"[dry-run] Would migrate {briefing_count} briefing(s) → user_id={seed_uid}")
+        else:
+            conn.execute(
+                "UPDATE briefings SET user_id = ? WHERE user_id IS NULL",
+                (seed_uid,),
+            )
+            typer.echo(f"Migrated {briefing_count} briefing(s) → user_id={seed_uid}")
+
+        # ── 5. Seed source subscriptions ──────────────────────────────────────
+        enabled_sources = conn.execute(
+            "SELECT slug FROM sources"
+            " WHERE enabled = 1"
+            " AND (owner_user_id IS NULL OR owner_user_id = ?)",
+            (seed_uid,),
+        ).fetchall()
+
+        us_inserted = 0
+        for src in enabled_sources:
+            slug = src[0] if isinstance(src, tuple) else row_to_dict(src)["slug"]
+            if dry_run:
+                us_inserted += 1
+                continue
+            conn.execute(
+                "INSERT INTO user_sources(user_id, source_slug, enabled)"
+                " VALUES(?, ?, 1) ON CONFLICT(user_id, source_slug) DO NOTHING",
+                (seed_uid, slug),
+            )
+            us_inserted += 1
+
+        action = "[dry-run] Would insert" if dry_run else "Inserted"
+        typer.echo(f"{action} {us_inserted} source subscription(s) → user_sources")
+
+    typer.echo("Done.")
 
 
 if __name__ == "__main__":
