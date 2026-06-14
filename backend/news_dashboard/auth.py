@@ -29,6 +29,7 @@ class KeycloakConfig:
     internal_server_url: str
     realm: str
     client_id: str
+    client_secret: str | None
     base_url: str
 
     @property
@@ -66,6 +67,7 @@ def keycloak_config() -> KeycloakConfig:
         internal_server_url=internal_server,
         realm=(os.getenv("KEYCLOAK_REALM") or "news-dashboard").strip(),
         client_id=(os.getenv("KEYCLOAK_CLIENT_ID") or "news-dashboard").strip(),
+        client_secret=(os.getenv("KEYCLOAK_CLIENT_SECRET") or "").strip() or None,
         base_url=_strip_url(os.getenv("NEWS_DASHBOARD_BASE_URL")) or "http://localhost:8080",
     )
 
@@ -322,6 +324,19 @@ def keycloak_authorization_url(state: str) -> str:
     return f"{config.public_realm_url}/protocol/openid-connect/auth?{params}"
 
 
+def keycloak_token_request_data(code: str) -> dict[str, str]:
+    config = keycloak_config()
+    data = {
+        "grant_type": "authorization_code",
+        "client_id": config.client_id,
+        "code": code,
+        "redirect_uri": config.redirect_uri,
+    }
+    if config.client_secret:
+        data["client_secret"] = config.client_secret
+    return data
+
+
 def ensure_keycloak_user(info: dict[str, Any]) -> dict[str, Any]:
     username = str(
         info.get("preferred_username") or info.get("email") or info.get("sub") or ""
@@ -358,12 +373,7 @@ async def exchange_keycloak_code(code: str) -> dict[str, Any]:
     async with httpx.AsyncClient(timeout=10.0) as client:
         token_response = await client.post(
             token_url,
-            data={
-                "grant_type": "authorization_code",
-                "client_id": config.client_id,
-                "code": code,
-                "redirect_uri": config.redirect_uri,
-            },
+            data=keycloak_token_request_data(code),
             headers={"Accept": "application/json"},
         )
         if token_response.status_code >= 400:

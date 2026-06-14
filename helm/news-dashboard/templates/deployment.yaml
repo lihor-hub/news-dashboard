@@ -77,6 +77,11 @@ spec:
               value: {{ .Values.app.auth.realm | quote }}
             - name: KEYCLOAK_CLIENT_ID
               value: {{ .Values.app.auth.clientId | quote }}
+            - name: KEYCLOAK_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "news-dashboard.fullname" . }}-auth
+                  key: KEYCLOAK_CLIENT_SECRET
             - name: KEYCLOAK_ADMIN_USERNAMES
               value: {{ .Values.app.auth.adminUsernames | quote }}
             - name: SESSION_SECRET

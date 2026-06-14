@@ -21,6 +21,7 @@ from news_dashboard.auth import (
     init_auth,
     keycloak_auth_metadata,
     keycloak_authorization_url,
+    keycloak_token_request_data,
     list_users,
     update_password,
     user_count_from_row,
@@ -165,6 +166,36 @@ def test_keycloak_authorization_url(monkeypatch: pytest.MonkeyPatch) -> None:
     assert "client_id=news-dashboard" in url
     assert "redirect_uri=https%3A%2F%2Fnews.lihor.ro%2Fauth%2Fcallback" in url
     assert "state=state-123" in url
+
+
+def test_keycloak_token_request_data_includes_optional_client_secret(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("KEYCLOAK_AUTH_ENABLED", "1")
+    monkeypatch.setenv("NEWS_DASHBOARD_BASE_URL", "https://news.lihor.ro")
+    monkeypatch.setenv("KEYCLOAK_CLIENT_ID", "news-dashboard")
+    monkeypatch.setenv("KEYCLOAK_CLIENT_SECRET", "client-secret")
+
+    data = keycloak_token_request_data("code-123")
+
+    assert data == {
+        "grant_type": "authorization_code",
+        "client_id": "news-dashboard",
+        "client_secret": "client-secret",
+        "code": "code-123",
+        "redirect_uri": "https://news.lihor.ro/auth/callback",
+    }
+
+
+def test_keycloak_token_request_data_omits_blank_client_secret(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("KEYCLOAK_AUTH_ENABLED", "1")
+    monkeypatch.setenv("KEYCLOAK_CLIENT_SECRET", " ")
+
+    data = keycloak_token_request_data("code-123")
+
+    assert "client_secret" not in data
 
 
 def test_ensure_keycloak_user_creates_local_user(

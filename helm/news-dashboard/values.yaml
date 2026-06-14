@@ -37,6 +37,8 @@ app:
     keycloakInternalServerUrl: https://news.lihor.ro/keycloak
     realm: news-dashboard
     clientId: news-dashboard
+    # Optional. Set this when the Keycloak client uses "confidential" access type.
+    clientSecret: ""
     # Comma-separated usernames that become app admins when first seen from Keycloak.
     adminUsernames: ioachim
     # Override in CI/local deploy with a long random string.
