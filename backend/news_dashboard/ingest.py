@@ -598,6 +598,20 @@ def ingest_all(db_path: Path | None = None) -> dict[str, int]:
 
 _INTERNAL_ARTICLE_COLUMNS = frozenset({"embedding", "fts_vector"})
 
+# UAS columns that override article-level state when a user_id is provided
+_UAS_STATE_COLUMNS = frozenset(
+    {
+        "state",
+        "starred",
+        "done_at",
+        "starred_at",
+        "skipped_at",
+        "archived_at",
+        "later_until",
+        "restored_at",
+    }
+)
+
 
 def _article_dict(row: Any) -> dict[str, Any]:
     """Convert a DB row to a dict, stripping internal-only columns.
@@ -612,7 +626,105 @@ def _article_dict(row: Any) -> dict[str, Any]:
     return d
 
 
-def list_articles(
+def _merge_uas(article: dict[str, Any], uas: dict[str, Any] | None) -> dict[str, Any]:
+    """Overlay per-user state from a user_article_state row onto an article dict.
+
+    When uas is None the article is implicitly in the 'today' state for the user
+    (the row doesn't exist yet because the user hasn't acted on it).
+    """
+    if uas is None:
+        article["state"] = "today"
+        article["starred"] = False
+        for col in (
+            "done_at",
+            "starred_at",
+            "skipped_at",
+            "archived_at",
+            "later_until",
+            "restored_at",
+        ):
+            article[col] = None
+    else:
+        article["state"] = uas.get("state") or "today"
+        article["starred"] = bool(uas.get("starred", False))
+        article["done_at"] = uas.get("done_at")
+        article["starred_at"] = uas.get("starred_at")
+        article["skipped_at"] = uas.get("skipped_at")
+        article["archived_at"] = uas.get("archived_at")
+        article["later_until"] = uas.get("later_until")
+        article["restored_at"] = uas.get("restored_at")
+    return article
+
+
+def _fetch_uas_map(conn: Any, article_ids: list[int], user_id: int) -> dict[int, dict[str, Any]]:
+    """Return a map of article_id → UAS row dict for the given user and article IDs."""
+    if not article_ids:
+        return {}
+    placeholders = ",".join("?" * len(article_ids))
+    rows = conn.execute(
+        f"SELECT * FROM user_article_state WHERE user_id = ? AND article_id IN ({placeholders})",
+        [user_id, *article_ids],
+    ).fetchall()
+    return {row_to_dict(r)["article_id"]: row_to_dict(r) for r in rows}
+
+
+def _get_uas_row(conn: Any, article_id: int, user_id: int) -> dict[str, Any] | None:
+    row = conn.execute(
+        "SELECT * FROM user_article_state WHERE user_id = ? AND article_id = ?",
+        (user_id, article_id),
+    ).fetchone()
+    return row_to_dict(row) if row else None
+
+
+def _upsert_uas(  # noqa: PLR0913
+    conn: Any,
+    user_id: int,
+    article_id: int,
+    *,
+    state: str,
+    starred: bool,
+    done_at: str | None = None,
+    starred_at: str | None = None,
+    skipped_at: str | None = None,
+    archived_at: str | None = None,
+    later_until: str | None = None,
+    restored_at: str | None = None,
+    updated_at: str,
+) -> None:
+    conn.execute(
+        """
+        INSERT INTO user_article_state(
+          user_id, article_id, state, starred,
+          done_at, starred_at, skipped_at, archived_at, later_until, restored_at, updated_at
+        ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(user_id, article_id) DO UPDATE SET
+          state = excluded.state,
+          starred = excluded.starred,
+          done_at = COALESCE(excluded.done_at, user_article_state.done_at),
+          starred_at = COALESCE(excluded.starred_at, user_article_state.starred_at),
+          skipped_at = COALESCE(excluded.skipped_at, user_article_state.skipped_at),
+          archived_at = COALESCE(excluded.archived_at, user_article_state.archived_at),
+          later_until = excluded.later_until,
+          restored_at = COALESCE(excluded.restored_at, user_article_state.restored_at),
+          updated_at = excluded.updated_at
+        """,
+        (
+            user_id,
+            article_id,
+            state,
+            1 if starred else 0,
+            done_at,
+            starred_at,
+            skipped_at,
+            archived_at,
+            later_until,
+            restored_at,
+            updated_at,
+        ),
+    )
+
+
+def list_articles(  # noqa: PLR0913
     status: str | None = None,
     state: str | None = None,
     category: str | None = None,
@@ -620,9 +732,25 @@ def list_articles(
     limit: int = 100,
     offset: int = 0,
     db_path: Path | None = None,
+    user_id: int | None = None,
 ) -> list[dict[str, Any]]:
     init_db(db_path)
     now = now_iso()
+
+    if user_id is not None:
+        return _list_articles_for_user(
+            user_id=user_id,
+            status=status,
+            state=state,
+            category=category,
+            starred=starred,
+            limit=limit,
+            offset=offset,
+            db_path=db_path,
+            now=now,
+        )
+
+    # ── Legacy path (no user context) ─────────────────────────────────────────
     # Exclude canonical-archived duplicates from results
     clauses: list[str] = ["(canonical_id IS NULL OR state != 'archived')"]
     params: list[object] = []
@@ -642,7 +770,6 @@ def list_articles(
             clauses.append("starred = 1")
     if state:
         if state == "today":
-            # Today = explicitly today OR later with expired snooze
             clauses.append(
                 "(state = 'today'"
                 " OR (state = 'later' AND later_until IS NOT NULL AND later_until <= ?))"
@@ -665,26 +792,117 @@ def list_articles(
             params,
         ).fetchall()
         articles = [_article_dict(row) for row in rows]
-
-        # Attach duplicate source names to canonical articles
-        article_ids = [a["id"] for a in articles]
-        if article_ids:
-            placeholders = ",".join("?" * len(article_ids))
-            dup_rows = conn.execute(
-                f"""
-                SELECT canonical_id, source_name FROM articles
-                WHERE canonical_id IN ({placeholders}) AND state='archived'
-                """,
-                article_ids,
-            ).fetchall()
-            dupes_by_canonical: dict[int, list[str]] = defaultdict(list)
-            for dr in dup_rows:
-                d = row_to_dict(dr)
-                dupes_by_canonical[d["canonical_id"]].append(d["source_name"])
-            for article in articles:
-                article["also_from"] = dupes_by_canonical.get(article["id"], [])
-
+        _attach_also_from(conn, articles)
         return articles
+
+
+def _list_articles_for_user(  # noqa: PLR0913
+    user_id: int,
+    *,
+    status: str | None,
+    state: str | None,
+    category: str | None,
+    starred: bool | None,
+    limit: int,
+    offset: int,
+    db_path: Path | None,
+    now: str,
+) -> list[dict[str, Any]]:
+    """Article listing scoped to a specific user via user_article_state."""
+    # Map legacy status → state
+    if status:
+        legacy_map = {
+            "new": "today",
+            "read": "done",
+            "saved": "today",
+            "skipped": "skipped",
+            "archived": "archived",
+        }
+        state = legacy_map.get(status, status)
+        if status == "saved":
+            starred = True
+
+    # Build WHERE on articles
+    not_archived = "(a.canonical_id IS NULL OR COALESCE(uas.state, 'today') != 'archived')"
+    art_clauses: list[str] = [not_archived]
+    params: list[object] = [user_id]  # first param is for the LEFT JOIN ON clause
+
+    # State filter on UAS
+    if state:
+        if state == "today":
+            art_clauses.append(
+                "(uas.state IS NULL OR uas.state = 'today'"
+                " OR (uas.state = 'later' AND uas.later_until IS NOT NULL"
+                " AND uas.later_until <= ?))"
+            )
+            params.append(now)
+        else:
+            art_clauses.append("COALESCE(uas.state, 'today') = ?")
+            params.append(state)
+    if starred is not None:
+        art_clauses.append("COALESCE(uas.starred, 0) = ?")
+        params.append(1 if starred else 0)
+    if category:
+        art_clauses.append("a.category = ?")
+        params.append(category)
+
+    where = f"WHERE {' AND '.join(art_clauses)}"
+    params.extend([limit, offset])
+
+    sql = f"""
+        SELECT a.*,
+          COALESCE(uas.state, 'today') AS _uas_state,
+          COALESCE(uas.starred, 0)     AS _uas_starred,
+          uas.done_at     AS _uas_done_at,
+          uas.starred_at  AS _uas_starred_at,
+          uas.skipped_at  AS _uas_skipped_at,
+          uas.archived_at AS _uas_archived_at,
+          uas.later_until AS _uas_later_until,
+          uas.restored_at AS _uas_restored_at
+        FROM articles a
+        LEFT JOIN user_article_state uas ON uas.article_id = a.id AND uas.user_id = ?
+        {where}
+        ORDER BY a.discovered_at DESC, a.id DESC
+        LIMIT ? OFFSET ?
+    """
+    with connect(db_path) as conn:
+        rows = conn.execute(sql, params).fetchall()
+        articles = []
+        for row in rows:
+            d = _article_dict(row)
+            # Apply UAS overrides from the prefixed columns
+            d["state"] = d.pop("_uas_state", "today")
+            d["starred"] = bool(d.pop("_uas_starred", 0))
+            d["done_at"] = d.pop("_uas_done_at", None)
+            d["starred_at"] = d.pop("_uas_starred_at", None)
+            d["skipped_at"] = d.pop("_uas_skipped_at", None)
+            d["archived_at"] = d.pop("_uas_archived_at", None)
+            d["later_until"] = d.pop("_uas_later_until", None)
+            d["restored_at"] = d.pop("_uas_restored_at", None)
+            articles.append(d)
+        _attach_also_from(conn, articles)
+        return articles
+
+
+def _attach_also_from(conn: Any, articles: list[dict[str, Any]]) -> None:
+    """Attach duplicate source names to canonical articles (in-place)."""
+    article_ids = [a["id"] for a in articles]
+    if not article_ids:
+        return
+    placeholders = ",".join("?" * len(article_ids))
+    dup_rows = conn.execute(
+        f"""
+        SELECT canonical_id, source_name FROM articles
+        WHERE canonical_id IN ({placeholders}) AND state='archived'
+        """,
+        article_ids,
+    ).fetchall()
+    dupes_by_canonical: dict[int, list[str]] = defaultdict(list)
+    for dr in dup_rows:
+        d = row_to_dict(dr)
+        dupes_by_canonical[d["canonical_id"]].append(d["source_name"])
+    for article in articles:
+        article["also_from"] = dupes_by_canonical.get(article["id"], [])
 
 
 def search_articles(  # noqa: PLR0913
@@ -697,9 +915,26 @@ def search_articles(  # noqa: PLR0913
     starred_only: bool = False,
     include_archived: bool = False,
     date_range: str = "all",
+    user_id: int | None = None,
 ) -> list[dict[str, Any]]:
     init_db(db_path)
     terms = [t for t in q.split() if len(t) >= 2]
+    now_ts = now_iso()
+
+    if user_id is not None:
+        return _search_articles_for_user(
+            user_id=user_id,
+            q=q,
+            limit=limit,
+            db_path=db_path,
+            states=states,
+            categories=categories,
+            sources=sources,
+            starred_only=starred_only,
+            include_archived=include_archived,
+            date_range=date_range,
+            now_ts=now_ts,
+        )
 
     clauses: list[str] = []
     params: list[Any] = []
@@ -743,7 +978,6 @@ def search_articles(  # noqa: PLR0913
         clauses.append("starred = 1")
 
     # Date range filter
-    now_ts = now_iso()
     if date_range == "today":
         clauses.append("discovered_at >= datetime(?, '-1 day')")
         params.append(now_ts)
@@ -764,6 +998,100 @@ def search_articles(  # noqa: PLR0913
     with connect(db_path) as conn:
         rows = conn.execute(sql, params).fetchall()
         return [_article_dict(row) for row in rows]
+
+
+def _search_articles_for_user(  # noqa: PLR0913
+    *,
+    user_id: int,
+    q: str,
+    limit: int,
+    db_path: Path | None,
+    states: list[str] | None,
+    categories: list[str] | None,
+    sources: list[str] | None,
+    starred_only: bool,
+    include_archived: bool,
+    date_range: str,
+    now_ts: str,
+) -> list[dict[str, Any]]:
+    terms = [t for t in q.split() if len(t) >= 2]
+    clauses: list[str] = []
+    params: list[Any] = [user_id]  # first positional = LEFT JOIN ON uas.user_id = ?
+
+    for term in terms:
+        like = f"%{term}%"
+        clauses.append(
+            "(a.title LIKE ? OR a.summary LIKE ? OR a.reason LIKE ? OR a.tags LIKE ?"
+            " OR a.source_name LIKE ? OR (a.body IS NOT NULL AND a.body LIKE ?))"
+        )
+        params.extend([like, like, like, like, like, like])
+
+    if not include_archived:
+        clauses.append("COALESCE(uas.state, 'today') != 'archived'")
+
+    if states:
+        placeholders = ",".join("?" * len(states))
+        clauses.append(f"COALESCE(uas.state, 'today') IN ({placeholders})")
+        params.extend(states)
+        if include_archived is False and "archived" in states:
+            clauses.remove("COALESCE(uas.state, 'today') != 'archived'")
+
+    if categories:
+        placeholders = ",".join("?" * len(categories))
+        clauses.append(f"a.category IN ({placeholders})")
+        params.extend(categories)
+
+    if sources:
+        placeholders = ",".join("?" * len(sources))
+        clauses.append(f"a.source_slug IN ({placeholders})")
+        params.extend(sources)
+
+    if starred_only:
+        clauses.append("COALESCE(uas.starred, 0) = 1")
+
+    if date_range == "today":
+        clauses.append("a.discovered_at >= datetime(?, '-1 day')")
+        params.append(now_ts)
+    elif date_range == "week":
+        clauses.append("a.discovered_at >= datetime(?, '-7 days')")
+        params.append(now_ts)
+    elif date_range == "month":
+        clauses.append("a.discovered_at >= datetime(?, '-30 days')")
+        params.append(now_ts)
+
+    where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+    params.append(limit)
+
+    sql = f"""
+        SELECT a.*,
+          COALESCE(uas.state, 'today') AS _uas_state,
+          COALESCE(uas.starred, 0)     AS _uas_starred,
+          uas.done_at     AS _uas_done_at,
+          uas.starred_at  AS _uas_starred_at,
+          uas.skipped_at  AS _uas_skipped_at,
+          uas.archived_at AS _uas_archived_at,
+          uas.later_until AS _uas_later_until,
+          uas.restored_at AS _uas_restored_at
+        FROM articles a
+        LEFT JOIN user_article_state uas ON uas.article_id = a.id AND uas.user_id = ?
+        {where}
+        ORDER BY a.importance_score DESC, a.discovered_at DESC LIMIT ?
+    """
+    with connect(db_path) as conn:
+        rows = conn.execute(sql, params).fetchall()
+        result = []
+        for row in rows:
+            d = _article_dict(row)
+            d["state"] = d.pop("_uas_state", "today")
+            d["starred"] = bool(d.pop("_uas_starred", 0))
+            d["done_at"] = d.pop("_uas_done_at", None)
+            d["starred_at"] = d.pop("_uas_starred_at", None)
+            d["skipped_at"] = d.pop("_uas_skipped_at", None)
+            d["archived_at"] = d.pop("_uas_archived_at", None)
+            d["later_until"] = d.pop("_uas_later_until", None)
+            d["restored_at"] = d.pop("_uas_restored_at", None)
+            result.append(d)
+        return result
 
 
 def set_article_status(
@@ -810,10 +1138,11 @@ def _get_article_row(conn: Any, article_id: int) -> dict[str, Any] | None:
     return _article_dict(row) if row else None
 
 
-def transition_article_state(
+def transition_article_state(  # noqa: PLR0912, PLR0915
     article_id: int,
     new_state: str,
     db_path: Path | None = None,
+    user_id: int | None = None,
 ) -> dict[str, Any] | None:
     """Apply a state transition, enforcing allowed-transition rules.
 
@@ -826,45 +1155,74 @@ def transition_article_state(
 
     init_db(db_path)
     with connect(db_path) as conn:
-        current = _get_article_row(conn, article_id)
-        if current is None:
+        base = _get_article_row(conn, article_id)
+        if base is None:
             return None
 
-        current_state = str(current.get("state") or "today")
+        if user_id is not None:
+            uas = _get_uas_row(conn, article_id, user_id)
+            current_state = str((uas or {}).get("state") or "today")
+            current_starred = bool((uas or {}).get("starred", False))
+        else:
+            current_state = str(base.get("state") or "today")
+            current_starred = bool(base.get("starred", False))
+
         if current_state == new_state:
-            return current
+            if user_id is not None:
+                return _merge_uas(base, uas if "uas" in dir() else None)
+            return base
 
         if (current_state, new_state) not in _ALLOWED_TRANSITIONS:
             message = f"transition {current_state!r} → {new_state!r} is not allowed"
             raise ValueError(message)
 
-        if new_state == "skipped" and current.get("starred"):
+        if new_state == "skipped" and current_starred:
             message = "starred articles cannot be skipped"
             raise ValueError(message)
 
         ts = now_iso()
-        timestamp_sets: list[str] = ["state = ?", "updated_at = ?"]
-        params: list[Any] = [new_state, ts]
 
-        if new_state == "done":
-            timestamp_sets.append("done_at = ?")
-            params.append(ts)
-        elif new_state == "skipped":
-            timestamp_sets.append("skipped_at = ?")
-            params.append(ts)
-        elif new_state == "archived":
-            timestamp_sets.append("archived_at = ?")
-            params.append(ts)
-        elif new_state == "today":
-            timestamp_sets.append("restored_at = ?")
-            timestamp_sets.append("later_until = NULL")
-            params.append(ts)
+        if user_id is not None:
+            existing = _get_uas_row(conn, article_id, user_id)
+            _upsert_uas(
+                conn,
+                user_id,
+                article_id,
+                state=new_state,
+                starred=current_starred,
+                done_at=ts if new_state == "done" else None,
+                skipped_at=ts if new_state == "skipped" else None,
+                archived_at=ts if new_state == "archived" else None,
+                restored_at=ts if new_state == "today" else None,
+                later_until=None if new_state == "today" else (existing or {}).get("later_until"),
+                updated_at=ts,
+            )
+            result: dict[str, Any] | None = _merge_uas(
+                _get_article_row(conn, article_id) or {},
+                _get_uas_row(conn, article_id, user_id),
+            )
+        else:
+            timestamp_sets: list[str] = ["state = ?", "updated_at = ?"]
+            params: list[Any] = [new_state, ts]
 
-        set_clause = ", ".join(timestamp_sets)
-        params.append(article_id)
-        conn.execute(f"UPDATE articles SET {set_clause} WHERE id = ?", params)
+            if new_state == "done":
+                timestamp_sets.append("done_at = ?")
+                params.append(ts)
+            elif new_state == "skipped":
+                timestamp_sets.append("skipped_at = ?")
+                params.append(ts)
+            elif new_state == "archived":
+                timestamp_sets.append("archived_at = ?")
+                params.append(ts)
+            elif new_state == "today":
+                timestamp_sets.append("restored_at = ?")
+                timestamp_sets.append("later_until = NULL")
+                params.append(ts)
 
-        result = _get_article_row(conn, article_id)
+            set_clause = ", ".join(timestamp_sets)
+            params.append(article_id)
+            conn.execute(f"UPDATE articles SET {set_clause} WHERE id = ?", params)
+            result = _get_article_row(conn, article_id)
 
     # Embed done articles lazily
     if result and new_state == "done":
@@ -882,15 +1240,32 @@ def set_article_starred(
     article_id: int,
     starred: bool,
     db_path: Path | None = None,
+    user_id: int | None = None,
 ) -> dict[str, Any] | None:
     """Set the starred flag on an article. Raises ValueError if starring a skipped article."""
     init_db(db_path)
     with connect(db_path) as conn:
-        current = _get_article_row(conn, article_id)
-        if current is None:
+        base = _get_article_row(conn, article_id)
+        if base is None:
             return None
 
         ts = now_iso()
+
+        if user_id is not None:
+            existing = _get_uas_row(conn, article_id, user_id)
+            current_state = str((existing or {}).get("state") or "today")
+            _upsert_uas(
+                conn,
+                user_id,
+                article_id,
+                state=current_state,
+                starred=starred,
+                starred_at=ts if starred else (existing or {}).get("starred_at"),
+                updated_at=ts,
+            )
+            base2 = _get_article_row(conn, article_id) or {}
+            return _merge_uas(base2, _get_uas_row(conn, article_id, user_id))
+
         if starred:
             conn.execute(
                 "UPDATE articles SET starred = 1, starred_at = ?, updated_at = ? WHERE id = ?",
@@ -909,6 +1284,7 @@ def send_article_later(
     article_id: int,
     days: int = 1,
     db_path: Path | None = None,
+    user_id: int | None = None,
 ) -> dict[str, Any] | None:
     """Snooze an article to Later with an expiry of `days` days from now.
 
@@ -920,11 +1296,16 @@ def send_article_later(
 
     init_db(db_path)
     with connect(db_path) as conn:
-        current = _get_article_row(conn, article_id)
-        if current is None:
+        base = _get_article_row(conn, article_id)
+        if base is None:
             return None
 
-        current_state = str(current.get("state") or "today")
+        if user_id is not None:
+            uas = _get_uas_row(conn, article_id, user_id)
+            current_state = str((uas or {}).get("state") or "today")
+        else:
+            current_state = str(base.get("state") or "today")
+
         if current_state not in {"today", "later"}:
             message = f"cannot snooze article in state {current_state!r}"
             raise ValueError(message)
@@ -933,6 +1314,21 @@ def send_article_later(
             (datetime.now(timezone.utc) + timedelta(days=days)).replace(microsecond=0).isoformat()
         )
         ts = now_iso()
+
+        if user_id is not None:
+            existing = _get_uas_row(conn, article_id, user_id)
+            _upsert_uas(
+                conn,
+                user_id,
+                article_id,
+                state="later",
+                starred=bool((existing or {}).get("starred", False)),
+                later_until=later_until,
+                updated_at=ts,
+            )
+            base3 = _get_article_row(conn, article_id) or {}
+            return _merge_uas(base3, _get_uas_row(conn, article_id, user_id))
+
         conn.execute(
             "UPDATE articles SET state = 'later', later_until = ?, updated_at = ? WHERE id = ?",
             (later_until, ts, article_id),

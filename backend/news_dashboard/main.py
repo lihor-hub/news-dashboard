@@ -218,6 +218,7 @@ def ingest_stream() -> StreamingResponse:
 
 @api.get("/api/articles")
 def articles(
+    current_user: Annotated[dict[str, Any], Depends(require_auth)],
     status: Annotated[str | None, Query()] = None,
     state: Annotated[str | None, Query()] = None,
     starred: Annotated[bool | None, Query()] = None,
@@ -233,12 +234,14 @@ def articles(
             category=category,
             limit=limit,
             offset=offset,
+            user_id=current_user["id"],
         )
     }
 
 
 @api.get("/api/search")
 def search(  # noqa: PLR0913
+    current_user: Annotated[dict[str, Any], Depends(require_auth)],
     q: Annotated[str, Query(description="Space-separated search terms")] = "",
     limit: Annotated[int, Query(ge=1, le=200)] = 50,
     states: Annotated[list[str] | None, Query()] = None,
@@ -258,6 +261,7 @@ def search(  # noqa: PLR0913
             starred_only=starred_only,
             include_archived=include_archived,
             date_range=date_range,
+            user_id=current_user["id"],
         )
     }
 
@@ -290,9 +294,13 @@ def update_status(article_id: int, payload: StatusUpdate) -> dict[str, Any]:
 
 
 @api.patch("/api/articles/{article_id}/state")
-def update_state(article_id: int, payload: StateUpdate) -> dict[str, Any]:
+def update_state(
+    article_id: int,
+    payload: StateUpdate,
+    current_user: Annotated[dict[str, Any], Depends(require_auth)],
+) -> dict[str, Any]:
     try:
-        article = transition_article_state(article_id, payload.state)
+        article = transition_article_state(article_id, payload.state, user_id=current_user["id"])
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     if not article:
@@ -301,17 +309,25 @@ def update_state(article_id: int, payload: StateUpdate) -> dict[str, Any]:
 
 
 @api.patch("/api/articles/{article_id}/star")
-def update_star(article_id: int, payload: StarUpdate) -> dict[str, Any]:
-    article = set_article_starred(article_id, payload.starred)
+def update_star(
+    article_id: int,
+    payload: StarUpdate,
+    current_user: Annotated[dict[str, Any], Depends(require_auth)],
+) -> dict[str, Any]:
+    article = set_article_starred(article_id, payload.starred, user_id=current_user["id"])
     if not article:
         raise HTTPException(status_code=404, detail="article not found")
     return article
 
 
 @api.patch("/api/articles/{article_id}/later")
-def snooze_later(article_id: int, payload: LaterUpdate) -> dict[str, Any]:
+def snooze_later(
+    article_id: int,
+    payload: LaterUpdate,
+    current_user: Annotated[dict[str, Any], Depends(require_auth)],
+) -> dict[str, Any]:
     try:
-        article = send_article_later(article_id, payload.days)
+        article = send_article_later(article_id, payload.days, user_id=current_user["id"])
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     if not article:
