@@ -890,7 +890,7 @@ def _list_articles_for_user(  # noqa: PLR0913
         LEFT JOIN user_article_state uas ON uas.article_id = a.id AND uas.user_id = ?
         {where}
           AND (
-            (src.owner_user_id IS NULL AND COALESCE(us_src.enabled, 1) = 1)
+            (src.owner_user_id IS NULL AND COALESCE(us_src.enabled, true))
             OR src.owner_user_id = ?
           )
         ORDER BY a.discovered_at DESC, a.id DESC
@@ -1092,7 +1092,7 @@ def _search_articles_for_user(  # noqa: PLR0912, PLR0913, PLR0915
 
     # Source subscription filter appended to WHERE
     src_filter = (
-        "(src.owner_user_id IS NULL AND COALESCE(us_src.enabled, 1) = 1) OR src.owner_user_id = ?"
+        "(src.owner_user_id IS NULL AND COALESCE(us_src.enabled, true)) OR src.owner_user_id = ?"
     )
     if clauses:
         clauses.append(f"({src_filter})")

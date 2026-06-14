@@ -439,8 +439,8 @@ def sources(
         rows = conn.execute(
             """
             SELECT s.*,
-              CASE WHEN s.owner_user_id IS NULL THEN COALESCE(us.enabled, 1)
-                   ELSE s.enabled END AS user_enabled
+              CASE WHEN s.owner_user_id IS NULL THEN COALESCE(us.enabled, true)
+                   ELSE (s.enabled = 1) END AS user_enabled
             FROM sources s
             LEFT JOIN user_sources us ON us.source_slug = s.slug AND us.user_id = ?
             WHERE s.owner_user_id IS NULL OR s.owner_user_id = ?
@@ -528,7 +528,7 @@ def set_source_enabled(
                 VALUES (?, ?, ?)
                 ON CONFLICT(user_id, source_slug) DO UPDATE SET enabled = excluded.enabled
                 """,
-                (uid, slug, 1 if payload.enabled else 0),
+                (uid, slug, bool(payload.enabled)),
             )
         else:
             # Private source — only owner can change
