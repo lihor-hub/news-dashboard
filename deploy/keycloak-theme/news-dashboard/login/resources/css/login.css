@@ -99,7 +99,7 @@ body.login-pf {
 }
 
 #kc-page-title::after {
-  content: 'Private radar dashboard for news.lihor.ro';
+  content: 'Private radar dashboard for news.example.com';
   display: block;
   margin-top: 0.25rem;
   color: var(--nd-muted-foreground);

@@ -1,6 +1,6 @@
 # news-dashboard
 
-Private dashboard for `news.lihor.ro`: a news inbox, reading tracker, source registry, and later summary/AI question layer for Ioachim.
+Private dashboard for `news.example.com`: a news inbox, reading tracker, source registry, and later summary/AI question layer for the owner.
 
 ## Product intent
 
@@ -82,7 +82,7 @@ helm upgrade --install news-dashboard ./helm/news-dashboard \
 The Kubernetes deployment uses PostgreSQL by default, backed by durable host storage on the local single-node cluster:
 
 ```text
-/home/ioachim-minipc/news-dashboard-postgres-data
+/home/your-runner/news-dashboard-postgres-data
 ```
 
 SQLite remains only a local/test fallback. Existing SQLite data can be migrated with:
@@ -94,11 +94,11 @@ news-dashboard-migrate /data/news-dashboard.db
 ## Deployment notes
 
 - The app should be private/auth-protected when exposed publicly.
-- `news.lihor.ro` uses app-level authentication. The local minipc deployment can
-  use Keycloak under `https://news.lihor.ro/keycloak`; see
+- `news.example.com` uses app-level authentication. The local minipc deployment can
+  use Keycloak under `https://news.example.com/keycloak`; see
   [docs/KEYCLOAK_AUTH.md](docs/KEYCLOAK_AUTH.md) for backend env vars, Helm
   values, Caddy routing, and the matching Keycloak login theme.
-- `news.lihor.ro` is served by host-level Caddy with automatic Let's Encrypt
+- `news.example.com` is served by host-level Caddy with automatic Let's Encrypt
   HTTPS. See [docs/CADDY_HTTPS_SETUP.md](docs/CADDY_HTTPS_SETUP.md) for the
   full HTTPS setup guide; the Caddyfile lives at `deploy/Caddyfile`.
 - HTTPS is required for PWA install (Chrome/Android "Add to Home Screen" as a
@@ -107,3 +107,7 @@ news-dashboard-migrate /data/news-dashboard.db
   Keycloak redirects and API responses reach the backend.
 - GitHub Actions publishes `ghcr.io/ioachim-hub/news-dashboard`.
 - For the local Kubernetes cluster, if GHCR pull auth is unavailable, build and push to `localhost:5000/news-dashboard:<tag>` and override Helm image values.
+
+## License
+
+Released under the [MIT License](LICENSE).

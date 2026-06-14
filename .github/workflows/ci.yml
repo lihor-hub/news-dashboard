@@ -158,6 +158,14 @@ jobs:
           GHCR_ACTOR: ${{ github.actor }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           SESSION_SECRET: ${{ secrets.SESSION_SECRET }}
+          # Deployment-specific values kept out of the public repo. Set these as
+          # GitHub Actions repository Variables (Settings → Secrets and variables
+          # → Actions → Variables). Falls back to the generic chart defaults.
+          PUBLIC_BASE_URL: ${{ vars.PUBLIC_BASE_URL }}
+          KEYCLOAK_SERVER_URL: ${{ vars.KEYCLOAK_SERVER_URL }}
+          ADMIN_USERNAMES: ${{ vars.ADMIN_USERNAMES }}
+          DATA_HOSTPATH: ${{ vars.DATA_HOSTPATH }}
+          POSTGRES_HOSTPATH: ${{ vars.POSTGRES_HOSTPATH }}
         run: |
           set -euo pipefail
 
@@ -210,12 +218,25 @@ jobs:
             --set image.pullSecretName=ghcr-pull-secret
             --set service.type=NodePort
             --set service.nodePort=30088
-            --set persistence.hostPath=/home/ioachim-minipc/news-dashboard-data
-            --set postgresql.persistence.hostPath=/home/ioachim-minipc/news-dashboard-postgres-data
+            --set persistence.hostPath="${DATA_HOSTPATH:-/data/news-dashboard-data}"
+            --set postgresql.persistence.hostPath="${POSTGRES_HOSTPATH:-/data/news-dashboard-postgres-data}"
             --set ingress.enabled=false
             --set-string app.auth.sessionSecret="$SESSION_SECRET"
             "${ai_helm_args[@]}"
           )
+          # Apply deployment-specific overrides only when the matching repo
+          # Variable is set, so the public chart defaults stay generic.
+          if [ -n "$PUBLIC_BASE_URL" ]; then
+            helm_args+=(--set "app.auth.publicBaseUrl=$PUBLIC_BASE_URL")
+            helm_args+=(--set "ingress.host=${PUBLIC_BASE_URL#https://}")
+          fi
+          if [ -n "$KEYCLOAK_SERVER_URL" ]; then
+            helm_args+=(--set "app.auth.keycloakServerUrl=$KEYCLOAK_SERVER_URL")
+            helm_args+=(--set "app.auth.keycloakInternalServerUrl=$KEYCLOAK_SERVER_URL")
+          fi
+          if [ -n "$ADMIN_USERNAMES" ]; then
+            helm_args+=(--set "app.auth.adminUsernames=$ADMIN_USERNAMES")
+          fi
           helm "${helm_args[@]}"
 
           # Wait for the new pods to become ready.

@@ -1,6 +1,6 @@
 # News Dashboard Architecture
 
-This project is a private personal news dashboard for `news.lihor.ro`. It collects curated technical news feeds, stores articles, lets the owner triage them as `new`, `read`, `saved`, `skipped`, or `archived`, tracks source health, and can send a daily digest email.
+This project is a private personal news dashboard for `news.example.com`. It collects curated technical news feeds, stores articles, lets the owner triage them as `new`, `read`, `saved`, `skipped`, or `archived`, tracks source health, and can send a daily digest email.
 
 The system is not a large microservice platform. It is best understood as a modular monolith with a small number of runtime units:
 
@@ -35,7 +35,7 @@ flowchart TB
   end
 
   subgraph Kubernetes["Kubernetes via Helm"]
-    Caddy["Host Caddy<br/>news.lihor.ro<br/>Basic Auth"]
+    Caddy["Host Caddy<br/>news.example.com<br/>Basic Auth"]
     Service["K8s Service<br/>NodePort 30088 or ClusterIP"]
     Deployment["news-dashboard Deployment<br/>replicas: 1"]
     CronJob["K8s CronJob<br/>news-dashboard ingest<br/>every 6 hours"]
@@ -150,7 +150,7 @@ sequenceDiagram
 
 ```mermaid
 flowchart TD
-  Open["Open news.lihor.ro"] --> Load["React loads dashboard"]
+  Open["Open news.example.com"] --> Load["React loads dashboard"]
   Load --> Summary["GET /api/summary"]
   Load --> Articles["GET /api/articles?status=new"]
   Load --> Sources["GET /api/sources"]
@@ -239,7 +239,7 @@ During ingestion, each source is fetched through either `feedparser` for RSS/Ato
 
 The React UI reads articles by status and category, displays summary counts, shows source health, and lets the user update article status. Status changes are persisted through `PATCH /api/articles/{article_id}/status`, and the UI reloads articles and counts afterward. Search calls `/api/search` and returns matching articles across statuses.
 
-For production, GitHub Actions tests the Python backend, builds the frontend, builds a Docker image, pushes it to GHCR, and deploys it on a self-hosted runner with Helm. The host-level Caddy route exposes the Kubernetes NodePort at `news.lihor.ro` and applies Basic Auth outside the app.
+For production, GitHub Actions tests the Python backend, builds the frontend, builds a Docker image, pushes it to GHCR, and deploys it on a self-hosted runner with Helm. The host-level Caddy route exposes the Kubernetes NodePort at `news.example.com` and applies Basic Auth outside the app.
 
 ## Operational Notes
 

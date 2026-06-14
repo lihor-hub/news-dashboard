@@ -1,4 +1,4 @@
-news.lihor.ro {
+news.example.com {
 	# Authentication is enforced by the app. Keycloak is mounted under the same
 	# hostname so OAuth redirect URIs do not require a separate DNS record.
 	handle /keycloak* {

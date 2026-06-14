@@ -1,6 +1,6 @@
 apiVersion: v2
 name: news-dashboard
-description: Private news inbox and reading tracker for news.lihor.ro
+description: Private news inbox and reading tracker for news.example.com
 type: application
 version: 0.1.0
 appVersion: "0.1.0"

@@ -1,16 +1,16 @@
-# Self-hosted runner setup on ioachim-minipc
+# Self-hosted runner setup on your-runner
 
 The CD workflow (deploy job) runs on a self-hosted GitHub Actions runner installed
 directly on the production machine.  This avoids managing SSH keys and gives the
 runner direct access to `kubectl` / `helm` / the local Kubernetes cluster.
 
-## One-time setup (run on ioachim-minipc)
+## One-time setup (run on your-runner)
 
 ### 1. Install the runner
 
 Go to **https://github.com/ioachim-hub/news-dashboard/settings/actions/runners**,
 click **New self-hosted runner**, select Linux/x64, and follow the steps shown.
-When asked for labels, add `ioachim-minipc` (the workflow uses `[self-hosted, ioachim-minipc]`).
+When asked for labels, add `your-runner` (the workflow uses `[self-hosted, your-runner]`).
 
 Install as a systemd service so the runner starts on boot:
 
@@ -82,7 +82,7 @@ docker pull ghcr.io/ioachim-hub/news-dashboard:latest
 git push origin main
   └─ test job      (ubuntu-latest)   pytest + tsc/vite build
   └─ publish job   (ubuntu-latest)   docker build + push to GHCR with :<sha>
-  └─ deploy job    (ioachim-minipc)
+  └─ deploy job    (your-runner)
        ├─ kubectl apply imagePullSecret (refreshes GHCR_READ_TOKEN in cluster)
        ├─ helm upgrade --set image.tag=<sha>  (exact SHA, never "latest")
        ├─ kubectl rollout status --timeout=120s
@@ -111,7 +111,7 @@ produces the pod/deployment name `news-dashboard-news-dashboard`.  This is expec
 ## HTTPS / Caddy setup
 
 The app runs as a NodePort service on `localhost:30088`.  To serve it over HTTPS
-at `news.lihor.ro` (required for PWA install, service worker, and Basic Auth),
+at `news.example.com` (required for PWA install, service worker, and Basic Auth),
 a host-level Caddy reverse proxy is needed.
 
 See **[docs/CADDY_HTTPS_SETUP.md](CADDY_HTTPS_SETUP.md)** for the full walkthrough,

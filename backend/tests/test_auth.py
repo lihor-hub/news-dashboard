@@ -193,14 +193,14 @@ def test_keycloak_auth_metadata_disabled(monkeypatch: pytest.MonkeyPatch) -> Non
 
 def test_keycloak_authorization_url(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("KEYCLOAK_AUTH_ENABLED", "1")
-    monkeypatch.setenv("NEWS_DASHBOARD_BASE_URL", "https://news.lihor.ro")
-    monkeypatch.setenv("KEYCLOAK_SERVER_URL", "https://news.lihor.ro/keycloak")
+    monkeypatch.setenv("NEWS_DASHBOARD_BASE_URL", "https://news.example.com")
+    monkeypatch.setenv("KEYCLOAK_SERVER_URL", "https://news.example.com/keycloak")
     url = keycloak_authorization_url("state-123")
     assert url.startswith(
-        "https://news.lihor.ro/keycloak/realms/news-dashboard/protocol/openid-connect/auth?"
+        "https://news.example.com/keycloak/realms/news-dashboard/protocol/openid-connect/auth?"
     )
     assert "client_id=news-dashboard" in url
-    assert "redirect_uri=https%3A%2F%2Fnews.lihor.ro%2Fauth%2Fcallback" in url
+    assert "redirect_uri=https%3A%2F%2Fnews.example.com%2Fauth%2Fcallback" in url
     assert "state=state-123" in url
 
 
@@ -208,7 +208,7 @@ def test_keycloak_token_request_data_includes_optional_client_secret(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv("KEYCLOAK_AUTH_ENABLED", "1")
-    monkeypatch.setenv("NEWS_DASHBOARD_BASE_URL", "https://news.lihor.ro")
+    monkeypatch.setenv("NEWS_DASHBOARD_BASE_URL", "https://news.example.com")
     monkeypatch.setenv("KEYCLOAK_CLIENT_ID", "news-dashboard")
     monkeypatch.setenv("KEYCLOAK_CLIENT_SECRET", "client-secret")
 
@@ -219,7 +219,7 @@ def test_keycloak_token_request_data_includes_optional_client_secret(
         "client_id": "news-dashboard",
         "client_secret": "client-secret",
         "code": "code-123",
-        "redirect_uri": "https://news.lihor.ro/auth/callback",
+        "redirect_uri": "https://news.example.com/auth/callback",
     }
 
 
@@ -237,12 +237,12 @@ def test_keycloak_token_request_data_omits_blank_client_secret(
 def test_ensure_keycloak_user_creates_local_user(
     tmp_db: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setenv("KEYCLOAK_ADMIN_USERNAMES", "ioachim")
+    monkeypatch.setenv("KEYCLOAK_ADMIN_USERNAMES", "admin")
     user = ensure_keycloak_user(
-        {"preferred_username": "ioachim", "email": "ioachim@example.test", "sub": "kc-sub"}
+        {"preferred_username": "admin", "email": "admin@example.test", "sub": "kc-sub"}
     )
-    assert user["username"] == "ioachim"
-    assert user["email"] == "ioachim@example.test"
+    assert user["username"] == "admin"
+    assert user["email"] == "admin@example.test"
     assert user["is_admin"]
 
 
@@ -258,7 +258,7 @@ def test_init_auth_requires_session_secret_for_keycloak(
     tmp_db: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setenv("KEYCLOAK_AUTH_ENABLED", "1")
-    monkeypatch.setenv("KEYCLOAK_SERVER_URL", "https://news.lihor.ro/keycloak")
+    monkeypatch.setenv("KEYCLOAK_SERVER_URL", "https://news.example.com/keycloak")
     monkeypatch.delenv("SESSION_SECRET", raising=False)
     monkeypatch.delenv("TEST_SESSION_SECRET", raising=False)
 
@@ -270,7 +270,7 @@ def test_init_auth_accepts_keycloak_when_session_secret_is_set(
     tmp_db: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setenv("KEYCLOAK_AUTH_ENABLED", "1")
-    monkeypatch.setenv("KEYCLOAK_SERVER_URL", "https://news.lihor.ro/keycloak")
+    monkeypatch.setenv("KEYCLOAK_SERVER_URL", "https://news.example.com/keycloak")
     monkeypatch.setenv("SESSION_SECRET", "test-secret")
 
     init_auth()

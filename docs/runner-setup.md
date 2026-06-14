@@ -45,7 +45,7 @@ tar xzf actions-runner-linux-x64.tar.gz
 # Register — use the token shown on the GitHub UI; it expires in 1 hour
 ./config.sh --url https://github.com/ioachim-hub/news-dashboard \
             --token <REGISTRATION_TOKEN_FROM_GITHUB_UI> \
-            --name ioachim-minipc \
+            --name your-runner \
             --labels self-hosted
 ```
 

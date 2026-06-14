@@ -343,7 +343,9 @@ def sync_sources(db_path: Path | None = None) -> None:
 
 def _fetch_feed_entries(source: SourceDefinition) -> list[dict[str, Any]]:
     """Fetch and normalize feed entries, surfacing fetch failures as FeedFetchError."""
-    parsed = feedparser.parse(source.url, agent="news-dashboard/0.1 (personal; contact@lihor.ro)")
+    parsed = feedparser.parse(
+        source.url, agent="news-dashboard/0.1 (personal; contact@example.com)"
+    )
     # feedparser swallows network errors via bozo; surface them so health tracking works
     if parsed.bozo and not parsed.entries:
         exc = getattr(parsed, "bozo_exception", None)

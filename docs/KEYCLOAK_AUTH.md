@@ -30,9 +30,9 @@ Required when Keycloak auth is enabled:
 
 ```bash
 KEYCLOAK_AUTH_ENABLED=1
-NEWS_DASHBOARD_BASE_URL=https://news.lihor.ro
-KEYCLOAK_SERVER_URL=https://news.lihor.ro/keycloak
-KEYCLOAK_INTERNAL_SERVER_URL=https://news.lihor.ro/keycloak
+NEWS_DASHBOARD_BASE_URL=https://news.example.com
+KEYCLOAK_SERVER_URL=https://news.example.com/keycloak
+KEYCLOAK_INTERNAL_SERVER_URL=https://news.example.com/keycloak
 KEYCLOAK_REALM=news-dashboard
 KEYCLOAK_CLIENT_ID=news-dashboard
 KEYCLOAK_ADMIN_USERNAMES=alice,bob   # comma-separated; omit to grant no admins via Keycloak
@@ -46,7 +46,7 @@ SESSION_SECRET=<long random string>
 The minipc Caddy config exposes Keycloak under the same hostname:
 
 ```caddy
-news.lihor.ro {
+news.example.com {
 	handle /keycloak* {
 		reverse_proxy 127.0.0.1:8081
 	}
@@ -55,12 +55,12 @@ news.lihor.ro {
 }
 ```
 
-This avoids a separate DNS record and keeps redirect URIs under `https://news.lihor.ro`.
+This avoids a separate DNS record and keeps redirect URIs under `https://news.example.com`.
 
-Do **not** enable a separate `keycloak.lihor.ro` Caddy site unless the DNS record exists first. If that site is imported while the subdomain is `NXDOMAIN`, Caddy will keep retrying Let's Encrypt issuance and logging ACME DNS failures. For this deployment, the durable public Keycloak base is:
+Do **not** enable a separate `keycloak.example.com` Caddy site unless the DNS record exists first. If that site is imported while the subdomain is `NXDOMAIN`, Caddy will keep retrying Let's Encrypt issuance and logging ACME DNS failures. For this deployment, the durable public Keycloak base is:
 
 ```text
-https://news.lihor.ro/keycloak
+https://news.example.com/keycloak
 ```
 
 ## Helm
@@ -81,9 +81,9 @@ Recommended realm/client values:
 - Realm: `news-dashboard`
 - Client ID: `news-dashboard`
 - Client type: public OpenID Connect client
-- Valid redirect URI: `https://news.lihor.ro/auth/callback`
-- Valid post-logout redirect URI: `https://news.lihor.ro`
-- Web origin: `https://news.lihor.ro`
+- Valid redirect URI: `https://news.example.com/auth/callback`
+- Valid post-logout redirect URI: `https://news.example.com`
+- Web origin: `https://news.example.com`
 
 ## Google sign-in
 
@@ -101,7 +101,7 @@ dashboard user record as any other Keycloak login.
 4. Add this authorized redirect URI:
 
    ```text
-   https://news.lihor.ro/keycloak/realms/news-dashboard/broker/google/endpoint
+   https://news.example.com/keycloak/realms/news-dashboard/broker/google/endpoint
    ```
 
 5. Copy the generated client ID and client secret.
@@ -123,12 +123,12 @@ dashboard user record as any other Keycloak login.
 6. Save the provider, then open a private browser window and visit:
 
    ```text
-   https://news.lihor.ro/auth/login
+   https://news.example.com/auth/login
    ```
 
    The Keycloak login page should show the Google provider as an alternate
    sign-in action. After Google redirects back to Keycloak, Keycloak redirects
-   to `https://news.lihor.ro/auth/callback`, and the dashboard session cookie is
+   to `https://news.example.com/auth/callback`, and the dashboard session cookie is
    issued by the app.
 
 No frontend or backend environment variable is required specifically for Google

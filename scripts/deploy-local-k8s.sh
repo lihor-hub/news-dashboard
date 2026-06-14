@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Manual deploy to the local Kubernetes cluster on ioachim-minipc.
+# Manual deploy to a local single-node Kubernetes cluster.
 # CI runs the equivalent steps automatically on push to main.
 #
 # Usage:
@@ -41,8 +41,8 @@ helm upgrade --install news-dashboard ./helm/news-dashboard \
   --set-string image.pullSecretName="${PULL_SECRET_NAME:-}" \
   --set service.type=NodePort \
   --set service.nodePort=30088 \
-  --set persistence.hostPath=/home/ioachim-minipc/news-dashboard-data \
-  --set postgresql.persistence.hostPath=/home/ioachim-minipc/news-dashboard-postgres-data \
+  --set persistence.hostPath="${DATA_HOSTPATH:-/data/news-dashboard-data}" \
+  --set postgresql.persistence.hostPath="${POSTGRES_HOSTPATH:-/data/news-dashboard-postgres-data}" \
   "${AI_HELM_ARGS[@]}" \
   --set ingress.enabled=false
 

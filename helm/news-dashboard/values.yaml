@@ -32,15 +32,16 @@ app:
   databasePath: /data/news-dashboard.db
   auth:
     enabled: true
-    publicBaseUrl: https://news.lihor.ro
-    keycloakServerUrl: https://news.lihor.ro/keycloak
-    keycloakInternalServerUrl: https://news.lihor.ro/keycloak
+    # Override per deployment (CI sets these from repo Variables).
+    publicBaseUrl: https://news.example.com
+    keycloakServerUrl: https://news.example.com/keycloak
+    keycloakInternalServerUrl: https://news.example.com/keycloak
     realm: news-dashboard
     clientId: news-dashboard
     # Optional. Set this when the Keycloak client uses "confidential" access type.
     clientSecret: ""
     # Comma-separated usernames that become app admins when first seen from Keycloak.
-    adminUsernames: ioachim
+    adminUsernames: admin
     # Override in CI/local deploy with a long random string.
     sessionSecret: ""
   ai:
@@ -60,13 +61,13 @@ postgresql:
     enabled: true
     size: 2Gi
     storageClassName: ""
-    # Local single-node durable storage. This survives pod restarts/upgrades.
-    hostPath: /home/ioachim-minipc/news-dashboard-postgres-data
+    # Local single-node durable storage path on the node (override per deploy).
+    hostPath: /data/news-dashboard-postgres-data
 
 ingress:
   enabled: false
   className: ""
-  host: news.lihor.ro
+  host: news.example.com
   annotations: {}
   tls: []
 
