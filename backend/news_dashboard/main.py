@@ -581,8 +581,10 @@ def stats_ingested_vs_handled_endpoint() -> dict[str, Any]:
 
 
 @api.get("/api/briefings/latest")
-def briefings_latest() -> dict[str, Any]:
-    briefing = get_latest_briefing()
+def briefings_latest(
+    current_user: Annotated[dict[str, Any], Depends(require_auth)],
+) -> dict[str, Any]:
+    briefing = get_latest_briefing(user_id=current_user["id"])
     if briefing is None:
         return {"status": "empty"}
     return briefing
@@ -590,24 +592,30 @@ def briefings_latest() -> dict[str, Any]:
 
 @api.get("/api/briefings")
 def briefings_list(
+    current_user: Annotated[dict[str, Any], Depends(require_auth)],
     limit: Annotated[int, Query(ge=1, le=200)] = 50,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> dict[str, Any]:
-    return {"items": list_briefings(limit=limit, offset=offset)}
+    return {"items": list_briefings(limit=limit, offset=offset, user_id=current_user["id"])}
 
 
 @api.get("/api/briefings/{briefing_id}")
-def briefings_detail(briefing_id: int) -> dict[str, Any]:
-    briefing = get_briefing(briefing_id)
+def briefings_detail(
+    briefing_id: int,
+    current_user: Annotated[dict[str, Any], Depends(require_auth)],
+) -> dict[str, Any]:
+    briefing = get_briefing(briefing_id, user_id=current_user["id"])
     if briefing is None:
         raise HTTPException(status_code=404, detail="briefing not found")
     return briefing
 
 
 @api.post("/api/briefings")
-def briefings_create() -> dict[str, Any]:
+def briefings_create(
+    current_user: Annotated[dict[str, Any], Depends(require_auth)],
+) -> dict[str, Any]:
     try:
-        return generate_briefing()
+        return generate_briefing(user_id=current_user["id"])
     except BriefingAINotConfiguredError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     except BriefingGenerationError as exc:

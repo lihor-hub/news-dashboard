@@ -67,6 +67,23 @@ _CANDIDATES_SQL = """
     LIMIT %s
 """
 
+_CANDIDATES_SQL_USER = """
+    SELECT a.id, a.title, a.url, a.source_name, a.category,
+           a.summary, a.importance_score, a.discovered_at
+    FROM articles a
+    LEFT JOIN user_article_state uas ON uas.article_id = a.id AND uas.user_id = %s
+    LEFT JOIN sources src ON src.slug = a.source_slug
+    LEFT JOIN user_sources us_src ON us_src.user_id = %s AND us_src.source_slug = a.source_slug
+    WHERE COALESCE(uas.state, 'today') = 'today'
+      AND a.discovered_at::timestamptz >= %s
+      AND (
+        (src.owner_user_id IS NULL AND COALESCE(us_src.enabled, TRUE) IS TRUE)
+        OR src.owner_user_id = %s
+      )
+    ORDER BY a.importance_score DESC NULLS LAST, a.discovered_at DESC
+    LIMIT %s
+"""
+
 
 # ── Internal helpers ──────────────────────────────────────────────────────────
 
@@ -86,17 +103,31 @@ def _coerce_content(value: Any) -> Any:
     return value
 
 
-def _get_since_at(database_url: str | None = None) -> datetime:
-    """Return the previous briefing's until_at, or now() - 24h if none exists."""
+def _get_since_at(
+    database_url: str | None = None,
+    user_id: int | None = None,
+) -> datetime:
+    """Return the previous briefing's until_at for this user, or now() - 24h if none exists."""
     with connect(database_url=database_url) as conn:
-        row = conn.execute(
-            """
-            SELECT until_at FROM briefings
-            WHERE status = 'complete' AND until_at IS NOT NULL
-            ORDER BY created_at DESC
-            LIMIT 1
-            """,
-        ).fetchone()
+        if user_id is not None:
+            row = conn.execute(
+                """
+                SELECT until_at FROM briefings
+                WHERE status = 'complete' AND until_at IS NOT NULL AND user_id = %s
+                ORDER BY created_at DESC
+                LIMIT 1
+                """,
+                (user_id,),
+            ).fetchone()
+        else:
+            row = conn.execute(
+                """
+                SELECT until_at FROM briefings
+                WHERE status = 'complete' AND until_at IS NOT NULL AND user_id IS NULL
+                ORDER BY created_at DESC
+                LIMIT 1
+                """,
+            ).fetchone()
     if row is not None:
         val = row_to_dict(row)["until_at"]
         if val is not None:
@@ -198,6 +229,7 @@ def _save_briefing(
     candidate_ids: set[int],
     model: str,
     database_url: str | None = None,
+    user_id: int | None = None,
 ) -> dict[str, Any]:
     """Insert briefing + article links; return the full briefing dict."""
     title = content.get("title") or ""
@@ -211,9 +243,9 @@ def _save_briefing(
         row = conn.execute(
             """
             INSERT INTO briefings(
-                scope, since_at, until_at, status, title, summary, content, model
+                scope, since_at, until_at, status, title, summary, content, model, user_id
             )
-            VALUES (%s, %s, %s, %s, %s, %s, %s::jsonb, %s)
+            VALUES (%s, %s, %s, %s, %s, %s, %s::jsonb, %s, %s)
             RETURNING id
             """,
             (
@@ -225,6 +257,7 @@ def _save_briefing(
                 summary,
                 json.dumps(content_blob),
                 model,
+                user_id,
             ),
         ).fetchone()
         if row is None:
@@ -271,19 +304,31 @@ def _save_briefing(
 def _find_recent_briefing(
     window_minutes: int,
     database_url: str | None = None,
+    user_id: int | None = None,
 ) -> dict[str, Any] | None:
     """Return the most recent complete briefing if created within window_minutes, else None."""
     cutoff = datetime.now(timezone.utc) - timedelta(minutes=window_minutes)
     with connect(database_url=database_url) as conn:
-        row = conn.execute(
-            """
-            SELECT id FROM briefings
-            WHERE status = 'complete' AND created_at >= %s
-            ORDER BY created_at DESC
-            LIMIT 1
-            """,
-            (cutoff,),
-        ).fetchone()
+        if user_id is not None:
+            row = conn.execute(
+                """
+                SELECT id FROM briefings
+                WHERE status = 'complete' AND created_at >= %s AND user_id = %s
+                ORDER BY created_at DESC
+                LIMIT 1
+                """,
+                (cutoff, user_id),
+            ).fetchone()
+        else:
+            row = conn.execute(
+                """
+                SELECT id FROM briefings
+                WHERE status = 'complete' AND created_at >= %s AND user_id IS NULL
+                ORDER BY created_at DESC
+                LIMIT 1
+                """,
+                (cutoff,),
+            ).fetchone()
     if row is None:
         return None
     return get_briefing(int(row_to_dict(row)["id"]), database_url=database_url)
@@ -295,16 +340,17 @@ def _save_failed_briefing(
     exc: Exception,
     model: str,
     database_url: str | None = None,
+    user_id: int | None = None,
 ) -> None:
     """Persist a failed-status row for observability; DB errors are swallowed."""
     try:
         with connect(database_url=database_url) as conn:
             conn.execute(
                 """
-                INSERT INTO briefings(scope, since_at, until_at, status, model, error)
-                VALUES (%s, %s, %s, %s, %s, %s)
+                INSERT INTO briefings(scope, since_at, until_at, status, model, error, user_id)
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
                 """,
-                ("since_last_briefing", since_at, until_at, "failed", model, str(exc)),
+                ("since_last_briefing", since_at, until_at, "failed", model, str(exc), user_id),
             )
     except Exception:
         logger.exception("Failed to persist failed-briefing row — original error follows")
@@ -316,10 +362,20 @@ def _save_failed_briefing(
 def select_candidates(
     since_at: datetime,
     database_url: str | None = None,
+    user_id: int | None = None,
 ) -> list[dict[str, Any]]:
-    """Return up to CANDIDATE_LIMIT today-state articles discovered after since_at."""
+    """Return up to CANDIDATE_LIMIT today-state articles discovered after since_at.
+
+    When user_id is provided, selects only articles from the user's subscribed sources
+    that are in the 'today' state for that user (via user_article_state).
+    """
     with connect(database_url=database_url) as conn:
-        rows = conn.execute(_CANDIDATES_SQL, (since_at, CANDIDATE_LIMIT)).fetchall()
+        if user_id is not None:
+            rows = conn.execute(
+                _CANDIDATES_SQL_USER, (user_id, user_id, since_at, user_id, CANDIDATE_LIMIT)
+            ).fetchall()
+        else:
+            rows = conn.execute(_CANDIDATES_SQL, (since_at, CANDIDATE_LIMIT)).fetchall()
         return [row_to_dict(r) for r in rows]
 
 
@@ -329,6 +385,7 @@ def generate_briefing(
     model: str | None = None,
     ai_fn: AiFn | None = None,
     idempotency_window_minutes: int = IDEMPOTENCY_WINDOW_MINUTES,
+    user_id: int | None = None,
 ) -> dict[str, Any]:
     """Generate and persist a briefing from eligible Today articles.
 
@@ -342,16 +399,16 @@ def generate_briefing(
         BriefingAINotConfiguredError: OPENAI_API_KEY is not set.
         BriefingGenerationError: AI returned an invalid or unparseable response.
     """
-    recent = _find_recent_briefing(idempotency_window_minutes, database_url)
+    recent = _find_recent_briefing(idempotency_window_minutes, database_url, user_id=user_id)
     if recent is not None:
         return recent
 
     _env_model = os.getenv("OPENAI_BRIEFING_MODEL", DEFAULT_BRIEFING_MODEL)
     resolved_model = model if model is not None else _env_model
-    since_at = _get_since_at(database_url)
+    since_at = _get_since_at(database_url, user_id=user_id)
     until_at = datetime.now(timezone.utc)
 
-    candidates = select_candidates(since_at, database_url=database_url)
+    candidates = select_candidates(since_at, database_url=database_url, user_id=user_id)
     if not candidates:
         return {"status": "no_candidates"}
 
@@ -361,27 +418,46 @@ def generate_briefing(
         raw_content = call_ai(candidates, resolved_model)
         content = _validate_content(raw_content, candidate_ids)
     except (BriefingAINotConfiguredError, BriefingGenerationError) as exc:
-        _save_failed_briefing(since_at, until_at, exc, resolved_model, database_url)
+        _save_failed_briefing(
+            since_at, until_at, exc, resolved_model, database_url, user_id=user_id
+        )
         raise
-    return _save_briefing(since_at, until_at, content, candidate_ids, resolved_model, database_url)
+    return _save_briefing(
+        since_at, until_at, content, candidate_ids, resolved_model, database_url, user_id=user_id
+    )
 
 
 def get_latest_briefing(
     db_path: Path | None = None,
     database_url: str | None = None,
+    user_id: int | None = None,
 ) -> dict[str, Any] | None:
     """Return the most recent briefing with cited articles, or None if none exist."""
     with connect(db_path, database_url) as conn:
-        row = conn.execute(
-            """
-            SELECT id, created_at, scope, since_at, until_at, status,
-                   title, summary, content, model, error
-            FROM briefings
-            ORDER BY created_at DESC
-            LIMIT %s
-            """,
-            (1,),
-        ).fetchone()
+        if user_id is not None:
+            row = conn.execute(
+                """
+                SELECT id, created_at, scope, since_at, until_at, status,
+                       title, summary, content, model, error
+                FROM briefings
+                WHERE user_id = %s
+                ORDER BY created_at DESC
+                LIMIT %s
+                """,
+                (user_id, 1),
+            ).fetchone()
+        else:
+            row = conn.execute(
+                """
+                SELECT id, created_at, scope, since_at, until_at, status,
+                       title, summary, content, model, error
+                FROM briefings
+                WHERE user_id IS NULL
+                ORDER BY created_at DESC
+                LIMIT %s
+                """,
+                (1,),
+            ).fetchone()
         if row is None:
             return None
         briefing = row_to_dict(row)
@@ -395,19 +471,34 @@ def list_briefings(
     offset: int = 0,
     db_path: Path | None = None,
     database_url: str | None = None,
+    user_id: int | None = None,
 ) -> list[dict[str, Any]]:
     """Return briefing history (no content blob, no articles)."""
     with connect(db_path, database_url) as conn:
-        rows = conn.execute(
-            """
-            SELECT id, created_at, scope, since_at, until_at, status,
-                   title, summary, model, error
-            FROM briefings
-            ORDER BY created_at DESC
-            LIMIT %s OFFSET %s
-            """,
-            (limit, offset),
-        ).fetchall()
+        if user_id is not None:
+            rows = conn.execute(
+                """
+                SELECT id, created_at, scope, since_at, until_at, status,
+                       title, summary, model, error
+                FROM briefings
+                WHERE user_id = %s
+                ORDER BY created_at DESC
+                LIMIT %s OFFSET %s
+                """,
+                (user_id, limit, offset),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                """
+                SELECT id, created_at, scope, since_at, until_at, status,
+                       title, summary, model, error
+                FROM briefings
+                WHERE user_id IS NULL
+                ORDER BY created_at DESC
+                LIMIT %s OFFSET %s
+                """,
+                (limit, offset),
+            ).fetchall()
         return [row_to_dict(r) for r in rows]
 
 
@@ -415,18 +506,30 @@ def get_briefing(
     briefing_id: int,
     db_path: Path | None = None,
     database_url: str | None = None,
+    user_id: int | None = None,
 ) -> dict[str, Any] | None:
     """Return one briefing with full content and cited article metadata."""
     with connect(db_path, database_url) as conn:
-        row = conn.execute(
-            """
-            SELECT id, created_at, scope, since_at, until_at, status,
-                   title, summary, content, model, error
-            FROM briefings
-            WHERE id = %s
-            """,
-            (briefing_id,),
-        ).fetchone()
+        if user_id is not None:
+            row = conn.execute(
+                """
+                SELECT id, created_at, scope, since_at, until_at, status,
+                       title, summary, content, model, error
+                FROM briefings
+                WHERE id = %s AND user_id = %s
+                """,
+                (briefing_id, user_id),
+            ).fetchone()
+        else:
+            row = conn.execute(
+                """
+                SELECT id, created_at, scope, since_at, until_at, status,
+                       title, summary, content, model, error
+                FROM briefings
+                WHERE id = %s AND user_id IS NULL
+                """,
+                (briefing_id,),
+            ).fetchone()
         if row is None:
             return None
         briefing = row_to_dict(row)
