@@ -44,6 +44,7 @@ from .briefings import (
 )
 from .db import connect, describe_database, init_db, row_to_dict
 from .ingest import (
+    get_user_summary,
     ingest_all,
     list_articles,
     search_articles,
@@ -713,19 +714,10 @@ def ask_ai(payload: AskRequest) -> dict[str, Any]:
 
 
 @api.get("/api/summary")
-def summary() -> dict[str, Any]:
-    init_db()
-    with connect() as conn:
-        status_rows = conn.execute(
-            "SELECT status, COUNT(*) AS count FROM articles GROUP BY status"
-        ).fetchall()
-        category_rows = conn.execute(
-            "SELECT category, COUNT(*) AS count FROM articles GROUP BY category"
-        ).fetchall()
-    return {
-        "byStatus": {row["status"]: row["count"] for row in status_rows},
-        "byCategory": {row["category"]: row["count"] for row in category_rows},
-    }
+def summary(
+    current_user: Annotated[dict[str, Any], Depends(require_auth)],
+) -> dict[str, Any]:
+    return get_user_summary(user_id=current_user["id"])
 
 
 # ── Admin user-management routes ─────────────────────────────────────────────

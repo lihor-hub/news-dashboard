@@ -1377,5 +1377,95 @@ def send_article_later(
             "UPDATE articles SET state = 'later', later_until = ?, updated_at = ? WHERE id = ?",
             (later_until, ts, article_id),
         )
-
         return _get_article_row(conn, article_id)
+
+
+def get_user_summary(user_id: int, db_path: Path | None = None) -> dict[str, Any]:
+    """Return per-user article counts by status and category.
+
+    Maps the new (state, starred) model back to the legacy status keys the
+    frontend expects: new, saved, read, skipped, archived.
+    """
+    init_db(db_path)
+    with connect(db_path) as conn:
+        # Per-user state counts via user_article_state (LEFT JOIN so articles
+        # with no UAS row are treated as state='today').
+        state_rows = conn.execute(
+            """
+            SELECT COALESCE(uas.state, 'today') AS state, COUNT(*) AS count
+            FROM articles a
+            LEFT JOIN sources src ON src.slug = a.source_slug
+            LEFT JOIN user_sources us_src
+                   ON us_src.user_id = ? AND us_src.source_slug = a.source_slug
+            LEFT JOIN user_article_state uas
+                   ON uas.article_id = a.id AND uas.user_id = ?
+            WHERE (a.canonical_id IS NULL OR COALESCE(uas.state, 'today') != 'archived')
+              AND (
+                (src.owner_user_id IS NULL AND COALESCE(us_src.enabled, true))
+                OR src.owner_user_id = ?
+              )
+            GROUP BY COALESCE(uas.state, 'today')
+            """,
+            (user_id, user_id, user_id),
+        ).fetchall()
+
+        starred_row = conn.execute(
+            """
+            SELECT COUNT(*) AS count
+            FROM articles a
+            LEFT JOIN sources src ON src.slug = a.source_slug
+            LEFT JOIN user_sources us_src
+                   ON us_src.user_id = ? AND us_src.source_slug = a.source_slug
+            LEFT JOIN user_article_state uas
+                   ON uas.article_id = a.id AND uas.user_id = ?
+            WHERE COALESCE(uas.starred, false) = true
+              AND (a.canonical_id IS NULL OR COALESCE(uas.state, 'today') != 'archived')
+              AND (
+                (src.owner_user_id IS NULL AND COALESCE(us_src.enabled, true))
+                OR src.owner_user_id = ?
+              )
+            """,
+            (user_id, user_id, user_id),
+        ).fetchone()
+
+        category_rows = conn.execute(
+            """
+            SELECT a.category, COUNT(*) AS count
+            FROM articles a
+            LEFT JOIN sources src ON src.slug = a.source_slug
+            LEFT JOIN user_sources us_src
+                   ON us_src.user_id = ? AND us_src.source_slug = a.source_slug
+            LEFT JOIN user_article_state uas
+                   ON uas.article_id = a.id AND uas.user_id = ?
+            WHERE (a.canonical_id IS NULL OR COALESCE(uas.state, 'today') != 'archived')
+              AND (
+                (src.owner_user_id IS NULL AND COALESCE(us_src.enabled, true))
+                OR src.owner_user_id = ?
+              )
+            GROUP BY a.category
+            """,
+            (user_id, user_id, user_id),
+        ).fetchall()
+
+    state_counts: dict[str, int] = {}
+    for r in state_rows:
+        d = row_to_dict(r)
+        state_counts[str(d["state"])] = int(d["count"])
+
+    starred_count = int(row_to_dict(starred_row)["count"]) if starred_row else 0
+
+    # Map internal state names → legacy status keys used by the frontend
+    by_status = {
+        "new": state_counts.get("today", 0),
+        "saved": starred_count,
+        "read": state_counts.get("done", 0),
+        "skipped": state_counts.get("skipped", 0),
+        "archived": state_counts.get("archived", 0),
+    }
+
+    by_category: dict[str, int] = {}
+    for r in category_rows:
+        d = row_to_dict(r)
+        by_category[str(d["category"])] = int(d["count"])
+
+    return {"byStatus": by_status, "byCategory": by_category}
