@@ -170,6 +170,19 @@ Options:
 
 ## Troubleshooting
 
+**`/auth/login` shows the dashboard login shell instead of redirecting to Keycloak**
+The service worker is probably serving the SPA fallback for an auth route. Keep `vite.config.ts` configured with `navigateFallbackDenylist` entries for `/api/`, `/auth/`, and `/keycloak/`, then rebuild/redeploy. On a phone/PWA, close and reopen the installed app or clear site data once so the new service worker activates.
+
+**Caddy logs ACME errors for `keycloak.lihor.ro`**
+Do not import a separate `keycloak.lihor.ro` site unless DNS exists. The supported local deployment exposes Keycloak at `https://news.lihor.ro/keycloak`, so disable or rename the separate Caddyfile, validate, and reload Caddy:
+
+```bash
+sudo mv /etc/caddy/Caddyfile.d/keycloak.lihor.ro.caddyfile \
+  /etc/caddy/Caddyfile.d/keycloak.lihor.ro.caddyfile.disabled
+sudo caddy validate --config /etc/caddy/Caddyfile
+sudo systemctl reload caddy
+```
+
 **`caddy reload` shows a config error**
 Run `caddy validate --config /etc/caddy/Caddyfile` to see the exact error.
 

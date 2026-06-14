@@ -6,11 +6,23 @@
 
 1. The frontend calls `GET /api/auth/config`.
 2. When `KEYCLOAK_AUTH_ENABLED=1`, the login screen shows the new dashboard-style `Sign in with Keycloak` button.
-3. `/auth/login` redirects the browser to Keycloak using Authorization Code flow.
+3. `/auth/login` must reach the FastAPI backend and returns a `307` redirect to Keycloak using Authorization Code flow.
 4. `/auth/callback` exchanges the code, reads Keycloak `userinfo`, creates or reuses a local app user, and sets the existing signed `nd_session` cookie.
 5. All existing authenticated API routes continue to use `require_auth`, so article state, source subscriptions, briefings, and admin routes remain scoped by local `user_id`.
 
 Keycloak-created users receive an unusable random local password because Keycloak owns authentication. The comma-separated `KEYCLOAK_ADMIN_USERNAMES` env var controls which Keycloak usernames become app admins on first login; the local default is `ioachim`.
+
+### PWA/service-worker routing
+
+The dashboard is a PWA, so the generated Workbox service worker can answer browser navigations with the SPA `index.html` fallback. That is correct for client routes such as `/today`, but it must never intercept backend or identity-provider routes.
+
+`vite.config.ts` therefore denies fallback handling for:
+
+```ts
+navigateFallbackDenylist: [/^\/api\//, /^\/auth\//, /^\/keycloak\//]
+```
+
+Without this denylist, an already-installed PWA or a browser with an old service worker can open `/auth/login` and see the dashboard login shell again instead of following the backend `307` to Keycloak.
 
 ## Backend environment
 
@@ -31,15 +43,25 @@ SESSION_SECRET=<long random string>
 
 ## Caddy
 
-`deploy/news.lihor.ro.caddyfile` exposes Keycloak under the same hostname:
+The minipc Caddy config exposes Keycloak under the same hostname:
 
 ```caddy
-handle /keycloak* {
-	reverse_proxy 127.0.0.1:8081
+news.lihor.ro {
+	handle /keycloak* {
+		reverse_proxy 127.0.0.1:8081
+	}
+
+	reverse_proxy 127.0.0.1:30088
 }
 ```
 
 This avoids a separate DNS record and keeps redirect URIs under `https://news.lihor.ro`.
+
+Do **not** enable a separate `keycloak.lihor.ro` Caddy site unless the DNS record exists first. If that site is imported while the subdomain is `NXDOMAIN`, Caddy will keep retrying Let's Encrypt issuance and logging ACME DNS failures. For this deployment, the durable public Keycloak base is:
+
+```text
+https://news.lihor.ro/keycloak
+```
 
 ## Helm
 

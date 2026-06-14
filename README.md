@@ -102,6 +102,8 @@ news-dashboard-migrate /data/news-dashboard.db
   HTTPS. See [docs/CADDY_HTTPS_SETUP.md](docs/CADDY_HTTPS_SETUP.md) for the
   full HTTPS setup guide; the Caddyfile lives at `deploy/Caddyfile`.
 - HTTPS is required for PWA install (Chrome/Android "Add to Home Screen" as a
-  standalone app) and for service worker registration.
+  standalone app) and for service worker registration. The service worker must
+  let `/api/*`, `/auth/*`, and `/keycloak/*` bypass SPA navigation fallback so
+  Keycloak redirects and API responses reach the backend.
 - GitHub Actions publishes `ghcr.io/ioachim-hub/news-dashboard`.
 - For the local Kubernetes cluster, if GHCR pull auth is unavailable, build and push to `localhost:5000/news-dashboard:<tag>` and override Helm image values.
