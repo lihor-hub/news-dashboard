@@ -288,3 +288,47 @@ def test_health_is_public(tmp_db: Path) -> None:
     client = _fresh_client()
     resp = client.get("/api/health")
     assert resp.status_code == 200
+
+
+# ── Postgres integration tests for bootstrap_admin ────────────────────────────
+# These exercise the COUNT(*) query against a real psycopg connection to verify
+# the row key ("count" on Postgres, "COUNT(*)" on SQLite) is handled correctly.
+
+
+def test_postgres_bootstrap_creates_first_admin(
+    pg_clean: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("DATABASE_URL", pg_clean)
+    monkeypatch.setenv("BOOTSTRAP_ADMIN_USERNAME", "pgadmin")
+    monkeypatch.setenv("BOOTSTRAP_ADMIN_PASSWORD", "pgpass123")
+    bootstrap_admin()
+    from news_dashboard.auth import list_users
+
+    users = list_users()
+    assert len(users) == 1
+    assert users[0]["username"] == "pgadmin"
+    assert users[0]["is_admin"]
+
+
+def test_postgres_bootstrap_noop_if_users_exist(
+    pg_clean: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("DATABASE_URL", pg_clean)
+    monkeypatch.setenv("BOOTSTRAP_ADMIN_USERNAME", "pgadmin")
+    monkeypatch.setenv("BOOTSTRAP_ADMIN_PASSWORD", "pgpass123")
+    create_user("existing_pg", "pw")
+    bootstrap_admin()
+    from news_dashboard.auth import list_users
+
+    users = list_users()
+    assert len(users) == 1
+    assert users[0]["username"] == "existing_pg"
+
+
+def test_postgres_bootstrap_no_env_vars_does_not_crash(
+    pg_clean: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("DATABASE_URL", pg_clean)
+    monkeypatch.delenv("BOOTSTRAP_ADMIN_USERNAME", raising=False)
+    monkeypatch.delenv("BOOTSTRAP_ADMIN_PASSWORD", raising=False)
+    bootstrap_admin()  # must not raise even when no users exist

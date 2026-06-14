@@ -156,9 +156,8 @@ def bootstrap_admin() -> None:
     password = os.getenv("BOOTSTRAP_ADMIN_PASSWORD")
     if not username or not password:
         with connect() as conn:
-            count = conn.execute("SELECT COUNT(*) FROM users").fetchone()
-            n = count[0] if not isinstance(count, dict) else count["count(*)"]
-            if int(n) == 0:
+            row = conn.execute("SELECT COUNT(*) AS n FROM users").fetchone()
+            if int(row_to_dict(row)["n"]) == 0:
                 logger.warning(
                     "No users exist and BOOTSTRAP_ADMIN_USERNAME/BOOTSTRAP_ADMIN_PASSWORD "
                     "are not set. The app will start but login is impossible. "
@@ -167,9 +166,8 @@ def bootstrap_admin() -> None:
         return
 
     with connect() as conn:
-        count = conn.execute("SELECT COUNT(*) FROM users").fetchone()
-        n = count[0] if not isinstance(count, dict) else count["count(*)"]
-        if int(n) > 0:
+        row = conn.execute("SELECT COUNT(*) AS n FROM users").fetchone()
+        if int(row_to_dict(row)["n"]) > 0:
             return  # users already exist; bootstrap is a no-op
 
     user = create_user(username, password, is_admin=True)
