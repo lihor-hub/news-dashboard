@@ -15,36 +15,15 @@ export default defineConfig({
       injectRegister: 'auto',
       // Only apply PWA in production builds — dev mode uses Vite HMR.
       devOptions: { enabled: false },
-      manifest: {
-        name: 'News Dashboard',
-        short_name: 'News',
-        description: 'Personal AI-curated news dashboard',
-        start_url: '/',
-        display: 'standalone',
-        background_color: '#faf8f5',
-        theme_color: '#221f1a',
-        lang: 'en',
-        icons: [
-          {
-            src: '/icons/icon-192.png',
-            sizes: '192x192',
-            type: 'image/png',
-            purpose: 'any',
-          },
-          {
-            src: '/icons/icon-512.png',
-            sizes: '512x512',
-            type: 'image/png',
-            purpose: 'any',
-          },
-          {
-            src: '/icons/icon-512-maskable.png',
-            sizes: '512x512',
-            type: 'image/png',
-            purpose: 'maskable',
-          },
-        ],
-      },
+      includeAssets: [
+        'favicon.svg',
+        'manifest.webmanifest',
+        'icons/apple-touch-icon.png',
+        'icons/icon-192.png',
+        'icons/icon-512.png',
+        'icons/icon-512-maskable.png',
+      ],
+      manifest: false,
       workbox: {
         // Cache the app shell and static assets, but never let the service worker
         // answer backend/auth navigations.  Otherwise `/auth/login` can be served

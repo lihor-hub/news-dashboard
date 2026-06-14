@@ -4,9 +4,8 @@
  * Split by what's available in dev vs build:
  *
  *  - iOS meta tags + theme-color: always present in index.html — tested here.
- *  - manifest link <link rel="manifest">: injected by vite-plugin-pwa at
- *    BUILD time only (devOptions.enabled = false). Covered by the vitest
- *    pwa.test.ts unit tests and by `npm run build` in CI.
+ *  - manifest link <link rel="manifest">: always present in index.html so the
+ *    dev server and production build both expose install metadata.
  *  - /manifest.webmanifest file: served from public/ in both dev and prod,
  *    so we verify its content here via fetch.
  */
@@ -19,6 +18,16 @@ test.beforeEach(async ({ page }) => {
 });
 
 test.describe('PWA — iOS meta tags', () => {
+  test('has app favicon and manifest links', async ({ page }) => {
+    const favicon = page.locator('link[rel="icon"]');
+    await expect(favicon).toHaveCount(1);
+    expect(await favicon.getAttribute('href')).toBe('/favicon.svg');
+
+    const manifest = page.locator('link[rel="manifest"]');
+    await expect(manifest).toHaveCount(1);
+    expect(await manifest.getAttribute('href')).toBe('/manifest.webmanifest');
+  });
+
   test('has apple-mobile-web-app-capable meta tag', async ({ page }) => {
     const meta = page.locator('meta[name="apple-mobile-web-app-capable"]');
     await expect(meta).toHaveCount(1);
@@ -78,6 +87,16 @@ test.describe('PWA — manifest file', () => {
     expect(icon192?.type).toBe('image/png');
   });
 
+  test('manifest includes app favicon', async ({ page }) => {
+    const response = await page.request.get('/manifest.webmanifest');
+    const manifest = await response.json();
+    const icons: Array<{ src: string; sizes: string; type: string }> = manifest.icons ?? [];
+    const favicon = icons.find((i) => i.src === '/favicon.svg');
+    expect(favicon).toBeDefined();
+    expect(favicon?.sizes).toBe('any');
+    expect(favicon?.type).toBe('image/svg+xml');
+  });
+
   test('manifest includes maskable icon', async ({ page }) => {
     const response = await page.request.get('/manifest.webmanifest');
     const manifest = await response.json();
@@ -87,6 +106,12 @@ test.describe('PWA — manifest file', () => {
 });
 
 test.describe('PWA — icon files', () => {
+  test('GET /favicon.svg returns 200', async ({ page }) => {
+    const response = await page.request.get('/favicon.svg');
+    expect(response.status()).toBe(200);
+    expect(response.headers()['content-type']).toContain('image/svg+xml');
+  });
+
   test('GET /icons/icon-192.png returns 200', async ({ page }) => {
     const response = await page.request.get('/icons/icon-192.png');
     expect(response.status()).toBe(200);

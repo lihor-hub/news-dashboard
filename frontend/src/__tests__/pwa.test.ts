@@ -5,32 +5,24 @@
  * These tests verify that the PWA configuration values match the app's
  * branding and that icons are declared at the required sizes.
  *
- * We import directly from vite.config.ts so any change to the manifest
- * is automatically caught here.
+ * We read public/manifest.webmanifest directly so CI catches drift in the
+ * install metadata served by both dev and production builds.
  */
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { describe, it, expect } from 'vitest';
 
-// vite-plugin-pwa manifest config (imported statically so CI catches drift)
-const MANIFEST = {
-  name: 'News Dashboard',
-  short_name: 'News',
-  description: 'Personal AI-curated news dashboard',
-  start_url: '/',
-  display: 'standalone',
-  background_color: '#faf8f5',
-  theme_color: '#221f1a',
-  lang: 'en',
-  icons: [
-    { src: '/icons/icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
-    { src: '/icons/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
-    {
-      src: '/icons/icon-512-maskable.png',
-      sizes: '512x512',
-      type: 'image/png',
-      purpose: 'maskable',
-    },
-  ],
-} as const;
+const MANIFEST = JSON.parse(
+  readFileSync(resolve(process.cwd(), 'public/manifest.webmanifest'), 'utf-8')
+) as {
+  name: string;
+  short_name: string;
+  start_url: string;
+  display: string;
+  background_color: string;
+  theme_color: string;
+  icons: { src: string; sizes: string; type: string; purpose: string }[];
+};
 
 describe('PWA manifest — identity', () => {
   it('has a human-readable name', () => {
@@ -51,6 +43,13 @@ describe('PWA manifest — identity', () => {
 });
 
 describe('PWA manifest — icons', () => {
+  it('declares the app favicon for browser and PWA metadata', () => {
+    const icon = MANIFEST.icons.find((i) => i.src === '/favicon.svg');
+    expect(icon).toBeDefined();
+    expect(icon?.sizes).toBe('any');
+    expect(icon?.type).toBe('image/svg+xml');
+  });
+
   it('declares a 192×192 icon (required for Android install)', () => {
     const icon = MANIFEST.icons.find((i) => i.sizes === '192x192');
     expect(icon).toBeDefined();
