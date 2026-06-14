@@ -151,13 +151,17 @@ def _touch_last_login(user_id: int) -> None:
 # --------------------------------------------------------------------------- #
 
 
+def user_count_from_row(row: Any) -> int:
+    return int(row_to_dict(row)["n"])
+
+
 def bootstrap_admin() -> None:
     username = os.getenv("BOOTSTRAP_ADMIN_USERNAME")
     password = os.getenv("BOOTSTRAP_ADMIN_PASSWORD")
     if not username or not password:
         with connect() as conn:
             row = conn.execute("SELECT COUNT(*) AS n FROM users").fetchone()
-            if int(row_to_dict(row)["n"]) == 0:
+            if user_count_from_row(row) == 0:
                 logger.warning(
                     "No users exist and BOOTSTRAP_ADMIN_USERNAME/BOOTSTRAP_ADMIN_PASSWORD "
                     "are not set. The app will start but login is impossible. "
@@ -167,7 +171,7 @@ def bootstrap_admin() -> None:
 
     with connect() as conn:
         row = conn.execute("SELECT COUNT(*) AS n FROM users").fetchone()
-        if int(row_to_dict(row)["n"]) > 0:
+        if user_count_from_row(row) > 0:
             return  # users already exist; bootstrap is a no-op
 
     user = create_user(username, password, is_admin=True)

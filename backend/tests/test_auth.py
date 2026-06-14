@@ -19,6 +19,7 @@ from news_dashboard.auth import (
     hash_password,
     list_users,
     update_password,
+    user_count_from_row,
     verify_password,
     verify_session_token,
 )
@@ -162,6 +163,10 @@ def test_bootstrap_noop_if_users_exist(tmp_db: Path, monkeypatch: pytest.MonkeyP
     users = list_users()
     assert len(users) == 1
     assert users[0]["username"] == "existing"
+
+
+def test_user_count_from_row_reads_aliased_count() -> None:
+    assert user_count_from_row({"n": 3}) == 3
 
 
 # ── Login / logout API ────────────────────────────────────────────────────────
