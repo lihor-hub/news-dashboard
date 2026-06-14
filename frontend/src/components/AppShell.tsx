@@ -13,6 +13,7 @@ import {
   BarChart3,
   Archive,
   Settings,
+  History,
 } from 'lucide-react';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
 import { CommandPalette } from './CommandPalette';
@@ -52,6 +53,7 @@ const navItems: NavItem[] = [
 const mobileNavItems = navItems.slice(0, 5);
 
 const moreItems = [
+  { to: '/briefs', label: 'Brief History', icon: History },
   { to: '/feeds', label: 'Feeds', icon: Radio },
   { to: '/stats', label: 'Stats', icon: BarChart3 },
   { to: '/archive', label: 'Archive', icon: Archive },
@@ -70,6 +72,7 @@ function currentTitle(p: string) {
   if (p.startsWith('/starred')) return 'Starred';
   if (p.startsWith('/search')) return 'Search';
   if (p.startsWith('/ask')) return 'Ask AI';
+  if (p.startsWith('/briefs')) return 'Briefs';
   if (p.startsWith('/feeds')) return 'Feeds';
   if (p.startsWith('/stats')) return 'Stats';
   if (p.startsWith('/archive')) return 'Archive';
@@ -170,6 +173,7 @@ export function AppShell() {
           else if (k === 's') navigate('/starred');
           else if (k === 'a') navigate('/ask');
           else if (k === 'f') navigate('/feeds');
+          else if (k === 'h') navigate('/briefs');
           window.removeEventListener('keydown', handler2);
         };
         window.addEventListener('keydown', handler2, { once: true });

@@ -16,6 +16,8 @@ import { StatsPage } from './pages/StatsPage';
 import { ArchivePage } from './pages/ArchivePage';
 import { SettingsPage } from './pages/SettingsPage';
 import { ArticlePage } from './pages/ArticlePage';
+import { BriefingsHistoryPage } from './pages/BriefingsHistoryPage';
+import { BriefingDetailPage } from './pages/BriefingDetailPage';
 
 function NotFound() {
   return (
@@ -64,6 +66,8 @@ const router = createBrowserRouter([
           { path: 'logs', element: <FeedsLogsPage /> },
         ],
       },
+      { path: 'briefs', element: <BriefingsHistoryPage /> },
+      { path: 'briefs/:id', element: <BriefingDetailPage /> },
       { path: 'stats', element: <StatsPage /> },
       { path: 'archive', element: <ArchivePage /> },
       { path: 'settings', element: <SettingsPage /> },

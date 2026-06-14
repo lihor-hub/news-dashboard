@@ -41,7 +41,7 @@ test.describe('Command palette — navigation items', () => {
   });
 
   test('shows Brief nav item', async ({ page }) => {
-    await expect(page.getByRole('option', { name: /brief/i })).toBeVisible();
+    await expect(page.getByRole('option', { name: 'Brief', exact: true })).toBeVisible();
   });
 
   test('shows Today nav item', async ({ page }) => {

@@ -31,12 +31,14 @@ vi.mock('../hooks/useTriageMutations', () => ({
   ARTICLES_KEY: 'articles',
 }));
 
-// Silence BriefPage's briefing fetch during AppShell render tests
+// Silence page fetches during AppShell render tests
 vi.mock('../api', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../api')>();
   return {
     ...actual,
     fetchLatestBriefing: vi.fn().mockReturnValue(new Promise((_r) => undefined)),
+    fetchBriefings: vi.fn().mockReturnValue(new Promise((_r) => undefined)),
+    fetchBriefing: vi.fn().mockReturnValue(new Promise((_r) => undefined)),
     fetchSummary: vi.fn().mockResolvedValue({ byStatus: {}, byCategory: {} }),
     searchArticles: vi.fn().mockResolvedValue([]),
   };
@@ -189,12 +191,53 @@ describe('#105 — shortcut overlay', () => {
 
   it('has Brief in shortcut descriptions', () => {
     render(<ShortcutOverlay open={true} onOpenChange={vi.fn()} />);
-    expect(screen.getByText(/brief/i)).toBeTruthy();
+    expect(screen.getAllByText(/brief/i).length).toBeGreaterThan(0);
   });
 
   it('has Today in shortcut descriptions', () => {
     render(<ShortcutOverlay open={true} onOpenChange={vi.fn()} />);
     expect(screen.getAllByText(/today/i).length).toBeGreaterThan(0);
+  });
+});
+
+// ── #118: Briefing History nav + shortcuts ────────────────────────────────────
+
+describe('#118 — Brief History in moreItems nav', () => {
+  it('shows Brief History link in shell nav', async () => {
+    renderShell('/');
+    await waitFor(() => {
+      const links = screen.getAllByRole('link', { name: /brief history/i });
+      expect(links.length).toBeGreaterThan(0);
+    });
+  });
+
+  it('Brief History link points to /briefs', async () => {
+    renderShell('/');
+    await waitFor(() => {
+      const link = screen
+        .getAllByRole('link', { name: /brief history/i })
+        .find((l) => l.getAttribute('href') === '/briefs');
+      expect(link).toBeTruthy();
+    });
+  });
+
+  it('header shows "Briefs" title at /briefs', async () => {
+    renderShell('/briefs');
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'Briefs' })).toBeTruthy());
+  });
+});
+
+describe('#118 — Briefing History in command palette', () => {
+  it('shows Briefing History as a nav item', () => {
+    renderPalette();
+    expect(screen.getByText('Briefing History')).toBeTruthy();
+  });
+});
+
+describe('#118 — shortcut overlay shows g h', () => {
+  it('mentions g h for Briefing History', () => {
+    render(<ShortcutOverlay open={true} onOpenChange={vi.fn()} />);
+    expect(screen.getByText('g h')).toBeTruthy();
   });
 });
 

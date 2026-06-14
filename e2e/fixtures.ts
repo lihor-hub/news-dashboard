@@ -161,15 +161,21 @@ export async function mockApi(page: Page) {
   // Summary / counts
   await page.route('/api/summary', (r) => r.fulfill(json(SUMMARY_DATA)));
 
-  // Briefings
-  await page.route('/api/briefings/latest', (r) => r.fulfill(json(SAMPLE_BRIEFING)));
-  await page.route('/api/briefings', async (r: Route) => {
-    if (r.request().method() === 'POST') {
+  // Briefings — single handler dispatches by path/method to avoid glob ambiguity
+  await page.route('/api/briefings**', async (r: Route) => {
+    const url = new URL(r.request().url());
+    const method = r.request().method();
+    const path = url.pathname;
+
+    if (method === 'GET' && path === '/api/briefings') {
+      return r.fulfill(json({ items: [SAMPLE_BRIEFING] }));
+    }
+    if (method === 'POST' && path === '/api/briefings') {
       return r.fulfill(json(SAMPLE_BRIEFING));
     }
-    return r.fulfill(json({ items: [SAMPLE_BRIEFING] }));
+    // /api/briefings/latest, /api/briefings/:id, etc.
+    return r.fulfill(json(SAMPLE_BRIEFING));
   });
-  await page.route('/api/briefings/**', (r) => r.fulfill(json(SAMPLE_BRIEFING)));
 
   // Articles
   await page.route('/api/articles**', async (r: Route) => {

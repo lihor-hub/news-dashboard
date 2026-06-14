@@ -21,6 +21,7 @@ import {
   CheckCheck,
   SkipForward,
   ExternalLink,
+  History,
 } from 'lucide-react';
 import { searchArticles, ingestNow } from '@/api';
 import { adaptArticle } from '@/api/workflowApi';
@@ -36,6 +37,7 @@ interface Props {
 
 const NAV_ITEMS = [
   { icon: Newspaper, label: 'Brief', to: '/' },
+  { icon: History, label: 'Briefing History', to: '/briefs' },
   { icon: Inbox, label: 'Today', to: '/today' },
   { icon: Clock, label: 'Later', to: '/later' },
   { icon: Star, label: 'Starred', to: '/starred' },
