@@ -1,4 +1,4 @@
-"""Scheduler module: periodic ingest + daily digest email."""
+"""Scheduler module: periodic ingest, daily digest email, and daily briefing."""
 
 from __future__ import annotations
 
@@ -31,6 +31,28 @@ def _run_ingest() -> None:
         logger.info("Scheduled ingest complete: %d new articles", total)
     except Exception:
         logger.exception("Scheduled ingest failed")
+
+
+def _run_briefing() -> None:
+    from .briefings import (
+        BriefingAINotConfiguredError,
+        BriefingGenerationError,
+        generate_briefing,
+    )
+
+    logger.info("Scheduled briefing generation starting…")
+    try:
+        result = generate_briefing()
+        if result.get("status") == "no_candidates":
+            logger.info("Scheduled briefing skipped: no candidate articles found.")
+        else:
+            logger.info("Scheduled briefing complete: id=%s", result.get("id"))
+    except BriefingAINotConfiguredError:
+        logger.warning("Scheduled briefing skipped: OPENAI_API_KEY not configured.")
+    except BriefingGenerationError:
+        logger.exception("Scheduled briefing failed (generation error)")
+    except Exception:
+        logger.exception("Scheduled briefing failed (unexpected error)")
 
 
 def _run_digest() -> None:
@@ -68,6 +90,7 @@ def start_scheduler() -> None:
     start_paused = db_paused == "true" if db_paused is not None else False
 
     digest_cron = os.getenv("DIGEST_CRON", "0 8 * * *")
+    briefing_cron = os.getenv("BRIEFING_CRON", "0 9 * * *")
 
     scheduler = BackgroundScheduler(timezone="UTC")
 
@@ -98,6 +121,25 @@ def start_scheduler() -> None:
         replace_existing=True,
     )
 
+    try:
+        b_parts = briefing_cron.strip().split()
+        if len(b_parts) >= 2:
+            b_minute = b_parts[0]
+            b_hour = b_parts[1]
+        else:
+            b_minute, b_hour = "0", "9"
+    except Exception:
+        b_minute, b_hour = "0", "9"
+
+    scheduler.add_job(
+        _run_briefing,
+        trigger="cron",
+        hour=b_hour,
+        minute=b_minute,
+        id="briefing",
+        replace_existing=True,
+    )
+
     scheduler.start()
     _state.scheduler = scheduler
 
@@ -109,10 +151,12 @@ def start_scheduler() -> None:
             logger.exception("Failed to pause ingest job on startup")
     else:
         logger.info(
-            "Scheduler started: ingest every %d min, digest at %s:%s UTC",
+            "Scheduler started: ingest every %d min, digest at %s:%s UTC, briefing at %s:%s UTC",
             interval_minutes,
             cron_hour.zfill(2),
             cron_minute.zfill(2),
+            b_hour.zfill(2),
+            b_minute.zfill(2),
         )
 
 
