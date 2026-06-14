@@ -730,7 +730,7 @@ def _upsert_uas(  # noqa: PLR0913
             user_id,
             article_id,
             state,
-            1 if starred else 0,
+            bool(starred),
             done_at,
             starred_at,
             skipped_at,
