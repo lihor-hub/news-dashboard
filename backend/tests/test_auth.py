@@ -158,7 +158,9 @@ def test_keycloak_authorization_url(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("NEWS_DASHBOARD_BASE_URL", "https://news.lihor.ro")
     monkeypatch.setenv("KEYCLOAK_SERVER_URL", "https://news.lihor.ro/keycloak")
     url = keycloak_authorization_url("state-123")
-    assert url.startswith("https://news.lihor.ro/keycloak/realms/news-dashboard/protocol/openid-connect/auth?")
+    assert url.startswith(
+        "https://news.lihor.ro/keycloak/realms/news-dashboard/protocol/openid-connect/auth?"
+    )
     assert "client_id=news-dashboard" in url
     assert "redirect_uri=https%3A%2F%2Fnews.lihor.ro%2Fauth%2Fcallback" in url
     assert "state=state-123" in url

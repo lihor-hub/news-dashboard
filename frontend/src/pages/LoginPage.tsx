@@ -18,7 +18,14 @@ export function LoginPage() {
   useEffect(() => {
     void fetchAuthConfig()
       .then(setAuthConfig)
-      .catch(() => setAuthConfig({ provider: 'password', keycloak_enabled: false, login_url: null, logout_url: '/api/auth/logout' }));
+      .catch(() =>
+        setAuthConfig({
+          provider: 'password',
+          keycloak_enabled: false,
+          login_url: null,
+          logout_url: '/api/auth/logout',
+        })
+      );
   }, []);
 
   async function handleSubmit(e: FormEvent) {
@@ -36,7 +43,8 @@ export function LoginPage() {
     }
   }
 
-  const keycloakLoginUrl = authConfig?.provider === 'keycloak' ? (authConfig.login_url ?? '/auth/login') : null;
+  const keycloakLoginUrl =
+    authConfig?.provider === 'keycloak' ? (authConfig.login_url ?? '/auth/login') : null;
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background px-4">
@@ -47,7 +55,9 @@ export function LoginPage() {
           </div>
           <div>
             <h1 className="text-xl font-semibold text-foreground">Sign in</h1>
-            <p className="mt-1 text-sm text-muted-foreground">Private radar dashboard for news.lihor.ro</p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Private radar dashboard for news.lihor.ro
+            </p>
           </div>
         </div>
 

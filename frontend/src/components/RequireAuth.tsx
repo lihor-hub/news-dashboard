@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { fetchMe } from '@/api';
+import { fetchAuthConfig, fetchMe } from '@/api';
 import { useAuth } from '@/contexts/auth';
 
 interface Props {
@@ -19,7 +19,12 @@ export function RequireAuth({ children }: Props) {
         setUser(user);
         setChecked(true);
       })
-      .catch(() => {
+      .catch(async () => {
+        const config = await fetchAuthConfig().catch(() => null);
+        if (config?.provider === 'keycloak') {
+          window.location.assign(config.login_url ?? '/auth/login');
+          return;
+        }
         navigate('/login', { state: { from: location.pathname }, replace: true });
       });
     // Run once on mount only

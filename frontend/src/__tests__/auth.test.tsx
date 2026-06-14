@@ -66,6 +66,12 @@ describe('RequireAuth', () => {
 
   it('redirects to /login when /api/auth/me returns 401', async () => {
     vi.spyOn(api, 'fetchMe').mockRejectedValue(new Error('401 Unauthorized'));
+    vi.spyOn(api, 'fetchAuthConfig').mockResolvedValue({
+      provider: 'password',
+      keycloak_enabled: false,
+      login_url: null,
+      logout_url: '/api/auth/logout',
+    });
 
     renderWithRouter(
       <Routes>
@@ -87,8 +93,57 @@ describe('RequireAuth', () => {
     expect(screen.queryByText('Protected content')).toBeNull();
   });
 
+  it('redirects straight to Keycloak when /api/auth/me returns 401 and Keycloak is enabled', async () => {
+    vi.spyOn(api, 'fetchMe').mockRejectedValue(new Error('401 Unauthorized'));
+    vi.spyOn(api, 'fetchAuthConfig').mockResolvedValue({
+      provider: 'keycloak',
+      keycloak_enabled: true,
+      login_url: '/auth/login',
+      logout_url: '/auth/logout',
+    });
+    const assign = vi.fn();
+    const originalLocation = window.location;
+    Object.defineProperty(window, 'location', {
+      configurable: true,
+      value: { ...originalLocation, assign },
+    });
+
+    try {
+      renderWithRouter(
+        <Routes>
+          <Route
+            path="/"
+            element={
+              <RequireAuth>
+                <div>Protected content</div>
+              </RequireAuth>
+            }
+          />
+          <Route path="/login" element={<div>Login page</div>} />
+        </Routes>
+      );
+
+      await waitFor(() => {
+        expect(assign).toHaveBeenCalledWith('/auth/login');
+      });
+      expect(screen.queryByText('Protected content')).toBeNull();
+      expect(screen.queryByText('Login page')).toBeNull();
+    } finally {
+      Object.defineProperty(window, 'location', {
+        configurable: true,
+        value: originalLocation,
+      });
+    }
+  });
+
   it('passes the original path via location state when redirecting', async () => {
     vi.spyOn(api, 'fetchMe').mockRejectedValue(new Error('401 Unauthorized'));
+    vi.spyOn(api, 'fetchAuthConfig').mockResolvedValue({
+      provider: 'password',
+      keycloak_enabled: false,
+      login_url: null,
+      logout_url: '/api/auth/logout',
+    });
 
     let capturedState: unknown = undefined;
 
