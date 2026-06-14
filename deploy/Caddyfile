@@ -1,0 +1,9 @@
+news.lihor.ro {
+    reverse_proxy localhost:30088
+    basicauth {
+        # Add one or more users with hashed passwords.
+        # Generate a hash:  caddy hash-password
+        # Then paste the output here, e.g.:
+        #   ioachim $2a$14$<hash-output-goes-here>
+    }
+}

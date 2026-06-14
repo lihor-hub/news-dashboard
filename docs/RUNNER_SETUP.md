@@ -107,3 +107,13 @@ If missing, re-run the workflow or create it manually with the PAT.
 **Deployment name**: The Helm release name `news-dashboard` + chart name `news-dashboard`
 produces the pod/deployment name `news-dashboard-news-dashboard`.  This is expected
 (Helm double-name pattern); don't rename without a `helm rename` migration.
+
+## HTTPS / Caddy setup
+
+The app runs as a NodePort service on `localhost:30088`.  To serve it over HTTPS
+at `news.lihor.ro` (required for PWA install, service worker, and Basic Auth),
+a host-level Caddy reverse proxy is needed.
+
+See **[docs/CADDY_HTTPS_SETUP.md](CADDY_HTTPS_SETUP.md)** for the full walkthrough,
+including the Caddyfile (at `deploy/Caddyfile` in this repo), DNS configuration,
+router port forwarding, and Let's Encrypt certificate setup.

@@ -94,6 +94,10 @@ news-dashboard-migrate /data/news-dashboard.db
 ## Deployment notes
 
 - The app should be private/auth-protected when exposed publicly.
-- `news.lihor.ro` is served by host-level Caddy with Basic Auth.
+- `news.lihor.ro` is served by host-level Caddy with Basic Auth and automatic
+  Let's Encrypt HTTPS. See [docs/CADDY_HTTPS_SETUP.md](docs/CADDY_HTTPS_SETUP.md)
+  for the full setup guide; the Caddyfile lives at `deploy/Caddyfile`.
+- HTTPS is required for PWA install (Chrome/Android "Add to Home Screen" as a
+  standalone app) and for service worker registration.
 - GitHub Actions publishes `ghcr.io/ioachim-hub/news-dashboard`.
 - For the local Kubernetes cluster, if GHCR pull auth is unavailable, build and push to `localhost:5000/news-dashboard:<tag>` and override Helm image values.
