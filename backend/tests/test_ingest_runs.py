@@ -103,8 +103,10 @@ def test_ingest_all_records_source_errors(tmp_path: Path, monkeypatch: Any) -> N
 
 
 def test_ingest_stream_route_is_registered() -> None:
-    route_paths = [getattr(r, "path", None) for r in app.routes]
-    assert "/api/ingest/stream" in route_paths, f"Route not found. app.routes paths: {route_paths}"
+    # url_path_for raises NoMatchFound (KeyError) if the route isn't registered.
+    # Using url_path_for is robust across FastAPI versions (0.137+ stores included
+    # routers as _IncludedRouter objects rather than flattening into app.routes).
+    assert str(app.url_path_for("ingest_stream")) == "/api/ingest/stream"
 
 
 def test_ingest_stream_replays_last_completed_run() -> None:
