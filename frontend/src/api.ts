@@ -18,6 +18,7 @@ import type {
   TriageMetrics,
   IngestRunPage,
   IngestRunSource,
+  User,
 } from './types';
 
 export async function requestJson<T>(url: string, init?: RequestInit): Promise<T> {
@@ -202,4 +203,31 @@ export async function fetchBriefing(id: number): Promise<Briefing> {
 export async function fetchBriefings(limit = 50, offset = 0): Promise<{ items: Briefing[] }> {
   const params = new URLSearchParams({ limit: String(limit), offset: String(offset) });
   return requestJson<{ items: Briefing[] }>(`/api/briefings?${params}`);
+}
+
+// ── Auth ──────────────────────────────────────────────────────────────────────
+
+export async function fetchMe(): Promise<User> {
+  return requestJson<User>('/api/auth/me');
+}
+
+export async function loginUser(username: string, password: string): Promise<User> {
+  return requestJson<User>('/api/auth/login', {
+    method: 'POST',
+    body: JSON.stringify({ username, password }),
+  });
+}
+
+export async function logoutUser(): Promise<void> {
+  await fetch('/api/auth/logout');
+}
+
+export async function toggleSourceSubscription(
+  slug: string,
+  enabled: boolean
+): Promise<{ subscribed: boolean }> {
+  return requestJson<{ subscribed: boolean }>(`/api/sources/${slug}/enabled`, {
+    method: 'PATCH',
+    body: JSON.stringify({ enabled }),
+  });
 }

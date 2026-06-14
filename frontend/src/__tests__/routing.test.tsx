@@ -12,6 +12,7 @@ import { AppShell } from '../components/AppShell';
 import { CommandPalette } from '../components/CommandPalette';
 import { ShortcutOverlay } from '../components/ShortcutOverlay';
 import { FocusedArticleProvider } from '../contexts/focusedArticle';
+import { AuthProvider } from '../contexts/auth';
 import * as api from '../api';
 
 vi.spyOn(console, 'error').mockImplementation(() => undefined);
@@ -54,11 +55,13 @@ function renderShell(initialPath = '/') {
   const qc = makeQc();
   return render(
     <QueryClientProvider client={qc}>
-      <MemoryRouter initialEntries={[initialPath]}>
-        <FocusedArticleProvider>
-          <AppShell />
-        </FocusedArticleProvider>
-      </MemoryRouter>
+      <AuthProvider>
+        <MemoryRouter initialEntries={[initialPath]}>
+          <FocusedArticleProvider>
+            <AppShell />
+          </FocusedArticleProvider>
+        </MemoryRouter>
+      </AuthProvider>
     </QueryClientProvider>
   );
 }
@@ -250,21 +253,18 @@ describe('#105 — g-key shortcuts via AppShell', () => {
 
   it('g then b navigates to / (Brief)', async () => {
     const qc = makeQc();
-    // We can't easily spy on react-router navigate in unit tests,
-    // so we verify the shortcut wiring via the keyboard test for AppShell.
-    // This test checks the key handler registers 'b' for Brief.
     render(
       <QueryClientProvider client={qc}>
-        <MemoryRouter initialEntries={['/today']}>
-          <FocusedArticleProvider>
-            <AppShell />
-          </FocusedArticleProvider>
-        </MemoryRouter>
+        <AuthProvider>
+          <MemoryRouter initialEntries={['/today']}>
+            <FocusedArticleProvider>
+              <AppShell />
+            </FocusedArticleProvider>
+          </MemoryRouter>
+        </AuthProvider>
       </QueryClientProvider>
     );
-    // Fire g then b — if wired, the URL would change; we verify no error is thrown.
     await userEvent.keyboard('gb');
-    // Verify the component renders without error after the keypress.
     expect(screen.getAllByText('Brief').length).toBeGreaterThan(0);
   });
 
@@ -272,11 +272,13 @@ describe('#105 — g-key shortcuts via AppShell', () => {
     const qc = makeQc();
     render(
       <QueryClientProvider client={qc}>
-        <MemoryRouter initialEntries={['/']}>
-          <FocusedArticleProvider>
-            <AppShell />
-          </FocusedArticleProvider>
-        </MemoryRouter>
+        <AuthProvider>
+          <MemoryRouter initialEntries={['/']}>
+            <FocusedArticleProvider>
+              <AppShell />
+            </FocusedArticleProvider>
+          </MemoryRouter>
+        </AuthProvider>
       </QueryClientProvider>
     );
     await userEvent.keyboard('gt');

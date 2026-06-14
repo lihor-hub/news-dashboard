@@ -33,6 +33,13 @@ export interface Article {
   body_status?: 'ok' | 'missing' | 'error';
 }
 
+export interface User {
+  id: number;
+  username: string;
+  email?: string | null;
+  is_admin: boolean;
+}
+
 export interface Source {
   slug: string;
   name: string;
@@ -41,6 +48,8 @@ export interface Source {
   kind: string;
   priority: number;
   enabled: number;
+  subscribed?: boolean;
+  owner_user_id?: number | null;
   last_checked_at?: string | null;
   last_success_at?: string | null;
   last_error?: string | null;

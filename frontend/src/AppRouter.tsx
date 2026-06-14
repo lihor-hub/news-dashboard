@@ -1,6 +1,9 @@
 import { createBrowserRouter, RouterProvider, Navigate } from 'react-router-dom';
 import { FocusedArticleProvider } from './contexts/focusedArticle';
+import { AuthProvider } from './contexts/auth';
+import { RequireAuth } from './components/RequireAuth';
 import { AppShell } from './components/AppShell';
+import { LoginPage } from './pages/LoginPage';
 import { BriefPage } from './pages/BriefPage';
 import { InboxPage } from './pages/InboxPage';
 import { LaterPage } from './pages/LaterPage';
@@ -43,12 +46,24 @@ function NotFound() {
 
 const router = createBrowserRouter([
   {
+    path: '/login',
+    element: <LoginPage />,
+  },
+  {
     path: '/a/:id',
-    element: <ArticlePage />,
+    element: (
+      <RequireAuth>
+        <ArticlePage />
+      </RequireAuth>
+    ),
   },
   {
     path: '/',
-    element: <AppShell />,
+    element: (
+      <RequireAuth>
+        <AppShell />
+      </RequireAuth>
+    ),
     children: [
       { index: true, element: <BriefPage /> },
       { path: 'today', element: <InboxPage /> },
@@ -88,8 +103,10 @@ const router = createBrowserRouter([
 
 export function AppRouter() {
   return (
-    <FocusedArticleProvider>
-      <RouterProvider router={router} />
-    </FocusedArticleProvider>
+    <AuthProvider>
+      <FocusedArticleProvider>
+        <RouterProvider router={router} />
+      </FocusedArticleProvider>
+    </AuthProvider>
   );
 }

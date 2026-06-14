@@ -14,12 +14,14 @@ import {
   Archive,
   Settings,
   History,
+  LogOut,
 } from 'lucide-react';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
 import { CommandPalette } from './CommandPalette';
 import { ShortcutOverlay } from './ShortcutOverlay';
 import { cn } from '@/lib/utils';
-import { fetchSummary } from '@/api';
+import { fetchSummary, logoutUser } from '@/api';
+import { useAuth } from '@/contexts/auth';
 
 function useNavCounts() {
   const { data } = useQuery({
@@ -82,8 +84,16 @@ function currentTitle(p: string) {
 
 function DesktopRail({ pathname }: { pathname: string }) {
   const counts = useNavCounts();
+  const { user, setUser } = useAuth();
+  const navigate = useNavigate();
   const countFor = (to: string): number | null =>
     to === '/today' ? counts.today : to === '/starred' ? counts.starred : null;
+
+  async function handleLogout() {
+    await logoutUser();
+    setUser(null);
+    navigate('/login', { replace: true });
+  }
 
   return (
     <aside className="hidden md:flex md:flex-col md:w-[200px] md:shrink-0 md:border-r md:border-border md:min-h-[calc(100vh-3rem)] md:sticky md:top-12 md:self-start">
@@ -136,6 +146,18 @@ function DesktopRail({ pathname }: { pathname: string }) {
           );
         })}
       </nav>
+      <div className="mt-auto mx-2 mb-2 pt-2 border-t border-border">
+        {user && (
+          <div className="px-2.5 py-1 text-[11px] text-subtle truncate">{user.username}</div>
+        )}
+        <button
+          onClick={() => void handleLogout()}
+          className="flex w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-sm text-muted-foreground hover:bg-surface hover:text-foreground"
+        >
+          <LogOut className="size-4" />
+          Log out
+        </button>
+      </div>
     </aside>
   );
 }
@@ -143,9 +165,16 @@ function DesktopRail({ pathname }: { pathname: string }) {
 export function AppShell() {
   const { pathname } = useLocation();
   const navigate = useNavigate();
+  const { user, setUser } = useAuth();
   const [moreOpen, setMoreOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
+
+  async function handleLogout() {
+    await logoutUser();
+    setUser(null);
+    navigate('/login', { replace: true });
+  }
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -235,6 +264,9 @@ export function AppShell() {
               <SheetContent side="right" className="w-[280px] p-0">
                 <SheetHeader className="px-5 pt-5 pb-3">
                   <SheetTitle className="text-sm">Menu</SheetTitle>
+                  {user && (
+                    <p className="text-xs text-muted-foreground truncate">{user.username}</p>
+                  )}
                 </SheetHeader>
                 <nav className="p-2">
                   {moreItems.map((m) => {
@@ -257,6 +289,13 @@ export function AppShell() {
                       </Link>
                     );
                   })}
+                  <button
+                    onClick={() => void handleLogout()}
+                    className="flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-sm text-muted-foreground hover:bg-surface hover:text-foreground"
+                  >
+                    <LogOut className="size-4" />
+                    Log out
+                  </button>
                 </nav>
               </SheetContent>
             </Sheet>
