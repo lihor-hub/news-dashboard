@@ -5,7 +5,17 @@ import tseslint from 'typescript-eslint';
 import prettier from 'eslint-config-prettier';
 
 export default tseslint.config(
-  { ignores: ['frontend/dist', 'node_modules', 'design/', 'frontend/src/components/ui/**'] },
+  {
+    ignores: [
+      'frontend/dist',
+      'node_modules',
+      'design/',
+      'frontend/src/components/ui/**',
+      // Stale git worktrees — lint runs on the whole tree so exclude them explicitly
+      '.claude/worktrees/**',
+      '.worktrees/**',
+    ],
+  },
   {
     files: ['frontend/src/**/*.{ts,tsx}'],
     extends: [
