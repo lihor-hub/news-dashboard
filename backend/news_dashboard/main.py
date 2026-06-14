@@ -6,14 +6,26 @@ from datetime import datetime
 from pathlib import Path
 from typing import Annotated, Any
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import APIRouter, Depends, FastAPI, HTTPException, Query, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from starlette.exceptions import HTTPException as StarletteHTTPException
-from starlette.responses import Response
+from starlette.responses import Response as StarletteResponse
 
+from .auth import (
+    authenticate,
+    create_session_token,
+    create_user,
+    delete_user,
+    get_user_by_id,
+    init_auth,
+    list_users,
+    require_admin,
+    require_auth,
+    update_password,
+)
 from .body_fetch import fetch_and_cache_body, get_article
 from .briefings import (
     BriefingAINotConfiguredError,
@@ -58,11 +70,14 @@ from .stats import (
     triage_metrics,
 )
 
+_SESSION_COOKIE = "nd_session"
+_SESSION_DAYS = 30
+
 
 class SPAStaticFiles(StaticFiles):
     """Serve index.html for client-side routes while preserving API/static 404s."""
 
-    async def get_response(self, path: str, scope: MutableMapping[str, Any]) -> Response:
+    async def get_response(self, path: str, scope: MutableMapping[str, Any]) -> StarletteResponse:
         try:
             return await super().get_response(path, scope)
         except StarletteHTTPException as exc:
@@ -75,19 +90,23 @@ class SPAStaticFiles(StaticFiles):
 
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+    init_auth()
     sync_sources()
     start_scheduler()
     yield
     stop_scheduler()
 
 
-app = FastAPI(title="News Dashboard", version="0.3.0", lifespan=lifespan)
+app = FastAPI(title="News Dashboard", version="0.4.0", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
     allow_methods=["*"],
     allow_headers=["*"],
+    allow_credentials=True,
 )
+
+# ── Pydantic models ──────────────────────────────────────────────────────────
 
 
 class StatusUpdate(BaseModel):
@@ -110,7 +129,32 @@ class EnabledUpdate(BaseModel):
     enabled: bool
 
 
-@app.get("/api/health")
+class IntervalUpdate(BaseModel):
+    minutes: int
+
+
+class LoginRequest(BaseModel):
+    username: str
+    password: str
+
+
+class CreateUserRequest(BaseModel):
+    username: str
+    password: str
+    email: str | None = None
+    is_admin: bool = False
+
+
+class UpdatePasswordRequest(BaseModel):
+    password: str
+
+
+# ── Public auth routes (no session required) ──────────────────────────────────
+
+public_router = APIRouter()
+
+
+@public_router.get("/api/health")
 def health() -> dict[str, Any]:
     init_db()
     return {
@@ -120,36 +164,59 @@ def health() -> dict[str, Any]:
     }
 
 
-@app.post("/api/ingest")
+@public_router.post("/api/auth/login")
+def login(payload: LoginRequest, response: Response) -> dict[str, Any]:
+    user = authenticate(payload.username, payload.password)
+    if not user:
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+    token = create_session_token(user["id"], bool(user["is_admin"]))
+    response.set_cookie(
+        key=_SESSION_COOKIE,
+        value=token,
+        httponly=True,
+        secure=True,
+        samesite="strict",
+        max_age=_SESSION_DAYS * 86400,
+        path="/",
+    )
+    return {"id": user["id"], "username": user["username"], "is_admin": bool(user["is_admin"])}
+
+
+@public_router.get("/api/auth/logout")
+def logout(response: Response) -> dict[str, str]:
+    response.delete_cookie(key=_SESSION_COOKIE, path="/")
+    return {"status": "logged_out"}
+
+
+app.include_router(public_router)
+
+# ── Authenticated API router ─────────────────────────────────────────────────
+
+api = APIRouter(dependencies=[Depends(require_auth)])
+
+
+@api.get("/api/auth/me")
+def auth_me(current_user: Annotated[dict[str, Any], Depends(require_auth)]) -> dict[str, Any]:
+    return {
+        "id": current_user["id"],
+        "username": current_user["username"],
+        "email": current_user.get("email"),
+        "is_admin": bool(current_user["is_admin"]),
+    }
+
+
+@api.post("/api/ingest")
 def ingest() -> dict[str, Any]:
     results = ingest_all()
     return {"results": results, "inserted": sum(v for v in results.values() if v > 0)}
 
 
-@app.get("/api/ingest/stream")
+@api.get("/api/ingest/stream")
 def ingest_stream() -> StreamingResponse:
     return StreamingResponse(stream_ingest_events(), media_type="text/event-stream")
 
 
-@app.get("/api/ingest/runs")
-def ingest_runs(
-    from_: Annotated[datetime | None, Query(alias="from")] = None,
-    to: Annotated[datetime | None, Query()] = None,
-    page: Annotated[int, Query(ge=1)] = 1,
-    per_page: Annotated[int, Query(ge=1, le=100)] = 20,
-) -> dict[str, Any]:
-    return list_ingest_runs(from_=from_, to=to, page=page, per_page=per_page)
-
-
-@app.get("/api/ingest/runs/{run_id}")
-def ingest_run_sources(run_id: int) -> dict[str, Any]:
-    sources = get_ingest_run_sources(run_id)
-    if sources is None:
-        raise HTTPException(status_code=404, detail="ingest run not found")
-    return {"items": sources}
-
-
-@app.get("/api/articles")
+@api.get("/api/articles")
 def articles(
     status: Annotated[str | None, Query()] = None,
     state: Annotated[str | None, Query()] = None,
@@ -170,7 +237,7 @@ def articles(
     }
 
 
-@app.get("/api/search")
+@api.get("/api/search")
 def search(  # noqa: PLR0913
     q: Annotated[str, Query(description="Space-separated search terms")] = "",
     limit: Annotated[int, Query(ge=1, le=200)] = 50,
@@ -195,7 +262,7 @@ def search(  # noqa: PLR0913
     }
 
 
-@app.get("/api/articles/{article_id}")
+@api.get("/api/articles/{article_id}")
 def get_article_by_id(article_id: int) -> dict[str, Any]:
     article = get_article(article_id)
     if not article:
@@ -203,16 +270,15 @@ def get_article_by_id(article_id: int) -> dict[str, Any]:
     return article
 
 
-@app.post("/api/articles/{article_id}/body")
+@api.post("/api/articles/{article_id}/body")
 def fetch_article_body(article_id: int) -> dict[str, Any]:
-    """Fetch and cache full body text for an article. Idempotent (cache hit returns fast)."""
     article = fetch_and_cache_body(article_id)
     if not article:
         raise HTTPException(status_code=404, detail="article not found")
     return article
 
 
-@app.patch("/api/articles/{article_id}/status")
+@api.patch("/api/articles/{article_id}/status")
 def update_status(article_id: int, payload: StatusUpdate) -> dict[str, Any]:
     try:
         article = set_article_status(article_id, payload.status)
@@ -223,7 +289,7 @@ def update_status(article_id: int, payload: StatusUpdate) -> dict[str, Any]:
     return article
 
 
-@app.patch("/api/articles/{article_id}/state")
+@api.patch("/api/articles/{article_id}/state")
 def update_state(article_id: int, payload: StateUpdate) -> dict[str, Any]:
     try:
         article = transition_article_state(article_id, payload.state)
@@ -234,7 +300,7 @@ def update_state(article_id: int, payload: StateUpdate) -> dict[str, Any]:
     return article
 
 
-@app.patch("/api/articles/{article_id}/star")
+@api.patch("/api/articles/{article_id}/star")
 def update_star(article_id: int, payload: StarUpdate) -> dict[str, Any]:
     article = set_article_starred(article_id, payload.starred)
     if not article:
@@ -242,7 +308,7 @@ def update_star(article_id: int, payload: StarUpdate) -> dict[str, Any]:
     return article
 
 
-@app.patch("/api/articles/{article_id}/later")
+@api.patch("/api/articles/{article_id}/later")
 def snooze_later(article_id: int, payload: LaterUpdate) -> dict[str, Any]:
     try:
         article = send_article_later(article_id, payload.days)
@@ -253,9 +319,8 @@ def snooze_later(article_id: int, payload: LaterUpdate) -> dict[str, Any]:
     return article
 
 
-@app.get("/api/articles/{article_id}/read")
+@api.get("/api/articles/{article_id}/read")
 def mark_read_via_token(article_id: int, token: Annotated[str, Query()]) -> dict[str, Any]:
-    """One-click mark-read endpoint for digest emails. Validates a signed token."""
     from .digest import verify_read_token
 
     if not verify_read_token(article_id, token):
@@ -269,7 +334,7 @@ def mark_read_via_token(article_id: int, token: Annotated[str, Query()]) -> dict
     return {"status": "marked_read", "article": article}
 
 
-@app.get("/api/sources")
+@api.get("/api/sources")
 def sources() -> dict[str, Any]:
     init_db()
     with connect() as conn:
@@ -279,12 +344,12 @@ def sources() -> dict[str, Any]:
         return {"items": [row_to_dict(row) for row in rows]}
 
 
-@app.get("/api/sources/health")
+@api.get("/api/sources/health")
 def sources_health() -> dict[str, Any]:
     return {"items": list_source_health()}
 
 
-@app.patch("/api/sources/{slug}/enabled")
+@api.patch("/api/sources/{slug}/enabled")
 def set_source_enabled(slug: str, payload: EnabledUpdate) -> dict[str, Any]:
     init_db()
     with connect() as conn:
@@ -298,11 +363,7 @@ def set_source_enabled(slug: str, payload: EnabledUpdate) -> dict[str, Any]:
         return row_to_dict(row)
 
 
-class IntervalUpdate(BaseModel):
-    minutes: int
-
-
-@app.get("/api/scheduler/status")
+@api.get("/api/scheduler/status")
 def scheduler_status() -> dict[str, Any]:
     next_run = get_next_ingest_at()
     paused = is_paused()
@@ -313,7 +374,10 @@ def scheduler_status() -> dict[str, Any]:
     }
 
 
-@app.post("/api/scheduler/interval")
+_admin_dep = [Depends(require_admin)]
+
+
+@api.post("/api/scheduler/interval", dependencies=_admin_dep)
 def scheduler_set_interval(payload: IntervalUpdate) -> dict[str, Any]:
     if payload.minutes < 1:
         raise HTTPException(status_code=400, detail="minutes must be >= 1")
@@ -321,19 +385,37 @@ def scheduler_set_interval(payload: IntervalUpdate) -> dict[str, Any]:
     return {"interval_minutes": payload.minutes, "next_run_at": get_next_ingest_at()}
 
 
-@app.post("/api/scheduler/pause")
+@api.post("/api/scheduler/pause", dependencies=_admin_dep)
 def scheduler_pause() -> dict[str, Any]:
     pause_scheduler()
     return {"paused": True}
 
 
-@app.post("/api/scheduler/resume")
+@api.post("/api/scheduler/resume", dependencies=_admin_dep)
 def scheduler_resume() -> dict[str, Any]:
     resume_scheduler()
     return {"paused": False, "next_run_at": get_next_ingest_at()}
 
 
-@app.get("/api/stats/overview")
+@api.get("/api/ingest/runs", dependencies=_admin_dep)
+def ingest_runs(
+    from_: Annotated[datetime | None, Query(alias="from")] = None,
+    to: Annotated[datetime | None, Query()] = None,
+    page: Annotated[int, Query(ge=1)] = 1,
+    per_page: Annotated[int, Query(ge=1, le=100)] = 20,
+) -> dict[str, Any]:
+    return list_ingest_runs(from_=from_, to=to, page=page, per_page=per_page)
+
+
+@api.get("/api/ingest/runs/{run_id}", dependencies=_admin_dep)
+def ingest_run_sources(run_id: int) -> dict[str, Any]:
+    run_sources = get_ingest_run_sources(run_id)
+    if run_sources is None:
+        raise HTTPException(status_code=404, detail="ingest run not found")
+    return {"items": run_sources}
+
+
+@api.get("/api/stats/overview", dependencies=_admin_dep)
 def stats_overview_endpoint(
     from_: Annotated[str, Query(alias="from")],
     to: Annotated[str, Query()],
@@ -344,7 +426,7 @@ def stats_overview_endpoint(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
-@app.get("/api/stats/articles-over-time")
+@api.get("/api/stats/articles-over-time", dependencies=_admin_dep)
 def stats_articles_over_time_endpoint(
     from_: Annotated[str, Query(alias="from")],
     to: Annotated[str, Query()],
@@ -355,7 +437,7 @@ def stats_articles_over_time_endpoint(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
-@app.get("/api/stats/sources-volume")
+@api.get("/api/stats/sources-volume", dependencies=_admin_dep)
 def stats_sources_volume_endpoint(
     from_: Annotated[str, Query(alias="from")],
     to: Annotated[str, Query()],
@@ -366,32 +448,32 @@ def stats_sources_volume_endpoint(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
-@app.get("/api/stats/article-counts")
+@api.get("/api/stats/article-counts", dependencies=_admin_dep)
 def stats_article_counts_endpoint() -> dict[str, Any]:
     return article_counts()
 
 
-@app.get("/api/stats/triage-metrics")
+@api.get("/api/stats/triage-metrics", dependencies=_admin_dep)
 def stats_triage_metrics_endpoint() -> dict[str, Any]:
     return triage_metrics()
 
 
-@app.get("/api/stats/source-quality")
+@api.get("/api/stats/source-quality", dependencies=_admin_dep)
 def stats_source_quality_endpoint() -> dict[str, Any]:
     return {"items": source_quality()}
 
 
-@app.get("/api/stats/category-mix")
+@api.get("/api/stats/category-mix", dependencies=_admin_dep)
 def stats_category_mix_endpoint() -> dict[str, Any]:
     return {"items": category_mix()}
 
 
-@app.get("/api/stats/ingested-vs-handled")
+@api.get("/api/stats/ingested-vs-handled", dependencies=_admin_dep)
 def stats_ingested_vs_handled_endpoint() -> dict[str, Any]:
     return {"items": ingested_vs_handled()}
 
 
-@app.get("/api/briefings/latest")
+@api.get("/api/briefings/latest")
 def briefings_latest() -> dict[str, Any]:
     briefing = get_latest_briefing()
     if briefing is None:
@@ -399,7 +481,7 @@ def briefings_latest() -> dict[str, Any]:
     return briefing
 
 
-@app.get("/api/briefings")
+@api.get("/api/briefings")
 def briefings_list(
     limit: Annotated[int, Query(ge=1, le=200)] = 50,
     offset: Annotated[int, Query(ge=0)] = 0,
@@ -407,7 +489,7 @@ def briefings_list(
     return {"items": list_briefings(limit=limit, offset=offset)}
 
 
-@app.get("/api/briefings/{briefing_id}")
+@api.get("/api/briefings/{briefing_id}")
 def briefings_detail(briefing_id: int) -> dict[str, Any]:
     briefing = get_briefing(briefing_id)
     if briefing is None:
@@ -415,9 +497,8 @@ def briefings_detail(briefing_id: int) -> dict[str, Any]:
     return briefing
 
 
-@app.post("/api/briefings")
+@api.post("/api/briefings")
 def briefings_create() -> dict[str, Any]:
-    """Generate a briefing from eligible Today articles and persist it."""
     try:
         return generate_briefing()
     except BriefingAINotConfiguredError as exc:
@@ -431,9 +512,8 @@ class AskRequest(BaseModel):
     include_all: bool = False
 
 
-@app.post("/api/ask")
+@api.post("/api/ask")
 def ask_ai(payload: AskRequest) -> dict[str, Any]:
-    """Answer a natural-language question using saved/read articles as context."""
     from .embeddings import ask
 
     q = payload.query.strip()
@@ -442,11 +522,10 @@ def ask_ai(payload: AskRequest) -> dict[str, Any]:
     try:
         return ask(q, include_all=payload.include_all)
     except Exception as exc:
-        # Surface errors clearly (missing API keys, etc.)
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
-@app.get("/api/summary")
+@api.get("/api/summary")
 def summary() -> dict[str, Any]:
     init_db()
     with connect() as conn:
@@ -461,6 +540,62 @@ def summary() -> dict[str, Any]:
         "byCategory": {row["category"]: row["count"] for row in category_rows},
     }
 
+
+# ── Admin user-management routes ─────────────────────────────────────────────
+
+admin = APIRouter(prefix="/api/admin", dependencies=[Depends(require_admin)])
+
+
+@admin.get("/users")
+def admin_list_users() -> dict[str, Any]:
+    return {"items": list_users()}
+
+
+@admin.post("/users")
+def admin_create_user(payload: CreateUserRequest) -> dict[str, Any]:
+    try:
+        return create_user(
+            payload.username,
+            payload.password,
+            email=payload.email,
+            is_admin=payload.is_admin,
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@admin.get("/users/{user_id}")
+def admin_get_user(user_id: int) -> dict[str, Any]:
+    user = get_user_by_id(user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="user not found")
+    return user
+
+
+@admin.patch("/users/{user_id}/password")
+def admin_update_password(user_id: int, payload: UpdatePasswordRequest) -> dict[str, Any]:
+    if not update_password(user_id, payload.password):
+        raise HTTPException(status_code=404, detail="user not found")
+    return {"status": "updated"}
+
+
+@admin.delete("/users/{user_id}")
+def admin_delete_user(
+    user_id: int,
+    current_user: Annotated[dict[str, Any], Depends(require_auth)],
+) -> dict[str, Any]:
+    if user_id == current_user["id"]:
+        raise HTTPException(status_code=400, detail="cannot delete your own account")
+    if not delete_user(user_id):
+        raise HTTPException(status_code=404, detail="user not found")
+    return {"status": "deleted"}
+
+
+app.include_router(api)
+app.include_router(admin)
+
+
+# ── SPA static files ─────────────────────────────────────────────────────────
 
 static_dir = Path(__file__).resolve().parents[2] / "frontend" / "dist"
 if static_dir.exists():

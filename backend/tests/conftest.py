@@ -7,15 +7,24 @@ is not reachable (e.g. on a dev machine without Docker Desktop).
 
 The ``pg_clean`` fixture truncates briefing/article/source rows before each
 test so every integration test starts from a known empty state.
+
+Auth: ``override_auth`` is an autouse fixture that patches ``require_auth``
+and ``require_admin`` to return a fake admin user so existing API tests keep
+working without needing real sessions.  Auth-specific tests that need real
+session behaviour should clear ``app.dependency_overrides`` themselves.
 """
 
 from __future__ import annotations
 
+import os
 from collections.abc import Generator
 
 import pytest
 
 from news_dashboard.db import init_db
+
+# Ensure SESSION_SECRET is set for all tests so auth module can load.
+os.environ.setdefault("TEST_SESSION_SECRET", "test-secret-key-not-for-production")
 
 
 def pytest_configure(config: pytest.Config) -> None:
@@ -23,6 +32,33 @@ def pytest_configure(config: pytest.Config) -> None:
         "markers",
         "postgres: marks tests that require a live PostgreSQL instance",
     )
+
+
+_FAKE_ADMIN = {
+    "id": 1,
+    "username": "testadmin",
+    "email": None,
+    "is_admin": True,
+    "created_at": "2026-01-01T00:00:00",
+    "last_login_at": None,
+}
+
+
+@pytest.fixture(autouse=True)
+def override_auth() -> Generator[None]:
+    """Inject a fake admin user into all tests that use the FastAPI app.
+
+    Auth-specific tests that need real session behaviour should call
+    ``app.dependency_overrides.clear()`` at the start of the test.
+    """
+    from news_dashboard.auth import require_admin, require_auth
+    from news_dashboard.main import app
+
+    app.dependency_overrides[require_auth] = lambda: _FAKE_ADMIN
+    app.dependency_overrides[require_admin] = lambda: _FAKE_ADMIN
+    yield
+    app.dependency_overrides.pop(require_auth, None)
+    app.dependency_overrides.pop(require_admin, None)
 
 
 @pytest.fixture(scope="session")
@@ -70,7 +106,8 @@ def pg_clean(pg_url: str) -> str:
 
     with psycopg.connect(pg_url) as conn:
         conn.execute(
-            "TRUNCATE briefing_articles, briefings, articles, sources RESTART IDENTITY CASCADE"
+            "TRUNCATE user_article_state, user_sources, briefing_articles, briefings,"
+            " articles, sources, users RESTART IDENTITY CASCADE"
         )
         conn.commit()
     return pg_url

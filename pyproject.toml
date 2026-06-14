@@ -13,6 +13,8 @@ dependencies = [
   "openai>=1.50.0",
   "numpy>=1.26.0",
   "rapidfuzz>=3.0.0",
+  "bcrypt>=4.0.0",
+  "itsdangerous>=2.2.0",
 ]
 
 [project.optional-dependencies]

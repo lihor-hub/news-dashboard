@@ -25,6 +25,16 @@ SQLITE_SCHEMA = """
 PRAGMA journal_mode=WAL;
 PRAGMA foreign_keys=ON;
 
+CREATE TABLE IF NOT EXISTS users (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  username      TEXT NOT NULL UNIQUE,
+  password_hash TEXT NOT NULL,
+  email         TEXT,
+  is_admin      INTEGER NOT NULL DEFAULT 0,
+  created_at    TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  last_login_at TEXT
+);
+
 CREATE TABLE IF NOT EXISTS sources (
   slug TEXT PRIMARY KEY,
   name TEXT NOT NULL,
@@ -132,6 +142,10 @@ SQLITE_COLUMN_MIGRATIONS = [
     ("articles", "starred_at", "TEXT"),
     ("articles", "later_until", "TEXT"),
     ("articles", "restored_at", "TEXT"),
+    # #126 auth — owner column on sources
+    ("sources", "owner_user_id", "INTEGER REFERENCES users(id)"),
+    # #129 per-user briefings
+    ("briefings", "user_id", "INTEGER REFERENCES users(id)"),
 ]
 
 # Data-only migrations run after column additions (idempotent via WHERE guard)
@@ -154,6 +168,17 @@ SQLITE_DATA_MIGRATIONS = [
 ]
 
 POSTGRES_SCHEMA = [
+    """
+    CREATE TABLE IF NOT EXISTS users (
+      id            SERIAL PRIMARY KEY,
+      username      TEXT NOT NULL UNIQUE,
+      password_hash TEXT NOT NULL,
+      email         TEXT,
+      is_admin      BOOLEAN NOT NULL DEFAULT FALSE,
+      created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      last_login_at TIMESTAMPTZ
+    )
+    """,
     """
     CREATE TABLE IF NOT EXISTS sources (
       slug TEXT PRIMARY KEY,
@@ -310,6 +335,14 @@ POSTGRES_SCHEMA = [
     )
     """,
     "CREATE INDEX IF NOT EXISTS idx_briefing_articles_briefing ON briefing_articles(briefing_id)",
+    # #126 Auth — owner column on sources (NULL = global catalog)
+    (
+        "ALTER TABLE sources ADD COLUMN IF NOT EXISTS"
+        " owner_user_id INTEGER REFERENCES users(id) ON DELETE CASCADE"
+    ),
+    # #129 Per-user briefings
+    "ALTER TABLE briefings ADD COLUMN IF NOT EXISTS user_id INTEGER REFERENCES users(id)",
+    "CREATE INDEX IF NOT EXISTS idx_briefings_user ON briefings(user_id, created_at DESC)",
 ]
 
 # SQLite-compatible briefing tables (TEXT instead of JSONB/TIMESTAMPTZ, for tests only)
@@ -325,7 +358,8 @@ CREATE TABLE IF NOT EXISTS briefings (
   summary    TEXT,
   content    TEXT,
   model      TEXT,
-  error      TEXT
+  error      TEXT,
+  user_id    INTEGER REFERENCES users(id)
 );
 
 CREATE TABLE IF NOT EXISTS briefing_articles (
@@ -339,6 +373,74 @@ CREATE TABLE IF NOT EXISTS briefing_articles (
 CREATE INDEX IF NOT EXISTS idx_briefings_created ON briefings(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_briefing_articles_briefing ON briefing_articles(briefing_id);
 """
+
+# SQLite-compatible multi-user tables (for tests)
+SQLITE_MULTIUSER_SCHEMA = """
+CREATE TABLE IF NOT EXISTS user_sources (
+  user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  source_slug TEXT    NOT NULL REFERENCES sources(slug) ON DELETE CASCADE,
+  enabled     INTEGER NOT NULL DEFAULT 1,
+  added_at    TEXT    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (user_id, source_slug)
+);
+
+CREATE INDEX IF NOT EXISTS idx_user_sources_user ON user_sources(user_id, enabled);
+
+CREATE TABLE IF NOT EXISTS user_article_state (
+  user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  article_id  INTEGER NOT NULL REFERENCES articles(id) ON DELETE CASCADE,
+  state       TEXT NOT NULL DEFAULT 'today'
+                CHECK(state IN ('today','done','skipped','archived','later')),
+  starred     INTEGER NOT NULL DEFAULT 0,
+  done_at     TEXT,
+  starred_at  TEXT,
+  skipped_at  TEXT,
+  archived_at TEXT,
+  later_until TEXT,
+  restored_at TEXT,
+  updated_at  TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (user_id, article_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_uas_user_state ON user_article_state(user_id, state);
+CREATE INDEX IF NOT EXISTS idx_uas_user_starred ON user_article_state(user_id, starred);
+"""
+
+# PostgreSQL multi-user tables
+POSTGRES_MULTIUSER_SCHEMA = [
+    """
+    CREATE TABLE IF NOT EXISTS user_sources (
+      user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      source_slug TEXT    NOT NULL REFERENCES sources(slug) ON DELETE CASCADE,
+      enabled     BOOLEAN NOT NULL DEFAULT TRUE,
+      added_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      PRIMARY KEY (user_id, source_slug)
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_user_sources_user ON user_sources(user_id, enabled)",
+    """
+    CREATE TABLE IF NOT EXISTS user_article_state (
+      user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      article_id  BIGINT  NOT NULL REFERENCES articles(id) ON DELETE CASCADE,
+      state       TEXT NOT NULL DEFAULT 'today'
+                    CHECK(state IN ('today','done','skipped','archived','later')),
+      starred     BOOLEAN NOT NULL DEFAULT FALSE,
+      done_at     TIMESTAMPTZ,
+      starred_at  TIMESTAMPTZ,
+      skipped_at  TIMESTAMPTZ,
+      archived_at TIMESTAMPTZ,
+      later_until TIMESTAMPTZ,
+      restored_at TIMESTAMPTZ,
+      updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      PRIMARY KEY (user_id, article_id)
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_uas_user_state ON user_article_state(user_id, state)",
+    (
+        "CREATE INDEX IF NOT EXISTS idx_uas_user_starred"
+        " ON user_article_state(user_id, starred) WHERE starred = TRUE"
+    ),
+]
 
 
 def _validate_postgres_url(url: str) -> str:
@@ -375,7 +477,10 @@ def is_postgres(database_url: str | None = None) -> bool:
 
 
 def describe_database(db_path: Path | None = None, database_url: str | None = None) -> str:
-    url = active_database_url(database_url)
+    try:
+        url = active_database_url(database_url)
+    except RuntimeError:
+        return str(db_path or DB_PATH)
     if url:
         parts = urlsplit(url)
         if parts.password:
@@ -464,7 +569,7 @@ def _apply_sqlite_data_migrations(conn: Any) -> None:
 def init_db(db_path: Path | None = None, database_url: str | None = None) -> None:
     if is_postgres(database_url):
         with connect(db_path, database_url) as conn:
-            for statement in POSTGRES_SCHEMA:
+            for statement in POSTGRES_SCHEMA + POSTGRES_MULTIUSER_SCHEMA:
                 try:
                     conn.execute(statement)
                 except Exception:  # idempotent best-effort schema statements
@@ -473,6 +578,7 @@ def init_db(db_path: Path | None = None, database_url: str | None = None) -> Non
     with connect(db_path, database_url) as conn:
         conn.executescript(SQLITE_SCHEMA)
         conn.executescript(SQLITE_BRIEFINGS_SCHEMA)
+        conn.executescript(SQLITE_MULTIUSER_SCHEMA)
         _apply_sqlite_column_migrations(conn)
         _apply_sqlite_data_migrations(conn)
         _build_fts_index(conn)
