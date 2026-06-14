@@ -103,7 +103,8 @@ def test_ingest_all_records_source_errors(tmp_path: Path, monkeypatch: Any) -> N
 
 
 def test_ingest_stream_route_is_registered() -> None:
-    assert any(getattr(route, "path", None) == "/api/ingest/stream" for route in app.routes)
+    route_paths = [getattr(r, "path", None) for r in app.routes]
+    assert "/api/ingest/stream" in route_paths, f"Route not found. app.routes paths: {route_paths}"
 
 
 def test_ingest_stream_replays_last_completed_run() -> None:
