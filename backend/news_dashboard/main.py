@@ -129,6 +129,13 @@ class EnabledUpdate(BaseModel):
     enabled: bool
 
 
+class CreateSourceRequest(BaseModel):
+    url: str
+    name: str
+    category: str = "tech"
+    slug: str | None = None
+
+
 class IntervalUpdate(BaseModel):
     minutes: int
 
@@ -351,13 +358,75 @@ def mark_read_via_token(article_id: int, token: Annotated[str, Query()]) -> dict
 
 
 @api.get("/api/sources")
-def sources() -> dict[str, Any]:
+def sources(
+    current_user: Annotated[dict[str, Any], Depends(require_auth)],
+) -> dict[str, Any]:
     init_db()
+    uid = current_user["id"]
     with connect() as conn:
         rows = conn.execute(
-            "SELECT * FROM sources ORDER BY category, priority DESC, name"
+            """
+            SELECT s.*,
+              CASE WHEN s.owner_user_id IS NULL THEN COALESCE(us.enabled, 1)
+                   ELSE s.enabled END AS user_enabled
+            FROM sources s
+            LEFT JOIN user_sources us ON us.source_slug = s.slug AND us.user_id = ?
+            WHERE s.owner_user_id IS NULL OR s.owner_user_id = ?
+            ORDER BY s.category, s.priority DESC, s.name
+            """,
+            (uid, uid),
         ).fetchall()
-        return {"items": [row_to_dict(row) for row in rows]}
+        items = []
+        for row in rows:
+            d = row_to_dict(row)
+            d["subscribed"] = bool(d.pop("user_enabled", 1))
+            items.append(d)
+        return {"items": items}
+
+
+@api.post("/api/sources")
+def create_source(
+    payload: CreateSourceRequest,
+    current_user: Annotated[dict[str, Any], Depends(require_auth)],
+) -> dict[str, Any]:
+    """Create a private custom source owned by the current user."""
+    import re
+
+    uid = current_user["id"]
+    slug = payload.slug or re.sub(r"[^a-z0-9-]", "-", payload.name.lower()).strip("-")
+    init_db()
+    with connect() as conn:
+        existing = conn.execute("SELECT 1 FROM sources WHERE slug = ?", (slug,)).fetchone()
+        if existing:
+            raise HTTPException(status_code=409, detail=f"source slug {slug!r} already exists")
+        conn.execute(
+            """
+            INSERT INTO sources(slug, name, url, category, kind, priority, enabled, owner_user_id)
+            VALUES (?, ?, ?, ?, 'rss_feed', 0, 1, ?)
+            """,
+            (slug, payload.name, payload.url, payload.category, uid),
+        )
+        row = conn.execute("SELECT * FROM sources WHERE slug = ?", (slug,)).fetchone()
+    return row_to_dict(row)
+
+
+@api.delete("/api/sources/{slug}")
+def delete_source(
+    slug: str,
+    current_user: Annotated[dict[str, Any], Depends(require_auth)],
+) -> dict[str, Any]:
+    """Delete a private source. Only the owner can delete their own sources."""
+    uid = current_user["id"]
+    init_db()
+    with connect() as conn:
+        row = conn.execute("SELECT * FROM sources WHERE slug = ?", (slug,)).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="source not found")
+        src = row_to_dict(row)
+        if src.get("owner_user_id") != uid:
+            raise HTTPException(status_code=403, detail="cannot delete a source you don't own")
+        conn.execute("DELETE FROM sources WHERE slug = ?", (slug,))
+    return {"status": "deleted"}
 
 
 @api.get("/api/sources/health")
@@ -366,17 +435,39 @@ def sources_health() -> dict[str, Any]:
 
 
 @api.patch("/api/sources/{slug}/enabled")
-def set_source_enabled(slug: str, payload: EnabledUpdate) -> dict[str, Any]:
+def set_source_enabled(
+    slug: str,
+    payload: EnabledUpdate,
+    current_user: Annotated[dict[str, Any], Depends(require_auth)],
+) -> dict[str, Any]:
+    """For global sources: set per-user subscription. For private sources: set enabled flag."""
+    uid = current_user["id"]
     init_db()
     with connect() as conn:
-        cursor = conn.execute(
-            "UPDATE sources SET enabled=? WHERE slug=?",
-            (1 if payload.enabled else 0, slug),
-        )
-        if cursor.rowcount == 0:
+        row = conn.execute("SELECT * FROM sources WHERE slug = ?", (slug,)).fetchone()
+        if not row:
             raise HTTPException(status_code=404, detail="source not found")
-        row = conn.execute("SELECT * FROM sources WHERE slug=?", (slug,)).fetchone()
-        return row_to_dict(row)
+        src = row_to_dict(row)
+        if src.get("owner_user_id") is None:
+            # Global source — write to user_sources subscription table
+            conn.execute(
+                """
+                INSERT INTO user_sources(user_id, source_slug, enabled)
+                VALUES (?, ?, ?)
+                ON CONFLICT(user_id, source_slug) DO UPDATE SET enabled = excluded.enabled
+                """,
+                (uid, slug, 1 if payload.enabled else 0),
+            )
+        else:
+            # Private source — only owner can change
+            if src.get("owner_user_id") != uid:
+                raise HTTPException(status_code=403, detail="cannot modify a source you don't own")
+            conn.execute(
+                "UPDATE sources SET enabled = ? WHERE slug = ?",
+                (1 if payload.enabled else 0, slug),
+            )
+        row = conn.execute("SELECT * FROM sources WHERE slug = ?", (slug,)).fetchone()
+    return {**row_to_dict(row), "subscribed": payload.enabled}
 
 
 @api.get("/api/scheduler/status")

@@ -566,13 +566,31 @@ def ingest_all(db_path: Path | None = None) -> dict[str, int]:
         run_id = _create_ingest_run(db_path, run_started_at)
         ingest_events.start_run(run_id, f"Ingest run #{run_id} started at {run_started_at}")
 
+        # Collect sources to ingest: DEFAULT_SOURCES + enabled user-owned private sources
+        sources_to_ingest: list[SourceDefinition] = [s for s in DEFAULT_SOURCES if s.enabled]
+        with connect(db_path) as conn:
+            private_rows = conn.execute(
+                "SELECT slug, name, url, category, kind, priority"
+                " FROM sources WHERE owner_user_id IS NOT NULL AND enabled = 1"
+            ).fetchall()
+        for row in private_rows:
+            r = row_to_dict(row)
+            sources_to_ingest.append(
+                SourceDefinition(
+                    slug=r["slug"],
+                    name=r["name"],
+                    url=r["url"],
+                    category=r["category"],
+                    kind=r["kind"],
+                    priority=int(r["priority"] or 0),
+                )
+            )
+
         results: dict[str, int] = {}
         total_new = 0
         total_errors = 0
         try:
-            for source in DEFAULT_SOURCES:
-                if not source.enabled:
-                    continue
+            for source in sources_to_ingest:
                 outcome = _ingest_source(source, db_path)
                 _record_ingest_source(run_id, outcome, db_path)
                 ingest_events.append_line(_format_source_log(outcome))
@@ -825,7 +843,7 @@ def _list_articles_for_user(  # noqa: PLR0913
     # Build WHERE on articles
     not_archived = "(a.canonical_id IS NULL OR COALESCE(uas.state, 'today') != 'archived')"
     art_clauses: list[str] = [not_archived]
-    params: list[object] = [user_id]  # first param is for the LEFT JOIN ON clause
+    where_params: list[object] = []  # params only for WHERE predicates
 
     # State filter on UAS
     if state:
@@ -835,19 +853,26 @@ def _list_articles_for_user(  # noqa: PLR0913
                 " OR (uas.state = 'later' AND uas.later_until IS NOT NULL"
                 " AND uas.later_until <= ?))"
             )
-            params.append(now)
+            where_params.append(now)
         else:
             art_clauses.append("COALESCE(uas.state, 'today') = ?")
-            params.append(state)
+            where_params.append(state)
     if starred is not None:
         art_clauses.append("COALESCE(uas.starred, 0) = ?")
-        params.append(1 if starred else 0)
+        where_params.append(1 if starred else 0)
     if category:
         art_clauses.append("a.category = ?")
-        params.append(category)
+        where_params.append(category)
 
     where = f"WHERE {' AND '.join(art_clauses)}"
-    params.extend([limit, offset])
+
+    # Final param order matches SQL left-to-right:
+    # 1. us_src JOIN: user_id
+    # 2. uas JOIN:    user_id
+    # 3. WHERE:       where_params
+    # 4. owner check: user_id
+    # 5. LIMIT/OFFSET
+    all_params: list[object] = [user_id, user_id, *where_params, user_id, limit, offset]
 
     sql = f"""
         SELECT a.*,
@@ -860,13 +885,19 @@ def _list_articles_for_user(  # noqa: PLR0913
           uas.later_until AS _uas_later_until,
           uas.restored_at AS _uas_restored_at
         FROM articles a
+        LEFT JOIN sources src ON src.slug = a.source_slug
+        LEFT JOIN user_sources us_src ON us_src.user_id = ? AND us_src.source_slug = a.source_slug
         LEFT JOIN user_article_state uas ON uas.article_id = a.id AND uas.user_id = ?
         {where}
+          AND (
+            (src.owner_user_id IS NULL AND COALESCE(us_src.enabled, 1) = 1)
+            OR src.owner_user_id = ?
+          )
         ORDER BY a.discovered_at DESC, a.id DESC
         LIMIT ? OFFSET ?
     """
     with connect(db_path) as conn:
-        rows = conn.execute(sql, params).fetchall()
+        rows = conn.execute(sql, all_params).fetchall()
         articles = []
         for row in rows:
             d = _article_dict(row)
@@ -1000,7 +1031,7 @@ def search_articles(  # noqa: PLR0913
         return [_article_dict(row) for row in rows]
 
 
-def _search_articles_for_user(  # noqa: PLR0913
+def _search_articles_for_user(  # noqa: PLR0912, PLR0913, PLR0915
     *,
     user_id: int,
     q: str,
@@ -1016,7 +1047,7 @@ def _search_articles_for_user(  # noqa: PLR0913
 ) -> list[dict[str, Any]]:
     terms = [t for t in q.split() if len(t) >= 2]
     clauses: list[str] = []
-    params: list[Any] = [user_id]  # first positional = LEFT JOIN ON uas.user_id = ?
+    where_params: list[Any] = []  # params only for WHERE predicates
 
     for term in terms:
         like = f"%{term}%"
@@ -1024,7 +1055,7 @@ def _search_articles_for_user(  # noqa: PLR0913
             "(a.title LIKE ? OR a.summary LIKE ? OR a.reason LIKE ? OR a.tags LIKE ?"
             " OR a.source_name LIKE ? OR (a.body IS NOT NULL AND a.body LIKE ?))"
         )
-        params.extend([like, like, like, like, like, like])
+        where_params.extend([like, like, like, like, like, like])
 
     if not include_archived:
         clauses.append("COALESCE(uas.state, 'today') != 'archived'")
@@ -1032,35 +1063,46 @@ def _search_articles_for_user(  # noqa: PLR0913
     if states:
         placeholders = ",".join("?" * len(states))
         clauses.append(f"COALESCE(uas.state, 'today') IN ({placeholders})")
-        params.extend(states)
+        where_params.extend(states)
         if include_archived is False and "archived" in states:
             clauses.remove("COALESCE(uas.state, 'today') != 'archived'")
 
     if categories:
         placeholders = ",".join("?" * len(categories))
         clauses.append(f"a.category IN ({placeholders})")
-        params.extend(categories)
+        where_params.extend(categories)
 
     if sources:
         placeholders = ",".join("?" * len(sources))
         clauses.append(f"a.source_slug IN ({placeholders})")
-        params.extend(sources)
+        where_params.extend(sources)
 
     if starred_only:
         clauses.append("COALESCE(uas.starred, 0) = 1")
 
     if date_range == "today":
         clauses.append("a.discovered_at >= datetime(?, '-1 day')")
-        params.append(now_ts)
+        where_params.append(now_ts)
     elif date_range == "week":
         clauses.append("a.discovered_at >= datetime(?, '-7 days')")
-        params.append(now_ts)
+        where_params.append(now_ts)
     elif date_range == "month":
         clauses.append("a.discovered_at >= datetime(?, '-30 days')")
-        params.append(now_ts)
+        where_params.append(now_ts)
+
+    # Source subscription filter appended to WHERE
+    src_filter = (
+        "(src.owner_user_id IS NULL AND COALESCE(us_src.enabled, 1) = 1) OR src.owner_user_id = ?"
+    )
+    if clauses:
+        clauses.append(f"({src_filter})")
+    else:
+        clauses = [f"({src_filter})"]
 
     where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
-    params.append(limit)
+
+    # Param order: us_src JOIN, uas JOIN, WHERE params, owner check, limit
+    all_params: list[Any] = [user_id, user_id, *where_params, user_id, limit]
 
     sql = f"""
         SELECT a.*,
@@ -1073,12 +1115,14 @@ def _search_articles_for_user(  # noqa: PLR0913
           uas.later_until AS _uas_later_until,
           uas.restored_at AS _uas_restored_at
         FROM articles a
+        LEFT JOIN sources src ON src.slug = a.source_slug
+        LEFT JOIN user_sources us_src ON us_src.user_id = ? AND us_src.source_slug = a.source_slug
         LEFT JOIN user_article_state uas ON uas.article_id = a.id AND uas.user_id = ?
         {where}
         ORDER BY a.importance_score DESC, a.discovered_at DESC LIMIT ?
     """
     with connect(db_path) as conn:
-        rows = conn.execute(sql, params).fetchall()
+        rows = conn.execute(sql, all_params).fetchall()
         result = []
         for row in rows:
             d = _article_dict(row)
