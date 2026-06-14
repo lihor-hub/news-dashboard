@@ -106,6 +106,42 @@ def test_create_and_get_user(tmp_db: Path) -> None:
     assert fetched["username"] == "alice"
 
 
+def test_create_user_passes_boolean_admin_value(monkeypatch: pytest.MonkeyPatch) -> None:
+    class FakeCursor:
+        def fetchone(self) -> dict[str, Any]:
+            return {
+                "id": 1,
+                "username": "admin",
+                "email": None,
+                "is_admin": True,
+                "created_at": "now",
+            }
+
+    class FakeConnection:
+        params: tuple[Any, ...] | None = None
+
+        def execute(self, _sql: str, params: tuple[Any, ...]) -> FakeCursor:
+            self.params = params
+            return FakeCursor()
+
+    class FakeConnect:
+        conn = FakeConnection()
+
+        def __enter__(self) -> FakeConnection:
+            return self.conn
+
+        def __exit__(self, *args: object) -> None:
+            return None
+
+    fake_connect = FakeConnect()
+    monkeypatch.setattr("news_dashboard.auth.connect", lambda: fake_connect)
+
+    create_user("admin", "secret", is_admin=True)
+
+    assert fake_connect.conn.params is not None
+    assert fake_connect.conn.params[3] is True
+
+
 def test_list_users(tmp_db: Path) -> None:
     create_user("u1", "p1")
     create_user("u2", "p2")

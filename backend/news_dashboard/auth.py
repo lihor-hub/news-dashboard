@@ -192,7 +192,7 @@ def create_user(
         row = conn.execute(
             "INSERT INTO users(username, password_hash, email, is_admin)"
             " VALUES(?, ?, ?, ?) RETURNING id, username, email, is_admin, created_at",
-            (username, password_hash, email, 1 if is_admin else 0),
+            (username, password_hash, email, bool(is_admin)),
         ).fetchone()
         if row is None:
             msg = "User insert returned no row"
