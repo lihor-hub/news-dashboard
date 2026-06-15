@@ -144,23 +144,84 @@ def extract_body(url: str) -> tuple[str, str]:
     return text, "ok"
 
 
-def fetch_and_cache_body(article_id: int, db_path: Path | None = None) -> dict[str, Any] | None:
+def _merge_user_state(
+    d: dict[str, Any], conn: Any, article_id: int, user_id: int
+) -> dict[str, Any]:
+    """Overlay per-user state from user_article_state onto an article dict in-place."""
+    uas_row = conn.execute(
+        "SELECT * FROM user_article_state WHERE user_id = ? AND article_id = ?",
+        (user_id, article_id),
+    ).fetchone()
+    uas = row_to_dict(uas_row) if uas_row else None
+    if uas is None:
+        d["state"] = "today"
+        d["starred"] = False
+        for col in (
+            "done_at",
+            "starred_at",
+            "skipped_at",
+            "archived_at",
+            "later_until",
+            "restored_at",
+        ):
+            d[col] = None
+    else:
+        d["state"] = uas.get("state") or "today"
+        d["starred"] = bool(uas.get("starred", False))
+        d["done_at"] = uas.get("done_at")
+        d["starred_at"] = uas.get("starred_at")
+        d["skipped_at"] = uas.get("skipped_at")
+        d["archived_at"] = uas.get("archived_at")
+        d["later_until"] = uas.get("later_until")
+        d["restored_at"] = uas.get("restored_at")
+    return d
+
+
+def get_article(
+    article_id: int,
+    db_path: Path | None = None,
+    user_id: int | None = None,
+) -> dict[str, Any] | None:
+    """Fetch a single article by ID, stripping internal columns.
+
+    When user_id is given the per-user state from user_article_state is merged
+    in so that state/starred/timestamps reflect the calling user, not the
+    global articles table defaults.
+    """
+    init_db(db_path)
+    with connect(db_path) as conn:
+        row = conn.execute("SELECT * FROM articles WHERE id = ?", (article_id,)).fetchone()
+        if row is None:
+            return None
+        d = row_to_dict(row)
+        d.pop("embedding", None)
+        d.pop("fts_vector", None)
+        if user_id is not None:
+            _merge_user_state(d, conn, article_id, user_id)
+        return d
+
+
+def fetch_and_cache_body(
+    article_id: int,
+    db_path: Path | None = None,
+    user_id: int | None = None,
+) -> dict[str, Any] | None:
     """Fetch and store body for an article. Returns the updated article dict or None if not found.
 
     If body_status is already 'ok', returns the cached row immediately.
+    When user_id is given the returned dict reflects per-user state.
     """
     init_db(db_path)
     with connect(db_path) as conn:
         row = conn.execute(
-            "SELECT id, url, body, body_status FROM articles WHERE id = ?",
+            "SELECT id, url, body_status FROM articles WHERE id = ?",
             (article_id,),
         ).fetchone()
         if row is None:
             return None
         row_d = row_to_dict(row)
         if row_d.get("body_status") == "ok":
-            full_row = conn.execute("SELECT * FROM articles WHERE id = ?", (article_id,)).fetchone()
-            return row_to_dict(full_row) if full_row else None
+            return get_article(article_id, db_path=db_path, user_id=user_id)
 
     url = row_d["url"]
     body, status = extract_body(url)
@@ -171,24 +232,35 @@ def fetch_and_cache_body(article_id: int, db_path: Path | None = None) -> dict[s
             " updated_at = CURRENT_TIMESTAMP WHERE id = ?",
             (body if status == "ok" else None, status, article_id),
         )
-        full_row = conn.execute("SELECT * FROM articles WHERE id = ?", (article_id,)).fetchone()
-        if full_row is None:
-            return None
-        result = row_to_dict(full_row)
-        # Strip internal columns
-        result.pop("embedding", None)
-        result.pop("fts_vector", None)
-        return result
+
+    return get_article(article_id, db_path=db_path, user_id=user_id)
 
 
-def get_article(article_id: int, db_path: Path | None = None) -> dict[str, Any] | None:
-    """Fetch a single article by ID, stripping internal columns."""
+def prefetch_article_bodies(limit: int = 20, db_path: Path | None = None) -> int:
+    """Fetch and cache bodies for recently ingested articles that are still missing a body.
+
+    Called as a background task after each ingest run to warm the body cache
+    before users open those articles. Returns the count of articles that were
+    successfully fetched.
+    """
     init_db(db_path)
     with connect(db_path) as conn:
-        row = conn.execute("SELECT * FROM articles WHERE id = ?", (article_id,)).fetchone()
-        if row is None:
-            return None
-        d = row_to_dict(row)
-        d.pop("embedding", None)
-        d.pop("fts_vector", None)
-        return d
+        rows = conn.execute(
+            "SELECT id FROM articles WHERE body_status = 'missing'"
+            " ORDER BY discovered_at DESC LIMIT ?",
+            (limit,),
+        ).fetchall()
+    ids = [int(row_to_dict(r)["id"]) for r in rows]
+    if not ids:
+        return 0
+    logger.info("Body prefetch: warming cache for %d articles", len(ids))
+    fetched = 0
+    for article_id in ids:
+        try:
+            result = fetch_and_cache_body(article_id, db_path=db_path)
+            if result and result.get("body_status") == "ok":
+                fetched += 1
+        except Exception:
+            logger.warning("Body prefetch failed for article %d", article_id, exc_info=True)
+    logger.info("Body prefetch complete: %d/%d succeeded", fetched, len(ids))
+    return fetched

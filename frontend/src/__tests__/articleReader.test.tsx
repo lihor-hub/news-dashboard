@@ -39,10 +39,13 @@ function makeArticle(overrides: Partial<Article> = {}): Article {
   };
 }
 
-function renderReader(id = '42') {
+function renderReader(id = '42', cachedArticle?: Article) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
+  if (cachedArticle) {
+    queryClient.setQueryData(['article', id], cachedArticle);
+  }
   return render(
     <QueryClientProvider client={queryClient}>
       <MemoryRouter initialEntries={[`/a/${id}`]}>
@@ -108,15 +111,13 @@ describe('ArticlePage — body fetch', () => {
     await waitFor(() => expect(fetchBodySpy).toHaveBeenCalledWith('42'));
   });
 
-  it('does not re-fetch when body_status is ok', async () => {
-    const fetchBodySpy = vi
-      .spyOn(api, 'fetchArticleBody')
-      .mockResolvedValue(makeArticle({ body_status: 'ok', body: 'Cached' }));
-    vi.spyOn(api, 'fetchArticle').mockResolvedValue(
-      makeArticle({ body_status: 'ok', body: 'Cached text' })
-    );
+  it('does not re-fetch when body_status is ok (cache already warm)', async () => {
+    const cachedArticle = makeArticle({ body_status: 'ok', body: 'Cached text' });
+    const fetchBodySpy = vi.spyOn(api, 'fetchArticleBody').mockResolvedValue(cachedArticle);
+    vi.spyOn(api, 'fetchArticle').mockResolvedValue(cachedArticle);
 
-    renderReader();
+    // Pre-populate the React Query cache so the useEffect skips the body fetch.
+    renderReader('42', cachedArticle);
     await waitFor(() => expect(screen.getByText('Test Article Title')).toBeTruthy());
     expect(fetchBodySpy).not.toHaveBeenCalled();
   });
