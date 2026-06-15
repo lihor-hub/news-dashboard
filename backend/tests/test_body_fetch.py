@@ -7,7 +7,12 @@ import threading
 from pathlib import Path
 from unittest.mock import patch
 
-from news_dashboard.body_fetch import extract_body, fetch_and_cache_body, get_article
+from news_dashboard.body_fetch import (
+    extract_body,
+    fetch_and_cache_body,
+    get_article,
+    prefetch_article_bodies,
+)
 from news_dashboard.db import connect, init_db
 from news_dashboard.ingest import sync_sources
 
@@ -190,3 +195,154 @@ def test_get_article_returns_none_for_missing(tmp_path: Path) -> None:
     db_path = _db(tmp_path)
     init_db(db_path)
     assert get_article(99999, db_path=db_path) is None
+
+
+# ── get_article with user_id ──────────────────────────────────────────────────
+
+
+def _seed_user(db_path: Path, username: str = "alice") -> int:
+    with connect(db_path) as conn:
+        conn.execute(
+            "INSERT OR IGNORE INTO users(username, password_hash, is_admin) VALUES (?, 'x', 0)",
+            (username,),
+        )
+        row = conn.execute("SELECT id FROM users WHERE username=?", (username,)).fetchone()
+    return int(row["id"] if isinstance(row, dict) else row[0])
+
+
+def test_get_article_with_no_uas_defaults_to_today(tmp_path: Path) -> None:
+    db_path = _db(tmp_path)
+    article_id = _seed_article(db_path)
+    user_id = _seed_user(db_path)
+    result = get_article(article_id, db_path=db_path, user_id=user_id)
+    assert result is not None
+    assert result["state"] == "today"
+    assert result["starred"] is False
+    assert result["done_at"] is None
+
+
+def test_get_article_with_uas_returns_user_state(tmp_path: Path) -> None:
+    db_path = _db(tmp_path)
+    article_id = _seed_article(db_path)
+    user_id = _seed_user(db_path)
+
+    with connect(db_path) as conn:
+        conn.execute(
+            """
+            INSERT INTO user_article_state(user_id, article_id, state, starred, done_at)
+            VALUES (?, ?, 'done', 1, '2024-06-01T12:00:00')
+            """,
+            (user_id, article_id),
+        )
+
+    result = get_article(article_id, db_path=db_path, user_id=user_id)
+    assert result is not None
+    assert result["state"] == "done"
+    assert result["starred"] is True
+    assert result["done_at"] == "2024-06-01T12:00:00"
+
+
+def test_get_article_with_user_id_does_not_bleed_across_users(tmp_path: Path) -> None:
+    db_path = _db(tmp_path)
+    article_id = _seed_article(db_path)
+    user_a = _seed_user(db_path, "alice")
+    user_b = _seed_user(db_path, "bob")
+
+    with connect(db_path) as conn:
+        conn.execute(
+            "INSERT INTO user_article_state(user_id, article_id, state, starred)"
+            " VALUES (?, ?, 'done', 1)",
+            (user_a, article_id),
+        )
+
+    result_b = get_article(article_id, db_path=db_path, user_id=user_b)
+    assert result_b is not None
+    assert result_b["state"] == "today"
+    assert result_b["starred"] is False
+
+
+# ── fetch_and_cache_body with user_id ────────────────────────────────────────
+
+
+def test_fetch_and_cache_body_with_user_id_reflects_state(tmp_path: Path) -> None:
+    db_path = _db(tmp_path)
+    article_id = _seed_article(db_path)
+    user_id = _seed_user(db_path)
+
+    with connect(db_path) as conn:
+        conn.execute(
+            "UPDATE articles SET body='cached', body_status='ok' WHERE id=?",
+            (article_id,),
+        )
+        conn.execute(
+            "INSERT INTO user_article_state(user_id, article_id, state, starred)"
+            " VALUES (?, ?, 'done', 1)",
+            (user_id, article_id),
+        )
+
+    result = fetch_and_cache_body(article_id, db_path=db_path, user_id=user_id)
+    assert result is not None
+    assert result["body_status"] == "ok"
+    assert result["state"] == "done"
+    assert result["starred"] is True
+
+
+# ── prefetch_article_bodies ───────────────────────────────────────────────────
+
+
+def test_prefetch_article_bodies_returns_zero_when_none_missing(tmp_path: Path) -> None:
+    db_path = _db(tmp_path)
+    init_db(db_path)
+    assert prefetch_article_bodies(db_path=db_path) == 0
+
+
+def test_prefetch_article_bodies_fetches_missing(tmp_path: Path) -> None:
+    db_path = _db(tmp_path)
+    article_id = _seed_article(db_path)
+
+    html = b"""
+    <html><body>
+      <p>Prefetch test paragraph that is long enough to be extracted by the parser.</p>
+      <p>Another paragraph with enough content to make it past the forty-char minimum.</p>
+    </body></html>
+    """
+    url, thread = _start_server(html)
+
+    with connect(db_path) as conn:
+        conn.execute(
+            "UPDATE articles SET url=?, canonical_url=?, body_status='missing' WHERE id=?",
+            (url, url, article_id),
+        )
+
+    count = prefetch_article_bodies(db_path=db_path)
+    thread.join(timeout=2)
+
+    assert count == 1
+
+    with connect(db_path) as conn:
+        row = conn.execute("SELECT body_status FROM articles WHERE id=?", (article_id,)).fetchone()
+    status = row["body_status"] if isinstance(row, dict) else row[0]
+    assert status == "ok"
+
+
+def test_prefetch_article_bodies_skips_already_ok(tmp_path: Path) -> None:
+    db_path = _db(tmp_path)
+    article_id = _seed_article(db_path)
+
+    with connect(db_path) as conn:
+        conn.execute(
+            "UPDATE articles SET body='already here', body_status='ok' WHERE id=?",
+            (article_id,),
+        )
+
+    called: list[str] = []
+
+    def fake_extract(url: str) -> tuple[str, str]:
+        called.append(url)
+        return "new", "ok"
+
+    with patch("news_dashboard.body_fetch.extract_body", fake_extract):
+        count = prefetch_article_bodies(db_path=db_path)
+
+    assert count == 0
+    assert called == [], "should not re-fetch articles that already have a body"

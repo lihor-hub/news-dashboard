@@ -22,6 +22,7 @@ _state = _SchedulerState()
 
 
 def _run_ingest() -> None:
+    from .body_fetch import prefetch_article_bodies
     from .ingest import ingest_all
 
     logger.info("Scheduled ingest starting…")
@@ -29,6 +30,8 @@ def _run_ingest() -> None:
         results = ingest_all()
         total = sum(v for v in results.values() if v > 0)
         logger.info("Scheduled ingest complete: %d new articles", total)
+        if total > 0:
+            prefetch_article_bodies()
     except Exception:
         logger.exception("Scheduled ingest failed")
 

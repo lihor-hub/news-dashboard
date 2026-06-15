@@ -8,7 +8,16 @@ from datetime import datetime
 from pathlib import Path
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, FastAPI, HTTPException, Query, Request, Response
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    FastAPI,
+    HTTPException,
+    Query,
+    Request,
+    Response,
+)
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
@@ -33,7 +42,7 @@ from .auth import (
     require_auth,
     update_password,
 )
-from .body_fetch import fetch_and_cache_body, get_article
+from .body_fetch import fetch_and_cache_body, get_article, prefetch_article_bodies
 from .briefings import (
     BriefingAINotConfiguredError,
     BriefingGenerationError,
@@ -286,9 +295,12 @@ def auth_me(current_user: Annotated[dict[str, Any], Depends(require_auth)]) -> d
 
 
 @api.post("/api/ingest")
-def ingest() -> dict[str, Any]:
+def ingest(background_tasks: BackgroundTasks) -> dict[str, Any]:
     results = ingest_all()
-    return {"results": results, "inserted": sum(v for v in results.values() if v > 0)}
+    inserted = sum(v for v in results.values() if v > 0)
+    if inserted > 0:
+        background_tasks.add_task(prefetch_article_bodies)
+    return {"results": results, "inserted": inserted}
 
 
 @api.get("/api/ingest/stream")
@@ -347,16 +359,22 @@ def search(  # noqa: PLR0913
 
 
 @api.get("/api/articles/{article_id}")
-def get_article_by_id(article_id: int) -> dict[str, Any]:
-    article = get_article(article_id)
+def get_article_by_id(
+    article_id: int,
+    current_user: Annotated[dict[str, Any], Depends(require_auth)],
+) -> dict[str, Any]:
+    article = get_article(article_id, user_id=current_user["id"])
     if not article:
         raise HTTPException(status_code=404, detail="article not found")
     return article
 
 
 @api.post("/api/articles/{article_id}/body")
-def fetch_article_body(article_id: int) -> dict[str, Any]:
-    article = fetch_and_cache_body(article_id)
+def fetch_article_body(
+    article_id: int,
+    current_user: Annotated[dict[str, Any], Depends(require_auth)],
+) -> dict[str, Any]:
+    article = fetch_and_cache_body(article_id, user_id=current_user["id"])
     if not article:
         raise HTTPException(status_code=404, detail="article not found")
     return article

@@ -137,7 +137,8 @@ export function ArticlePage() {
 
   const article = rawArticle ? adaptArticle(rawArticle) : null;
 
-  // Trigger body fetch on first open when body is missing
+  // Trigger body fetch in parallel with metadata — fire at mount so we don't
+  // wait for the GET /api/articles/:id round-trip before starting the slow scrape.
   const bodyMutation = useMutation({
     mutationFn: () => fetchArticleBody(id!),
     onSuccess: (updated) => {
@@ -146,12 +147,14 @@ export function ArticlePage() {
   });
 
   useEffect(() => {
-    if (!article) return;
-    if (article.bodyStatus === 'missing' && !bodyMutation.isPending) {
-      bodyMutation.mutate();
-    }
+    if (!id) return;
+    // Skip if the React Query cache already has a fully-fetched body for this article.
+    const cached = queryClient.getQueryData<{ body_status?: string }>(['article', id]);
+    if (cached?.body_status === 'ok') return;
+    bodyMutation.mutate();
+    // Run once per article id; bodyMutation is intentionally omitted from deps.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [article?.bodyStatus]);
+  }, [id]);
 
   // Prev/next navigation from sessionStorage list
   const readerList = getReaderList();
@@ -251,7 +254,8 @@ export function ArticlePage() {
     );
   }
 
-  const bodyLoading = bodyMutation.isPending || article.bodyStatus === 'missing';
+  const bodyLoading =
+    bodyMutation.isPending || (article.bodyStatus === 'missing' && bodyMutation.isIdle);
 
   return (
     <div className="min-h-screen bg-background flex flex-col motion-slide-in-right">
