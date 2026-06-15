@@ -404,6 +404,7 @@ CREATE TABLE IF NOT EXISTS user_article_state (
 
 CREATE INDEX IF NOT EXISTS idx_uas_user_state ON user_article_state(user_id, state);
 CREATE INDEX IF NOT EXISTS idx_uas_user_starred ON user_article_state(user_id, starred);
+CREATE INDEX IF NOT EXISTS idx_uas_article_id ON user_article_state(article_id);
 """
 
 # PostgreSQL multi-user tables
@@ -440,6 +441,7 @@ POSTGRES_MULTIUSER_SCHEMA = [
         "CREATE INDEX IF NOT EXISTS idx_uas_user_starred"
         " ON user_article_state(user_id, starred) WHERE starred = TRUE"
     ),
+    "CREATE INDEX IF NOT EXISTS idx_uas_article_id ON user_article_state(article_id)",
 ]
 
 

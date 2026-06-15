@@ -1182,7 +1182,7 @@ def _get_article_row(conn: Any, article_id: int) -> dict[str, Any] | None:
     return _article_dict(row) if row else None
 
 
-def transition_article_state(  # noqa: PLR0912, PLR0915
+def transition_article_state(  # noqa: PLR0912
     article_id: int,
     new_state: str,
     db_path: Path | None = None,
@@ -1227,7 +1227,7 @@ def transition_article_state(  # noqa: PLR0912, PLR0915
         ts = now_iso()
 
         if user_id is not None:
-            existing = _get_uas_row(conn, article_id, user_id)
+            # `uas` was fetched above — reuse it; don't re-query before the write.
             _upsert_uas(
                 conn,
                 user_id,
@@ -1238,11 +1238,12 @@ def transition_article_state(  # noqa: PLR0912, PLR0915
                 skipped_at=ts if new_state == "skipped" else None,
                 archived_at=ts if new_state == "archived" else None,
                 restored_at=ts if new_state == "today" else None,
-                later_until=None if new_state == "today" else (existing or {}).get("later_until"),
+                later_until=None if new_state == "today" else (uas or {}).get("later_until"),
                 updated_at=ts,
             )
+            # Re-read UAS to get the post-write COALESCE values; reuse `base` (article unchanged).
             result: dict[str, Any] | None = _merge_uas(
-                _get_article_row(conn, article_id) or {},
+                dict(base),
                 _get_uas_row(conn, article_id, user_id),
             )
         else:
@@ -1267,15 +1268,6 @@ def transition_article_state(  # noqa: PLR0912, PLR0915
             params.append(article_id)
             conn.execute(f"UPDATE articles SET {set_clause} WHERE id = ?", params)
             result = _get_article_row(conn, article_id)
-
-    # Embed done articles lazily
-    if result and new_state == "done":
-        try:
-            from .embeddings import ensure_article_embedded
-
-            ensure_article_embedded(article_id, db_path)
-        except Exception:
-            logger.debug("Skipping embedding for article %d", article_id, exc_info=True)
 
     return result
 
@@ -1307,8 +1299,8 @@ def set_article_starred(
                 starred_at=ts if starred else (existing or {}).get("starred_at"),
                 updated_at=ts,
             )
-            base2 = _get_article_row(conn, article_id) or {}
-            return _merge_uas(base2, _get_uas_row(conn, article_id, user_id))
+            # Reuse `base` — article row didn't change; re-read UAS for post-write values.
+            return _merge_uas(dict(base), _get_uas_row(conn, article_id, user_id))
 
         if starred:
             conn.execute(
@@ -1360,18 +1352,18 @@ def send_article_later(
         ts = now_iso()
 
         if user_id is not None:
-            existing = _get_uas_row(conn, article_id, user_id)
+            # `uas` was fetched above for current_state — reuse it for starred.
             _upsert_uas(
                 conn,
                 user_id,
                 article_id,
                 state="later",
-                starred=bool((existing or {}).get("starred", False)),
+                starred=bool((uas or {}).get("starred", False)),
                 later_until=later_until,
                 updated_at=ts,
             )
-            base3 = _get_article_row(conn, article_id) or {}
-            return _merge_uas(base3, _get_uas_row(conn, article_id, user_id))
+            # Reuse `base` — article row didn't change; re-read UAS for post-write values.
+            return _merge_uas(dict(base), _get_uas_row(conn, article_id, user_id))
 
         conn.execute(
             "UPDATE articles SET state = 'later', later_until = ?, updated_at = ? WHERE id = ?",
@@ -1385,14 +1377,19 @@ def get_user_summary(user_id: int, db_path: Path | None = None) -> dict[str, Any
 
     Maps the new (state, starred) model back to the legacy status keys the
     frontend expects: new, saved, read, skipped, archived.
+
+    Single scan: groups by (state, starred, category) so state counts, starred
+    count, and category counts are all derived from one table pass.
     """
     init_db(db_path)
     with connect(db_path) as conn:
-        # Per-user state counts via user_article_state (LEFT JOIN so articles
-        # with no UAS row are treated as state='today').
-        state_rows = conn.execute(
+        rows = conn.execute(
             """
-            SELECT COALESCE(uas.state, 'today') AS state, COUNT(*) AS count
+            SELECT
+              COALESCE(uas.state, 'today') AS state,
+              COALESCE(uas.starred, false)  AS starred,
+              a.category,
+              COUNT(*)                      AS count
             FROM articles a
             LEFT JOIN sources src ON src.slug = a.source_slug
             LEFT JOIN user_sources us_src
@@ -1404,68 +1401,31 @@ def get_user_summary(user_id: int, db_path: Path | None = None) -> dict[str, Any
                 (src.owner_user_id IS NULL AND COALESCE(us_src.enabled, true))
                 OR src.owner_user_id = ?
               )
-            GROUP BY COALESCE(uas.state, 'today')
+            GROUP BY COALESCE(uas.state, 'today'), COALESCE(uas.starred, false), a.category
             """,
             (user_id, user_id, user_id),
         ).fetchall()
 
-        starred_row = conn.execute(
-            """
-            SELECT COUNT(*) AS count
-            FROM articles a
-            LEFT JOIN sources src ON src.slug = a.source_slug
-            LEFT JOIN user_sources us_src
-                   ON us_src.user_id = ? AND us_src.source_slug = a.source_slug
-            LEFT JOIN user_article_state uas
-                   ON uas.article_id = a.id AND uas.user_id = ?
-            WHERE COALESCE(uas.starred, false) = true
-              AND (a.canonical_id IS NULL OR COALESCE(uas.state, 'today') != 'archived')
-              AND (
-                (src.owner_user_id IS NULL AND COALESCE(us_src.enabled, true))
-                OR src.owner_user_id = ?
-              )
-            """,
-            (user_id, user_id, user_id),
-        ).fetchone()
+    state_counts: dict[str, int] = defaultdict(int)
+    by_category: dict[str, int] = defaultdict(int)
+    starred_count = 0
 
-        category_rows = conn.execute(
-            """
-            SELECT a.category, COUNT(*) AS count
-            FROM articles a
-            LEFT JOIN sources src ON src.slug = a.source_slug
-            LEFT JOIN user_sources us_src
-                   ON us_src.user_id = ? AND us_src.source_slug = a.source_slug
-            LEFT JOIN user_article_state uas
-                   ON uas.article_id = a.id AND uas.user_id = ?
-            WHERE (a.canonical_id IS NULL OR COALESCE(uas.state, 'today') != 'archived')
-              AND (
-                (src.owner_user_id IS NULL AND COALESCE(us_src.enabled, true))
-                OR src.owner_user_id = ?
-              )
-            GROUP BY a.category
-            """,
-            (user_id, user_id, user_id),
-        ).fetchall()
-
-    state_counts: dict[str, int] = {}
-    for r in state_rows:
+    for r in rows:
         d = row_to_dict(r)
-        state_counts[str(d["state"])] = int(d["count"])
+        state = str(d["state"])
+        count = int(d["count"])
+        state_counts[state] += count
+        by_category[str(d["category"])] += count
+        if bool(d["starred"]):
+            starred_count += count
 
-    starred_count = int(row_to_dict(starred_row)["count"]) if starred_row else 0
-
-    # Map internal state names → legacy status keys used by the frontend
-    by_status = {
-        "new": state_counts.get("today", 0),
-        "saved": starred_count,
-        "read": state_counts.get("done", 0),
-        "skipped": state_counts.get("skipped", 0),
-        "archived": state_counts.get("archived", 0),
+    return {
+        "byStatus": {
+            "new": state_counts.get("today", 0),
+            "saved": starred_count,
+            "read": state_counts.get("done", 0),
+            "skipped": state_counts.get("skipped", 0),
+            "archived": state_counts.get("archived", 0),
+        },
+        "byCategory": dict(by_category),
     }
-
-    by_category: dict[str, int] = {}
-    for r in category_rows:
-        d = row_to_dict(r)
-        by_category[str(d["category"])] = int(d["count"])
-
-    return {"byStatus": by_status, "byCategory": by_category}
