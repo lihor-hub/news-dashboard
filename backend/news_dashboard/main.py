@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import os
 import secrets
 from collections.abc import AsyncIterator, MutableMapping
@@ -86,6 +87,8 @@ from .stats import (
     stats_overview,
     triage_metrics,
 )
+
+logger = logging.getLogger(__name__)
 
 _SESSION_COOKIE = "nd_session"
 _OAUTH_STATE_COOKIE = "nd_oauth_state"
@@ -279,6 +282,17 @@ def logout(response: Response) -> dict[str, str]:
 
 app.include_router(public_router)
 
+
+def _embed_article_background(article_id: int) -> None:
+    """Background task: generate embedding for a 'done' article, silently skipping on errors."""
+    try:
+        from .embeddings import ensure_article_embedded
+
+        ensure_article_embedded(article_id)
+    except Exception:
+        logger.debug("Background embedding skipped for article %d", article_id, exc_info=True)
+
+
 # ── Authenticated API router ─────────────────────────────────────────────────
 
 api = APIRouter(dependencies=[Depends(require_auth)])
@@ -396,6 +410,7 @@ def update_state(
     article_id: int,
     payload: StateUpdate,
     current_user: Annotated[dict[str, Any], Depends(require_auth)],
+    background_tasks: BackgroundTasks,
 ) -> dict[str, Any]:
     try:
         article = transition_article_state(article_id, payload.state, user_id=current_user["id"])
@@ -403,6 +418,8 @@ def update_state(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     if not article:
         raise HTTPException(status_code=404, detail="article not found")
+    if payload.state == "done":
+        background_tasks.add_task(_embed_article_background, article_id)
     return article
 
 
