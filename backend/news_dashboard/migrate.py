@@ -8,7 +8,7 @@ from typing import Annotated, Any
 import typer
 
 from .auth import hash_password
-from .db import POSTGRES_PREFIXES, connect, init_db, row_to_dict
+from .db import connect, init_db, row_to_dict
 
 app = typer.Typer(help="Migration helpers for news-dashboard")
 
@@ -85,7 +85,7 @@ def sqlite_to_postgres(
                   slug, name, url, category, kind, priority, enabled, last_checked_at,
                   last_success_at, last_error, last_fetched_count, last_inserted_count
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 ON CONFLICT(slug) DO UPDATE SET
                   name=excluded.name,
                   url=excluded.url,
@@ -109,7 +109,10 @@ def sqlite_to_postgres(
                   url, canonical_url, title, source_slug, source_name, category, kind, published_at,
                   summary, reason, importance_score, tags, status, discovered_at, read_at, saved_at,
                   skipped_at, archived_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (
+                  %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                  %s, %s, %s, %s, %s, %s, %s, %s, %s
+                )
                 ON CONFLICT (url) DO UPDATE SET
                   title=excluded.title,
                   source_slug=excluded.source_slug,
@@ -135,26 +138,13 @@ def sqlite_to_postgres(
     )
 
 
-def _is_postgres() -> bool:
-    """Return True when the active database is PostgreSQL."""
-    url = os.getenv("DATABASE_URL") or ""
-    host = os.getenv("POSTGRES_HOST") or ""
-    return url.startswith(POSTGRES_PREFIXES) or bool(host)
-
-
-def _ph() -> str:
-    """SQL parameter placeholder: %s for PostgreSQL, ? for SQLite."""
-    return "%s" if _is_postgres() else "?"
-
-
 def _row_count(row: Any) -> int:
-    """Extract an integer from a COUNT(*) row, handling PG vs SQLite naming."""
+    """Extract an integer from a PostgreSQL COUNT(*) row."""
     if row is None:
         return 0
     try:
         d = row_to_dict(row)
-        # PostgreSQL names the column 'count'; SQLite names it 'COUNT(*)'
-        return int(d.get("count") or d.get("COUNT(*)") or 0)
+        return int(d.get("count") or 0)
     except Exception:
         try:
             return int(row[0])
@@ -166,22 +156,13 @@ def _check_prerequisites(conn: Any) -> list[str]:
     """Return a list of missing prerequisite schema items."""
     missing: list[str] = []
     required_tables = ["users", "user_article_state", "user_sources"]
-    try:
-        existing = {
-            r[0]
-            for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
-        }
-        missing.extend(f"table '{t}'" for t in required_tables if t not in existing)
-    except Exception:
-        # PostgreSQL — check via information_schema
-        ph = _ph()
-        for tbl in required_tables:
-            row = conn.execute(
-                f"SELECT 1 FROM information_schema.tables WHERE table_name = {ph}",
-                (tbl,),
-            ).fetchone()
-            if row is None:
-                missing.append(f"table '{tbl}'")
+    for tbl in required_tables:
+        row = conn.execute(
+            "SELECT 1 FROM information_schema.tables WHERE table_name = %s",
+            (tbl,),
+        ).fetchone()
+        if row is None:
+            missing.append(f"table '{tbl}'")
 
     try:
         conn.execute("SELECT user_id FROM briefings LIMIT 0")
@@ -196,11 +177,7 @@ def migrate_multi_user(  # noqa: PLR0912, PLR0915
     dry_run: Annotated[bool, typer.Option("--dry-run", help="Print planned actions only")] = False,
 ) -> None:
     """Promote existing single-tenant data to the first user account."""
-    db_path_env = os.getenv("NEWS_DASHBOARD_DB")
-    db_path = Path(db_path_env) if db_path_env else None
-    ph = _ph()
-
-    with connect(db_path) as conn:
+    with connect() as conn:
         # ── 1. Check prerequisites ─────────────────────────────────────────────
         missing = _check_prerequisites(conn)
         if missing:
@@ -230,10 +207,13 @@ def migrate_multi_user(  # noqa: PLR0912, PLR0915
             else:
                 pw_hash = hash_password(seed_password)
                 row = conn.execute(
-                    f"INSERT INTO users(username, password_hash, is_admin)"
-                    f" VALUES({ph}, {ph}, 1) RETURNING id",
+                    "INSERT INTO users(username, password_hash, is_admin)"
+                    " VALUES(%s, %s, TRUE) RETURNING id",
                     (seed_username, pw_hash),
                 ).fetchone()
+                if row is None:
+                    message = "User insert returned no row"
+                    raise RuntimeError(message)
                 seed_uid = int(row_to_dict(row)["id"])
                 typer.echo(f"Created seed user {seed_username!r} (id={seed_uid}, is_admin=1)")
 
@@ -246,7 +226,12 @@ def migrate_multi_user(  # noqa: PLR0912, PLR0915
             """
             SELECT id, state, starred, done_at, starred_at, later_until, restored_at, skipped_at
             FROM articles
-            WHERE (state != 'today' OR starred = 1 OR done_at IS NOT NULL OR starred_at IS NOT NULL)
+            WHERE (
+              state != 'today'
+              OR starred IS TRUE
+              OR done_at IS NOT NULL
+              OR starred_at IS NOT NULL
+            )
             """
         ).fetchall()
 
@@ -257,18 +242,18 @@ def migrate_multi_user(  # noqa: PLR0912, PLR0915
                 uas_inserted += 1
                 continue
             conn.execute(
-                f"""
+                """
                 INSERT INTO user_article_state(
                   user_id, article_id, state, starred,
                   done_at, starred_at, skipped_at, later_until, restored_at
-                ) VALUES ({ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph})
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
                 ON CONFLICT(user_id, article_id) DO NOTHING
                 """,
                 (
                     seed_uid,
                     d["id"],
                     d.get("state", "today"),
-                    1 if d.get("starred") else 0,
+                    bool(d.get("starred")),
                     d.get("done_at"),
                     d.get("starred_at"),
                     d.get("skipped_at"),
@@ -290,16 +275,16 @@ def migrate_multi_user(  # noqa: PLR0912, PLR0915
             typer.echo(f"[dry-run] Would migrate {briefing_count} briefing(s) → user_id={seed_uid}")
         else:
             conn.execute(
-                f"UPDATE briefings SET user_id = {ph} WHERE user_id IS NULL",
+                "UPDATE briefings SET user_id = %s WHERE user_id IS NULL",
                 (seed_uid,),
             )
             typer.echo(f"Migrated {briefing_count} briefing(s) → user_id={seed_uid}")
 
         # ── 5. Seed source subscriptions ──────────────────────────────────────
         enabled_sources = conn.execute(
-            f"SELECT slug FROM sources"
-            f" WHERE enabled = 1"
-            f" AND (owner_user_id IS NULL OR owner_user_id = {ph})",
+            "SELECT slug FROM sources"
+            " WHERE enabled IS TRUE"
+            " AND (owner_user_id IS NULL OR owner_user_id = %s)",
             (seed_uid,),
         ).fetchall()
 
@@ -310,8 +295,8 @@ def migrate_multi_user(  # noqa: PLR0912, PLR0915
                 us_inserted += 1
                 continue
             conn.execute(
-                f"INSERT INTO user_sources(user_id, source_slug, enabled)"
-                f" VALUES({ph}, {ph}, 1) ON CONFLICT(user_id, source_slug) DO NOTHING",
+                "INSERT INTO user_sources(user_id, source_slug, enabled)"
+                " VALUES(%s, %s, TRUE) ON CONFLICT(user_id, source_slug) DO NOTHING",
                 (seed_uid, slug),
             )
             us_inserted += 1

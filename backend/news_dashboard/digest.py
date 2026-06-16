@@ -51,7 +51,7 @@ def _get_top_new_articles(limit: int = 10) -> list[dict[str, Any]]:
             SELECT * FROM articles
             WHERE status = 'new'
             ORDER BY importance_score DESC, discovered_at DESC
-            LIMIT ?
+            LIMIT %s
             """,
             (limit,),
         ).fetchall()

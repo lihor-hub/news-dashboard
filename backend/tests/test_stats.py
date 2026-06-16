@@ -31,7 +31,7 @@ def _insert_run(
             INSERT INTO ingest_runs(
               id, started_at, finished_at, duration_ms, total_new, total_errors
             )
-            VALUES (?, ?, ?, ?, ?, ?)
+            VALUES (%s, %s, %s, %s, %s, %s)
             """,
             (run_id, started_at, started_at, duration_ms, total_new, total_errors),
         )
@@ -41,7 +41,7 @@ def _insert_run(
                 INSERT INTO ingest_run_sources(
               run_id, source_name, articles_found, articles_new, error_message
             )
-                VALUES (?, ?, ?, ?, ?)
+                VALUES (%s, %s, %s, %s, %s)
                 """,
                 (run_id, source_name, found, new, error),
             )
@@ -183,7 +183,7 @@ def _insert_article(  # noqa: PLR0913
               url, canonical_url, title, source_slug, source_name, category, kind,
               published_at, summary, reason, importance_score, tags,
               status, discovered_at, skipped_at, saved_at, read_at, archived_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             ON CONFLICT (url) DO NOTHING
             """,
             (

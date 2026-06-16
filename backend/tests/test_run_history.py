@@ -19,11 +19,13 @@ def _insert_run(
         cursor = conn.execute(
             """
             INSERT INTO ingest_runs(started_at, finished_at, duration_ms, total_new, total_errors)
-            VALUES (?, ?, ?, ?, ?)
+            VALUES (%s, %s, %s, %s, %s)
+            RETURNING id
             """,
             (started_at, finished_at, duration_ms, total_new, total_errors),
         )
-        return int(cursor.lastrowid)
+        row = cursor.fetchone()
+        return int(row["id"])
 
 
 def _insert_source(
@@ -41,7 +43,7 @@ def _insert_source(
             INSERT INTO ingest_run_sources(
               run_id, source_name, articles_found, articles_new, error_message
             )
-            VALUES (?, ?, ?, ?, ?)
+            VALUES (%s, %s, %s, %s, %s)
             """,
             (run_id, source_name, articles_found, articles_new, error_message),
         )

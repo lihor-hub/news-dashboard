@@ -60,7 +60,7 @@ def _insert_article(
             INSERT INTO articles(
               url, canonical_url, title, source_slug, source_name,
               category, kind, state
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
             RETURNING id
             """,
             (
@@ -81,8 +81,9 @@ def _insert_private_source(db_path: Path, *, slug: str, owner_user_id: int) -> N
     with connect(db_path) as conn:
         conn.execute(
             """
-            INSERT OR IGNORE INTO sources(slug, name, url, category, kind, owner_user_id, enabled)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO sources(slug, name, url, category, kind, owner_user_id, enabled)
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
+            ON CONFLICT(slug) DO NOTHING
             """,
             (slug, slug, f"https://{slug}.example.com", "AI/LLM", "rss_feed", owner_user_id, True),
         )
@@ -206,7 +207,7 @@ def test_user_disabled_source_excludes_articles(tmp_path: Path) -> None:
         conn.execute(
             """
             INSERT INTO user_sources(user_id, source_slug, enabled)
-            VALUES (?, ?, ?)
+            VALUES (%s, %s, %s)
             ON CONFLICT(user_id, source_slug) DO UPDATE SET enabled = excluded.enabled
             """,
             (uid, "python-insider", False),

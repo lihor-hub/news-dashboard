@@ -57,6 +57,22 @@ jobs:
   test:
     name: Test & build
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: news_dashboard
+          POSTGRES_USER: news_dashboard
+          POSTGRES_PASSWORD: news_dashboard
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgresql://news_dashboard:news_dashboard@localhost:5432/news_dashboard
     steps:
       - uses: actions/checkout@v4
 

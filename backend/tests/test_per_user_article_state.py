@@ -35,7 +35,7 @@ def _insert_article(db_path: Path, *, url_suffix: str = "1", state: str = "today
             INSERT INTO articles(
               url, canonical_url, title, source_slug, source_name,
               category, kind, state
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
             RETURNING id
             """,
             (
@@ -238,7 +238,7 @@ def test_snooze_returns_to_today_after_expiry(tmp_path: Path) -> None:
     expired_ts = "2020-01-01T00:00:00+00:00"
     with connect(db) as conn:
         conn.execute(
-            "UPDATE user_article_state SET later_until = ? WHERE article_id = ? AND user_id = ?",
+            "UPDATE user_article_state SET later_until = %s WHERE article_id = %s AND user_id = %s",
             (expired_ts, aid, uid),
         )
 
@@ -328,7 +328,7 @@ def test_api_state_transition_writes_uas(tmp_path: Path, monkeypatch: pytest.Mon
         # Confirm UAS row was written, article table state unchanged
         with connect(tmp_path / "api2.db") as conn:
             uas = conn.execute(
-                "SELECT * FROM user_article_state WHERE article_id = ? AND user_id = ?",
+                "SELECT * FROM user_article_state WHERE article_id = %s AND user_id = %s",
                 (aid, uid),
             ).fetchone()
             assert uas is not None
@@ -337,7 +337,7 @@ def test_api_state_transition_writes_uas(tmp_path: Path, monkeypatch: pytest.Mon
             uas_d = row_to_dict(uas)
             assert uas_d["state"] == "done"
 
-            art = conn.execute("SELECT state FROM articles WHERE id = ?", (aid,)).fetchone()
+            art = conn.execute("SELECT state FROM articles WHERE id = %s", (aid,)).fetchone()
             art_d = row_to_dict(art)
             assert art_d["state"] == "today"  # article table untouched
     finally:

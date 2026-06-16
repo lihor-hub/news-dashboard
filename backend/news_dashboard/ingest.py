@@ -15,7 +15,7 @@ from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
 import feedparser
 
-from .db import connect, init_db, insert_article_sql, is_postgres, row_to_dict
+from .db import connect, init_db, insert_article_sql, placeholders, row_to_dict
 from .ingest_events import ingest_events
 from .sources import DEFAULT_SOURCES, SourceDefinition
 
@@ -289,7 +289,7 @@ def _find_canonical(conn: Any, canonical_url: str, title: str) -> int | None:
     row = conn.execute(
         """
         SELECT id FROM articles
-        WHERE canonical_url=? AND (canonical_id IS NULL OR canonical_id=id)
+        WHERE canonical_url=%s AND (canonical_id IS NULL OR canonical_id=id)
         LIMIT 1
         """,
         (canonical_url,),
@@ -302,7 +302,7 @@ def _find_canonical(conn: Any, canonical_url: str, title: str) -> int | None:
     rows = conn.execute(
         """SELECT id, title FROM articles
            WHERE canonical_id IS NULL
-             AND discovered_at >= ?
+             AND discovered_at >= %s
            ORDER BY discovered_at DESC
            LIMIT 200""",
         (cutoff,),
@@ -322,7 +322,7 @@ def sync_sources(db_path: Path | None = None) -> None:
             conn.execute(
                 """
                 INSERT INTO sources(slug, name, url, category, kind, priority, enabled)
-                VALUES (?, ?, ?, ?, ?, ?, 1)
+                VALUES (%s, %s, %s, %s, %s, %s, TRUE)
                 ON CONFLICT(slug) DO UPDATE SET
                   name=excluded.name,
                   url=excluded.url,
@@ -403,7 +403,7 @@ def _ingest_source(source: SourceDefinition, db_path: Path | None = None) -> Sou
                              url, canonical_url, title, source_slug, source_name, category, kind,
                              published_at, summary, reason, importance_score, tags,
                              status, canonical_id
-                           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'archived', ?)
+                           ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'archived', %s)
                            ON CONFLICT (url) DO NOTHING""",
                         (
                             url,
@@ -423,13 +423,15 @@ def _ingest_source(source: SourceDefinition, db_path: Path | None = None) -> Sou
                     )
                     # Tag canonical article's source list (stored in reason prefix)
                     conn.execute(
-                        """UPDATE articles SET updated_at=? WHERE id=? AND canonical_id IS NULL""",
+                        """
+                        UPDATE articles
+                           SET updated_at=%s
+                         WHERE id=%s AND canonical_id IS NULL
+                        """,
                         (now_iso(), canonical_id),
                     )
                 else:
                     sql = insert_article_sql()
-                    if not is_postgres():
-                        sql = sql.replace("%s", "?")
                     cursor = conn.execute(
                         sql,
                         (
@@ -451,9 +453,9 @@ def _ingest_source(source: SourceDefinition, db_path: Path | None = None) -> Sou
 
             conn.execute(
                 """UPDATE sources SET
-                     last_checked_at=?, last_success_at=?, last_error=NULL,
-                     last_fetched_count=?, last_inserted_count=?
-                   WHERE slug=?""",
+                     last_checked_at=%s, last_success_at=%s, last_error=NULL,
+                     last_fetched_count=%s, last_inserted_count=%s
+                   WHERE slug=%s""",
                 (checked_at, checked_at, fetched, inserted, source.slug),
             )
 
@@ -462,9 +464,9 @@ def _ingest_source(source: SourceDefinition, db_path: Path | None = None) -> Sou
         with connect(db_path) as conn:
             conn.execute(
                 """UPDATE sources SET
-                     last_checked_at=?, last_error=?,
+                     last_checked_at=%s, last_error=%s,
                      last_fetched_count=0, last_inserted_count=0
-                   WHERE slug=?""",
+                   WHERE slug=%s""",
                 (checked_at, error_msg, source.slug),
             )
         return SourceIngestOutcome(
@@ -504,7 +506,7 @@ def _create_ingest_run(db_path: Path | None, started_at: str) -> int:
     init_db(db_path)
     with connect(db_path) as conn:
         row = conn.execute(
-            "INSERT INTO ingest_runs(started_at) VALUES (?) RETURNING id",
+            "INSERT INTO ingest_runs(started_at) VALUES (%s) RETURNING id",
             (started_at,),
         ).fetchone()
     return int(_row_value(row, "id", 0))
@@ -517,7 +519,7 @@ def _record_ingest_source(run_id: int, outcome: SourceIngestOutcome, db_path: Pa
             INSERT INTO ingest_run_sources(
               run_id, source_name, articles_found, articles_new, error_message
             )
-            VALUES (?, ?, ?, ?, ?)
+            VALUES (%s, %s, %s, %s, %s)
             """,
             (
                 run_id,
@@ -541,8 +543,8 @@ def _finish_ingest_run(
         conn.execute(
             """
             UPDATE ingest_runs
-               SET finished_at=?, duration_ms=?, total_new=?, total_errors=?
-             WHERE id=?
+               SET finished_at=%s, duration_ms=%s, total_new=%s, total_errors=%s
+             WHERE id=%s
             """,
             (finished_at, duration_ms, total_new, total_errors, run_id),
         )
@@ -571,7 +573,7 @@ def ingest_all(db_path: Path | None = None) -> dict[str, int]:
         with connect(db_path) as conn:
             private_rows = conn.execute(
                 "SELECT slug, name, url, category, kind, priority"
-                " FROM sources WHERE owner_user_id IS NOT NULL AND enabled = 1"
+                " FROM sources WHERE owner_user_id IS NOT NULL AND enabled IS TRUE"
             ).fetchall()
         for row in private_rows:
             r = row_to_dict(row)
@@ -678,9 +680,12 @@ def _fetch_uas_map(conn: Any, article_ids: list[int], user_id: int) -> dict[int,
     """Return a map of article_id → UAS row dict for the given user and article IDs."""
     if not article_ids:
         return {}
-    placeholders = ",".join("?" * len(article_ids))
+    article_placeholders = placeholders(article_ids)
     rows = conn.execute(
-        f"SELECT * FROM user_article_state WHERE user_id = ? AND article_id IN ({placeholders})",
+        (
+            "SELECT * FROM user_article_state"
+            f" WHERE user_id = %s AND article_id IN ({article_placeholders})"
+        ),
         [user_id, *article_ids],
     ).fetchall()
     return {row_to_dict(r)["article_id"]: row_to_dict(r) for r in rows}
@@ -688,7 +693,7 @@ def _fetch_uas_map(conn: Any, article_ids: list[int], user_id: int) -> dict[int,
 
 def _get_uas_row(conn: Any, article_id: int, user_id: int) -> dict[str, Any] | None:
     row = conn.execute(
-        "SELECT * FROM user_article_state WHERE user_id = ? AND article_id = ?",
+        "SELECT * FROM user_article_state WHERE user_id = %s AND article_id = %s",
         (user_id, article_id),
     ).fetchone()
     return row_to_dict(row) if row else None
@@ -714,7 +719,7 @@ def _upsert_uas(  # noqa: PLR0913
         INSERT INTO user_article_state(
           user_id, article_id, state, starred,
           done_at, starred_at, skipped_at, archived_at, later_until, restored_at, updated_at
-        ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES(%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         ON CONFLICT(user_id, article_id) DO UPDATE SET
           state = excluded.state,
           starred = excluded.starred,
@@ -782,31 +787,34 @@ def list_articles(  # noqa: PLR0913
             "archived": "archived",
         }
         mapped = legacy_map.get(status, status)
-        clauses.append("state = ?")
+        clauses.append("state = %s")
         params.append(mapped)
         if status == "saved":
-            clauses.append("starred = 1")
+            clauses.append("starred IS TRUE")
     if state:
         if state == "today":
             clauses.append(
                 "(state = 'today'"
-                " OR (state = 'later' AND later_until IS NOT NULL AND later_until <= ?))"
+                " OR (state = 'later' AND later_until IS NOT NULL AND later_until <= %s))"
             )
             params.append(now)
         else:
-            clauses.append("state = ?")
+            clauses.append("state = %s")
             params.append(state)
     if starred is not None:
-        clauses.append("starred = ?")
-        params.append(1 if starred else 0)
+        clauses.append("starred = %s")
+        params.append(bool(starred))
     if category:
-        clauses.append("category = ?")
+        clauses.append("category = %s")
         params.append(category)
     where = f"WHERE {' AND '.join(clauses)}"
     params.extend([limit, offset])
     with connect(db_path) as conn:
         rows = conn.execute(
-            f"SELECT * FROM articles {where} ORDER BY discovered_at DESC, id DESC LIMIT ? OFFSET ?",
+            (
+                f"SELECT * FROM articles {where}"
+                " ORDER BY discovered_at DESC, id DESC LIMIT %s OFFSET %s"
+            ),
             params,
         ).fetchall()
         articles = [_article_dict(row) for row in rows]
@@ -851,17 +859,17 @@ def _list_articles_for_user(  # noqa: PLR0913
             art_clauses.append(
                 "(uas.state IS NULL OR uas.state = 'today'"
                 " OR (uas.state = 'later' AND uas.later_until IS NOT NULL"
-                " AND uas.later_until <= ?))"
+                " AND uas.later_until <= %s))"
             )
             where_params.append(now)
         else:
-            art_clauses.append("COALESCE(uas.state, 'today') = ?")
+            art_clauses.append("COALESCE(uas.state, 'today') = %s")
             where_params.append(state)
     if starred is not None:
-        art_clauses.append("COALESCE(uas.starred, false) = ?")
+        art_clauses.append("COALESCE(uas.starred, false) = %s")
         where_params.append(bool(starred))
     if category:
-        art_clauses.append("a.category = ?")
+        art_clauses.append("a.category = %s")
         where_params.append(category)
 
     where = f"WHERE {' AND '.join(art_clauses)}"
@@ -886,15 +894,15 @@ def _list_articles_for_user(  # noqa: PLR0913
           uas.restored_at AS _uas_restored_at
         FROM articles a
         LEFT JOIN sources src ON src.slug = a.source_slug
-        LEFT JOIN user_sources us_src ON us_src.user_id = ? AND us_src.source_slug = a.source_slug
-        LEFT JOIN user_article_state uas ON uas.article_id = a.id AND uas.user_id = ?
+        LEFT JOIN user_sources us_src ON us_src.user_id = %s AND us_src.source_slug = a.source_slug
+        LEFT JOIN user_article_state uas ON uas.article_id = a.id AND uas.user_id = %s
         {where}
           AND (
             (src.owner_user_id IS NULL AND COALESCE(us_src.enabled, true))
-            OR src.owner_user_id = ?
+            OR src.owner_user_id = %s
           )
         ORDER BY a.discovered_at DESC, a.id DESC
-        LIMIT ? OFFSET ?
+        LIMIT %s OFFSET %s
     """
     with connect(db_path) as conn:
         rows = conn.execute(sql, all_params).fetchall()
@@ -920,11 +928,11 @@ def _attach_also_from(conn: Any, articles: list[dict[str, Any]]) -> None:
     article_ids = [a["id"] for a in articles]
     if not article_ids:
         return
-    placeholders = ",".join("?" * len(article_ids))
+    article_placeholders = placeholders(article_ids)
     dup_rows = conn.execute(
         f"""
         SELECT canonical_id, source_name FROM articles
-        WHERE canonical_id IN ({placeholders}) AND state='archived'
+        WHERE canonical_id IN ({article_placeholders}) AND state='archived'
         """,
         article_ids,
     ).fetchall()
@@ -974,8 +982,8 @@ def search_articles(  # noqa: PLR0913
     for term in terms:
         like = f"%{term}%"
         clauses.append(
-            "(title LIKE ? OR summary LIKE ? OR reason LIKE ? OR tags LIKE ?"
-            " OR source_name LIKE ? OR (body IS NOT NULL AND body LIKE ?))"
+            "(title ILIKE %s OR summary ILIKE %s OR reason ILIKE %s OR tags ILIKE %s"
+            " OR source_name ILIKE %s OR (body IS NOT NULL AND body ILIKE %s))"
         )
         params.extend([like, like, like, like, like, like])
 
@@ -985,8 +993,8 @@ def search_articles(  # noqa: PLR0913
 
     # State filter (multi-select; overrides archived exclusion for explicit archived selection)
     if states:
-        placeholders = ",".join("?" * len(states))
-        clauses.append(f"state IN ({placeholders})")
+        state_placeholders = placeholders(states)
+        clauses.append(f"state IN ({state_placeholders})")
         params.extend(states)
         if include_archived is False and "archived" in states:
             # User explicitly wants archived — remove the exclusion clause we just added
@@ -994,36 +1002,37 @@ def search_articles(  # noqa: PLR0913
 
     # Category filter
     if categories:
-        placeholders = ",".join("?" * len(categories))
-        clauses.append(f"category IN ({placeholders})")
+        category_placeholders = placeholders(categories)
+        clauses.append(f"category IN ({category_placeholders})")
         params.extend(categories)
 
     # Source filter
     if sources:
-        placeholders = ",".join("?" * len(sources))
-        clauses.append(f"source_slug IN ({placeholders})")
+        source_placeholders = placeholders(sources)
+        clauses.append(f"source_slug IN ({source_placeholders})")
         params.extend(sources)
 
     # Starred filter
     if starred_only:
-        clauses.append("starred = 1")
+        clauses.append("starred IS TRUE")
 
     # Date range filter
     if date_range == "today":
-        clauses.append("discovered_at >= datetime(?, '-1 day')")
+        clauses.append("discovered_at::timestamptz >= %s::timestamptz - interval '1 day'")
         params.append(now_ts)
     elif date_range == "week":
-        clauses.append("discovered_at >= datetime(?, '-7 days')")
+        clauses.append("discovered_at::timestamptz >= %s::timestamptz - interval '7 days'")
         params.append(now_ts)
     elif date_range == "month":
-        clauses.append("discovered_at >= datetime(?, '-30 days')")
+        clauses.append("discovered_at::timestamptz >= %s::timestamptz - interval '30 days'")
         params.append(now_ts)
 
     where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
     params.append(limit)
 
     sql = (
-        f"SELECT * FROM articles {where} ORDER BY importance_score DESC, discovered_at DESC LIMIT ?"
+        f"SELECT * FROM articles {where}"
+        " ORDER BY importance_score DESC, discovered_at DESC LIMIT %s"
     )
 
     with connect(db_path) as conn:
@@ -1052,8 +1061,8 @@ def _search_articles_for_user(  # noqa: PLR0912, PLR0913, PLR0915
     for term in terms:
         like = f"%{term}%"
         clauses.append(
-            "(a.title LIKE ? OR a.summary LIKE ? OR a.reason LIKE ? OR a.tags LIKE ?"
-            " OR a.source_name LIKE ? OR (a.body IS NOT NULL AND a.body LIKE ?))"
+            "(a.title ILIKE %s OR a.summary ILIKE %s OR a.reason ILIKE %s OR a.tags ILIKE %s"
+            " OR a.source_name ILIKE %s OR (a.body IS NOT NULL AND a.body ILIKE %s))"
         )
         where_params.extend([like, like, like, like, like, like])
 
@@ -1061,38 +1070,38 @@ def _search_articles_for_user(  # noqa: PLR0912, PLR0913, PLR0915
         clauses.append("COALESCE(uas.state, 'today') != 'archived'")
 
     if states:
-        placeholders = ",".join("?" * len(states))
-        clauses.append(f"COALESCE(uas.state, 'today') IN ({placeholders})")
+        state_placeholders = placeholders(states)
+        clauses.append(f"COALESCE(uas.state, 'today') IN ({state_placeholders})")
         where_params.extend(states)
         if include_archived is False and "archived" in states:
             clauses.remove("COALESCE(uas.state, 'today') != 'archived'")
 
     if categories:
-        placeholders = ",".join("?" * len(categories))
-        clauses.append(f"a.category IN ({placeholders})")
+        category_placeholders = placeholders(categories)
+        clauses.append(f"a.category IN ({category_placeholders})")
         where_params.extend(categories)
 
     if sources:
-        placeholders = ",".join("?" * len(sources))
-        clauses.append(f"a.source_slug IN ({placeholders})")
+        source_placeholders = placeholders(sources)
+        clauses.append(f"a.source_slug IN ({source_placeholders})")
         where_params.extend(sources)
 
     if starred_only:
         clauses.append("COALESCE(uas.starred, false) = true")
 
     if date_range == "today":
-        clauses.append("a.discovered_at >= datetime(?, '-1 day')")
+        clauses.append("a.discovered_at::timestamptz >= %s::timestamptz - interval '1 day'")
         where_params.append(now_ts)
     elif date_range == "week":
-        clauses.append("a.discovered_at >= datetime(?, '-7 days')")
+        clauses.append("a.discovered_at::timestamptz >= %s::timestamptz - interval '7 days'")
         where_params.append(now_ts)
     elif date_range == "month":
-        clauses.append("a.discovered_at >= datetime(?, '-30 days')")
+        clauses.append("a.discovered_at::timestamptz >= %s::timestamptz - interval '30 days'")
         where_params.append(now_ts)
 
     # Source subscription filter appended to WHERE
     src_filter = (
-        "(src.owner_user_id IS NULL AND COALESCE(us_src.enabled, true)) OR src.owner_user_id = ?"
+        "(src.owner_user_id IS NULL AND COALESCE(us_src.enabled, true)) OR src.owner_user_id = %s"
     )
     if clauses:
         clauses.append(f"({src_filter})")
@@ -1116,10 +1125,10 @@ def _search_articles_for_user(  # noqa: PLR0912, PLR0913, PLR0915
           uas.restored_at AS _uas_restored_at
         FROM articles a
         LEFT JOIN sources src ON src.slug = a.source_slug
-        LEFT JOIN user_sources us_src ON us_src.user_id = ? AND us_src.source_slug = a.source_slug
-        LEFT JOIN user_article_state uas ON uas.article_id = a.id AND uas.user_id = ?
+        LEFT JOIN user_sources us_src ON us_src.user_id = %s AND us_src.source_slug = a.source_slug
+        LEFT JOIN user_article_state uas ON uas.article_id = a.id AND uas.user_id = %s
         {where}
-        ORDER BY a.importance_score DESC, a.discovered_at DESC LIMIT ?
+        ORDER BY a.importance_score DESC, a.discovered_at DESC LIMIT %s
     """
     with connect(db_path) as conn:
         rows = conn.execute(sql, all_params).fetchall()
@@ -1154,15 +1163,15 @@ def set_article_status(
     with connect(db_path) as conn:
         if timestamp_column:
             conn.execute(
-                f"UPDATE articles SET status=?, {timestamp_column}=?, updated_at=? WHERE id=?",
+                f"UPDATE articles SET status=%s, {timestamp_column}=%s, updated_at=%s WHERE id=%s",
                 (status, now_iso(), now_iso(), article_id),
             )
         else:
             conn.execute(
-                "UPDATE articles SET status=?, updated_at=? WHERE id=?",
+                "UPDATE articles SET status=%s, updated_at=%s WHERE id=%s",
                 (status, now_iso(), article_id),
             )
-        row = conn.execute("SELECT * FROM articles WHERE id=?", (article_id,)).fetchone()
+        row = conn.execute("SELECT * FROM articles WHERE id=%s", (article_id,)).fetchone()
         result = _article_dict(row) if row else None
 
     # Lazily embed articles when they become saved/read (fire-and-forget; ignore errors)
@@ -1178,7 +1187,7 @@ def set_article_status(
 
 
 def _get_article_row(conn: Any, article_id: int) -> dict[str, Any] | None:
-    row = conn.execute("SELECT * FROM articles WHERE id=?", (article_id,)).fetchone()
+    row = conn.execute("SELECT * FROM articles WHERE id=%s", (article_id,)).fetchone()
     return _article_dict(row) if row else None
 
 
@@ -1247,26 +1256,26 @@ def transition_article_state(  # noqa: PLR0912
                 _get_uas_row(conn, article_id, user_id),
             )
         else:
-            timestamp_sets: list[str] = ["state = ?", "updated_at = ?"]
+            timestamp_sets: list[str] = ["state = %s", "updated_at = %s"]
             params: list[Any] = [new_state, ts]
 
             if new_state == "done":
-                timestamp_sets.append("done_at = ?")
+                timestamp_sets.append("done_at = %s")
                 params.append(ts)
             elif new_state == "skipped":
-                timestamp_sets.append("skipped_at = ?")
+                timestamp_sets.append("skipped_at = %s")
                 params.append(ts)
             elif new_state == "archived":
-                timestamp_sets.append("archived_at = ?")
+                timestamp_sets.append("archived_at = %s")
                 params.append(ts)
             elif new_state == "today":
-                timestamp_sets.append("restored_at = ?")
+                timestamp_sets.append("restored_at = %s")
                 timestamp_sets.append("later_until = NULL")
                 params.append(ts)
 
             set_clause = ", ".join(timestamp_sets)
             params.append(article_id)
-            conn.execute(f"UPDATE articles SET {set_clause} WHERE id = ?", params)
+            conn.execute(f"UPDATE articles SET {set_clause} WHERE id = %s", params)
             result = _get_article_row(conn, article_id)
 
     return result
@@ -1304,12 +1313,14 @@ def set_article_starred(
 
         if starred:
             conn.execute(
-                "UPDATE articles SET starred = 1, starred_at = ?, updated_at = ? WHERE id = ?",
+                "UPDATE articles"
+                " SET starred = TRUE, starred_at = %s, updated_at = %s"
+                " WHERE id = %s",
                 (ts, ts, article_id),
             )
         else:
             conn.execute(
-                "UPDATE articles SET starred = 0, updated_at = ? WHERE id = ?",
+                "UPDATE articles SET starred = FALSE, updated_at = %s WHERE id = %s",
                 (ts, article_id),
             )
 
@@ -1366,7 +1377,7 @@ def send_article_later(
             return _merge_uas(dict(base), _get_uas_row(conn, article_id, user_id))
 
         conn.execute(
-            "UPDATE articles SET state = 'later', later_until = ?, updated_at = ? WHERE id = ?",
+            "UPDATE articles SET state = 'later', later_until = %s, updated_at = %s WHERE id = %s",
             (later_until, ts, article_id),
         )
         return _get_article_row(conn, article_id)
@@ -1393,13 +1404,13 @@ def get_user_summary(user_id: int, db_path: Path | None = None) -> dict[str, Any
             FROM articles a
             LEFT JOIN sources src ON src.slug = a.source_slug
             LEFT JOIN user_sources us_src
-                   ON us_src.user_id = ? AND us_src.source_slug = a.source_slug
+                   ON us_src.user_id = %s AND us_src.source_slug = a.source_slug
             LEFT JOIN user_article_state uas
-                   ON uas.article_id = a.id AND uas.user_id = ?
+                   ON uas.article_id = a.id AND uas.user_id = %s
             WHERE (a.canonical_id IS NULL OR COALESCE(uas.state, 'today') != 'archived')
               AND (
                 (src.owner_user_id IS NULL AND COALESCE(us_src.enabled, true))
-                OR src.owner_user_id = ?
+                OR src.owner_user_id = %s
               )
             GROUP BY COALESCE(uas.state, 'today'), COALESCE(uas.starred, false), a.category
             """,

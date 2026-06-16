@@ -10,7 +10,7 @@ from typer.testing import CliRunner
 import news_dashboard.db as db_mod
 from news_dashboard.db import connect, init_db
 from news_dashboard.ingest import sync_sources
-from news_dashboard.migrate import _check_prerequisites, _ph, _row_count, app
+from news_dashboard.migrate import _check_prerequisites, _row_count, app
 
 runner = CliRunner()
 
@@ -27,7 +27,7 @@ def _insert_article(db_path: Path, *, url_suffix: str = "1", state: str = "done"
             """
             INSERT INTO articles(url, canonical_url, title, source_slug, source_name,
               category, kind, state, starred)
-            VALUES (?, ?, ?, ?, ?, 'tech', 'rss_feed', ?, 0)
+            VALUES (%s, %s, %s, %s, %s, 'tech', 'rss_feed', %s, FALSE)
             RETURNING id
             """,
             (
@@ -42,29 +42,7 @@ def _insert_article(db_path: Path, *, url_suffix: str = "1", state: str = "done"
     return int(row[0] if isinstance(row, tuple) else row["id"])
 
 
-# ── _ph and _row_count helpers ────────────────────────────────────────────────
-
-
-def test_ph_returns_question_mark_without_postgres_env(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv("DATABASE_URL", raising=False)
-    monkeypatch.delenv("POSTGRES_HOST", raising=False)
-    assert _ph() == "?"
-
-
-def test_ph_returns_percent_s_with_database_url(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("DATABASE_URL", "postgresql://user:pw@localhost/db")
-    assert _ph() == "%s"
-
-
-def test_ph_returns_percent_s_with_postgres_host(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv("DATABASE_URL", raising=False)
-    monkeypatch.setenv("POSTGRES_HOST", "localhost")
-    assert _ph() == "%s"
-
-
-def test_row_count_sqlite_style() -> None:
-    # Simulate a sqlite3.Row-like dict with COUNT(*) key
-    assert _row_count({"COUNT(*)": 7}) == 7
+# ── _row_count helper ─────────────────────────────────────────────────────────
 
 
 def test_row_count_postgres_style() -> None:
@@ -101,7 +79,7 @@ def test_prerequisites_detect_missing_table(tmp_path: Path) -> None:
 
 def test_migration_creates_seed_user(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     db = _setup_db(tmp_path)
-    monkeypatch.setenv("NEWS_DASHBOARD_DB", str(db))
+    monkeypatch.setattr(db_mod, "DB_PATH", db)
     monkeypatch.setenv("SEED_USER", "alice")
     monkeypatch.setenv("SEED_PASSWORD", "password123")
 
@@ -117,7 +95,7 @@ def test_migration_creates_seed_user(tmp_path: Path, monkeypatch: pytest.MonkeyP
 def test_migration_migrates_article_state(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     db = _setup_db(tmp_path)
     aid = _insert_article(db, url_suffix="m1", state="done")
-    monkeypatch.setenv("NEWS_DASHBOARD_DB", str(db))
+    monkeypatch.setattr(db_mod, "DB_PATH", db)
     monkeypatch.setenv("SEED_USER", "alice")
     monkeypatch.setenv("SEED_PASSWORD", "password123")
 
@@ -126,7 +104,7 @@ def test_migration_migrates_article_state(tmp_path: Path, monkeypatch: pytest.Mo
 
     with connect(db) as conn:
         uas = conn.execute(
-            "SELECT state FROM user_article_state WHERE article_id = ?", (aid,)
+            "SELECT state FROM user_article_state WHERE article_id = %s", (aid,)
         ).fetchone()
     assert uas is not None
     assert uas[0] == "done"
@@ -136,7 +114,7 @@ def test_migration_seeds_source_subscriptions(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     db = _setup_db(tmp_path)
-    monkeypatch.setenv("NEWS_DASHBOARD_DB", str(db))
+    monkeypatch.setattr(db_mod, "DB_PATH", db)
     monkeypatch.setenv("SEED_USER", "alice")
     monkeypatch.setenv("SEED_PASSWORD", "password123")
 
@@ -151,7 +129,7 @@ def test_migration_seeds_source_subscriptions(
 def test_migration_is_idempotent(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     db = _setup_db(tmp_path)
     _insert_article(db, url_suffix="i1", state="done")
-    monkeypatch.setenv("NEWS_DASHBOARD_DB", str(db))
+    monkeypatch.setattr(db_mod, "DB_PATH", db)
     monkeypatch.setenv("SEED_USER", "alice")
     monkeypatch.setenv("SEED_PASSWORD", "password123")
 
@@ -171,7 +149,7 @@ def test_migration_is_idempotent(tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 def test_migration_dry_run_does_not_write(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     db = _setup_db(tmp_path)
     _insert_article(db, url_suffix="d1", state="done")
-    monkeypatch.setenv("NEWS_DASHBOARD_DB", str(db))
+    monkeypatch.setattr(db_mod, "DB_PATH", db)
     monkeypatch.setenv("SEED_USER", "alice")
     monkeypatch.setenv("SEED_PASSWORD", "password123")
 
@@ -193,7 +171,7 @@ def test_migration_aborts_on_missing_schema(
     init_db(db)
     with connect(db) as conn:
         conn.execute("DROP TABLE IF EXISTS user_article_state")
-    monkeypatch.setenv("NEWS_DASHBOARD_DB", str(db))
+    monkeypatch.setattr(db_mod, "DB_PATH", db)
     monkeypatch.setenv("SEED_USER", "alice")
     monkeypatch.setenv("SEED_PASSWORD", "password123")
 
@@ -210,7 +188,7 @@ def test_migration_skips_user_creation_if_exists(
     from news_dashboard.auth import create_user
 
     create_user("existing", "pass")
-    monkeypatch.setenv("NEWS_DASHBOARD_DB", str(db))
+    monkeypatch.setattr(db_mod, "DB_PATH", db)
     monkeypatch.setenv("SEED_USER", "alice")
     monkeypatch.setenv("SEED_PASSWORD", "password123")
 

@@ -28,7 +28,7 @@ def _insert_article(conn: Any, n: int = 1) -> None:
             """INSERT INTO articles(
                  url, canonical_url, title, source_slug, source_name, category, kind
                )
-               VALUES (?, ?, ?, 'python-insider', 'Python Insider', 'python', 'rss_feed')
+               VALUES (%s, %s, %s, 'python-insider', 'Python Insider', 'python', 'rss_feed')
                ON CONFLICT (url) DO NOTHING""",
             (f"https://example.com/art-{i}", f"https://example.com/art-{i}", f"Article {i}"),
         )
@@ -52,7 +52,7 @@ def test_source_error_tracked(tmp_path: Path) -> None:
     with connect(db) as conn:
         conn.execute(
             "INSERT INTO sources(slug, name, url, category, kind, priority, enabled) "
-            "VALUES (?, ?, ?, ?, ?, 50, 1) ON CONFLICT(slug) DO NOTHING",
+            "VALUES (%s, %s, %s, %s, %s, 50, TRUE) ON CONFLICT(slug) DO NOTHING",
             (bad.slug, bad.name, bad.url, bad.category, bad.kind),
         )
 
@@ -63,7 +63,7 @@ def test_source_error_tracked(tmp_path: Path) -> None:
 
     with connect(db) as conn:
         row = conn.execute(
-            "SELECT last_error, last_checked_at FROM sources WHERE slug=?", (bad.slug,)
+            "SELECT last_error, last_checked_at FROM sources WHERE slug=%s", (bad.slug,)
         ).fetchone()
         assert row["last_error"] is not None, "last_error should be set on failure"
         assert row["last_checked_at"] is not None, "last_checked_at should be set even on failure"
@@ -75,7 +75,7 @@ def test_source_health_error_streak_resets_after_success(tmp_path: Path) -> None
     with connect(db) as conn:
         for run_id, error in ((1, "timeout"), (2, "HTTP 500"), (3, None)):
             conn.execute(
-                "INSERT INTO ingest_runs(id, started_at) VALUES (?, ?)",
+                "INSERT INTO ingest_runs(id, started_at) VALUES (%s, %s)",
                 (run_id, f"2026-06-0{run_id}T00:00:00+00:00"),
             )
             conn.execute(
@@ -83,7 +83,7 @@ def test_source_health_error_streak_resets_after_success(tmp_path: Path) -> None
                 INSERT INTO ingest_run_sources(
               run_id, source_name, articles_found, articles_new, error_message
             )
-                VALUES (?, 'Python Insider', 10, ?, ?)
+                VALUES (%s, 'Python Insider', 10, %s, %s)
                 """,
                 (run_id, 3 if error is None else 0, error),
             )
@@ -100,7 +100,7 @@ def test_source_health_counts_leading_errors_and_sorts_first(tmp_path: Path) -> 
     with connect(db) as conn:
         for run_id in (1, 2, 3):
             conn.execute(
-                "INSERT INTO ingest_runs(id, started_at) VALUES (?, ?)",
+                "INSERT INTO ingest_runs(id, started_at) VALUES (%s, %s)",
                 (run_id, f"2026-06-0{run_id}T00:00:00+00:00"),
             )
         conn.execute(

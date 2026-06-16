@@ -69,10 +69,10 @@ def list_ingest_runs(
     from_iso = _iso(from_)
     to_iso = _iso(to)
     if from_iso:
-        filters.append("started_at >= ?")
+        filters.append("started_at >= %s")
         params.append(from_iso)
     if to_iso:
-        filters.append("started_at <= ?")
+        filters.append("started_at <= %s")
         params.append(to_iso)
     where = " AND ".join(filters)
     offset = (page - 1) * per_page
@@ -113,7 +113,7 @@ def list_ingest_runs(
             FROM ingest_runs r
             WHERE {where}
             ORDER BY r.started_at DESC, r.id DESC
-            LIMIT ? OFFSET ?
+            LIMIT %s OFFSET %s
             """,
             (*params, per_page, offset),
         ).fetchall()
@@ -132,7 +132,7 @@ def get_ingest_run_sources(
 ) -> list[dict[str, Any]] | None:
     init_db(db_path)
     with connect(db_path) as conn:
-        exists = conn.execute("SELECT id FROM ingest_runs WHERE id=?", (run_id,)).fetchone()
+        exists = conn.execute("SELECT id FROM ingest_runs WHERE id=%s", (run_id,)).fetchone()
         if not exists:
             return None
         rows = conn.execute(
@@ -145,7 +145,7 @@ def get_ingest_run_sources(
               COALESCE(articles_new, 0) AS articles_new,
               error_message
             FROM ingest_run_sources
-            WHERE run_id=?
+            WHERE run_id=%s
             ORDER BY id ASC
             """,
             (run_id,),

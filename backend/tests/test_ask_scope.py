@@ -30,7 +30,7 @@ def _seed_articles(db_path: Path) -> None:
                     id, url, canonical_url, title, source_slug, source_name,
                     category, kind, status, importance_score, summary, reason,
                     tags, embedding
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 """,
                 (
                     i,
@@ -138,7 +138,7 @@ def test_ask_default_scope_returns_answer(tmp_path: Path, monkeypatch: pytest.Mo
                     id, url, canonical_url, title, source_slug, source_name,
                     category, kind, status, importance_score, summary, reason,
                     tags, embedding
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 """,
                 (
                     i,
@@ -195,7 +195,7 @@ def test_ask_include_all_widens_corpus(tmp_path: Path, monkeypatch: pytest.Monke
                     id, url, canonical_url, title, source_slug, source_name,
                     category, kind, status, importance_score, summary, reason,
                     tags, embedding
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 """,
                 (
                     i,

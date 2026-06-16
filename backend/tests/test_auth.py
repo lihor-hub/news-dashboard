@@ -42,7 +42,7 @@ def _fresh_client() -> TestClient:
 
 @pytest.fixture
 def tmp_db(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    """Fresh SQLite DB with DB_PATH patched so auth helpers use it."""
+    """Fresh PostgreSQL test schema with DB_PATH patched so auth helpers use it."""
     db = tmp_path / "test.db"
     init_db(db)
     monkeypatch.setattr(db_mod, "DB_PATH", db)

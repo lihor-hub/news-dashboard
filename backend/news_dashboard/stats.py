@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
-from .db import connect, init_db, row_to_dict
+from .db import connect, init_db, placeholders, row_to_dict
 
 # Status values that count as "handled" (not sitting in inbox)
 _HANDLED_STATUSES = ("read", "saved", "skipped", "archived")
@@ -107,7 +107,7 @@ def ingested_vs_handled(db_path: Path | None = None, days: int = 14) -> list[dic
             row_to_dict(r)
             for r in conn.execute(
                 "SELECT DATE(discovered_at) AS day, COUNT(*) AS n FROM articles "
-                "WHERE discovered_at >= ? GROUP BY day",
+                "WHERE discovered_at >= %s GROUP BY day",
                 (since,),
             ).fetchall()
         ]
@@ -118,7 +118,7 @@ def ingested_vs_handled(db_path: Path | None = None, days: int = 14) -> list[dic
                 SELECT DATE(COALESCE(skipped_at, saved_at, read_at, archived_at)) AS day,
                        COUNT(*) AS n
                 FROM articles
-                WHERE discovered_at >= ?
+                WHERE discovered_at >= %s
                   AND (skipped_at IS NOT NULL OR saved_at IS NOT NULL
                        OR read_at IS NOT NULL OR archived_at IS NOT NULL)
                 GROUP BY day
@@ -159,21 +159,25 @@ def triage_metrics(db_path: Path | None = None) -> dict[str, Any]:
     with connect(db_path) as conn:
         total = row_to_dict(
             conn.execute(
-                "SELECT COUNT(*) AS n FROM articles WHERE discovered_at >= ?",
+                "SELECT COUNT(*) AS n FROM articles WHERE discovered_at >= %s",
                 (week_ago,),
             ).fetchone()
         )["n"]
 
+        status_placeholders = placeholders(_HANDLED_STATUSES)
         handled = row_to_dict(
             conn.execute(
-                f"SELECT COUNT(*) AS n FROM articles WHERE discovered_at >= ? AND status IN ({','.join('?' * len(_HANDLED_STATUSES))})",  # noqa: E501
+                (
+                    "SELECT COUNT(*) AS n FROM articles"
+                    f" WHERE discovered_at >= %s AND status IN ({status_placeholders})"
+                ),
                 (week_ago, *_HANDLED_STATUSES),
             ).fetchone()
         )["n"]
 
         saved = row_to_dict(
             conn.execute(
-                "SELECT COUNT(*) AS n FROM articles WHERE discovered_at >= ? AND status = 'saved'",
+                "SELECT COUNT(*) AS n FROM articles WHERE discovered_at >= %s AND status = 'saved'",
                 (week_ago,),
             ).fetchone()
         )["n"]
@@ -185,7 +189,7 @@ def triage_metrics(db_path: Path | None = None) -> dict[str, Any]:
                 SELECT discovered_at,
                        COALESCE(skipped_at, saved_at, read_at, archived_at) AS triaged_at
                 FROM articles
-                WHERE discovered_at >= ?
+                WHERE discovered_at >= %s
                   AND (skipped_at IS NOT NULL OR saved_at IS NOT NULL
                        OR read_at IS NOT NULL OR archived_at IS NOT NULL)
                 """,
@@ -273,7 +277,7 @@ def category_mix(db_path: Path | None = None, days: int = 14) -> list[dict[str, 
                 """
                 SELECT DATE(discovered_at) AS day, category, COUNT(*) AS n
                 FROM articles
-                WHERE discovered_at >= ?
+                WHERE discovered_at >= %s
                 GROUP BY day, category
                 ORDER BY day ASC
                 """,
@@ -311,7 +315,7 @@ def _load_stats_rows(
             """
             SELECT id, started_at, finished_at, duration_ms, total_new, total_errors
             FROM ingest_runs
-            WHERE started_at >= ? AND started_at <= ?
+            WHERE started_at >= %s AND started_at <= %s
             ORDER BY started_at ASC, id ASC
             """,
             (_to_query_value(start), _to_query_value(end)),
@@ -321,7 +325,7 @@ def _load_stats_rows(
         if not run_ids:
             return [], []
 
-        placeholders = ", ".join("?" for _ in run_ids)
+        run_placeholders = placeholders(run_ids)
         source_rows = conn.execute(
             f"""
             SELECT
@@ -334,7 +338,7 @@ def _load_stats_rows(
               ingest_runs.started_at
             FROM ingest_run_sources
             JOIN ingest_runs ON ingest_runs.id = ingest_run_sources.run_id
-            WHERE ingest_run_sources.run_id IN ({placeholders})
+            WHERE ingest_run_sources.run_id IN ({run_placeholders})
             ORDER BY ingest_runs.started_at ASC, ingest_run_sources.id ASC
             """,
             tuple(run_ids),

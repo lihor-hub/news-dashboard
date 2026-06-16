@@ -122,7 +122,7 @@ def test_fetch_and_cache_body_success(tmp_path: Path) -> None:
 
     with connect(db_path) as conn:
         conn.execute(
-            "UPDATE articles SET url=?, canonical_url=? WHERE id=?",
+            "UPDATE articles SET url=%s, canonical_url=%s WHERE id=%s",
             (url, url, article_id),
         )
 
@@ -141,7 +141,7 @@ def test_fetch_and_cache_body_cache_hit(tmp_path: Path) -> None:
 
     with connect(db_path) as conn:
         conn.execute(
-            "UPDATE articles SET body='cached text', body_status='ok' WHERE id=?",
+            "UPDATE articles SET body='cached text', body_status='ok' WHERE id=%s",
             (article_id,),
         )
 
@@ -203,10 +203,14 @@ def test_get_article_returns_none_for_missing(tmp_path: Path) -> None:
 def _seed_user(db_path: Path, username: str = "alice") -> int:
     with connect(db_path) as conn:
         conn.execute(
-            "INSERT OR IGNORE INTO users(username, password_hash, is_admin) VALUES (?, 'x', 0)",
+            """
+            INSERT INTO users(username, password_hash, is_admin)
+            VALUES (%s, 'x', FALSE)
+            ON CONFLICT(username) DO NOTHING
+            """,
             (username,),
         )
-        row = conn.execute("SELECT id FROM users WHERE username=?", (username,)).fetchone()
+        row = conn.execute("SELECT id FROM users WHERE username=%s", (username,)).fetchone()
     return int(row["id"] if isinstance(row, dict) else row[0])
 
 
@@ -230,7 +234,7 @@ def test_get_article_with_uas_returns_user_state(tmp_path: Path) -> None:
         conn.execute(
             """
             INSERT INTO user_article_state(user_id, article_id, state, starred, done_at)
-            VALUES (?, ?, 'done', 1, '2024-06-01T12:00:00')
+            VALUES (%s, %s, 'done', TRUE, '2024-06-01T12:00:00')
             """,
             (user_id, article_id),
         )
@@ -251,7 +255,7 @@ def test_get_article_with_user_id_does_not_bleed_across_users(tmp_path: Path) ->
     with connect(db_path) as conn:
         conn.execute(
             "INSERT INTO user_article_state(user_id, article_id, state, starred)"
-            " VALUES (?, ?, 'done', 1)",
+            " VALUES (%s, %s, 'done', TRUE)",
             (user_a, article_id),
         )
 
@@ -271,12 +275,12 @@ def test_fetch_and_cache_body_with_user_id_reflects_state(tmp_path: Path) -> Non
 
     with connect(db_path) as conn:
         conn.execute(
-            "UPDATE articles SET body='cached', body_status='ok' WHERE id=?",
+            "UPDATE articles SET body='cached', body_status='ok' WHERE id=%s",
             (article_id,),
         )
         conn.execute(
             "INSERT INTO user_article_state(user_id, article_id, state, starred)"
-            " VALUES (?, ?, 'done', 1)",
+            " VALUES (%s, %s, 'done', TRUE)",
             (user_id, article_id),
         )
 
@@ -310,7 +314,7 @@ def test_prefetch_article_bodies_fetches_missing(tmp_path: Path) -> None:
 
     with connect(db_path) as conn:
         conn.execute(
-            "UPDATE articles SET url=?, canonical_url=?, body_status='missing' WHERE id=?",
+            "UPDATE articles SET url=%s, canonical_url=%s, body_status='missing' WHERE id=%s",
             (url, url, article_id),
         )
 
@@ -320,7 +324,7 @@ def test_prefetch_article_bodies_fetches_missing(tmp_path: Path) -> None:
     assert count == 1
 
     with connect(db_path) as conn:
-        row = conn.execute("SELECT body_status FROM articles WHERE id=?", (article_id,)).fetchone()
+        row = conn.execute("SELECT body_status FROM articles WHERE id=%s", (article_id,)).fetchone()
     status = row["body_status"] if isinstance(row, dict) else row[0]
     assert status == "ok"
 
@@ -331,7 +335,7 @@ def test_prefetch_article_bodies_skips_already_ok(tmp_path: Path) -> None:
 
     with connect(db_path) as conn:
         conn.execute(
-            "UPDATE articles SET body='already here', body_status='ok' WHERE id=?",
+            "UPDATE articles SET body='already here', body_status='ok' WHERE id=%s",
             (article_id,),
         )
 

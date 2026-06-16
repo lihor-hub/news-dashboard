@@ -18,20 +18,22 @@ def _seed_db(db_path: Path) -> tuple[int, int]:
             """
             INSERT INTO ingest_runs(started_at, finished_at, duration_ms, total_new, total_errors)
             VALUES ('2026-06-06T10:00:00+00:00', '2026-06-06T10:00:02+00:00', 2000, 3, 1)
+            RETURNING id
             """
-        ).lastrowid
+        ).fetchone()["id"]
         r2 = conn.execute(
             """
             INSERT INTO ingest_runs(started_at, finished_at, duration_ms, total_new, total_errors)
             VALUES ('2026-06-06T11:00:00+00:00', '2026-06-06T11:00:01+00:00', 1000, 1, 0)
+            RETURNING id
             """
-        ).lastrowid
+        ).fetchone()["id"]
         conn.execute(
             """
             INSERT INTO ingest_run_sources(
               run_id, source_name, articles_found, articles_new, error_message
             )
-            VALUES (?, 'Python Insider', 5, 3, NULL)
+            VALUES (%s, 'Python Insider', 5, 3, NULL)
             """,
             (r1,),
         )
@@ -40,7 +42,7 @@ def _seed_db(db_path: Path) -> tuple[int, int]:
             INSERT INTO ingest_run_sources(
               run_id, source_name, articles_found, articles_new, error_message
             )
-            VALUES (?, 'Broken Feed', 0, 0, 'timeout')
+            VALUES (%s, 'Broken Feed', 0, 0, 'timeout')
             """,
             (r1,),
         )
@@ -49,7 +51,7 @@ def _seed_db(db_path: Path) -> tuple[int, int]:
             INSERT INTO ingest_run_sources(
               run_id, source_name, articles_found, articles_new, error_message
             )
-            VALUES (?, 'Hacker News', 10, 1, NULL)
+            VALUES (%s, 'Hacker News', 10, 1, NULL)
             """,
             (r2,),
         )
@@ -58,7 +60,6 @@ def _seed_db(db_path: Path) -> tuple[int, int]:
 
 def test_list_runs_returns_paginated_response(tmp_path: Path, monkeypatch: Any) -> None:
     db = tmp_path / "api_runs.db"
-    monkeypatch.setenv("NEWS_DASHBOARD_DB", str(db))
     import news_dashboard.db as db_mod
     import news_dashboard.run_history as rh_mod
 
@@ -80,7 +81,6 @@ def test_list_runs_returns_paginated_response(tmp_path: Path, monkeypatch: Any) 
 
 def test_list_runs_pagination(tmp_path: Path, monkeypatch: Any) -> None:
     db = tmp_path / "api_page.db"
-    monkeypatch.setenv("NEWS_DASHBOARD_DB", str(db))
     import news_dashboard.db as db_mod
     import news_dashboard.run_history as rh_mod
 
@@ -106,7 +106,6 @@ def test_list_runs_pagination(tmp_path: Path, monkeypatch: Any) -> None:
 
 def test_get_run_sources_returns_breakdown(tmp_path: Path, monkeypatch: Any) -> None:
     db = tmp_path / "api_sources.db"
-    monkeypatch.setenv("NEWS_DASHBOARD_DB", str(db))
     import news_dashboard.db as db_mod
     import news_dashboard.run_history as rh_mod
 
@@ -129,7 +128,6 @@ def test_get_run_sources_returns_breakdown(tmp_path: Path, monkeypatch: Any) -> 
 
 def test_get_run_sources_404_for_unknown_id(tmp_path: Path, monkeypatch: Any) -> None:
     db = tmp_path / "api_404.db"
-    monkeypatch.setenv("NEWS_DASHBOARD_DB", str(db))
     import news_dashboard.db as db_mod
     import news_dashboard.run_history as rh_mod
 
@@ -143,7 +141,6 @@ def test_get_run_sources_404_for_unknown_id(tmp_path: Path, monkeypatch: Any) ->
 
 def test_list_runs_empty_state(tmp_path: Path, monkeypatch: Any) -> None:
     db = tmp_path / "api_empty.db"
-    monkeypatch.setenv("NEWS_DASHBOARD_DB", str(db))
     import news_dashboard.db as db_mod
     import news_dashboard.run_history as rh_mod
 

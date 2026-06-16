@@ -27,7 +27,7 @@ def _insert(  # noqa: PLR0913
     source_slug: str = "python-insider",
     source_name: str = "Python Insider",
     state: str = "today",
-    starred: int = 0,
+    starred: bool = False,
     url_suffix: str = "",
 ) -> int:
     url = f"https://example.com/{title.lower().replace(' ', '-')}{url_suffix}"
@@ -38,7 +38,7 @@ def _insert(  # noqa: PLR0913
               url, canonical_url, title, source_slug, source_name,
               category, kind, state, starred, summary, reason, tags, body
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             RETURNING id
             """,
             (
@@ -166,8 +166,8 @@ def test_include_archived(db: Path) -> None:
 
 
 def test_starred_only(db: Path) -> None:
-    _insert(db, title="Starred Art", starred=1, url_suffix="-1")
-    _insert(db, title="Normal Art", starred=0, url_suffix="-2")
+    _insert(db, title="Starred Art", starred=True, url_suffix="-1")
+    _insert(db, title="Normal Art", starred=False, url_suffix="-2")
 
     results = search_articles(db_path=db, starred_only=True)
     titles = [r["title"] for r in results]
@@ -235,9 +235,9 @@ def test_q_plus_state_filter(db: Path) -> None:
 
 
 def test_starred_plus_category_filter(db: Path) -> None:
-    _insert(db, title="Starred Python", category="python", starred=1, url_suffix="-1")
-    _insert(db, title="Unstarred Python", category="python", starred=0, url_suffix="-2")
-    _insert(db, title="Starred AI", category="ai-llm", starred=1, url_suffix="-3")
+    _insert(db, title="Starred Python", category="python", starred=True, url_suffix="-1")
+    _insert(db, title="Unstarred Python", category="python", starred=False, url_suffix="-2")
+    _insert(db, title="Starred AI", category="ai-llm", starred=True, url_suffix="-3")
 
     results = search_articles(db_path=db, starred_only=True, categories=["python"])
     titles = [r["title"] for r in results]
@@ -251,7 +251,7 @@ def test_starred_plus_category_filter(db: Path) -> None:
 
 @pytest.fixture
 def api_db(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    """Spin up a throwaway SQLite DB and patch the app to use it."""
+    """Use an isolated PostgreSQL schema and patch the app to use it."""
     import news_dashboard.db as db_mod
     import news_dashboard.ingest as ingest_mod
 

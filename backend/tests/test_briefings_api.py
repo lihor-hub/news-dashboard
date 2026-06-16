@@ -1,8 +1,7 @@
 """Tests for #101: persist and read saved briefings — API layer.
 
 Strategy:
-- Table-init tests: run init_db() against a SQLite tmp DB to verify that the
-  briefings and briefing_articles tables are created (DDL is database-agnostic).
+- Schema tests inspect the PostgreSQL DDL constants for the saved briefing tables.
 - API-contract tests: use FastAPI's TestClient and monkeypatch the imported
   names in news_dashboard.main (the module that actually calls them) so no
   PostgreSQL connection is required.  Patching the *importer's* namespace is
@@ -14,15 +13,13 @@ actual psycopg %s parameterisation, JSONB round-trip, and NULLS LAST ordering.
 
 from __future__ import annotations
 
-import sqlite3
-from pathlib import Path
 from typing import Any
 
 from fastapi.testclient import TestClient
 
 import news_dashboard.main as main_mod
 from news_dashboard.briefings import BriefingAINotConfiguredError, BriefingGenerationError
-from news_dashboard.db import init_db
+from news_dashboard.db import POSTGRES_SCHEMA
 from news_dashboard.main import app
 
 client = TestClient(app, raise_server_exceptions=True)
@@ -82,43 +79,29 @@ _SAMPLE_LIST_ITEM = {
 }
 
 
-def _sqlite_tables(db: Path) -> set[str]:
-    with sqlite3.connect(db) as conn:
-        return {row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
-
-
-def _sqlite_cols(db: Path, table: str) -> set[str]:
-    with sqlite3.connect(db) as conn:
-        return {row[1] for row in conn.execute(f"PRAGMA table_info({table})")}
-
-
 # ── Table initialisation ──────────────────────────────────────────────────────
 
 
-def test_init_db_creates_briefings_table(tmp_path: Path) -> None:
-    db = tmp_path / "briefings_init.db"
-    init_db(db)
-    assert "briefings" in _sqlite_tables(db)
+def test_schema_creates_briefings_table() -> None:
+    schema = "\n".join(POSTGRES_SCHEMA).lower()
+    assert "create table if not exists briefings" in schema
 
 
-def test_init_db_creates_briefing_articles_table(tmp_path: Path) -> None:
-    db = tmp_path / "briefings_init.db"
-    init_db(db)
-    assert "briefing_articles" in _sqlite_tables(db)
+def test_schema_creates_briefing_articles_table() -> None:
+    schema = "\n".join(POSTGRES_SCHEMA).lower()
+    assert "create table if not exists briefing_articles" in schema
 
 
-def test_briefings_table_columns(tmp_path: Path) -> None:
-    db = tmp_path / "briefings_init.db"
-    init_db(db)
-    cols = _sqlite_cols(db, "briefings")
-    assert {"id", "created_at", "scope", "since_at", "until_at", "content"} <= cols
+def test_briefings_table_columns() -> None:
+    schema = "\n".join(POSTGRES_SCHEMA).lower()
+    for column in ("id", "created_at", "scope", "since_at", "until_at", "content"):
+        assert column in schema
 
 
-def test_briefing_articles_table_columns(tmp_path: Path) -> None:
-    db = tmp_path / "briefings_init.db"
-    init_db(db)
-    cols = _sqlite_cols(db, "briefing_articles")
-    assert {"briefing_id", "article_id", "section_index", "citation_index"} <= cols
+def test_briefing_articles_table_columns() -> None:
+    schema = "\n".join(POSTGRES_SCHEMA).lower()
+    for column in ("briefing_id", "article_id", "section_index", "citation_index"):
+        assert column in schema
 
 
 # ── GET /api/briefings/latest — empty state ───────────────────────────────────

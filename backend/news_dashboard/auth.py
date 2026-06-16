@@ -154,7 +154,8 @@ def verify_session_token(token: str) -> dict[str, Any] | None:
 def get_user_by_id(user_id: int) -> dict[str, Any] | None:
     with connect() as conn:
         row = conn.execute(
-            "SELECT id, username, email, is_admin, created_at, last_login_at FROM users WHERE id=?",
+            "SELECT id, username, email, is_admin, created_at, last_login_at "
+            "FROM users WHERE id=%s",
             (user_id,),
         ).fetchone()
         return row_to_dict(row) if row else None
@@ -164,7 +165,7 @@ def get_user_by_username(username: str) -> dict[str, Any] | None:
     with connect() as conn:
         row = conn.execute(
             "SELECT id, username, email, is_admin, created_at, last_login_at, password_hash"
-            " FROM users WHERE username=?",
+            " FROM users WHERE username=%s",
             (username,),
         ).fetchone()
         return row_to_dict(row) if row else None
@@ -174,7 +175,7 @@ def get_user_by_email(email: str) -> dict[str, Any] | None:
     with connect() as conn:
         row = conn.execute(
             "SELECT id, username, email, is_admin, created_at, last_login_at "
-            "FROM users WHERE email=?",
+            "FROM users WHERE email=%s",
             (email,),
         ).fetchone()
         return row_to_dict(row) if row else None
@@ -191,7 +192,7 @@ def create_user(
     with connect() as conn:
         row = conn.execute(
             "INSERT INTO users(username, password_hash, email, is_admin)"
-            " VALUES(?, ?, ?, ?) RETURNING id, username, email, is_admin, created_at",
+            " VALUES(%s, %s, %s, %s) RETURNING id, username, email, is_admin, created_at",
             (username, password_hash, email, bool(is_admin)),
         ).fetchone()
         if row is None:
@@ -211,19 +212,19 @@ def list_users() -> list[dict[str, Any]]:
 def update_password(user_id: int, new_password: str) -> bool:
     new_hash = hash_password(new_password)
     with connect() as conn:
-        cursor = conn.execute("UPDATE users SET password_hash=? WHERE id=?", (new_hash, user_id))
+        cursor = conn.execute("UPDATE users SET password_hash=%s WHERE id=%s", (new_hash, user_id))
         return bool(cursor.rowcount > 0)
 
 
 def delete_user(user_id: int) -> bool:
     with connect() as conn:
-        cursor = conn.execute("DELETE FROM users WHERE id=?", (user_id,))
+        cursor = conn.execute("DELETE FROM users WHERE id=%s", (user_id,))
         return bool(cursor.rowcount > 0)
 
 
 def _touch_last_login(user_id: int) -> None:
     with connect() as conn:
-        conn.execute("UPDATE users SET last_login_at=CURRENT_TIMESTAMP WHERE id=?", (user_id,))
+        conn.execute("UPDATE users SET last_login_at=CURRENT_TIMESTAMP WHERE id=%s", (user_id,))
 
 
 # --------------------------------------------------------------------------- #

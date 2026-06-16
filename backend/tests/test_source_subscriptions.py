@@ -37,7 +37,7 @@ def _insert_article(db_path: Path, *, source_slug: str, url_suffix: str = "1") -
             """
             INSERT INTO articles(url, canonical_url, title, source_slug, source_name,
               category, kind, state)
-            VALUES (?, ?, ?, ?, ?, 'tech', 'rss_feed', 'today')
+            VALUES (%s, %s, %s, %s, %s, 'tech', 'rss_feed', 'today')
             RETURNING id
             """,
             (
@@ -65,7 +65,7 @@ def _add_private_source(db_path: Path, *, slug: str, owner_user_id: int) -> None
         conn.execute(
             """
             INSERT INTO sources(slug, name, url, category, kind, priority, enabled, owner_user_id)
-            VALUES (?, ?, 'https://example.com/feed', 'tech', 'rss_feed', 0, 1, ?)
+            VALUES (%s, %s, 'https://example.com/feed', 'tech', 'rss_feed', 0, TRUE, %s)
             ON CONFLICT(slug) DO NOTHING
             """,
             (slug, slug, owner_user_id),
@@ -98,7 +98,7 @@ def test_unsubscribed_source_articles_hidden(tmp_path: Path) -> None:
     # Explicitly unsubscribe
     with connect(db) as conn:
         conn.execute(
-            "INSERT INTO user_sources(user_id, source_slug, enabled) VALUES (?, ?, 0)",
+            "INSERT INTO user_sources(user_id, source_slug, enabled) VALUES (%s, %s, FALSE)",
             (uid, slug),
         )
 
@@ -117,11 +117,11 @@ def test_resubscription_shows_articles_again(tmp_path: Path) -> None:
     # Unsubscribe then re-subscribe
     with connect(db) as conn:
         conn.execute(
-            "INSERT INTO user_sources(user_id, source_slug, enabled) VALUES (?, ?, 0)",
+            "INSERT INTO user_sources(user_id, source_slug, enabled) VALUES (%s, %s, FALSE)",
             (uid, slug),
         )
         conn.execute(
-            "UPDATE user_sources SET enabled = 1 WHERE user_id = ? AND source_slug = ?",
+            "UPDATE user_sources SET enabled = TRUE WHERE user_id = %s AND source_slug = %s",
             (uid, slug),
         )
 
@@ -159,7 +159,7 @@ def test_unsubscription_is_per_user(tmp_path: Path) -> None:
     # Alice unsubscribes
     with connect(db) as conn:
         conn.execute(
-            "INSERT INTO user_sources(user_id, source_slug, enabled) VALUES (?, ?, 0)",
+            "INSERT INTO user_sources(user_id, source_slug, enabled) VALUES (%s, %s, FALSE)",
             (uid_a, slug),
         )
 

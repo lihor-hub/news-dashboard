@@ -17,7 +17,7 @@ from news_dashboard.ingest import (
 )
 
 
-def _insert_article(db_path: Path, *, state: str = "today", starred: int = 0) -> int:
+def _insert_article(db_path: Path, *, state: str = "today", starred: bool = False) -> int:
     init_db(db_path)
     with connect(db_path) as conn:
         row = conn.execute(
@@ -26,7 +26,7 @@ def _insert_article(db_path: Path, *, state: str = "today", starred: int = 0) ->
               url, canonical_url, title, source_slug, source_name,
               category, kind, state, starred
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
             RETURNING id
             """,
             (
@@ -196,7 +196,7 @@ def test_disallowed_transitions(tmp_path: Path, from_state: str, to_state: str) 
 def test_starred_cannot_be_skipped(tmp_path: Path) -> None:
     db = tmp_path / "news.db"
     sync_sources(db)
-    aid = _insert_article(db, state="today", starred=1)
+    aid = _insert_article(db, state="today", starred=True)
     with pytest.raises(ValueError, match="starred articles cannot be skipped"):
         transition_article_state(aid, "skipped", db_path=db)
 
@@ -204,7 +204,7 @@ def test_starred_cannot_be_skipped(tmp_path: Path) -> None:
 def test_unstarred_can_be_skipped(tmp_path: Path) -> None:
     db = tmp_path / "news.db"
     sync_sources(db)
-    aid = _insert_article(db, state="today", starred=0)
+    aid = _insert_article(db, state="today", starred=False)
     updated = transition_article_state(aid, "skipped", db_path=db)
     assert updated is not None
     assert updated["state"] == "skipped"
@@ -216,7 +216,7 @@ def test_unstarred_can_be_skipped(tmp_path: Path) -> None:
 def test_star_article(tmp_path: Path) -> None:
     db = tmp_path / "news.db"
     sync_sources(db)
-    aid = _insert_article(db, state="today", starred=0)
+    aid = _insert_article(db, state="today", starred=False)
     updated = set_article_starred(aid, True, db_path=db)
     assert updated is not None
     assert updated["starred"] in (1, True)
@@ -226,7 +226,7 @@ def test_star_article(tmp_path: Path) -> None:
 def test_unstar_article(tmp_path: Path) -> None:
     db = tmp_path / "news.db"
     sync_sources(db)
-    aid = _insert_article(db, state="today", starred=1)
+    aid = _insert_article(db, state="today", starred=True)
     updated = set_article_starred(aid, False, db_path=db)
     assert updated is not None
     assert updated["starred"] in (0, False)
@@ -248,7 +248,7 @@ def test_expired_later_appears_in_today(tmp_path: Path) -> None:
               url, canonical_url, title, source_slug, source_name,
               category, kind, state, later_until
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, 'later', ?)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, 'later', %s)
             """,
             (
                 "https://example.com/expired-later",
@@ -279,7 +279,7 @@ def test_active_later_does_not_appear_in_today(tmp_path: Path) -> None:
               url, canonical_url, title, source_slug, source_name,
               category, kind, state, later_until
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, 'later', ?)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, 'later', %s)
             """,
             (
                 "https://example.com/active-later",
@@ -335,43 +335,43 @@ def test_missing_article_returns_none(tmp_path: Path) -> None:
 def test_migration_mapping(tmp_path: Path) -> None:
     """Verify that existing legacy status rows get migrated to the new state column."""
     db = tmp_path / "news.db"
-    # Insert articles with old status values before running migrations
-    import sqlite3
-
-    raw = sqlite3.connect(str(db))
-    raw.execute(
-        """
-        CREATE TABLE IF NOT EXISTS articles (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          url TEXT NOT NULL UNIQUE,
-          canonical_url TEXT NOT NULL DEFAULT '',
-          title TEXT NOT NULL DEFAULT '',
-          source_slug TEXT NOT NULL DEFAULT 'python-insider',
-          source_name TEXT NOT NULL DEFAULT 'Python Insider',
-          category TEXT NOT NULL DEFAULT 'python',
-          kind TEXT NOT NULL DEFAULT 'rss_feed',
-          published_at TEXT,
-          discovered_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-          status TEXT NOT NULL DEFAULT 'new',
-          importance_score INTEGER NOT NULL DEFAULT 50,
-          summary TEXT NOT NULL DEFAULT '',
-          reason TEXT NOT NULL DEFAULT '',
-          tags TEXT NOT NULL DEFAULT '',
-          read_at TEXT,
-          saved_at TEXT,
-          skipped_at TEXT,
-          archived_at TEXT,
-          updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    with connect(db) as conn:
+        conn.execute(
+            """
+            CREATE TABLE articles (
+              id BIGSERIAL PRIMARY KEY,
+              url TEXT NOT NULL UNIQUE,
+              canonical_url TEXT NOT NULL DEFAULT '',
+              title TEXT NOT NULL DEFAULT '',
+              source_slug TEXT NOT NULL DEFAULT 'python-insider',
+              source_name TEXT NOT NULL DEFAULT 'Python Insider',
+              category TEXT NOT NULL DEFAULT 'python',
+              kind TEXT NOT NULL DEFAULT 'rss_feed',
+              published_at TEXT,
+              discovered_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+              status TEXT NOT NULL DEFAULT 'new',
+              importance_score INTEGER NOT NULL DEFAULT 50,
+              summary TEXT NOT NULL DEFAULT '',
+              reason TEXT NOT NULL DEFAULT '',
+              tags TEXT NOT NULL DEFAULT '',
+              read_at TEXT,
+              saved_at TEXT,
+              skipped_at TEXT,
+              archived_at TEXT,
+              updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+            """
         )
-        """
-    )
-    for status in ["new", "read", "saved", "skipped", "archived"]:
-        raw.execute(
-            "INSERT INTO articles(url, canonical_url, title, status) VALUES (?, ?, ?, ?)",
-            (f"https://example.com/{status}", f"https://example.com/{status}", status, status),
-        )
-    raw.commit()
-    raw.close()
+        for status in ["new", "read", "saved", "skipped", "archived"]:
+            conn.execute(
+                "INSERT INTO articles(url, canonical_url, title, status) VALUES (%s, %s, %s, %s)",
+                (
+                    f"https://example.com/{status}",
+                    f"https://example.com/{status}",
+                    status,
+                    status,
+                ),
+            )
 
     # Running init_db triggers migration
     init_db(db)
@@ -386,9 +386,9 @@ def test_migration_mapping(tmp_path: Path) -> None:
         )
         for row in rows
     }
-    assert mapping["new"] == ("today", 0)
-    assert mapping["read"] == ("done", 0)
+    assert mapping["new"] == ("today", False)
+    assert mapping["read"] == ("done", False)
     assert mapping["saved"][0] == "today"
     assert mapping["saved"][1] in (1, True)
-    assert mapping["skipped"] == ("skipped", 0)
-    assert mapping["archived"] == ("archived", 0)
+    assert mapping["skipped"] == ("skipped", False)
+    assert mapping["archived"] == ("archived", False)

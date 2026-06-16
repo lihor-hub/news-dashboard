@@ -476,10 +476,10 @@ def sources(
             """
             SELECT s.*,
               CASE WHEN s.owner_user_id IS NULL THEN COALESCE(us.enabled, true)
-                   ELSE (s.enabled = 1) END AS user_enabled
+                   ELSE (s.enabled IS TRUE) END AS user_enabled
             FROM sources s
-            LEFT JOIN user_sources us ON us.source_slug = s.slug AND us.user_id = ?
-            WHERE s.owner_user_id IS NULL OR s.owner_user_id = ?
+            LEFT JOIN user_sources us ON us.source_slug = s.slug AND us.user_id = %s
+            WHERE s.owner_user_id IS NULL OR s.owner_user_id = %s
             ORDER BY s.category, s.priority DESC, s.name
             """,
             (uid, uid),
@@ -504,17 +504,17 @@ def create_source(
     slug = payload.slug or re.sub(r"[^a-z0-9-]", "-", payload.name.lower()).strip("-")
     init_db()
     with connect() as conn:
-        existing = conn.execute("SELECT 1 FROM sources WHERE slug = ?", (slug,)).fetchone()
+        existing = conn.execute("SELECT 1 FROM sources WHERE slug = %s", (slug,)).fetchone()
         if existing:
             raise HTTPException(status_code=409, detail=f"source slug {slug!r} already exists")
         conn.execute(
             """
             INSERT INTO sources(slug, name, url, category, kind, priority, enabled, owner_user_id)
-            VALUES (?, ?, ?, ?, 'rss_feed', 0, 1, ?)
+            VALUES (%s, %s, %s, %s, 'rss_feed', 0, TRUE, %s)
             """,
             (slug, payload.name, payload.url, payload.category, uid),
         )
-        row = conn.execute("SELECT * FROM sources WHERE slug = ?", (slug,)).fetchone()
+        row = conn.execute("SELECT * FROM sources WHERE slug = %s", (slug,)).fetchone()
     return row_to_dict(row)
 
 
@@ -527,13 +527,13 @@ def delete_source(
     uid = current_user["id"]
     init_db()
     with connect() as conn:
-        row = conn.execute("SELECT * FROM sources WHERE slug = ?", (slug,)).fetchone()
+        row = conn.execute("SELECT * FROM sources WHERE slug = %s", (slug,)).fetchone()
         if not row:
             raise HTTPException(status_code=404, detail="source not found")
         src = row_to_dict(row)
         if src.get("owner_user_id") != uid:
             raise HTTPException(status_code=403, detail="cannot delete a source you don't own")
-        conn.execute("DELETE FROM sources WHERE slug = ?", (slug,))
+        conn.execute("DELETE FROM sources WHERE slug = %s", (slug,))
     return {"status": "deleted"}
 
 
@@ -552,7 +552,7 @@ def set_source_enabled(
     uid = current_user["id"]
     init_db()
     with connect() as conn:
-        row = conn.execute("SELECT * FROM sources WHERE slug = ?", (slug,)).fetchone()
+        row = conn.execute("SELECT * FROM sources WHERE slug = %s", (slug,)).fetchone()
         if not row:
             raise HTTPException(status_code=404, detail="source not found")
         src = row_to_dict(row)
@@ -561,7 +561,7 @@ def set_source_enabled(
             conn.execute(
                 """
                 INSERT INTO user_sources(user_id, source_slug, enabled)
-                VALUES (?, ?, ?)
+                VALUES (%s, %s, %s)
                 ON CONFLICT(user_id, source_slug) DO UPDATE SET enabled = excluded.enabled
                 """,
                 (uid, slug, bool(payload.enabled)),
@@ -571,10 +571,10 @@ def set_source_enabled(
             if src.get("owner_user_id") != uid:
                 raise HTTPException(status_code=403, detail="cannot modify a source you don't own")
             conn.execute(
-                "UPDATE sources SET enabled = ? WHERE slug = ?",
-                (1 if payload.enabled else 0, slug),
+                "UPDATE sources SET enabled = %s WHERE slug = %s",
+                (bool(payload.enabled), slug),
             )
-        row = conn.execute("SELECT * FROM sources WHERE slug = ?", (slug,)).fetchone()
+        row = conn.execute("SELECT * FROM sources WHERE slug = %s", (slug,)).fetchone()
     return {**row_to_dict(row), "subscribed": payload.enabled}
 
 

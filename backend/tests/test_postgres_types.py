@@ -64,7 +64,7 @@ def _add_global_source(pg_url: str, slug: str) -> None:
         conn.execute(
             """
             INSERT INTO sources(slug, name, url, category, kind, priority, enabled)
-            VALUES (%s, %s, 'https://example.com/feed', 'tech', 'rss_feed', 50, 1)
+            VALUES (%s, %s, 'https://example.com/feed', 'tech', 'rss_feed', 50, TRUE)
             ON CONFLICT(slug) DO NOTHING
             """,
             (slug, slug),
@@ -441,8 +441,8 @@ def test_pg_user_sources_enabled_is_boolean(pg_clean: str) -> None:
     assert row[0] == "boolean"
 
 
-def test_pg_articles_starred_is_integer(pg_clean: str) -> None:
-    """articles.starred is added via ALTER TABLE as INTEGER — verify no regression."""
+def test_pg_articles_starred_is_boolean(pg_clean: str) -> None:
+    """articles.starred must be a boolean column in PostgreSQL."""
     import psycopg
 
     with psycopg.connect(pg_clean) as conn:
@@ -453,4 +453,4 @@ def test_pg_articles_starred_is_integer(pg_clean: str) -> None:
             """,
         ).fetchone()
     assert row is not None
-    assert row[0] == "integer"
+    assert row[0] == "boolean"

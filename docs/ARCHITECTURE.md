@@ -27,7 +27,7 @@ flowchart TB
   subgraph LocalDev["Local development"]
     Vite["Vite React dev server<br/>localhost:5173"]
     FastAPIDev["FastAPI backend<br/>uvicorn news_dashboard.main:app"]
-    SQLite["SQLite fallback<br/>NEWS_DASHBOARD_DB"]
+    PostgresDev["PostgreSQL<br/>DATABASE_URL or POSTGRES_*"]
   end
 
   subgraph Container["Docker / Production image"]
@@ -54,7 +54,7 @@ flowchart TB
 
   User --> Vite
   Vite --> FastAPIDev
-  FastAPIDev --> SQLite
+  FastAPIDev --> PostgresDev
 
   User --> Caddy --> Service --> Deployment
   Deployment --> App
@@ -83,14 +83,14 @@ flowchart LR
     Ingest["ingest.py<br/>feed parsing, tagging, scoring, insert"]
     Scraper["scraper.py<br/>custom scraped-page handlers"]
     Sources["sources.py<br/>curated source registry"]
-    DB["db.py<br/>SQLite/Postgres abstraction + schema"]
+    DB["db.py<br/>PostgreSQL connection + schema"]
     Scheduler["scheduler.py<br/>APScheduler ingest + digest jobs"]
     Digest["digest.py<br/>daily email + mark-read token"]
     CLI["cli.py<br/>init, ingest, articles"]
     Migrate["migrate.py<br/>SQLite to Postgres migration"]
   end
 
-  Database["articles + sources tables<br/>Postgres production<br/>SQLite local/test fallback"]
+  Database["articles + sources tables<br/>PostgreSQL"]
 
   Browser --> APIClient --> Main
   Main --> Ingest
@@ -118,7 +118,7 @@ sequenceDiagram
   participant Ingest as ingest_all()
   participant Sources as DEFAULT_SOURCES
   participant Feed as RSS/Atom or Scraper
-  participant DB as Postgres or SQLite
+  participant DB as PostgreSQL
   participant UI as React UI
 
   Trigger->>API: POST /api/ingest or news-dashboard ingest
@@ -213,7 +213,7 @@ flowchart LR
 - `backend/news_dashboard/ingest.py`: ingestion pipeline, URL canonicalization, source health updates, summaries, tags, and scoring.
 - `backend/news_dashboard/sources.py`: curated source registry.
 - `backend/news_dashboard/scraper.py`: custom scraped-page handlers, currently for Anthropic News.
-- `backend/news_dashboard/db.py`: SQLite/Postgres schema and connection abstraction.
+- `backend/news_dashboard/db.py`: PostgreSQL configuration, psycopg connection handling, and schema setup.
 - `backend/news_dashboard/scheduler.py`: in-process APScheduler jobs for ingest and digest.
 - `backend/news_dashboard/digest.py`: daily digest email and signed mark-read links.
 - `backend/news_dashboard/cli.py`: maintenance commands.
@@ -229,7 +229,7 @@ The database has two main tables:
 - `sources`: source registry and health information, including `last_checked_at`, `last_success_at`, `last_error`, `last_fetched_count`, and `last_inserted_count`.
 - `articles`: normalized article records, including source metadata, category, kind, publication/discovery timestamps, status, importance score, summary, reason, tags, and status-specific timestamps.
 
-SQLite also creates an FTS5 virtual table. PostgreSQL adds a generated `tsvector` column and GIN index, although the current search implementation uses a cross-database `LIKE` query for compatibility.
+PostgreSQL adds a generated `tsvector` column and GIN index. User-facing search uses PostgreSQL-native `ILIKE` filters today, leaving the generated full-text index available for a future ranking pass.
 
 ## How It Works
 
@@ -243,7 +243,7 @@ For production, GitHub Actions tests the Python backend, builds the frontend, bu
 
 ## Operational Notes
 
-- The production database is PostgreSQL by default; SQLite remains a local/test fallback.
+- PostgreSQL is required in every runtime environment. SQLite is only a legacy migration input for importing old local data into PostgreSQL.
 - The React app is served separately only in local development. In the production image, the built frontend is served by FastAPI.
 - There are two scheduling mechanisms: in-process APScheduler and the Kubernetes CronJob. If duplicate ingestion is undesirable, configure one of them as the authoritative scheduler.
 - Authentication is handled outside the app by host-level Caddy Basic Auth, according to the repository deployment notes.

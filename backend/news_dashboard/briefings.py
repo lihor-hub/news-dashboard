@@ -94,7 +94,7 @@ def _fetch_cited_articles(conn: Any, briefing_id: int) -> list[dict[str, Any]]:
 
 
 def _coerce_content(value: Any) -> Any:
-    """Normalise content: psycopg returns jsonb as dict already; SQLite TEXT needs decoding."""
+    """Normalise content from JSONB rows and tolerate older string payloads."""
     if isinstance(value, str):
         try:
             return json.loads(value)

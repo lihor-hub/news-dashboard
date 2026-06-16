@@ -30,7 +30,6 @@ def test_init_db_postgres_applies_all_statements(tmp_path: Any) -> None:
     fake_schema = ["CREATE TABLE a", "CREATE TABLE b", "CREATE TABLE c"]
 
     with (
-        patch("news_dashboard.db.is_postgres", return_value=True),
         patch("news_dashboard.db.connect", fake_connect),
         patch("news_dashboard.db.POSTGRES_SCHEMA", fake_schema),
         patch("news_dashboard.db.POSTGRES_MULTIUSER_SCHEMA", []),
@@ -64,7 +63,6 @@ def test_init_db_postgres_continues_after_statement_failure(tmp_path: Any) -> No
     fake_schema = ["stmt_ok_1", "WILL_FAIL", "stmt_ok_2"]
 
     with (
-        patch("news_dashboard.db.is_postgres", return_value=True),
         patch("news_dashboard.db.connect", fake_connect),
         patch("news_dashboard.db.POSTGRES_SCHEMA", fake_schema),
         patch("news_dashboard.db.POSTGRES_MULTIUSER_SCHEMA", []),
@@ -98,7 +96,6 @@ def test_init_db_postgres_each_statement_uses_own_connection(tmp_path: Any) -> N
     fake_schema = ["stmt_a", "stmt_b", "stmt_c"]
 
     with (
-        patch("news_dashboard.db.is_postgres", return_value=True),
         patch("news_dashboard.db.connect", fake_connect),
         patch("news_dashboard.db.POSTGRES_SCHEMA", fake_schema),
         patch("news_dashboard.db.POSTGRES_MULTIUSER_SCHEMA", []),

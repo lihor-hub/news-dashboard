@@ -149,7 +149,7 @@ def _merge_user_state(
 ) -> dict[str, Any]:
     """Overlay per-user state from user_article_state onto an article dict in-place."""
     uas_row = conn.execute(
-        "SELECT * FROM user_article_state WHERE user_id = ? AND article_id = ?",
+        "SELECT * FROM user_article_state WHERE user_id = %s AND article_id = %s",
         (user_id, article_id),
     ).fetchone()
     uas = row_to_dict(uas_row) if uas_row else None
@@ -190,7 +190,7 @@ def get_article(
     """
     init_db(db_path)
     with connect(db_path) as conn:
-        row = conn.execute("SELECT * FROM articles WHERE id = ?", (article_id,)).fetchone()
+        row = conn.execute("SELECT * FROM articles WHERE id = %s", (article_id,)).fetchone()
         if row is None:
             return None
         d = row_to_dict(row)
@@ -214,7 +214,7 @@ def fetch_and_cache_body(
     init_db(db_path)
     with connect(db_path) as conn:
         row = conn.execute(
-            "SELECT id, url, body_status FROM articles WHERE id = ?",
+            "SELECT id, url, body_status FROM articles WHERE id = %s",
             (article_id,),
         ).fetchone()
         if row is None:
@@ -228,8 +228,8 @@ def fetch_and_cache_body(
 
     with connect(db_path) as conn:
         conn.execute(
-            "UPDATE articles SET body = ?, body_status = ?,"
-            " updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+            "UPDATE articles SET body = %s, body_status = %s,"
+            " updated_at = CURRENT_TIMESTAMP WHERE id = %s",
             (body if status == "ok" else None, status, article_id),
         )
 
@@ -247,7 +247,7 @@ def prefetch_article_bodies(limit: int = 20, db_path: Path | None = None) -> int
     with connect(db_path) as conn:
         rows = conn.execute(
             "SELECT id FROM articles WHERE body_status = 'missing'"
-            " ORDER BY discovered_at DESC LIMIT ?",
+            " ORDER BY discovered_at DESC LIMIT %s",
             (limit,),
         ).fetchall()
     ids = [int(row_to_dict(r)["id"]) for r in rows]
