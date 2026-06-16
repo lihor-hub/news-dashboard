@@ -146,4 +146,45 @@ describe('SwipeableRow — long-press gesture', () => {
     inner.dispatchEvent(evt);
     expect(evt.defaultPrevented).toBe(false);
   });
+
+  it('does not fire swipe action when long-press already fired during the same gesture', () => {
+    const onLongPress = vi.fn();
+    const onSwipeRight = vi.fn();
+    const { getByTestId } = render(
+      <SwipeableRow onLongPress={onLongPress} onSwipeRight={onSwipeRight}>
+        <div data-testid="inner">content</div>
+      </SwipeableRow>
+    );
+    const inner = getByTestId('inner');
+    // Start touch and hold for 500 ms → long-press fires
+    fireEvent.touchStart(inner, { touches: [{ clientX: 0, clientY: 0 }] });
+    void act(() => vi.advanceTimersByTime(500));
+    expect(onLongPress).toHaveBeenCalledOnce();
+    // Finger slides right past the swipe threshold while still holding
+    fireEvent.touchMove(inner, { touches: [{ clientX: 100, clientY: 0 }] });
+    // Lift finger — swipe must NOT fire because long-press already handled the gesture
+    fireEvent.touchEnd(inner);
+    void act(() => vi.advanceTimersByTime(200));
+    expect(onSwipeRight).not.toHaveBeenCalled();
+  });
+
+  it('resets gesture state on touchcancel so the next gesture works correctly', () => {
+    const onSwipeRight = vi.fn();
+    const { getByTestId } = render(
+      <SwipeableRow onSwipeRight={onSwipeRight}>
+        <div data-testid="inner">content</div>
+      </SwipeableRow>
+    );
+    const inner = getByTestId('inner');
+    // First touch is cancelled by the browser (e.g. notification arrives)
+    fireEvent.touchStart(inner, { touches: [{ clientX: 0, clientY: 0 }] });
+    fireEvent.touchMove(inner, { touches: [{ clientX: 50, clientY: 0 }] });
+    fireEvent(inner, new TouchEvent('touchcancel', { bubbles: true }));
+    // Second touch should behave normally — swipe right works
+    fireEvent.touchStart(inner, { touches: [{ clientX: 0, clientY: 0 }] });
+    fireEvent.touchMove(inner, { touches: [{ clientX: 100, clientY: 0 }] });
+    fireEvent.touchEnd(inner);
+    void act(() => vi.advanceTimersByTime(200));
+    expect(onSwipeRight).toHaveBeenCalledOnce();
+  });
 });

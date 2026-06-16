@@ -63,8 +63,12 @@ export function SwipeableRow({
     longPressOrigin.current = null;
     if (!isDragging) return;
     setIsDragging(false);
+    // Suppress swipe if a long-press already fired — the two actions must be mutually exclusive.
+    // Before PR #162, Chrome's contextmenu dialog consumed touchend so this was never reached;
+    // preventing the default unblocked touchend and exposed the race.
     const willFire =
-      (dx > THRESHOLD && !!onSwipeRight) || (dx < -THRESHOLD && !disableLeft && !!onSwipeLeft);
+      !longPressFired.current &&
+      ((dx > THRESHOLD && !!onSwipeRight) || (dx < -THRESHOLD && !disableLeft && !!onSwipeLeft));
     if (willFire) {
       setCommitting(true);
       const action = dx > THRESHOLD ? onSwipeRight : onSwipeLeft;
@@ -152,6 +156,7 @@ export function SwipeableRow({
           onMove(touch.clientX, touch.clientY);
         }}
         onTouchEnd={onEnd}
+        onTouchCancel={onEnd}
       >
         {children}
       </div>
