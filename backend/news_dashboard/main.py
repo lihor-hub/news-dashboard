@@ -27,6 +27,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.responses import Response as StarletteResponse
 
 from .auth import (
+    _session_days,
     authenticate,
     create_session_token,
     create_user,
@@ -92,7 +93,6 @@ logger = logging.getLogger(__name__)
 
 _SESSION_COOKIE = "nd_session"
 _OAUTH_STATE_COOKIE = "nd_oauth_state"
-_SESSION_DAYS = 30
 
 
 class SPAStaticFiles(StaticFiles):
@@ -240,7 +240,7 @@ async def keycloak_callback(request: Request) -> RedirectResponse:
         httponly=True,
         secure=True,
         samesite="strict",
-        max_age=_SESSION_DAYS * 86400,
+        max_age=_session_days() * 86400,
         path="/",
     )
     redirect.delete_cookie(key=_OAUTH_STATE_COOKIE, path="/auth/callback")
@@ -268,7 +268,7 @@ def login(payload: LoginRequest, response: Response) -> dict[str, Any]:
         httponly=True,
         secure=True,
         samesite="strict",
-        max_age=_SESSION_DAYS * 86400,
+        max_age=_session_days() * 86400,
         path="/",
     )
     return {"id": user["id"], "username": user["username"], "is_admin": bool(user["is_admin"])}

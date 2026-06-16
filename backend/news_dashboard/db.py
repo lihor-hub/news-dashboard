@@ -570,12 +570,17 @@ def _apply_sqlite_data_migrations(conn: Any) -> None:
 
 def init_db(db_path: Path | None = None, database_url: str | None = None) -> None:
     if is_postgres(database_url):
-        with connect(db_path, database_url) as conn:
-            for statement in POSTGRES_SCHEMA + POSTGRES_MULTIUSER_SCHEMA:
-                try:
+        # Each statement runs in its own transaction so that a failed statement
+        # (e.g. column already exists without IF NOT EXISTS, data migration with
+        # no matching rows) does not leave the psycopg3 connection in ABORTED
+        # state and cause every subsequent statement — and the final commit() —
+        # to raise InFailedSqlTransaction.
+        for statement in POSTGRES_SCHEMA + POSTGRES_MULTIUSER_SCHEMA:
+            try:
+                with connect(db_path, database_url) as conn:
                     conn.execute(statement)
-                except Exception:  # idempotent best-effort schema statements
-                    logger.debug("Schema statement skipped (already applied): %.80s", statement)
+            except Exception:  # idempotent best-effort schema statements
+                logger.debug("Schema statement skipped (already applied): %.80s", statement)
         return
     with connect(db_path, database_url) as conn:
         conn.executescript(SQLITE_SCHEMA)
