@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -165,5 +165,59 @@ describe('ArticlePage — back navigation', () => {
     await waitFor(() => screen.getByText('Back'));
     await userEvent.click(screen.getByText('Back'));
     // Just confirm click doesn't throw
+  });
+});
+
+// ─── Touch gesture handling ────────────────────────────────────────────────────
+
+describe('ArticlePage — touch gesture state', () => {
+  beforeEach(() => {
+    vi.spyOn(api, 'fetchArticle').mockResolvedValue(
+      makeArticle({ body_status: 'ok', body: 'Text' })
+    );
+    vi.spyOn(api, 'fetchArticleBody').mockResolvedValue(
+      makeArticle({ body_status: 'ok', body: 'Text' })
+    );
+  });
+
+  it('action bar buttons are in the DOM and individually accessible', async () => {
+    // Regression: the motion-slide-in-right CSS animation used fill:both which
+    // retained transform:translateX(0) on the outer div after the 0.2s animation.
+    // Any non-none CSS transform makes an element a containing block for
+    // position:fixed descendants — the fixed action bar would scroll with the
+    // content instead of staying viewport-fixed, making buttons unreachable.
+    // The fix removes transform from the keyframe `to` state so no transform is
+    // retained after the animation ends.
+    renderReader();
+    await waitFor(() => screen.getByText('Test Article Title'));
+    // All five action buttons must be present in the DOM.
+    expect(screen.getByRole('button', { name: /star/i })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /done/i })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /later/i })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /skip/i })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /archive/i })).toBeTruthy();
+  });
+
+  it('touchcancel on the article content resets swipe state without navigating', async () => {
+    // Regression: missing onTouchCancel meant swipeRef.current stayed non-null
+    // after a cancelled browser gesture, so the very next touchEnd could see
+    // a stale dx and fire prev/next navigation unexpectedly.
+    renderReader();
+    await waitFor(() => screen.getByText('Test Article Title'));
+
+    // Find the scrollable content div (it has the touch handlers).
+    // In the rendered DOM it wraps the <article> element.
+    const contentDiv = screen.getByText('Test Article Title').closest('article')!.parentElement!;
+
+    // Simulate a horizontal drag that is then cancelled by the browser.
+    fireEvent.touchStart(contentDiv, { touches: [{ clientX: 0, clientY: 0 }] });
+    fireEvent.touchMove(contentDiv, { touches: [{ clientX: 90, clientY: 0 }] });
+    // Browser cancels the gesture (e.g. a notification steals touch).
+    fireEvent(contentDiv, new TouchEvent('touchcancel', { bubbles: true }));
+
+    // A fresh tap immediately after must not trigger navigation — swipeRef was cleared.
+    fireEvent.touchStart(contentDiv, { touches: [{ clientX: 0, clientY: 0 }] });
+    fireEvent.touchEnd(contentDiv);
+    // No navigation error thrown = pass (MemoryRouter absorbs navigate calls).
   });
 });

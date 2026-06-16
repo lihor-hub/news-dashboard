@@ -1,4 +1,4 @@
-import { useRef, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Check, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -37,6 +37,16 @@ export function SwipeableRow({
       longPressTimer.current = null;
     }
   };
+
+  // Cancel the long-press timer if the component unmounts mid-gesture (e.g.
+  // programmatic navigation from a keyboard shortcut while a finger is down).
+  // Without this, the timer fires after unmount and calls onLongPress() —
+  // triggering a star mutation against an article that the user never intended.
+  useEffect(() => {
+    return () => {
+      if (longPressTimer.current) clearTimeout(longPressTimer.current);
+    };
+  }, []);
 
   const onStart = (x: number) => {
     startX.current = x;

@@ -232,7 +232,12 @@
     opacity: 0.5;
   }
   to {
-    transform: translateX(0);
+    /* No transform here: omitting it lets the browser interpolate to the
+       element's natural transform:none.  Including transform:translateX(0)
+       would cause animation-fill-mode:forwards to retain it after the
+       animation ends — any non-none transform makes an ancestor a containing
+       block for position:fixed descendants, so the fixed action bar would
+       scroll with the content instead of staying viewport-fixed. */
     opacity: 1;
   }
 }
@@ -243,7 +248,8 @@
     opacity: 0;
   }
   to {
-    transform: translateY(0);
+    /* Same reasoning: omit transform so fill-mode does not retain a
+       stacking-context-creating transform on article list items. */
     opacity: 1;
   }
 }

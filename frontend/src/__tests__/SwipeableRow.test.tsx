@@ -204,4 +204,24 @@ describe('SwipeableRow — long-press gesture', () => {
     void act(() => vi.advanceTimersByTime(200));
     expect(onSwipeRight).not.toHaveBeenCalled();
   });
+
+  it('does not fire long-press action when component unmounts mid-gesture', () => {
+    // Regression: without useEffect cleanup the 500ms timer fires after unmount and
+    // calls onLongPress() — starring an article the user never intended to star.
+    const onLongPress = vi.fn();
+    const { getByTestId, unmount } = render(
+      <SwipeableRow onLongPress={onLongPress}>
+        <div data-testid="inner">content</div>
+      </SwipeableRow>
+    );
+    const inner = getByTestId('inner');
+    fireEvent.touchStart(inner, { touches: [{ clientX: 50, clientY: 50 }] });
+    // 300 ms in — timer is running but not yet fired
+    void act(() => vi.advanceTimersByTime(300));
+    // Component navigates away (unmounts) while finger is still down
+    unmount();
+    // The remaining 200 ms pass — timer must NOT fire after unmount
+    void act(() => vi.advanceTimersByTime(200));
+    expect(onLongPress).not.toHaveBeenCalled();
+  });
 });

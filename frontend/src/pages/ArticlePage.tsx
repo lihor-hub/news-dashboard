@@ -316,6 +316,10 @@ export function ArticlePage() {
           setSwipeDx(0);
           swipeRef.current = null;
         }}
+        onTouchCancel={() => {
+          swipeRef.current = null;
+          setSwipeDx(0);
+        }}
       >
         <article
           className="mx-auto max-w-2xl px-5 pt-6"
