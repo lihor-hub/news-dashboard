@@ -81,6 +81,17 @@ export function SwipeableRow({
     startX.current = null;
   };
 
+  // Browser-cancelled touch (scroll takeover, notification, etc.) — reset state only, no action.
+  const onCancel = () => {
+    clearLongPress();
+    longPressOrigin.current = null;
+    longPressFired.current = false;
+    if (!isDragging) return;
+    setIsDragging(false);
+    setDx(0);
+    startX.current = null;
+  };
+
   const showRight = dx > 10;
   const showLeft = dx < -10 && !disableLeft;
 
@@ -156,7 +167,7 @@ export function SwipeableRow({
           onMove(touch.clientX, touch.clientY);
         }}
         onTouchEnd={onEnd}
-        onTouchCancel={onEnd}
+        onTouchCancel={onCancel}
       >
         {children}
       </div>

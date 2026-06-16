@@ -187,4 +187,21 @@ describe('SwipeableRow — long-press gesture', () => {
     void act(() => vi.advanceTimersByTime(200));
     expect(onSwipeRight).toHaveBeenCalledOnce();
   });
+
+  it('does not fire swipe action when touchcancel arrives even if dx exceeds threshold', () => {
+    // Regression: onTouchCancel={onEnd} would invoke onEnd which fires the swipe if dx > 80.
+    // A browser cancel (e.g. scroll taking over) must never trigger an article action.
+    const onSwipeRight = vi.fn();
+    const { getByTestId } = render(
+      <SwipeableRow onSwipeRight={onSwipeRight}>
+        <div data-testid="inner">content</div>
+      </SwipeableRow>
+    );
+    const inner = getByTestId('inner');
+    fireEvent.touchStart(inner, { touches: [{ clientX: 0, clientY: 0 }] });
+    fireEvent.touchMove(inner, { touches: [{ clientX: 100, clientY: 0 }] }); // dx=100 > THRESHOLD
+    fireEvent(inner, new TouchEvent('touchcancel', { bubbles: true }));
+    void act(() => vi.advanceTimersByTime(200));
+    expect(onSwipeRight).not.toHaveBeenCalled();
+  });
 });

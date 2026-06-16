@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from news_dashboard.db import connect, init_db
@@ -226,7 +227,8 @@ def test_article_counts_returns_status_counts(tmp_path: Path) -> None:
 def test_triage_metrics_computes_handled_and_save_rates(tmp_path: Path) -> None:
     db_path = tmp_path / "triage.db"
     init_db(db_path)
-    recent = "2026-06-09T10:00:00+00:00"
+    now = datetime.now(timezone.utc)
+    recent = (now - timedelta(days=2)).isoformat()
     _insert_article(db_path, url="u1", source_name="S", status="new", discovered_at=recent)
     _insert_article(
         db_path,
@@ -234,7 +236,7 @@ def test_triage_metrics_computes_handled_and_save_rates(tmp_path: Path) -> None:
         source_name="S",
         status="skipped",
         discovered_at=recent,
-        skipped_at="2026-06-09T11:00:00+00:00",
+        skipped_at=(now - timedelta(days=2, hours=-1)).isoformat(),
     )
     _insert_article(
         db_path,
@@ -242,7 +244,7 @@ def test_triage_metrics_computes_handled_and_save_rates(tmp_path: Path) -> None:
         source_name="S",
         status="saved",
         discovered_at=recent,
-        saved_at="2026-06-09T12:00:00+00:00",
+        saved_at=(now - timedelta(days=2, hours=-2)).isoformat(),
     )
 
     result = triage_metrics(db_path)
