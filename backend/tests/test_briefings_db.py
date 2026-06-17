@@ -69,19 +69,17 @@ def _seed_article(
     state: str = "new",
     discovered_at: str | None = None,
 ) -> int:
-    extra_cols = ""
-    extra_vals: tuple[object, ...] = ()
-    if discovered_at is not None:
-        extra_cols = ", discovered_at"
-        extra_vals = (discovered_at,)
+    # Use a Python-computed timestamp so discovered_at is always behind any
+    # subsequent datetime.now() call even when Docker's clock is slightly ahead.
+    ts = discovered_at or (datetime.now(timezone.utc) - timedelta(seconds=30)).isoformat()
     with connect(database_url=pg_url) as conn:
         row = conn.execute(
-            f"""
+            """
             INSERT INTO articles(
               url, canonical_url, title, source_slug, source_name,
-              category, kind, importance_score, state{extra_cols}
+              category, kind, importance_score, state, discovered_at
             )
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s{", %s" if discovered_at else ""})
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             RETURNING id
             """,
             (
@@ -94,7 +92,7 @@ def _seed_article(
                 "rss_feed",
                 importance_score,
                 state,
-                *extra_vals,
+                ts,
             ),
         ).fetchone()
     assert row is not None
@@ -122,20 +120,17 @@ def _seed_briefing(
     until_at: str = "2026-06-13T00:00:00+00:00",
 ) -> int:
     _content = content or {"sections": [], "worth_opening": []}
-    extra_cols = ""
-    extra_vals: tuple[object, ...] = ()
-    if created_at:
-        extra_cols = ", created_at"
-        extra_vals = (created_at,)
+    # Always set created_at from Python's clock so it's behind any subsequent
+    # datetime.now() call even when Docker's clock is slightly ahead.
+    ts = created_at or (datetime.now(timezone.utc) - timedelta(seconds=1)).isoformat()
 
     with connect(database_url=pg_url) as conn:
         row = conn.execute(
-            f"""
+            """
             INSERT INTO briefings(
-              title, summary, content, status, scope, since_at, until_at, model
-              {extra_cols}
+              title, summary, content, status, scope, since_at, until_at, model, created_at
             )
-            VALUES (%s, %s, %s::jsonb, %s, %s, %s, %s, %s{", %s" if created_at else ""})
+            VALUES (%s, %s, %s::jsonb, %s, %s, %s, %s, %s, %s)
             RETURNING id
             """,
             (
@@ -147,7 +142,7 @@ def _seed_briefing(
                 "2026-06-12T00:00:00+00:00",
                 until_at,
                 "claude-sonnet-4-6",
-                *extra_vals,
+                ts,
             ),
         ).fetchone()
     assert row is not None
