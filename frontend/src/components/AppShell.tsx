@@ -1,27 +1,22 @@
 import { useLocation, useNavigate, Outlet, Link } from 'react-router-dom';
 import { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import {
-  Newspaper,
-  Inbox,
-  Clock,
-  Star,
-  Search,
-  Sparkles,
-  MoreHorizontal,
-  Radio,
-  BarChart3,
-  Archive,
-  Settings,
-  History,
-  LogOut,
-} from 'lucide-react';
+import { LogOut, MoreHorizontal, Search } from 'lucide-react';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
 import { CommandPalette } from './CommandPalette';
 import { ShortcutOverlay } from './ShortcutOverlay';
 import { cn } from '@/lib/utils';
 import { fetchSummary, logoutUser } from '@/api';
 import { useAuth } from '@/contexts/auth';
+import {
+  getPageTitle,
+  getShortcutTarget,
+  isNavigationItemActive,
+  mobileNavigationItems,
+  primaryNavigationItems,
+  secondaryNavigationItems,
+  type NavigationItem,
+} from '@/lib/navigation';
 
 function useNavCounts() {
   const { data } = useQuery({
@@ -36,58 +31,12 @@ function useNavCounts() {
   };
 }
 
-interface NavItem {
-  to: string;
-  label: string;
-  icon: React.ComponentType<{ className?: string }>;
-}
-
-// Desktop rail shows all primary + ask; mobile nav shows only the first 5.
-const navItems: NavItem[] = [
-  { to: '/', label: 'Brief', icon: Newspaper },
-  { to: '/today', label: 'Today', icon: Inbox },
-  { to: '/later', label: 'Later', icon: Clock },
-  { to: '/starred', label: 'Starred', icon: Star },
-  { to: '/search', label: 'Search', icon: Search },
-  { to: '/ask', label: 'Ask', icon: Sparkles },
-];
-
-const mobileNavItems = navItems.slice(0, 5);
-
-const moreItems = [
-  { to: '/briefs', label: 'Brief History', icon: History },
-  { to: '/feeds', label: 'Feeds', icon: Radio },
-  { to: '/stats', label: 'Stats', icon: BarChart3 },
-  { to: '/archive', label: 'Archive', icon: Archive },
-  { to: '/settings', label: 'Settings', icon: Settings },
-];
-
-function isNavActive(to: string, pathname: string): boolean {
-  if (to === '/' || to === '/today') return pathname === to;
-  return pathname.startsWith(to);
-}
-
-function currentTitle(p: string) {
-  if (p === '/') return 'Brief';
-  if (p === '/today') return 'Today';
-  if (p.startsWith('/later')) return 'Later';
-  if (p.startsWith('/starred')) return 'Starred';
-  if (p.startsWith('/search')) return 'Search';
-  if (p.startsWith('/ask')) return 'Ask AI';
-  if (p.startsWith('/briefs')) return 'Briefs';
-  if (p.startsWith('/feeds')) return 'Feeds';
-  if (p.startsWith('/stats')) return 'Stats';
-  if (p.startsWith('/archive')) return 'Archive';
-  if (p.startsWith('/settings')) return 'Settings';
-  return 'Radar';
-}
-
 function DesktopRail({ pathname }: { pathname: string }) {
   const counts = useNavCounts();
   const { user, setUser } = useAuth();
   const navigate = useNavigate();
-  const countFor = (to: string): number | null =>
-    to === '/today' ? counts.today : to === '/starred' ? counts.starred : null;
+  const countFor = (item: NavigationItem): number | null =>
+    item.to === '/today' ? counts.today : item.to === '/starred' ? counts.starred : null;
 
   async function handleLogout() {
     await logoutUser();
@@ -98,10 +47,10 @@ function DesktopRail({ pathname }: { pathname: string }) {
   return (
     <aside className="hidden md:flex md:flex-col md:w-[200px] md:shrink-0 md:border-r md:border-border md:min-h-[calc(100vh-3rem)] md:sticky md:top-12 md:self-start">
       <nav className="flex flex-col p-2 gap-0.5">
-        {navItems.map((n) => {
+        {primaryNavigationItems.map((n) => {
           const Icon = n.icon;
-          const active = isNavActive(n.to, pathname);
-          const count = countFor(n.to);
+          const active = isNavigationItemActive(n.to, pathname);
+          const count = countFor(n);
           return (
             <Link
               key={n.to}
@@ -126,9 +75,9 @@ function DesktopRail({ pathname }: { pathname: string }) {
       </nav>
       <div className="mx-2 my-2 h-px bg-border" />
       <nav className="flex flex-col p-2 gap-0.5">
-        {moreItems.map((m) => {
+        {secondaryNavigationItems.map((m) => {
           const Icon = m.icon;
-          const active = pathname.startsWith(m.to);
+          const active = isNavigationItemActive(m.to, pathname);
           return (
             <Link
               key={m.to}
@@ -195,14 +144,8 @@ export function AppShell() {
         setShortcutsOpen((v) => !v);
       } else if (e.key === 'g') {
         const handler2 = (e2: KeyboardEvent) => {
-          const k = e2.key.toLowerCase();
-          if (k === 'b') navigate('/');
-          else if (k === 't') navigate('/today');
-          else if (k === 'l') navigate('/later');
-          else if (k === 's') navigate('/starred');
-          else if (k === 'a') navigate('/ask');
-          else if (k === 'f') navigate('/feeds');
-          else if (k === 'h') navigate('/briefs');
+          const target = getShortcutTarget(e2.key);
+          if (target) navigate(target);
           window.removeEventListener('keydown', handler2);
         };
         window.addEventListener('keydown', handler2, { once: true });
@@ -230,7 +173,7 @@ export function AppShell() {
     );
   }
 
-  const title = currentTitle(pathname);
+  const title = getPageTitle(pathname);
 
   return (
     <div className="app-shell min-h-screen flex flex-col bg-background text-foreground">
@@ -269,9 +212,9 @@ export function AppShell() {
                   )}
                 </SheetHeader>
                 <nav className="p-2">
-                  {moreItems.map((m) => {
+                  {secondaryNavigationItems.map((m) => {
                     const Icon = m.icon;
-                    const active = pathname.startsWith(m.to);
+                    const active = isNavigationItemActive(m.to, pathname);
                     return (
                       <Link
                         key={m.to}
@@ -316,9 +259,9 @@ export function AppShell() {
       {/* Mobile bottom nav */}
       <nav className="md:hidden fixed bottom-0 inset-x-0 z-30 border-t border-border bg-background/95 backdrop-blur pb-[env(safe-area-inset-bottom)]">
         <div className="grid grid-cols-5">
-          {mobileNavItems.map((n) => {
+          {mobileNavigationItems.map((n) => {
             const Icon = n.icon;
-            const active = isNavActive(n.to, pathname);
+            const active = isNavigationItemActive(n.to, pathname);
             return (
               <Link
                 key={n.to}

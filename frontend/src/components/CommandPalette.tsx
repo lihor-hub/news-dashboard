@@ -3,51 +3,31 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Command } from 'cmdk';
-import { Dialog, DialogContent } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
 import { toast } from 'sonner';
 import {
-  Newspaper,
-  Inbox,
   Clock,
   Star,
   Search,
-  Sparkles,
-  Radio,
-  BarChart3,
   Archive,
-  Settings,
   FileText,
   RefreshCw,
   CheckCheck,
   SkipForward,
   ExternalLink,
-  History,
 } from 'lucide-react';
 import { searchArticles, ingestNow } from '@/api';
 import { adaptArticle } from '@/api/workflowApi';
 import { useTriageMutations } from '@/hooks/useTriageMutations';
 import { useFocusedArticle } from '@/contexts/focusedArticle';
 import type { WorkflowArticle } from '@/lib/workflowTypes';
+import { commandNavigationItems } from '@/lib/navigation';
 
 interface Props {
   open: boolean;
   onOpenChange: (v: boolean) => void;
   onShortcuts?: () => void;
 }
-
-const NAV_ITEMS = [
-  { icon: Newspaper, label: 'Brief', to: '/' },
-  { icon: History, label: 'Briefing History', to: '/briefs' },
-  { icon: Inbox, label: 'Today', to: '/today' },
-  { icon: Clock, label: 'Later', to: '/later' },
-  { icon: Star, label: 'Starred', to: '/starred' },
-  { icon: Search, label: 'Search', to: '/search' },
-  { icon: Sparkles, label: 'Ask AI', to: '/ask' },
-  { icon: Radio, label: 'Feeds', to: '/feeds' },
-  { icon: BarChart3, label: 'Stats', to: '/stats' },
-  { icon: Archive, label: 'Archive', to: '/archive' },
-  { icon: Settings, label: 'Settings', to: '/settings' },
-];
 
 const GROUP_CLS =
   '[&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:text-[10px] [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:uppercase [&_[cmdk-group-heading]]:tracking-wider [&_[cmdk-group-heading]]:text-subtle';
@@ -122,16 +102,18 @@ export function CommandPalette({ open, onOpenChange, onShortcuts }: Props) {
     fn();
   }
 
-  // #79 not merged — open original URL with TODO seam for reader navigation
   function openArticle(a: WorkflowArticle) {
     close();
-    // TODO(#79): navigate(`/a/${a.id}`) once the reader is implemented
-    window.open(a.url, '_blank', 'noopener,noreferrer');
+    navigate(`/a/${a.id}`);
   }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="p-0 max-w-xl overflow-hidden gap-0">
+        <DialogTitle className="sr-only">Command palette</DialogTitle>
+        <DialogDescription className="sr-only">
+          Jump to views, search articles, and run article actions.
+        </DialogDescription>
         <Command shouldFilter={false} className="bg-popover text-popover-foreground">
           <div className="flex items-center px-3 border-b border-border">
             <Search className="size-4 text-muted-foreground shrink-0" />
@@ -257,7 +239,7 @@ export function CommandPalette({ open, onOpenChange, onShortcuts }: Props) {
 
             {/* Navigation */}
             <Command.Group heading="Navigation" className={GROUP_CLS}>
-              {NAV_ITEMS.map(({ icon: Icon, label, to }) => (
+              {commandNavigationItems.map(({ icon: Icon, label, to }) => (
                 <Command.Item key={to} onSelect={() => go(to)} className={ITEM_CLS}>
                   <Icon className="size-4 text-muted-foreground" />
                   <span className="text-sm">{label}</span>

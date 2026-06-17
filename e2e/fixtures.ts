@@ -146,6 +146,13 @@ export const SCHEDULER_STATUS = {
   next_run_at: '2026-06-13T13:00:00+00:00',
 };
 
+export const SAMPLE_USER = {
+  id: 1,
+  username: 'e2e-user',
+  email: 'e2e@example.com',
+  is_admin: true,
+};
+
 // ── Mock setup helpers ────────────────────────────────────────────────────────
 
 function json(data: unknown, status = 200) {
@@ -158,6 +165,20 @@ function json(data: unknown, status = 200) {
  * matching handler.
  */
 export async function mockApi(page: Page) {
+  // Auth
+  await page.route('/api/auth/config', (r) =>
+    r.fulfill(
+      json({
+        provider: 'password',
+        keycloak_enabled: false,
+        login_url: null,
+        logout_url: '/api/auth/logout',
+      })
+    )
+  );
+  await page.route('/api/auth/me', (r) => r.fulfill(json(SAMPLE_USER)));
+  await page.route('/api/auth/logout', (r) => r.fulfill(json({ status: 'logged_out' })));
+
   // Summary / counts
   await page.route('/api/summary', (r) => r.fulfill(json(SUMMARY_DATA)));
 

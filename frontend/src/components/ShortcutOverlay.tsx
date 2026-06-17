@@ -1,4 +1,5 @@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { navigationShortcutRows } from '@/lib/navigation';
 
 interface Props {
   open: boolean;
@@ -8,14 +9,7 @@ interface Props {
 const SECTIONS: { title: string; items: [string, string][] }[] = [
   {
     title: 'Navigation',
-    items: [
-      ['j / k', 'Move down / up in list'],
-      ['Enter', 'Open selected article'],
-      ['g b / g t', 'Go to Brief / Today'],
-      ['g l / g s', 'Go to Later / Starred'],
-      ['g a / g f', 'Go to Ask / Feeds'],
-      ['g h', 'Go to Briefing History'],
-    ],
+    items: navigationShortcutRows,
   },
   {
     title: 'Article actions',
