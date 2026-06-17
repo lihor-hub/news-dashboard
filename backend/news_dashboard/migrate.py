@@ -158,7 +158,8 @@ def _check_prerequisites(conn: Any) -> list[str]:
     required_tables = ["users", "user_article_state", "user_sources"]
     for tbl in required_tables:
         row = conn.execute(
-            "SELECT 1 FROM information_schema.tables WHERE table_name = %s",
+            "SELECT 1 FROM information_schema.tables"
+            " WHERE table_name = %s AND table_schema = current_schema()",
             (tbl,),
         ).fetchone()
         if row is None:

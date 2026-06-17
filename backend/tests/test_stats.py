@@ -177,6 +177,13 @@ def _insert_article(  # noqa: PLR0913
     archived_at: str | None = None,
 ) -> None:
     with connect(db_path) as conn:
+        # Ensure the referenced source exists (FK constraint).
+        conn.execute(
+            "INSERT INTO sources(slug, name, url, category, kind, priority, enabled)"
+            " VALUES ('src-1', %s, 'https://example.com/src-1.xml', %s, 'rss_feed', 50, TRUE)"
+            " ON CONFLICT(slug) DO UPDATE SET name = EXCLUDED.name",
+            (source_name, category),
+        )
         conn.execute(
             """
             INSERT INTO articles(
