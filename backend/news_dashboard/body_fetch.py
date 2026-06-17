@@ -74,7 +74,7 @@ class _BodyExtractor(HTMLParser):
         self._chunks: list[str] = []
         self._current: list[str] = []
 
-    def handle_starttag(self, tag: str, _attrs: list[tuple[str, str | None]]) -> None:
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:  # noqa: ARG002
         if self._skip_depth or tag in _SKIP_TAGS:
             self._skip_depth += 1
             return

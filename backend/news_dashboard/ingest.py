@@ -1212,6 +1212,7 @@ def transition_article_state(  # noqa: PLR0912
         if base is None:
             return None
 
+        uas: dict[str, Any] | None = None
         if user_id is not None:
             uas = _get_uas_row(conn, article_id, user_id)
             current_state = str((uas or {}).get("state") or "today")
@@ -1222,7 +1223,7 @@ def transition_article_state(  # noqa: PLR0912
 
         if current_state == new_state:
             if user_id is not None:
-                return _merge_uas(base, uas if "uas" in dir() else None)
+                return _merge_uas(base, uas)
             return base
 
         if (current_state, new_state) not in _ALLOWED_TRANSITIONS:
@@ -1347,6 +1348,7 @@ def send_article_later(
         if base is None:
             return None
 
+        uas: dict[str, Any] | None = None
         if user_id is not None:
             uas = _get_uas_row(conn, article_id, user_id)
             current_state = str((uas or {}).get("state") or "today")

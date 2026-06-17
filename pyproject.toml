@@ -25,6 +25,8 @@ dev = [
   "httpx>=0.27.0",
   "ruff>=0.8.0",
   "mypy>=1.13.0",
+  "ty>=0.0.49",
+  "pyrefly>=1.1.0",
   "pre-commit>=4.0.0",
   "testcontainers[postgres]>=4.8.0",
 ]
@@ -138,3 +140,20 @@ ignore_missing_imports = true
 [[tool.mypy.overrides]]
 module = ["tests.*"]
 disallow_untyped_decorators = false
+
+# ── ty (Astral type checker) ─────────────────────────────────────────────────
+[tool.ty.environment]
+# Resolve the `news_dashboard` package from backend/, mirroring mypy's
+# files=["backend"] and pytest's pythonpath=["backend"]. Without this, ty falls
+# back to whatever editable install is on sys.path (possibly a stale worktree).
+python-version = "3.14"
+extra-paths = ["backend"]
+
+[tool.ty.src]
+include = ["backend"]
+
+# ── pyrefly (Meta type checker) ──────────────────────────────────────────────
+[tool.pyrefly]
+python-version = "3.14"
+project-includes = ["backend"]
+search-path = ["backend"]

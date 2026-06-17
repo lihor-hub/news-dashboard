@@ -30,6 +30,18 @@ repos:
         language: system
         types: [python]
         pass_filenames: false
+      - id: ty
+        name: ty
+        entry: ty check backend
+        language: system
+        types: [python]
+        pass_filenames: false
+      - id: pyrefly
+        name: pyrefly
+        entry: pyrefly check backend
+        language: system
+        types: [python]
+        pass_filenames: false
       - id: eslint
         name: eslint
         entry: npm run lint --silent
@@ -49,10 +61,39 @@ repos:
         files: \.(ts|tsx)$
         pass_filenames: false
 
-      # ── pre-push: run the test suites before code leaves the machine ───────
-      # These are deliberately on the `pre-push` stage, not `pre-commit`: tests
-      # are too slow to run on every commit, but must pass before a push.
+      # ── pre-push: full quality gate before code leaves the machine ─────────
+      # The linters/type-checkers also run on the pre-push stage (in addition to
+      # pre-commit) so a push is blocked even if some commits skipped hooks.
+      # Tests live here only — too slow for every commit.
       # Enable with: pre-commit install --hook-type pre-push
+      - id: ruff-push
+        name: ruff (pre-push)
+        entry: ruff check backend
+        language: system
+        types: [python]
+        pass_filenames: false
+        stages: [pre-push]
+      - id: mypy-push
+        name: mypy (pre-push)
+        entry: mypy backend
+        language: system
+        types: [python]
+        pass_filenames: false
+        stages: [pre-push]
+      - id: ty-push
+        name: ty (pre-push)
+        entry: ty check backend
+        language: system
+        types: [python]
+        pass_filenames: false
+        stages: [pre-push]
+      - id: pyrefly-push
+        name: pyrefly (pre-push)
+        entry: pyrefly check backend
+        language: system
+        types: [python]
+        pass_filenames: false
+        stages: [pre-push]
       - id: pytest
         name: pytest (backend)
         entry: pytest

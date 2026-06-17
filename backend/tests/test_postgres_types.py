@@ -54,7 +54,8 @@ def _make_user(pg_url: str, username: str) -> int:
             (username, "x"),
         ).fetchone()
         conn.commit()
-    return int(row[0])  # type: ignore[index]
+    assert row is not None
+    return int(row[0])
 
 
 def _add_global_source(pg_url: str, slug: str) -> None:
@@ -107,7 +108,8 @@ def _add_article(pg_url: str, *, source_slug: str, url_suffix: str = "1") -> int
             ),
         ).fetchone()
         conn.commit()
-    return int(row[0])  # type: ignore[index]
+    assert row is not None
+    return int(row[0])
 
 
 def _api_client(uid: int, username: str = "user") -> Any:
