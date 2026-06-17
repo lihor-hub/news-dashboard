@@ -48,3 +48,22 @@ repos:
         language: system
         files: \.(ts|tsx)$
         pass_filenames: false
+
+      # ── pre-push: run the test suites before code leaves the machine ───────
+      # These are deliberately on the `pre-push` stage, not `pre-commit`: tests
+      # are too slow to run on every commit, but must pass before a push.
+      # Enable with: pre-commit install --hook-type pre-push
+      - id: pytest
+        name: pytest (backend)
+        entry: pytest
+        language: system
+        types: [python]
+        pass_filenames: false
+        stages: [pre-push]
+      - id: vitest
+        name: vitest (frontend)
+        entry: npm run test:frontend --silent
+        language: system
+        files: \.(ts|tsx)$
+        pass_filenames: false
+        stages: [pre-push]
