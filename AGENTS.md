@@ -10,4 +10,6 @@
 
 ## Git Workflow
 
+- Before starting work, fetch and rebase on `origin/main`.
+- Keep working branches fast-forwardable with `origin/main`; resolve divergence by rebasing rather than merging.
 - Do not use `git push --no-verify` when pushing changes.
