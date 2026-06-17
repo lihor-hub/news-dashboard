@@ -211,10 +211,7 @@ def test_snooze_with_user(tmp_path: Path) -> None:
     assert result["state"] == "later"
     assert result["later_until"] is not None
     later_until = result["later_until"]
-    if isinstance(later_until, str):
-        until = datetime.fromisoformat(later_until)
-    else:
-        until = later_until
+    until = datetime.fromisoformat(later_until) if isinstance(later_until, str) else later_until
     delta = until - datetime.now(timezone.utc)
     assert 2 < delta.total_seconds() / 3600 < 75  # ~3 days
 

@@ -141,7 +141,9 @@ def test_migration_is_idempotent(tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 
     with connect(db) as conn:
         user_count = conn.execute("SELECT COUNT(*) AS count FROM users").fetchone()["count"]
-        uas_count = conn.execute("SELECT COUNT(*) AS count FROM user_article_state").fetchone()["count"]
+        uas_count = conn.execute("SELECT COUNT(*) AS count FROM user_article_state").fetchone()[
+            "count"
+        ]
     assert user_count == 1
     assert uas_count == 1
 
@@ -159,7 +161,9 @@ def test_migration_dry_run_does_not_write(tmp_path: Path, monkeypatch: pytest.Mo
 
     with connect(db) as conn:
         user_count = conn.execute("SELECT COUNT(*) AS count FROM users").fetchone()["count"]
-        uas_count = conn.execute("SELECT COUNT(*) AS count FROM user_article_state").fetchone()["count"]
+        uas_count = conn.execute("SELECT COUNT(*) AS count FROM user_article_state").fetchone()[
+            "count"
+        ]
     assert user_count == 0
     assert uas_count == 0
 
