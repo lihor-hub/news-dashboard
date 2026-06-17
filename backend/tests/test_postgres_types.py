@@ -454,3 +454,104 @@ def test_pg_articles_starred_is_boolean(pg_clean: str) -> None:
         ).fetchone()
     assert row is not None
     assert row[0] == "boolean"
+
+
+def test_pg_init_db_converts_legacy_integer_booleans(pg_url: str, tmp_path: Any) -> None:
+    """init_db must repair legacy integer 0/1 boolean columns before runtime SQL uses TRUE."""
+    import psycopg
+    from psycopg import sql
+
+    from news_dashboard.db import _schema_name, init_db
+
+    schema = _schema_name(tmp_path / "legacy-integer-booleans")
+    with psycopg.connect(pg_url) as conn:
+        conn.execute(sql.SQL("DROP SCHEMA IF EXISTS {} CASCADE").format(sql.Identifier(schema)))
+        conn.execute(sql.SQL("CREATE SCHEMA {}").format(sql.Identifier(schema)))
+        conn.execute(sql.SQL("SET search_path TO {}").format(sql.Identifier(schema)))
+        conn.execute(
+            """
+            CREATE TABLE sources (
+              slug TEXT PRIMARY KEY,
+              name TEXT NOT NULL,
+              url TEXT NOT NULL,
+              category TEXT NOT NULL,
+              kind TEXT NOT NULL,
+              priority INTEGER NOT NULL DEFAULT 50,
+              enabled INTEGER NOT NULL DEFAULT 1
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE articles (
+              id BIGSERIAL PRIMARY KEY,
+              url TEXT NOT NULL UNIQUE,
+              canonical_url TEXT NOT NULL,
+              title TEXT NOT NULL,
+              source_slug TEXT NOT NULL REFERENCES sources(slug),
+              source_name TEXT NOT NULL,
+              category TEXT NOT NULL,
+              kind TEXT NOT NULL,
+              published_at TEXT,
+              discovered_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+              status TEXT NOT NULL DEFAULT 'new',
+              importance_score INTEGER NOT NULL DEFAULT 50,
+              summary TEXT NOT NULL DEFAULT '',
+              reason TEXT NOT NULL DEFAULT '',
+              tags TEXT NOT NULL DEFAULT '',
+              read_at TEXT,
+              saved_at TEXT,
+              skipped_at TEXT,
+              archived_at TEXT,
+              updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+              starred INTEGER NOT NULL DEFAULT 0
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE users (
+              id SERIAL PRIMARY KEY,
+              username TEXT NOT NULL UNIQUE,
+              password_hash TEXT NOT NULL
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE user_sources (
+              user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+              source_slug TEXT NOT NULL REFERENCES sources(slug) ON DELETE CASCADE,
+              enabled INTEGER NOT NULL DEFAULT 1,
+              PRIMARY KEY (user_id, source_slug)
+            )
+            """
+        )
+        conn.commit()
+
+    init_db(tmp_path / "legacy-integer-booleans", database_url=pg_url)
+
+    with psycopg.connect(pg_url) as conn:
+        conn.execute(sql.SQL("SET search_path TO {}").format(sql.Identifier(schema)))
+        rows = conn.execute(
+            """
+            SELECT table_name, column_name, data_type, column_default
+            FROM information_schema.columns
+            WHERE table_schema = current_schema()
+              AND (table_name, column_name) IN (
+                ('sources', 'enabled'),
+                ('articles', 'starred'),
+                ('user_sources', 'enabled')
+              )
+            ORDER BY table_name, column_name
+            """
+        ).fetchall()
+        conn.execute(sql.SQL("DROP SCHEMA {} CASCADE").format(sql.Identifier(schema)))
+        conn.commit()
+
+    assert {(row[0], row[1], row[2]) for row in rows} == {
+        ("articles", "starred", "boolean"),
+        ("sources", "enabled", "boolean"),
+        ("user_sources", "enabled", "boolean"),
+    }
+    assert all("true" in str(row[3]).lower() or "false" in str(row[3]).lower() for row in rows)

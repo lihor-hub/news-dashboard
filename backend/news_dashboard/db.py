@@ -121,10 +121,15 @@ POSTGRES_SCHEMA = [
     BEGIN
       IF EXISTS (
         SELECT 1 FROM information_schema.columns
-        WHERE table_name = 'sources' AND column_name = 'enabled' AND data_type = 'integer'
+        WHERE table_schema = current_schema()
+          AND table_name = 'sources'
+          AND column_name = 'enabled'
+          AND data_type = 'integer'
       ) THEN
+        ALTER TABLE sources ALTER COLUMN enabled DROP DEFAULT;
         ALTER TABLE sources ALTER COLUMN enabled TYPE BOOLEAN USING enabled <> 0;
       END IF;
+      ALTER TABLE sources ALTER COLUMN enabled SET DEFAULT TRUE;
     END $$;
     """,
     "ALTER TABLE articles ADD COLUMN IF NOT EXISTS canonical_id BIGINT REFERENCES articles(id)",
@@ -138,10 +143,15 @@ POSTGRES_SCHEMA = [
     BEGIN
       IF EXISTS (
         SELECT 1 FROM information_schema.columns
-        WHERE table_name = 'articles' AND column_name = 'starred' AND data_type = 'integer'
+        WHERE table_schema = current_schema()
+          AND table_name = 'articles'
+          AND column_name = 'starred'
+          AND data_type = 'integer'
       ) THEN
+        ALTER TABLE articles ALTER COLUMN starred DROP DEFAULT;
         ALTER TABLE articles ALTER COLUMN starred TYPE BOOLEAN USING starred <> 0;
       END IF;
+      ALTER TABLE articles ALTER COLUMN starred SET DEFAULT FALSE;
     END $$;
     """,
     "ALTER TABLE articles ADD COLUMN IF NOT EXISTS done_at TEXT",
@@ -218,6 +228,22 @@ POSTGRES_MULTIUSER_SCHEMA = [
       added_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       PRIMARY KEY (user_id, source_slug)
     )
+    """,
+    """
+    DO $$
+    BEGIN
+      IF EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = current_schema()
+          AND table_name = 'user_sources'
+          AND column_name = 'enabled'
+          AND data_type = 'integer'
+      ) THEN
+        ALTER TABLE user_sources ALTER COLUMN enabled DROP DEFAULT;
+        ALTER TABLE user_sources ALTER COLUMN enabled TYPE BOOLEAN USING enabled <> 0;
+      END IF;
+      ALTER TABLE user_sources ALTER COLUMN enabled SET DEFAULT TRUE;
+    END $$;
     """,
     "CREATE INDEX IF NOT EXISTS idx_user_sources_user ON user_sources(user_id, enabled)",
     """
