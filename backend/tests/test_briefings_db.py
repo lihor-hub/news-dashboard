@@ -866,6 +866,28 @@ def test_generate_briefing_skips_idempotency_when_window_is_zero(pg_clean: str) 
     assert len(list_briefings(database_url=pg_clean)) == 2  # old + new
 
 
+def test_generate_briefing_with_user_id_succeeds_on_reread(pg_clean: str) -> None:
+    """Regression: _save_briefing must pass user_id to get_briefing after insert.
+
+    Briefings owned by a user have a non-NULL user_id column, so get_briefing
+    with user_id=None (the previous bug) silently returned None and raised
+    "Could not re-read briefing N after insert".
+    """
+    _seed_source(pg_clean)
+    user_id = _seed_user(pg_clean, username="reread-user")
+    _seed_article(
+        pg_clean,
+        url="https://example.com/user-reread-a1",
+        title="User Article 1",
+        state="today",
+    )
+
+    result = generate_briefing(database_url=pg_clean, ai_fn=_fake_ai, user_id=user_id)
+
+    assert result["title"] == "Fake Briefing"
+    assert result["status"] == "complete"
+
+
 def test_generate_briefing_ignores_failed_rows_in_idempotency_check(pg_clean: str) -> None:
     _seed_source(pg_clean)
     a1 = _seed_article(pg_clean, url="https://example.com/h1", title="H1", state="today")

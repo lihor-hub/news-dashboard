@@ -302,7 +302,7 @@ def _save_briefing(
                     (briefing_id, aid),
                 )
 
-    result = get_briefing(briefing_id, database_url=database_url)
+    result = get_briefing(briefing_id, database_url=database_url, user_id=user_id)
     if result is None:
         msg = f"Could not re-read briefing {briefing_id} after insert"
         raise BriefingGenerationError(msg)
@@ -339,7 +339,7 @@ def _find_recent_briefing(
             ).fetchone()
     if row is None:
         return None
-    return get_briefing(int(row_to_dict(row)["id"]), database_url=database_url)
+    return get_briefing(int(row_to_dict(row)["id"]), database_url=database_url, user_id=user_id)
 
 
 def _save_failed_briefing(
