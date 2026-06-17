@@ -616,7 +616,31 @@ def ingest_all(db_path: Path | None = None) -> dict[str, int]:
     return results
 
 
-_INTERNAL_ARTICLE_COLUMNS = frozenset({"embedding", "fts_vector"})
+_INTERNAL_ARTICLE_COLUMNS = frozenset({"embedding", "fts_vector", "search_vector"})
+_ARTICLE_LIST_COLUMNS = (
+    "id, url, canonical_url, canonical_id, title, source_slug, source_name,"
+    " category, kind, published_at, discovered_at, status, importance_score,"
+    " summary, reason, tags, read_at, saved_at, skipped_at, archived_at,"
+    " updated_at, body_status, state, starred, done_at, starred_at, later_until, restored_at"
+)
+
+
+def _article_list_select(alias: str | None = None) -> str:
+    if alias is None:
+        return _ARTICLE_LIST_COLUMNS
+    return ", ".join(f"{alias}.{column.strip()}" for column in _ARTICLE_LIST_COLUMNS.split(","))
+
+
+def _search_tsquery(value: str) -> str | None:
+    tokens = [
+        token.lower()
+        for token in re.findall(r"[A-Za-z0-9]+", value)
+        if len(token) >= 2 and not token.isdigit()
+    ]
+    if not tokens:
+        return None
+    return " & ".join(f"{token}:*" for token in tokens)
+
 
 # UAS columns that override article-level state when a user_id is provided
 _UAS_STATE_COLUMNS = frozenset(
@@ -812,7 +836,7 @@ def list_articles(  # noqa: PLR0913
     with connect(db_path) as conn:
         rows = conn.execute(
             (
-                f"SELECT * FROM articles {where}"
+                f"SELECT {_article_list_select()} FROM articles {where}"
                 " ORDER BY discovered_at DESC, id DESC LIMIT %s OFFSET %s"
             ),
             params,
@@ -883,7 +907,7 @@ def _list_articles_for_user(  # noqa: PLR0913
     all_params: list[object] = [user_id, user_id, *where_params, user_id, limit, offset]
 
     sql = f"""
-        SELECT a.*,
+        SELECT {_article_list_select("a")},
           COALESCE(uas.state, 'today') AS _uas_state,
           COALESCE(uas.starred, false)  AS _uas_starred,
           uas.done_at     AS _uas_done_at,
@@ -957,7 +981,7 @@ def search_articles(  # noqa: PLR0913
     user_id: int | None = None,
 ) -> list[dict[str, Any]]:
     init_db(db_path)
-    terms = [t for t in q.split() if len(t) >= 2]
+    tsquery = _search_tsquery(q)
     now_ts = now_iso()
 
     if user_id is not None:
@@ -978,14 +1002,10 @@ def search_articles(  # noqa: PLR0913
     clauses: list[str] = []
     params: list[Any] = []
 
-    # Full-text search across title, summary, reason, tags, source_name, body
-    for term in terms:
-        like = f"%{term}%"
-        clauses.append(
-            "(title ILIKE %s OR summary ILIKE %s OR reason ILIKE %s OR tags ILIKE %s"
-            " OR source_name ILIKE %s OR (body IS NOT NULL AND body ILIKE %s))"
-        )
-        params.extend([like, like, like, like, like, like])
+    # Full-text search across title, summary, reason, tags, source name, and cached body.
+    if tsquery:
+        clauses.append("search_vector @@ to_tsquery('english', %s)")
+        params.append(tsquery)
 
     # Archived exclusion — must come before state filter to avoid conflict
     if not include_archived:
@@ -1031,7 +1051,7 @@ def search_articles(  # noqa: PLR0913
     params.append(limit)
 
     sql = (
-        f"SELECT * FROM articles {where}"
+        f"SELECT {_article_list_select()} FROM articles {where}"
         " ORDER BY importance_score DESC, discovered_at DESC LIMIT %s"
     )
 
@@ -1054,17 +1074,13 @@ def _search_articles_for_user(  # noqa: PLR0912, PLR0913, PLR0915
     date_range: str,
     now_ts: str,
 ) -> list[dict[str, Any]]:
-    terms = [t for t in q.split() if len(t) >= 2]
+    tsquery = _search_tsquery(q)
     clauses: list[str] = []
     where_params: list[Any] = []  # params only for WHERE predicates
 
-    for term in terms:
-        like = f"%{term}%"
-        clauses.append(
-            "(a.title ILIKE %s OR a.summary ILIKE %s OR a.reason ILIKE %s OR a.tags ILIKE %s"
-            " OR a.source_name ILIKE %s OR (a.body IS NOT NULL AND a.body ILIKE %s))"
-        )
-        where_params.extend([like, like, like, like, like, like])
+    if tsquery:
+        clauses.append("a.search_vector @@ to_tsquery('english', %s)")
+        where_params.append(tsquery)
 
     if not include_archived:
         clauses.append("COALESCE(uas.state, 'today') != 'archived'")
@@ -1114,7 +1130,7 @@ def _search_articles_for_user(  # noqa: PLR0912, PLR0913, PLR0915
     all_params: list[Any] = [user_id, user_id, *where_params, user_id, limit]
 
     sql = f"""
-        SELECT a.*,
+        SELECT {_article_list_select("a")},
           COALESCE(uas.state, 'today') AS _uas_state,
           COALESCE(uas.starred, false)  AS _uas_starred,
           uas.done_at     AS _uas_done_at,

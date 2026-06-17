@@ -51,9 +51,28 @@ def list_source_health(db_path: Path | None = None) -> list[dict[str, Any]]:
         ).fetchall()
         run_rows = conn.execute(
             """
+            WITH ordered AS (
+              SELECT
+                source_name,
+                articles_new,
+                error_message,
+                ROW_NUMBER() OVER source_order AS row_number,
+                COUNT(*) FILTER (
+                  WHERE error_message IS NULL OR error_message = ''
+                ) OVER (
+                  PARTITION BY source_name
+                  ORDER BY run_id DESC, id DESC
+                  ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING
+                ) AS successes_before
+              FROM ingest_run_sources
+              WINDOW source_order AS (
+                PARTITION BY source_name ORDER BY run_id DESC, id DESC
+              )
+            )
             SELECT source_name, articles_new, error_message
-            FROM ingest_run_sources
-            ORDER BY run_id DESC, id DESC
+            FROM ordered
+            WHERE row_number = 1 OR COALESCE(successes_before, 0) = 0
+            ORDER BY source_name, row_number
             """
         ).fetchall()
 

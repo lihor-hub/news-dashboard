@@ -8,7 +8,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from news_dashboard.db import connect, init_db
-from news_dashboard.ingest import search_articles, sync_sources
+from news_dashboard.ingest import list_articles, search_articles, sync_sources
 from news_dashboard.main import app
 
 
@@ -108,6 +108,22 @@ def test_search_by_body(db: Path) -> None:
     results = search_articles("pydantic", db_path=db)
     assert any(r["title"] == "Deep Dive" for r in results)
     assert all(r["title"] != "Other Article" for r in results)
+
+
+def test_search_results_omit_cached_body_payload(db: Path) -> None:
+    _insert(db, title="Deep Dive", body="The full text discusses pydantic validation in detail")
+    results = search_articles("pydantic", db_path=db)
+    article = next(r for r in results if r["title"] == "Deep Dive")
+    assert "body" not in article
+    assert article["body_status"] == "missing"
+
+
+def test_list_articles_omits_cached_body_payload(db: Path) -> None:
+    _insert(db, title="Deep Dive", body="Large cached article body")
+    articles = list_articles(db_path=db)
+    article = next(r for r in articles if r["title"] == "Deep Dive")
+    assert "body" not in article
+    assert article["body_status"] == "missing"
 
 
 def test_no_query_returns_empty_without_filters(db: Path) -> None:

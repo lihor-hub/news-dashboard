@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { Link } from 'react-router-dom';
 import { Star } from 'lucide-react';
 import type { WorkflowArticle } from '@/lib/workflowTypes';
@@ -12,7 +13,7 @@ interface Props {
   showLaterUntil?: boolean;
 }
 
-export function ArticleRow({ article, focused, showLaterUntil }: Props) {
+function ArticleRowComponent({ article, focused, showLaterUntil }: Props) {
   const { setState, toggleStar } = useTriageMutations();
 
   const handleDone = () => setState(article, 'done', 'Read');
@@ -69,3 +70,5 @@ export function ArticleRow({ article, focused, showLaterUntil }: Props) {
     </SwipeableRow>
   );
 }
+
+export const ArticleRow = memo(ArticleRowComponent);

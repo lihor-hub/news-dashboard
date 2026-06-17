@@ -107,3 +107,33 @@ def test_init_db_postgres_each_statement_uses_own_connection(tmp_path: Any) -> N
     assert len(connect_calls) == 3, "expected one connect() call per statement"
     for per_call in statements_per_call:
         assert len(per_call) == 1, "each connection must execute exactly one statement"
+
+
+def test_init_db_postgres_caches_successful_schema_runs(tmp_path: Any) -> None:
+    """Repeated hot-path init_db() calls should not replay every schema statement."""
+    connect_calls: list[str] = []
+
+    @contextmanager
+    def fake_connect(db_path: Any = None, database_url: Any = None) -> Any:
+        connect_calls.append("open")
+
+        class _Conn:
+            def execute(self, sql: str, params: Any = None) -> None:  # noqa: ARG002
+                return None
+
+        yield _Conn()
+
+    fake_schema = ["CREATE TABLE cache_test_a", "CREATE TABLE cache_test_b"]
+
+    with (
+        patch("news_dashboard.db.connect", fake_connect),
+        patch("news_dashboard.db.POSTGRES_SCHEMA", fake_schema),
+        patch("news_dashboard.db.POSTGRES_MULTIUSER_SCHEMA", []),
+    ):
+        from news_dashboard.db import init_db
+
+        token = tmp_path / "cache-test.db"
+        init_db(token)
+        init_db(token)
+
+    assert len(connect_calls) == len(fake_schema)
