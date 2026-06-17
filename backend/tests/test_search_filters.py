@@ -32,6 +32,13 @@ def _insert(  # noqa: PLR0913
 ) -> int:
     url = f"https://example.com/{title.lower().replace(' ', '-')}{url_suffix}"
     with connect(db_path) as conn:
+        # Ensure the referenced source exists (FK constraint).
+        conn.execute(
+            "INSERT INTO sources(slug, name, url, category, kind, priority, enabled)"
+            " VALUES (%s, %s, %s, %s, 'rss_feed', 50, TRUE)"
+            " ON CONFLICT(slug) DO NOTHING",
+            (source_slug, source_name, f"https://example.com/{source_slug}.xml", category),
+        )
         row = conn.execute(
             """
             INSERT INTO articles(

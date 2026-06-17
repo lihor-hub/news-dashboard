@@ -79,7 +79,7 @@ def _add_private_source(pg_url: str, slug: str, *, owner_user_id: int) -> None:
         conn.execute(
             """
             INSERT INTO sources(slug, name, url, category, kind, priority, enabled, owner_user_id)
-            VALUES (%s, %s, 'https://example.com/feed', 'tech', 'rss_feed', 50, 1, %s)
+            VALUES (%s, %s, 'https://example.com/feed', 'tech', 'rss_feed', 50, TRUE, %s)
             ON CONFLICT(slug) DO NOTHING
             """,
             (slug, slug, owner_user_id),

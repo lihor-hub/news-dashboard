@@ -89,7 +89,7 @@ def test_migration_creates_seed_user(tmp_path: Path, monkeypatch: pytest.MonkeyP
     with connect(db) as conn:
         users = conn.execute("SELECT username FROM users").fetchall()
     assert len(users) == 1
-    assert users[0][0] == "alice"
+    assert users[0]["username"] == "alice"
 
 
 def test_migration_migrates_article_state(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -107,7 +107,7 @@ def test_migration_migrates_article_state(tmp_path: Path, monkeypatch: pytest.Mo
             "SELECT state FROM user_article_state WHERE article_id = %s", (aid,)
         ).fetchone()
     assert uas is not None
-    assert uas[0] == "done"
+    assert uas["state"] == "done"
 
 
 def test_migration_seeds_source_subscriptions(
@@ -122,7 +122,7 @@ def test_migration_seeds_source_subscriptions(
     assert result.exit_code == 0, result.output
 
     with connect(db) as conn:
-        count = conn.execute("SELECT COUNT(*) FROM user_sources").fetchone()[0]
+        count = conn.execute("SELECT COUNT(*) AS count FROM user_sources").fetchone()["count"]
     assert count > 0
 
 
@@ -140,8 +140,8 @@ def test_migration_is_idempotent(tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     assert result2.exit_code == 0, result2.output
 
     with connect(db) as conn:
-        user_count = conn.execute("SELECT COUNT(*) FROM users").fetchone()[0]
-        uas_count = conn.execute("SELECT COUNT(*) FROM user_article_state").fetchone()[0]
+        user_count = conn.execute("SELECT COUNT(*) AS count FROM users").fetchone()["count"]
+        uas_count = conn.execute("SELECT COUNT(*) AS count FROM user_article_state").fetchone()["count"]
     assert user_count == 1
     assert uas_count == 1
 
@@ -158,8 +158,8 @@ def test_migration_dry_run_does_not_write(tmp_path: Path, monkeypatch: pytest.Mo
     assert "[dry-run]" in result.output
 
     with connect(db) as conn:
-        user_count = conn.execute("SELECT COUNT(*) FROM users").fetchone()[0]
-        uas_count = conn.execute("SELECT COUNT(*) FROM user_article_state").fetchone()[0]
+        user_count = conn.execute("SELECT COUNT(*) AS count FROM users").fetchone()["count"]
+        uas_count = conn.execute("SELECT COUNT(*) AS count FROM user_article_state").fetchone()["count"]
     assert user_count == 0
     assert uas_count == 0
 
@@ -197,5 +197,5 @@ def test_migration_skips_user_creation_if_exists(
     assert "Users already exist" in result.output
 
     with connect(db) as conn:
-        count = conn.execute("SELECT COUNT(*) FROM users").fetchone()[0]
+        count = conn.execute("SELECT COUNT(*) AS count FROM users").fetchone()["count"]
     assert count == 1

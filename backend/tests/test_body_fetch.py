@@ -243,7 +243,9 @@ def test_get_article_with_uas_returns_user_state(tmp_path: Path) -> None:
     assert result is not None
     assert result["state"] == "done"
     assert result["starred"] is True
-    assert result["done_at"] == "2024-06-01T12:00:00"
+    done_at = result["done_at"]
+    done_at_str = done_at.isoformat() if hasattr(done_at, "isoformat") else str(done_at)
+    assert done_at_str.startswith("2024-06-01T12:00")
 
 
 def test_get_article_with_user_id_does_not_bleed_across_users(tmp_path: Path) -> None:
