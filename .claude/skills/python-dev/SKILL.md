@@ -91,9 +91,26 @@ These are decisions encoded in config/`AGENTS.md` that an unaware edit will undo
 - Framework is **pytest** with `flake8-pytest-style` (`PT`) enforced. Use
   `pytest.raises`, parametrize with `@pytest.mark.parametrize`, name fixtures
   clearly. `assert` is allowed in tests (per-file ignore), not in app code.
-- **Postgres in tests:** the suite uses `testcontainers[postgres]`. Don't mock
-  the DB into a fake; spin a container fixture like the existing tests
-  (`backend/tests/conftest.py`). Read a neighbor test before writing a new one.
+- **Postgres in tests:** the suite uses `testcontainers[postgres]` but can also
+  hit a local Docker Postgres directly. Credentials live in `.env` at the project
+  root — **load it before running tests**:
+  ```bash
+  source .env && make test
+  # or, if dotenv-cli is installed:
+  dotenv make test
+  ```
+  `.env` sets `TEST_DATABASE_URL` (and `DATABASE_URL`) to the local Docker
+  Postgres (`postgresql://news_dashboard:…@localhost:55432/news_dashboard_test`).
+  When `TEST_DATABASE_URL` is present, `conftest.py` uses it directly instead of
+  spinning a container — so tests run faster and never skip on Docker availability.
+  Don't mock the DB into a fake; use the `pg_clean` fixture from `conftest.py`
+  (gives a fresh-truncated Postgres URL per test). Read a neighbour test before
+  writing a new one.
+- **All tests must use Postgres.** The codebase is Postgres-only; SQLite
+  `tmp_path` fixtures are no longer valid. Convert any `tmp_db` / `db_path`
+  fixture to `pg_clean` and pass `database_url=pg_clean` to functions.
+  Monkeypatching `DB_PATH` is also obsolete — patch `DATABASE_URL` env var or
+  pass `database_url=` explicitly.
 - **No live network.** Stub `httpx`/feed fetches; tests must pass offline.
   `filterwarnings = error` for the package's own DeprecationWarnings — don't
   introduce deprecated calls.
@@ -117,9 +134,9 @@ These are decisions encoded in config/`AGENTS.md` that an unaware edit will undo
 Do not report success on unverified code. Run, in order, and fix until clean:
 
 ```bash
-make lint        # ruff check + ruff format --check
-make typecheck   # mypy strict
-make test        # pytest --cov --cov-report=term-missing
+make lint                  # ruff check + ruff format --check
+make typecheck             # mypy strict
+source .env && make test   # pytest --cov (needs Postgres from .env)
 ```
 
 `make format` auto-fixes lint/format issues. Quote the real output when

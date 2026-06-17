@@ -17,7 +17,6 @@ session behaviour should clear ``app.dependency_overrides`` themselves.
 from __future__ import annotations
 
 import os
-import subprocess
 from collections.abc import Generator
 from pathlib import Path
 
@@ -25,27 +24,16 @@ import pytest
 
 from news_dashboard.db import init_db
 
-# Load .env from the main repo root so tests can run without manually exporting
-# DATABASE_URL. Works in both regular checkouts and git worktrees.
-# setdefault means CI-provided env vars always take precedence.
-try:
-    _git_common = subprocess.run(
-        ["git", "rev-parse", "--git-common-dir"],  # noqa: S607
-        capture_output=True,
-        text=True,
-        check=True,
-    ).stdout.strip()
-    _repo_root = Path(_git_common).parent
-    if not _repo_root.is_absolute():
-        _repo_root = (Path.cwd() / _repo_root).resolve()
-    _env_file = _repo_root / ".env"
-    if _env_file.exists():
-        for _line in _env_file.read_text().splitlines():
+# Load .env from the repo root when running locally (no-op in CI where the
+# variables are injected by the GitHub Actions service container instead).
+_env_file = Path(__file__).parent.parent.parent / ".env"
+if _env_file.exists():
+    with _env_file.open() as _f:
+        for _line in _f:
+            _line = _line.strip()
             if _line and not _line.startswith("#") and "=" in _line:
                 _key, _, _val = _line.partition("=")
                 os.environ.setdefault(_key.strip(), _val.strip())
-except Exception:  # noqa: S110
-    pass
 
 # Ensure SESSION_SECRET is set for all tests so auth module can load.
 os.environ.setdefault("TEST_SESSION_SECRET", "test-secret-key-not-for-production")
