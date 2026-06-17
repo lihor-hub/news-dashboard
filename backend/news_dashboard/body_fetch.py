@@ -177,6 +177,15 @@ def _merge_user_state(
     return d
 
 
+def _article_from_row(row: Any, conn: Any, article_id: int, user_id: int | None) -> dict[str, Any]:
+    d = row_to_dict(row)
+    d.pop("embedding", None)
+    d.pop("fts_vector", None)
+    if user_id is not None:
+        _merge_user_state(d, conn, article_id, user_id)
+    return d
+
+
 def get_article(
     article_id: int,
     db_path: Path | None = None,
@@ -193,12 +202,7 @@ def get_article(
         row = conn.execute("SELECT * FROM articles WHERE id = %s", (article_id,)).fetchone()
         if row is None:
             return None
-        d = row_to_dict(row)
-        d.pop("embedding", None)
-        d.pop("fts_vector", None)
-        if user_id is not None:
-            _merge_user_state(d, conn, article_id, user_id)
-        return d
+        return _article_from_row(row, conn, article_id, user_id)
 
 
 def fetch_and_cache_body(
@@ -213,15 +217,12 @@ def fetch_and_cache_body(
     """
     init_db(db_path)
     with connect(db_path) as conn:
-        row = conn.execute(
-            "SELECT id, url, body_status FROM articles WHERE id = %s",
-            (article_id,),
-        ).fetchone()
+        row = conn.execute("SELECT * FROM articles WHERE id = %s", (article_id,)).fetchone()
         if row is None:
             return None
         row_d = row_to_dict(row)
         if row_d.get("body_status") == "ok":
-            return get_article(article_id, db_path=db_path, user_id=user_id)
+            return _article_from_row(row, conn, article_id, user_id)
 
     url = row_d["url"]
     body, status = extract_body(url)

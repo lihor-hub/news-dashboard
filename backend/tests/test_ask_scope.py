@@ -17,9 +17,22 @@ def _pack(vector: list[float]) -> bytes:
     return struct.pack(f"{len(vector)}f", *vector)
 
 
+def _seed_source(db_path: Path, slug: str = "test-source", name: str = "TestSource") -> None:
+    with connect(db_path) as conn:
+        conn.execute(
+            """
+            INSERT INTO sources(slug, name, url, category, kind, priority, enabled)
+            VALUES (%s, %s, %s, 'engineering', 'rss', 50, TRUE)
+            ON CONFLICT(slug) DO NOTHING
+            """,
+            (slug, name, f"https://example.com/{slug}.xml"),
+        )
+
+
 def _seed_articles(db_path: Path) -> None:
     """Insert one article per legacy status with a pre-set embedding."""
     init_db(db_path)
+    _seed_source(db_path)
     embedding = _pack([0.1] * 10)
     statuses = ["new", "saved", "read", "skipped", "archived"]
     with connect(db_path) as conn:
@@ -129,6 +142,7 @@ def test_ask_default_scope_returns_answer(tmp_path: Path, monkeypatch: pytest.Mo
     """ask() with include_all=False succeeds when saved+read count >= MIN_ARTICLES."""
     db_path = tmp_path / "ask.db"
     init_db(db_path)
+    _seed_source(db_path, "s", "S")
     embedding = _pack([0.1] * 10)
     with connect(db_path) as conn:
         for i in range(1, 8):  # 7 saved/read articles — above MIN_ARTICLES=5
@@ -185,6 +199,7 @@ def test_ask_include_all_widens_corpus(tmp_path: Path, monkeypatch: pytest.Monke
     """ask(include_all=True) includes new+skipped articles in the pool."""
     db_path = tmp_path / "ask.db"
     init_db(db_path)
+    _seed_source(db_path, "s", "S")
     embedding = _pack([0.1] * 10)
     # Insert 6 articles with status 'new' — not picked up by default scope
     with connect(db_path) as conn:
