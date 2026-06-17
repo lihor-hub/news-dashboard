@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import os
+import threading
 from collections.abc import Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from hashlib import sha256
@@ -17,6 +18,8 @@ POSTGRES_PREFIXES = ("postgres:" + "//", "postgresql:" + "//")
 DB_PATH: Path | None = None
 
 logger = logging.getLogger(__name__)
+_INIT_DB_LOCK = threading.Lock()
+_INITIALIZED_DATABASES: set[tuple[str, str | None, str]] = set()
 
 POSTGRES_SCHEMA = [
     """
@@ -136,6 +139,18 @@ POSTGRES_SCHEMA = [
     "ALTER TABLE articles ADD COLUMN IF NOT EXISTS embedding BYTEA",
     "ALTER TABLE articles ADD COLUMN IF NOT EXISTS body TEXT",
     "ALTER TABLE articles ADD COLUMN IF NOT EXISTS body_status TEXT NOT NULL DEFAULT 'missing'",
+    """
+    ALTER TABLE articles ADD COLUMN IF NOT EXISTS search_vector tsvector
+      GENERATED ALWAYS AS (
+        to_tsvector(
+          'english',
+          coalesce(title, '') || ' ' || coalesce(summary, '') || ' ' ||
+          coalesce(reason, '') || ' ' || coalesce(tags, '') || ' ' ||
+          coalesce(source_name, '') || ' ' || coalesce(body, '')
+        )
+      ) STORED
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_articles_search ON articles USING gin(search_vector)",
     "ALTER TABLE articles ADD COLUMN IF NOT EXISTS state TEXT NOT NULL DEFAULT 'today'",
     "ALTER TABLE articles ADD COLUMN IF NOT EXISTS starred BOOLEAN NOT NULL DEFAULT FALSE",
     """
@@ -179,6 +194,19 @@ POSTGRES_SCHEMA = [
     ),
     "CREATE INDEX IF NOT EXISTS idx_articles_state ON articles(state)",
     "CREATE INDEX IF NOT EXISTS idx_articles_starred ON articles(starred)",
+    """
+    CREATE INDEX IF NOT EXISTS idx_articles_state_discovered_id
+      ON articles(state, discovered_at DESC, id DESC)
+    """,
+    """
+    CREATE INDEX IF NOT EXISTS idx_articles_category_discovered_id
+      ON articles(category, discovered_at DESC, id DESC)
+    """,
+    """
+    CREATE INDEX IF NOT EXISTS idx_articles_visible_discovered_id
+      ON articles(discovered_at DESC, id DESC)
+      WHERE canonical_id IS NULL
+    """,
     """
     CREATE INDEX IF NOT EXISTS idx_ingest_run_sources_source_run
       ON ingest_run_sources(source_name, run_id DESC)
@@ -269,6 +297,10 @@ POSTGRES_MULTIUSER_SCHEMA = [
         " ON user_article_state(user_id, starred) WHERE starred = TRUE"
     ),
     "CREATE INDEX IF NOT EXISTS idx_uas_article_id ON user_article_state(article_id)",
+    """
+    CREATE INDEX IF NOT EXISTS idx_uas_user_state_article
+      ON user_article_state(user_id, state, article_id)
+    """,
 ]
 
 
@@ -334,14 +366,43 @@ def connect(
 
 
 def init_db(_db_path: Path | None = None, database_url: str | None = None) -> None:
+    schema_fingerprint = sha256(
+        "\0".join(POSTGRES_SCHEMA + POSTGRES_MULTIUSER_SCHEMA).encode("utf-8")
+    ).hexdigest()
+    env_key = (
+        database_url
+        or os.getenv("DATABASE_URL")
+        or "|".join(
+            (
+                os.getenv("POSTGRES_HOST", ""),
+                os.getenv("POSTGRES_PORT", ""),
+                os.getenv("POSTGRES_DB", ""),
+                os.getenv("POSTGRES_USER", ""),
+            )
+        )
+    )
+    cache_key = (
+        str(_db_path or DB_PATH or ""),
+        env_key,
+        schema_fingerprint,
+    )
+    with _INIT_DB_LOCK:
+        if cache_key in _INITIALIZED_DATABASES:
+            return
+
     # Each statement runs in its own transaction so a harmless idempotency
     # failure does not leave later schema statements in an aborted transaction.
+    applied = 0
     for statement in POSTGRES_SCHEMA + POSTGRES_MULTIUSER_SCHEMA:
         try:
             with connect(_db_path, database_url=database_url) as conn:
                 conn.execute(statement)
+                applied += 1
         except Exception:  # idempotent best-effort schema statements
             logger.debug("Schema statement skipped (already applied): %.80s", statement)
+    if applied > 0:
+        with _INIT_DB_LOCK:
+            _INITIALIZED_DATABASES.add(cache_key)
 
 
 def _schema_name(token: Path) -> str:
