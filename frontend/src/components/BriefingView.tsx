@@ -32,7 +32,10 @@ export function BriefSection({
   index: number;
 }) {
   return (
-    <div className={index > 0 ? 'mt-5 pt-5 border-t border-border' : ''}>
+    <section
+      aria-label={`Briefing section ${index + 1}: ${section.title}`}
+      className={index > 0 ? 'mt-5 pt-5 border-t border-border' : ''}
+    >
       <h3 className="text-sm font-semibold text-foreground mb-1.5">{section.title}</h3>
       <p className="text-sm text-muted-foreground leading-relaxed">{section.body}</p>
       {section.citations.length > 0 && (
@@ -44,7 +47,7 @@ export function BriefSection({
           })}
         </div>
       )}
-    </div>
+    </section>
   );
 }
 
@@ -104,8 +107,12 @@ export function BriefingView({
   afterMeta?: React.ReactNode;
 }) {
   const articleMap = new Map(briefing.articles.map((a) => [a.id, a]));
-  const worthOpening = briefing.articles.filter((a) => a.section_index === null);
   const sections = briefing.content?.sections ?? [];
+  const worthOpening = briefing.content?.worth_opening?.length
+    ? briefing.content.worth_opening
+        .map((articleId) => articleMap.get(articleId))
+        .filter((article): article is BriefingArticle => Boolean(article))
+    : briefing.articles.filter((a) => a.section_index === null);
   const articleCount = briefing.articles.length;
 
   return (

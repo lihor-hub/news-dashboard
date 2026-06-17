@@ -164,6 +164,34 @@ describe('BriefPage — latest briefing', () => {
     expect(screen.getByText('Another Article')).toBeTruthy();
   });
 
+  it('orders worth-opening articles by the briefing content contract', async () => {
+    vi.spyOn(api, 'fetchLatestBriefing').mockResolvedValue({
+      ...COMPLETE_BRIEFING,
+      content: {
+        ...COMPLETE_BRIEFING.content,
+        worth_opening: [99, 77],
+      },
+      articles: [
+        { ...ARTICLE_CITED, id: 77, title: 'Second Worth Opening', section_index: null },
+        ARTICLE_WORTH,
+      ],
+    });
+
+    renderBriefPage();
+
+    await waitFor(() => expect(screen.getByText('Also worth a look')).toBeTruthy());
+    const worthLinks = screen
+      .getAllByRole('link')
+      .filter(
+        (link) => link.getAttribute('href') === '/a/99' || link.getAttribute('href') === '/a/77'
+      );
+
+    expect(worthLinks.map((link) => link.textContent)).toEqual([
+      'Another ArticleTech News',
+      'Second Worth OpeningAnthropic Blog',
+    ]);
+  });
+
   it('shows Refresh button', async () => {
     renderBriefPage();
     await waitFor(() =>

@@ -189,6 +189,12 @@ function RouteStateCapture({ onState }: { onState: (s: unknown) => void }) {
 describe('LoginPage', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+    vi.spyOn(api, 'fetchAuthConfig').mockResolvedValue({
+      provider: 'password',
+      keycloak_enabled: false,
+      login_url: null,
+      logout_url: '/api/auth/logout',
+    });
   });
 
   it('renders username and password fields', () => {

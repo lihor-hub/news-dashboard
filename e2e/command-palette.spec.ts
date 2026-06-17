@@ -15,8 +15,8 @@ test.describe('Command palette — open/close', () => {
     await expect(page.getByPlaceholder(/jump to a view/i)).toBeVisible();
   });
 
-  test('opens with Meta+K', async ({ page }) => {
-    await page.keyboard.press('Meta+k');
+  test('opens with the platform shortcut', async ({ page }) => {
+    await page.keyboard.press('ControlOrMeta+k');
     await expect(page.getByPlaceholder(/jump to a view/i)).toBeVisible();
   });
 

@@ -4,7 +4,7 @@
  * and #105 (command palette + keyboard shortcuts for Brief/Today).
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -179,6 +179,18 @@ describe('#105 — command palette navigation', () => {
   });
 });
 
+describe('#105 — command palette shortcut', () => {
+  it('opens on Meta+K', async () => {
+    renderShell('/');
+
+    fireEvent.keyDown(window, { key: 'k', metaKey: true });
+
+    await waitFor(() => {
+      expect(screen.getByPlaceholderText(/jump to a view/i)).toBeTruthy();
+    });
+  });
+});
+
 // ── #105: Shortcut overlay text ───────────────────────────────────────────────
 
 describe('#105 — shortcut overlay', () => {
@@ -205,20 +217,20 @@ describe('#105 — shortcut overlay', () => {
 
 // ── #118: Briefing History nav + shortcuts ────────────────────────────────────
 
-describe('#118 — Brief History in moreItems nav', () => {
-  it('shows Brief History link in shell nav', async () => {
+describe('#118 — Briefing History in secondary nav', () => {
+  it('shows Briefing History link in shell nav', async () => {
     renderShell('/');
     await waitFor(() => {
-      const links = screen.getAllByRole('link', { name: /brief history/i });
+      const links = screen.getAllByRole('link', { name: /briefing history/i });
       expect(links.length).toBeGreaterThan(0);
     });
   });
 
-  it('Brief History link points to /briefs', async () => {
+  it('Briefing History link points to /briefs', async () => {
     renderShell('/');
     await waitFor(() => {
       const link = screen
-        .getAllByRole('link', { name: /brief history/i })
+        .getAllByRole('link', { name: /briefing history/i })
         .find((l) => l.getAttribute('href') === '/briefs');
       expect(link).toBeTruthy();
     });
