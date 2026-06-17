@@ -315,7 +315,9 @@ def connect(
     database_url: str | None = None,
 ) -> Iterator[Any]:
     """Open a PostgreSQL connection using psycopg-native SQL and parameters."""
-    conn = psycopg.connect(active_database_url(database_url), row_factory=dict_row)
+    # ty mis-resolves psycopg's overloaded connect() and infers the default
+    # tuple row_factory; mypy and pyrefly both accept dict_row here.
+    conn = psycopg.connect(active_database_url(database_url), row_factory=dict_row)  # ty: ignore[invalid-argument-type]
     schema_token = _db_path or DB_PATH
     try:
         if schema_token is not None:

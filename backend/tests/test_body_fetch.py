@@ -50,7 +50,7 @@ class _SimpleHTTPHandler(http.server.BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(self.__class__.html)
 
-    def log_message(self, *args: object) -> None:
+    def log_message(self, format: str, *args: object) -> None:  # noqa: A002
         pass
 
 
