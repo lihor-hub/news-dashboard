@@ -22,6 +22,20 @@ describe('SwipeableRow — swipe gestures', () => {
     vi.useRealTimers();
   });
 
+  it('fires swipe actions immediately on touch end', () => {
+    const onSwipeRight = vi.fn();
+    const { getByTestId } = render(
+      <SwipeableRow onSwipeRight={onSwipeRight}>
+        <div data-testid="inner">content</div>
+      </SwipeableRow>
+    );
+    const inner = getByTestId('inner');
+    fireEvent.touchStart(inner, { touches: [{ clientX: 0, clientY: 0 }] });
+    fireEvent.touchMove(inner, { touches: [{ clientX: 100, clientY: 0 }] });
+    fireEvent.touchEnd(inner);
+    expect(onSwipeRight).toHaveBeenCalledOnce();
+  });
+
   it('fires onSwipeLeft when dragged left past threshold', () => {
     const onSwipeLeft = vi.fn();
     const { getByTestId } = render(

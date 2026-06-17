@@ -25,6 +25,7 @@ export function SwipeableRow({
   const [isDragging, setIsDragging] = useState(false);
   const [committing, setCommitting] = useState(false);
   const startX = useRef<number | null>(null);
+  const commitTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Long-press state
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -45,6 +46,7 @@ export function SwipeableRow({
   useEffect(() => {
     return () => {
       if (longPressTimer.current) clearTimeout(longPressTimer.current);
+      if (commitTimer.current) clearTimeout(commitTimer.current);
     };
   }, []);
 
@@ -82,8 +84,9 @@ export function SwipeableRow({
     if (willFire) {
       setCommitting(true);
       const action = dx > THRESHOLD ? onSwipeRight : onSwipeLeft;
-      setTimeout(() => {
-        action?.();
+      action?.();
+      if (commitTimer.current) clearTimeout(commitTimer.current);
+      commitTimer.current = setTimeout(() => {
         setCommitting(false);
       }, 180);
     }
@@ -98,6 +101,7 @@ export function SwipeableRow({
     longPressFired.current = false;
     if (!isDragging) return;
     setIsDragging(false);
+    setCommitting(false);
     setDx(0);
     startX.current = null;
   };

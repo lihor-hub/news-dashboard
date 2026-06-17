@@ -19,11 +19,13 @@ vi.mock('sonner', () => ({
   }),
 }));
 
+let patchArticleStatePromise: Promise<unknown> = Promise.resolve({});
+
 vi.mock('../api/workflowApi', async (importOriginal) => {
   const actual = await importOriginal<typeof workflowApi>();
   return {
     ...actual,
-    patchArticleState: vi.fn().mockResolvedValue({}),
+    patchArticleState: vi.fn(() => patchArticleStatePromise),
     patchArticleStar: vi.fn().mockResolvedValue({}),
     patchArticleLater: vi.fn().mockResolvedValue({}),
   };
@@ -84,6 +86,7 @@ function capturedUndo(): () => void {
 describe('useTriageMutations — undo calls the API to revert server state', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    patchArticleStatePromise = Promise.resolve({});
   });
 
   it('setState undo calls patchArticleState with original state', () => {
@@ -175,5 +178,21 @@ describe('useTriageMutations — undo calls the API to revert server state', () 
 
     expect(vi.mocked(toast).error).toHaveBeenCalledWith("Starred articles can't be skipped");
     expect(workflowApi.patchArticleState).not.toHaveBeenCalled();
+  });
+
+  it('removes moved articles from state-filtered query caches before the API resolves', () => {
+    patchArticleStatePromise = new Promise((resolve) => {
+      void resolve;
+    });
+    const { wrapper, queryClient } = makeWrapper();
+    const { result } = renderHook(() => useTriageMutations(), { wrapper });
+    const article = makeArticle({ state: 'today' });
+    queryClient.setQueryData([ARTICLES_KEY, 'today'], [article]);
+
+    act(() => {
+      result.current.setState(article, 'done', 'Marked as read');
+    });
+
+    expect(queryClient.getQueryData([ARTICLES_KEY, 'today'])).toEqual([]);
   });
 });
