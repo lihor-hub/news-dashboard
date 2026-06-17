@@ -79,7 +79,9 @@ jobs:
           python-version: '3.14'
           cache: pip
       - run: pip install -e '.[dev]'
-      - run: pytest -v --cov --cov-report=term-missing
+      - run: >
+          pytest -v --cov --cov-report=term-missing --durations=20
+          -o faulthandler_timeout=120 -o faulthandler_exit_on_timeout=true
         env:
           DATABASE_URL: postgresql://news_dashboard:news_dashboard@127.0.0.1:5432/news_dashboard
           TEST_DATABASE_URL: postgresql://news_dashboard:news_dashboard@127.0.0.1:5432/news_dashboard
