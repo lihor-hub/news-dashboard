@@ -15,6 +15,7 @@ from typing import Any
 import psycopg
 import pytest
 
+import news_dashboard.briefings as briefings_mod
 from news_dashboard.briefings import (
     CANDIDATE_LIMIT,
     IDEMPOTENCY_WINDOW_MINUTES,
@@ -42,6 +43,20 @@ def _seed_source(pg_url: str, slug: str = "test-source") -> None:
             """,
             (slug, "Test Source", f"https://example.com/{slug}", "tech", "rss_feed"),
         )
+
+
+def _seed_user(pg_url: str, username: str = "briefing-user") -> int:
+    with connect(database_url=pg_url) as conn:
+        row = conn.execute(
+            """
+            INSERT INTO users(username, password_hash)
+            VALUES (%s, %s)
+            RETURNING id
+            """,
+            (username, "hash"),
+        ).fetchone()
+    assert row is not None
+    return int(row["id"])
 
 
 def _seed_article(
@@ -86,12 +101,25 @@ def _seed_article(
     return int(row["id"])
 
 
+def _set_user_article_state(pg_url: str, user_id: int, article_id: int, state: str) -> None:
+    with connect(database_url=pg_url) as conn:
+        conn.execute(
+            """
+            INSERT INTO user_article_state(user_id, article_id, state)
+            VALUES (%s, %s, %s)
+            ON CONFLICT(user_id, article_id) DO UPDATE SET state = excluded.state
+            """,
+            (user_id, article_id, state),
+        )
+
+
 def _seed_briefing(
     pg_url: str,
     *,
     title: str = "Test Brief",
     content: dict[str, Any] | None = None,
     created_at: str | None = None,
+    until_at: str = "2026-06-13T00:00:00+00:00",
 ) -> int:
     _content = content or {"sections": [], "worth_opening": []}
     extra_cols = ""
@@ -117,7 +145,7 @@ def _seed_briefing(
                 "complete",
                 "since_last_briefing",
                 "2026-06-12T00:00:00+00:00",
-                "2026-06-13T00:00:00+00:00",
+                until_at,
                 "claude-sonnet-4-6",
                 *extra_vals,
             ),
@@ -422,18 +450,118 @@ def test_get_since_at_uses_most_recent_briefing(pg_clean: str) -> None:
 # ── select_candidates ─────────────────────────────────────────────────────────
 
 
-def test_select_candidates_returns_only_today_articles(pg_clean: str) -> None:
+class _FakeCursor:
+    def __init__(self, rows: list[dict[str, Any]]) -> None:
+        self._rows = rows
+
+    def fetchall(self) -> list[dict[str, Any]]:
+        return self._rows
+
+
+class _FakeBriefingConn:
+    def __init__(self, rows: list[dict[str, Any]]) -> None:
+        self.rows = rows
+        self.calls: list[tuple[str, tuple[object, ...]]] = []
+
+    def __enter__(self) -> _FakeBriefingConn:
+        return self
+
+    def __exit__(self, *_: object) -> None:
+        return None
+
+    def execute(self, query: str, params: tuple[object, ...]) -> _FakeCursor:
+        self.calls.append((query, params))
+        return _FakeCursor(self.rows)
+
+
+def test_select_candidates_sql_ignores_global_workflow_state(monkeypatch: Any) -> None:
+    since_at = datetime(2026, 6, 17, 0, 0, tzinfo=timezone.utc)
+    until_at = datetime(2026, 6, 18, 0, 0, tzinfo=timezone.utc)
+    fake_conn = _FakeBriefingConn(
+        [{"id": 1, "title": "Done article", "importance_score": 90, "discovered_at": since_at}]
+    )
+
+    def _connect(**_: object) -> _FakeBriefingConn:
+        return fake_conn
+
+    monkeypatch.setattr(briefings_mod, "connect", _connect)
+
+    candidates = select_candidates(since_at, until_at=until_at, database_url="postgresql://test")
+
+    query, params = fake_conn.calls[0]
+    assert "state = 'today'" not in query
+    assert "discovered_at::timestamptz >= %s" in query
+    assert "discovered_at::timestamptz < %s" in query
+    assert params == (since_at, until_at, CANDIDATE_LIMIT)
+    assert candidates[0]["title"] == "Done article"
+
+
+def test_select_candidates_sql_ignores_user_workflow_state(monkeypatch: Any) -> None:
+    since_at = datetime(2026, 6, 17, 0, 0, tzinfo=timezone.utc)
+    until_at = datetime(2026, 6, 18, 0, 0, tzinfo=timezone.utc)
+    fake_conn = _FakeBriefingConn(
+        [
+            {
+                "id": 2,
+                "title": "User skipped article",
+                "importance_score": 80,
+                "discovered_at": since_at,
+            }
+        ]
+    )
+
+    def _connect(**_: object) -> _FakeBriefingConn:
+        return fake_conn
+
+    monkeypatch.setattr(briefings_mod, "connect", _connect)
+
+    candidates = select_candidates(
+        since_at,
+        until_at=until_at,
+        database_url="postgresql://test",
+        user_id=7,
+    )
+
+    query, params = fake_conn.calls[0]
+    assert "COALESCE(uas.state, 'today') = 'today'" not in query
+    assert "LEFT JOIN user_article_state" in query
+    assert params == (7, 7, since_at, until_at, 7, CANDIDATE_LIMIT)
+    assert candidates[0]["title"] == "User skipped article"
+
+
+def test_select_candidates_returns_current_day_articles_regardless_workflow_state(
+    pg_clean: str,
+) -> None:
     _seed_source(pg_clean)
     since_at = datetime.now(timezone.utc) - timedelta(hours=1)
     _seed_article(pg_clean, url="https://example.com/today-1", title="Today 1", state="today")
     _seed_article(pg_clean, url="https://example.com/later-1", title="Later 1", state="later")
-    _seed_article(pg_clean, url="https://example.com/new-1", title="New 1", state="new")
+    _seed_article(pg_clean, url="https://example.com/done-1", title="Done 1", state="done")
+    _seed_article(pg_clean, url="https://example.com/skipped-1", title="Skipped 1", state="skipped")
 
     candidates = select_candidates(since_at, database_url=pg_clean)
     titles = [a["title"] for a in candidates]
     assert "Today 1" in titles
-    assert "Later 1" not in titles
-    assert "New 1" not in titles
+    assert "Later 1" in titles
+    assert "Done 1" in titles
+    assert "Skipped 1" in titles
+
+
+def test_select_candidates_for_user_ignores_user_workflow_state(pg_clean: str) -> None:
+    _seed_source(pg_clean)
+    user_id = _seed_user(pg_clean)
+    since_at = datetime.now(timezone.utc) - timedelta(hours=1)
+    article_id = _seed_article(
+        pg_clean,
+        url="https://example.com/user-done-1",
+        title="User Done 1",
+        state="today",
+    )
+    _set_user_article_state(pg_clean, user_id, article_id, "done")
+
+    candidates = select_candidates(since_at, database_url=pg_clean, user_id=user_id)
+
+    assert [a["title"] for a in candidates] == ["User Done 1"]
 
 
 def test_select_candidates_filters_by_since_at(pg_clean: str) -> None:
@@ -564,9 +692,33 @@ def test_generate_briefing_creates_briefing_row(pg_clean: str) -> None:
     assert result["title"] == "Fake Briefing"
     assert result["summary"] == "A fake summary."
     assert result["status"] == "complete"
-    assert result["scope"] == "since_last_briefing"
+    assert result["scope"] == "current_day"
     assert result["since_at"] is not None
     assert result["until_at"] is not None
+
+
+def test_generate_briefing_uses_current_day_window_not_previous_briefing_until(
+    pg_clean: str,
+) -> None:
+    _seed_source(pg_clean)
+    future_until_at = (datetime.now(timezone.utc) + timedelta(minutes=5)).isoformat()
+    _seed_briefing(pg_clean, until_at=future_until_at)
+    article_id = _seed_article(
+        pg_clean,
+        url="https://example.com/current-day-after-previous",
+        title="Current Day After Previous",
+        state="done",
+        discovered_at=(datetime.now(timezone.utc) - timedelta(minutes=30)).isoformat(),
+    )
+
+    result = generate_briefing(
+        database_url=pg_clean,
+        ai_fn=_fake_ai,
+        idempotency_window_minutes=0,
+    )
+
+    assert result["scope"] == "current_day"
+    assert {a["id"] for a in result["articles"]} == {article_id}
 
 
 def test_generate_briefing_links_section_citations(pg_clean: str) -> None:

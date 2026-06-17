@@ -18,6 +18,7 @@ from .db import connect, row_to_dict
 CANDIDATE_LIMIT = 40
 DEFAULT_BRIEFING_MODEL = "gpt-4o-mini"
 IDEMPOTENCY_WINDOW_MINUTES = 10
+CURRENT_DAY_SCOPE = "current_day"
 
 logger = logging.getLogger(__name__)
 
@@ -61,8 +62,9 @@ _CITED_ARTICLES_SQL = """
 _CANDIDATES_SQL = """
     SELECT id, title, url, source_name, category, summary, importance_score, discovered_at
     FROM articles
-    WHERE state = 'today'
-      AND discovered_at::timestamptz >= %s
+    WHERE discovered_at::timestamptz >= %s
+      AND discovered_at::timestamptz < %s
+      AND (canonical_id IS NULL OR state != 'archived')
     ORDER BY importance_score DESC NULLS LAST, discovered_at DESC
     LIMIT %s
 """
@@ -74,8 +76,9 @@ _CANDIDATES_SQL_USER = """
     LEFT JOIN user_article_state uas ON uas.article_id = a.id AND uas.user_id = %s
     LEFT JOIN sources src ON src.slug = a.source_slug
     LEFT JOIN user_sources us_src ON us_src.user_id = %s AND us_src.source_slug = a.source_slug
-    WHERE COALESCE(uas.state, 'today') = 'today'
-      AND a.discovered_at::timestamptz >= %s
+    WHERE a.discovered_at::timestamptz >= %s
+      AND a.discovered_at::timestamptz < %s
+      AND (a.canonical_id IS NULL OR a.state != 'archived')
       AND (
         (src.owner_user_id IS NULL AND COALESCE(us_src.enabled, TRUE) IS TRUE)
         OR src.owner_user_id = %s
@@ -137,6 +140,11 @@ def _get_since_at(
             # fallback: parse ISO string
             return datetime.fromisoformat(str(val))
     return datetime.now(timezone.utc) - timedelta(hours=24)
+
+
+def _current_day_since_at(until_at: datetime) -> datetime:
+    """Return the current-day briefing lower bound using the app's rolling 24-hour convention."""
+    return until_at - timedelta(hours=24)
 
 
 def _call_openai(candidates: list[dict[str, Any]], model: str) -> dict[str, Any]:
@@ -249,7 +257,7 @@ def _save_briefing(
             RETURNING id
             """,
             (
-                "since_last_briefing",
+                CURRENT_DAY_SCOPE,
                 since_at,
                 until_at,
                 "complete",
@@ -350,7 +358,7 @@ def _save_failed_briefing(
                 INSERT INTO briefings(scope, since_at, until_at, status, model, error, user_id)
                 VALUES (%s, %s, %s, %s, %s, %s, %s)
                 """,
-                ("since_last_briefing", since_at, until_at, "failed", model, str(exc), user_id),
+                (CURRENT_DAY_SCOPE, since_at, until_at, "failed", model, str(exc), user_id),
             )
     except Exception:
         logger.exception("Failed to persist failed-briefing row — original error follows")
@@ -361,21 +369,27 @@ def _save_failed_briefing(
 
 def select_candidates(
     since_at: datetime,
+    until_at: datetime | None = None,
     database_url: str | None = None,
     user_id: int | None = None,
 ) -> list[dict[str, Any]]:
-    """Return up to CANDIDATE_LIMIT today-state articles discovered after since_at.
+    """Return up to CANDIDATE_LIMIT current-day articles discovered within the window.
 
-    When user_id is provided, selects only articles from the user's subscribed sources
-    that are in the 'today' state for that user (via user_article_state).
+    Workflow state is intentionally ignored so generated reports can include news
+    the user has already opened, starred, postponed, skipped, or marked done.
+    When user_id is provided, source subscriptions still scope the article pool.
     """
+    resolved_until_at = until_at if until_at is not None else datetime.now(timezone.utc)
     with connect(database_url=database_url) as conn:
         if user_id is not None:
             rows = conn.execute(
-                _CANDIDATES_SQL_USER, (user_id, user_id, since_at, user_id, CANDIDATE_LIMIT)
+                _CANDIDATES_SQL_USER,
+                (user_id, user_id, since_at, resolved_until_at, user_id, CANDIDATE_LIMIT),
             ).fetchall()
         else:
-            rows = conn.execute(_CANDIDATES_SQL, (since_at, CANDIDATE_LIMIT)).fetchall()
+            rows = conn.execute(
+                _CANDIDATES_SQL, (since_at, resolved_until_at, CANDIDATE_LIMIT)
+            ).fetchall()
         return [row_to_dict(r) for r in rows]
 
 
@@ -405,10 +419,12 @@ def generate_briefing(
 
     _env_model = os.getenv("OPENAI_BRIEFING_MODEL", DEFAULT_BRIEFING_MODEL)
     resolved_model = model if model is not None else _env_model
-    since_at = _get_since_at(database_url, user_id=user_id)
     until_at = datetime.now(timezone.utc)
+    since_at = _current_day_since_at(until_at)
 
-    candidates = select_candidates(since_at, database_url=database_url, user_id=user_id)
+    candidates = select_candidates(
+        since_at, until_at=until_at, database_url=database_url, user_id=user_id
+    )
     if not candidates:
         return {"status": "no_candidates"}
 

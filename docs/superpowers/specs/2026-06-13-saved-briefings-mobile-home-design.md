@@ -9,7 +9,7 @@ The next improvement should make the app more useful on a phone. The selected di
 ## Goals
 
 - Make the default mobile entry point a saved AI briefing, not a raw article queue.
-- Generate briefings from new inbox articles so the app is useful before triage.
+- Generate briefings from current-day source articles so the app stays useful even after triage.
 - Save each generated briefing as a durable artifact with timestamp, scope, content, and cited source articles.
 - Keep the current Today feed and article workflow intact.
 - Make citations lead directly into the existing article reader.
@@ -55,7 +55,7 @@ Add a `briefings` table:
 
 - `id`: primary key.
 - `created_at`: generation timestamp.
-- `scope`: text scope identifier, initially `since_last_briefing`.
+- `scope`: text scope identifier, initially `current_day`.
 - `since_at`: lower bound for considered article discovery time.
 - `until_at`: upper bound for considered article discovery time.
 - `status`: `complete` or `failed`.
@@ -100,10 +100,11 @@ Add briefing endpoints:
 
 `POST /api/briefings` behavior:
 
-- Select candidate articles from the Today/new inbox only.
-- Use `since_at` from the previous briefing's `until_at`; if no previous briefing exists, use the last 24 hours.
+- Select candidate articles from the current-day report corpus, not the Today Feed.
+- Use a current-day window rather than the previous briefing's `until_at`.
 - Set `until_at` to generation time.
-- Exclude archived, skipped, done, and later articles.
+- Include articles regardless of Workflow State, so already-opened, starred, done, skipped, and later articles still contribute to the report.
+- Keep source subscription scoping for the current user.
 - Cap candidates to 40 articles, ordered by importance score and recency.
 - Require AI configuration. Missing `OPENAI_API_KEY` or disabled AI should return a clear configured-state error.
 - Validate generated JSON before saving.
@@ -155,7 +156,7 @@ Backend tests:
 
 - Briefing tables initialize correctly.
 - Latest briefing returns an empty state when no saved brief exists.
-- Candidate selection includes only eligible new inbox articles in the time window.
+- Candidate selection includes eligible current-day articles in the time window regardless of Workflow State.
 - Generated briefing saves JSON content and article join rows.
 - Invalid generated citations are rejected or removed.
 - Missing AI configuration returns a clear error.
@@ -182,5 +183,5 @@ Implement without removing existing feed workflows:
 
 ## Fixed Defaults
 
-- The first briefing uses a 24-hour initial window.
+- Briefing generation uses the app's current-day window.
 - Briefing generation considers at most 40 candidate articles.

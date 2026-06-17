@@ -102,7 +102,8 @@ export function BriefPage() {
           <Newspaper className="size-10 text-subtle mb-3" strokeWidth={1.25} />
           <div className="text-sm font-medium text-foreground">No articles to brief</div>
           <div className="text-xs mt-1 max-w-xs">
-            No new articles in the Today feed. Check back after your next ingest.
+            No articles were discovered in the current-day window. Check back after your next
+            ingest.
           </div>
         </div>
         <div className="flex justify-center">
