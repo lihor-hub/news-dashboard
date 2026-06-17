@@ -71,8 +71,6 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
-    env:
-      DATABASE_URL: postgresql://news_dashboard:news_dashboard@localhost:5432/news_dashboard
     steps:
       - uses: actions/checkout@v4
 
@@ -82,6 +80,9 @@ jobs:
           cache: pip
       - run: pip install -e '.[dev]'
       - run: pytest -v --cov --cov-report=term-missing
+        env:
+          DATABASE_URL: postgresql://news_dashboard:news_dashboard@127.0.0.1:5432/news_dashboard
+          TEST_DATABASE_URL: postgresql://news_dashboard:news_dashboard@127.0.0.1:5432/news_dashboard
 
       - uses: actions/setup-node@v4
         with:

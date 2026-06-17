@@ -65,10 +65,16 @@ def override_auth() -> Generator[None]:
 def pg_url() -> Generator[str]:
     """Start a PostgreSQL container and return a psycopg-compatible DSN.
 
-    Skips automatically if testcontainers is not installed or if the Docker
-    daemon is unreachable (graceful degradation for environments without
-    Docker).
+    CI can provide TEST_DATABASE_URL via a GitHub Actions service container,
+    avoiding Docker-in-pytest startup hangs. Locally, skip automatically if
+    testcontainers is not installed or if the Docker daemon is unreachable.
     """
+    service_url = os.environ.get("TEST_DATABASE_URL")
+    if service_url:
+        init_db(database_url=service_url)
+        yield service_url
+        return
+
     try:
         from testcontainers.postgres import PostgresContainer
     except ImportError:
