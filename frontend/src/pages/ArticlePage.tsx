@@ -13,9 +13,11 @@ import {
   Archive,
   AlertCircle,
   Loader2,
+  Volume2,
+  Square,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { fetchArticle, fetchArticleBody } from '@/api';
+import { fetchArticle, fetchArticleBody, fetchArticleAudioUrl } from '@/api';
 import { adaptArticle, patchArticleState, patchArticleStar } from '@/api/workflowApi';
 import type { WorkflowState } from '@/lib/workflowTypes';
 import { formatDate, signalLabel } from '@/lib/format';
@@ -198,6 +200,61 @@ export function ArticlePage() {
     } catch {
       toast.error('Action failed');
     }
+  }
+
+  // TTS audio player
+  type AudioState = 'idle' | 'loading' | 'playing' | 'paused';
+  const [audioState, setAudioState] = useState<AudioState>('idle');
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const audioUrlRef = useRef<string | null>(null);
+
+  const audioMutation = useMutation({
+    mutationFn: () => fetchArticleAudioUrl(id!),
+    onSuccess: (url) => {
+      audioUrlRef.current = url;
+      const audio = new Audio(url);
+      audioRef.current = audio;
+      audio.onended = () => setAudioState('paused');
+      audio.onerror = () => {
+        toast.error('Audio playback failed');
+        setAudioState('idle');
+      };
+      void audio.play();
+      setAudioState('playing');
+    },
+    onError: () => {
+      toast.error('Could not load audio');
+      setAudioState('idle');
+    },
+  });
+
+  useEffect(() => {
+    return () => {
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current = null;
+      }
+      if (audioUrlRef.current) {
+        URL.revokeObjectURL(audioUrlRef.current);
+        audioUrlRef.current = null;
+      }
+    };
+  }, []);
+
+  function handleListen() {
+    if (audioState === 'loading') return;
+    if (audioState === 'playing') {
+      audioRef.current?.pause();
+      setAudioState('paused');
+      return;
+    }
+    if (audioState === 'paused' && audioRef.current) {
+      void audioRef.current.play();
+      setAudioState('playing');
+      return;
+    }
+    setAudioState('loading');
+    audioMutation.mutate();
   }
 
   // Touch swipe
@@ -388,7 +445,7 @@ export function ArticlePage() {
 
       {/* Action bar */}
       <div className="fixed bottom-0 inset-x-0 z-20 border-t border-border bg-background/95 backdrop-blur pb-[env(safe-area-inset-bottom)]">
-        <div className="mx-auto max-w-2xl grid grid-cols-5 gap-1 p-2">
+        <div className="mx-auto max-w-2xl grid grid-cols-6 gap-1 p-2">
           <ActionBtn
             onClick={() => void doStar()}
             icon={Star}
@@ -407,6 +464,20 @@ export function ArticlePage() {
             onClick={() => void doAction('archived', 'Archived')}
             icon={Archive}
             label="Archive"
+          />
+          <ActionBtn
+            onClick={handleListen}
+            icon={audioState === 'loading' ? Loader2 : audioState === 'playing' ? Square : Volume2}
+            label={
+              audioState === 'loading'
+                ? 'Loading…'
+                : audioState === 'playing'
+                  ? 'Stop'
+                  : audioState === 'paused'
+                    ? 'Resume'
+                    : 'Listen'
+            }
+            disabled={audioState === 'loading'}
           />
         </div>
       </div>

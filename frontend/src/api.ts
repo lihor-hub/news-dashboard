@@ -63,6 +63,18 @@ export async function fetchArticleBody(id: number | string): Promise<Article> {
   return requestJson<Article>(`/api/articles/${id}/body`, { method: 'POST' });
 }
 
+export async function fetchArticleAudioUrl(id: number | string): Promise<string> {
+  const response = await fetch(`/api/articles/${id}/audio`, {
+    method: 'POST',
+    credentials: 'same-origin',
+  });
+  if (!response.ok) {
+    throw new Error(`${response.status} ${response.statusText}`);
+  }
+  const blob = await response.blob();
+  return URL.createObjectURL(blob);
+}
+
 export async function fetchSources(): Promise<Source[]> {
   const data = await requestJson<{ items: Source[] }>('/api/sources');
   return data.items;

@@ -20,7 +20,7 @@ from fastapi import (
     Response,
 )
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import RedirectResponse, StreamingResponse
+from fastapi.responses import FileResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from starlette.exceptions import HTTPException as StarletteHTTPException
@@ -392,6 +392,25 @@ def fetch_article_body(
     if not article:
         raise HTTPException(status_code=404, detail="article not found")
     return article
+
+
+@api.post("/api/articles/{article_id}/audio")
+def article_audio(
+    article_id: int,
+    current_user: Annotated[dict[str, Any], Depends(require_auth)],
+) -> FileResponse:
+    from .tts import TTSNotConfiguredError, generate_audio
+
+    article = get_article(article_id, user_id=current_user["id"])
+    if not article:
+        raise HTTPException(status_code=404, detail="article not found")
+    try:
+        path = generate_audio(article_id, article)
+    except TTSNotConfiguredError as exc:
+        raise HTTPException(status_code=501, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return FileResponse(path, media_type="audio/mpeg", filename=f"article-{article_id}.mp3")
 
 
 @api.patch("/api/articles/{article_id}/status")

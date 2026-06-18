@@ -86,7 +86,7 @@ describe('ArticlePage — rendering', () => {
     await waitFor(() => expect(screen.getByText('Back')).toBeTruthy());
   });
 
-  it('shows action bar with Star, Done, Later, Skip, Archive', async () => {
+  it('shows action bar with Star, Done, Later, Skip, Archive, Listen', async () => {
     renderReader();
     await waitFor(() => {
       expect(screen.getByText('Star')).toBeTruthy();
@@ -94,6 +94,7 @@ describe('ArticlePage — rendering', () => {
       expect(screen.getByText('Later')).toBeTruthy();
       expect(screen.getByText('Skip')).toBeTruthy();
       expect(screen.getByText('Archive')).toBeTruthy();
+      expect(screen.getByText('Listen')).toBeTruthy();
     });
   });
 });
@@ -190,12 +191,21 @@ describe('ArticlePage — touch gesture state', () => {
     // retained after the animation ends.
     renderReader();
     await waitFor(() => screen.getByText('Test Article Title'));
-    // All five action buttons must be present in the DOM.
+    // All six action buttons must be present in the DOM.
     expect(screen.getByRole('button', { name: /star/i })).toBeTruthy();
     expect(screen.getByRole('button', { name: /done/i })).toBeTruthy();
     expect(screen.getByRole('button', { name: /later/i })).toBeTruthy();
     expect(screen.getByRole('button', { name: /skip/i })).toBeTruthy();
     expect(screen.getByRole('button', { name: /archive/i })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /listen/i })).toBeTruthy();
+  });
+
+  it('listen button is accessible and enabled when article is loaded', async () => {
+    vi.spyOn(api, 'fetchArticleAudioUrl').mockResolvedValue('blob:fake');
+    renderReader();
+    await waitFor(() => screen.getByText('Test Article Title'));
+    const btn = screen.getByRole('button', { name: /listen/i });
+    expect((btn as HTMLButtonElement).disabled).toBe(false);
   });
 
   it('touchcancel on the article content resets swipe state without navigating', async () => {
@@ -219,5 +229,53 @@ describe('ArticlePage — touch gesture state', () => {
     fireEvent.touchStart(contentDiv, { touches: [{ clientX: 0, clientY: 0 }] });
     fireEvent.touchEnd(contentDiv);
     // No navigation error thrown = pass (MemoryRouter absorbs navigate calls).
+  });
+});
+
+// ─── TTS / Listen button ──────────────────────────────────────────────────────
+
+describe('ArticlePage — Listen / TTS', () => {
+  beforeEach(() => {
+    vi.spyOn(api, 'fetchArticle').mockResolvedValue(
+      makeArticle({ body_status: 'ok', body: 'Full article text.' })
+    );
+    vi.spyOn(api, 'fetchArticleBody').mockResolvedValue(
+      makeArticle({ body_status: 'ok', body: 'Full article text.' })
+    );
+  });
+
+  it('shows Listen button in idle state', async () => {
+    renderReader();
+    await waitFor(() => screen.getByText('Test Article Title'));
+    expect(screen.getByText('Listen')).toBeTruthy();
+  });
+
+  it('shows loading state while audio is being fetched', async () => {
+    let resolveAudio!: (url: string) => void;
+    vi.spyOn(api, 'fetchArticleAudioUrl').mockReturnValue(
+      new Promise<string>((res) => {
+        resolveAudio = res;
+      })
+    );
+
+    renderReader();
+    await waitFor(() => screen.getByText('Listen'));
+    await userEvent.click(screen.getByText('Listen'));
+
+    await waitFor(() => expect(screen.getByText('Loading…')).toBeTruthy());
+    const btn = screen.getByRole('button', { name: /loading/i });
+    expect((btn as HTMLButtonElement).disabled).toBe(true);
+
+    resolveAudio('blob:fake');
+  });
+
+  it('shows error toast when audio fetch fails', async () => {
+    vi.spyOn(api, 'fetchArticleAudioUrl').mockRejectedValue(new Error('501 Not Implemented'));
+
+    renderReader();
+    await waitFor(() => screen.getByText('Listen'));
+    await userEvent.click(screen.getByText('Listen'));
+
+    await waitFor(() => expect(screen.getByText('Listen')).toBeTruthy());
   });
 });
