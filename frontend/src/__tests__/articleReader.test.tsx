@@ -99,6 +99,38 @@ describe('ArticlePage — rendering', () => {
   });
 });
 
+// ─── Reading time ─────────────────────────────────────────────────────────────
+
+describe('ArticlePage — reading time', () => {
+  it('shows "X min read" when body is loaded', async () => {
+    // 400 words → 2 min read
+    const body = Array(400).fill('word').join(' ');
+    vi.spyOn(api, 'fetchArticle').mockResolvedValue(makeArticle({ body_status: 'ok', body }));
+    vi.spyOn(api, 'fetchArticleBody').mockResolvedValue(makeArticle({ body_status: 'ok', body }));
+
+    renderReader('42', makeArticle({ body_status: 'ok', body }));
+    await waitFor(() => expect(screen.getByText('2 min read')).toBeTruthy());
+  });
+
+  it('does not show reading time when body is not yet loaded', async () => {
+    vi.spyOn(api, 'fetchArticle').mockResolvedValue(makeArticle({ body_status: 'missing' }));
+    vi.spyOn(api, 'fetchArticleBody').mockResolvedValue(makeArticle({ body_status: 'missing' }));
+
+    renderReader();
+    await waitFor(() => screen.getByText('Test Article Title'));
+    expect(screen.queryByText(/min read/)).toBeNull();
+  });
+
+  it('shows minimum 1 min read for very short bodies', async () => {
+    const body = 'Short.';
+    vi.spyOn(api, 'fetchArticle').mockResolvedValue(makeArticle({ body_status: 'ok', body }));
+    vi.spyOn(api, 'fetchArticleBody').mockResolvedValue(makeArticle({ body_status: 'ok', body }));
+
+    renderReader('42', makeArticle({ body_status: 'ok', body }));
+    await waitFor(() => expect(screen.getByText('1 min read')).toBeTruthy());
+  });
+});
+
 // ─── Body fetch on open ───────────────────────────────────────────────────────
 
 describe('ArticlePage — body fetch', () => {

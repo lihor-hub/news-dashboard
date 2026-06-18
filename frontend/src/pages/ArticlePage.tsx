@@ -20,7 +20,7 @@ import { toast } from 'sonner';
 import { fetchArticle, fetchArticleBody, fetchArticleAudioUrl } from '@/api';
 import { adaptArticle, patchArticleState, patchArticleStar } from '@/api/workflowApi';
 import type { WorkflowState } from '@/lib/workflowTypes';
-import { formatDate, signalLabel } from '@/lib/format';
+import { formatDate, readingTime, signalLabel } from '@/lib/format';
 import { getReaderList } from '@/lib/readerList';
 import { cn } from '@/lib/utils';
 
@@ -400,6 +400,14 @@ export function ArticlePage() {
           <h1 className="mt-3 text-[26px] md:text-[30px] font-semibold tracking-tight leading-tight">
             {article.title}
           </h1>
+
+          {/* Reading time — only shown once body is available */}
+          {article.bodyStatus === 'ok' && article.body && (
+            <div className="mt-2 flex items-center gap-1 text-[12px] text-muted-foreground">
+              <Clock className="size-3.5" strokeWidth={1.75} />
+              <span>{readingTime(article.body)} min read</span>
+            </div>
+          )}
 
           {/* Why this matters */}
           <div className="mt-4 rounded-lg border-l-2 border-accent bg-surface/60 px-4 py-3">
