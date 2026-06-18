@@ -398,6 +398,17 @@ export function ArticlePage() {
               <span>{formatDate(article.publishedAt)}</span>
               <span>·</span>
               <span className={cn('font-medium', signalColor)}>{signalLabel(article.signal)}</span>
+              <span>·</span>
+              <a
+                href={article.url}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-0.5 hover:text-foreground"
+                aria-label="Open original article"
+              >
+                <ExternalLink className="size-3" />
+                Open original
+              </a>
             </div>
 
             {/* Title */}

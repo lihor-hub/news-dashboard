@@ -99,6 +99,60 @@ describe('ArticlePage — rendering', () => {
   });
 });
 
+// ─── Open original link ───────────────────────────────────────────────────────
+
+describe('ArticlePage — Open original link', () => {
+  it('is visible while body is still loading', async () => {
+    vi.spyOn(api, 'fetchArticle').mockResolvedValue(makeArticle({ body_status: 'missing' }));
+    // Body fetch never resolves — simulates in-progress load
+    vi.spyOn(api, 'fetchArticleBody').mockReturnValue(new Promise(() => undefined));
+
+    renderReader();
+    await waitFor(() => screen.getByText('Test Article Title'));
+    // Meta-line "Open original" link is always present
+    expect(screen.getAllByText('Open original').length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('is visible when body loaded successfully', async () => {
+    vi.spyOn(api, 'fetchArticle').mockResolvedValue(
+      makeArticle({ body_status: 'ok', body: 'Full text.' })
+    );
+    vi.spyOn(api, 'fetchArticleBody').mockResolvedValue(
+      makeArticle({ body_status: 'ok', body: 'Full text.' })
+    );
+
+    renderReader('42', makeArticle({ body_status: 'ok', body: 'Full text.' }));
+    await waitFor(() => screen.getByText('Test Article Title'));
+    expect(screen.getAllByText('Open original').length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('is visible when body fetch failed', async () => {
+    vi.spyOn(api, 'fetchArticle').mockResolvedValue(
+      makeArticle({ body_status: 'error', body: null })
+    );
+    vi.spyOn(api, 'fetchArticleBody').mockResolvedValue(
+      makeArticle({ body_status: 'error', body: null })
+    );
+
+    renderReader('42', makeArticle({ body_status: 'error', body: null }));
+    await waitFor(() => screen.getByText('Test Article Title'));
+    // Meta-line link + error-block link are both present
+    expect(screen.getAllByText('Open original').length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('points to the article URL', async () => {
+    vi.spyOn(api, 'fetchArticle').mockResolvedValue(makeArticle({ body_status: 'missing' }));
+    vi.spyOn(api, 'fetchArticleBody').mockReturnValue(new Promise(() => undefined));
+
+    renderReader();
+    await waitFor(() => screen.getByText('Test Article Title'));
+    // The meta-line link (first match by text) must point to the article URL
+    const links = screen.getAllByText('Open original');
+    const hrefs = links.map((el) => el.closest('a')?.href);
+    expect(hrefs).toContain('https://example.com/article');
+  });
+});
+
 // ─── Reading time ─────────────────────────────────────────────────────────────
 
 describe('ArticlePage — reading time', () => {
@@ -177,7 +231,8 @@ describe('ArticlePage — body fetch', () => {
 
     renderReader();
     await waitFor(() => expect(screen.getByText("Couldn't extract article text")).toBeTruthy());
-    expect(screen.getByText('Open original')).toBeTruthy();
+    // Multiple "Open original" links exist (meta-line + error block)
+    expect(screen.getAllByText('Open original').length).toBeGreaterThanOrEqual(1);
   });
 });
 

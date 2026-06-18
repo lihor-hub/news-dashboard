@@ -352,3 +352,183 @@ def test_prefetch_article_bodies_skips_already_ok(tmp_path: Path) -> None:
 
     assert count == 0
     assert called == [], "should not re-fetch articles that already have a body"
+
+
+# ── _ai_extract_body ──────────────────────────────────────────────────────────
+
+
+def test_ai_extract_body_skipped_without_api_key(tmp_path: Path) -> None:
+    from news_dashboard.body_fetch import _ai_extract_body
+
+    with patch.dict("os.environ", {}, clear=False):
+        import os
+
+        os.environ.pop("OPENAI_API_KEY", None)
+        body, status = _ai_extract_body("https://example.com/article")
+
+    assert status == "error"
+    assert body == ""
+
+
+def test_ai_extract_body_calls_openai_on_html(tmp_path: Path) -> None:
+    from unittest.mock import MagicMock
+
+    from news_dashboard.body_fetch import _ai_extract_body
+
+    mock_resp = MagicMock()
+    mock_resp.text = "<html><body>Hello world</body></html>"
+
+    mock_completion = MagicMock()
+    mock_completion.choices[0].message.content = "Hello world"
+    mock_client = MagicMock()
+    mock_client.chat.completions.create.return_value = mock_completion
+
+    with (
+        patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}),
+        patch("httpx.get", return_value=mock_resp),
+        patch("openai.OpenAI", return_value=mock_client),
+    ):
+        body, status = _ai_extract_body("https://example.com/article")
+
+    assert status == "ok"
+    assert body == "Hello world"
+    mock_client.chat.completions.create.assert_called_once()
+
+
+def test_ai_extract_body_returns_error_on_http_failure(tmp_path: Path) -> None:
+    from news_dashboard.body_fetch import _ai_extract_body
+
+    with (
+        patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}),
+        patch("httpx.get", side_effect=RuntimeError("connection refused")),
+    ):
+        body, status = _ai_extract_body("https://example.com/article")
+
+    assert status == "error"
+    assert body == ""
+
+
+def test_ai_extract_body_returns_error_when_openai_returns_empty(tmp_path: Path) -> None:
+    from unittest.mock import MagicMock
+
+    from news_dashboard.body_fetch import _ai_extract_body
+
+    mock_resp = MagicMock()
+    mock_resp.text = "<html><body>some html</body></html>"
+
+    mock_completion = MagicMock()
+    mock_completion.choices[0].message.content = "   "
+    mock_client = MagicMock()
+    mock_client.chat.completions.create.return_value = mock_completion
+
+    with (
+        patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}),
+        patch("httpx.get", return_value=mock_resp),
+        patch("openai.OpenAI", return_value=mock_client),
+    ):
+        body, status = _ai_extract_body("https://example.com/article")
+
+    assert status == "error"
+    assert body == ""
+
+
+def test_ai_extract_body_truncates_html_to_limit(tmp_path: Path) -> None:
+    from unittest.mock import MagicMock
+
+    from news_dashboard.body_fetch import _AI_HTML_LIMIT, _AI_PROMPT, _ai_extract_body
+
+    # 'A' * limit + 'B' * limit — 'B' must never appear in the OpenAI call
+    long_html = "A" * _AI_HTML_LIMIT + "B" * _AI_HTML_LIMIT
+    mock_resp = MagicMock()
+    mock_resp.text = long_html
+
+    mock_completion = MagicMock()
+    mock_completion.choices[0].message.content = "extracted"
+    mock_client = MagicMock()
+    mock_client.chat.completions.create.return_value = mock_completion
+
+    with (
+        patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}),
+        patch("httpx.get", return_value=mock_resp),
+        patch("openai.OpenAI", return_value=mock_client),
+    ):
+        _ai_extract_body("https://example.com/article")
+
+    mock_client.chat.completions.create.assert_called_once()
+    # call_args.kwargs["messages"] is a list[dict]; inspect the sent content
+    sent_messages = mock_client.chat.completions.create.call_args.kwargs["messages"]
+    assert isinstance(sent_messages, list)
+    assert len(sent_messages) == 1
+    prompt_msg = sent_messages[0]["content"]
+    assert isinstance(prompt_msg, str)
+    # The 'B' portion (beyond the limit) must not appear in the sent message
+    assert "B" not in prompt_msg
+    # The 'A' portion (within the limit) must be present
+    assert "A" * 10 in prompt_msg
+    # Exact length: prompt + '\n\n' + truncated html
+    assert len(prompt_msg) == len(_AI_PROMPT) + 2 + _AI_HTML_LIMIT
+
+
+# ── fetch_and_cache_body with AI fallback ─────────────────────────────────────
+
+
+def test_fetch_and_cache_body_uses_ai_fallback_when_scraper_fails(tmp_path: Path) -> None:
+    db_path = _db(tmp_path)
+    article_id = _seed_article(db_path)
+
+    with (
+        patch("news_dashboard.body_fetch.extract_body", return_value=("", "error")),
+        patch(
+            "news_dashboard.body_fetch._ai_extract_body",
+            return_value=("AI extracted text", "ok"),
+        ),
+    ):
+        result = fetch_and_cache_body(article_id, db_path=db_path)
+
+    assert result is not None
+    assert result["body_status"] == "ok"
+    assert result["body"] == "AI extracted text"
+
+
+def test_fetch_and_cache_body_ai_fallback_not_called_when_scraper_ok(tmp_path: Path) -> None:
+    db_path = _db(tmp_path)
+    article_id = _seed_article(db_path)
+    ai_calls: list[str] = []
+
+    def fake_ai(url: str) -> tuple[str, str]:
+        ai_calls.append(url)
+        return "ai text", "ok"
+
+    with (
+        patch("news_dashboard.body_fetch.extract_body", return_value=("scraper text", "ok")),
+        patch("news_dashboard.body_fetch._ai_extract_body", side_effect=fake_ai),
+    ):
+        result = fetch_and_cache_body(article_id, db_path=db_path)
+
+    assert result is not None
+    assert result["body_status"] == "ok"
+    assert result["body"] == "scraper text"
+    assert ai_calls == [], "AI fallback must not run when scraper succeeds"
+
+
+def test_fetch_and_cache_body_ai_fallback_result_is_cached(tmp_path: Path) -> None:
+    db_path = _db(tmp_path)
+    article_id = _seed_article(db_path)
+    ai_calls: list[str] = []
+
+    def fake_ai(url: str) -> tuple[str, str]:
+        ai_calls.append(url)
+        return "AI body text", "ok"
+
+    with (
+        patch("news_dashboard.body_fetch.extract_body", return_value=("", "error")),
+        patch("news_dashboard.body_fetch._ai_extract_body", side_effect=fake_ai),
+    ):
+        result1 = fetch_and_cache_body(article_id, db_path=db_path)
+        result2 = fetch_and_cache_body(article_id, db_path=db_path)
+
+    assert result1 is not None
+    assert result2 is not None
+    assert result1["body"] == "AI body text"
+    assert result2["body"] == "AI body text"
+    assert len(ai_calls) == 1, "AI fallback must be called only once; second call uses cache"

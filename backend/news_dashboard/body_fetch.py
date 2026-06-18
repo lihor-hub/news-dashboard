@@ -8,6 +8,7 @@ Subsequent opens serve the cache; no bulk crawling at ingest.
 from __future__ import annotations
 
 import logging
+import os
 import re
 import urllib.request
 from html.parser import HTMLParser
@@ -18,6 +19,57 @@ from .db import connect, init_db, row_to_dict
 from .scraper import TIMEOUT_SECS, USER_AGENT
 
 logger = logging.getLogger(__name__)
+
+_AI_HTML_LIMIT = 15_000
+_AI_MODEL = "gpt-4o-mini"
+_AI_PROMPT = (
+    "Extract the main article text from this HTML. "
+    "Return only the article body as plain text, no HTML tags."
+)
+
+
+def _ai_extract_body(url: str) -> tuple[str, str]:
+    """Fallback: fetch raw HTML via httpx and extract body text via OpenAI.
+
+    Returns (text, 'ok') on success or ('', 'error') if OPENAI_API_KEY is
+    absent, the HTTP fetch fails, or the AI call fails.
+    """
+    api_key = os.getenv("OPENAI_API_KEY")
+    if not api_key:
+        return "", "error"
+
+    try:
+        import httpx  # lazy import — optional at module load time
+
+        resp = httpx.get(
+            url,
+            timeout=15,
+            headers={"User-Agent": USER_AGENT},
+            follow_redirects=True,
+        )
+        html = resp.text[:_AI_HTML_LIMIT]
+    except Exception as exc:
+        logger.warning("ai_body_fetch: HTTP fetch failed for %r: %s", url, exc)
+        return "", "error"
+
+    try:
+        from openai import OpenAI  # lazy import — optional dep at import time
+
+        client = OpenAI(api_key=api_key)
+        result = client.chat.completions.create(
+            model=_AI_MODEL,
+            messages=[{"role": "user", "content": f"{_AI_PROMPT}\n\n{html}"}],
+            max_tokens=2048,
+        )
+        text = (result.choices[0].message.content or "").strip()
+        if not text:
+            return "", "error"
+        logger.info("ai_body_fetch: AI extraction succeeded for %r", url)
+        return text, "ok"
+    except Exception as exc:
+        logger.warning("ai_body_fetch: AI extraction failed for %r: %s", url, exc)
+        return "", "error"
+
 
 # Tags whose entire subtree we skip
 _SKIP_TAGS = frozenset(
@@ -226,6 +278,8 @@ def fetch_and_cache_body(
 
     url = row_d["url"]
     body, status = extract_body(url)
+    if status == "error":
+        body, status = _ai_extract_body(url)
 
     with connect(db_path) as conn:
         conn.execute(
