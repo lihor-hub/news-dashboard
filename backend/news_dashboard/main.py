@@ -413,6 +413,24 @@ def article_audio(
     return FileResponse(path, media_type="audio/mpeg", filename=f"article-{article_id}.mp3")
 
 
+@api.get("/api/articles/{article_id}/insights")
+def article_insights(
+    article_id: int,
+    current_user: Annotated[dict[str, Any], Depends(require_auth)],
+) -> dict[str, Any]:
+    from .insights import InsightsNotConfiguredError, get_or_generate_insights
+
+    try:
+        bullets = get_or_generate_insights(article_id, user_id=current_user["id"])
+    except InsightsNotConfiguredError as exc:
+        raise HTTPException(status_code=501, detail=str(exc)) from exc
+
+    if not bullets and not get_article(article_id, user_id=current_user["id"]):
+        raise HTTPException(status_code=404, detail="article not found")
+
+    return {"bullets": bullets}
+
+
 @api.patch("/api/articles/{article_id}/status")
 def update_status(article_id: int, payload: StatusUpdate) -> dict[str, Any]:
     try:

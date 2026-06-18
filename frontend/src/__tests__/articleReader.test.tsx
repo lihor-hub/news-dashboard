@@ -342,6 +342,51 @@ describe('ArticlePage — touch gesture state', () => {
   });
 });
 
+// ─── AI insights ─────────────────────────────────────────────────────────────
+
+describe('ArticlePage — AI insights', () => {
+  beforeEach(() => {
+    vi.spyOn(api, 'fetchArticle').mockResolvedValue(
+      makeArticle({ body_status: 'ok', body: 'Full article text.' })
+    );
+    vi.spyOn(api, 'fetchArticleBody').mockResolvedValue(
+      makeArticle({ body_status: 'ok', body: 'Full article text.' })
+    );
+  });
+
+  it('shows insights section with bullets when loaded', async () => {
+    vi.spyOn(api, 'fetchArticleInsights').mockResolvedValue([
+      'First insight bullet',
+      'Second insight bullet',
+    ]);
+    renderReader();
+    await waitFor(() => expect(screen.getByText('First insight bullet')).toBeTruthy());
+    expect(screen.getByText('Second insight bullet')).toBeTruthy();
+    expect(screen.getByTestId('insights-section')).toBeTruthy();
+  });
+
+  it('shows analyzing spinner while insights are loading', async () => {
+    vi.spyOn(api, 'fetchArticleInsights').mockReturnValue(new Promise(() => undefined));
+    renderReader();
+    await waitFor(() => screen.getByText('Test Article Title'));
+    expect(screen.getByText('Analyzing…')).toBeTruthy();
+  });
+
+  it('hides insights section on 501 error', async () => {
+    vi.spyOn(api, 'fetchArticleInsights').mockRejectedValue(new Error('501 Not Implemented'));
+    renderReader();
+    await waitFor(() => screen.getByText('Test Article Title'));
+    await waitFor(() => expect(screen.queryByTestId('insights-section')).toBeNull());
+  });
+
+  it('hides insights section when bullets list is empty', async () => {
+    vi.spyOn(api, 'fetchArticleInsights').mockResolvedValue([]);
+    renderReader();
+    await waitFor(() => screen.getByText('Test Article Title'));
+    await waitFor(() => expect(screen.queryByTestId('insights-section')).toBeNull());
+  });
+});
+
 // ─── TTS / Listen button ──────────────────────────────────────────────────────
 
 describe('ArticlePage — Listen / TTS', () => {

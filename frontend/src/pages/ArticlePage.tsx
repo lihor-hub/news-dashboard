@@ -17,7 +17,7 @@ import {
   Square,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { fetchArticle, fetchArticleBody, fetchArticleAudioUrl } from '@/api';
+import { fetchArticle, fetchArticleBody, fetchArticleAudioUrl, fetchArticleInsights } from '@/api';
 import { adaptArticle, patchArticleState, patchArticleStar } from '@/api/workflowApi';
 import type { WorkflowState } from '@/lib/workflowTypes';
 import { formatDate, readingTime, signalLabel } from '@/lib/format';
@@ -157,6 +157,18 @@ export function ArticlePage() {
     // Run once per article id; bodyMutation is intentionally omitted from deps.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
+
+  const {
+    data: insightBullets,
+    isLoading: insightsLoading,
+    isError: insightsError,
+  } = useQuery({
+    queryKey: ['article-insights', id],
+    queryFn: () => fetchArticleInsights(id!),
+    enabled: !!id,
+    retry: false,
+    staleTime: Infinity,
+  });
 
   // Prev/next navigation from sessionStorage list
   const readerList = getReaderList();
@@ -423,6 +435,37 @@ export function ArticlePage() {
                 <span>{readingTime(article.body)} min read</span>
               </div>
             )}
+
+            {/* AI insights — hidden on 501/error, spinner while loading */}
+            {!insightsError &&
+              (insightsLoading || (insightBullets && insightBullets.length > 0)) && (
+                <div
+                  className="mt-4 rounded-lg border border-border bg-surface/40 px-4 py-3"
+                  data-testid="insights-section"
+                >
+                  <div className="text-[10px] font-medium uppercase tracking-wider text-subtle mb-2">
+                    Key takeaways
+                  </div>
+                  {insightsLoading ? (
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <Loader2 className="size-3.5 animate-spin" />
+                      <span>Analyzing…</span>
+                    </div>
+                  ) : (
+                    <ul className="space-y-1.5">
+                      {insightBullets!.map((bullet, i) => (
+                        <li
+                          key={i}
+                          className="flex items-start gap-2 text-[13px] leading-snug text-foreground"
+                        >
+                          <span className="mt-0.5 shrink-0 text-accent">•</span>
+                          <span>{bullet}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              )}
 
             {/* Why this matters */}
             <div className="mt-4 rounded-lg border-l-2 border-accent bg-surface/60 px-4 py-3">

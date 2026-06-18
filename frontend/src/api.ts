@@ -75,6 +75,11 @@ export async function fetchArticleAudioUrl(id: number | string): Promise<string>
   return URL.createObjectURL(blob);
 }
 
+export async function fetchArticleInsights(id: number | string): Promise<string[]> {
+  const data = await requestJson<{ bullets: string[] }>(`/api/articles/${id}/insights`);
+  return data.bullets;
+}
+
 export async function fetchSources(): Promise<Source[]> {
   const data = await requestJson<{ items: Source[] }>('/api/sources');
   return data.items;
