@@ -181,6 +181,29 @@ describe('ArticlePage — body fetch', () => {
   });
 });
 
+// ─── Action bar viewport-fixed ───────────────────────────────────────────────
+
+describe('ArticlePage — action bar', () => {
+  beforeEach(() => {
+    vi.spyOn(api, 'fetchArticle').mockResolvedValue(
+      makeArticle({ body_status: 'ok', body: 'Text' })
+    );
+    vi.spyOn(api, 'fetchArticleBody').mockResolvedValue(
+      makeArticle({ body_status: 'ok', body: 'Text' })
+    );
+  });
+
+  it('renders the action bar', async () => {
+    renderReader();
+    await waitFor(() => screen.getByText('Test Article Title'));
+    // The action bar element must be present in the DOM.  It lives outside the
+    // motion-slide-in-right animated wrapper so position:fixed always resolves
+    // against the viewport rather than against an ancestor that carries a CSS
+    // transform during the 0.2 s entry animation (fixes #189).
+    expect(screen.getByTestId('action-bar')).toBeTruthy();
+  });
+});
+
 // ─── Back navigation ──────────────────────────────────────────────────────────
 
 describe('ArticlePage — back navigation', () => {
