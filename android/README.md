@@ -34,10 +34,14 @@ gh run download <run-id> --name news-dashboard-apk
 | File | Purpose |
 |---|---|
 | `twa-manifest.json` | Bubblewrap config — source of truth for package ID, icons, colours, signing key ref |
+| `app/` | Gradle Android application module (generated via `@bubblewrap/core`, committed) |
+| `build.gradle` / `settings.gradle` | Root Gradle build files |
+| `gradlew` | Gradle wrapper — CI uses this directly |
 | `android.keystore` | **NOT in git** — signing keystore lives only in GitHub secrets |
 
-The Bubblewrap CLI reads `twa-manifest.json` and generates the full Gradle
-project at build time. You do not need to commit any Gradle files.
+The Gradle project under `android/` was generated once via `@bubblewrap/core`
+and is committed to the repo. CI builds directly with `./gradlew assembleRelease`
+— no Bubblewrap CLI is needed at build time.
 
 ## Signing key
 

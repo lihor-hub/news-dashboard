@@ -35,39 +35,26 @@ jobs:
       # Android SDK — installs build-tools, platform-tools, and cmdline-tools
       - uses: android-actions/setup-android@v3
 
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-
-      # Pre-configure Bubblewrap so it uses the JDK and Android SDK already set
-      # up by the actions above. Without this, Bubblewrap prompts to install its
-      # own JDK (which blocks non-interactive CI).
-      - name: Configure Bubblewrap SDK paths
-        run: |
-          mkdir -p ~/.bubblewrap
-          printf '{"jdkPath":"%s","androidSdkPath":"%s"}\n' \
-            "$JAVA_HOME" "$ANDROID_SDK_ROOT" > ~/.bubblewrap/config.json
-          cat ~/.bubblewrap/config.json
-
-      # Decode the base64 keystore secret into the location twa-manifest.json expects
+      # Decode the base64 keystore secret into the android/ directory
       - name: Decode keystore
         run: echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > android/android.keystore
 
-      # Bubblewrap reads twa-manifest.json, generates the Gradle project, builds,
-      # and signs the APK. Passwords are supplied via CLI flags to skip prompts.
+      # Build and sign the release APK directly via Gradle
       - name: Build signed APK
         working-directory: android
         run: |
-          npx --yes @bubblewrap/cli@1.24.1 build \
-            --skipPwaValidation \
-            --signingKeyPassword "${{ secrets.ANDROID_KEY_PASSWORD }}" \
-            --signingKeyKeystorePassword "${{ secrets.ANDROID_KEYSTORE_PASSWORD }}"
+          chmod +x gradlew
+          ./gradlew assembleRelease \
+            -PstoreFile="$GITHUB_WORKSPACE/android/android.keystore" \
+            -PstorePassword="${{ secrets.ANDROID_KEYSTORE_PASSWORD }}" \
+            -PkeyAlias="${{ secrets.ANDROID_KEY_ALIAS }}" \
+            -PkeyPassword="${{ secrets.ANDROID_KEY_PASSWORD }}"
 
-      # Locate the signed APK (Bubblewrap outputs to working dir or app/build/)
+      # Locate the signed APK in the standard Gradle output directory
       - name: Find APK
         id: apk
         run: |
-          APK=$(find android -name "*.apk" | grep -v unsigned | head -1)
+          APK=$(find android/app/build/outputs/apk/release -name "*.apk" | head -1)
           echo "path=$APK" >> "$GITHUB_OUTPUT"
           echo "Found APK: $APK"
           ls -lh "$APK"

@@ -65,6 +65,7 @@
     "zustand": "^5.0.14"
   },
   "devDependencies": {
+    "@bubblewrap/core": "^1.24.1",
     "@eslint/js": "^10.0.1",
     "@fontsource-variable/inter": "^5.2.8",
     "@fontsource-variable/jetbrains-mono": "^5.2.8",
