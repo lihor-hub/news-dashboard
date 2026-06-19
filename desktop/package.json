@@ -1,0 +1,20 @@
+{
+  "name": "news-dashboard",
+  "version": "1.0.0",
+  "description": "News Dashboard desktop app — wraps https://news.lihor.ro in a native window",
+  "main": "src/main.js",
+  "author": "ioachim-hub",
+  "license": "MIT",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder",
+    "build:mac": "electron-builder --mac",
+    "build:linux": "electron-builder --linux",
+    "build:win": "electron-builder --win"
+  },
+  "devDependencies": {
+    "electron": "^33.0.0",
+    "electron-builder": "^25.1.8"
+  }
+}

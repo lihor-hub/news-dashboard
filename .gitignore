@@ -18,3 +18,7 @@ data/*.db-*
 android/*.keystore
 android/*.jks
 android/*.p12
+
+# Electron desktop build outputs
+desktop/node_modules/
+desktop/dist/

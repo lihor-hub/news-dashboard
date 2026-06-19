@@ -1,0 +1,55 @@
+appId: ro.lihor.newsdashboard.desktop
+productName: News Dashboard
+copyright: "Copyright © 2024 Lihor"
+
+directories:
+  output: dist
+  buildResources: assets
+
+files:
+  - src/**
+  - package.json
+
+# ── macOS ─────────────────────────────────────────────────────────────────────
+mac:
+  category: public.app-category.news
+  icon: assets/icon.icns
+  # Skip code signing — no Apple Developer certificate.
+  # Users bypass Gatekeeper on first launch: right-click → Open.
+  identity: null
+  target:
+    - target: dmg
+      arch:
+        - universal   # works on both Intel (x64) and Apple Silicon (arm64)
+
+dmg:
+  title: "${productName} ${version}"
+  # Default window layout: app icon + Applications shortcut
+  contents:
+    - x: 130
+      y: 150
+    - x: 410
+      y: 150
+      type: link
+      path: /Applications
+
+# ── Linux ─────────────────────────────────────────────────────────────────────
+linux:
+  category: Network
+  icon: assets/icon.png
+  target:
+    - target: AppImage
+      arch:
+        - x64
+
+# ── Windows ───────────────────────────────────────────────────────────────────
+win:
+  icon: assets/icon.ico
+  target:
+    - target: nsis
+      arch:
+        - x64
+
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
