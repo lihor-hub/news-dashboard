@@ -277,20 +277,21 @@ export function StatsPage() {
                 <th className="px-3 py-2 font-medium text-right">Inserted</th>
                 <th className="px-3 py-2 font-medium text-right">Skip rate</th>
                 <th className="px-3 py-2 font-medium text-right">Save rate</th>
+                <th className="px-3 py-2 font-medium text-right">Handle rate</th>
                 <th className="px-3 py-2 font-medium text-right">Errors</th>
               </tr>
             </thead>
             <tbody>
               {loading && (
                 <tr>
-                  <td colSpan={5} className="px-3 py-4 text-center text-muted-foreground text-xs">
+                  <td colSpan={6} className="px-3 py-4 text-center text-muted-foreground text-xs">
                     Loading…
                   </td>
                 </tr>
               )}
               {!loading && sourceQuality.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="px-3 py-4 text-center text-muted-foreground text-xs">
+                  <td colSpan={6} className="px-3 py-4 text-center text-muted-foreground text-xs">
                     No data yet
                   </td>
                 </tr>
@@ -303,6 +304,9 @@ export function StatsPage() {
                     {s.skip_rate}%
                   </td>
                   <td className="px-3 py-2 text-right tabular-nums text-star">{s.save_rate}%</td>
+                  <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">
+                    {s.handle_rate.toFixed(1)}%
+                  </td>
                   <td
                     className={`px-3 py-2 text-right tabular-nums ${s.error_rate > 0 ? 'text-err' : 'text-muted-foreground'}`}
                   >

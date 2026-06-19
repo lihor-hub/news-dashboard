@@ -113,6 +113,7 @@ export interface SourceQualityRow {
   total: number;
   skip_rate: number;
   save_rate: number;
+  handle_rate: number;
   error_rate: number;
 }
 

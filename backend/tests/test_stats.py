@@ -170,12 +170,14 @@ def _insert_article(  # noqa: PLR0913
     source_name: str,
     category: str = "Engineering",
     status: str = "new",
-    discovered_at: str = "2026-06-05T10:00:00+00:00",
+    discovered_at: str | None = None,
     skipped_at: str | None = None,
     saved_at: str | None = None,
     read_at: str | None = None,
     archived_at: str | None = None,
 ) -> None:
+    if discovered_at is None:
+        discovered_at = datetime.now(timezone.utc).isoformat()
     with connect(db_path) as conn:
         # Ensure the referenced source exists (FK constraint).
         conn.execute(
@@ -274,6 +276,55 @@ def test_source_quality_aggregates_per_source(tmp_path: Path) -> None:
     assert alpha["total"] == 3
     assert alpha["skip_rate"] == 33
     assert alpha["save_rate"] == 33
+
+
+def test_source_quality_handle_rate_counts_done_at_from_user_article_state(
+    tmp_path: Path,
+) -> None:
+    """handle_rate must count articles with done_at set in user_article_state."""
+    db_path = tmp_path / "quality_hr.db"
+    init_db(db_path)
+    now_ts = datetime.now(timezone.utc).isoformat()
+
+    # Seed a user for FK constraint
+    with connect(db_path) as conn:
+        user_row = conn.execute(
+            "INSERT INTO users(username, password_hash) VALUES ('tester', 'x') RETURNING id"
+        ).fetchone()
+        assert user_row is not None
+        user_id = int(user_row["id"])
+
+    # Alpha has 4 articles; we'll mark 1 as done
+    _insert_article(db_path, url="a1", source_name="Alpha", status="new")
+    _insert_article(db_path, url="a2", source_name="Alpha", status="new")
+    _insert_article(db_path, url="a3", source_name="Alpha", status="new")
+    _insert_article(db_path, url="a4", source_name="Alpha", status="new")
+    # Beta has 2 articles; we'll mark both as done
+    _insert_article(db_path, url="b1", source_name="Beta", status="new")
+    _insert_article(db_path, url="b2", source_name="Beta", status="new")
+
+    with connect(db_path) as conn:
+        a1_id = int(conn.execute("SELECT id FROM articles WHERE url = 'a1'").fetchone()["id"])
+        b1_id = int(conn.execute("SELECT id FROM articles WHERE url = 'b1'").fetchone()["id"])
+        b2_id = int(conn.execute("SELECT id FROM articles WHERE url = 'b2'").fetchone()["id"])
+
+        for art_id in (a1_id, b1_id, b2_id):
+            conn.execute(
+                "INSERT INTO user_article_state(user_id, article_id, state, done_at, updated_at)"
+                " VALUES (%s, %s, 'done', %s, %s)",
+                (user_id, art_id, now_ts, now_ts),
+            )
+
+    result = source_quality(db_path)
+    alpha = next(r for r in result if r["source_name"] == "Alpha")
+    beta = next(r for r in result if r["source_name"] == "Beta")
+
+    # Alpha: 1 of 4 done → 25.0%
+    assert alpha["total"] == 4
+    assert alpha["handle_rate"] == 25.0
+    # Beta: 2 of 2 done → 100.0%
+    assert beta["total"] == 2
+    assert beta["handle_rate"] == 100.0
 
 
 def test_ingested_vs_handled_returns_14_days(tmp_path: Path) -> None:

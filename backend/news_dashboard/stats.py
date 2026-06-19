@@ -233,14 +233,24 @@ def source_quality(db_path: Path | None = None) -> list[dict[str, Any]]:
             row_to_dict(r)
             for r in conn.execute(
                 """
+                WITH handled AS (
+                  SELECT a2.source_name,
+                         COUNT(DISTINCT uas.article_id) AS handled
+                  FROM user_article_state uas
+                  JOIN articles a2 ON a2.id = uas.article_id
+                  WHERE uas.done_at IS NOT NULL
+                  GROUP BY a2.source_name
+                )
                 SELECT
-                  source_name,
+                  a.source_name,
                   COUNT(*) AS total,
-                  SUM(CASE WHEN status = 'skipped' THEN 1 ELSE 0 END) AS skipped,
-                  SUM(CASE WHEN status = 'saved'   THEN 1 ELSE 0 END) AS saved
-                FROM articles
-                GROUP BY source_name
-                ORDER BY total DESC, source_name
+                  SUM(CASE WHEN a.status = 'skipped' THEN 1 ELSE 0 END) AS skipped,
+                  SUM(CASE WHEN a.status = 'saved'   THEN 1 ELSE 0 END) AS saved,
+                  COALESCE(h.handled, 0) AS handled
+                FROM articles a
+                LEFT JOIN handled h ON h.source_name = a.source_name
+                GROUP BY a.source_name, h.handled
+                ORDER BY total DESC, a.source_name
                 """
             ).fetchall()
         ]
@@ -261,6 +271,7 @@ def source_quality(db_path: Path | None = None) -> list[dict[str, Any]]:
         total = _int_value(row["total"])
         skipped = _int_value(row["skipped"])
         saved = _int_value(row["saved"])
+        handled = _int_value(row["handled"])
         has_error = error_map.get(str(row["source_name"]), False)
         result.append(
             {
@@ -268,6 +279,7 @@ def source_quality(db_path: Path | None = None) -> list[dict[str, Any]]:
                 "total": total,
                 "skip_rate": round(skipped / total * 100) if total else 0,
                 "save_rate": round(saved / total * 100) if total else 0,
+                "handle_rate": round(handled / total * 100, 1) if total else 0.0,
                 "error_rate": 100 if has_error else 0,
             }
         )
