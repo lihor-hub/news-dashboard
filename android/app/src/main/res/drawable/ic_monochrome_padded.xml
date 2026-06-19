@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Wraps ic_monochrome with 12dp inset on each side so the artwork stays inside
+    the adaptive icon safe zone (inner 72dp of the 108dp canvas = 16.7% each side).
+    The raw PNG starts at ~15.6% — just outside the safe zone — so without this
+    wrapper the edges are clipped by circle-mask launchers.
+-->
+<inset xmlns:android="http://schemas.android.com/apk/res/android"
+    android:drawable="@mipmap/ic_monochrome"
+    android:inset="12dp" />
