@@ -1,7 +1,7 @@
-name: Android APK
+name: Android APK (manual)
 
-# Build, sign, and publish the TWA APK as a GitHub Release on every push to
-# main, and on manual workflow_dispatch triggers.
+# Manual build only — automatic releases are handled by release.yml.
+# Use this for testing the build without triggering a version bump.
 #
 # Required repository secrets:
 #   ANDROID_KEYSTORE_BASE64   — base64-encoded android.keystore (JKS)
@@ -11,11 +11,9 @@ name: Android APK
 
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
 
 permissions:
-  contents: write  # required to create GitHub Releases
+  contents: write
 
 jobs:
   build:
@@ -25,20 +23,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # JDK 17 is required by Android Gradle Plugin 8.x
       - uses: actions/setup-java@v4
         with:
           java-version: '17'
           distribution: 'temurin'
 
-      # Android SDK — installs build-tools, platform-tools, and cmdline-tools
       - uses: android-actions/setup-android@v3
 
-      # Decode the base64 keystore secret into the android/ directory
       - name: Decode keystore
         run: echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > android/android.keystore
 
-      # Build and sign the release APK directly via Gradle
       - name: Build signed APK
         working-directory: android
         run: |
@@ -49,43 +43,18 @@ jobs:
             -PkeyAlias="${{ secrets.ANDROID_KEY_ALIAS }}" \
             -PkeyPassword="${{ secrets.ANDROID_KEY_PASSWORD }}"
 
-      # Locate the signed APK in the standard Gradle output directory
       - name: Find APK
         id: apk
         run: |
           APK=$(find android/app/build/outputs/apk/release -name "*.apk" | head -1)
-          echo "path=$APK" >> "$GITHUB_OUTPUT"
-          ls -lh "$APK"
-
-      # Derive version tag from twa-manifest.json + run number so every release
-      # has a unique, monotonically increasing tag.
-      # Tag format: android-v{versionName}-{run_number}, e.g. android-v1.0.0-42
-      - name: Compute release tag
-        id: version
-        run: |
-          VERSION=$(jq -r '.appVersionName' android/twa-manifest.json)
-          TAG="android-v${VERSION}-${{ github.run_number }}"
-          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "Tag: $TAG"
-
-      # Rename the APK to something descriptive before attaching to the release
-      - name: Rename APK
-        id: rename
-        run: |
-          DEST="news-dashboard-${{ steps.version.outputs.tag }}.apk"
-          cp "${{ steps.apk.outputs.path }}" "$DEST"
+          VERSION=$(cat VERSION)
+          DEST="news-dashboard-android-v${VERSION}-manual-${{ github.run_number }}.apk"
+          cp "$APK" "$DEST"
           echo "path=$DEST" >> "$GITHUB_OUTPUT"
+          ls -lh "$DEST"
 
-      # Publish a GitHub Release with the signed APK as a downloadable asset.
-      # --latest marks this as the latest release so the Releases page always
-      # shows the most recent build at the top.
-      - name: Create GitHub Release
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          gh release create "${{ steps.version.outputs.tag }}" \
-            "${{ steps.rename.outputs.path }}" \
-            --title "Android APK v${{ steps.version.outputs.version }} (#${{ github.run_number }})" \
-            --notes "Built from commit ${{ github.sha }} on \`${{ github.ref_name }}\`." \
-            --latest
+      - uses: actions/upload-artifact@v4
+        with:
+          name: news-dashboard-apk-manual
+          path: ${{ steps.apk.outputs.path }}
+          retention-days: 7

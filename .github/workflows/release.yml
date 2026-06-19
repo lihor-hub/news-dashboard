@@ -1,0 +1,218 @@
+name: Release
+
+# Automatic semantic version bump + build on every push to main.
+#
+# Job graph:
+#   version  →  android   (ubuntu, ~5 min)
+#            ↘  desktop   (macos,  ~10 min)
+#
+# version job:
+#   1. Reads commits since the last v* tag (Conventional Commits)
+#   2. Determines bump: feat → minor, fix/perf → patch, BREAKING → major
+#   3. Updates VERSION, android/app/build.gradle, android/twa-manifest.json,
+#      desktop/package.json, commits "chore: bump version to vX.Y.Z", pushes tag
+#
+# android / desktop jobs build only when a bump occurred.
+# GITHUB_TOKEN pushes never re-trigger workflows — no infinite loop risk.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  # ── 1. Compute bump and update version files ─────────────────────────────────
+
+  version:
+    name: Compute & bump version
+    runs-on: ubuntu-latest
+    if: github.actor != 'github-actions[bot]'
+    outputs:
+      bumped: ${{ steps.compute.outputs.bumped }}
+      version: ${{ steps.compute.outputs.version }}
+      code: ${{ steps.compute.outputs.code }}
+      tag: ${{ steps.compute.outputs.tag }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configure git identity
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Run bump script
+        id: compute
+        run: |
+          CURRENT=$(cat VERSION)
+          LAST_TAG=$(git tag --list 'v*' --sort=-version:refname | head -1)
+
+          if [ -z "$LAST_TAG" ]; then
+            echo "No v* tags found — bootstrapping from all commits"
+            RESULT=$(python3 scripts/bump_version.py --current "$CURRENT")
+          else
+            echo "Computing bump since $LAST_TAG"
+            RESULT=$(python3 scripts/bump_version.py --current "$CURRENT" --since-tag "$LAST_TAG")
+          fi
+
+          echo "$RESULT"
+          BUMP=$(echo "$RESULT" | grep '^bump=' | cut -d= -f2)
+          NEXT=$(echo "$RESULT" | grep '^next=' | cut -d= -f2)
+          CODE=$(echo "$RESULT" | grep '^code=' | cut -d= -f2)
+
+          if [ "$BUMP" = "none" ]; then
+            echo "No version bump needed (only ci/docs/test/chore commits)"
+            echo "bumped=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "Bump: $BUMP  |  $CURRENT → $NEXT  (versionCode $CODE)"
+            echo "bumped=true"  >> "$GITHUB_OUTPUT"
+            echo "version=$NEXT" >> "$GITHUB_OUTPUT"
+            echo "code=$CODE"    >> "$GITHUB_OUTPUT"
+            echo "tag=v$NEXT"   >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Update version files and push tag
+        if: steps.compute.outputs.bumped == 'true'
+        run: |
+          V="${{ steps.compute.outputs.version }}"
+          CODE="${{ steps.compute.outputs.code }}"
+          TAG="${{ steps.compute.outputs.tag }}"
+
+          # Primary source of truth
+          echo "$V" > VERSION
+
+          # Android Gradle build file
+          sed -i "s/versionCode [0-9]*/versionCode $CODE/" android/app/build.gradle
+          sed -i "s/versionName \"[0-9][^\"]*\"/versionName \"$V\"/" android/app/build.gradle
+
+          # android/twa-manifest.json
+          jq --arg v "$V" --argjson c "$CODE" \
+            '.appVersionName = $v | .appVersionCode = $c' \
+            android/twa-manifest.json > /tmp/twa.json
+          mv /tmp/twa.json android/twa-manifest.json
+
+          # desktop/package.json
+          jq --arg v "$V" '.version = $v' \
+            desktop/package.json > /tmp/pkg.json
+          mv /tmp/pkg.json desktop/package.json
+
+          git add VERSION android/app/build.gradle android/twa-manifest.json desktop/package.json
+          git commit -m "chore: bump version to $TAG"
+          git tag "$TAG"
+          git push origin HEAD:main --tags
+
+  # ── 2a. Build and sign Android APK ───────────────────────────────────────────
+
+  android:
+    name: Android APK
+    needs: version
+    if: needs.version.outputs.bumped == 'true'
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.version.outputs.tag }}
+
+      - uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - uses: android-actions/setup-android@v3
+
+      - name: Decode keystore
+        run: echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > android/android.keystore
+
+      - name: Build signed APK
+        working-directory: android
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleRelease \
+            -PstoreFile="$GITHUB_WORKSPACE/android/android.keystore" \
+            -PstorePassword="${{ secrets.ANDROID_KEYSTORE_PASSWORD }}" \
+            -PkeyAlias="${{ secrets.ANDROID_KEY_ALIAS }}" \
+            -PkeyPassword="${{ secrets.ANDROID_KEY_PASSWORD }}"
+
+      - name: Rename APK
+        id: apk
+        run: |
+          APK=$(find android/app/build/outputs/apk/release -name "*.apk" | head -1)
+          V="${{ needs.version.outputs.version }}"
+          DEST="news-dashboard-android-v${V}.apk"
+          cp "$APK" "$DEST"
+          echo "path=$DEST" >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          V="${{ needs.version.outputs.version }}"
+          gh release create "android-v$V" \
+            "${{ steps.apk.outputs.path }}" \
+            --title "Android APK v$V" \
+            --notes "Signed APK built from ${{ needs.version.outputs.tag }}." \
+            --latest
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: news-dashboard-apk
+          path: ${{ steps.apk.outputs.path }}
+          retention-days: 30
+
+  # ── 2b. Build Desktop DMG ────────────────────────────────────────────────────
+
+  desktop:
+    name: Desktop DMG
+    needs: version
+    if: needs.version.outputs.bumped == 'true'
+    runs-on: macos-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.version.outputs.tag }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: desktop/package-lock.json
+
+      - name: Install dependencies
+        working-directory: desktop
+        run: npm ci
+
+      - name: Build universal DMG
+        working-directory: desktop
+        run: npm run build:mac
+
+      - name: Find DMG
+        id: dmg
+        run: |
+          DMG=$(find desktop/dist -name "*.dmg" | head -1)
+          echo "path=$DMG" >> "$GITHUB_OUTPUT"
+          ls -lh "$DMG"
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          V="${{ needs.version.outputs.version }}"
+          NOTES="Unsigned macOS DMG (universal — Intel + Apple Silicon).
+
+          First launch: right-click News Dashboard.app in Finder → Open → Open
+          Or in Terminal: xattr -cr \"/Applications/News Dashboard.app\"
+
+          Built from ${{ needs.version.outputs.tag }}."
+
+          gh release create "desktop-v$V" \
+            "${{ steps.dmg.outputs.path }}" \
+            --title "Desktop App v$V" \
+            --notes "$NOTES" \
+            --latest
