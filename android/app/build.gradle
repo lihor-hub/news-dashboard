@@ -68,7 +68,7 @@ android {
         applicationId "ro.lihor.newsdashboard"
         minSdkVersion 24
         targetSdkVersion 35
-        versionCode project.hasProperty('appVersionCode') ? project.appVersionCode.toInteger() : 1
+        versionCode 1001000project.hasProperty('appVersionCode') ? project.appVersionCode.toInteger() : 1
         versionName project.hasProperty('appVersionName') ? project.appVersionName : "1.0.0"
 
         // The name for the application
