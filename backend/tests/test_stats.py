@@ -288,6 +288,99 @@ def test_ingested_vs_handled_returns_14_days(tmp_path: Path) -> None:
         assert "handled" in row
 
 
+def test_ingested_vs_handled_counts_user_article_state_done(tmp_path: Path) -> None:
+    """Regression: handled count must read user_article_state.done_at, not articles.read_at.
+
+    Before the fix, ingested_vs_handled queried articles.read_at / articles.saved_at
+    which are never written by the current state machine.  Users marking articles
+    as 'done' writes user_article_state.done_at — the stats query must read that
+    table and column.
+    """
+    db_path = tmp_path / "ivh_regression.db"
+    init_db(db_path)
+
+    with connect(db_path) as conn:
+        # Seed a user (required for FK in user_article_state)
+        user_row = conn.execute(
+            "INSERT INTO users(username, password_hash) VALUES ('tester', 'x') RETURNING id"
+        ).fetchone()
+        assert user_row is not None
+        user_id = int(user_row["id"])
+
+        # Seed a source
+        conn.execute(
+            "INSERT INTO sources(slug, name, url, category, kind) "
+            "VALUES ('s', 'S', 'https://example.com', 'tech', 'rss_feed') "
+            "ON CONFLICT(slug) DO NOTHING"
+        )
+
+        # Seed an article discovered today
+        now_ts = datetime.now(timezone.utc).isoformat()
+        art_row = conn.execute(
+            """
+            INSERT INTO articles(url, canonical_url, title, source_slug, source_name,
+                                 category, kind, summary, discovered_at)
+            VALUES ('https://e.com/a1', 'https://e.com/a1', 'A1', 's', 'S',
+                    'tech', 'rss_feed', 's', %s)
+            RETURNING id
+            """,
+            (now_ts,),
+        ).fetchone()
+        assert art_row is not None
+        article_id = int(art_row["id"])
+
+        # Mark the article as "done" by inserting into user_article_state
+        # (exactly what transition_article_state does when user_id is provided)
+        conn.execute(
+            """
+            INSERT INTO user_article_state(user_id, article_id, state, done_at, updated_at)
+            VALUES (%s, %s, 'done', %s, %s)
+            """,
+            (user_id, article_id, now_ts, now_ts),
+        )
+
+    result = ingested_vs_handled(db_path)
+    today_row = result[-1]
+
+    assert today_row["ingested"] == 1, "ingested count should include today's article"
+    assert today_row["handled"] == 1, (
+        "handled count must read user_article_state.done_at — "
+        "was zero because old query read articles.read_at which is never written"
+    )
+
+
+def test_ingested_vs_handled_handled_zero_when_only_articles_read_at_set(
+    tmp_path: Path,
+) -> None:
+    """Confirm the old articles.read_at column is NOT counted as handled.
+
+    If only articles.read_at is set (legacy data, no user_article_state row),
+    the chart should show 0 handled — that column is no longer used by the
+    current state machine and counting it would distort today's stats.
+    """
+    db_path = tmp_path / "ivh_legacy.db"
+    init_db(db_path)
+
+    now_ts = datetime.now(timezone.utc).isoformat()
+    # Insert article with read_at set in the articles table (old pattern),
+    # but NO corresponding user_article_state row.
+    _insert_article(
+        db_path,
+        url="legacy1",
+        source_name="L",
+        status="read",
+        discovered_at=now_ts,
+        read_at=now_ts,
+    )
+
+    result = ingested_vs_handled(db_path)
+    today_row = result[-1]
+    assert today_row["ingested"] == 1
+    assert today_row["handled"] == 0, (
+        "articles.read_at must not be counted; handled reads user_article_state only"
+    )
+
+
 def test_category_mix_returns_14_days_with_categories(tmp_path: Path) -> None:
     db_path = tmp_path / "catmix.db"
     init_db(db_path)

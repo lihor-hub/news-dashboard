@@ -111,16 +111,24 @@ def ingested_vs_handled(db_path: Path | None = None, days: int = 14) -> list[dic
                 (since,),
             ).fetchall()
         ]
+        # Read from user_article_state (per-user workflow table).  The old
+        # query hit articles.read_at / articles.saved_at which are never
+        # written by the current state machine; the new state model uses
+        # user_article_state.done_at / skipped_at / archived_at instead.
+        # COUNT(DISTINCT article_id) avoids double-counting articles handled
+        # by more than one user on the same day.
         handled_rows = [
             row_to_dict(r)
             for r in conn.execute(
                 """
-                SELECT DATE(COALESCE(skipped_at, saved_at, read_at, archived_at)) AS day,
-                       COUNT(*) AS n
-                FROM articles
-                WHERE discovered_at >= %s
-                  AND (skipped_at IS NOT NULL OR saved_at IS NOT NULL
-                       OR read_at IS NOT NULL OR archived_at IS NOT NULL)
+                SELECT DATE(COALESCE(uas.done_at, uas.skipped_at, uas.archived_at)) AS day,
+                       COUNT(DISTINCT uas.article_id) AS n
+                FROM user_article_state uas
+                JOIN articles a ON a.id = uas.article_id
+                WHERE a.discovered_at >= %s
+                  AND (uas.done_at IS NOT NULL
+                       OR uas.skipped_at IS NOT NULL
+                       OR uas.archived_at IS NOT NULL)
                 GROUP BY day
                 """,
                 (since,),
