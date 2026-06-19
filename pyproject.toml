@@ -118,6 +118,14 @@ ignore = [
   "ARG001",  # fixtures often unused directly
   "PLR0915", # long test functions are acceptable
 ]
+"scripts/bump_version.py" = [
+  "S603",    # subprocess calls git with trusted CI-controlled arguments
+  "T201",    # print is the intended CLI output for shell consumption
+]
+"scripts/test_bump_version.py" = [
+  "S101",    # asserts are the point of tests
+  "PT009",   # plain assert is preferred over self.assertEqual here
+]
 
 [tool.ruff.lint.pylint]
 max-args = 7

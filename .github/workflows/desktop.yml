@@ -1,17 +1,11 @@
-name: Desktop App
+name: Desktop App (manual)
 
-# Build and publish the Electron desktop installer on every push to main that
-# touches desktop/, and on manual workflow_dispatch triggers.
-#
-# macOS builds must run on a macOS runner (electron-builder cannot produce .dmg
-# on Linux). The resulting installer is published as a GitHub Release asset.
+# Manual build only — automatic releases are handled by release.yml.
+# Use this for testing the build without triggering a version bump.
 # The app is unsigned — users bypass Gatekeeper with right-click → Open.
 
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
-    paths: ['desktop/**']
 
 permissions:
   contents: write
@@ -45,31 +39,8 @@ jobs:
           echo "path=$DMG" >> "$GITHUB_OUTPUT"
           ls -lh "$DMG"
 
-      - name: Compute release tag
-        id: version
-        run: |
-          VERSION=$(node -p "require('./desktop/package.json').version")
-          TAG="desktop-v${VERSION}-${{ github.run_number }}"
-          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-
-      - name: Create GitHub Release
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          NOTES="Unsigned macOS DMG (universal — Intel + Apple Silicon).
-
-          First launch: macOS Gatekeeper will block the app because it is unsigned.
-          Bypass with either:
-          - Right-click News Dashboard.app in Finder → Open → Open
-          - Or in Terminal: xattr -cr \"/Applications/News Dashboard.app\"
-
-          After the first launch the exception is saved permanently.
-
-          Built from commit ${{ github.sha }}."
-
-          gh release create "${{ steps.version.outputs.tag }}" \
-            "${{ steps.dmg.outputs.path }}" \
-            --title "Desktop App v${{ steps.version.outputs.version }} (#${{ github.run_number }})" \
-            --notes "$NOTES" \
-            --latest
+      - uses: actions/upload-artifact@v4
+        with:
+          name: news-dashboard-dmg-manual
+          path: ${{ steps.dmg.outputs.path }}
+          retention-days: 7
