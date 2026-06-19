@@ -39,13 +39,22 @@ jobs:
         with:
           node-version: '20'
 
+      # Pre-configure Bubblewrap so it uses the JDK and Android SDK already set
+      # up by the actions above. Without this, Bubblewrap prompts to install its
+      # own JDK (which blocks non-interactive CI).
+      - name: Configure Bubblewrap SDK paths
+        run: |
+          mkdir -p ~/.bubblewrap
+          printf '{"jdkPath":"%s","androidSdkPath":"%s"}\n' \
+            "$JAVA_HOME" "$ANDROID_SDK_ROOT" > ~/.bubblewrap/config.json
+          cat ~/.bubblewrap/config.json
+
       # Decode the base64 keystore secret into the location twa-manifest.json expects
       - name: Decode keystore
         run: echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > android/android.keystore
 
       # Bubblewrap reads twa-manifest.json, generates the Gradle project, builds,
-      # and signs the APK in one step. Passwords come via CLI flags so the
-      # prompts are skipped in non-interactive CI.
+      # and signs the APK. Passwords are supplied via CLI flags to skip prompts.
       - name: Build signed APK
         working-directory: android
         run: |
