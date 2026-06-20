@@ -6,7 +6,17 @@ import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ArticlePage } from '../pages/ArticlePage';
 import * as api from '../api';
+import * as workflowApi from '../api/workflowApi';
 import type { Article } from '../types';
+
+vi.mock('../api/workflowApi', async (importOriginal) => {
+  const actual = await importOriginal<typeof workflowApi>();
+  return {
+    ...actual,
+    patchArticleState: vi.fn().mockResolvedValue({}),
+    patchArticleStar: vi.fn().mockResolvedValue({}),
+  };
+});
 
 vi.spyOn(console, 'error').mockImplementation(() => undefined);
 
@@ -483,6 +493,96 @@ describe('ArticlePage — Share button', () => {
     await userEvent.click(screen.getByRole('button', { name: /share/i }));
 
     expect(clipboardMock).toHaveBeenCalledWith('https://example.com/article');
+  });
+});
+
+// ─── Triage actions navigate back ────────────────────────────────────────────
+//
+// Each triage button (Done, Archive, Skip, Later, Star) must navigate back to
+// the previous page (i.e. the Today list) after the action succeeds.  The
+// test uses a MemoryRouter with a two-entry history stack so that navigate(-1)
+// is observable: the "/" route renders a sentinel element that appears only
+// after navigation has occurred.
+
+describe('ArticlePage — triage actions navigate back to the list', () => {
+  function renderReaderWithHistory() {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    });
+    return render(
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter initialEntries={['/', '/a/42']} initialIndex={1}>
+          <Routes>
+            <Route path="/a/:id" element={<ArticlePage />} />
+            <Route path="/" element={<div data-testid="today-list">Today List</div>} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>
+    );
+  }
+
+  beforeEach(() => {
+    vi.spyOn(api, 'fetchArticle').mockResolvedValue(makeArticle());
+    vi.spyOn(api, 'fetchArticleBody').mockResolvedValue(
+      makeArticle({ body_status: 'ok', body: 'Text' })
+    );
+    vi.mocked(workflowApi.patchArticleState).mockResolvedValue({} as never);
+    vi.mocked(workflowApi.patchArticleStar).mockResolvedValue({} as never);
+  });
+
+  it('Done navigates back to the list', async () => {
+    renderReaderWithHistory();
+    await waitFor(() => screen.getByText('Test Article Title'));
+    await userEvent.click(screen.getByRole('button', { name: /done/i }));
+    await waitFor(() => screen.getByTestId('today-list'));
+  });
+
+  it('Archive navigates back to the list', async () => {
+    renderReaderWithHistory();
+    await waitFor(() => screen.getByText('Test Article Title'));
+    await userEvent.click(screen.getByRole('button', { name: /archive/i }));
+    await waitFor(() => screen.getByTestId('today-list'));
+  });
+
+  it('Skip navigates back to the list (unstarred article)', async () => {
+    renderReaderWithHistory();
+    await waitFor(() => screen.getByText('Test Article Title'));
+    await userEvent.click(screen.getByRole('button', { name: /skip/i }));
+    await waitFor(() => screen.getByTestId('today-list'));
+  });
+
+  it('Later navigates back to the list', async () => {
+    renderReaderWithHistory();
+    await waitFor(() => screen.getByText('Test Article Title'));
+    await userEvent.click(screen.getByRole('button', { name: /later/i }));
+    await waitFor(() => screen.getByTestId('today-list'));
+  });
+
+  it('Star navigates back to the list', async () => {
+    renderReaderWithHistory();
+    await waitFor(() => screen.getByText('Test Article Title'));
+    await userEvent.click(screen.getByRole('button', { name: /star/i }));
+    await waitFor(() => screen.getByTestId('today-list'));
+  });
+
+  it('Skip on a starred article is disabled and does NOT navigate', async () => {
+    // Override BOTH fetchArticle and fetchArticleBody so bodyMutation.onSuccess
+    // (which calls setQueryData with the body response) does not overwrite the
+    // starred flag.  adaptArticle uses a.state != null for the new state model,
+    // so both state and starred must be present on both responses.
+    const starredArticle = makeArticle({ state: 'today', starred: true });
+    vi.spyOn(api, 'fetchArticle').mockResolvedValue(starredArticle);
+    vi.spyOn(api, 'fetchArticleBody').mockResolvedValue(
+      makeArticle({ state: 'today', starred: true, body_status: 'ok', body: 'Text' })
+    );
+    renderReaderWithHistory();
+    await waitFor(() => screen.getByText('Test Article Title'));
+    // Skip button is disabled when the article is starred
+    const skipBtn = screen.getByRole('button', { name: /skip/i });
+    expect((skipBtn as HTMLButtonElement).disabled).toBe(true);
+    // Still on the article page — no navigation
+    expect(screen.queryByTestId('today-list')).toBeNull();
+    expect(workflowApi.patchArticleState).not.toHaveBeenCalled();
   });
 });
 

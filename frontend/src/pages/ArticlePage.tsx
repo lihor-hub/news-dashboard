@@ -188,8 +188,7 @@ export function ArticlePage() {
       void queryClient.invalidateQueries({ queryKey: ['articles'] });
       void queryClient.invalidateQueries({ queryKey: ['summary'] });
       toast(label);
-      if (nextId) navigate(`/a/${nextId}`, { replace: true });
-      else goBack();
+      goBack();
     } catch {
       toast.error('Action failed');
     }
@@ -200,10 +199,11 @@ export function ArticlePage() {
     const next = !article.starred;
     try {
       await patchArticleStar(article.id, next);
-      await queryClient.invalidateQueries({ queryKey: ['article', id] });
+      void queryClient.invalidateQueries({ queryKey: ['article', id] });
       void queryClient.invalidateQueries({ queryKey: ['articles'] });
       void queryClient.invalidateQueries({ queryKey: ['summary'] });
       toast(next ? 'Starred' : 'Unstarred');
+      goBack();
     } catch {
       toast.error('Action failed');
     }

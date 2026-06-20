@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, expect, it, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { FocusedArticleProvider } from '../contexts/focusedArticle';
@@ -83,5 +83,24 @@ describe('ArticleListView', () => {
     renderArticleList(() => Promise.resolve([]));
 
     await waitFor(() => expect(screen.getByText('Queue clear')).toBeTruthy());
+  });
+});
+
+describe('ArticleListView — list-view triage actions do not navigate', () => {
+  it('swipe-right (done) calls setState but stays on the list page', async () => {
+    renderArticleList(() => Promise.resolve([makeArticle()]));
+    await waitFor(() => screen.getByText('Readable article'));
+
+    // The SwipeableRow inner div (touch target) wraps the article Link.
+    const link = screen.getByRole('link', { name: /readable article/i });
+    const touchTarget = link.parentElement!;
+
+    fireEvent.touchStart(touchTarget, { touches: [{ clientX: 0, clientY: 0 }] });
+    fireEvent.touchMove(touchTarget, { touches: [{ clientX: 100, clientY: 0 }] });
+    fireEvent.touchEnd(touchTarget);
+
+    // Still on the list — article reader route was not activated
+    expect(screen.queryByTestId('reader')).toBeNull();
+    expect(screen.getByText('Readable article')).toBeTruthy();
   });
 });
