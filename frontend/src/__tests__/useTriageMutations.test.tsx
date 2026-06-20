@@ -70,6 +70,7 @@ interface ToastAction {
   onClick: () => void;
 }
 interface ToastOpts {
+  id?: string;
   action?: ToastAction;
 }
 
@@ -167,6 +168,33 @@ describe('useTriageMutations — undo calls the API to revert server state', () 
     expect(lastArgs?.[1]?.action?.label).toBe('Undo');
   });
 
+  it('every action toast carries the shared triage id so rapid actions replace the previous toast', () => {
+    const { wrapper } = makeWrapper();
+    const { result } = renderHook(() => useTriageMutations(), { wrapper });
+    const article = makeArticle();
+
+    // Three rapid actions in sequence — each should carry the same id.
+    act(() => {
+      result.current.setState(article, 'done', 'Marked as read');
+    });
+    const afterDone = vi.mocked(toast).mock.lastCall as unknown as [string, ToastOpts?] | undefined;
+    expect(afterDone?.[1]?.id).toBe('triage');
+
+    act(() => {
+      result.current.toggleStar(article);
+    });
+    const afterStar = vi.mocked(toast).mock.lastCall as unknown as [string, ToastOpts?] | undefined;
+    expect(afterStar?.[1]?.id).toBe('triage');
+
+    act(() => {
+      result.current.sendLater(article, 1);
+    });
+    const afterLater = vi.mocked(toast).mock.lastCall as unknown as
+      | [string, ToastOpts?]
+      | undefined;
+    expect(afterLater?.[1]?.id).toBe('triage');
+  });
+
   it('setState blocks skipping a starred article', () => {
     const { wrapper } = makeWrapper();
     const { result } = renderHook(() => useTriageMutations(), { wrapper });
@@ -176,7 +204,9 @@ describe('useTriageMutations — undo calls the API to revert server state', () 
       result.current.setState(article, 'skipped', 'Skipped');
     });
 
-    expect(vi.mocked(toast).error).toHaveBeenCalledWith("Starred articles can't be skipped");
+    expect(vi.mocked(toast).error).toHaveBeenCalledWith("Starred articles can't be skipped", {
+      id: 'triage',
+    });
     expect(workflowApi.patchArticleState).not.toHaveBeenCalled();
   });
 
