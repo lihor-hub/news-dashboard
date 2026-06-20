@@ -220,14 +220,14 @@ jobs:
 
           Built from ${{ needs.version.outputs.tag }}."
 
-          ASSETS="${{ steps.dmg.outputs.path }}"
+          ASSETS=("${{ steps.dmg.outputs.path }}")
           MANIFEST="${{ steps.dmg.outputs.manifest }}"
           if [ -n "$MANIFEST" ] && [ -f "$MANIFEST" ]; then
-            ASSETS="$ASSETS $MANIFEST"
+            ASSETS+=("$MANIFEST")
           fi
 
           gh release create "desktop-v$V" \
-            $ASSETS \
+            "${ASSETS[@]}" \
             --title "Desktop App v$V" \
             --notes "$NOTES" \
             --latest
