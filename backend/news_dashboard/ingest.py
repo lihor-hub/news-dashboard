@@ -341,14 +341,25 @@ def sync_sources(db_path: Path | None = None) -> None:
             )
 
 
-def _fetch_feed_entries(source: SourceDefinition) -> list[dict[str, Any]]:
-    """Fetch and normalize feed entries, surfacing fetch failures as FeedFetchError."""
-    parsed = feedparser.parse(source.url, agent="news-dashboard/0.1 (personal; contact@lihor.ro)")
-    # feedparser swallows network errors via bozo; surface them so health tracking works
+# Nitter instances tried in order; first success wins. Public instances are
+# community-run and can go offline — update this list if the top one breaks.
+# See https://github.com/zedeus/nitter/wiki/Instances for current options.
+_NITTER_INSTANCES: tuple[str, ...] = (
+    "nitter.poast.org",
+    "nitter.privacydev.net",
+    "nitter.net",
+)
+
+_FEED_AGENT = "news-dashboard/0.1 (personal; contact@lihor.ro)"
+
+
+def _parse_feed_url(url: str) -> list[dict[str, Any]]:
+    """Fetch and normalize a single feed URL. Raises FeedFetchError on failure."""
+    parsed = feedparser.parse(url, agent=_FEED_AGENT)
     if parsed.bozo and not parsed.entries:
         exc = getattr(parsed, "bozo_exception", None)
-        message = f"Feed fetch failed: {exc or 'no entries, bozo=True'}"
-        raise FeedFetchError(message)
+        msg = f"Feed fetch failed: {exc or 'no entries, bozo=True'}"
+        raise FeedFetchError(msg)
     return [
         {
             "url": e.get("link") or e.get("id") or "",
@@ -358,6 +369,30 @@ def _fetch_feed_entries(source: SourceDefinition) -> list[dict[str, Any]]:
         }
         for e in parsed.entries
     ]
+
+
+def _fetch_feed_entries(source: SourceDefinition) -> list[dict[str, Any]]:
+    """Fetch and normalize feed entries, surfacing fetch failures as FeedFetchError."""
+    return _parse_feed_url(source.url)
+
+
+def _nitter_handle(url: str) -> str:
+    """Extract the bare handle from an x.com or twitter.com profile URL."""
+    return url.rstrip("/").split("/")[-1]
+
+
+def _fetch_nitter_feed(source: SourceDefinition) -> list[dict[str, Any]]:
+    """Fetch an X/Twitter account via Nitter RSS, trying instances in order."""
+    handle = _nitter_handle(source.url)
+    last_exc: Exception | None = None
+    for instance in _NITTER_INSTANCES:
+        try:
+            return _parse_feed_url(f"https://{instance}/{handle}/rss")
+        except FeedFetchError as exc:
+            logger.warning("Nitter %s failed for @%s: %s", instance, handle, exc)
+            last_exc = exc
+    msg = f"All Nitter instances failed for @{handle}"
+    raise FeedFetchError(msg) from last_exc
 
 
 def _ingest_source(source: SourceDefinition, db_path: Path | None = None) -> SourceIngestOutcome:
@@ -370,13 +405,17 @@ def _ingest_source(source: SourceDefinition, db_path: Path | None = None) -> Sou
     started = time.perf_counter()
 
     try:
-        entries = (
-            scrape_source(source) if source.kind == "scraped_page" else _fetch_feed_entries(source)
-        )
+        if source.kind == "scraped_page":
+            entries = scrape_source(source)
+        elif source.kind == "nitter_feed":
+            entries = _fetch_nitter_feed(source)
+        else:
+            entries = _fetch_feed_entries(source)
 
-        # Apply per-source item limit
+        # Apply per-source item limit; tweets are short/frequent so cap lower by default
         noise_rule = NOISE_FILTERS.get(source.slug, {})
-        max_items = noise_rule.get("max_items", 50)
+        default_max = 15 if source.kind == "nitter_feed" else 50
+        max_items = noise_rule.get("max_items", default_max)
         entries = entries[:max_items]
         fetched = len(entries)
 
