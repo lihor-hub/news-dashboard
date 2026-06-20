@@ -191,7 +191,11 @@ jobs:
 
       - name: Build universal DMG
         working-directory: desktop
-        run: npm run build:mac
+        # --publish never: prevent electron-builder from trying to push to
+        # GitHub itself (it reads the publish: config and demands GH_TOKEN in
+        # CI).  The manifest files (latest-mac.yml) are still written to dist/
+        # and uploaded manually by the "Create GitHub Release" step below.
+        run: npm run build:mac -- --publish never
 
       - name: Find DMG and update manifest
         id: dmg
