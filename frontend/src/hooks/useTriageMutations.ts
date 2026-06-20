@@ -1,5 +1,9 @@
 import { useQueryClient, useMutation, type QueryKey } from '@tanstack/react-query';
 import { toast } from 'sonner';
+
+// Single shared ID so every triage toast replaces the previous one rather than
+// stacking — rapid actions (read, skip, star) should show only the latest.
+const TRIAGE_TOAST_ID = 'triage';
 import type { WorkflowArticle, WorkflowState } from '../lib/workflowTypes';
 import {
   patchArticleState,
@@ -126,7 +130,7 @@ export function useTriageMutations() {
     onError: (_err, _vars, context) => {
       if (context?.querySnapshots) restoreQuerySnapshots(queryClient, context.querySnapshots);
       else if (context?.snap) restoreToCache(queryClient, context.snap.article);
-      toast.error('Action failed — changes reverted');
+      toast.error('Action failed — changes reverted', { id: TRIAGE_TOAST_ID });
     },
 
     onSettled: () => {
@@ -152,7 +156,7 @@ export function useTriageMutations() {
     onError: (_err, _vars, context) => {
       if (context?.querySnapshots) restoreQuerySnapshots(queryClient, context.querySnapshots);
       else if (context?.snap) restoreToCache(queryClient, context.snap.article);
-      toast.error('Action failed — changes reverted');
+      toast.error('Action failed — changes reverted', { id: TRIAGE_TOAST_ID });
     },
 
     onSettled: () => {
@@ -177,7 +181,7 @@ export function useTriageMutations() {
     onError: (_err, _vars, context) => {
       if (context?.querySnapshots) restoreQuerySnapshots(queryClient, context.querySnapshots);
       else if (context?.snap) restoreToCache(queryClient, context.snap.article);
-      toast.error('Action failed — changes reverted');
+      toast.error('Action failed — changes reverted', { id: TRIAGE_TOAST_ID });
     },
 
     onSettled: () => {
@@ -187,13 +191,14 @@ export function useTriageMutations() {
 
   function setState(article: WorkflowArticle, newState: WorkflowState, label: string) {
     if (newState === 'skipped' && article.starred) {
-      toast.error("Starred articles can't be skipped");
+      toast.error("Starred articles can't be skipped", { id: TRIAGE_TOAST_ID });
       return;
     }
     const snap = snapshot(article);
     const querySnapshots = snapshotArticleQueries(queryClient, article.id);
     setStateMutation.mutate({ article, newState });
     toast(label, {
+      id: TRIAGE_TOAST_ID,
       action: {
         label: 'Undo',
         onClick: () => {
@@ -214,6 +219,7 @@ export function useTriageMutations() {
     const querySnapshots = snapshotArticleQueries(queryClient, article.id);
     starMutation.mutate({ article, starred: nextStarred });
     toast(nextStarred ? 'Starred' : 'Unstarred', {
+      id: TRIAGE_TOAST_ID,
       action: {
         label: 'Undo',
         onClick: () => {
@@ -231,6 +237,7 @@ export function useTriageMutations() {
     const querySnapshots = snapshotArticleQueries(queryClient, article.id);
     sendLaterMutation.mutate({ article, days });
     toast('Snoozed to tomorrow', {
+      id: TRIAGE_TOAST_ID,
       action: {
         label: 'Undo',
         onClick: () => {
