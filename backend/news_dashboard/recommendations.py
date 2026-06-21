@@ -10,6 +10,7 @@ from .db import connect, init_db, row_to_dict
 
 BEHAVIORAL_MODEL_VERSION = "behavioral-affinity-v1"
 SEMANTIC_MODEL_VERSION = "semantic-hybrid-v1"
+NOVELTY_MODEL_VERSION = "novelty-freshness-v1"
 
 # Weight each workflow action contributes toward feature affinity.
 # Starred is handled separately as a flag bonus (see STAR_WEIGHT) because an
@@ -45,6 +46,29 @@ AFFINITY_SCORE_SPAN = 25.0
 # the behavioral and cold-start factors, so semantic scoring degrading to a
 # no-op simply leaves the other factors in charge.
 SEMANTIC_SCORE_SPAN = 25.0
+
+# Maximum points a fresh, high-quality article can gain from the freshness
+# contribution.  Freshness gives recent quality items a controlled path upward
+# so they are not buried by historical preference alone; it is a smaller lift
+# than behavioral/semantic so relevance still leads.
+FRESHNESS_SCORE_SPAN = 15.0
+
+# Articles older than this are considered to have no freshness left.  The lift
+# decays linearly from full at age zero to nothing at the horizon.
+FRESHNESS_HORIZON_HOURS = 168.0  # 7 days
+
+# Maximum points the novelty contribution can add.  Novelty rewards plausible
+# but *surprising* articles — ones dissimilar to the user's taste — so the feed
+# is not purely more of the same.  It is deliberately a fraction of the semantic
+# span so relevance still dominates while novelty keeps a controlled path up.
+NOVELTY_SCORE_SPAN = 10.0
+
+
+def _quality_factor(importance: float | None) -> float:
+    """Map an importance score (0-100, default 50) onto a [0, 1] quality factor."""
+    if importance is None:
+        importance = 50.0
+    return _clamp(importance / 100.0, 0.0, 1.0)
 
 
 def _clamp(value: float, low: float, high: float) -> float:
@@ -207,6 +231,47 @@ def semantic_adjustment(
     return _clamp(similarity, -1.0, 1.0) * SEMANTIC_SCORE_SPAN
 
 
+def freshness_adjustment(age_hours: float | None, importance: float | None) -> float:
+    """Score delta (in points) rewarding recent, high-quality articles.
+
+    The lift decays linearly with age over :data:`FRESHNESS_HORIZON_HOURS` and
+    is scaled by article quality, so a brand-new important item gets a real
+    boost while a stale or low-quality one gets little or none.  Returns ``0.0``
+    when the age is unknown, so missing timestamps never disturb the score.
+    """
+    if age_hours is None:
+        return 0.0
+    recency = _clamp(1.0 - max(age_hours, 0.0) / FRESHNESS_HORIZON_HOURS, 0.0, 1.0)
+    return recency * _quality_factor(importance) * FRESHNESS_SCORE_SPAN
+
+
+def novelty_adjustment(
+    candidate_vector: list[float] | None,
+    profile_vector: list[float] | None,
+    importance: float | None,
+) -> float:
+    """Score delta (in points) rewarding plausible-but-surprising articles.
+
+    Novelty is the controlled inverse of semantic similarity: articles that are
+    *dissimilar* to the user's taste get a lift, but only in proportion to their
+    quality (``importance``) so the path up is reserved for surprising yet
+    plausible items rather than random low-signal noise.  Degrades to ``0.0``
+    when novelty cannot be assessed (missing vectors), leaving the rest of the
+    score — including the relevance-seeking semantic lift — in charge.
+    """
+    if not candidate_vector or not profile_vector:
+        return 0.0
+    if len(candidate_vector) != len(profile_vector):
+        return 0.0
+    from .embeddings import cosine_similarity
+
+    similarity = cosine_similarity(candidate_vector, profile_vector)
+    # Map similarity [-1, 1] onto a dissimilarity factor [0, 1]: the further the
+    # candidate is from the user's taste, the more novel it is.
+    dissimilarity = _clamp((1.0 - similarity) / 2.0, 0.0, 1.0)
+    return dissimilarity * _quality_factor(importance) * NOVELTY_SCORE_SPAN
+
+
 def upsert_recommendation_score(
     user_id: int,
     article_id: int,
@@ -309,6 +374,9 @@ def _load_candidates(conn: Any, user_id: int, limit: int) -> list[dict[str, Any]
     rows = conn.execute(
         f"""
         SELECT a.id, a.source_slug, a.category, a.tags, a.embedding,
+          a.importance_score,
+          EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - a.discovered_at::timestamptz))
+            / 3600.0 AS age_hours,
           {_COLD_START_RECOMMENDATION_SCORE_SQL} AS base_score
         FROM articles a
         LEFT JOIN sources src ON src.slug = a.source_slug
@@ -344,17 +412,24 @@ def recompute_user_recommendations(
         semantic_profile = build_semantic_profile(_load_user_history_vectors(conn, user_id))
         candidates = _load_candidates(conn, user_id, limit)
 
-    model_version = SEMANTIC_MODEL_VERSION if semantic_profile else BEHAVIORAL_MODEL_VERSION
+    # Novelty needs an embedded taste vector to measure surprise against; without
+    # one it degrades to a no-op, so the version only advertises novelty when the
+    # semantic profile is present.
+    model_version = NOVELTY_MODEL_VERSION if semantic_profile else BEHAVIORAL_MODEL_VERSION
     scored = 0
     for candidate in candidates:
         base = float(candidate["base_score"])
         source_slug = str(candidate["source_slug"])
         category = candidate.get("category")
         tags = parse_tags(candidate.get("tags"))
+        importance = _opt_float(candidate.get("importance_score"))
+        age_hours = _opt_float(candidate.get("age_hours"))
         adjustment = profile.adjustment(source_slug, category, tags)
         candidate_vector = _decode_candidate_embedding(candidate.get("embedding"))
         semantic = semantic_adjustment(candidate_vector, semantic_profile)
-        final_score = _clamp(base + adjustment + semantic, 0.0, 100.0)
+        freshness = freshness_adjustment(age_hours, importance)
+        novelty = novelty_adjustment(candidate_vector, semantic_profile, importance)
+        final_score = _clamp(base + adjustment + semantic + freshness + novelty, 0.0, 100.0)
         upsert_recommendation_score(
             user_id,
             int(candidate["id"]),
@@ -365,6 +440,8 @@ def recompute_user_recommendations(
                 "base_score": round(base, 4),
                 "affinity_adjustment": round(adjustment, 4),
                 "semantic_adjustment": round(semantic, 4),
+                "freshness_adjustment": round(freshness, 4),
+                "novelty_adjustment": round(novelty, 4),
                 "source_slug": source_slug,
                 "category": category,
             },
@@ -372,6 +449,13 @@ def recompute_user_recommendations(
         )
         scored += 1
     return scored
+
+
+def _opt_float(value: Any) -> float | None:
+    """Coerce an optional numeric DB column to ``float``, preserving ``None``."""
+    if value is None:
+        return None
+    return float(value)
 
 
 def _decode_candidate_embedding(blob: Any) -> list[float] | None:

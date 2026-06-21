@@ -266,10 +266,20 @@ def test_recompute_with_no_history_keeps_base_scores(
     assert recompute_user_recommendations(user_id, db_path=db_path) == 1
     with connect(db_path) as conn:
         row = conn.execute(
-            "SELECT recommendation_score, cold_start_score"
+            "SELECT recommendation_score, cold_start_score, signals"
             " FROM user_article_recommendations WHERE user_id = %s AND article_id = %s",
             (user_id, article),
         ).fetchone()
     assert row is not None
-    # No interactions → affinity profile is empty → score equals the cold-start base.
-    assert float(row["recommendation_score"]) == pytest.approx(float(row["cold_start_score"]))
+    signals = row["signals"]
+    # No interactions → affinity profile is empty → no behavioral/semantic lift.
+    assert signals["affinity_adjustment"] == pytest.approx(0.0)
+    assert signals["semantic_adjustment"] == pytest.approx(0.0)
+    # The recommendation is the cold-start base plus the history-independent
+    # freshness/novelty contributions (novelty needs a taste vector, so it is 0).
+    expected = (
+        float(row["cold_start_score"])
+        + signals["freshness_adjustment"]
+        + signals["novelty_adjustment"]
+    )
+    assert float(row["recommendation_score"]) == pytest.approx(expected)
