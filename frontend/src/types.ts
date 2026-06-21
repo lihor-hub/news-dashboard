@@ -1,4 +1,6 @@
-import type { WorkflowState } from './lib/workflowTypes';
+import type { RecommendationSignals, WorkflowState } from './lib/workflowTypes';
+
+export type { RecommendationSignals };
 
 export type ArticleStatus = 'new' | 'read' | 'saved' | 'skipped' | 'archived';
 
@@ -33,6 +35,7 @@ export interface Article {
   body_status?: 'ok' | 'missing' | 'error';
   recommendation_score?: number | null;
   recommendation_model?: string | null;
+  recommendation_signals?: RecommendationSignals | null;
 }
 
 export interface User {

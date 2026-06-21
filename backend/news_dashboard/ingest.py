@@ -996,7 +996,8 @@ def _list_articles_for_user(  # noqa: PLR0913
           uas.later_until AS _uas_later_until,
           uas.restored_at AS _uas_restored_at,
           uar.recommendation_score AS _uar_recommendation_score,
-          uar.model_version        AS _uar_recommendation_model
+          uar.model_version        AS _uar_recommendation_model,
+          uar.signals              AS _uar_recommendation_signals
         FROM articles a
         LEFT JOIN sources src ON src.slug = a.source_slug
         LEFT JOIN user_sources us_src ON us_src.user_id = %s AND us_src.source_slug = a.source_slug
@@ -1028,6 +1029,10 @@ def _list_articles_for_user(  # noqa: PLR0913
             rec_score = d.pop("_uar_recommendation_score", None)
             d["recommendation_score"] = float(rec_score) if rec_score is not None else None
             d["recommendation_model"] = d.pop("_uar_recommendation_model", None)
+            # The signals JSONB carries the per-factor breakdown (affinity,
+            # semantic, freshness, novelty) used to produce on-demand
+            # explanations; absent for unranked articles.
+            d["recommendation_signals"] = d.pop("_uar_recommendation_signals", None)
             articles.append(d)
         _attach_also_from(conn, articles)
         return articles

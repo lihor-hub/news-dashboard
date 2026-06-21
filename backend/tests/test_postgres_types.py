@@ -187,7 +187,19 @@ def test_pg_list_articles_exposes_recommendation_metadata(pg_env: str) -> None:
     aid_scored = _add_article(pg_url, source_slug="pg-src-rec", url_suffix="rec-scored")
     aid_unscored = _add_article(pg_url, source_slug="pg-src-rec", url_suffix="rec-unscored")
 
-    upsert_recommendation_score(uid, aid_scored, 82.5, model_version="semantic-hybrid-v1")
+    upsert_recommendation_score(
+        uid,
+        aid_scored,
+        82.5,
+        model_version="semantic-hybrid-v1",
+        signals={
+            "affinity_adjustment": 8.0,
+            "semantic_adjustment": 12.0,
+            "freshness_adjustment": 3.0,
+            "novelty_adjustment": 0.0,
+            "source_slug": "pg-src-rec",
+        },
+    )
 
     results = list_articles(state="today", user_id=uid)
     by_id = {a["id"]: a for a in results}
@@ -195,11 +207,15 @@ def test_pg_list_articles_exposes_recommendation_metadata(pg_env: str) -> None:
     scored = by_id[aid_scored]
     assert scored["recommendation_score"] == pytest.approx(82.5)
     assert scored["recommendation_model"] == "semantic-hybrid-v1"
+    # The per-factor signal breakdown powers on-demand explanations (#225).
+    assert scored["recommendation_signals"]["semantic_adjustment"] == pytest.approx(12.0)
+    assert scored["recommendation_signals"]["affinity_adjustment"] == pytest.approx(8.0)
 
     # Articles without recommendation metadata degrade gracefully to None.
     unscored = by_id[aid_unscored]
     assert unscored["recommendation_score"] is None
     assert unscored["recommendation_model"] is None
+    assert unscored["recommendation_signals"] is None
 
 
 def test_pg_list_articles_today_without_uas(pg_env: str) -> None:

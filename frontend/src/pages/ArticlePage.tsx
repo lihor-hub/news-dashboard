@@ -18,6 +18,7 @@ import {
   Square,
   Share2,
   Sparkles,
+  Lightbulb,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { fetchArticle, fetchArticleBody, fetchArticleAudioUrl, fetchArticleInsights } from '@/api';
@@ -25,6 +26,7 @@ import { adaptArticle, patchArticleState, patchArticleStar } from '@/api/workflo
 import type { WorkflowState } from '@/lib/workflowTypes';
 import { formatDate, readingTime, signalLabel } from '@/lib/format';
 import { getReaderList } from '@/lib/readerList';
+import { recommendationExplanation } from '@/lib/recommendation';
 import { cn } from '@/lib/utils';
 
 function renderBody(md: string): string {
@@ -274,6 +276,10 @@ export function ArticlePage() {
     }
   }
 
+  // On-demand recommendation explanation — kept collapsed by default so the
+  // reader surface stays clean until the user asks why the article was ranked.
+  const [showWhyRecommended, setShowWhyRecommended] = useState(false);
+
   // Touch swipe
   const swipeRef = useRef<{ x: number; y: number } | null>(null);
   const [swipeDx, setSwipeDx] = useState(0);
@@ -488,6 +494,50 @@ export function ArticlePage() {
                 Why this matters
               </div>
               <p className="text-[14px] leading-snug text-foreground">{article.reason}</p>
+            </div>
+
+            {/* Why recommended — on-demand explanation of the personalized ranking.
+                Collapsed by default to keep the reader clean; expands to concise
+                reasons naming the real factors (affinity, similarity, freshness,
+                novelty) or a useful fallback when no breakdown is available. */}
+            <div className="mt-3">
+              <button
+                onClick={() => setShowWhyRecommended((v) => !v)}
+                data-testid="why-recommended-button"
+                aria-expanded={showWhyRecommended}
+                className="inline-flex items-center gap-1.5 rounded-md border border-border bg-surface/40 px-3 py-1.5 text-[12px] font-medium text-muted-foreground hover:text-foreground hover:bg-surface transition-colors"
+              >
+                <Lightbulb className="size-3.5" strokeWidth={1.75} />
+                {showWhyRecommended ? 'Hide why recommended' : 'Why recommended?'}
+              </button>
+              {showWhyRecommended &&
+                (() => {
+                  const explanation = recommendationExplanation({
+                    score: article.recommendationScore,
+                    signals: article.recommendationSignals,
+                  });
+                  return (
+                    <div
+                      className="mt-2 rounded-lg border border-border bg-surface/40 px-4 py-3"
+                      data-testid="why-recommended-section"
+                    >
+                      <div className="text-[10px] font-medium uppercase tracking-wider text-subtle mb-2">
+                        Why recommended
+                      </div>
+                      <ul className="space-y-1.5">
+                        {explanation.reasons.map((reason, i) => (
+                          <li
+                            key={i}
+                            className="flex items-start gap-2 text-[13px] leading-snug text-foreground"
+                          >
+                            <span className="mt-0.5 shrink-0 text-accent">•</span>
+                            <span>{reason}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  );
+                })()}
             </div>
 
             {/* Body */}

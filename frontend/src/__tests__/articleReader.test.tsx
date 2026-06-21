@@ -445,6 +445,75 @@ describe('ArticlePage — AI insights (on-demand)', () => {
   });
 });
 
+// ─── Why recommended (on-demand explanation, #225) ────────────────────────────
+
+describe('ArticlePage — why recommended (on-demand)', () => {
+  beforeEach(() => {
+    vi.spyOn(api, 'fetchArticleBody').mockResolvedValue(
+      makeArticle({ body_status: 'ok', body: 'Full article text.' })
+    );
+  });
+
+  it('keeps the explanation collapsed by default to avoid clutter', async () => {
+    vi.spyOn(api, 'fetchArticle').mockResolvedValue(
+      makeArticle({
+        body_status: 'ok',
+        body: 'Text',
+        recommendation_score: 82,
+        recommendation_signals: { semantic_adjustment: 12 },
+      })
+    );
+    renderReader();
+    await waitFor(() => screen.getByText('Test Article Title'));
+    expect(screen.getByTestId('why-recommended-button')).toBeTruthy();
+    expect(screen.queryByTestId('why-recommended-section')).toBeNull();
+  });
+
+  it('reveals concise factor reasons on demand', async () => {
+    const scored = makeArticle({
+      body_status: 'ok',
+      body: 'Text',
+      recommendation_score: 88,
+      recommendation_signals: { affinity_adjustment: 8, semantic_adjustment: 12 },
+    });
+    vi.spyOn(api, 'fetchArticle').mockResolvedValue(scored);
+    // The body-fetch response replaces the cached article, so it must carry the
+    // same recommendation metadata for the explanation to survive body load.
+    vi.spyOn(api, 'fetchArticleBody').mockResolvedValue(scored);
+    renderReader();
+    await waitFor(() => screen.getByTestId('why-recommended-button'));
+    await userEvent.click(screen.getByTestId('why-recommended-button'));
+    await waitFor(() => expect(screen.getByTestId('why-recommended-section')).toBeTruthy());
+    expect(screen.getByText('Matches sources and topics you engage with')).toBeTruthy();
+    expect(screen.getByText('Similar to articles you’ve starred or read')).toBeTruthy();
+  });
+
+  it('shows a useful fallback when recommendation metadata is missing', async () => {
+    vi.spyOn(api, 'fetchArticle').mockResolvedValue(
+      makeArticle({ body_status: 'ok', body: 'Text' })
+    );
+    renderReader();
+    await waitFor(() => screen.getByTestId('why-recommended-button'));
+    await userEvent.click(screen.getByTestId('why-recommended-button'));
+    await waitFor(() => expect(screen.getByTestId('why-recommended-section')).toBeTruthy());
+    expect(
+      screen.getByText('Not personalized yet — shown based on general importance')
+    ).toBeTruthy();
+  });
+
+  it('can be toggled closed again, preserving the clean reader', async () => {
+    vi.spyOn(api, 'fetchArticle').mockResolvedValue(
+      makeArticle({ body_status: 'ok', body: 'Text', recommendation_score: 70 })
+    );
+    renderReader();
+    await waitFor(() => screen.getByTestId('why-recommended-button'));
+    await userEvent.click(screen.getByTestId('why-recommended-button'));
+    await waitFor(() => expect(screen.getByTestId('why-recommended-section')).toBeTruthy());
+    await userEvent.click(screen.getByTestId('why-recommended-button'));
+    await waitFor(() => expect(screen.queryByTestId('why-recommended-section')).toBeNull());
+  });
+});
+
 // ─── Share button ─────────────────────────────────────────────────────────────
 
 describe('ArticlePage — Share button', () => {

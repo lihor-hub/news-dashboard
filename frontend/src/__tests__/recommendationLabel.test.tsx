@@ -3,7 +3,11 @@ import { describe, expect, it, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { ArticleRow } from '../components/article/ArticleRow';
-import { recommendationLabel, RECOMMENDATION_LABEL_TEXT } from '../lib/recommendation';
+import {
+  recommendationLabel,
+  recommendationExplanation,
+  RECOMMENDATION_LABEL_TEXT,
+} from '../lib/recommendation';
 import type { WorkflowArticle } from '../lib/workflowTypes';
 
 const setState = vi.fn();
@@ -110,5 +114,55 @@ describe('ArticleRow — existing workflows keep working', () => {
     fireEvent.touchMove(touchTarget, { touches: [{ clientX: 100, clientY: 0 }] });
     fireEvent.touchEnd(touchTarget);
     expect(setState).toHaveBeenCalledWith(expect.objectContaining({ id: '42' }), 'done', 'Read');
+  });
+});
+
+describe('recommendationExplanation — concise factor reasons', () => {
+  it('names each factor that meaningfully lifted the score', () => {
+    const { reasons, fallback } = recommendationExplanation({
+      score: 85,
+      signals: {
+        affinity_adjustment: 8,
+        semantic_adjustment: 12,
+        freshness_adjustment: 3,
+        novelty_adjustment: 4,
+      },
+    });
+    expect(fallback).toBe(false);
+    expect(reasons).toEqual([
+      'Matches sources and topics you engage with',
+      'Similar to articles you’ve starred or read',
+      'Fresh and timely right now',
+      'Brings something new to your feed',
+    ]);
+  });
+
+  it('omits factors that did not contribute', () => {
+    const { reasons } = recommendationExplanation({
+      score: 60,
+      signals: {
+        affinity_adjustment: 0,
+        semantic_adjustment: 9,
+        freshness_adjustment: 0.2,
+        novelty_adjustment: -1,
+      },
+    });
+    expect(reasons).toEqual(['Similar to articles you’ve starred or read']);
+  });
+
+  it('falls back to a useful reason when a score exists but no factor stands out', () => {
+    const { reasons, fallback } = recommendationExplanation({
+      score: 48,
+      signals: { affinity_adjustment: 0, semantic_adjustment: 0 },
+    });
+    expect(fallback).toBe(true);
+    expect(reasons).toEqual(['Ranked by overall relevance and importance for you']);
+  });
+
+  it('explains unranked articles rather than rendering an empty list', () => {
+    const { reasons, fallback } = recommendationExplanation({});
+    expect(fallback).toBe(true);
+    expect(reasons).toEqual(['Not personalized yet — shown based on general importance']);
+    expect(reasons.length).toBeGreaterThan(0);
   });
 });
