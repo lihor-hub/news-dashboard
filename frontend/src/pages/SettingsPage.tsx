@@ -1,9 +1,19 @@
-import { useEffect } from 'react';
-import { Sun, Moon, Monitor, RefreshCw, Download, RotateCcw, ExternalLink } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import {
+  Sun,
+  Moon,
+  Monitor,
+  RefreshCw,
+  Download,
+  RotateCcw,
+  ExternalLink,
+  Sparkles,
+} from 'lucide-react';
 import { useTheme } from '@/hooks/useTheme';
 import { cn } from '@/lib/utils';
 import type { Theme } from '@/lib/theme';
 import { useUpdateCheck } from '@/hooks/useUpdateCheck';
+import { recalculateMyRecommendations } from '@/api';
 
 const THEME_OPTS: { v: Theme; label: string; Icon: React.ComponentType<{ className?: string }> }[] =
   [
@@ -260,6 +270,67 @@ function UpdatesSection() {
   );
 }
 
+type RecalcState =
+  | { status: 'idle' }
+  | { status: 'running' }
+  | { status: 'done'; scored: number }
+  | { status: 'error' };
+
+function PersonalizationSection() {
+  const [state, setState] = useState<RecalcState>({ status: 'idle' });
+
+  const recalculate = async () => {
+    setState({ status: 'running' });
+    try {
+      const { scored } = await recalculateMyRecommendations();
+      setState({ status: 'done', scored });
+    } catch {
+      setState({ status: 'error' });
+    }
+  };
+
+  return (
+    <section>
+      <div className="text-[10px] uppercase tracking-wider text-subtle font-medium mb-2">
+        Personalization
+      </div>
+      <div className="rounded-lg border border-border bg-card p-4 space-y-3">
+        <p className="text-xs text-muted-foreground">
+          Recommendations are learned from articles you star, read, or skip. Refresh to recompute
+          your personalized scores now.
+        </p>
+        <button
+          onClick={() => void recalculate()}
+          disabled={state.status === 'running'}
+          className="flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-60"
+        >
+          {state.status === 'running' ? (
+            <RefreshCw className="size-3 animate-spin" />
+          ) : (
+            <Sparkles className="size-3" />
+          )}
+          {state.status === 'running' ? 'Refreshing…' : 'Refresh recommendations'}
+        </button>
+
+        {state.status === 'done' && state.scored > 0 && (
+          <p className="text-xs text-green-600 dark:text-green-400">
+            Personalized {state.scored} {state.scored === 1 ? 'article' : 'articles'}. Your feed is
+            up to date.
+          </p>
+        )}
+        {state.status === 'done' && state.scored === 0 && (
+          <p className="text-xs text-muted-foreground">
+            Nothing to personalize yet — star, read, or skip a few articles first, then refresh.
+          </p>
+        )}
+        {state.status === 'error' && (
+          <p className="text-xs text-destructive">Couldn't refresh recommendations. Try again.</p>
+        )}
+      </div>
+    </section>
+  );
+}
+
 export function SettingsPage() {
   const { theme, setTheme } = useTheme();
 
@@ -294,6 +365,8 @@ export function SettingsPage() {
           })}
         </div>
       </section>
+
+      <PersonalizationSection />
 
       <UpdatesSection />
 

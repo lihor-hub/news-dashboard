@@ -159,6 +159,61 @@ def recalculate_stale_recommendations(
     return summary
 
 
+def _all_user_ids(*, db_path: Path | None = None, database_url: str | None = None) -> list[int]:
+    """Return every user id, ordered, for an unconditional recompute sweep."""
+    init_db(db_path, database_url=database_url)
+    with connect(db_path, database_url=database_url) as conn:
+        rows = conn.execute("SELECT id FROM users ORDER BY id").fetchall()
+    return [int(row_to_dict(row)["id"]) for row in rows]
+
+
+def recalculate_all_recommendations(
+    *,
+    db_path: Path | None = None,
+    database_url: str | None = None,
+    limit_per_user: int = 1000,
+) -> RecalculationSummary:
+    """Recompute scores for *every* user, regardless of staleness.
+
+    Unlike :func:`recalculate_stale_recommendations`, this refreshes users whose
+    stored scores are neither stale nor missing — needed for the daily sweep
+    because the freshness factor decays with article age, so scores drift over
+    time even when a user's preferences and the model version are unchanged.
+    Per-user failures are isolated so one bad user never aborts the sweep.
+    """
+    user_ids = _all_user_ids(db_path=db_path, database_url=database_url)
+    recalculated = 0
+    failed = 0
+    scores = 0
+    for user_id in user_ids:
+        try:
+            scores += recompute_user_recommendations(
+                user_id,
+                db_path=db_path,
+                database_url=database_url,
+                limit=limit_per_user,
+            )
+            recalculated += 1
+        except Exception:
+            failed += 1
+            logger.exception("Daily recommendation recalculation failed for user %s", user_id)
+    summary = RecalculationSummary(
+        users_considered=len(user_ids),
+        users_recalculated=recalculated,
+        users_failed=failed,
+        scores_written=scores,
+    )
+    logger.info(
+        "Daily recommendation recalculation complete: "
+        "considered=%d recalculated=%d failed=%d written=%d",
+        summary.users_considered,
+        summary.users_recalculated,
+        summary.users_failed,
+        summary.scores_written,
+    )
+    return summary
+
+
 def recommendation_health(
     *,
     db_path: Path | None = None,

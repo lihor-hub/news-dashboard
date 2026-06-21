@@ -265,3 +265,14 @@ export async function toggleSourceSubscription(
     body: JSON.stringify({ enabled }),
   });
 }
+
+/**
+ * Recompute the current user's personalized recommendation scores on demand.
+ * Returns how many articles were scored — zero means there's no interaction
+ * history (starred/done/skipped) to learn from yet.
+ */
+export async function recalculateMyRecommendations(): Promise<{ scored: number }> {
+  return requestJson<{ scored: number }>('/api/recommendations/recalculate-mine', {
+    method: 'POST',
+  });
+}

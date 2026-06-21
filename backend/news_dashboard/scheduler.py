@@ -49,6 +49,17 @@ def _run_recommendation_recalc() -> None:
         logger.exception("Recommendation recalculation failed")
 
 
+def _run_daily_recommendation_recalc() -> None:
+    from .recommendation_jobs import recalculate_all_recommendations
+
+    logger.info("Daily recommendation recalculation starting…")
+    try:
+        summary = recalculate_all_recommendations()
+        logger.info("Daily recommendation recalculation: %s", summary.as_dict())
+    except Exception:
+        logger.exception("Daily recommendation recalculation failed")
+
+
 def _run_briefing() -> None:
     from .briefings import (
         BriefingAINotConfiguredError,
@@ -85,6 +96,21 @@ def _run_digest() -> None:
         logger.exception("Daily digest failed")
 
 
+def _parse_cron_hm(cron: str, default_minute: str, default_hour: str) -> tuple[str, str]:
+    """Extract (minute, hour) from a cron string, falling back to defaults.
+
+    Only the first two fields matter for our daily jobs; a malformed value
+    degrades to the supplied defaults rather than failing scheduler startup.
+    """
+    try:
+        parts = cron.strip().split()
+        if len(parts) >= 2:
+            return parts[0], parts[1]
+    except Exception:
+        logger.debug("Could not parse cron %r; using defaults", cron, exc_info=True)
+    return default_minute, default_hour
+
+
 def start_scheduler() -> None:
     try:
         from apscheduler.schedulers.background import BackgroundScheduler
@@ -107,6 +133,7 @@ def start_scheduler() -> None:
 
     digest_cron = os.getenv("DIGEST_CRON", "0 8 * * *")
     briefing_cron = os.getenv("BRIEFING_CRON", "0 9 * * *")
+    recommendations_cron = os.getenv("RECOMMENDATIONS_CRON", "30 7 * * *")
 
     scheduler = BackgroundScheduler(timezone="UTC")
 
@@ -118,16 +145,7 @@ def start_scheduler() -> None:
         replace_existing=True,
     )
 
-    try:
-        parts = digest_cron.strip().split()
-        if len(parts) >= 2:
-            cron_minute = parts[0]
-            cron_hour = parts[1]
-        else:
-            cron_minute, cron_hour = "0", "8"
-    except Exception:
-        cron_minute, cron_hour = "0", "8"
-
+    cron_minute, cron_hour = _parse_cron_hm(digest_cron, "0", "8")
     scheduler.add_job(
         _run_digest,
         trigger="cron",
@@ -137,22 +155,23 @@ def start_scheduler() -> None:
         replace_existing=True,
     )
 
-    try:
-        b_parts = briefing_cron.strip().split()
-        if len(b_parts) >= 2:
-            b_minute = b_parts[0]
-            b_hour = b_parts[1]
-        else:
-            b_minute, b_hour = "0", "9"
-    except Exception:
-        b_minute, b_hour = "0", "9"
-
+    b_minute, b_hour = _parse_cron_hm(briefing_cron, "0", "9")
     scheduler.add_job(
         _run_briefing,
         trigger="cron",
         hour=b_hour,
         minute=b_minute,
         id="briefing",
+        replace_existing=True,
+    )
+
+    r_minute, r_hour = _parse_cron_hm(recommendations_cron, "30", "7")
+    scheduler.add_job(
+        _run_daily_recommendation_recalc,
+        trigger="cron",
+        hour=r_hour,
+        minute=r_minute,
+        id="recommendations",
         replace_existing=True,
     )
 
@@ -167,12 +186,15 @@ def start_scheduler() -> None:
             logger.exception("Failed to pause ingest job on startup")
     else:
         logger.info(
-            "Scheduler started: ingest every %d min, digest at %s:%s UTC, briefing at %s:%s UTC",
+            "Scheduler started: ingest every %d min, digest at %s:%s UTC, "
+            "briefing at %s:%s UTC, recommendations at %s:%s UTC",
             interval_minutes,
             cron_hour.zfill(2),
             cron_minute.zfill(2),
             b_hour.zfill(2),
             b_minute.zfill(2),
+            r_hour.zfill(2),
+            r_minute.zfill(2),
         )
 
 

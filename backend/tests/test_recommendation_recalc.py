@@ -11,6 +11,7 @@ from news_dashboard.db import connect, init_db
 from news_dashboard.ingest import list_articles, transition_article_state
 from news_dashboard.recommendation_jobs import (
     find_recalculation_candidates,
+    recalculate_all_recommendations,
     recalculate_stale_recommendations,
     recommendation_health,
 )
@@ -264,3 +265,28 @@ def test_recommendation_health_reports_stale_and_missing(
     assert health["stale_scores"] == 1
     assert health["missing_scores"] >= 1
     assert health["by_model_version"]
+
+
+# ── Daily full sweep ───────────────────────────────────────────────────────────
+
+
+def test_recalculate_all_refreshes_non_stale_current_scores(
+    tmp_path: Path, monkeypatch: Any, pg_clean: str
+) -> None:
+    db_path = _setup_db(tmp_path, monkeypatch, pg_clean, "daily.db")
+    _insert_source(db_path, "src", category="ai")
+    user_id = _make_user(db_path, "alice")
+    article = _insert_article(db_path, "src", "a", category="ai")
+    # A score that is neither stale nor missing nor outdated — the stale sweep
+    # would skip it, but the daily full sweep must still recompute it.
+    _insert_rec(db_path, user_id, article, score=1.0, stale=False)
+
+    assert user_id not in find_recalculation_candidates(db_path=db_path)
+
+    summary = recalculate_all_recommendations(db_path=db_path)
+    assert summary.users_considered == 1
+    assert summary.users_recalculated == 1
+
+    row = _rec_row(db_path, user_id, article)
+    assert row is not None
+    assert row["recommendation_score"] != pytest.approx(1.0)

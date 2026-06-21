@@ -221,3 +221,23 @@ def test_today_endpoint_uses_cold_start_fallback_for_missing_scores(
         app.dependency_overrides.pop(require_auth, None)
 
     assert ids[:3] == [recent_topic_match, older_important, old_low_signal]
+
+
+def test_recalculate_mine_scores_callers_own_feed(
+    tmp_path: Path, monkeypatch: Any, pg_clean: str
+) -> None:
+    db_path = _setup_db(tmp_path, monkeypatch, pg_clean, "recalc-mine.db")
+    _insert_source(db_path, "hot-ai-source", category="ai", priority=95)
+    user_id = _make_user(db_path, "alice")
+
+    _insert_article(db_path, "hot-ai-source", "a", category="ai", importance=80)
+    _insert_article(db_path, "hot-ai-source", "b", category="ai", importance=70)
+
+    try:
+        with _client_for(user_id, "alice") as client:
+            response = client.post("/api/recommendations/recalculate-mine")
+    finally:
+        app.dependency_overrides.pop(require_auth, None)
+
+    assert response.status_code == 200
+    assert response.json()["scored"] == 2
