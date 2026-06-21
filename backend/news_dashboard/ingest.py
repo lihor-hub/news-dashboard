@@ -695,6 +695,44 @@ _UAS_STATE_COLUMNS = frozenset(
     }
 )
 
+_COLD_START_RECOMMENDATION_SCORE_SQL = """
+    (
+      LEAST(GREATEST(COALESCE(a.importance_score, 50), 0), 100)::double precision * 0.45
+      + LEAST(GREATEST(COALESCE(src.priority, 50), 0), 100)::double precision * 0.25
+      + CASE lower(COALESCE(a.category, ''))
+          WHEN 'ai' THEN 8.0
+          WHEN 'ai-ml' THEN 8.0
+          WHEN 'python' THEN 7.0
+          WHEN 'security' THEN 6.0
+          WHEN 'devtools' THEN 5.0
+          WHEN 'tech' THEN 4.0
+          ELSE 2.0
+        END
+      + CASE
+          WHEN lower(COALESCE(a.tags, '')) ~ '(agents|llm|python|security|release)' THEN 8.0
+          WHEN lower(COALESCE(a.title, '') || ' ' || COALESCE(a.summary, ''))
+            ~ '(agent|llm|python|security|release)' THEN 5.0
+          ELSE 0.0
+        END
+      + CASE
+          WHEN a.discovered_at::timestamptz >= CURRENT_TIMESTAMP - INTERVAL '36 hours' THEN 12.0
+          WHEN a.discovered_at::timestamptz >= CURRENT_TIMESTAMP - INTERVAL '7 days' THEN 7.0
+          WHEN a.discovered_at::timestamptz >= CURRENT_TIMESTAMP - INTERVAL '30 days' THEN 3.0
+          ELSE 0.0
+        END
+    )
+"""
+
+
+def _article_order_clause(*, state: str | None) -> str:
+    if state == "today":
+        return (
+            "ORDER BY "
+            f"COALESCE(uar.recommendation_score, {_COLD_START_RECOMMENDATION_SCORE_SQL}) DESC,"
+            " a.discovered_at DESC, a.id DESC"
+        )
+    return "ORDER BY a.discovered_at DESC, a.id DESC"
+
 
 def _article_dict(row: Any) -> dict[str, Any]:
     """Convert a DB row to a dict, stripping internal-only columns.
@@ -940,10 +978,12 @@ def _list_articles_for_user(  # noqa: PLR0913
     # Final param order matches SQL left-to-right:
     # 1. us_src JOIN: user_id
     # 2. uas JOIN:    user_id
-    # 3. WHERE:       where_params
-    # 4. owner check: user_id
-    # 5. LIMIT/OFFSET
-    all_params: list[object] = [user_id, user_id, *where_params, user_id, limit, offset]
+    # 3. uar JOIN:    user_id
+    # 4. WHERE:       where_params
+    # 5. owner check: user_id
+    # 6. LIMIT/OFFSET
+    all_params: list[object] = [user_id, user_id, user_id, *where_params, user_id, limit, offset]
+    order_clause = _article_order_clause(state=state)
 
     sql = f"""
         SELECT {_article_list_select("a")},
@@ -959,12 +999,14 @@ def _list_articles_for_user(  # noqa: PLR0913
         LEFT JOIN sources src ON src.slug = a.source_slug
         LEFT JOIN user_sources us_src ON us_src.user_id = %s AND us_src.source_slug = a.source_slug
         LEFT JOIN user_article_state uas ON uas.article_id = a.id AND uas.user_id = %s
+        LEFT JOIN user_article_recommendations uar
+          ON uar.article_id = a.id AND uar.user_id = %s
         {where}
           AND (
             (src.owner_user_id IS NULL AND COALESCE(us_src.enabled, true))
             OR src.owner_user_id = %s
           )
-        ORDER BY a.discovered_at DESC, a.id DESC
+        {order_clause}
         LIMIT %s OFFSET %s
     """
     with connect(db_path) as conn:

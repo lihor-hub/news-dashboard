@@ -1,6 +1,7 @@
 import pytest
 
 from news_dashboard.db import (
+    POSTGRES_MULTIUSER_SCHEMA,
     POSTGRES_SCHEMA,
     active_database_url,
     describe_database,
@@ -22,6 +23,14 @@ def test_postgres_articles_schema_includes_embedding_column() -> None:
 
     assert "embedding bytea" in postgres_schema
     assert "alter table articles add column if not exists embedding bytea" in postgres_schema
+
+
+def test_postgres_schema_includes_user_article_recommendations() -> None:
+    postgres_schema = "\n".join(POSTGRES_MULTIUSER_SCHEMA).lower()
+
+    assert "create table if not exists user_article_recommendations" in postgres_schema
+    assert "primary key (user_id, article_id)" in postgres_schema
+    assert "idx_uar_user_score" in postgres_schema
 
 
 def test_database_url_is_required(monkeypatch: pytest.MonkeyPatch) -> None:

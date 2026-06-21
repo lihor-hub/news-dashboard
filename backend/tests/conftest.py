@@ -124,8 +124,8 @@ def pg_clean(pg_url: str) -> str:
 
     with psycopg.connect(pg_url) as conn:
         conn.execute(
-            "TRUNCATE user_article_state, user_sources, briefing_articles, briefings,"
-            " articles, sources, users RESTART IDENTITY CASCADE"
+            "TRUNCATE user_article_recommendations, user_article_state, user_sources,"
+            " briefing_articles, briefings, articles, sources, users RESTART IDENTITY CASCADE"
         )
         conn.commit()
     return pg_url
