@@ -41,6 +41,29 @@ def _unpack(blob: bytes) -> list[float]:
     return list(struct.unpack(f"{n}f", blob))
 
 
+def decode_embedding(blob: bytes) -> list[float]:
+    """Public helper: deserialize a stored embedding BLOB into a float vector."""
+    return _unpack(blob)
+
+
+# ── Embedding source text ──────────────────────────────────────────────────
+
+
+def embedding_text(
+    title: str | None,
+    summary: str | None,
+    reason: str | None = None,
+    tags: str | None = None,
+) -> str:
+    """Build the text fed to the embedding model from an article's fields.
+
+    Uses title, summary, reason, and tags — no full-body extraction required.
+    Empty fields are dropped so missing data never adds noise.
+    """
+    parts = [part.strip() for part in (title, summary, reason, tags) if part and part.strip()]
+    return " ".join(parts)
+
+
 # ── OpenAI embedding ───────────────────────────────────────────────────────
 
 
@@ -84,6 +107,11 @@ def _cosine(a: list[float], b: list[float]) -> float:
     return float(dot / (norm_a * norm_b))
 
 
+def cosine_similarity(a: list[float], b: list[float]) -> float:
+    """Public helper: cosine similarity between two embedding vectors."""
+    return _cosine(a, b)
+
+
 # ── Lazy embedding of saved/read articles ─────────────────────────────────
 
 
@@ -94,12 +122,12 @@ def ensure_article_embedded(article_id: int, db_path: Any = None) -> None:
     init_db(db_path)
     with connect(db_path) as conn:
         row = conn.execute(
-            "SELECT id, title, summary, embedding FROM articles WHERE id=%s",
+            "SELECT id, title, summary, reason, tags, embedding FROM articles WHERE id=%s",
             (article_id,),
         ).fetchone()
         if row is None or row["embedding"] is not None:
             return  # already embedded or gone
-        text = f"{row['title']} {row['summary']}".strip()
+        text = embedding_text(row["title"], row["summary"], row["reason"], row["tags"])
         if not text:
             return
         vector = _embed(text)
@@ -122,13 +150,14 @@ def embed_all_eligible(db_path: Any = None, *, include_all: bool = False) -> int
     init_db(db_path)
     with connect(db_path) as conn:
         query = (
-            f"SELECT id, title, summary FROM articles WHERE {status_filter} AND embedding IS NULL"
+            "SELECT id, title, summary, reason, tags FROM articles "
+            f"WHERE {status_filter} AND embedding IS NULL"
         )
         rows = conn.execute(query).fetchall()
 
     count = 0
     for row in rows:
-        text = f"{row['title']} {row['summary']}".strip()
+        text = embedding_text(row["title"], row["summary"], row["reason"], row["tags"])
         if not text:
             continue
         vector = _embed(text)

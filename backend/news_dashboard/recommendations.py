@@ -9,6 +9,7 @@ from typing import Any
 from .db import connect, init_db, row_to_dict
 
 BEHAVIORAL_MODEL_VERSION = "behavioral-affinity-v1"
+SEMANTIC_MODEL_VERSION = "semantic-hybrid-v1"
 
 # Weight each workflow action contributes toward feature affinity.
 # Starred is handled separately as a flag bonus (see STAR_WEIGHT) because an
@@ -38,6 +39,12 @@ TOPIC_AFFINITY_WEIGHT = 1.0
 # direction.  Kept well below the base-score range so a high-quality article from
 # a noisy/disliked source can still rise — affinity nudges, it does not gate.
 AFFINITY_SCORE_SPAN = 25.0
+
+# Maximum points semantic similarity to the user's valued history can add to a
+# score.  Like affinity, it is a bounded lift that blends with — never replaces —
+# the behavioral and cold-start factors, so semantic scoring degrading to a
+# no-op simply leaves the other factors in charge.
+SEMANTIC_SCORE_SPAN = 25.0
 
 
 def _clamp(value: float, low: float, high: float) -> float:
@@ -156,6 +163,50 @@ def score_article(
     return _clamp(adjusted, 0.0, 100.0)
 
 
+def build_semantic_profile(vectors: list[list[float]]) -> list[float] | None:
+    """Mean-pool valued-history embeddings into one taste vector.
+
+    Returns ``None`` when there are no usable vectors (no embedded history),
+    which callers treat as "semantic scoring unavailable" and fall back to the
+    non-semantic path.
+    """
+    centroid: list[float] | None = None
+    used = 0
+    for vector in vectors:
+        if not vector:
+            continue
+        if centroid is None:
+            centroid = list(vector)
+        elif len(vector) == len(centroid):
+            for i, value in enumerate(vector):
+                centroid[i] += value
+        else:
+            continue  # skip mismatched dimensions defensively
+        used += 1
+    if centroid is None or used == 0:
+        return None
+    return [value / used for value in centroid]
+
+
+def semantic_adjustment(
+    candidate_vector: list[float] | None,
+    profile_vector: list[float] | None,
+) -> float:
+    """Score delta (in points) from semantic similarity to the user's taste.
+
+    Degrades to ``0.0`` when either the candidate or the profile vector is
+    missing, so missing embeddings never disturb the rest of the score.
+    """
+    if not candidate_vector or not profile_vector:
+        return 0.0
+    if len(candidate_vector) != len(profile_vector):
+        return 0.0
+    from .embeddings import cosine_similarity
+
+    similarity = cosine_similarity(candidate_vector, profile_vector)
+    return _clamp(similarity, -1.0, 1.0) * SEMANTIC_SCORE_SPAN
+
+
 def upsert_recommendation_score(
     user_id: int,
     article_id: int,
@@ -224,13 +275,40 @@ def _load_user_signals(conn: Any, user_id: int) -> list[ArticleSignal]:
     return signals
 
 
+def _load_user_history_vectors(conn: Any, user_id: int) -> list[list[float]]:
+    """Decode embeddings of the user's valued history (starred or done).
+
+    Articles without an embedding are skipped, so an empty list means "no
+    embedded history" and semantic scoring stays disabled for this user.
+    """
+    from .embeddings import decode_embedding
+
+    rows = conn.execute(
+        """
+        SELECT a.embedding
+        FROM user_article_state uas
+        JOIN articles a ON a.id = uas.article_id
+        WHERE uas.user_id = %s
+          AND a.embedding IS NOT NULL
+          AND (uas.starred IS TRUE OR uas.state = 'done')
+        """,
+        (user_id,),
+    ).fetchall()
+    vectors: list[list[float]] = []
+    for row in rows:
+        blob = row_to_dict(row).get("embedding")
+        if blob is not None:
+            vectors.append(decode_embedding(bytes(blob)))
+    return vectors
+
+
 def _load_candidates(conn: Any, user_id: int, limit: int) -> list[dict[str, Any]]:
     """Read today/later-eligible articles with their cold-start base score."""
     from .ingest import _COLD_START_RECOMMENDATION_SCORE_SQL
 
     rows = conn.execute(
         f"""
-        SELECT a.id, a.source_slug, a.category, a.tags,
+        SELECT a.id, a.source_slug, a.category, a.tags, a.embedding,
           {_COLD_START_RECOMMENDATION_SCORE_SQL} AS base_score
         FROM articles a
         LEFT JOIN sources src ON src.slug = a.source_slug
@@ -263,8 +341,10 @@ def recompute_user_recommendations(
     init_db(db_path)
     with connect(db_path) as conn:
         profile = build_affinity_profile(_load_user_signals(conn, user_id))
+        semantic_profile = build_semantic_profile(_load_user_history_vectors(conn, user_id))
         candidates = _load_candidates(conn, user_id, limit)
 
+    model_version = SEMANTIC_MODEL_VERSION if semantic_profile else BEHAVIORAL_MODEL_VERSION
     scored = 0
     for candidate in candidates:
         base = float(candidate["base_score"])
@@ -272,7 +352,9 @@ def recompute_user_recommendations(
         category = candidate.get("category")
         tags = parse_tags(candidate.get("tags"))
         adjustment = profile.adjustment(source_slug, category, tags)
-        final_score = _clamp(base + adjustment, 0.0, 100.0)
+        candidate_vector = _decode_candidate_embedding(candidate.get("embedding"))
+        semantic = semantic_adjustment(candidate_vector, semantic_profile)
+        final_score = _clamp(base + adjustment + semantic, 0.0, 100.0)
         upsert_recommendation_score(
             user_id,
             int(candidate["id"]),
@@ -282,10 +364,20 @@ def recompute_user_recommendations(
             signals={
                 "base_score": round(base, 4),
                 "affinity_adjustment": round(adjustment, 4),
+                "semantic_adjustment": round(semantic, 4),
                 "source_slug": source_slug,
                 "category": category,
             },
-            model_version=BEHAVIORAL_MODEL_VERSION,
+            model_version=model_version,
         )
         scored += 1
     return scored
+
+
+def _decode_candidate_embedding(blob: Any) -> list[float] | None:
+    """Best-effort decode of a candidate's stored embedding, ``None`` if absent."""
+    if blob is None:
+        return None
+    from .embeddings import decode_embedding
+
+    return decode_embedding(bytes(blob))
