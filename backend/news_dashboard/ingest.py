@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import logging
 import re
 import threading
@@ -696,6 +697,56 @@ _UAS_STATE_COLUMNS = frozenset(
 )
 
 
+_COLD_START_RECOMMENDATION_SCORE_SQL = """
+LEAST(
+  1.0,
+  GREATEST(
+    0.0,
+    (COALESCE(a.importance_score, 50)::double precision / 100.0 * 0.40)
+    + (COALESCE(src.priority, 50)::double precision / 100.0 * 0.20)
+    + CASE
+        WHEN a.discovered_at::timestamptz >= NOW() - interval '1 day' THEN 0.20
+        WHEN a.discovered_at::timestamptz >= NOW() - interval '3 days' THEN 0.14
+        WHEN a.discovered_at::timestamptz >= NOW() - interval '7 days' THEN 0.08
+        ELSE 0.02
+      END
+    + CASE lower(a.category)
+        WHEN 'agents' THEN 0.10
+        WHEN 'ai-llm' THEN 0.10
+        WHEN 'python' THEN 0.08
+        WHEN 'ai-social' THEN 0.07
+        WHEN 'repositories' THEN 0.06
+        WHEN 'engineering' THEN 0.05
+        WHEN 'cloud-infra' THEN 0.04
+        ELSE 0.02
+      END
+    + CASE
+        WHEN src.kind = 'github_release_feed' THEN 0.03
+        WHEN src.kind = 'trending_feed' THEN 0.025
+        WHEN src.kind = 'nitter_feed' THEN 0.015
+        WHEN a.source_slug IN (
+          'anthropic-news',
+          'openai-blog',
+          'simon-willison',
+          'python-insider',
+          'astral-blog'
+        ) THEN 0.03
+        ELSE 0.01
+      END
+    + CASE
+        WHEN lower(a.tags) LIKE '%agents%' THEN 0.05
+        WHEN lower(a.tags) LIKE '%llm%' THEN 0.045
+        WHEN lower(a.tags) LIKE '%security%' THEN 0.04
+        WHEN lower(a.tags) LIKE '%python%' THEN 0.035
+        WHEN lower(a.tags) LIKE '%release%' THEN 0.03
+        WHEN lower(a.tags) LIKE '%tutorial%' THEN 0.02
+        ELSE 0.0
+      END
+  )
+)
+"""
+
+
 def _article_dict(row: Any) -> dict[str, Any]:
     """Convert a DB row to a dict, stripping internal-only columns.
 
@@ -810,6 +861,42 @@ def _upsert_uas(  # noqa: PLR0913
     )
 
 
+def upsert_article_recommendation(
+    *,
+    user_id: int,
+    article_id: int,
+    score: float,
+    metadata: dict[str, Any] | None = None,
+    score_source: str = "persisted",
+    db_path: Path | None = None,
+) -> dict[str, Any]:
+    """Persist per-user/article recommendation score metadata."""
+    init_db(db_path)
+    with connect(db_path) as conn:
+        row = conn.execute(
+            """
+            INSERT INTO user_article_recommendations(
+              user_id, article_id, score, score_source, metadata
+            ) VALUES (%s, %s, %s, %s, %s::jsonb)
+            ON CONFLICT(user_id, article_id) DO UPDATE SET
+              score = excluded.score,
+              score_source = excluded.score_source,
+              metadata = excluded.metadata,
+              updated_at = NOW()
+            RETURNING
+              user_id,
+              article_id,
+              score,
+              score_source,
+              metadata,
+              created_at,
+              updated_at
+            """,
+            (user_id, article_id, score, score_source, json.dumps(metadata or {})),
+        ).fetchone()
+    return row_to_dict(row)
+
+
 def list_articles(  # noqa: PLR0913
     status: str | None = None,
     state: str | None = None,
@@ -910,6 +997,7 @@ def _list_articles_for_user(  # noqa: PLR0913
         state = legacy_map.get(status, status)
         if status == "saved":
             starred = True
+    rank_today = state == "today" and starred is not True
 
     # Build WHERE on articles
     not_archived = "(a.canonical_id IS NULL OR COALESCE(uas.state, 'today') != 'archived')"
@@ -936,14 +1024,36 @@ def _list_articles_for_user(  # noqa: PLR0913
         where_params.append(category)
 
     where = f"WHERE {' AND '.join(art_clauses)}"
+    recommendation_select = ""
+    recommendation_join = ""
+    recommendation_order = "a.discovered_at DESC, a.id DESC"
+    if rank_today:
+        recommendation_select = f""",
+          COALESCE(uar.score, {_COLD_START_RECOMMENDATION_SCORE_SQL}) AS recommendation_score,
+          CASE
+            WHEN uar.score IS NULL THEN 'cold_start'
+            ELSE COALESCE(uar.score_source, 'persisted')
+          END AS recommendation_score_source,
+          COALESCE(uar.metadata, '{{}}'::jsonb) AS recommendation_metadata,
+          uar.updated_at AS recommendation_scored_at
+        """
+        recommendation_join = (
+            "LEFT JOIN user_article_recommendations uar"
+            " ON uar.article_id = a.id AND uar.user_id = %s"
+        )
+        recommendation_order = "recommendation_score DESC, a.discovered_at DESC, a.id DESC"
 
     # Final param order matches SQL left-to-right:
     # 1. us_src JOIN: user_id
     # 2. uas JOIN:    user_id
-    # 3. WHERE:       where_params
-    # 4. owner check: user_id
-    # 5. LIMIT/OFFSET
-    all_params: list[object] = [user_id, user_id, *where_params, user_id, limit, offset]
+    # 3. optional recommendation JOIN: user_id
+    # 4. WHERE:       where_params
+    # 5. owner check: user_id
+    # 6. LIMIT/OFFSET
+    all_params: list[object] = [user_id, user_id]
+    if rank_today:
+        all_params.append(user_id)
+    all_params.extend([*where_params, user_id, limit, offset])
 
     sql = f"""
         SELECT {_article_list_select("a")},
@@ -955,16 +1065,18 @@ def _list_articles_for_user(  # noqa: PLR0913
           uas.archived_at AS _uas_archived_at,
           uas.later_until AS _uas_later_until,
           uas.restored_at AS _uas_restored_at
+          {recommendation_select}
         FROM articles a
         LEFT JOIN sources src ON src.slug = a.source_slug
         LEFT JOIN user_sources us_src ON us_src.user_id = %s AND us_src.source_slug = a.source_slug
         LEFT JOIN user_article_state uas ON uas.article_id = a.id AND uas.user_id = %s
+        {recommendation_join}
         {where}
           AND (
             (src.owner_user_id IS NULL AND COALESCE(us_src.enabled, true))
             OR src.owner_user_id = %s
           )
-        ORDER BY a.discovered_at DESC, a.id DESC
+        ORDER BY {recommendation_order}
         LIMIT %s OFFSET %s
     """
     with connect(db_path) as conn:

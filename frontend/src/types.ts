@@ -31,6 +31,10 @@ export interface Article {
   canonical_id?: number | null;
   body?: string | null;
   body_status?: 'ok' | 'missing' | 'error';
+  recommendation_score?: number | null;
+  recommendation_score_source?: string | null;
+  recommendation_metadata?: Record<string, unknown> | null;
+  recommendation_scored_at?: string | null;
 }
 
 export interface User {

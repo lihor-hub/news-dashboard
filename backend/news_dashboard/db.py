@@ -302,6 +302,26 @@ POSTGRES_MULTIUSER_SCHEMA = [
     CREATE INDEX IF NOT EXISTS idx_uas_user_state_article
       ON user_article_state(user_id, state, article_id)
     """,
+    """
+    CREATE TABLE IF NOT EXISTS user_article_recommendations (
+      user_id      INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      article_id   BIGINT  NOT NULL REFERENCES articles(id) ON DELETE CASCADE,
+      score        DOUBLE PRECISION NOT NULL CHECK (score >= 0 AND score <= 1),
+      score_source TEXT NOT NULL DEFAULT 'persisted',
+      metadata     JSONB NOT NULL DEFAULT '{}'::jsonb,
+      created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      PRIMARY KEY (user_id, article_id)
+    )
+    """,
+    """
+    CREATE INDEX IF NOT EXISTS idx_uar_user_score
+      ON user_article_recommendations(user_id, score DESC, article_id)
+    """,
+    """
+    CREATE INDEX IF NOT EXISTS idx_uar_article_id
+      ON user_article_recommendations(article_id)
+    """,
 ]
 
 
