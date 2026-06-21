@@ -320,6 +320,16 @@ POSTGRES_MULTIUSER_SCHEMA = [
     CREATE INDEX IF NOT EXISTS idx_uar_user_score
       ON user_article_recommendations(user_id, recommendation_score DESC, article_id)
     """,
+    # `stale` flags scores whose inputs changed (preference history) and that need
+    # a background recalculation; the partial index keeps the "find stale" sweep cheap.
+    (
+        "ALTER TABLE user_article_recommendations"
+        " ADD COLUMN IF NOT EXISTS stale BOOLEAN NOT NULL DEFAULT FALSE"
+    ),
+    """
+    CREATE INDEX IF NOT EXISTS idx_uar_user_stale
+      ON user_article_recommendations(user_id) WHERE stale = TRUE
+    """,
 ]
 
 

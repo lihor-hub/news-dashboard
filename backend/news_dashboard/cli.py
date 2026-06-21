@@ -29,5 +29,28 @@ def articles(status: str | None = None, limit: int = 20) -> None:
         )
 
 
+@app.command(name="rec-health")
+def rec_health() -> None:
+    """Print a diagnostic snapshot of stale/missing recommendation scores."""
+    from .recommendation_jobs import recommendation_health
+
+    health = recommendation_health()
+    for key in ("total_scores", "stale_scores", "outdated_scores", "missing_scores"):
+        typer.echo(f"{key}: {health[key]}")
+    typer.echo(f"oldest_computed_at: {health['oldest_computed_at']}")
+    for entry in health["by_model_version"]:
+        typer.echo(f"  {entry['model_version']}: {entry['count']}")
+
+
+@app.command(name="rec-recalc")
+def rec_recalc() -> None:
+    """Recalculate stale, missing, or superseded recommendation scores."""
+    from .recommendation_jobs import recalculate_stale_recommendations
+
+    summary = recalculate_stale_recommendations()
+    for key, value in summary.as_dict().items():
+        typer.echo(f"{key}: {value}")
+
+
 if __name__ == "__main__":
     app()

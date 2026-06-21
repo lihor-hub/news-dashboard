@@ -34,6 +34,19 @@ def _run_ingest() -> None:
             prefetch_article_bodies()
     except Exception:
         logger.exception("Scheduled ingest failed")
+    # Repair stale/missing scores out-of-band.  Guarded separately so a
+    # recalculation or scoring failure never fails the ingest run itself.
+    _run_recommendation_recalc()
+
+
+def _run_recommendation_recalc() -> None:
+    from .recommendation_jobs import recalculate_stale_recommendations
+
+    try:
+        summary = recalculate_stale_recommendations()
+        logger.info("Recommendation recalculation: %s", summary.as_dict())
+    except Exception:
+        logger.exception("Recommendation recalculation failed")
 
 
 def _run_briefing() -> None:

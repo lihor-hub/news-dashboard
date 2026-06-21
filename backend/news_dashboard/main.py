@@ -682,6 +682,20 @@ def ingest_run_sources(run_id: int) -> dict[str, Any]:
     return {"items": run_sources}
 
 
+@api.get("/api/recommendations/health", dependencies=_admin_dep)
+def recommendations_health_endpoint() -> dict[str, Any]:
+    from .recommendation_jobs import recommendation_health
+
+    return recommendation_health()
+
+
+@api.post("/api/recommendations/recalculate", dependencies=_admin_dep)
+def recommendations_recalculate_endpoint() -> dict[str, Any]:
+    from .recommendation_jobs import recalculate_stale_recommendations
+
+    return recalculate_stale_recommendations().as_dict()
+
+
 @api.get("/api/stats/overview", dependencies=_admin_dep)
 def stats_overview_endpoint(
     from_: Annotated[str, Query(alias="from")],

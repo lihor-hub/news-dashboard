@@ -846,6 +846,12 @@ def _upsert_uas(  # noqa: PLR0913
             updated_at,
         ),
     )
+    # A workflow/star change reshapes this user's affinity + semantic profile, so
+    # every stored score derived from it is now stale and eligible for a
+    # background recalculation (see recommendation_jobs.recalculate_stale_recommendations).
+    from .recommendation_jobs import mark_user_recommendations_stale
+
+    mark_user_recommendations_stale(conn, user_id)
 
 
 def list_articles(  # noqa: PLR0913

@@ -12,6 +12,14 @@ BEHAVIORAL_MODEL_VERSION = "behavioral-affinity-v1"
 SEMANTIC_MODEL_VERSION = "semantic-hybrid-v1"
 NOVELTY_MODEL_VERSION = "novelty-freshness-v1"
 
+# Model versions :func:`recompute_user_recommendations` writes today.  Any stored
+# recommendation whose ``model_version`` is outside this set was produced by an
+# older scoring formula or embedding scheme and is eligible for a background
+# repair recompute (see :mod:`news_dashboard.recommendation_jobs`).
+CURRENT_MODEL_VERSIONS: frozenset[str] = frozenset(
+    {BEHAVIORAL_MODEL_VERSION, NOVELTY_MODEL_VERSION}
+)
+
 # Weight each workflow action contributes toward feature affinity.
 # Starred is handled separately as a flag bonus (see STAR_WEIGHT) because an
 # article can be starred while in any state.  Later is deliberately neutral:
@@ -272,30 +280,33 @@ def novelty_adjustment(
     return dissimilarity * _quality_factor(importance) * NOVELTY_SCORE_SPAN
 
 
-def upsert_recommendation_score(
+def upsert_recommendation_score(  # noqa: PLR0913
     user_id: int,
     article_id: int,
     recommendation_score: float,
     *,
     db_path: Path | None = None,
+    database_url: str | None = None,
     cold_start_score: float | None = None,
     signals: dict[str, Any] | None = None,
     model_version: str = "cold-start-v1",
 ) -> None:
     """Persist recommendation metadata for one user/article pair."""
-    init_db(db_path)
-    with connect(db_path) as conn:
+    init_db(db_path, database_url=database_url)
+    with connect(db_path, database_url=database_url) as conn:
         conn.execute(
             """
             INSERT INTO user_article_recommendations(
-              user_id, article_id, recommendation_score, cold_start_score, signals, model_version
+              user_id, article_id, recommendation_score, cold_start_score,
+              signals, model_version, stale
             )
-            VALUES (%s, %s, %s, %s, %s::jsonb, %s)
+            VALUES (%s, %s, %s, %s, %s::jsonb, %s, FALSE)
             ON CONFLICT(user_id, article_id) DO UPDATE SET
               recommendation_score = excluded.recommendation_score,
               cold_start_score = excluded.cold_start_score,
               signals = excluded.signals,
               model_version = excluded.model_version,
+              stale = FALSE,
               updated_at = NOW()
             """,
             (
@@ -396,6 +407,7 @@ def recompute_user_recommendations(
     user_id: int,
     *,
     db_path: Path | None = None,
+    database_url: str | None = None,
     limit: int = 1000,
 ) -> int:
     """Recompute and persist behavioral-affinity scores for a user's live feed.
@@ -406,8 +418,8 @@ def recompute_user_recommendations(
     :func:`build_affinity_profile` / :func:`score_article` and is unit-testable
     without touching the database.
     """
-    init_db(db_path)
-    with connect(db_path) as conn:
+    init_db(db_path, database_url=database_url)
+    with connect(db_path, database_url=database_url) as conn:
         profile = build_affinity_profile(_load_user_signals(conn, user_id))
         semantic_profile = build_semantic_profile(_load_user_history_vectors(conn, user_id))
         candidates = _load_candidates(conn, user_id, limit)
@@ -435,6 +447,7 @@ def recompute_user_recommendations(
             int(candidate["id"]),
             final_score,
             db_path=db_path,
+            database_url=database_url,
             cold_start_score=base,
             signals={
                 "base_score": round(base, 4),
