@@ -147,14 +147,31 @@ def _current_day_since_at(until_at: datetime) -> datetime:
     return until_at - timedelta(hours=24)
 
 
+def _briefing_ai_config() -> tuple[str, str | None]:
+    """Resolve the (api_key, base_url) for briefing generation.
+
+    Briefings can target any OpenAI-compatible endpoint (e.g. a self-hosted
+    gateway) via ``OPENAI_BRIEFING_BASE_URL`` / ``OPENAI_BRIEFING_API_KEY``,
+    falling back to the shared ``OPENAI_BASE_URL`` / ``OPENAI_API_KEY`` used by
+    the rest of the app. The base URL is optional; when unset the official
+    OpenAI endpoint is used.
+    """
+    api_key = os.getenv("OPENAI_BRIEFING_API_KEY") or os.getenv("OPENAI_API_KEY")
+    if not api_key:
+        msg = (
+            "Briefing generation requires an API key. Set OPENAI_BRIEFING_API_KEY "
+            "(or OPENAI_API_KEY) in the app environment."
+        )
+        raise BriefingAINotConfiguredError(msg)
+    base_url = os.getenv("OPENAI_BRIEFING_BASE_URL") or os.getenv("OPENAI_BASE_URL") or None
+    return api_key, base_url
+
+
 def _call_openai(candidates: list[dict[str, Any]], model: str) -> dict[str, Any]:
-    """Call OpenAI to generate structured briefing JSON from a candidate article list."""
+    """Call an OpenAI-compatible API to generate structured briefing JSON."""
     from openai import OpenAI  # lazy import — optional dep at import time
 
-    api_key = os.getenv("OPENAI_API_KEY")
-    if not api_key:
-        msg = "Briefing generation requires OPENAI_API_KEY. Set it in the app environment."
-        raise BriefingAINotConfiguredError(msg)
+    api_key, base_url = _briefing_ai_config()
 
     article_lines = []
     for a in candidates:
@@ -178,7 +195,7 @@ def _call_openai(candidates: list[dict[str, Any]], model: str) -> dict[str, Any]
     )
     user = "Articles:\n\n" + "\n\n".join(article_lines)
 
-    client = OpenAI(api_key=api_key)
+    client = OpenAI(api_key=api_key, base_url=base_url)
     response = client.chat.completions.create(
         model=model,
         messages=[

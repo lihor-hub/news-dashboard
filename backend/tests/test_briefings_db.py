@@ -11,7 +11,7 @@ from __future__ import annotations
 import json
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
-from typing import Any
+from typing import Any, ClassVar
 
 import psycopg
 import pytest
@@ -697,6 +697,7 @@ def test_current_day_since_at_subtracts_24_hours() -> None:
 
 def test_call_openai_requires_api_key(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.delenv("OPENAI_BRIEFING_API_KEY", raising=False)
     with pytest.raises(BriefingAINotConfiguredError, match="OPENAI_API_KEY"):
         _call_openai([], model="gpt-x")
 
@@ -705,19 +706,39 @@ class _FakeOpenAI:
     """Stand-in for ``openai.OpenAI`` whose completion returns a fixed string."""
 
     content = "{}"
+    last_kwargs: ClassVar[dict[str, Any]] = {}
 
-    def __init__(self, api_key: str) -> None:
-        self.api_key = api_key
+    def __init__(self, **kwargs: Any) -> None:
+        type(self).last_kwargs = kwargs
         message = SimpleNamespace(content=type(self).content)
         choice = SimpleNamespace(message=message)
         response = SimpleNamespace(choices=[choice])
         self.chat = SimpleNamespace(completions=SimpleNamespace(create=lambda **_kwargs: response))
 
 
-def _patch_openai(monkeypatch: pytest.MonkeyPatch, content: str) -> None:
+def _patch_openai(monkeypatch: pytest.MonkeyPatch, content: str) -> type[_FakeOpenAI]:
     monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
     cls = type("Patched", (_FakeOpenAI,), {"content": content})
     monkeypatch.setattr("openai.OpenAI", cls)
+    return cls
+
+
+def test_call_openai_uses_default_base_url_when_unset(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("OPENAI_BASE_URL", raising=False)
+    monkeypatch.delenv("OPENAI_BRIEFING_BASE_URL", raising=False)
+    cls = _patch_openai(monkeypatch, "{}")
+    _call_openai([{"id": 1, "title": "A"}], model="gpt-x")
+    assert cls.last_kwargs["api_key"] == "sk-test"
+    assert cls.last_kwargs["base_url"] is None
+
+
+def test_call_openai_uses_briefing_endpoint_override(monkeypatch: pytest.MonkeyPatch) -> None:
+    cls = _patch_openai(monkeypatch, "{}")
+    monkeypatch.setenv("OPENAI_BRIEFING_API_KEY", "freellmapi-key")
+    monkeypatch.setenv("OPENAI_BRIEFING_BASE_URL", "http://127.0.0.1:9130/v1")
+    _call_openai([{"id": 1, "title": "A"}], model="auto")
+    assert cls.last_kwargs["api_key"] == "freellmapi-key"
+    assert cls.last_kwargs["base_url"] == "http://127.0.0.1:9130/v1"
 
 
 def test_call_openai_parses_valid_json(monkeypatch: pytest.MonkeyPatch) -> None:

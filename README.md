@@ -44,6 +44,7 @@ Runtime storage is PostgreSQL only. Set `DATABASE_URL` or the split
 | `SESSION_SECRET` | Signed session key. Generate with `python -c "import secrets; print(secrets.token_hex(32))"`. |
 | `BOOTSTRAP_ADMIN_USERNAME`, `BOOTSTRAP_ADMIN_PASSWORD` | First local admin account. Used only when no users exist. |
 | `OPENAI_API_KEY` | Enables embeddings, Ask AI, and briefings. |
+| `OPENAI_BRIEFING_BASE_URL`, `OPENAI_BRIEFING_API_KEY` | Point briefing generation at an OpenAI-compatible endpoint (e.g. a self-hosted gateway). Optional; falls back to `OPENAI_BASE_URL` / `OPENAI_API_KEY`. Pair with `OPENAI_BRIEFING_MODEL` (use `auto` for a routing gateway). |
 | `KEYCLOAK_AUTH_ENABLED`, `KEYCLOAK_SERVER_URL`, `KEYCLOAK_REALM`, `KEYCLOAK_CLIENT_ID`, `KEYCLOAK_CLIENT_SECRET` | Enables Keycloak. See [docs/KEYCLOAK_AUTH.md](docs/KEYCLOAK_AUTH.md). |
 | `CORS_ORIGINS` | Comma-separated browser dev origins. |
 
