@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import secrets
 from typing import Any
 
 import pytest
@@ -16,7 +17,8 @@ def _enable_keycloak(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("KEYCLOAK_SERVER_URL", "https://idp.example")
     monkeypatch.setenv("KEYCLOAK_REALM", "nd")
     monkeypatch.setenv("KEYCLOAK_CLIENT_ID", "nd-client")
-    monkeypatch.setenv("KEYCLOAK_ADMIN_CLIENT_SECRET", "admin-secret")
+    # Generated at runtime so no credential literal lives in the source.
+    monkeypatch.setenv("KEYCLOAK_ADMIN_CLIENT_SECRET", secrets.token_hex(8))
 
 
 class _FakeResp:

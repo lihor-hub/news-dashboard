@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import secrets
 from pathlib import Path
 from typing import Any
 
@@ -269,7 +270,7 @@ def test_admin_generate_user_uses_keycloak_when_enabled(
     tmp_db: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     _enable_keycloak(monkeypatch)
-    monkeypatch.setenv("KEYCLOAK_ADMIN_CLIENT_SECRET", "admin-secret")
+    monkeypatch.setenv("KEYCLOAK_ADMIN_CLIENT_SECRET", secrets.token_hex(8))
 
     captured: dict[str, Any] = {}
 
