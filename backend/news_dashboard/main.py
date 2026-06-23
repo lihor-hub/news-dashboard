@@ -191,11 +191,7 @@ public_router = APIRouter()
 @public_router.get("/api/health")
 def health() -> dict[str, Any]:
     init_db()
-    return {
-        "status": "ok",
-        "database": describe_database(),
-        "next_ingest_at": get_next_ingest_at(),
-    }
+    return {"status": "ok"}
 
 
 @public_router.get("/api/auth/config")
@@ -680,6 +676,16 @@ def ingest_run_sources(run_id: int) -> dict[str, Any]:
     if run_sources is None:
         raise HTTPException(status_code=404, detail="ingest run not found")
     return {"items": run_sources}
+
+
+@api.get("/api/health/details", dependencies=_admin_dep)
+def health_details() -> dict[str, Any]:
+    init_db()
+    return {
+        "status": "ok",
+        "database": describe_database(),
+        "next_ingest_at": get_next_ingest_at(),
+    }
 
 
 @api.get("/api/recommendations/health", dependencies=_admin_dep)

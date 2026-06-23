@@ -427,3 +427,14 @@ def test_health_is_public(tmp_db: Path) -> None:
     client = _fresh_client()
     resp = client.get("/api/health")
     assert resp.status_code == 200
+    body = resp.json()
+    assert body == {"status": "ok"}
+    # Public health must not leak internal DB details.
+    assert "database" not in body
+    assert "next_ingest_at" not in body
+
+
+def test_health_details_requires_admin(tmp_db: Path) -> None:
+    client = _fresh_client()
+    resp = client.get("/api/health/details")
+    assert resp.status_code in (401, 403)
