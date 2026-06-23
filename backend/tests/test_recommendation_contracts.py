@@ -243,6 +243,57 @@ def test_today_stays_intact_when_no_scores_have_been_computed(
             assert item["recommendation_score"] is None
 
 
+# ── Reader path exposes the same score metadata as the Today list ─────────────
+
+
+def test_single_article_read_exposes_recommendation_metadata(
+    tmp_path: Path, monkeypatch: Any, pg_clean: str
+) -> None:
+    """The single-article endpoint (the reader's "Why recommended" source) must
+    carry the same per-user recommendation_score / signals as the Today list, so
+    a refresh that personalizes scores is reflected on the reader rather than
+    always falling back to "Not personalized yet"."""
+    db_path = _setup_db(tmp_path, monkeypatch, pg_clean, "contracts-reader.db")
+    _insert_source(db_path, "src", category="ai", priority=80)
+    user_id = _make_user(db_path, "alice")
+    article = _insert_article(db_path, "src", "reader", category="ai", importance=70)
+    signals = {"base_score": 50.0, "affinity_adjustment": 12.5}
+    upsert_recommendation_score(user_id, article, 88.0, db_path=db_path, signals=signals)
+
+    try:
+        with _client_for(user_id, "alice") as client:
+            response = client.get(f"/api/articles/{article}")
+    finally:
+        app.dependency_overrides.pop(require_auth, None)
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["recommendation_score"] == pytest.approx(88.0)
+    assert payload["recommendation_signals"] == signals
+
+
+def test_single_article_read_returns_null_score_when_unranked(
+    tmp_path: Path, monkeypatch: Any, pg_clean: str
+) -> None:
+    """An article with no stored score returns a null score/signals on the reader
+    path so the frontend uses its cold-start explanation, not a stale one."""
+    db_path = _setup_db(tmp_path, monkeypatch, pg_clean, "contracts-reader-null.db")
+    _insert_source(db_path, "src", category="ai", priority=80)
+    user_id = _make_user(db_path, "alice")
+    article = _insert_article(db_path, "src", "unranked", category="ai", importance=70)
+
+    try:
+        with _client_for(user_id, "alice") as client:
+            response = client.get(f"/api/articles/{article}")
+    finally:
+        app.dependency_overrides.pop(require_auth, None)
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["recommendation_score"] is None
+    assert payload["recommendation_signals"] is None
+
+
 # ── Scope guard: ranking only, no hiding / separate feed ──────────────────────
 
 

@@ -229,12 +229,37 @@ def _merge_user_state(
     return d
 
 
+def _merge_user_recommendation(
+    d: dict[str, Any], conn: Any, article_id: int, user_id: int
+) -> dict[str, Any]:
+    """Overlay the per-user recommendation score/signals onto an article dict.
+
+    Mirrors the recommendation columns ``list_articles`` returns so the
+    single-article read path exposes the same ``recommendation_score`` /
+    ``recommendation_model`` / ``recommendation_signals`` fields. Absent metadata
+    (no stored score yet) leaves the fields ``None`` so the frontend falls back to
+    its cold-start explanation rather than a stale one.
+    """
+    rec_row = conn.execute(
+        "SELECT recommendation_score, model_version, signals"
+        " FROM user_article_recommendations WHERE user_id = %s AND article_id = %s",
+        (user_id, article_id),
+    ).fetchone()
+    rec = row_to_dict(rec_row) if rec_row else None
+    score = rec.get("recommendation_score") if rec else None
+    d["recommendation_score"] = float(score) if score is not None else None
+    d["recommendation_model"] = rec.get("model_version") if rec else None
+    d["recommendation_signals"] = rec.get("signals") if rec else None
+    return d
+
+
 def _article_from_row(row: Any, conn: Any, article_id: int, user_id: int | None) -> dict[str, Any]:
     d = row_to_dict(row)
     d.pop("embedding", None)
     d.pop("fts_vector", None)
     if user_id is not None:
         _merge_user_state(d, conn, article_id, user_id)
+        _merge_user_recommendation(d, conn, article_id, user_id)
     return d
 
 
