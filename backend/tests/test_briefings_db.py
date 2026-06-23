@@ -9,6 +9,7 @@ fixture (started by testcontainers) and are skipped when Docker is unavailable.
 from __future__ import annotations
 
 import json
+import re
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from typing import Any, ClassVar
@@ -726,6 +727,7 @@ def _patch_openai(monkeypatch: pytest.MonkeyPatch, content: str) -> type[_FakeOp
 def test_call_openai_uses_default_base_url_when_unset(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("OPENAI_BASE_URL", raising=False)
     monkeypatch.delenv("OPENAI_BRIEFING_BASE_URL", raising=False)
+    monkeypatch.delenv("OPENAI_BRIEFING_API_KEY", raising=False)
     cls = _patch_openai(monkeypatch, "{}")
     _call_openai([{"id": 1, "title": "A"}], model="gpt-x")
     assert cls.last_kwargs["api_key"] == "sk-test"
@@ -754,6 +756,33 @@ def test_call_openai_raises_on_invalid_json(monkeypatch: pytest.MonkeyPatch) -> 
     _patch_openai(monkeypatch, "not json at all")
     with pytest.raises(BriefingGenerationError, match="invalid JSON"):
         _call_openai([{"id": 1, "title": "A"}], model="gpt-x")
+
+
+def test_call_openai_wraps_upstream_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    """An error from the gateway surfaces as BriefingGenerationError, not a bare 500."""
+    from openai import OpenAIError
+
+    class _UpstreamError(OpenAIError):
+        pass
+
+    def _raise(**_kwargs: Any) -> Any:
+        msg = "Connection error."
+        raise _UpstreamError(msg)
+
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
+    monkeypatch.setenv("OPENAI_BRIEFING_BASE_URL", "http://192.168.0.75:9130/v1")
+    cls = type(
+        "Patched",
+        (_FakeOpenAI,),
+        {
+            "__init__": lambda self, **_kw: setattr(
+                self, "chat", SimpleNamespace(completions=SimpleNamespace(create=_raise))
+            )
+        },
+    )
+    monkeypatch.setattr("openai.OpenAI", cls)
+    with pytest.raises(BriefingGenerationError, match=re.escape("192.168.0.75:9130")):
+        _call_openai([{"id": 1, "title": "A"}], model="auto")
 
 
 # ── generate_briefing (end-to-end with fake AI) ───────────────────────────────

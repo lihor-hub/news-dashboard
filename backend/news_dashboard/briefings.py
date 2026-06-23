@@ -195,16 +195,26 @@ def _call_openai(candidates: list[dict[str, Any]], model: str) -> dict[str, Any]
     )
     user = "Articles:\n\n" + "\n\n".join(article_lines)
 
+    from openai import OpenAIError  # lazy import — optional dep at import time
+
     client = OpenAI(api_key=api_key, base_url=base_url)
-    response = client.chat.completions.create(
-        model=model,
-        messages=[
-            {"role": "system", "content": system},
-            {"role": "user", "content": user},
-        ],
-        response_format={"type": "json_object"},
-        max_tokens=2048,
-    )
+    try:
+        response = client.chat.completions.create(
+            model=model,
+            messages=[
+                {"role": "system", "content": system},
+                {"role": "user", "content": user},
+            ],
+            response_format={"type": "json_object"},
+            max_tokens=2048,
+        )
+    except OpenAIError as exc:
+        # Connection refused, auth failure, or the model/gateway rejecting the
+        # request (e.g. an endpoint that does not support JSON response_format).
+        # Surface the upstream reason instead of an opaque 500.
+        endpoint = base_url or "the default OpenAI endpoint"
+        msg = f"Briefing AI request to {endpoint} failed: {exc}"
+        raise BriefingGenerationError(msg) from exc
     text = response.choices[0].message.content or "{}"
     try:
         return json.loads(text)  # type: ignore[no-any-return]
