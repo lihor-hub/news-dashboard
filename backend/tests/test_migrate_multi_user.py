@@ -73,11 +73,17 @@ def test_sqlite_to_postgres_migrates_rows(
     # exercise the graceful-degradation path, articles carries all columns.
     src = tmp_path / "legacy.sqlite"
     sqlite = sqlite3.connect(src)
-    # Empty sources table: exercises the sources loop (zero iterations) without
-    # tripping the enabled-column boolean adaptation limitation.
+    # Sources lacks the newer health columns (graceful degradation) and stores
+    # enabled as an integer 0/1 — the migrator must coerce it to a PG boolean.
     sqlite.execute(
         "CREATE TABLE sources(slug TEXT, name TEXT, url TEXT, category TEXT,"
         " kind TEXT, priority INTEGER, enabled INTEGER)"
+    )
+    sqlite.execute(
+        "INSERT INTO sources VALUES('acme', 'Acme', 'https://acme.test', 'tech', 'rss_feed', 1, 1)"
+    )
+    sqlite.execute(
+        "INSERT INTO sources VALUES('off', 'Off', 'https://off.test', 'tech', 'rss_feed', 1, 0)"
     )
     sqlite.execute(
         "CREATE TABLE articles(url TEXT, canonical_url TEXT, title TEXT, source_slug TEXT,"
@@ -98,21 +104,22 @@ def test_sqlite_to_postgres_migrates_rows(
     monkeypatch.setenv("DATABASE_URL", pg_url)
     monkeypatch.setattr(db_mod, "DB_PATH", schema_path)
 
-    # Pre-seed the parent source so the migrated article satisfies its FK.
+    # The migrator seeds sources before articles, so the article's FK to 'acme'
+    # is satisfied within the same run — no pre-seeding needed.
     init_db(schema_path)
-    with connect(schema_path) as conn:
-        conn.execute(
-            "INSERT INTO sources(slug, name, url, category, kind)"
-            " VALUES ('acme', 'Acme', 'https://acme.test', 'tech', 'rss_feed')"
-        )
 
     result = runner.invoke(app, ["sqlite-to-postgres", str(src)])
     assert result.exit_code == 0, result.output
-    assert "Migrated 0 source(s) and 1 article(s)" in result.output
+    assert "Migrated 2 source(s) and 1 article(s)" in result.output
 
     with connect(schema_path) as conn:
         articles = conn.execute("SELECT url, title FROM articles").fetchall()
+        sources = conn.execute("SELECT slug, enabled FROM sources ORDER BY slug").fetchall()
     assert articles[0]["title"] == "Hello"
+    # enabled integers are coerced to booleans
+    enabled_by_slug = {s["slug"]: s["enabled"] for s in sources}
+    assert enabled_by_slug["acme"] is True
+    assert enabled_by_slug["off"] is False
 
 
 def test_row_count_postgres_style() -> None:

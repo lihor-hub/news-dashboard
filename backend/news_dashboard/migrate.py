@@ -49,6 +49,23 @@ ARTICLE_COLUMNS = [
 ]
 
 
+def _coerce_source_value(column: str, row: sqlite3.Row) -> Any:
+    """Map a SQLite source column to a PostgreSQL-compatible value.
+
+    Older dumps lack the newer health columns; the NOT NULL count columns must
+    fall back to 0, and SQLite stores ``enabled`` as an integer 0/1 which
+    PostgreSQL's boolean column rejects.
+    """
+    not_null_counts = {"last_fetched_count", "last_inserted_count"}
+    present = column in row.keys()  # noqa: SIM118 - sqlite3.Row is not a Mapping
+    value = row[column] if present else None
+    if column == "enabled":
+        return None if value is None else bool(value)
+    if column in not_null_counts and value is None:
+        return 0
+    return value
+
+
 def sqlite_rows(path: Path, table: str) -> list[sqlite3.Row]:
     sqlite = sqlite3.connect(path)
     sqlite.row_factory = sqlite3.Row
@@ -75,10 +92,7 @@ def sqlite_to_postgres(
     with connect() as conn:
         for row in sources:
             # Gracefully handle older SQLite dumps that lack new health columns
-            source_values = tuple(
-                row[c] if c in row.keys() else None  # noqa: SIM118 - sqlite3.Row is not a Mapping
-                for c in SOURCE_COLUMNS
-            )
+            source_values = tuple(_coerce_source_value(c, row) for c in SOURCE_COLUMNS)
             conn.execute(
                 """
                 INSERT INTO sources(
