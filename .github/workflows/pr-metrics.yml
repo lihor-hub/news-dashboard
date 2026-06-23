@@ -1,0 +1,201 @@
+name: PR test metrics
+
+# On every pull request, measure test coverage and wall-clock test time for
+# BOTH the PR head and its merge base (main), then post a sticky comment that
+# diffs the two. Lets you see at a glance whether a PR moves coverage or makes
+# the suite slower before you merge.
+#
+# Strategy: a 2-entry matrix runs the suite once per ref and uploads a small
+# metrics artifact; a final job downloads both and renders the comparison.
+
+on:
+  pull_request:
+    branches: [main]
+
+# Allow the comment job to write to the PR.
+permissions:
+  contents: read
+  pull-requests: write
+
+# A newer push to the same PR makes in-flight measurements stale — cancel them.
+concurrency:
+  group: pr-metrics-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  # ── Measure: run once for the PR head and once for the base (main) ──────────
+  measure:
+    name: Measure (${{ matrix.key }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - key: pr
+            ref: ${{ github.event.pull_request.head.sha }}
+          - key: base
+            ref: ${{ github.event.pull_request.base.sha }}
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: news_dashboard
+          POSTGRES_USER: news_dashboard
+          POSTGRES_PASSWORD: news_dashboard
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ matrix.ref }}
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.14'
+          cache: pip
+      - run: pip install -e '.[dev]'
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '26'
+          cache: npm
+      - run: npm install
+
+      # Backend: pytest with JSON coverage; time the run with the bash SECONDS
+      # builtin. `|| true` so a measurement on the base ref never fails the PR.
+      - name: Backend tests + coverage
+        id: backend
+        env:
+          DATABASE_URL: postgresql://news_dashboard:news_dashboard@127.0.0.1:5432/news_dashboard
+          TEST_DATABASE_URL: postgresql://news_dashboard:news_dashboard@127.0.0.1:5432/news_dashboard
+        run: |
+          SECONDS=0
+          pytest -q --cov --cov-report=json:cov-backend.json \
+            -o faulthandler_timeout=120 || true
+          echo "seconds=$SECONDS" >> "$GITHUB_OUTPUT"
+
+      # Frontend: vitest with v8 JSON summary coverage.
+      - name: Frontend tests + coverage
+        id: frontend
+        run: |
+          SECONDS=0
+          npm run test:frontend:coverage --silent -- \
+            --coverage.reporter=json-summary || true
+          echo "seconds=$SECONDS" >> "$GITHUB_OUTPUT"
+
+      # Reduce raw outputs to one metrics.json for this ref.
+      - name: Collect metrics
+        env:
+          KEY: ${{ matrix.key }}
+          REF: ${{ matrix.ref }}
+          BACKEND_SECONDS: ${{ steps.backend.outputs.seconds }}
+          FRONTEND_SECONDS: ${{ steps.frontend.outputs.seconds }}
+        run: |
+          python - <<'PY'
+          import json, os
+
+          def num(path, *keys):
+              try:
+                  with open(path) as f:
+                      d = json.load(f)
+                  for k in keys:
+                      d = d[k]
+                  return round(float(d), 2)
+              except Exception:
+                  return None
+
+          metrics = {
+              "ref": os.environ["REF"],
+              "backend_cov": num("cov-backend.json", "totals", "percent_covered"),
+              "frontend_cov": num("coverage/coverage-summary.json", "total", "lines", "pct"),
+              "backend_seconds": int(os.environ["BACKEND_SECONDS"]),
+              "frontend_seconds": int(os.environ["FRONTEND_SECONDS"]),
+          }
+          with open("metrics.json", "w") as f:
+              json.dump(metrics, f)
+          print(json.dumps(metrics, indent=2))
+          PY
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: metrics-${{ matrix.key }}
+          path: metrics.json
+
+  # ── Comment: diff PR vs base and post a sticky comment ──────────────────────
+  comment:
+    name: Post comparison
+    needs: measure
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: metrics-pr
+          path: pr
+      - uses: actions/download-artifact@v4
+        with:
+          name: metrics-base
+          path: base
+
+      - name: Render and post comment
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const pr = JSON.parse(fs.readFileSync('pr/metrics.json', 'utf8'));
+            const base = JSON.parse(fs.readFileSync('base/metrics.json', 'utf8'));
+
+            const pct = (v) => (v == null ? 'n/a' : `${v.toFixed(2)}%`);
+            const secs = (v) => (v == null ? 'n/a' : `${v}s`);
+
+            const covRow = (label, p, b) => {
+              if (p == null || b == null) return `| ${label} | ${pct(p)} | ${pct(b)} | n/a |`;
+              const d = p - b;
+              const arrow = d > 0.01 ? '🟢 +' : d < -0.01 ? '🔴 ' : '⚪ ';
+              return `| ${label} | ${pct(p)} | ${pct(b)} | ${arrow}${d.toFixed(2)} pp |`;
+            };
+            const timeRow = (label, p, b) => {
+              const d = p - b;
+              const arrow = d > 1 ? '🔴 +' : d < -1 ? '🟢 ' : '⚪ ';
+              return `| ${label} | ${secs(p)} | ${secs(b)} | ${arrow}${d}s |`;
+            };
+
+            const body = [
+              '<!-- pr-test-metrics -->',
+              '### 📊 Test metrics vs `main`',
+              '',
+              '**Coverage**',
+              '',
+              '| Suite | PR | main | Δ |',
+              '| --- | --- | --- | --- |',
+              covRow('Backend', pr.backend_cov, base.backend_cov),
+              covRow('Frontend', pr.frontend_cov, base.frontend_cov),
+              '',
+              '**Timing**',
+              '',
+              '| Suite | PR | main | Δ |',
+              '| --- | --- | --- | --- |',
+              timeRow('Backend', pr.backend_seconds, base.backend_seconds),
+              timeRow('Frontend', pr.frontend_seconds, base.frontend_seconds),
+              '',
+              `<sub>PR \`${pr.ref.slice(0,7)}\` vs base \`${base.ref.slice(0,7)}\`. pp = percentage points.</sub>`,
+            ].join('\n');
+
+            const { owner, repo } = context.repo;
+            const issue_number = context.payload.pull_request.number;
+            const marker = '<!-- pr-test-metrics -->';
+
+            const { data: comments } = await github.rest.issues.listComments({
+              owner, repo, issue_number, per_page: 100,
+            });
+            const existing = comments.find((c) => c.body.includes(marker));
+            if (existing) {
+              await github.rest.issues.updateComment({ owner, repo, comment_id: existing.id, body });
+            } else {
+              await github.rest.issues.createComment({ owner, repo, issue_number, body });
+            }
