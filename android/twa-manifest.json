@@ -21,8 +21,8 @@
     "path": "android.keystore",
     "alias": "android"
   },
-  "appVersionName": "1.12.2",
-  "appVersionCode": 1012002,
+  "appVersionName": "1.12.3",
+  "appVersionCode": 1012003,
   "shortcuts": [],
   "generatorApp": "bubblewrap-cli",
   "webManifestUrl": "https://news.lihor.ro/manifest.webmanifest",
