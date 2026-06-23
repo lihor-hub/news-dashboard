@@ -64,6 +64,57 @@ def test_sqlite_to_postgres_rejects_missing_file(monkeypatch: pytest.MonkeyPatch
     assert "not found" in result.output.lower()
 
 
+def test_sqlite_to_postgres_migrates_rows(
+    tmp_path: Path, pg_url: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import sqlite3
+
+    # Build a legacy SQLite dump: sources lacks the newer health columns to
+    # exercise the graceful-degradation path, articles carries all columns.
+    src = tmp_path / "legacy.sqlite"
+    sqlite = sqlite3.connect(src)
+    # Empty sources table: exercises the sources loop (zero iterations) without
+    # tripping the enabled-column boolean adaptation limitation.
+    sqlite.execute(
+        "CREATE TABLE sources(slug TEXT, name TEXT, url TEXT, category TEXT,"
+        " kind TEXT, priority INTEGER, enabled INTEGER)"
+    )
+    sqlite.execute(
+        "CREATE TABLE articles(url TEXT, canonical_url TEXT, title TEXT, source_slug TEXT,"
+        " source_name TEXT, category TEXT, kind TEXT, published_at TEXT, summary TEXT,"
+        " reason TEXT, importance_score INTEGER, tags TEXT, status TEXT, discovered_at TEXT,"
+        " read_at TEXT, saved_at TEXT, skipped_at TEXT, archived_at TEXT, updated_at TEXT)"
+    )
+    sqlite.execute(
+        "INSERT INTO articles VALUES('https://acme.test/a', 'https://acme.test/a', 'Hello',"
+        " 'acme', 'Acme', 'tech', 'rss_feed', NULL, 'sum', 'why', 50, '', 'new',"
+        " '2026-06-01T00:00:00Z', NULL, NULL, NULL, NULL, '2026-06-01T00:00:00Z')"
+    )
+    sqlite.commit()
+    sqlite.close()
+
+    # Route the command's init_db()/connect() at an isolated schema in the test DB.
+    schema_path = tmp_path / "migrate-target.db"
+    monkeypatch.setenv("DATABASE_URL", pg_url)
+    monkeypatch.setattr(db_mod, "DB_PATH", schema_path)
+
+    # Pre-seed the parent source so the migrated article satisfies its FK.
+    init_db(schema_path)
+    with connect(schema_path) as conn:
+        conn.execute(
+            "INSERT INTO sources(slug, name, url, category, kind)"
+            " VALUES ('acme', 'Acme', 'https://acme.test', 'tech', 'rss_feed')"
+        )
+
+    result = runner.invoke(app, ["sqlite-to-postgres", str(src)])
+    assert result.exit_code == 0, result.output
+    assert "Migrated 0 source(s) and 1 article(s)" in result.output
+
+    with connect(schema_path) as conn:
+        articles = conn.execute("SELECT url, title FROM articles").fetchall()
+    assert articles[0]["title"] == "Hello"
+
+
 def test_row_count_postgres_style() -> None:
     # Simulate a psycopg dict_row with 'count' key (lowercase)
     assert _row_count({"count": 3}) == 3

@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
 from typing import Any
 
 import psycopg
@@ -19,7 +20,11 @@ import news_dashboard.briefings as briefings_mod
 from news_dashboard.briefings import (
     CANDIDATE_LIMIT,
     IDEMPOTENCY_WINDOW_MINUTES,
+    BriefingAINotConfiguredError,
     BriefingGenerationError,
+    _call_openai,
+    _coerce_content,
+    _current_day_since_at,
     _get_since_at,
     _validate_content,
     generate_briefing,
@@ -655,6 +660,79 @@ def test_validate_content_handles_empty_worth_opening() -> None:
     raw: dict[str, Any] = {"title": "T", "summary": "S", "sections": []}
     result = _validate_content(raw, candidate_ids={1, 2})
     assert result["worth_opening"] == []
+
+
+def test_validate_content_raises_when_sections_not_a_list() -> None:
+    raw: dict[str, Any] = {"title": "T", "summary": "S", "sections": "nope"}
+    with pytest.raises(BriefingGenerationError, match="must be a list"):
+        _validate_content(raw, candidate_ids=set())
+
+
+# ── _coerce_content (pure) ────────────────────────────────────────────────────
+
+
+def test_coerce_content_parses_json_string() -> None:
+    assert _coerce_content('{"a": 1}') == {"a": 1}
+
+
+def test_coerce_content_returns_non_json_string_unchanged() -> None:
+    assert _coerce_content("not json") == "not json"
+
+
+def test_coerce_content_passes_through_dict() -> None:
+    payload: dict[str, Any] = {"sections": []}
+    assert _coerce_content(payload) is payload
+
+
+# ── _current_day_since_at (pure) ──────────────────────────────────────────────
+
+
+def test_current_day_since_at_subtracts_24_hours() -> None:
+    until = datetime(2026, 6, 23, 12, 0, tzinfo=timezone.utc)
+    assert _current_day_since_at(until) == until - timedelta(hours=24)
+
+
+# ── _call_openai (mocked client) ──────────────────────────────────────────────
+
+
+def test_call_openai_requires_api_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    with pytest.raises(BriefingAINotConfiguredError, match="OPENAI_API_KEY"):
+        _call_openai([], model="gpt-x")
+
+
+class _FakeOpenAI:
+    """Stand-in for ``openai.OpenAI`` whose completion returns a fixed string."""
+
+    content = "{}"
+
+    def __init__(self, api_key: str) -> None:
+        self.api_key = api_key
+        message = SimpleNamespace(content=type(self).content)
+        choice = SimpleNamespace(message=message)
+        response = SimpleNamespace(choices=[choice])
+        self.chat = SimpleNamespace(completions=SimpleNamespace(create=lambda **_kwargs: response))
+
+
+def _patch_openai(monkeypatch: pytest.MonkeyPatch, content: str) -> None:
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
+    cls = type("Patched", (_FakeOpenAI,), {"content": content})
+    monkeypatch.setattr("openai.OpenAI", cls)
+
+
+def test_call_openai_parses_valid_json(monkeypatch: pytest.MonkeyPatch) -> None:
+    _patch_openai(monkeypatch, '{"title": "T", "sections": []}')
+    result = _call_openai(
+        [{"id": 1, "title": "A", "summary": "s", "source_name": "S", "category": "c"}],
+        model="gpt-x",
+    )
+    assert result == {"title": "T", "sections": []}
+
+
+def test_call_openai_raises_on_invalid_json(monkeypatch: pytest.MonkeyPatch) -> None:
+    _patch_openai(monkeypatch, "not json at all")
+    with pytest.raises(BriefingGenerationError, match="invalid JSON"):
+        _call_openai([{"id": 1, "title": "A"}], model="gpt-x")
 
 
 # ── generate_briefing (end-to-end with fake AI) ───────────────────────────────
