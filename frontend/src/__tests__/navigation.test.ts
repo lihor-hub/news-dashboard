@@ -3,6 +3,7 @@ import {
   commandNavigationItems,
   getPageTitle,
   getShortcutTarget,
+  isNavigationItemActive,
   primaryNavigationItems,
   secondaryNavigationItems,
 } from '../lib/navigation';
@@ -29,5 +30,17 @@ describe('navigation metadata', () => {
     expect(getShortcutTarget('t')).toBe('/today');
     expect(getShortcutTarget('h')).toBe('/briefs');
     expect(getShortcutTarget('z')).toBeNull();
+  });
+
+  it('matches exact roots but prefix-matches nested families', () => {
+    // '/' and '/today' must match exactly so they don't light up everywhere.
+    expect(isNavigationItemActive('/', '/')).toBe(true);
+    expect(isNavigationItemActive('/', '/today')).toBe(false);
+    expect(isNavigationItemActive('/today', '/today')).toBe(true);
+    expect(isNavigationItemActive('/today', '/today/123')).toBe(false);
+
+    // Other destinations match their whole sub-tree.
+    expect(isNavigationItemActive('/briefs', '/briefs/123')).toBe(true);
+    expect(isNavigationItemActive('/feeds', '/stats')).toBe(false);
   });
 });
