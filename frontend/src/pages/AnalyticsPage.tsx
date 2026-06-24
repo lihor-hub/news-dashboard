@@ -134,6 +134,16 @@ export function AnalyticsPage() {
                 axisLine={false}
               />
               <YAxis
+                yAxisId="users"
+                allowDecimals={false}
+                tick={{ fontSize: 10, fill: AXIS_FILL }}
+                tickLine={false}
+                axisLine={false}
+                width={28}
+              />
+              <YAxis
+                yAxisId="minutes"
+                orientation="right"
                 allowDecimals={false}
                 tick={{ fontSize: 10, fill: AXIS_FILL }}
                 tickLine={false}
@@ -142,6 +152,7 @@ export function AnalyticsPage() {
               />
               <Tooltip contentStyle={TOOLTIP_STYLE} />
               <Area
+                yAxisId="users"
                 type="monotone"
                 dataKey="active_users"
                 stroke={CHART_COLORS[0]}
@@ -151,6 +162,7 @@ export function AnalyticsPage() {
                 name="active users"
               />
               <Area
+                yAxisId="minutes"
                 type="monotone"
                 dataKey="minutes"
                 stroke={CHART_COLORS[1]}
