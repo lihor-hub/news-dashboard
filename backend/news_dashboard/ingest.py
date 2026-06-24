@@ -702,6 +702,7 @@ _COLD_START_RECOMMENDATION_SCORE_SQL = """
       + CASE lower(COALESCE(a.category, ''))
           WHEN 'ai' THEN 8.0
           WHEN 'ai-ml' THEN 8.0
+          WHEN 'ai-llm' THEN 8.0
           WHEN 'python' THEN 7.0
           WHEN 'security' THEN 6.0
           WHEN 'devtools' THEN 5.0

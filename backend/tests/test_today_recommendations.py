@@ -241,3 +241,48 @@ def test_recalculate_mine_scores_callers_own_feed(
 
     assert response.status_code == 200
     assert response.json()["scored"] == 2
+
+
+def test_cold_start_ai_llm_category_ranks_above_generic_tech(
+    tmp_path: Path, monkeypatch: Any, pg_clean: str
+) -> None:
+    """Regression: ai-llm category must receive the same 8-point bonus as ai/ai-ml.
+
+    Before the fix, `ai-llm` fell through to ELSE 2.0, silently demoting every
+    Google AI Blog / HuggingFace / Anthropic / OpenAI article in cold-start rank.
+    """
+    db_path = _setup_db(tmp_path, monkeypatch, pg_clean, "ai-llm-category.db")
+    sync_sources(db_path)
+    _insert_source(db_path, "google-ai-test", category="ai-llm", priority=75)
+    _insert_source(db_path, "generic-tech", category="tech", priority=75)
+    user_id = _make_user(db_path, "alice")
+
+    # Both articles: identical priority, importance, no tags, same freshness.
+    # The only difference is the source category — ai-llm vs tech.
+    tech_article = _insert_article(
+        db_path,
+        "generic-tech",
+        "tech-piece",
+        category="tech",
+        importance=70,
+        tags="",
+        discovered_at="2026-06-21T10:00:00+00:00",
+    )
+    ai_llm_article = _insert_article(
+        db_path,
+        "google-ai-test",
+        "google-ai-piece",
+        category="ai-llm",
+        importance=70,
+        tags="",
+        discovered_at="2026-06-21T10:00:00+00:00",
+    )
+
+    try:
+        with _client_for(user_id, "alice") as client:
+            ids = _today_ids(client)
+    finally:
+        app.dependency_overrides.pop(require_auth, None)
+
+    # ai-llm should rank above tech when all other factors are equal
+    assert ids.index(ai_llm_article) < ids.index(tech_article)
