@@ -27,6 +27,7 @@ import type { WorkflowState } from '@/lib/workflowTypes';
 import { formatDate, readingTime, signalLabel } from '@/lib/format';
 import { getReaderList } from '@/lib/readerList';
 import { recommendationExplanation } from '@/lib/recommendation';
+import { trackArticleOpen, trackArticleClose } from '@/lib/analytics';
 import { cn } from '@/lib/utils';
 
 function renderBody(md: string): string {
@@ -161,6 +162,19 @@ export function ArticlePage() {
     bodyMutation.mutate();
     // Run once per article id; bodyMutation is intentionally omitted from deps.
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id]);
+
+  // Per-article dwell telemetry: record an open when the reader mounts (or the
+  // user pages to a different article via prev/next, which swaps the id in
+  // place) and a close on unmount/id change so the close carries dwell time.
+  // This feeds the "Most-read articles" analytics panel via article_close
+  // events; without it that panel stays empty.
+  useEffect(() => {
+    if (!id) return;
+    const articleId = Number(id);
+    if (!Number.isFinite(articleId)) return;
+    trackArticleOpen(articleId);
+    return () => trackArticleClose(articleId);
   }, [id]);
 
   const insightsMutation = useMutation({
