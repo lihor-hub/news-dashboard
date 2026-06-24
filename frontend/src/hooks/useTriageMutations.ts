@@ -4,6 +4,7 @@ import { toast } from 'sonner';
 // Single shared ID so every triage toast replaces the previous one rather than
 // stacking — rapid actions (read, skip, star) should show only the latest.
 const TRIAGE_TOAST_ID = 'triage';
+import { trackFeature } from '../lib/analytics';
 import type { WorkflowArticle, WorkflowState } from '../lib/workflowTypes';
 import {
   patchArticleState,
@@ -196,6 +197,7 @@ export function useTriageMutations() {
     }
     const snap = snapshot(article);
     const querySnapshots = snapshotArticleQueries(queryClient, article.id);
+    trackFeature(`triage_${newState}`);
     setStateMutation.mutate({ article, newState });
     toast(label, {
       id: TRIAGE_TOAST_ID,
@@ -217,6 +219,7 @@ export function useTriageMutations() {
     const nextStarred = !article.starred;
     const snap = snapshot(article);
     const querySnapshots = snapshotArticleQueries(queryClient, article.id);
+    trackFeature(nextStarred ? 'star' : 'unstar');
     starMutation.mutate({ article, starred: nextStarred });
     toast(nextStarred ? 'Starred' : 'Unstarred', {
       id: TRIAGE_TOAST_ID,
@@ -235,6 +238,7 @@ export function useTriageMutations() {
   function sendLater(article: WorkflowArticle, days = 1) {
     const snap = snapshot(article);
     const querySnapshots = snapshotArticleQueries(queryClient, article.id);
+    trackFeature('snooze');
     sendLaterMutation.mutate({ article, days });
     toast('Snoozed to tomorrow', {
       id: TRIAGE_TOAST_ID,

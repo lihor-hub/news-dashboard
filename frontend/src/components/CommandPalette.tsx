@@ -22,6 +22,7 @@ import { useTriageMutations } from '@/hooks/useTriageMutations';
 import { useFocusedArticle } from '@/contexts/focusedArticle';
 import type { WorkflowArticle } from '@/lib/workflowTypes';
 import { commandNavigationItems } from '@/lib/navigation';
+import { trackFeature } from '@/lib/analytics';
 
 interface Props {
   open: boolean;
@@ -60,6 +61,7 @@ export function CommandPalette({ open, onOpenChange, onShortcuts }: Props) {
     }
     const doSearch = async () => {
       setSearching(true);
+      trackFeature('search');
       try {
         const raw = await searchArticles(q.trim(), 6);
         setSearchResults(raw.map(adaptArticle));
@@ -86,6 +88,7 @@ export function CommandPalette({ open, onOpenChange, onShortcuts }: Props) {
 
   async function handleIngest() {
     close();
+    trackFeature('ingest_now');
     const id = toast.loading('Refreshing feeds…');
     try {
       const result = await ingestNow();

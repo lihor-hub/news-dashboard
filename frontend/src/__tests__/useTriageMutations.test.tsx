@@ -7,6 +7,7 @@ import { toast } from 'sonner';
 import type { WorkflowArticle } from '../lib/workflowTypes';
 import * as workflowApi from '../api/workflowApi';
 import { useTriageMutations, ARTICLES_KEY } from '../hooks/useTriageMutations';
+import { trackFeature } from '../lib/analytics';
 
 // ─── Mocks ───────────────────────────────────────────────────────────────────
 
@@ -17,6 +18,10 @@ vi.mock('sonner', () => ({
     loading: vi.fn(),
     dismiss: vi.fn(),
   }),
+}));
+
+vi.mock('../lib/analytics', () => ({
+  trackFeature: vi.fn(),
 }));
 
 let patchArticleStatePromise: Promise<unknown> = Promise.resolve({});
@@ -136,6 +141,26 @@ describe('useTriageMutations — undo calls the API to revert server state', () 
     });
 
     expect(workflowApi.patchArticleStar).toHaveBeenCalledWith('42', false);
+  });
+
+  it('emits feature events for triage actions so the analytics panel is populated', () => {
+    const { wrapper } = makeWrapper();
+    const { result } = renderHook(() => useTriageMutations(), { wrapper });
+
+    act(() => {
+      result.current.setState(makeArticle(), 'done', 'Marked as read');
+    });
+    expect(trackFeature).toHaveBeenCalledWith('triage_done');
+
+    act(() => {
+      result.current.toggleStar(makeArticle({ starred: false }));
+    });
+    expect(trackFeature).toHaveBeenCalledWith('star');
+
+    act(() => {
+      result.current.sendLater(makeArticle(), 1);
+    });
+    expect(trackFeature).toHaveBeenCalledWith('snooze');
   });
 
   it('sendLater undo calls patchArticleState with original state', () => {
