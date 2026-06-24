@@ -161,6 +161,26 @@ describe('SettingsPage', () => {
     await waitFor(() => expect(screen.getByText(/Personalized 3 articles/)).toBeTruthy());
   });
 
+  it('invalidates article caches after recalculation so stale scores are not shown', async () => {
+    apiMock.recalculateMyRecommendations.mockResolvedValue({ scored: 2 });
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const invalidate = vi.spyOn(queryClient, 'invalidateQueries');
+    render(
+      <QueryClientProvider client={queryClient}>
+        <SettingsPage />
+      </QueryClientProvider>
+    );
+    fireEvent.click(screen.getByText('Refresh recommendations'));
+    await waitFor(() => expect(screen.getByText(/Personalized 2 articles/)).toBeTruthy());
+    // Both the article list and per-article caches must be purged so recommendation
+    // scores are re-fetched from the backend on the next view.
+    const calledKeys = invalidate.mock.calls.map((c) => (c[0] as { queryKey: unknown[] }).queryKey);
+    expect(calledKeys.some((k) => Array.isArray(k) && k.includes('articles'))).toBe(true);
+    expect(calledKeys.some((k) => Array.isArray(k) && k[0] === 'article' && k.length === 1)).toBe(
+      true
+    );
+  });
+
   it('reports when there is nothing to personalize', async () => {
     apiMock.recalculateMyRecommendations.mockResolvedValue({ scored: 0 });
     renderPage(<SettingsPage />);

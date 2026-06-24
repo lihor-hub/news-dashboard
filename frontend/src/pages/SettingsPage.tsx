@@ -9,11 +9,13 @@ import {
   ExternalLink,
   Sparkles,
 } from 'lucide-react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useTheme } from '@/hooks/useTheme';
 import { cn } from '@/lib/utils';
 import type { Theme } from '@/lib/theme';
 import { useUpdateCheck } from '@/hooks/useUpdateCheck';
 import { recalculateMyRecommendations } from '@/api';
+import { ARTICLES_KEY } from '@/hooks/useTriageMutations';
 
 const THEME_OPTS: { v: Theme; label: string; Icon: React.ComponentType<{ className?: string }> }[] =
   [
@@ -277,6 +279,7 @@ type RecalcState =
   | { status: 'error' };
 
 function PersonalizationSection() {
+  const queryClient = useQueryClient();
   const [state, setState] = useState<RecalcState>({ status: 'idle' });
 
   const recalculate = async () => {
@@ -284,6 +287,11 @@ function PersonalizationSection() {
     try {
       const { scored } = await recalculateMyRecommendations();
       setState({ status: 'done', scored });
+      // Invalidate cached article data so recommendation scores refresh on next render.
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: [ARTICLES_KEY] }),
+        queryClient.invalidateQueries({ queryKey: ['article'] }),
+      ]);
     } catch {
       setState({ status: 'error' });
     }
