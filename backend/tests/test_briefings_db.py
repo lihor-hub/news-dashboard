@@ -1043,3 +1043,90 @@ def test_generate_briefing_ignores_failed_rows_in_idempotency_check(pg_clean: st
     )
     assert result["status"] == "complete"
     assert result["title"] == "Recovery Brief"
+
+
+# ── Generation retries ────────────────────────────────────────────────────────
+
+
+def test_generate_briefing_retries_then_succeeds(pg_clean: str) -> None:
+    _seed_source(pg_clean)
+    a1 = _seed_article(pg_clean, url="https://example.com/r1", title="R1", state="today")
+
+    calls = {"n": 0}
+
+    def _flaky_ai(candidates: list[dict[str, Any]], model: str) -> dict[str, Any]:
+        calls["n"] += 1
+        if calls["n"] < 2:
+            msg = "transient gateway hiccup"
+            raise BriefingGenerationError(msg)
+        return {
+            "title": "Recovered Brief",
+            "summary": "S",
+            "sections": [{"title": "S", "body": "B", "citations": [a1]}],
+            "worth_opening": [],
+        }
+
+    result = generate_briefing(
+        database_url=pg_clean,
+        ai_fn=_flaky_ai,
+        idempotency_window_minutes=0,
+        retry_base_delay_seconds=0,
+    )
+
+    assert calls["n"] == 2
+    assert result["status"] == "complete"
+    assert result["title"] == "Recovered Brief"
+    # The transient first failure must not leave a failed-status row behind.
+    assert [b["status"] for b in list_briefings(database_url=pg_clean)] == ["complete"]
+
+
+def test_generate_briefing_exhausts_retries_and_persists_single_failed_row(
+    pg_clean: str,
+) -> None:
+    _seed_source(pg_clean)
+    _seed_article(pg_clean, url="https://example.com/r2", title="R2", state="today")
+
+    calls = {"n": 0}
+
+    def _always_fail(candidates: list[dict[str, Any]], model: str) -> dict[str, Any]:
+        calls["n"] += 1
+        msg = "still failing"
+        raise BriefingGenerationError(msg)
+
+    with pytest.raises(BriefingGenerationError, match="still failing"):
+        generate_briefing(
+            database_url=pg_clean,
+            ai_fn=_always_fail,
+            idempotency_window_minutes=0,
+            max_attempts=3,
+            retry_base_delay_seconds=0,
+        )
+
+    assert calls["n"] == 3
+    briefings = list_briefings(database_url=pg_clean)
+    assert len(briefings) == 1
+    assert briefings[0]["status"] == "failed"
+
+
+def test_generate_briefing_does_not_retry_when_ai_not_configured(pg_clean: str) -> None:
+    _seed_source(pg_clean)
+    _seed_article(pg_clean, url="https://example.com/r3", title="R3", state="today")
+
+    calls = {"n": 0}
+
+    def _not_configured(candidates: list[dict[str, Any]], model: str) -> dict[str, Any]:
+        calls["n"] += 1
+        msg = "OPENAI_API_KEY missing"
+        raise BriefingAINotConfiguredError(msg)
+
+    with pytest.raises(BriefingAINotConfiguredError):
+        generate_briefing(
+            database_url=pg_clean,
+            ai_fn=_not_configured,
+            idempotency_window_minutes=0,
+            max_attempts=3,
+            retry_base_delay_seconds=0,
+        )
+
+    # Misconfiguration fails fast — no retries.
+    assert calls["n"] == 1

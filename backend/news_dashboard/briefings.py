@@ -8,6 +8,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import time
 from collections.abc import Callable
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -19,6 +20,12 @@ CANDIDATE_LIMIT = 40
 DEFAULT_BRIEFING_MODEL = "gpt-4o-mini"
 IDEMPOTENCY_WINDOW_MINUTES = 10
 CURRENT_DAY_SCOPE = "current_day"
+
+# Generation retries: transient upstream failures (gateway hiccup, rate limit,
+# a flaky JSON response) often clear on a quick second attempt, so retry the AI
+# call a few times with a short, growing backoff before persisting a failed row.
+BRIEFING_MAX_ATTEMPTS = 3
+BRIEFING_RETRY_BASE_DELAY_SECONDS = 0.5
 
 logger = logging.getLogger(__name__)
 
@@ -427,18 +434,27 @@ def generate_briefing(
     ai_fn: AiFn | None = None,
     idempotency_window_minutes: int = IDEMPOTENCY_WINDOW_MINUTES,
     user_id: int | None = None,
+    max_attempts: int = BRIEFING_MAX_ATTEMPTS,
+    retry_base_delay_seconds: float = BRIEFING_RETRY_BASE_DELAY_SECONDS,
 ) -> dict[str, Any]:
     """Generate and persist a briefing from eligible Today articles.
 
     If a complete briefing already exists within ``idempotency_window_minutes``,
     return it immediately without calling the AI again.
 
+    The AI call is retried up to ``max_attempts`` times on transient
+    ``BriefingGenerationError`` failures, waiting ``retry_base_delay_seconds``
+    after the first failure and doubling the delay on each subsequent retry
+    (short exponential backoff). A missing-API-key error is never retried, and
+    a failed-status row is persisted only once, after the final attempt fails.
+
     Returns the saved briefing dict on success, or ``{"status": "no_candidates"}``
     when no eligible articles are found.
 
     Raises:
         BriefingAINotConfiguredError: OPENAI_API_KEY is not set.
-        BriefingGenerationError: AI returned an invalid or unparseable response.
+        BriefingGenerationError: AI returned an invalid or unparseable response
+            on every attempt.
     """
     recent = _find_recent_briefing(idempotency_window_minutes, database_url, user_id=user_id)
     if recent is not None:
@@ -457,14 +473,39 @@ def generate_briefing(
 
     candidate_ids = {int(a["id"]) for a in candidates}
     call_ai: AiFn = ai_fn if ai_fn is not None else _call_openai
-    try:
-        raw_content = call_ai(candidates, resolved_model)
-        content = _validate_content(raw_content, candidate_ids)
-    except (BriefingAINotConfiguredError, BriefingGenerationError) as exc:
-        _save_failed_briefing(
-            since_at, until_at, exc, resolved_model, database_url, user_id=user_id
-        )
-        raise
+    attempts = max(1, max_attempts)
+    content: dict[str, Any] | None = None
+    for attempt in range(1, attempts + 1):
+        try:
+            raw_content = call_ai(candidates, resolved_model)
+            content = _validate_content(raw_content, candidate_ids)
+            break
+        except BriefingAINotConfiguredError as exc:
+            # Misconfiguration won't fix itself on retry — fail fast.
+            _save_failed_briefing(
+                since_at, until_at, exc, resolved_model, database_url, user_id=user_id
+            )
+            raise
+        except BriefingGenerationError as exc:
+            if attempt >= attempts:
+                _save_failed_briefing(
+                    since_at, until_at, exc, resolved_model, database_url, user_id=user_id
+                )
+                raise
+            delay = retry_base_delay_seconds * (2 ** (attempt - 1))
+            logger.warning(
+                "Briefing generation attempt %d/%d failed (%s); retrying in %.2fs",
+                attempt,
+                attempts,
+                exc,
+                delay,
+            )
+            if delay > 0:
+                time.sleep(delay)
+
+    if content is None:  # pragma: no cover — loop either breaks or raises
+        msg = "Briefing generation produced no content"
+        raise BriefingGenerationError(msg)
     return _save_briefing(
         since_at, until_at, content, candidate_ids, resolved_model, database_url, user_id=user_id
     )
