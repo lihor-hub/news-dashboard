@@ -62,16 +62,8 @@ export function AnalyticsPage() {
 
   const s = data?.summary;
   const activeLabelled = useMemo(
-    () =>
-      (data?.active_over_time ?? []).map((d) => ({
-        ...d,
-        label: new Date(d.day + 'T00:00:00Z').toLocaleDateString(undefined, {
-          month: 'short',
-          day: 'numeric',
-          timeZone: 'UTC',
-        }),
-      })),
-    [data]
+    () => buildActiveSeries(data?.active_over_time ?? [], days),
+    [data, days]
   );
   const heatmap = useMemo(() => buildHeatmap(data?.hourly_heatmap ?? []), [data]);
 
@@ -222,7 +214,7 @@ export function AnalyticsPage() {
                           background:
                             value === 0
                               ? 'var(--color-border)'
-                              : `color-mix(in srgb, var(--color-chart-1) ${heatIntensity(value, heatmap)}%, transparent)`,
+                              : `color-mix(in srgb, var(--color-chart-1) ${heatIntensity(value)}%, transparent)`,
                         }}
                       />
                     </td>
@@ -324,6 +316,39 @@ function fmt(value: number | undefined, loading: boolean): number | string {
   return value ?? 0;
 }
 
+interface ActivePoint {
+  day: string;
+  active_users: number;
+  minutes: number;
+}
+
+/**
+ * Expand the (sparse) per-day series into one point per day across the full
+ * selected window so the x-axis always spans the chosen range. Days with no
+ * activity are filled with zeros rather than dropped.
+ */
+function buildActiveSeries(points: ActivePoint[], days: number) {
+  const byDay = new Map(points.map((p) => [p.day, p]));
+  const today = new Date();
+  const series: (ActivePoint & { label: string })[] = [];
+  for (let i = days - 1; i >= 0; i--) {
+    const d = new Date(
+      Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate() - i)
+    );
+    const key = d.toISOString().slice(0, 10);
+    const point = byDay.get(key) ?? { day: key, active_users: 0, minutes: 0 };
+    series.push({
+      ...point,
+      label: d.toLocaleDateString(undefined, {
+        month: 'short',
+        day: 'numeric',
+        timeZone: 'UTC',
+      }),
+    });
+  }
+  return series;
+}
+
 function buildHeatmap(points: { dow: number; hour: number; events: number }[]): number[][] {
   const grid: number[][] = Array.from({ length: 7 }, () => Array.from({ length: 24 }, () => 0));
   for (const p of points) {
@@ -334,9 +359,17 @@ function buildHeatmap(points: { dow: number; hour: number; events: number }[]): 
   return grid;
 }
 
-function heatIntensity(value: number, grid: number[][]): number {
-  const max = Math.max(1, ...grid.flat());
-  return Math.round((value / max) * 90) + 10;
+// Anchor heatmap color to an *absolute*, range-independent event count so the
+// grid reflects how much activity the selected window holds: a 7d view reads
+// faint, a 90d view dense. A log curve keeps high-volume cells (heartbeats add
+// up fast) from saturating instantly. Tuned so a cell saturates around ~500
+// cumulative events.
+const HEAT_SATURATION = 500;
+
+function heatIntensity(value: number): number {
+  if (value <= 0) return 0;
+  const scaled = Math.log1p(value) / Math.log1p(HEAT_SATURATION);
+  return Math.min(100, Math.round(scaled * 90) + 10);
 }
 
 function Stat({
