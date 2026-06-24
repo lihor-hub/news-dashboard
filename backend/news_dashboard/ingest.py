@@ -905,6 +905,10 @@ def list_articles(  # noqa: PLR0913
                 " OR (state = 'later' AND later_until IS NOT NULL AND later_until <= %s))"
             )
             params.append(now)
+        elif state == "later":
+            # Hide snoozes that have already returned to the today feed.
+            clauses.append("state = 'later' AND (later_until IS NULL OR later_until > %s)")
+            params.append(now)
         else:
             clauses.append("state = %s")
             params.append(state)
@@ -967,6 +971,12 @@ def _list_articles_for_user(  # noqa: PLR0913
                 "(uas.state IS NULL OR uas.state = 'today'"
                 " OR (uas.state = 'later' AND uas.later_until IS NOT NULL"
                 " AND uas.later_until <= %s))"
+            )
+            where_params.append(now)
+        elif state == "later":
+            # Hide snoozes that have already returned to the today feed.
+            art_clauses.append(
+                "uas.state = 'later' AND (uas.later_until IS NULL OR uas.later_until > %s)"
             )
             where_params.append(now)
         else:

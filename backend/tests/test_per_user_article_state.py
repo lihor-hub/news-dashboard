@@ -247,6 +247,31 @@ def test_snooze_returns_to_today_after_expiry(tmp_path: Path) -> None:
     assert any(a["id"] == aid for a in today_arts)
 
 
+def test_snooze_leaves_later_view_after_expiry(tmp_path: Path) -> None:
+    """An expired snooze returns to today and no longer shows in the later view."""
+    db = _setup_db(tmp_path)
+    uid = _make_user(db)
+    aid = _insert_article(db)
+
+    send_article_later(aid, days=1, db_path=db, user_id=uid)
+
+    # Still pending: visible in later, not yet in today.
+    assert any(a["id"] == aid for a in list_articles(state="later", db_path=db, user_id=uid))
+    assert not any(a["id"] == aid for a in list_articles(state="today", db_path=db, user_id=uid))
+
+    # Backdate later_until to simulate the snooze expiring.
+    expired_ts = "2020-01-01T00:00:00+00:00"
+    with connect(db) as conn:
+        conn.execute(
+            "UPDATE user_article_state SET later_until = %s WHERE article_id = %s AND user_id = %s",
+            (expired_ts, aid, uid),
+        )
+
+    # Returned: in today, gone from later.
+    assert any(a["id"] == aid for a in list_articles(state="today", db_path=db, user_id=uid))
+    assert not any(a["id"] == aid for a in list_articles(state="later", db_path=db, user_id=uid))
+
+
 # ── search_articles with user_id ──────────────────────────────────────────────
 
 
