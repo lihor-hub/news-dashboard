@@ -36,8 +36,8 @@ export function BriefSection({
       aria-label={`Briefing section ${index + 1}: ${section.title}`}
       className={index > 0 ? 'mt-5 pt-5 border-t border-border' : ''}
     >
-      <h3 className="text-sm font-semibold text-foreground mb-1.5">{section.title}</h3>
-      <p className="text-sm text-muted-foreground leading-relaxed">{section.body}</p>
+      <h3 className="text-sm font-semibold text-foreground mb-1.5 break-words">{section.title}</h3>
+      <p className="text-sm text-muted-foreground leading-relaxed break-words">{section.body}</p>
       {section.citations.length > 0 && (
         <div className="mt-2 flex flex-wrap gap-1.5">
           {section.citations.map((id) => {
@@ -66,7 +66,7 @@ export function WorthOpening({ articles }: { articles: BriefingArticle[] }) {
             className="flex items-start gap-3 rounded-md p-2 hover:bg-accent transition-colors group"
           >
             <div className="min-w-0">
-              <div className="text-sm font-medium text-foreground group-hover:text-accent-foreground leading-snug">
+              <div className="text-sm font-medium text-foreground group-hover:text-accent-foreground leading-snug break-words">
                 {article.title}
               </div>
               <div className="text-xs text-muted-foreground mt-0.5">{article.source_name}</div>
@@ -119,7 +119,7 @@ export function BriefingView({
     <div>
       <div className="px-4 md:px-5 pt-4 pb-3 flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <h2 className="text-[22px] font-semibold tracking-tight leading-tight">
+          <h2 className="text-[22px] font-semibold tracking-tight leading-tight break-words">
             {briefing.title}
           </h2>
           <p className="text-xs text-muted-foreground mt-1">
@@ -145,7 +145,7 @@ export function BriefingView({
 
       <div className="px-4 md:px-5 pb-6">
         {briefing.summary && (
-          <p className="text-sm text-muted-foreground leading-relaxed mb-5 pb-5 border-b border-border">
+          <p className="text-sm text-muted-foreground leading-relaxed mb-5 pb-5 border-b border-border break-words">
             {briefing.summary}
           </p>
         )}

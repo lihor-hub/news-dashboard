@@ -214,6 +214,13 @@
   }
 }
 
+/* Guard against content (e.g. long unbroken tokens in AI-generated briefings)
+   forcing horizontal overflow, which would stretch the fixed bottom nav past
+   the viewport. */
+.app-shell {
+  overflow-x: hidden;
+}
+
 /* Neutralise global a { color: ... } from legacy styles.css inside new shell */
 .app-shell a {
   color: inherit;
