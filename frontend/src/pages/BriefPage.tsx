@@ -5,6 +5,7 @@ import { Newspaper, RefreshCw, AlertCircle, Inbox, History } from 'lucide-react'
 import { Button } from '@/components/ui/button';
 import { fetchLatestBriefing, createBriefing } from '@/api';
 import { BriefingView, BriefSkeleton } from '@/components/BriefingView';
+import { trackFeature } from '@/lib/analytics';
 
 // ── Main page ─────────────────────────────────────────────────────────────────
 
@@ -32,6 +33,7 @@ export function BriefPage() {
   }
 
   async function handleGenerate() {
+    trackFeature('generate_briefing');
     setIsGenerating(true);
     setGenerateError(null);
     setNoCandidates({ shown: false });
