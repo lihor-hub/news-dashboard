@@ -196,16 +196,16 @@ export function AnalyticsPage() {
 
       <ChartSection title="Activity heatmap" sub="Events by day of week and hour">
         <div className="overflow-x-auto -mx-1">
-          <table className="border-separate border-spacing-[2px]">
+          <table className="w-full min-w-[480px] table-fixed border-separate border-spacing-[2px]">
             <tbody>
               {heatmap.map((row, dow) => (
                 <tr key={dow}>
-                  <td className="pr-2 text-[10px] text-subtle text-right">{DOW[dow]}</td>
+                  <td className="w-7 pr-2 text-[10px] text-subtle text-right">{DOW[dow]}</td>
                   {row.map((value, hour) => (
                     <td key={hour}>
                       <div
                         title={`${DOW[dow]} ${hour}:00 — ${value} events`}
-                        className="h-3 w-3 rounded-[2px]"
+                        className="h-3 w-full rounded-[2px]"
                         style={{
                           background:
                             value === 0
