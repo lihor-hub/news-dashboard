@@ -22,6 +22,7 @@ on:
 
 permissions:
   contents: write
+  models: read # GitHub Models inference for the changelog entry
 
 jobs:
   # ── 1. Compute bump and update version files ─────────────────────────────────
@@ -35,6 +36,7 @@ jobs:
       version: ${{ steps.compute.outputs.version }}
       code: ${{ steps.compute.outputs.code }}
       tag: ${{ steps.compute.outputs.tag }}
+      notes: ${{ steps.ai.outputs.response }}
 
     steps:
       - uses: actions/checkout@v4
@@ -76,6 +78,57 @@ jobs:
             echo "tag=v$NEXT"   >> "$GITHUB_OUTPUT"
           fi
 
+      # ── Changelog: summarize commits with GitHub Models (GITHUB_TOKEN only) ──
+      # Single-shot inference via actions/ai-inference — no external API key.
+
+      - name: Collect commits since last tag
+        if: steps.compute.outputs.bumped == 'true'
+        id: log
+        run: |
+          LAST_TAG=$(git tag --list 'v*' --sort=-version:refname | head -1)
+          {
+            echo "commits<<COMMITS_EOF"
+            git log --no-merges --pretty=format:'- %s' "${LAST_TAG}..HEAD"
+            echo
+            echo "COMMITS_EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Generate changelog entry (GitHub Models)
+        if: steps.compute.outputs.bumped == 'true'
+        id: ai
+        uses: actions/ai-inference@v1
+        with:
+          model: openai/gpt-4o
+          system-prompt: |
+            You write concise, user-facing changelog bullets for a news dashboard
+            app. Given raw git commit subjects, output ONLY markdown "- " bullet
+            lines describing user-visible features and fixes. Merge related commits,
+            rewrite terse messages into clear plain language, and omit
+            chore/ci/test/refactor/docs and other internal noise. Output no
+            headings, no version number, and no preamble — bullets only.
+          prompt: |
+            Commits for release ${{ steps.compute.outputs.tag }}:
+            ${{ steps.log.outputs.commits }}
+
+      - name: Prepend entry to CHANGELOG.md
+        if: steps.compute.outputs.bumped == 'true'
+        env:
+          V: ${{ steps.compute.outputs.version }}
+          BODY: ${{ steps.ai.outputs.response }}
+        run: |
+          python3 - <<'PY'
+          import os, pathlib
+          v = os.environ["V"]
+          body = os.environ["BODY"].strip()
+          # Fallback to raw commit subjects if inference returned nothing.
+          if not body:
+              body = """${{ steps.log.outputs.commits }}""".strip()
+          path = pathlib.Path("CHANGELOG.md")
+          text = path.read_text() if path.exists() else "# Changelog\n"
+          head, _, rest = text.partition("\n")
+          path.write_text(f"{head}\n\n## {v}\n{body}\n\n{rest.lstrip()}")
+          PY
+
       - name: Update version files and push tag
         if: steps.compute.outputs.bumped == 'true'
         run: |
@@ -102,7 +155,7 @@ jobs:
             desktop/package.json > /tmp/pkg.json
           mv /tmp/pkg.json desktop/package.json
 
-          git add VERSION android/app/build.gradle android/twa-manifest.json desktop/package.json
+          git add VERSION CHANGELOG.md android/app/build.gradle android/twa-manifest.json desktop/package.json
           git commit -m "chore: bump version to $TAG"
           git tag "$TAG"
           git push origin HEAD:main --tags
@@ -152,12 +205,20 @@ jobs:
       - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
+          CHANGELOG: ${{ needs.version.outputs.notes }}
         run: |
           V="${{ needs.version.outputs.version }}"
+          NOTES_FILE="$RUNNER_TEMP/android-notes.md"
+          {
+            if [ -n "$CHANGELOG" ]; then
+              printf "## What's new\n\n%s\n\n---\n\n" "$CHANGELOG"
+            fi
+            echo "Signed APK built from ${{ needs.version.outputs.tag }}."
+          } > "$NOTES_FILE"
           gh release create "android-v$V" \
             "${{ steps.apk.outputs.path }}" \
             --title "Android APK v$V" \
-            --notes "Signed APK built from ${{ needs.version.outputs.tag }}." \
+            --notes-file "$NOTES_FILE" \
             --latest
 
       - uses: actions/upload-artifact@v4
@@ -211,6 +272,7 @@ jobs:
       - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
+          CHANGELOG: ${{ needs.version.outputs.notes }}
         run: |
           V="${{ needs.version.outputs.version }}"
           NOTES="Unsigned macOS DMG (universal — Intel + Apple Silicon).
@@ -219,6 +281,14 @@ jobs:
           Or in Terminal: xattr -cr \"/Applications/News Dashboard.app\"
 
           Built from ${{ needs.version.outputs.tag }}."
+          if [ -n "$CHANGELOG" ]; then
+            NOTES="## What's new
+
+          $CHANGELOG
+
+          ---
+          $NOTES"
+          fi
 
           ASSETS=("${{ steps.dmg.outputs.path }}")
           MANIFEST="${{ steps.dmg.outputs.manifest }}"
