@@ -68,8 +68,8 @@ android {
         applicationId "ro.lihor.newsdashboard"
         minSdkVersion 24
         targetSdkVersion 35
-        versionCode 1018000
-        versionName "1.18.0"
+        versionCode 1018001
+        versionName "1.18.1"
 
         // The name for the application
         resValue "string", "appName", twaManifest.name
