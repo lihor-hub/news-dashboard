@@ -1,5 +1,42 @@
 # Changelog
 
+## 1.18.0
+- Show a "What's new" popup highlighting changes after the app updates to a new version
+
+## 1.17.0
+- Auto-schedule the daily brief with a configurable delivery time
+- Send push notifications when a new daily brief is ready
+
+## 1.16.1
+- Fix stale "Why recommended" cache after recommendations recalculate
+
+## 1.16.0
+- Show a numeric relevance score on each article card in Today's feed
+
+## 1.15.11
+- Populate the analytics Feature usage panel by emitting feature events
+
+## 1.15.10
+- Add AI/LLM to the cold-start category bonus in the recommendation score
+
+## 1.15.9
+- Fix empty summaries for HuggingFace Blog articles
+
+## 1.15.8
+- Make analytics charts respond to the 7d/30d/90d time filter
+
+## 1.15.7
+- Fix activity heatmap width to fill the panel
+
+## 1.15.6
+- Emit article dwell telemetry to populate the most-read panel
+
+## 1.15.5
+- Split active-users and minutes onto separate Y axes
+
+## 1.15.4
+- Keep the brief page bottom navbar within the viewport
+
 ## 1.15.3
 - Show numeric relevance score on each article card in Today's feed
 - Invalidate article cache after recommendations recalculate

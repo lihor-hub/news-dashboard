@@ -13,7 +13,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     NEWS_DASHBOARD_DB=/data/news-dashboard.db
 WORKDIR /app
 RUN adduser --disabled-password --gecos '' appuser && mkdir -p /data && chown -R appuser:appuser /data
-COPY pyproject.toml ./
+COPY pyproject.toml VERSION CHANGELOG.md ./
 COPY backend ./backend
 COPY --from=frontend /app/frontend/dist ./frontend/dist
 RUN pip install --no-cache-dir . && chown -R appuser:appuser /app
