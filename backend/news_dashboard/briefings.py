@@ -11,6 +11,7 @@ import os
 import time
 from collections.abc import Callable
 from datetime import datetime, timedelta, timezone
+from functools import partial
 from pathlib import Path
 from typing import Any
 
@@ -174,7 +175,9 @@ def _briefing_ai_config() -> tuple[str, str | None]:
     return api_key, base_url
 
 
-def _call_openai(candidates: list[dict[str, Any]], model: str) -> dict[str, Any]:
+def _call_openai(
+    candidates: list[dict[str, Any]], model: str, *, user_id: int | None = None
+) -> dict[str, Any]:
     """Call an OpenAI-compatible API to generate structured briefing JSON."""
 
     api_key, base_url = _briefing_ai_config()
@@ -211,6 +214,7 @@ def _call_openai(candidates: list[dict[str, Any]], model: str) -> dict[str, Any]
             client,
             name="briefing-generation",
             tags=["briefing"],
+            user_id=user_id,
             model=model,
             messages=[
                 {"role": "system", "content": system},
@@ -476,7 +480,7 @@ def generate_briefing(
         return {"status": "no_candidates"}
 
     candidate_ids = {int(a["id"]) for a in candidates}
-    call_ai: AiFn = ai_fn if ai_fn is not None else _call_openai
+    call_ai: AiFn = ai_fn if ai_fn is not None else partial(_call_openai, user_id=user_id)
     attempts = max(1, max_attempts)
     content: dict[str, Any] | None = None
     for attempt in range(1, attempts + 1):

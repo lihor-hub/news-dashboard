@@ -81,7 +81,7 @@ def _embed(text: str) -> list[float]:
     return list(response.data[0].embedding)
 
 
-def _answer(system_prompt: str, user_prompt: str) -> str:
+def _answer(system_prompt: str, user_prompt: str, *, user_id: int | None = None) -> str:
     """Generate an answer with OpenAI using the same key as embeddings."""
     from news_dashboard.ai_client import chat_create, get_openai_client
 
@@ -90,6 +90,7 @@ def _answer(system_prompt: str, user_prompt: str) -> str:
         client,
         name="ask-ai",
         tags=["ask-ai"],
+        user_id=user_id,
         model=os.getenv("OPENAI_ANSWER_MODEL", DEFAULT_ANSWER_MODEL),
         messages=[
             {"role": "system", "content": system_prompt},
@@ -181,12 +182,19 @@ def embed_all_eligible(db_path: Any = None, *, include_all: bool = False) -> int
 # ── Main Q&A entry-point ───────────────────────────────────────────────────
 
 
-def ask(query: str, db_path: Any = None, *, include_all: bool = False) -> dict[str, Any]:
+def ask(
+    query: str,
+    db_path: Any = None,
+    *,
+    include_all: bool = False,
+    user_id: int | None = None,
+) -> dict[str, Any]:
     """Answer *query* using RAG over saved/read articles.
 
     Args:
         include_all: When True, includes all non-archived articles instead of
             only Starred (saved) + Done (read) articles.
+        user_id: Authenticated user, attached to the Langfuse trace.
 
     Returns:
         {
@@ -246,7 +254,7 @@ def ask(query: str, db_path: Any = None, *, include_all: bool = False) -> dict[s
     user_prompt = f"Articles:\n\n{context_text}\n\nQuestion: {query}"
 
     # 6. Call OpenAI for the answer
-    answer_text = _answer(system_prompt, user_prompt)
+    answer_text = _answer(system_prompt, user_prompt, user_id=user_id)
 
     # 7. Return answer + deduplicated source list (top-k order)
     sources = [{"id": row["id"], "title": row["title"], "url": row["url"]} for row, _ in top]

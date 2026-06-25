@@ -28,7 +28,7 @@ _AI_PROMPT = (
 )
 
 
-def _ai_extract_body(url: str) -> tuple[str, str]:
+def _ai_extract_body(url: str, *, user_id: int | None = None) -> tuple[str, str]:
     """Fallback: fetch raw HTML via httpx and extract body text via OpenAI.
 
     Returns (text, 'ok') on success or ('', 'error') if OPENAI_API_KEY is
@@ -60,6 +60,7 @@ def _ai_extract_body(url: str) -> tuple[str, str]:
             client,
             name="ai-body-fetch",
             tags=["body-fetch"],
+            user_id=user_id,
             model=_AI_MODEL,
             messages=[{"role": "user", "content": f"{_AI_PROMPT}\n\n{html}"}],
             max_tokens=2048,
@@ -307,7 +308,7 @@ def fetch_and_cache_body(
     url = row_d["url"]
     body, status = extract_body(url)
     if status == "error":
-        body, status = _ai_extract_body(url)
+        body, status = _ai_extract_body(url, user_id=user_id)
 
     with connect(db_path) as conn:
         conn.execute(

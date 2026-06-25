@@ -982,14 +982,17 @@ class AskRequest(BaseModel):
 
 
 @api.post("/api/ask")
-def ask_ai(payload: AskRequest) -> dict[str, Any]:
+def ask_ai(
+    payload: AskRequest,
+    current_user: Annotated[dict[str, Any], Depends(require_auth)],
+) -> dict[str, Any]:
     from .embeddings import ask
 
     q = payload.query.strip()
     if not q:
         raise HTTPException(status_code=400, detail="query must not be empty")
     try:
-        return ask(q, include_all=payload.include_all)
+        return ask(q, include_all=payload.include_all, user_id=current_user["id"])
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 

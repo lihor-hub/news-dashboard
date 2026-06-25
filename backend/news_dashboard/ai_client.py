@@ -45,19 +45,33 @@ def _normalise_host_env() -> None:
             os.environ["LANGFUSE_HOST"] = base_url
 
 
-def trace_params(name: str, *, tags: list[str] | None = None) -> dict[str, Any]:
+def trace_params(
+    name: str,
+    *,
+    tags: list[str] | None = None,
+    user_id: int | str | None = None,
+    session_id: str | None = None,
+) -> dict[str, Any]:
     """Return per-call Langfuse trace kwargs for an OpenAI ``create`` call.
 
     Returns ``{}`` when tracing is disabled, so the plain OpenAI client (which
     rejects unknown kwargs) is never handed Langfuse-only arguments. When
-    enabled, sets a descriptive observation ``name`` (and optional ``tags``) so
-    traces are filterable by feature in the Langfuse UI.
+    enabled, sets a descriptive observation ``name`` plus optional ``tags``,
+    ``user_id`` and ``session_id`` so traces are filterable by feature, user
+    and conversation in the Langfuse UI.
     """
     if not langfuse_enabled():
         return {}
-    params: dict[str, Any] = {"name": name}
+    metadata: dict[str, Any] = {}
     if tags:
-        params["metadata"] = {"langfuse_tags": tags}
+        metadata["langfuse_tags"] = tags
+    if user_id is not None:
+        metadata["langfuse_user_id"] = str(user_id)
+    if session_id is not None:
+        metadata["langfuse_session_id"] = session_id
+    params: dict[str, Any] = {"name": name}
+    if metadata:
+        params["metadata"] = metadata
     return params
 
 
@@ -66,16 +80,19 @@ def chat_create(
     *,
     name: str,
     tags: list[str] | None = None,
+    user_id: int | str | None = None,
+    session_id: str | None = None,
     **kwargs: Any,
 ) -> ChatCompletion:
     """Create a (non-streaming) chat completion, traced when Langfuse is on.
 
-    Centralises the Langfuse trace name/tags so call sites stay clean and the
-    overloaded ``create`` keeps resolving to a non-streaming ``ChatCompletion``
-    (unpacking ``**kwargs`` otherwise widens the return type to include
-    ``Stream``).
+    Centralises the Langfuse trace name/tags/user/session so call sites stay
+    clean and the overloaded ``create`` keeps resolving to a non-streaming
+    ``ChatCompletion`` (unpacking ``**kwargs`` otherwise widens the return type
+    to include ``Stream``).
     """
-    completion = client.chat.completions.create(**kwargs, **trace_params(name, tags=tags))
+    trace = trace_params(name, tags=tags, user_id=user_id, session_id=session_id)
+    completion = client.chat.completions.create(**kwargs, **trace)
     return cast("ChatCompletion", completion)
 
 

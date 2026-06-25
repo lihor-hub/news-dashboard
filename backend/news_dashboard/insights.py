@@ -54,7 +54,7 @@ def _parse_bullets(response_text: str) -> list[str]:
     return bullets
 
 
-def generate_insights(article: dict[str, Any]) -> list[str]:
+def generate_insights(article: dict[str, Any], *, user_id: int | None = None) -> list[str]:
     """Call OpenAI and return a list of bullet-point strings.
 
     Raises InsightsNotConfiguredError when OPENAI_API_KEY is absent.
@@ -77,6 +77,7 @@ def generate_insights(article: dict[str, Any]) -> list[str]:
         client,
         name="article-insights",
         tags=["insights"],
+        user_id=user_id,
         model=_MODEL,
         messages=[{"role": "user", "content": f"{_PROMPT}\n\n{text}"}],
         max_tokens=512,
@@ -117,7 +118,7 @@ def get_or_generate_insights(
     if not str(article.get("body") or "").strip():
         return []
 
-    bullets = generate_insights(article)
+    bullets = generate_insights(article, user_id=user_id)
 
     with connect(database_url=database_url) as conn:
         conn.execute(

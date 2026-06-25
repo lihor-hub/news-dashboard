@@ -88,6 +88,16 @@ def test_trace_params_sets_name_and_tags_when_enabled(monkeypatch: pytest.Monkey
     assert trace_params("ask-ai") == {"name": "ask-ai"}
 
 
+def test_trace_params_includes_user_and_session(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("LANGFUSE_PUBLIC_KEY", "pk")
+    monkeypatch.setenv("LANGFUSE_SECRET_KEY", "sk")
+
+    assert trace_params("ask-ai", user_id=42, session_id="sess-1") == {
+        "name": "ask-ai",
+        "metadata": {"langfuse_user_id": "42", "langfuse_session_id": "sess-1"},
+    }
+
+
 @pytest.mark.usefixtures("_no_langfuse")
 def test_base_url_alias_populates_host(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("LANGFUSE_BASE_URL", "https://fuse.example.com")

@@ -179,6 +179,9 @@ jobs:
           OPENAI_BRIEFING_API_KEY: ${{ secrets.OPENAI_BRIEFING_API_KEY }}
           OPENAI_BRIEFING_BASE_URL: ${{ vars.OPENAI_BRIEFING_BASE_URL }}
           OPENAI_BRIEFING_MODEL: ${{ vars.OPENAI_BRIEFING_MODEL }}
+          LANGFUSE_PUBLIC_KEY: ${{ secrets.LANGFUSE_PUBLIC_KEY }}
+          LANGFUSE_SECRET_KEY: ${{ secrets.LANGFUSE_SECRET_KEY }}
+          LANGFUSE_HOST: ${{ vars.LANGFUSE_HOST }}
           SESSION_SECRET: ${{ secrets.SESSION_SECRET }}
         run: |
           set -euo pipefail
@@ -209,6 +212,12 @@ jobs:
           if [ -n "$OPENAI_BRIEFING_API_KEY" ]; then
             ai_secret_args+=(--from-literal=OPENAI_BRIEFING_API_KEY="$OPENAI_BRIEFING_API_KEY")
           fi
+          if [ -n "$LANGFUSE_PUBLIC_KEY" ]; then
+            ai_secret_args+=(--from-literal=LANGFUSE_PUBLIC_KEY="$LANGFUSE_PUBLIC_KEY")
+          fi
+          if [ -n "$LANGFUSE_SECRET_KEY" ]; then
+            ai_secret_args+=(--from-literal=LANGFUSE_SECRET_KEY="$LANGFUSE_SECRET_KEY")
+          fi
 
           ai_helm_args=()
           if [ ${#ai_secret_args[@]} -gt 0 ]; then
@@ -222,6 +231,9 @@ jobs:
           fi
           if [ -n "$OPENAI_BRIEFING_MODEL" ]; then
             ai_helm_args+=(--set-string "app.ai.briefingModel=$OPENAI_BRIEFING_MODEL")
+          fi
+          if [ -n "$LANGFUSE_HOST" ]; then
+            ai_helm_args+=(--set-string "app.ai.langfuse.host=$LANGFUSE_HOST")
           fi
 
           # Sync Helm chart changes from main. Avoid relying on the deploy
