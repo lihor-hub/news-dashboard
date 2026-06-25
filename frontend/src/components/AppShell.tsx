@@ -5,6 +5,8 @@ import { LogOut, MoreHorizontal, Search } from 'lucide-react';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
 import { CommandPalette } from './CommandPalette';
 import { ShortcutOverlay } from './ShortcutOverlay';
+import { WhatsNewDialog } from './WhatsNewDialog';
+import { useWhatsNew } from '@/hooks/useWhatsNew';
 import { cn } from '@/lib/utils';
 import { fetchSummary, logoutUser } from '@/api';
 import { startAnalytics, stopAnalytics, trackRoute } from '@/lib/analytics';
@@ -119,6 +121,7 @@ export function AppShell() {
   const [moreOpen, setMoreOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const whatsNew = useWhatsNew();
 
   async function handleLogout() {
     await logoutUser();
@@ -298,6 +301,7 @@ export function AppShell() {
         }}
       />
       <ShortcutOverlay open={shortcutsOpen} onOpenChange={setShortcutsOpen} />
+      <WhatsNewDialog state={whatsNew} />
     </div>
   );
 }
