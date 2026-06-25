@@ -3,7 +3,19 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
-vi.mock('@/api', () => ({ recalculateMyRecommendations: vi.fn() }));
+vi.mock('@/api', () => ({
+  recalculateMyRecommendations: vi.fn(),
+  fetchNotificationSettings: vi.fn().mockResolvedValue({
+    briefing_time: '09:00',
+    push_enabled: false,
+    vapid_public_key: null,
+  }),
+  updateNotificationSettings: vi
+    .fn()
+    .mockResolvedValue({ briefing_time: '09:00', push_enabled: false }),
+  subscribePush: vi.fn().mockResolvedValue({ subscribed: true }),
+  unsubscribePush: vi.fn().mockResolvedValue({ unsubscribed: true }),
+}));
 
 import { SettingsPage } from '../pages/SettingsPage';
 

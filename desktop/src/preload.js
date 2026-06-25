@@ -46,4 +46,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.removeAllListeners('updater:error');
     ipcRenderer.removeAllListeners('updater:progress');
   },
+
+  // ── Native notifications ──────────────────────────────────────────────────
+
+  showNotification: (title, body) => ipcRenderer.send('notification:show', { title, body }),
 });

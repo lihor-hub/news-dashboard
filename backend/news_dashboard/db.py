@@ -350,6 +350,20 @@ POSTGRES_MULTIUSER_SCHEMA = [
     """,
     "CREATE INDEX IF NOT EXISTS idx_user_events_user_time ON user_events(user_id, created_at)",
     "CREATE INDEX IF NOT EXISTS idx_user_events_type_time ON user_events(event_type, created_at)",
+    "ALTER TABLE users ADD COLUMN IF NOT EXISTS briefing_time TEXT DEFAULT '09:00'",
+    "ALTER TABLE users ADD COLUMN IF NOT EXISTS briefing_push_enabled"
+    " BOOLEAN NOT NULL DEFAULT FALSE",
+    """
+    CREATE TABLE IF NOT EXISTS user_push_subscriptions (
+      id          SERIAL PRIMARY KEY,
+      user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      endpoint    TEXT NOT NULL UNIQUE,
+      p256dh_key  TEXT NOT NULL,
+      auth_key    TEXT NOT NULL,
+      created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_push_subs_user ON user_push_subscriptions(user_id)",
 ]
 
 

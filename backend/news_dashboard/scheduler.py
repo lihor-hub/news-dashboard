@@ -82,6 +82,54 @@ def _run_briefing() -> None:
         logger.exception("Scheduled briefing failed (unexpected error)")
 
 
+def _run_per_user_briefings() -> None:
+    """Generate briefings for users whose scheduled time matches the current UTC HH:MM."""
+    from .briefings import (
+        BriefingAINotConfiguredError,
+        BriefingGenerationError,
+        generate_briefing,
+    )
+    from .db import connect, row_to_dict
+    from .push import send_push_for_user
+
+    now = datetime.now(timezone.utc)
+    current_hm = now.strftime("%H:%M")
+
+    try:
+        with connect() as conn:
+            rows = conn.execute(
+                "SELECT id FROM users WHERE briefing_time = %s",
+                (current_hm,),
+            ).fetchall()
+        user_ids = [int(row_to_dict(r)["id"]) for r in rows]
+    except Exception:
+        logger.exception("Per-user briefing: failed to query users for time %s", current_hm)
+        return
+
+    for user_id in user_ids:
+        logger.info("Per-user briefing: generating for user_id=%s", user_id)
+        try:
+            result = generate_briefing(user_id=user_id)
+            if result.get("status") == "no_candidates":
+                logger.info("Per-user briefing: skipped for user_id=%s (no candidates)", user_id)
+            else:
+                logger.info(
+                    "Per-user briefing: complete for user_id=%s id=%s", user_id, result.get("id")
+                )
+                try:
+                    send_push_for_user(user_id, "Your daily brief is ready", "")
+                except Exception:
+                    logger.exception(
+                        "Per-user briefing: push notification failed for user_id=%s", user_id
+                    )
+        except BriefingAINotConfiguredError:
+            logger.warning("Per-user briefing: skipped for user_id=%s (AI not configured)", user_id)
+        except BriefingGenerationError:
+            logger.exception("Per-user briefing: generation error for user_id=%s", user_id)
+        except Exception:
+            logger.exception("Per-user briefing: unexpected error for user_id=%s", user_id)
+
+
 def _run_digest() -> None:
     from .digest import send_digest
 
@@ -172,6 +220,14 @@ def start_scheduler() -> None:
         hour=r_hour,
         minute=r_minute,
         id="recommendations",
+        replace_existing=True,
+    )
+
+    scheduler.add_job(
+        _run_per_user_briefings,
+        trigger="interval",
+        minutes=1,
+        id="per_user_briefings",
         replace_existing=True,
     )
 

@@ -16,6 +16,7 @@ dependencies = [
   "bcrypt>=4.0.0",
   "httpx>=0.27.0",
   "itsdangerous>=2.2.0",
+  "pywebpush>=2.0.0",
 ]
 
 [project.optional-dependencies]
@@ -142,7 +143,7 @@ warn_unreachable = true
 pretty = true
 
 [[tool.mypy.overrides]]
-module = ["feedparser.*", "apscheduler.*", "testcontainers.*"]
+module = ["feedparser.*", "apscheduler.*", "testcontainers.*", "pywebpush.*", "py_vapid.*"]
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]

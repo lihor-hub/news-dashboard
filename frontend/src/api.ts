@@ -10,6 +10,9 @@ import type {
   BriefingLatestResponse,
   CategoryMixPoint,
   IngestedVsHandledPoint,
+  NotificationSettings,
+  NotificationSettingsUpdate,
+  PushSubscribeRequest,
   Source,
   SourceHealth,
   SourceQualityRow,
@@ -316,4 +319,32 @@ export async function recalculateMyRecommendations(): Promise<{ scored: number }
   return requestJson<{ scored: number }>('/api/recommendations/recalculate-mine', {
     method: 'POST',
   });
+}
+
+// ── Notification settings & push subscriptions ────────────────────────────────
+
+export async function fetchNotificationSettings(): Promise<NotificationSettings> {
+  return requestJson<NotificationSettings>('/api/settings/notifications');
+}
+
+export async function updateNotificationSettings(
+  update: NotificationSettingsUpdate
+): Promise<Omit<NotificationSettings, 'vapid_public_key'>> {
+  return requestJson('/api/settings/notifications', {
+    method: 'PUT',
+    body: JSON.stringify(update),
+  });
+}
+
+export async function subscribePush(
+  payload: PushSubscribeRequest
+): Promise<{ subscribed: boolean }> {
+  return requestJson('/api/notifications/subscribe', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function unsubscribePush(): Promise<{ unsubscribed: boolean }> {
+  return requestJson('/api/notifications/subscribe', { method: 'DELETE' });
 }

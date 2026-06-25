@@ -33,6 +33,8 @@ export default defineConfig({
         // as the SPA fallback and Keycloak redirects never reach the server.
         globPatterns: ['**/*.{js,css,html,svg,ico,woff2}'],
         navigateFallbackDenylist: [/^\/api\//, /^\/auth\//, /^\/keycloak\//],
+        // Add push notification event handlers to the generated service worker.
+        importScripts: ['/push-handler.js'],
         runtimeCaching: [
           {
             // Icon/image assets: cache-first, long TTL

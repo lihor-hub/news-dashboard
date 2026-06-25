@@ -98,6 +98,15 @@ function createWindow() {
   return win;
 }
 
+// ── Native notification IPC ───────────────────────────────────────────────────
+
+ipcMain.on('notification:show', (_event, { title, body }) => {
+  const { Notification } = require('electron');
+  if (Notification.isSupported()) {
+    new Notification({ title: String(title), body: String(body) }).show();
+  }
+});
+
 // ── Auto-updater IPC bridge ───────────────────────────────────────────────────
 //
 // The renderer (web app at news.lihor.ro) calls window.electronAPI.*

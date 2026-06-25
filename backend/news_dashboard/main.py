@@ -308,9 +308,31 @@ def _embed_article_background(article_id: int) -> None:
         logger.debug("Background embedding skipped for article %d", article_id, exc_info=True)
 
 
-# ── Public version endpoint (no auth) ────────────────────────────────────────
+# ── Public version / changelog endpoints (no auth) ───────────────────────────
 
 _VERSION_FILE = Path(__file__).resolve().parents[2] / "VERSION"
+_CHANGELOG_FILE = Path(__file__).resolve().parents[2] / "CHANGELOG.md"
+
+
+def _parse_changelog() -> list[dict[str, object]]:
+    try:
+        text = _CHANGELOG_FILE.read_text()
+    except OSError:
+        return []
+    entries: list[dict[str, object]] = []
+    current_version: str | None = None
+    current_items: list[str] = []
+    for line in text.splitlines():
+        if line.startswith("## "):
+            if current_version is not None:
+                entries.append({"version": current_version, "items": current_items})
+            current_version = line[3:].strip()
+            current_items = []
+        elif line.startswith("- ") and current_version is not None:
+            current_items.append(line[2:].strip())
+    if current_version is not None:
+        entries.append({"version": current_version, "items": current_items})
+    return entries
 
 
 @app.get("/api/version")
@@ -321,6 +343,16 @@ def version_endpoint() -> dict[str, str]:
     except OSError:
         version = "unknown"
     return {"version": version}
+
+
+@app.get("/api/changelog")
+def changelog_endpoint() -> dict[str, object]:
+    """Return changelog entries parsed from CHANGELOG.md."""
+    try:
+        version = _VERSION_FILE.read_text().strip()
+    except OSError:
+        version = "unknown"
+    return {"version": version, "entries": _parse_changelog()}
 
 
 # ── Authenticated API router ─────────────────────────────────────────────────
@@ -846,6 +878,102 @@ def briefings_create(
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     except BriefingGenerationError as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+# ── Notification settings & push subscriptions ───────────────────────────────
+
+_BRIEFING_TIME_RE = __import__("re").compile(r"^([01]\d|2[0-3]):[0-5]\d$")
+
+
+class NotificationSettingsUpdate(BaseModel):
+    briefing_time: str | None = None
+    push_enabled: bool | None = None
+
+
+class PushSubscribeRequest(BaseModel):
+    endpoint: str
+    p256dh: str
+    auth: str
+
+
+@api.get("/api/settings/notifications")
+def get_notification_settings(
+    current_user: Annotated[dict[str, Any], Depends(require_auth)],
+) -> dict[str, Any]:
+    from .push import get_vapid_public_key
+
+    uid = current_user["id"]
+    with connect() as conn:
+        row = conn.execute(
+            "SELECT briefing_time, briefing_push_enabled FROM users WHERE id = %s",
+            (uid,),
+        ).fetchone()
+    if row is None:
+        raise HTTPException(status_code=404, detail="user not found")
+    return {
+        "briefing_time": row["briefing_time"] or "09:00",
+        "push_enabled": bool(row["briefing_push_enabled"]),
+        "vapid_public_key": get_vapid_public_key(),
+    }
+
+
+@api.put("/api/settings/notifications")
+def update_notification_settings(
+    current_user: Annotated[dict[str, Any], Depends(require_auth)],
+    payload: NotificationSettingsUpdate,
+) -> dict[str, Any]:
+    uid = current_user["id"]
+    updates: dict[str, Any] = {}
+    if payload.briefing_time is not None:
+        if not _BRIEFING_TIME_RE.match(payload.briefing_time):
+            raise HTTPException(status_code=422, detail="briefing_time must be HH:MM (00:00-23:59)")
+        updates["briefing_time"] = payload.briefing_time
+    if payload.push_enabled is not None:
+        updates["briefing_push_enabled"] = payload.push_enabled
+    if updates:
+        set_clauses = ", ".join(f"{k} = %s" for k in updates)
+        with connect() as conn:
+            conn.execute(
+                f"UPDATE users SET {set_clauses} WHERE id = %s",
+                [*updates.values(), uid],
+            )
+    with connect() as conn:
+        row = conn.execute(
+            "SELECT briefing_time, briefing_push_enabled FROM users WHERE id = %s",
+            (uid,),
+        ).fetchone()
+    if row is None:
+        raise HTTPException(status_code=404, detail="user not found")
+    return {
+        "briefing_time": row["briefing_time"] or "09:00",
+        "push_enabled": bool(row["briefing_push_enabled"]),
+    }
+
+
+@api.post("/api/notifications/subscribe")
+def push_subscribe(
+    current_user: Annotated[dict[str, Any], Depends(require_auth)],
+    payload: PushSubscribeRequest,
+) -> dict[str, Any]:
+    from .push import save_push_subscription
+
+    save_push_subscription(
+        current_user["id"],
+        payload.endpoint,
+        payload.p256dh,
+        payload.auth,
+    )
+    return {"subscribed": True}
+
+
+@api.delete("/api/notifications/subscribe")
+def push_unsubscribe(
+    current_user: Annotated[dict[str, Any], Depends(require_auth)],
+) -> dict[str, Any]:
+    from .push import delete_push_subscriptions
+
+    delete_push_subscriptions(current_user["id"])
+    return {"unsubscribed": True}
 
 
 class AskRequest(BaseModel):

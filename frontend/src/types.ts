@@ -213,6 +213,23 @@ export interface Briefing {
 export type BriefingLatestResponse = Briefing | { status: 'empty' };
 export type BriefingCreateResponse = Briefing | { status: 'no_candidates' };
 
+export interface NotificationSettings {
+  briefing_time: string;
+  push_enabled: boolean;
+  vapid_public_key: string | null;
+}
+
+export interface NotificationSettingsUpdate {
+  briefing_time?: string;
+  push_enabled?: boolean;
+}
+
+export interface PushSubscribeRequest {
+  endpoint: string;
+  p256dh: string;
+  auth: string;
+}
+
 export interface AnalyticsSummary {
   dau: number;
   wau: number;

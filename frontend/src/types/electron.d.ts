@@ -24,5 +24,7 @@ interface Window {
     onUpdateError(cb: (message: string) => void): void;
     onDownloadProgress(cb: (progress: ElectronDownloadProgress) => void): void;
     removeUpdateListeners(): void;
+    /** Show a native OS notification (Electron only). */
+    showNotification(title: string, body: string): void;
   };
 }

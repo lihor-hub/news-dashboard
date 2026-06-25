@@ -8,13 +8,21 @@ import {
   RotateCcw,
   ExternalLink,
   Sparkles,
+  Bell,
+  BellOff,
 } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useTheme } from '@/hooks/useTheme';
 import { cn } from '@/lib/utils';
 import type { Theme } from '@/lib/theme';
 import { useUpdateCheck } from '@/hooks/useUpdateCheck';
-import { recalculateMyRecommendations } from '@/api';
+import {
+  fetchNotificationSettings,
+  recalculateMyRecommendations,
+  subscribePush,
+  unsubscribePush,
+  updateNotificationSettings,
+} from '@/api';
 import { ARTICLES_KEY } from '@/hooks/useTriageMutations';
 
 const THEME_OPTS: { v: Theme; label: string; Icon: React.ComponentType<{ className?: string }> }[] =
@@ -339,6 +347,212 @@ function PersonalizationSection() {
   );
 }
 
+function urlBase64ToUint8Array(base64String: string): Uint8Array<ArrayBuffer> {
+  const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const raw = atob(base64);
+  return new Uint8Array([...raw].map((c) => c.charCodeAt(0)));
+}
+
+type PushState = 'idle' | 'requesting' | 'subscribed' | 'denied' | 'unavailable' | 'error';
+
+function DailyBriefSection() {
+  const [briefingTime, setBriefingTime] = useState('09:00');
+  const [pushEnabled, setPushEnabled] = useState(false);
+  const [vapidKey, setVapidKey] = useState<string | null>(null);
+  const [loaded, setLoaded] = useState(false);
+  const [timeSaving, setTimeSaving] = useState(false);
+  const [pushState, setPushState] = useState<PushState>('idle');
+
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const s = await fetchNotificationSettings();
+        if (!cancelled) {
+          setBriefingTime(s.briefing_time);
+          setPushEnabled(s.push_enabled);
+          setVapidKey(s.vapid_public_key);
+          if (s.push_enabled) setPushState('subscribed');
+        }
+      } catch {
+        // keep defaults if settings fail to load
+      } finally {
+        if (!cancelled) setLoaded(true);
+      }
+    };
+    void load();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const handleTimeBlur = async (t: string) => {
+    if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(t)) return;
+    setTimeSaving(true);
+    try {
+      await updateNotificationSettings({ briefing_time: t });
+    } catch {
+      // non-critical — time preference will resync on next load
+    } finally {
+      setTimeSaving(false);
+    }
+  };
+
+  const enablePush = async () => {
+    if (window.electronAPI) {
+      try {
+        await updateNotificationSettings({ push_enabled: true });
+      } catch {
+        // best-effort
+      }
+      setPushEnabled(true);
+      setPushState('subscribed');
+      return;
+    }
+
+    if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+      setPushState('unavailable');
+      return;
+    }
+
+    setPushState('requesting');
+    try {
+      const permission = await Notification.requestPermission();
+      if (permission !== 'granted') {
+        setPushState('denied');
+        return;
+      }
+
+      const reg = await navigator.serviceWorker.ready;
+      const sub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(vapidKey ?? ''),
+      });
+
+      const rawKey = sub.getKey('p256dh');
+      const rawAuth = sub.getKey('auth');
+      if (!rawKey || !rawAuth) throw new Error('missing push keys');
+
+      await subscribePush({
+        endpoint: sub.endpoint,
+        p256dh: btoa(String.fromCharCode(...new Uint8Array(rawKey))),
+        auth: btoa(String.fromCharCode(...new Uint8Array(rawAuth))),
+      });
+      await updateNotificationSettings({ push_enabled: true });
+      setPushEnabled(true);
+      setPushState('subscribed');
+    } catch {
+      setPushState('error');
+    }
+  };
+
+  const disablePush = async () => {
+    try {
+      await unsubscribePush();
+    } catch {
+      // best-effort
+    }
+    try {
+      await updateNotificationSettings({ push_enabled: false });
+    } catch {
+      // best-effort
+    }
+    setPushEnabled(false);
+    setPushState('idle');
+  };
+
+  const canEnablePush =
+    !pushEnabled &&
+    (!!window.electronAPI || ('serviceWorker' in navigator && 'PushManager' in window));
+
+  if (!loaded) return null;
+
+  return (
+    <section>
+      <div className="text-[10px] uppercase tracking-wider text-subtle font-medium mb-2">
+        Daily Brief
+      </div>
+      <div className="rounded-lg border border-border bg-card p-4 space-y-4">
+        <div className="space-y-1.5">
+          <label className="text-xs font-medium text-foreground" htmlFor="briefing-time">
+            Generation time (UTC)
+          </label>
+          <div className="flex items-center gap-2">
+            <input
+              id="briefing-time"
+              type="time"
+              value={briefingTime}
+              onChange={(e) => setBriefingTime(e.target.value)}
+              onBlur={(e) => void handleTimeBlur(e.target.value)}
+              className="rounded-md border border-border bg-surface px-2.5 py-1.5 text-sm tabular-nums focus:outline-none focus:ring-1 focus:ring-ring"
+            />
+            {timeSaving && <RefreshCw className="size-3 animate-spin text-muted-foreground" />}
+          </div>
+          <p className="text-[11px] text-muted-foreground">
+            Your brief will be generated automatically at this time each day.
+          </p>
+        </div>
+
+        <div className="space-y-2">
+          <div className="text-xs font-medium text-foreground">Push notifications</div>
+          {pushEnabled ? (
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-1.5 text-xs text-green-600 dark:text-green-400">
+                <Bell className="size-3" />
+                Enabled
+              </div>
+              <button
+                onClick={() => void disablePush()}
+                className="flex items-center gap-1 text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground"
+              >
+                <BellOff className="size-3" />
+                Disable
+              </button>
+            </div>
+          ) : canEnablePush ? (
+            <button
+              onClick={() => void enablePush()}
+              disabled={pushState === 'requesting'}
+              className="flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-60"
+            >
+              {pushState === 'requesting' ? (
+                <RefreshCw className="size-3 animate-spin" />
+              ) : (
+                <Bell className="size-3" />
+              )}
+              {pushState === 'requesting' ? 'Requesting…' : 'Enable push notifications'}
+            </button>
+          ) : (
+            <p className="text-xs text-muted-foreground">
+              Push notifications are not supported in this environment.
+            </p>
+          )}
+
+          {pushState === 'denied' && (
+            <p className="text-xs text-destructive">
+              Permission denied. Allow notifications in your browser settings and try again.
+            </p>
+          )}
+          {pushState === 'error' && (
+            <p className="text-xs text-destructive">
+              Could not set up push notifications. Please try again.
+            </p>
+          )}
+          {!vapidKey && !window.electronAPI && (
+            <p className="text-[11px] text-muted-foreground">
+              Push notifications require server configuration (VAPID keys).
+            </p>
+          )}
+          <p className="text-[11px] text-muted-foreground">
+            You'll receive a notification when your daily brief is ready.
+          </p>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 export function SettingsPage() {
   const { theme, setTheme } = useTheme();
 
@@ -375,6 +589,8 @@ export function SettingsPage() {
       </section>
 
       <PersonalizationSection />
+
+      <DailyBriefSection />
 
       <UpdatesSection />
 
