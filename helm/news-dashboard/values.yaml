@@ -61,14 +61,14 @@ app:
     briefingModel: ""
     # Key within `existingSecret` holding the briefing endpoint's API key.
     briefingApiKeyKey: OPENAI_BRIEFING_API_KEY
-  # Langfuse LLM observability. When publicKey + secretKey are present (read
-  # from `ai.existingSecret`), every OpenAI call is traced. Leave host empty to
-  # disable tracing entirely (the app falls back to a plain OpenAI client).
-  langfuse:
-    host: ""
-    # Keys within `app.ai.existingSecret` holding the Langfuse credentials.
-    publicKeyKey: LANGFUSE_PUBLIC_KEY
-    secretKeyKey: LANGFUSE_SECRET_KEY
+    # Langfuse LLM observability. When publicKey + secretKey are present (read
+    # from `ai.existingSecret`), every OpenAI call is traced. Leave host empty
+    # to disable tracing entirely (app falls back to a plain OpenAI client).
+    langfuse:
+      host: ""
+      # Keys within `app.ai.existingSecret` holding the Langfuse credentials.
+      publicKeyKey: LANGFUSE_PUBLIC_KEY
+      secretKeyKey: LANGFUSE_SECRET_KEY
 
 postgresql:
   enabled: true
