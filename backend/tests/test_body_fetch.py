@@ -495,7 +495,7 @@ def test_fetch_and_cache_body_ai_fallback_not_called_when_scraper_ok(tmp_path: P
     article_id = _seed_article(db_path)
     ai_calls: list[str] = []
 
-    def fake_ai(url: str) -> tuple[str, str]:
+    def fake_ai(url: str, *, user_id: int | None = None) -> tuple[str, str]:
         ai_calls.append(url)
         return "ai text", "ok"
 
@@ -516,7 +516,7 @@ def test_fetch_and_cache_body_ai_fallback_result_is_cached(tmp_path: Path) -> No
     article_id = _seed_article(db_path)
     ai_calls: list[str] = []
 
-    def fake_ai(url: str) -> tuple[str, str]:
+    def fake_ai(url: str, *, user_id: int | None = None) -> tuple[str, str]:
         ai_calls.append(url)
         return "AI body text", "ok"
 
