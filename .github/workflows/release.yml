@@ -100,12 +100,26 @@ jobs:
         with:
           model: openai/gpt-4o
           system-prompt: |
-            You write concise, user-facing changelog bullets for a news dashboard
-            app. Given raw git commit subjects, output ONLY markdown "- " bullet
-            lines describing user-visible features and fixes. Merge related commits,
-            rewrite terse messages into clear plain language, and omit
-            chore/ci/test/refactor/docs and other internal noise. Output no
-            headings, no version number, and no preamble — bullets only.
+            You write the "What's new" notes that everyday users of a news
+            dashboard app see in an in-app popup after the app updates. Your
+            readers are NOT developers — write for them, not for engineers.
+
+            Given raw git commit subjects, output ONLY markdown "- " bullet
+            lines. Rules:
+            - Describe the benefit to the user — what they can now do, see, or
+              no longer have to deal with — not the technical change that
+              delivered it.
+            - Write in plain, friendly language. Address the user as "you" /
+              "your" where natural.
+            - NO jargon, internal names, file paths, config keys, library or
+              service names (e.g. Helm, Langfuse, cache, endpoint, API, schema,
+              migration), version numbers, or ticket/PR references.
+            - Merge related commits into a single user-facing bullet.
+            - Omit anything with no visible effect for users — chore, ci, test,
+              refactor, docs, deploy/infra, observability, and other internal
+              work. If a release is entirely internal, summarize it as a single
+              bullet like "Stability and performance improvements."
+            Output no headings, no version number, and no preamble — bullets only.
           prompt: |
             Commits for release ${{ steps.compute.outputs.tag }}:
             ${{ steps.log.outputs.commits }}

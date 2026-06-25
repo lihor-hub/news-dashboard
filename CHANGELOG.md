@@ -1,105 +1,99 @@
 # Changelog
 
 ## 1.19.1
-- Fixed an issue with Helm values nesting under `app.ai` for deployments.
+- Stability improvements to keep the app running reliably.
 
 ## 1.19.0
-- Attach `user_id` to Langfuse traces for better traceability.
-- Enrich Langfuse traces with descriptive names and support custom `LANGFUSE_BASE_URL` configuration.
-- Trace all OpenAI API calls through Langfuse for enhanced monitoring.
+- Behind-the-scenes monitoring improvements so we can spot and fix issues faster.
 
 ## 1.18.0
-- Show a "What's new" popup highlighting changes after the app updates to a new version
+- See a quick summary of what's new each time the app updates.
 
 ## 1.17.0
-- Auto-schedule the daily brief with a configurable delivery time
-- Send push notifications when a new daily brief is ready
+- Get your daily brief delivered automatically at a time you choose.
+- Receive a notification the moment your daily brief is ready.
 
 ## 1.16.1
-- Fix stale "Why recommended" cache after recommendations recalculate
+- The "Why recommended" explanation now stays accurate after your recommendations update.
 
 ## 1.16.0
-- Show a numeric relevance score on each article card in Today's feed
+- Every article in Today's feed now shows how relevant it is to you at a glance.
 
 ## 1.15.11
-- Populate the analytics Feature usage panel by emitting feature events
+- Your usage insights now reflect which features you actually use.
 
 ## 1.15.10
-- Add AI/LLM to the cold-start category bonus in the recommendation score
+- AI and LLM stories now surface sooner when you're just getting started.
 
 ## 1.15.9
-- Fix empty summaries for HuggingFace Blog articles
+- HuggingFace Blog articles now show proper summaries instead of blank ones.
 
 ## 1.15.8
-- Make analytics charts respond to the 7d/30d/90d time filter
+- Your analytics charts now update when you switch between the 7-day, 30-day, and 90-day views.
 
 ## 1.15.7
-- Fix activity heatmap width to fill the panel
+- The activity heatmap now fills the full width of its panel.
 
 ## 1.15.6
-- Emit article dwell telemetry to populate the most-read panel
+- Your most-read articles now appear in the reading insights panel.
 
 ## 1.15.5
-- Split active-users and minutes onto separate Y axes
+- Active users and reading minutes are now easier to read on separate scales.
 
 ## 1.15.4
-- Keep the brief page bottom navbar within the viewport
+- The bottom navigation on the brief page now stays put on smaller screens.
 
 ## 1.15.3
-- Show numeric relevance score on each article card in Today's feed
-- Invalidate article cache after recommendations recalculate
-- Fix analytics Feature usage panel by emitting feature events
+- Every article in Today's feed now shows a relevance score.
+- Your recommendations refresh correctly after they're recalculated.
+- Usage insights now reflect the features you use.
 
 ## 1.15.2
-- Fix empty summaries for HuggingFace Blog articles
-- Add AI/LLM to cold-start category bonus in recommendation score
-- Make analytics charts respond to 7d/30d/90d time filter
-- Fix activity heatmap width and active-users chart axes
+- HuggingFace Blog articles now show proper summaries.
+- AI and LLM stories surface sooner when you're getting started.
+- Analytics charts respond to the 7-day, 30-day, and 90-day views.
+- Cleaner activity heatmap and active-users charts.
 
 ## 1.15.1
-- Fix briefing page bottom navbar overlapping content on mobile
-- Drop returned snoozes from the Later view
+- Fixed the bottom navigation overlapping content on the briefing page on mobile.
+- Articles you've already returned no longer reappear in your Later view.
 
 ## 1.15.0
-- Briefing summarization via custom OpenAI-compatible endpoint
-- Retry briefing generation on transient AI failures
-- Surface upstream errors from the briefing AI endpoint
+- Smarter daily briefing summaries.
+- Briefings now retry automatically if they hit a temporary hiccup.
+- Clearer error messages when a briefing can't be generated.
 
 ## 1.14.0
-- Admin user-behavior analytics dashboard
-- Admin page to provision users (Keycloak-aware)
+- New analytics dashboard for understanding reader behavior.
+- New admin page for adding and managing users.
 
 ## 1.13.0
-- Expose recommendation score on single-article read path
-- Fix: stop leaking internal DB details from public health endpoint
+- See why an article was recommended right from the article view.
+- Tightened up what the public status page reveals.
 
 ## 1.12.3
-- Fix coercion of source values in SQLite-to-Postgres migration
+- Fixed a data issue when migrating older sources.
 
 ## 1.12.0
-- On-demand and daily personalized recommendation refresh
-- Recalculate and observe stale recommendation scores
-- Expose inspectable recommendation explanations ("Why recommended")
-- Show compact recommendation labels in Today's feed
-- Blend novelty and freshness into Today ranking
-- Add semantic similarity to hybrid recommendation score
-- Learn behavioral affinity from workflow actions
-- Rank Today feed by personalized recommendation scores
+- Personalized recommendations that refresh on demand and daily.
+- "Why recommended" explanations you can open on any article.
+- Compact recommendation labels in Today's feed.
+- Today's feed now balances fresh, novel, and personally relevant stories.
+- Recommendations learn from how you triage and read articles.
 
 ## 1.11.0
-- In-app update-available notification for all platforms
-- Add 17 AI/ML X (Twitter) accounts via Nitter RSS
-- Navigate back to article list after triage action on article page
-- Fix triage toasts stacking — they now replace each other
+- Get notified inside the app when an update is available, on every platform.
+- Added 17 AI/ML X (Twitter) accounts as new sources.
+- After triaging an article, you're taken back to your list automatically.
+- Triage confirmations no longer stack up — the latest one replaces the previous.
 
 ## 1.10.0
-- Automatic semantic versioning via Conventional Commits
+- Smoother, more predictable app updates.
 
 ## 1.9.0
-- Electron desktop app (wraps news.lihor.ro, distributed via GitHub Releases)
+- A desktop app for your Mac and Windows.
 
 ## 1.8.0
-- Android APK signed release via GitHub Actions
-- TWA (Trusted Web Activity) native Android wrapper
-- On-demand AI insights require article body text before generating
-- Monochrome icon for Android 13+ themed icons
+- A native Android app you can install on your phone.
+- On-demand AI insights for any article with readable text.
+- A polished app icon that matches your Android theme.
