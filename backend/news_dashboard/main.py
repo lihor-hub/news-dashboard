@@ -997,6 +997,37 @@ def ask_ai(
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
+class FeedbackRequest(BaseModel):
+    trace_id: str
+    helpful: bool
+    comment: str | None = None
+
+
+@api.post("/api/feedback")
+def submit_feedback(
+    payload: FeedbackRequest,
+    _current_user: Annotated[dict[str, Any], Depends(require_auth)],
+) -> dict[str, Any]:
+    """Record a user's thumbs up/down on an AI answer as a Langfuse score.
+
+    The Langfuse keys stay server-side: the frontend posts the ``trace_id`` it
+    received from ``/api/ask`` plus a boolean, and we attach a ``user-thumbs``
+    BOOLEAN score to that trace. A no-op (``recorded: False``) when Langfuse is
+    disabled, so feedback never errors for the user.
+    """
+    from .ai_client import create_score
+
+    comment = (payload.comment or "").strip() or None
+    recorded = create_score(
+        payload.trace_id,
+        name="user-thumbs",
+        value=1 if payload.helpful else 0,
+        data_type="BOOLEAN",
+        comment=comment,
+    )
+    return {"recorded": recorded}
+
+
 @api.get("/api/summary")
 def summary(
     current_user: Annotated[dict[str, Any], Depends(require_auth)],
@@ -1012,6 +1043,17 @@ admin = APIRouter(prefix="/api/admin", dependencies=[Depends(require_admin)])
 @admin.get("/analytics")
 def admin_get_analytics(days: Annotated[int, Query(ge=1, le=365)] = 30) -> dict[str, Any]:
     return admin_analytics(days=days)
+
+
+@admin.get("/ai/metrics")
+def admin_ai_metrics(days: Annotated[int, Query(ge=1, le=365)] = 30) -> dict[str, Any]:
+    """Aggregate AI usage/cost/feedback metrics from Langfuse for admins.
+
+    Returns ``{"enabled": False}`` when Langfuse tracing is not configured.
+    """
+    from .ai_client import fetch_metrics
+
+    return fetch_metrics(days=days)
 
 
 @admin.get("/users")

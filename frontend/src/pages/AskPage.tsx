@@ -1,9 +1,45 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Sparkles, Loader2, AlertCircle, BookOpen } from 'lucide-react';
-import { askAI } from '@/api';
+import { Sparkles, Loader2, AlertCircle, BookOpen, ThumbsUp, ThumbsDown } from 'lucide-react';
+import { askAI, submitFeedback } from '@/api';
 import type { AskResponse } from '@/types';
 import { cn } from '@/lib/utils';
+
+function AnswerFeedback({ traceId }: { traceId: string }) {
+  const [sent, setSent] = useState<boolean | null>(null);
+
+  function rate(helpful: boolean) {
+    if (sent !== null) return;
+    setSent(helpful);
+    // Fire-and-forget: feedback must never block or error the UI.
+    void submitFeedback(traceId, helpful).catch(() => undefined);
+  }
+
+  if (sent !== null) {
+    return <p className="text-[11px] text-muted-foreground">Thanks for the feedback.</p>;
+  }
+  return (
+    <div className="flex items-center gap-2">
+      <span className="text-[11px] text-muted-foreground">Was this helpful?</span>
+      <button
+        type="button"
+        aria-label="Helpful"
+        onClick={() => rate(true)}
+        className="rounded p-1 text-muted-foreground hover:bg-surface hover:text-foreground"
+      >
+        <ThumbsUp className="size-3.5" />
+      </button>
+      <button
+        type="button"
+        aria-label="Not helpful"
+        onClick={() => rate(false)}
+        className="rounded p-1 text-muted-foreground hover:bg-surface hover:text-foreground"
+      >
+        <ThumbsDown className="size-3.5" />
+      </button>
+    </div>
+  );
+}
 
 type ErrorKind = 'no_key' | 'not_enough' | 'generation_failed';
 
@@ -155,6 +191,8 @@ export function AskPage() {
       {result && (
         <div className="mt-6 space-y-4">
           <div className="reader-prose text-[15px] leading-relaxed">{result.answer}</div>
+
+          {result.trace_id && <AnswerFeedback traceId={result.trace_id} />}
 
           {noSupportingArticles && (
             <p className="text-sm text-muted-foreground italic">

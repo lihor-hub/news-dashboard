@@ -18,7 +18,10 @@ from __future__ import annotations
 import importlib
 import logging
 import os
-from typing import TYPE_CHECKING, Any, cast
+from collections.abc import Iterator
+from contextlib import contextmanager
+from dataclasses import dataclass, field
+from typing import TYPE_CHECKING, Any, Literal, cast
 
 if TYPE_CHECKING:
     from openai import OpenAI
@@ -26,10 +29,24 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+ScoreDataType = Literal["NUMERIC", "CATEGORICAL", "BOOLEAN"]
+
 
 def langfuse_enabled() -> bool:
     """Return True when Langfuse tracing credentials are configured."""
     return bool(os.getenv("LANGFUSE_PUBLIC_KEY") and os.getenv("LANGFUSE_SECRET_KEY"))
+
+
+def _client() -> Any:
+    """Return the configured Langfuse client (host normalised).
+
+    Callers must guard with :func:`langfuse_enabled` first; this resolves the
+    SDK dynamically so the module type-checks whether or not langfuse is
+    installed.
+    """
+    _normalise_host_env()
+    langfuse = importlib.import_module("langfuse")
+    return langfuse.get_client()
 
 
 def _normalise_host_env() -> None:
@@ -82,6 +99,7 @@ def chat_create(
     tags: list[str] | None = None,
     user_id: int | str | None = None,
     session_id: str | None = None,
+    prompt: ManagedPrompt | None = None,
     **kwargs: Any,
 ) -> ChatCompletion:
     """Create a (non-streaming) chat completion, traced when Langfuse is on.
@@ -90,8 +108,16 @@ def chat_create(
     clean and the overloaded ``create`` keeps resolving to a non-streaming
     ``ChatCompletion`` (unpacking ``**kwargs`` otherwise widens the return type
     to include ``Stream``).
+
+    When *prompt* is a Langfuse-managed prompt, the generation is linked to its
+    version (via the ``langfuse_prompt`` kwarg the wrapped client understands),
+    so the Langfuse UI shows which prompt version produced each answer. The link
+    is gated on tracing being enabled and on the prompt not being a local
+    fallback, so the plain OpenAI client never receives Langfuse-only kwargs.
     """
     trace = trace_params(name, tags=tags, user_id=user_id, session_id=session_id)
+    if langfuse_enabled() and prompt is not None and prompt.langfuse_prompt is not None:
+        trace["langfuse_prompt"] = prompt.langfuse_prompt
     completion = client.chat.completions.create(**kwargs, **trace)
     return cast("ChatCompletion", completion)
 
@@ -118,6 +144,225 @@ def get_openai_client(*, api_key: str, base_url: str | None = None) -> OpenAI:
     from openai import OpenAI as PlainOpenAI
 
     return PlainOpenAI(**kwargs)
+
+
+# ── Trace context ────────────────────────────────────────────────────────
+
+
+@dataclass
+class TraceHandle:
+    """Handle to the current Langfuse trace, returned by :func:`observe`.
+
+    ``trace_id`` is ``None`` when tracing is disabled, so callers can pass it
+    through to API responses unconditionally (clients simply omit feedback when
+    it is absent).
+    """
+
+    trace_id: str | None = None
+    _span: Any = field(default=None, repr=False)
+
+    def update_output(self, output: Any) -> None:
+        """Attach the final pipeline output to the trace, if tracing is on."""
+        if self._span is not None:
+            try:
+                self._span.update(output=output)
+            except Exception as exc:  # pragma: no cover - defensive
+                logger.warning("langfuse span update failed: %s", exc)
+
+
+@contextmanager
+def observe(
+    name: str,
+    *,
+    input: Any = None,  # noqa: A002 - mirrors the Langfuse SDK kwarg name
+) -> Iterator[TraceHandle]:
+    """Group nested AI calls under a single Langfuse trace.
+
+    Any wrapped-client calls made inside the ``with`` block (embeddings, chat
+    completions) attach as child observations of one trace, instead of each
+    creating its own. The yielded :class:`TraceHandle` exposes ``trace_id`` so
+    the caller can return it to the frontend and later attach user feedback as a
+    score. A no-op (``trace_id=None``) when tracing is disabled.
+    """
+    if not langfuse_enabled():
+        yield TraceHandle()
+        return
+    try:
+        client = _client()
+    except Exception as exc:  # pragma: no cover - defensive
+        logger.warning("langfuse client unavailable, tracing skipped: %s", exc)
+        yield TraceHandle()
+        return
+    with client.start_as_current_observation(name=name, as_type="span", input=input) as span:
+        yield TraceHandle(trace_id=client.get_current_trace_id(), _span=span)
+
+
+def create_score(
+    trace_id: str,
+    *,
+    name: str,
+    value: float | str,
+    data_type: ScoreDataType = "NUMERIC",
+    comment: str | None = None,
+) -> bool:
+    """Attach a score (e.g. user feedback) to a trace. Returns success.
+
+    No-op returning ``False`` when tracing is disabled or the SDK is
+    unavailable, so feedback endpoints degrade gracefully. Flushes immediately
+    because the API request that triggers feedback is short-lived.
+    """
+    if not langfuse_enabled() or not trace_id:
+        return False
+    try:
+        client = _client()
+        client.create_score(
+            trace_id=trace_id,
+            name=name,
+            value=value,
+            data_type=data_type,
+            comment=comment,
+        )
+        client.flush()
+    except Exception as exc:
+        logger.warning("langfuse score creation failed: %s", exc)
+        return False
+    return True
+
+
+def get_trace_url(trace_id: str) -> str | None:
+    """Return the Langfuse UI URL for *trace_id*, or ``None`` if unavailable."""
+    if not langfuse_enabled() or not trace_id:
+        return None
+    try:
+        url = _client().get_trace_url(trace_id=trace_id)
+    except Exception as exc:  # pragma: no cover - defensive
+        logger.warning("langfuse trace url lookup failed: %s", exc)
+        return None
+    return cast("str | None", url)
+
+
+# ── Prompt management ──────────────────────────────────────────────────────
+
+
+@dataclass(frozen=True)
+class ManagedPrompt:
+    """A prompt resolved from Langfuse, or a local fallback.
+
+    ``text`` is the compiled prompt string ready to use. ``langfuse_prompt`` is
+    the underlying Langfuse prompt object when the prompt was fetched from
+    Langfuse (used to link generations to the prompt version), or ``None`` for
+    the local fallback.
+    """
+
+    text: str
+    langfuse_prompt: Any | None = None
+
+
+def get_prompt(
+    name: str,
+    *,
+    fallback: str,
+    label: str = "production",
+    variables: dict[str, Any] | None = None,
+) -> ManagedPrompt:
+    """Fetch a managed text prompt from Langfuse, falling back to *fallback*.
+
+    Prompts live in Langfuse (type ``text``) so they can be edited and
+    versioned without redeploying. When tracing is disabled, the prompt is
+    missing, or the fetch fails, the hardcoded *fallback* is used so behaviour
+    is never blocked on Langfuse availability. ``{{variable}}`` placeholders are
+    substituted from *variables* (Langfuse's ``compile`` for fetched prompts; a
+    simple local substitution for the fallback).
+    """
+    variables = variables or {}
+    if not langfuse_enabled():
+        return ManagedPrompt(_compile_fallback(fallback, variables))
+    try:
+        client = _client()
+        prompt = client.get_prompt(name, label=label, type="text", fallback=fallback)
+        compiled = prompt.compile(**variables) if variables else prompt.prompt
+        # A fallback-resolved prompt has no real version to link against.
+        is_fallback = getattr(prompt, "is_fallback", False)
+        return ManagedPrompt(str(compiled), None if is_fallback else prompt)
+    except Exception as exc:
+        logger.warning("langfuse get_prompt(%s) failed, using fallback: %s", name, exc)
+        return ManagedPrompt(_compile_fallback(fallback, variables))
+
+
+def _compile_fallback(template: str, variables: dict[str, Any]) -> str:
+    """Substitute ``{{var}}`` placeholders locally (Langfuse-compatible syntax)."""
+    text = template
+    for key, val in variables.items():
+        text = text.replace("{{" + key + "}}", str(val))
+    return text
+
+
+# ── Metrics ────────────────────────────────────────────────────────────────
+
+
+def _metrics_query(query: dict[str, Any]) -> list[dict[str, Any]]:
+    """Run one Langfuse Metrics API query, returning its ``data`` rows."""
+    import json
+
+    response = _client().api.metrics.metrics(query=json.dumps(query))
+    return [dict(row) for row in (response.data or [])]
+
+
+def fetch_metrics(*, days: int = 30) -> dict[str, Any]:
+    """Return aggregate AI usage metrics from Langfuse for the last *days*.
+
+    Surfaces cost, latency and feedback aggregates in-app (e.g. an admin
+    dashboard) so they are visible without opening the Langfuse UI. Degrades
+    gracefully: returns ``{"enabled": False}`` when tracing is off, and
+    per-section ``None`` when a query fails, so the endpoint never errors.
+    """
+    from datetime import datetime, timedelta, timezone
+
+    if not langfuse_enabled():
+        return {"enabled": False}
+
+    to_ts = datetime.now(timezone.utc)
+    from_ts = to_ts - timedelta(days=days)
+    window = {
+        "fromTimestamp": from_ts.isoformat(),
+        "toTimestamp": to_ts.isoformat(),
+        "filters": [],
+        "dimensions": [{"field": "name"}],
+    }
+    result: dict[str, Any] = {"enabled": True, "window_days": days}
+
+    try:
+        result["usage"] = _metrics_query(
+            {
+                "view": "observations",
+                "metrics": [
+                    {"measure": "count", "aggregation": "count"},
+                    {"measure": "totalCost", "aggregation": "sum"},
+                    {"measure": "latency", "aggregation": "avg"},
+                ],
+                **window,
+            }
+        )
+    except Exception as exc:
+        logger.warning("langfuse usage metrics query failed: %s", exc)
+        result["usage"] = None
+
+    try:
+        result["scores"] = _metrics_query(
+            {
+                "view": "scores-numeric",
+                "metrics": [
+                    {"measure": "value", "aggregation": "avg"},
+                    {"measure": "count", "aggregation": "count"},
+                ],
+                **window,
+            }
+        )
+    except Exception as exc:
+        logger.warning("langfuse score metrics query failed: %s", exc)
+        result["scores"] = None
+
+    return result
 
 
 def flush() -> None:

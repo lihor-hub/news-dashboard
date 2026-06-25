@@ -61,6 +61,7 @@ describe('AskPage — citation click opens reader', () => {
         { id: 42, title: 'Test Article', url: 'https://example.com/test' },
         { id: 99, title: 'Another Article', url: 'https://example.com/other' },
       ],
+      trace_id: null,
     });
   });
 
@@ -131,6 +132,7 @@ describe('AskPage — error states', () => {
       answer:
         'Not enough articles yet — I need at least 5 saved or read articles to answer questions. You currently have 2.',
       sources: [],
+      trace_id: null,
     });
     renderAskPage();
     const ta = screen.getByPlaceholderText(/Postgres/i);
@@ -157,7 +159,9 @@ describe('AskPage — error states', () => {
 
 describe('AskPage — include_all checkbox', () => {
   it('passes include_all=false by default', async () => {
-    const spy = vi.spyOn(api, 'askAI').mockResolvedValue({ answer: 'ok', sources: [] });
+    const spy = vi
+      .spyOn(api, 'askAI')
+      .mockResolvedValue({ answer: 'ok', sources: [], trace_id: null });
     renderAskPage();
     const ta = screen.getByPlaceholderText(/Postgres/i);
     await userEvent.type(ta, 'test');
@@ -166,7 +170,9 @@ describe('AskPage — include_all checkbox', () => {
   });
 
   it('passes include_all=true when checkbox is checked', async () => {
-    const spy = vi.spyOn(api, 'askAI').mockResolvedValue({ answer: 'ok', sources: [] });
+    const spy = vi
+      .spyOn(api, 'askAI')
+      .mockResolvedValue({ answer: 'ok', sources: [], trace_id: null });
     renderAskPage();
     const checkbox = screen.getByRole('checkbox');
     await userEvent.click(checkbox);

@@ -69,17 +69,19 @@ def generate_insights(article: dict[str, Any], *, user_id: int | None = None) ->
     if not text.strip():
         return []
 
-    from news_dashboard.ai_client import chat_create, get_openai_client
+    from news_dashboard.ai_client import chat_create, get_openai_client, get_prompt
 
     client = get_openai_client(api_key=api_key)
+    prompt = get_prompt("article-insights", fallback=_PROMPT)
     logger.info("Generating insights for article %s", article.get("id"))
     result = chat_create(
         client,
         name="article-insights",
         tags=["insights"],
         user_id=user_id,
+        prompt=prompt,
         model=_MODEL,
-        messages=[{"role": "user", "content": f"{_PROMPT}\n\n{text}"}],
+        messages=[{"role": "user", "content": f"{prompt.text}\n\n{text}"}],
         max_tokens=512,
     )
     response_text = (result.choices[0].message.content or "").strip()
