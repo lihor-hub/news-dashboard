@@ -142,6 +142,8 @@ export interface AskSource {
 export interface AskResponse {
   answer: string;
   sources: AskSource[];
+  /** Langfuse trace id for this answer; null when tracing is disabled. */
+  trace_id: string | null;
 }
 
 export interface IngestRun {

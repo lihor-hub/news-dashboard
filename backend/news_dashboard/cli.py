@@ -56,5 +56,44 @@ def rec_recalc() -> None:
         typer.echo(f"{key}: {value}")
 
 
+@app.command(name="improve-prompt")
+def improve_prompt(
+    name: str = "ask-system",
+    days: int = 14,
+    max_examples: int = 50,
+) -> None:
+    """Draft an improved prompt version from thumbs-down feedback in Langfuse.
+
+    Fetches recent unhelpful answers, asks an LLM to revise the prompt, and saves
+    the result to Langfuse under the 'candidate' label for human review. Does NOT
+    auto-deploy: promote the candidate to 'production' in the Langfuse UI.
+    """
+    from .embeddings import ASK_SYSTEM_PROMPT
+    from .prompt_optimizer import PromptOptimizerError, optimize_prompt
+
+    fallback = ASK_SYSTEM_PROMPT if name == "ask-system" else ""
+    try:
+        result = optimize_prompt(
+            prompt_name=name,
+            fallback=fallback,
+            days=days,
+            max_examples=max_examples,
+        )
+    except PromptOptimizerError as exc:
+        typer.echo(f"skipped: {exc}")
+        raise typer.Exit(code=0) from exc
+
+    typer.echo(
+        f"proposed candidate for '{result.prompt_name}' "
+        f"(version {result.new_version}, label '{result.candidate_label}') "
+        f"from {result.example_count} thumbs-down examples"
+    )
+    typer.echo("review it in Langfuse and promote to 'production' if it is an improvement.")
+
+    from .ai_client import flush
+
+    flush()
+
+
 if __name__ == "__main__":
     app()

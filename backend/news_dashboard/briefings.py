@@ -28,6 +28,22 @@ CURRENT_DAY_SCOPE = "current_day"
 BRIEFING_MAX_ATTEMPTS = 3
 BRIEFING_RETRY_BASE_DELAY_SECONDS = 0.5
 
+# Local fallback for the briefing system prompt. The live prompt is managed in
+# Langfuse (name "briefing-system", label "production"); this string is used
+# verbatim when Langfuse is disabled or unreachable.
+_BRIEFING_SYSTEM_PROMPT = (
+    "You are a briefing editor. Given a list of news articles (each with a numeric ID), "
+    "produce a JSON object with these exact keys:\n"
+    "  title     — short, punchy headline for the briefing (max 10 words)\n"
+    "  summary   — 1-2 sentence overview of the day's themes\n"
+    "  sections  — array of section objects, each with:\n"
+    "                title     — section heading\n"
+    "                body      — 2-4 sentence narrative\n"
+    "                citations — array of integer article IDs cited in body\n"
+    "  worth_opening — flat array of integer article IDs most worth reading in full\n"
+    "Only use IDs from the provided list. Return valid JSON only, no markdown wrapper."
+)
+
 logger = logging.getLogger(__name__)
 
 # ── Error types ───────────────────────────────────────────────────────────────
@@ -190,23 +206,13 @@ def _call_openai(
             f"({a.get('source_name', '')} / {a.get('category', '')})\n  {snippet}"
         )
 
-    system = (
-        "You are a briefing editor. Given a list of news articles (each with a numeric ID), "
-        "produce a JSON object with these exact keys:\n"
-        "  title     — short, punchy headline for the briefing (max 10 words)\n"
-        "  summary   — 1-2 sentence overview of the day's themes\n"
-        "  sections  — array of section objects, each with:\n"
-        "                title     — section heading\n"
-        "                body      — 2-4 sentence narrative\n"
-        "                citations — array of integer article IDs cited in body\n"
-        "  worth_opening — flat array of integer article IDs most worth reading in full\n"
-        "Only use IDs from the provided list. Return valid JSON only, no markdown wrapper."
-    )
-    user = "Articles:\n\n" + "\n\n".join(article_lines)
-
     from openai import OpenAIError  # lazy import — optional dep at import time
 
-    from news_dashboard.ai_client import chat_create, get_openai_client
+    from news_dashboard.ai_client import chat_create, get_openai_client, get_prompt
+
+    prompt = get_prompt("briefing-system", fallback=_BRIEFING_SYSTEM_PROMPT)
+    system = prompt.text
+    user = "Articles:\n\n" + "\n\n".join(article_lines)
 
     client = get_openai_client(api_key=api_key, base_url=base_url)
     try:
@@ -215,6 +221,7 @@ def _call_openai(
             name="briefing-generation",
             tags=["briefing"],
             user_id=user_id,
+            prompt=prompt,
             model=model,
             messages=[
                 {"role": "system", "content": system},

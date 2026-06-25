@@ -10,11 +10,26 @@ from __future__ import annotations
 
 import os
 import struct
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from news_dashboard.ai_client import ManagedPrompt
 
 MIN_ARTICLES = 5  # refuse to answer if fewer than this many articles are embedded
 TOP_K = 8  # articles to include as context
 DEFAULT_ANSWER_MODEL = "gpt-4o-mini"
+
+# Local fallback for the Ask AI system prompt. The live prompt is managed in
+# Langfuse (name "ask-system", label "production"); this string is used verbatim
+# when Langfuse is disabled or unreachable, so behaviour never depends on it.
+ASK_SYSTEM_PROMPT = (
+    "You are a helpful assistant that answers questions based on the user's "
+    "curated news articles. "
+    "Use only the provided article excerpts to answer. "
+    "Cite articles by their bracketed number, e.g. [1], [2]. "
+    "If the articles do not contain enough information, say so clearly. "
+    "Be concise (2-4 sentences unless a longer answer is clearly needed)."
+)
 
 
 class MissingAICredentialsError(RuntimeError):
@@ -81,7 +96,13 @@ def _embed(text: str) -> list[float]:
     return list(response.data[0].embedding)
 
 
-def _answer(system_prompt: str, user_prompt: str, *, user_id: int | None = None) -> str:
+def _answer(
+    system_prompt: str,
+    user_prompt: str,
+    *,
+    user_id: int | None = None,
+    prompt: ManagedPrompt | None = None,
+) -> str:
     """Generate an answer with OpenAI using the same key as embeddings."""
     from news_dashboard.ai_client import chat_create, get_openai_client
 
@@ -91,6 +112,7 @@ def _answer(system_prompt: str, user_prompt: str, *, user_id: int | None = None)
         name="ask-ai",
         tags=["ask-ai"],
         user_id=user_id,
+        prompt=prompt,
         model=os.getenv("OPENAI_ANSWER_MODEL", DEFAULT_ANSWER_MODEL),
         messages=[
             {"role": "system", "content": system_prompt},
@@ -212,11 +234,11 @@ def ask(
     # 2. Load embedded articles
     init_db(db_path)
     with connect(db_path) as conn:
-        query = (
+        sql = (
             "SELECT id, title, url, summary, embedding FROM articles "
             f"WHERE {status_filter} AND embedding IS NOT NULL"
         )
-        rows = conn.execute(query).fetchall()
+        rows = conn.execute(sql).fetchall()
 
     if len(rows) < MIN_ARTICLES:
         return {
@@ -225,9 +247,10 @@ def ask(
                 f"articles to answer questions. You currently have {len(rows)}."
             ),
             "sources": [],
+            "trace_id": None,
         }
 
-    # 3. Embed the query
+    # 3. Embed the user's question
     query_vec = _embed(query)
 
     # 4. Rank by cosine similarity and pick top-k
@@ -243,19 +266,17 @@ def ask(
         )
     context_text = "\n\n".join(context_blocks)
 
-    system_prompt = (
-        "You are a helpful assistant that answers questions based on the user's "
-        "curated news articles. "
-        "Use only the provided article excerpts to answer. "
-        "Cite articles by their bracketed number, e.g. [1], [2]. "
-        "If the articles do not contain enough information, say so clearly. "
-        "Be concise (2-4 sentences unless a longer answer is clearly needed)."
-    )
+    from news_dashboard.ai_client import get_prompt, observe
+
+    prompt = get_prompt("ask-system", fallback=ASK_SYSTEM_PROMPT)
     user_prompt = f"Articles:\n\n{context_text}\n\nQuestion: {query}"
 
-    # 6. Call OpenAI for the answer
-    answer_text = _answer(system_prompt, user_prompt, user_id=user_id)
+    # 6. Call OpenAI for the answer, grouping retrieval + generation under one
+    #    Langfuse trace so its id can carry user feedback (see /api/feedback).
+    with observe("ask-ai", input={"query": query, "include_all": include_all}) as trace:
+        answer_text = _answer(prompt.text, user_prompt, user_id=user_id, prompt=prompt)
+        trace.update_output(answer_text)
 
     # 7. Return answer + deduplicated source list (top-k order)
     sources = [{"id": row["id"], "title": row["title"], "url": row["url"]} for row, _ in top]
-    return {"answer": answer_text, "sources": sources}
+    return {"answer": answer_text, "sources": sources, "trace_id": trace.trace_id}

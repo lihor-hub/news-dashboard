@@ -116,6 +116,17 @@ export async function askAI(query: string, includeAll = false): Promise<AskRespo
   });
 }
 
+export async function submitFeedback(
+  traceId: string,
+  helpful: boolean,
+  comment?: string
+): Promise<{ recorded: boolean }> {
+  return requestJson<{ recorded: boolean }>('/api/feedback', {
+    method: 'POST',
+    body: JSON.stringify({ trace_id: traceId, helpful, comment }),
+  });
+}
+
 export async function updateSourceEnabled(slug: string, enabled: boolean): Promise<Source> {
   return requestJson<Source>(`/api/sources/${slug}/enabled`, {
     method: 'PATCH',

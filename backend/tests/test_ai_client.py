@@ -5,10 +5,15 @@ import os
 import pytest
 
 from news_dashboard.ai_client import (
+    _compile_fallback,
     _normalise_host_env,
+    create_score,
     flush,
     get_openai_client,
+    get_prompt,
+    get_trace_url,
     langfuse_enabled,
+    observe,
     trace_params,
 )
 
@@ -54,6 +59,10 @@ def test_base_url_is_forwarded() -> None:
 
 
 def test_returns_langfuse_client_when_enabled(monkeypatch: pytest.MonkeyPatch) -> None:
+    # The wrapped client requires the langfuse SDK; skip when it is not importable
+    # in this interpreter (e.g. a system pytest outside the project venv). It is a
+    # core dependency, so this still runs in CI and any properly-synced env.
+    pytest.importorskip("langfuse.openai")
     monkeypatch.setenv("LANGFUSE_PUBLIC_KEY", "pk")
     monkeypatch.setenv("LANGFUSE_SECRET_KEY", "sk")
     monkeypatch.setenv("LANGFUSE_HOST", "http://langfuse:3000")
@@ -110,3 +119,41 @@ def test_existing_host_not_overwritten_by_alias(monkeypatch: pytest.MonkeyPatch)
     monkeypatch.setenv("LANGFUSE_BASE_URL", "https://alias.example.com")
     _normalise_host_env()
     assert os.environ["LANGFUSE_HOST"] == "https://primary.example.com"
+
+
+@pytest.mark.usefixtures("_no_langfuse")
+def test_observe_is_noop_without_credentials() -> None:
+    # Disabled: yields a handle with no trace id and tolerates update_output.
+    with observe("ask-ai-pipeline", input={"q": "hi"}) as handle:
+        assert handle.trace_id is None
+        handle.update_output("answer")
+
+
+@pytest.mark.usefixtures("_no_langfuse")
+def test_create_score_and_trace_url_noop_without_credentials() -> None:
+    assert create_score("trace-1", name="user-thumbs", value=1, data_type="BOOLEAN") is False
+    assert get_trace_url("trace-1") is None
+
+
+@pytest.mark.usefixtures("_no_langfuse")
+def test_get_prompt_uses_fallback_when_disabled() -> None:
+    prompt = get_prompt(
+        "ask-system",
+        fallback="Answer about {{topic}} clearly.",
+        variables={"topic": "Postgres"},
+    )
+    assert prompt.text == "Answer about Postgres clearly."
+    # No Langfuse prompt object to link against in fallback mode.
+    assert prompt.langfuse_prompt is None
+
+
+@pytest.mark.usefixtures("_no_langfuse")
+def test_fetch_metrics_disabled_returns_enabled_false() -> None:
+    from news_dashboard.ai_client import fetch_metrics
+
+    assert fetch_metrics(days=30) == {"enabled": False}
+
+
+def test_compile_fallback_substitutes_double_brace_vars() -> None:
+    assert _compile_fallback("Hi {{name}}, {{name}}!", {"name": "Sam"}) == "Hi Sam, Sam!"
+    assert _compile_fallback("no vars here", {}) == "no vars here"
