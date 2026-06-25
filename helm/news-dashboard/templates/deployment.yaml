@@ -86,13 +86,13 @@ spec:
               valueFrom:
                 secretKeyRef:
                   name: {{ .Values.app.ai.existingSecret | quote }}
-                  key: {{ .Values.app.ai.langfuse.publicKeyKey | quote }}
+                  key: {{ .Values.app.ai.langfuse.publicKeyKey | default "LANGFUSE_PUBLIC_KEY" | quote }}
                   optional: true
             - name: LANGFUSE_SECRET_KEY
               valueFrom:
                 secretKeyRef:
                   name: {{ .Values.app.ai.existingSecret | quote }}
-                  key: {{ .Values.app.ai.langfuse.secretKeyKey | quote }}
+                  key: {{ .Values.app.ai.langfuse.secretKeyKey | default "LANGFUSE_SECRET_KEY" | quote }}
                   optional: true
 {{- end }}
 {{- end }}
