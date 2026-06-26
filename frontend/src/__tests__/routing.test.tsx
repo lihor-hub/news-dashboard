@@ -37,11 +37,13 @@ vi.mock('../api', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../api')>();
   return {
     ...actual,
+    requestJson: vi.fn().mockReturnValue(new Promise((_r) => undefined)),
     fetchLatestBriefing: vi.fn().mockReturnValue(new Promise((_r) => undefined)),
     fetchBriefings: vi.fn().mockReturnValue(new Promise((_r) => undefined)),
     fetchBriefing: vi.fn().mockReturnValue(new Promise((_r) => undefined)),
     fetchSummary: vi.fn().mockResolvedValue({ byStatus: {}, byCategory: {} }),
     searchArticles: vi.fn().mockResolvedValue([]),
+    fetchSharesUnreadCount: vi.fn().mockResolvedValue(0),
   };
 });
 
