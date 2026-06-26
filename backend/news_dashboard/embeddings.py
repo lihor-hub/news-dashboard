@@ -130,10 +130,14 @@ def _answer(
     user_id: int | None = None,
     prompt: ManagedPrompt | None = None,
 ) -> str:
-    """Generate an answer with OpenAI using the same key as embeddings."""
+    """Generate an answer via the free LLM gateway when configured, else OpenAI."""
     from news_dashboard.ai_client import chat_create, get_openai_client
 
-    client = get_openai_client(api_key=_require_env("OPENAI_API_KEY", "use Ask AI"))
+    api_key = os.getenv("OPENAI_ANSWER_API_KEY") or _require_env("OPENAI_API_KEY", "use Ask AI")
+    base_url: str | None = (
+        os.getenv("OPENAI_ANSWER_BASE_URL") or os.getenv("OPENAI_BASE_URL") or None
+    )
+    client = get_openai_client(api_key=api_key, base_url=base_url)
     response = chat_create(
         client,
         name="ask-ai",
