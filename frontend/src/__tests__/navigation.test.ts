@@ -4,6 +4,7 @@ import {
   getPageTitle,
   getShortcutTarget,
   isNavigationItemActive,
+  mobileNavigationItems,
   primaryNavigationItems,
   secondaryNavigationItems,
 } from '../lib/navigation';
@@ -30,6 +31,13 @@ describe('navigation metadata', () => {
     expect(getShortcutTarget('t')).toBe('/today');
     expect(getShortcutTarget('h')).toBe('/briefs');
     expect(getShortcutTarget('z')).toBeNull();
+  });
+
+  it('surfaces Shared (not Later) in the fixed 5-slot mobile bottom bar', () => {
+    const mobileTargets = mobileNavigationItems.map((item) => item.to);
+    expect(mobileTargets).toEqual(['/', '/today', '/shared', '/starred', '/search']);
+    expect(mobileTargets).toContain('/shared');
+    expect(mobileTargets).not.toContain('/later');
   });
 
   it('matches exact roots but prefix-matches nested families', () => {

@@ -54,12 +54,16 @@ export function secondaryNavigationItemsFor(isAdmin: boolean): NavigationItem[] 
     : secondaryNavigationItems;
 }
 
-// The mobile bottom bar is a fixed 5-column grid. Keep the five most-used
-// destinations here explicitly so adding desktop-only items (e.g. Shared) does
-// not silently push one off the bar.
-export const mobileNavigationItems = primaryNavigationItems.filter((item) =>
-  ['/', '/today', '/later', '/starred', '/search'].includes(item.to)
-);
+// The mobile bottom bar is a fixed 5-column grid. List the five destinations in
+// display order so adding desktop-only items does not silently push one off the
+// bar. Mobile surfaces Shared (articles sent to you by other people) here in
+// place of Later, which remains reachable on desktop.
+const mobileNavigationOrder = ['/', '/today', '/shared', '/starred', '/search'];
+const primaryNavigationByTo = new Map(primaryNavigationItems.map((item) => [item.to, item]));
+export const mobileNavigationItems = mobileNavigationOrder.flatMap((to) => {
+  const item = primaryNavigationByTo.get(to);
+  return item ? [item] : [];
+});
 
 export const commandNavigationItems = [...primaryNavigationItems, ...secondaryNavigationItems].map(
   (item) => ({
