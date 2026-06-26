@@ -6,6 +6,7 @@ import logging
 import os
 import secrets
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Annotated, Any
 from urllib.parse import urlencode
 
@@ -205,9 +206,11 @@ def create_user(
     *,
     email: str | None = None,
     is_admin: bool = False,
+    db_path: Path | str | None = None,
 ) -> dict[str, Any]:
     password_hash = hash_password(password)
-    with connect() as conn:
+    connection = connect(db_path) if db_path is not None else connect()
+    with connection as conn:
         row = conn.execute(
             "INSERT INTO users(username, password_hash, email, is_admin)"
             " VALUES(%s, %s, %s, %s) RETURNING id, username, email, is_admin, created_at",

@@ -122,10 +122,16 @@ def pg_clean(pg_url: str) -> str:
     """
     import psycopg
 
+    from news_dashboard import db as db_mod
+
+    db_mod._INITIALIZED_DATABASES.clear()
+    init_db(database_url=pg_url)
     with psycopg.connect(pg_url) as conn:
         conn.execute(
             "TRUNCATE user_article_recommendations, user_article_state, user_sources,"
-            " briefing_articles, briefings, articles, sources, users RESTART IDENTITY CASCADE"
+            " user_push_subscriptions, article_shares, user_events, briefing_articles,"
+            " briefings, ingest_run_sources, ingest_runs, articles, sources, users"
+            " RESTART IDENTITY CASCADE"
         )
         conn.commit()
     return pg_url

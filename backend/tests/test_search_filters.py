@@ -273,21 +273,16 @@ def test_starred_plus_category_filter(db: Path) -> None:
 
 
 @pytest.fixture
-def api_db(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    """Use an isolated PostgreSQL schema and patch the app to use it."""
-    import news_dashboard.db as db_mod
-    import news_dashboard.ingest as ingest_mod
-
-    path = tmp_path / "search_api.db"
-    monkeypatch.setattr(db_mod, "DB_PATH", path)
-    monkeypatch.setattr(ingest_mod, "DB_PATH", path, raising=False)
-    init_db(path)
-    sync_sources(path)
-    return path
+def api_db(pg_clean: str, monkeypatch: pytest.MonkeyPatch) -> str:
+    """Use an isolated PostgreSQL database and patch the app to use it."""
+    monkeypatch.setenv("DATABASE_URL", pg_clean)
+    init_db(pg_clean)
+    sync_sources(pg_clean)
+    return pg_clean
 
 
 @pytest.fixture
-def client(api_db: Path) -> TestClient:
+def client(api_db: str) -> TestClient:
     return TestClient(app)
 
 

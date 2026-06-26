@@ -340,7 +340,7 @@ def _find_canonical(conn: Any, canonical_url: str, title: str) -> int | None:
     return None
 
 
-def sync_sources(db_path: Path | None = None) -> None:
+def sync_sources(db_path: Path | str | None = None) -> None:
     init_db(db_path)
     with connect(db_path) as conn:
         for source in DEFAULT_SOURCES:
@@ -420,7 +420,9 @@ def _fetch_nitter_feed(source: SourceDefinition) -> list[dict[str, Any]]:
     raise FeedFetchError(msg) from last_exc
 
 
-def _ingest_source(source: SourceDefinition, db_path: Path | None = None) -> SourceIngestOutcome:
+def _ingest_source(
+    source: SourceDefinition, db_path: Path | str | None = None
+) -> SourceIngestOutcome:
     """Fetch and insert articles for a single source. Returns count inserted."""
     from news_dashboard.scraper import scrape_source
 
@@ -567,7 +569,7 @@ def _ingest_source(source: SourceDefinition, db_path: Path | None = None) -> Sou
     )
 
 
-def ingest_source(source: SourceDefinition, db_path: Path | None = None) -> int:
+def ingest_source(source: SourceDefinition, db_path: Path | str | None = None) -> int:
     """Fetch and insert articles for a single source. Returns count inserted."""
     outcome = _ingest_source(source, db_path)
     if outcome.error_message is not None:
@@ -584,7 +586,7 @@ def _row_value(row: Any, key: str, index: int) -> Any:
         return row[index]
 
 
-def _create_ingest_run(db_path: Path | None, started_at: str) -> int:
+def _create_ingest_run(db_path: Path | str | None, started_at: str) -> int:
     init_db(db_path)
     with connect(db_path) as conn:
         row = conn.execute(
@@ -594,7 +596,9 @@ def _create_ingest_run(db_path: Path | None, started_at: str) -> int:
     return int(_row_value(row, "id", 0))
 
 
-def _record_ingest_source(run_id: int, outcome: SourceIngestOutcome, db_path: Path | None) -> None:
+def _record_ingest_source(
+    run_id: int, outcome: SourceIngestOutcome, db_path: Path | str | None
+) -> None:
     with connect(db_path) as conn:
         conn.execute(
             """
@@ -615,7 +619,7 @@ def _record_ingest_source(run_id: int, outcome: SourceIngestOutcome, db_path: Pa
 
 def _finish_ingest_run(
     run_id: int,
-    db_path: Path | None,
+    db_path: Path | str | None,
     finished_at: str,
     duration_ms: int,
     total_new: int,
@@ -642,7 +646,7 @@ def _format_source_log(outcome: SourceIngestOutcome) -> str:
     )
 
 
-def ingest_all(db_path: Path | None = None) -> dict[str, int]:
+def ingest_all(db_path: Path | str | None = None) -> dict[str, int]:
     with _INGEST_RUN_LOCK:
         sync_sources(db_path)
         run_started_at = now_iso()
@@ -932,7 +936,7 @@ def list_articles(  # noqa: PLR0913
     starred: bool | None = None,
     limit: int = 100,
     offset: int = 0,
-    db_path: Path | None = None,
+    db_path: Path | str | None = None,
     user_id: int | None = None,
 ) -> list[dict[str, Any]]:
     init_db(db_path)
@@ -1013,7 +1017,7 @@ def _list_articles_for_user(  # noqa: PLR0913
     starred: bool | None,
     limit: int,
     offset: int,
-    db_path: Path | None,
+    db_path: Path | str | None,
     now: str,
 ) -> list[dict[str, Any]]:
     """Article listing scoped to a specific user via user_article_state."""
@@ -1144,7 +1148,7 @@ def _attach_also_from(conn: Any, articles: list[dict[str, Any]]) -> None:
 def search_articles(  # noqa: PLR0912, PLR0913
     q: str = "",
     limit: int = 50,
-    db_path: Path | None = None,
+    db_path: Path | str | None = None,
     states: list[str] | None = None,
     categories: list[str] | None = None,
     sources: list[str] | None = None,
@@ -1245,7 +1249,7 @@ def _search_articles_for_user(  # noqa: PLR0912, PLR0913, PLR0915
     user_id: int,
     q: str,
     limit: int,
-    db_path: Path | None,
+    db_path: Path | str | None,
     states: list[str] | None,
     categories: list[str] | None,
     sources: list[str] | None,
@@ -1354,7 +1358,7 @@ def _search_articles_for_user(  # noqa: PLR0912, PLR0913, PLR0915
 
 
 def set_article_status(
-    article_id: int, status: str, db_path: Path | None = None
+    article_id: int, status: str, db_path: Path | str | None = None
 ) -> dict[str, Any] | None:
     if status not in VALID_STATUSES:
         message = f"invalid status: {status!r} (expected one of {sorted(VALID_STATUSES)})"
@@ -1400,7 +1404,7 @@ def _get_article_row(conn: Any, article_id: int) -> dict[str, Any] | None:
 def transition_article_state(  # noqa: PLR0912
     article_id: int,
     new_state: str,
-    db_path: Path | None = None,
+    db_path: Path | str | None = None,
     user_id: int | None = None,
 ) -> dict[str, Any] | None:
     """Apply a state transition, enforcing allowed-transition rules.
@@ -1491,7 +1495,7 @@ def transition_article_state(  # noqa: PLR0912
 def set_article_starred(
     article_id: int,
     starred: bool,
-    db_path: Path | None = None,
+    db_path: Path | str | None = None,
     user_id: int | None = None,
 ) -> dict[str, Any] | None:
     """Set the starred flag on an article. Raises ValueError if starring a skipped article."""
@@ -1537,7 +1541,7 @@ def set_article_starred(
 def send_article_later(
     article_id: int,
     days: int = 1,
-    db_path: Path | None = None,
+    db_path: Path | str | None = None,
     user_id: int | None = None,
 ) -> dict[str, Any] | None:
     """Snooze an article to Later with an expiry of `days` days from now.
@@ -1591,7 +1595,7 @@ def send_article_later(
         return _get_article_row(conn, article_id)
 
 
-def get_user_summary(user_id: int, db_path: Path | None = None) -> dict[str, Any]:
+def get_user_summary(user_id: int, db_path: Path | str | None = None) -> dict[str, Any]:
     """Return per-user article counts by status and category.
 
     Maps the new (state, starred) model back to the legacy status keys the

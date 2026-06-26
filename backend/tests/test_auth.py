@@ -2,13 +2,11 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
 
-import news_dashboard.db as db_mod
 from news_dashboard.auth import (
     authenticate,
     bootstrap_admin,
@@ -41,12 +39,11 @@ def _fresh_client() -> TestClient:
 
 
 @pytest.fixture
-def tmp_db(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    """Fresh PostgreSQL test schema with DB_PATH patched so auth helpers use it."""
-    db = tmp_path / "test.db"
-    init_db(db)
-    monkeypatch.setattr(db_mod, "DB_PATH", db)
-    return db
+def tmp_db(pg_clean: str, monkeypatch: pytest.MonkeyPatch) -> str:
+    """Fresh PostgreSQL test database routed through DATABASE_URL."""
+    monkeypatch.setenv("DATABASE_URL", pg_clean)
+    init_db(database_url=pg_clean)
+    return pg_clean
 
 
 # ── Password hashing ──────────────────────────────────────────────────────────
@@ -95,7 +92,7 @@ def test_expired_token_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
 # ── User CRUD ─────────────────────────────────────────────────────────────────
 
 
-def test_create_and_get_user(tmp_db: Path) -> None:
+def test_create_and_get_user(tmp_db: str) -> None:
     user = create_user("alice", "secret", email="a@b.com", is_admin=False)
     assert user["username"] == "alice"
     assert user["email"] == "a@b.com"
@@ -142,7 +139,7 @@ def test_create_user_passes_boolean_admin_value(monkeypatch: pytest.MonkeyPatch)
     assert fake_connect.conn.params[3] is True
 
 
-def test_list_users(tmp_db: Path) -> None:
+def test_list_users(tmp_db: str) -> None:
     create_user("u1", "p1")
     create_user("u2", "p2")
     usernames = [u["username"] for u in list_users()]
@@ -150,14 +147,14 @@ def test_list_users(tmp_db: Path) -> None:
     assert "u2" in usernames
 
 
-def test_update_password(tmp_db: Path) -> None:
+def test_update_password(tmp_db: str) -> None:
     user = create_user("bob", "old")
     assert update_password(user["id"], "new-pass")
     assert authenticate("bob", "new-pass") is not None
     assert authenticate("bob", "old") is None
 
 
-def test_delete_user(tmp_db: Path) -> None:
+def test_delete_user(tmp_db: str) -> None:
     user = create_user("carol", "pw")
     assert delete_user(user["id"])
     assert get_user_by_id(user["id"]) is None
@@ -166,7 +163,7 @@ def test_delete_user(tmp_db: Path) -> None:
 # ── authenticate() ────────────────────────────────────────────────────────────
 
 
-def test_authenticate_correct(tmp_db: Path) -> None:
+def test_authenticate_correct(tmp_db: str) -> None:
     create_user("dave", "correct")
     result = authenticate("dave", "correct")
     assert result is not None
@@ -174,12 +171,12 @@ def test_authenticate_correct(tmp_db: Path) -> None:
     assert "password_hash" not in result
 
 
-def test_authenticate_wrong_password(tmp_db: Path) -> None:
+def test_authenticate_wrong_password(tmp_db: str) -> None:
     create_user("eve", "right")
     assert authenticate("eve", "wrong") is None
 
 
-def test_authenticate_unknown_user(tmp_db: Path) -> None:
+def test_authenticate_unknown_user(tmp_db: str) -> None:
     assert authenticate("nobody", "pw") is None
 
 
@@ -235,7 +232,7 @@ def test_keycloak_token_request_data_omits_blank_client_secret(
 
 
 def test_ensure_keycloak_user_creates_local_user(
-    tmp_db: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_db: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setenv("KEYCLOAK_ADMIN_USERNAMES", "ioachim")
     user = ensure_keycloak_user(
@@ -247,7 +244,7 @@ def test_ensure_keycloak_user_creates_local_user(
 
 
 def test_password_login_disabled_when_keycloak_enabled(
-    tmp_db: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_db: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setenv("KEYCLOAK_AUTH_ENABLED", "1")
     create_user("local", "pw")
@@ -255,7 +252,7 @@ def test_password_login_disabled_when_keycloak_enabled(
 
 
 def test_init_auth_requires_session_secret_for_keycloak(
-    tmp_db: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_db: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setenv("KEYCLOAK_AUTH_ENABLED", "1")
     monkeypatch.setenv("KEYCLOAK_SERVER_URL", "https://news.lihor.ro/keycloak")
@@ -267,7 +264,7 @@ def test_init_auth_requires_session_secret_for_keycloak(
 
 
 def test_init_auth_accepts_keycloak_when_session_secret_is_set(
-    tmp_db: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_db: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setenv("KEYCLOAK_AUTH_ENABLED", "1")
     monkeypatch.setenv("KEYCLOAK_SERVER_URL", "https://news.lihor.ro/keycloak")
@@ -279,7 +276,7 @@ def test_init_auth_accepts_keycloak_when_session_secret_is_set(
 # ── Bootstrap ─────────────────────────────────────────────────────────────────
 
 
-def test_bootstrap_creates_first_admin(tmp_db: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_bootstrap_creates_first_admin(tmp_db: str, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("BOOTSTRAP_ADMIN_USERNAME", "admin")
     monkeypatch.setenv("BOOTSTRAP_ADMIN_PASSWORD", "adminpass")
     bootstrap_admin()
@@ -289,7 +286,7 @@ def test_bootstrap_creates_first_admin(tmp_db: Path, monkeypatch: pytest.MonkeyP
     assert users[0]["is_admin"]
 
 
-def test_bootstrap_noop_if_users_exist(tmp_db: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_bootstrap_noop_if_users_exist(tmp_db: str, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("BOOTSTRAP_ADMIN_USERNAME", "admin")
     monkeypatch.setenv("BOOTSTRAP_ADMIN_PASSWORD", "pw")
     create_user("existing", "pw2")
@@ -306,7 +303,7 @@ def test_user_count_from_row_reads_aliased_count() -> None:
 # ── Login / logout API ────────────────────────────────────────────────────────
 
 
-def test_login_sets_cookie(tmp_db: Path) -> None:
+def test_login_sets_cookie(tmp_db: str) -> None:
     create_user("frank", "frankpass", is_admin=False)
     client = _fresh_client()
     resp = client.post("/api/auth/login", json={"username": "frank", "password": "frankpass"})
@@ -315,7 +312,7 @@ def test_login_sets_cookie(tmp_db: Path) -> None:
     assert "nd_session" in resp.cookies
 
 
-def test_login_wrong_password_returns_401(tmp_db: Path) -> None:
+def test_login_wrong_password_returns_401(tmp_db: str) -> None:
     create_user("grace", "right")
     client = _fresh_client()
     resp = client.post("/api/auth/login", json={"username": "grace", "password": "wrong"})
@@ -323,7 +320,7 @@ def test_login_wrong_password_returns_401(tmp_db: Path) -> None:
     assert "nd_session" not in resp.cookies
 
 
-def test_logout_clears_cookie(tmp_db: Path) -> None:
+def test_logout_clears_cookie(tmp_db: str) -> None:
     create_user("henry", "pw")
     client = _fresh_client()
     client.post("/api/auth/login", json={"username": "henry", "password": "pw"})
@@ -335,13 +332,13 @@ def test_logout_clears_cookie(tmp_db: Path) -> None:
 # ── Auth middleware: protected routes require session ─────────────────────────
 
 
-def test_protected_route_without_session_returns_401(tmp_db: Path) -> None:
+def test_protected_route_without_session_returns_401(tmp_db: str) -> None:
     client = _fresh_client()
     resp = client.get("/api/articles", cookies={})
     assert resp.status_code == 401
 
 
-def test_protected_route_with_valid_session(tmp_db: Path) -> None:
+def test_protected_route_with_valid_session(tmp_db: str) -> None:
     user = create_user("irene", "pw")
     token = create_session_token(user["id"], is_admin=False)
     client = _fresh_client()
@@ -350,7 +347,7 @@ def test_protected_route_with_valid_session(tmp_db: Path) -> None:
     assert resp.status_code == 200
 
 
-def test_auth_me_returns_current_user(tmp_db: Path) -> None:
+def test_auth_me_returns_current_user(tmp_db: str) -> None:
     user = create_user("jane", "pw", is_admin=True)
     token = create_session_token(user["id"], is_admin=True)
     client = _fresh_client()
@@ -365,7 +362,7 @@ def test_auth_me_returns_current_user(tmp_db: Path) -> None:
 # ── Admin-only routes ─────────────────────────────────────────────────────────
 
 
-def test_admin_route_blocked_for_non_admin(tmp_db: Path) -> None:
+def test_admin_route_blocked_for_non_admin(tmp_db: str) -> None:
     user = create_user("regular", "pw", is_admin=False)
     token = create_session_token(user["id"], is_admin=False)
     client = _fresh_client()
@@ -374,7 +371,7 @@ def test_admin_route_blocked_for_non_admin(tmp_db: Path) -> None:
     assert resp.status_code == 403
 
 
-def test_admin_list_users(tmp_db: Path) -> None:
+def test_admin_list_users(tmp_db: str) -> None:
     admin = create_user("superadmin", "pw", is_admin=True)
     create_user("other", "pw2")
     token = create_session_token(admin["id"], is_admin=True)
@@ -387,7 +384,7 @@ def test_admin_list_users(tmp_db: Path) -> None:
     assert "other" in usernames
 
 
-def test_admin_create_user(tmp_db: Path) -> None:
+def test_admin_create_user(tmp_db: str) -> None:
     admin = create_user("superadmin", "pw", is_admin=True)
     token = create_session_token(admin["id"], is_admin=True)
     client = _fresh_client()
@@ -400,7 +397,7 @@ def test_admin_create_user(tmp_db: Path) -> None:
     assert resp.json()["username"] == "newuser"
 
 
-def test_admin_delete_user(tmp_db: Path) -> None:
+def test_admin_delete_user(tmp_db: str) -> None:
     admin = create_user("theadmin", "pw", is_admin=True)
     target = create_user("victim", "pw2", is_admin=False)
     token = create_session_token(admin["id"], is_admin=True)
@@ -411,7 +408,7 @@ def test_admin_delete_user(tmp_db: Path) -> None:
     assert get_user_by_id(target["id"]) is None
 
 
-def test_admin_cannot_delete_self(tmp_db: Path) -> None:
+def test_admin_cannot_delete_self(tmp_db: str) -> None:
     admin = create_user("self", "pw", is_admin=True)
     token = create_session_token(admin["id"], is_admin=True)
     client = _fresh_client()
@@ -423,7 +420,7 @@ def test_admin_cannot_delete_self(tmp_db: Path) -> None:
 # ── Health endpoint is public ─────────────────────────────────────────────────
 
 
-def test_health_is_public(tmp_db: Path) -> None:
+def test_health_is_public(tmp_db: str) -> None:
     client = _fresh_client()
     resp = client.get("/api/health")
     assert resp.status_code == 200
@@ -434,7 +431,7 @@ def test_health_is_public(tmp_db: Path) -> None:
     assert "next_ingest_at" not in body
 
 
-def test_health_details_requires_admin(tmp_db: Path) -> None:
+def test_health_details_requires_admin(tmp_db: str) -> None:
     client = _fresh_client()
     resp = client.get("/api/health/details")
     assert resp.status_code in (401, 403)

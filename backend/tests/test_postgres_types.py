@@ -505,16 +505,10 @@ def test_pg_articles_starred_is_boolean(pg_clean: str) -> None:
 
 def test_pg_init_db_converts_legacy_integer_booleans(pg_url: str, tmp_path: Any) -> None:
     """init_db must repair legacy integer 0/1 boolean columns before runtime SQL uses TRUE."""
-    import psycopg
-    from psycopg import sql
+    from news_dashboard.db import connect, init_db
 
-    from news_dashboard.db import _schema_name, init_db
-
-    schema = _schema_name(tmp_path / "legacy-integer-booleans")
-    with psycopg.connect(pg_url) as conn:
-        conn.execute(sql.SQL("DROP SCHEMA IF EXISTS {} CASCADE").format(sql.Identifier(schema)))
-        conn.execute(sql.SQL("CREATE SCHEMA {}").format(sql.Identifier(schema)))
-        conn.execute(sql.SQL("SET search_path TO {}").format(sql.Identifier(schema)))
+    db_path = tmp_path / "legacy-integer-booleans"
+    with connect(db_path, database_url=pg_url) as conn:
         conn.execute(
             """
             CREATE TABLE sources (
@@ -576,10 +570,9 @@ def test_pg_init_db_converts_legacy_integer_booleans(pg_url: str, tmp_path: Any)
         )
         conn.commit()
 
-    init_db(tmp_path / "legacy-integer-booleans", database_url=pg_url)
+    init_db(db_path, database_url=pg_url)
 
-    with psycopg.connect(pg_url) as conn:
-        conn.execute(sql.SQL("SET search_path TO {}").format(sql.Identifier(schema)))
+    with connect(db_path, database_url=pg_url) as conn:
         rows = conn.execute(
             """
             SELECT table_name, column_name, data_type, column_default
@@ -593,12 +586,14 @@ def test_pg_init_db_converts_legacy_integer_booleans(pg_url: str, tmp_path: Any)
             ORDER BY table_name, column_name
             """
         ).fetchall()
-        conn.execute(sql.SQL("DROP SCHEMA {} CASCADE").format(sql.Identifier(schema)))
-        conn.commit()
 
-    assert {(row[0], row[1], row[2]) for row in rows} == {
+    assert {(row["table_name"], row["column_name"], row["data_type"]) for row in rows} == {
         ("articles", "starred", "boolean"),
         ("sources", "enabled", "boolean"),
         ("user_sources", "enabled", "boolean"),
     }
-    assert all("true" in str(row[3]).lower() or "false" in str(row[3]).lower() for row in rows)
+    assert all(
+        "true" in str(row["column_default"]).lower()
+        or "false" in str(row["column_default"]).lower()
+        for row in rows
+    )

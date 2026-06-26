@@ -28,7 +28,7 @@ SESSION_GAP_SECONDS = 30 * 60
 def record_events(
     user_id: int,
     events: list[dict[str, Any]],
-    db_path: Path | None = None,
+    db_path: Path | str | None = None,
     database_url: str | None = None,
 ) -> int:
     """Bulk-insert validated telemetry events for ``user_id``; return the count stored."""
@@ -63,7 +63,7 @@ def record_events(
 
 def admin_analytics(
     days: int = 30,
-    db_path: Path | None = None,
+    db_path: Path | str | None = None,
     database_url: str | None = None,
 ) -> dict[str, Any]:
     """Aggregate user consumption and behavior over the trailing ``days`` window."""

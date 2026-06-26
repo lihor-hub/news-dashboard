@@ -7,7 +7,6 @@ from pathlib import Path
 import pytest
 from typer.testing import CliRunner
 
-import news_dashboard.db as db_mod
 from news_dashboard.db import connect, init_db
 from news_dashboard.ingest import sync_sources
 from news_dashboard.migrate import _check_prerequisites, _row_count, app
@@ -21,7 +20,8 @@ def _setup_db(tmp_path: Path) -> Path:
     return db
 
 
-def _insert_article(db_path: Path, *, url_suffix: str = "1", state: str = "done") -> int:
+def _insert_article(db_path: Path | str, *, url_suffix: str = "1", state: str = "done") -> int:
+    sync_sources(db_path)
     with connect(db_path) as conn:
         row = conn.execute(
             """
@@ -65,7 +65,7 @@ def test_sqlite_to_postgres_rejects_missing_file(monkeypatch: pytest.MonkeyPatch
 
 
 def test_sqlite_to_postgres_migrates_rows(
-    tmp_path: Path, pg_url: str, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, pg_clean: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     import sqlite3
 
@@ -100,9 +100,8 @@ def test_sqlite_to_postgres_migrates_rows(
     sqlite.close()
 
     # Route the command's init_db()/connect() at an isolated schema in the test DB.
-    schema_path = tmp_path / "migrate-target.db"
-    monkeypatch.setenv("DATABASE_URL", pg_url)
-    monkeypatch.setattr(db_mod, "DB_PATH", schema_path)
+    schema_path = pg_clean
+    monkeypatch.setenv("DATABASE_URL", pg_clean)
 
     # The migrator seeds sources before articles, so the article's FK to 'acme'
     # is satisfied within the same run — no pre-seeding needed.
@@ -154,9 +153,10 @@ def test_prerequisites_detect_missing_table(tmp_path: Path) -> None:
 # ── migrate-multi-user command ────────────────────────────────────────────────
 
 
-def test_migration_creates_seed_user(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    db = _setup_db(tmp_path)
-    monkeypatch.setattr(db_mod, "DB_PATH", db)
+def test_migration_creates_seed_user(pg_clean: str, monkeypatch: pytest.MonkeyPatch) -> None:
+    db = pg_clean
+    sync_sources(db)
+    monkeypatch.setenv("DATABASE_URL", str(db))
     monkeypatch.setenv("SEED_USER", "alice")
     monkeypatch.setenv("SEED_PASSWORD", "password123")
 
@@ -169,10 +169,10 @@ def test_migration_creates_seed_user(tmp_path: Path, monkeypatch: pytest.MonkeyP
     assert users[0]["username"] == "alice"
 
 
-def test_migration_migrates_article_state(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    db = _setup_db(tmp_path)
+def test_migration_migrates_article_state(pg_clean: str, monkeypatch: pytest.MonkeyPatch) -> None:
+    db = pg_clean
     aid = _insert_article(db, url_suffix="m1", state="done")
-    monkeypatch.setattr(db_mod, "DB_PATH", db)
+    monkeypatch.setenv("DATABASE_URL", str(db))
     monkeypatch.setenv("SEED_USER", "alice")
     monkeypatch.setenv("SEED_PASSWORD", "password123")
 
@@ -188,10 +188,11 @@ def test_migration_migrates_article_state(tmp_path: Path, monkeypatch: pytest.Mo
 
 
 def test_migration_seeds_source_subscriptions(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    pg_clean: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    db = _setup_db(tmp_path)
-    monkeypatch.setattr(db_mod, "DB_PATH", db)
+    db = pg_clean
+    sync_sources(db)
+    monkeypatch.setenv("DATABASE_URL", str(db))
     monkeypatch.setenv("SEED_USER", "alice")
     monkeypatch.setenv("SEED_PASSWORD", "password123")
 
@@ -203,10 +204,10 @@ def test_migration_seeds_source_subscriptions(
     assert count > 0
 
 
-def test_migration_is_idempotent(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    db = _setup_db(tmp_path)
+def test_migration_is_idempotent(pg_clean: str, monkeypatch: pytest.MonkeyPatch) -> None:
+    db = pg_clean
     _insert_article(db, url_suffix="i1", state="done")
-    monkeypatch.setattr(db_mod, "DB_PATH", db)
+    monkeypatch.setenv("DATABASE_URL", str(db))
     monkeypatch.setenv("SEED_USER", "alice")
     monkeypatch.setenv("SEED_PASSWORD", "password123")
 
@@ -225,10 +226,10 @@ def test_migration_is_idempotent(tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     assert uas_count == 1
 
 
-def test_migration_dry_run_does_not_write(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    db = _setup_db(tmp_path)
+def test_migration_dry_run_does_not_write(pg_clean: str, monkeypatch: pytest.MonkeyPatch) -> None:
+    db = pg_clean
     _insert_article(db, url_suffix="d1", state="done")
-    monkeypatch.setattr(db_mod, "DB_PATH", db)
+    monkeypatch.setenv("DATABASE_URL", str(db))
     monkeypatch.setenv("SEED_USER", "alice")
     monkeypatch.setenv("SEED_PASSWORD", "password123")
 
@@ -245,14 +246,12 @@ def test_migration_dry_run_does_not_write(tmp_path: Path, monkeypatch: pytest.Mo
     assert uas_count == 0
 
 
-def test_migration_aborts_on_missing_schema(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    db = tmp_path / "bare.db"
+def test_migration_aborts_on_missing_schema(pg_clean: str, monkeypatch: pytest.MonkeyPatch) -> None:
+    db = pg_clean
     init_db(db)
     with connect(db) as conn:
         conn.execute("DROP TABLE IF EXISTS user_article_state")
-    monkeypatch.setattr(db_mod, "DB_PATH", db)
+    monkeypatch.setenv("DATABASE_URL", db)
     monkeypatch.setenv("SEED_USER", "alice")
     monkeypatch.setenv("SEED_PASSWORD", "password123")
 
@@ -262,14 +261,14 @@ def test_migration_aborts_on_missing_schema(
 
 
 def test_migration_skips_user_creation_if_exists(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    pg_clean: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    db = _setup_db(tmp_path)
-    monkeypatch.setattr(db_mod, "DB_PATH", db)
+    db = pg_clean
+    monkeypatch.setenv("DATABASE_URL", str(db))
     from news_dashboard.auth import create_user
 
     create_user("existing", "pass")
-    monkeypatch.setattr(db_mod, "DB_PATH", db)
+    monkeypatch.setenv("DATABASE_URL", str(db))
     monkeypatch.setenv("SEED_USER", "alice")
     monkeypatch.setenv("SEED_PASSWORD", "password123")
 

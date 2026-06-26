@@ -43,7 +43,7 @@ def _as_int(value: Any, default: int = 0) -> int:
         return default
 
 
-def list_source_health(db_path: Path | None = None) -> list[dict[str, Any]]:
+def list_source_health(db_path: Path | str | None = None) -> list[dict[str, Any]]:
     init_db(db_path)
     with connect(db_path) as conn:
         source_rows = conn.execute(

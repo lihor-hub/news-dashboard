@@ -4,14 +4,12 @@ from __future__ import annotations
 
 import asyncio
 import secrets
-from pathlib import Path
 from typing import Any
 
 import pytest
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
-import news_dashboard.db as db_mod
 from news_dashboard import auth as auth_mod
 from news_dashboard.auth import (
     create_user,
@@ -27,11 +25,10 @@ from news_dashboard.main import app
 
 
 @pytest.fixture
-def tmp_db(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    db = tmp_path / "test.db"
-    init_db(db)
-    monkeypatch.setattr(db_mod, "DB_PATH", db)
-    return db
+def tmp_db(pg_clean: str, monkeypatch: pytest.MonkeyPatch) -> str:
+    monkeypatch.setenv("DATABASE_URL", pg_clean)
+    init_db(database_url=pg_clean)
+    return pg_clean
 
 
 def _enable_keycloak(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -102,7 +99,7 @@ def test_verify_session_token_rejects_garbage(monkeypatch: pytest.MonkeyPatch) -
 # ── get_current_user via the real dependency (no override) ───────────────────
 
 
-def test_me_rejects_invalid_session_cookie(tmp_db: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_me_rejects_invalid_session_cookie(tmp_db: str, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("TEST_SESSION_SECRET", "x" * 32)
     app.dependency_overrides.clear()
     client = TestClient(app)
@@ -110,7 +107,7 @@ def test_me_rejects_invalid_session_cookie(tmp_db: Path, monkeypatch: pytest.Mon
     assert resp.status_code == 401
 
 
-def test_me_rejects_when_user_missing(tmp_db: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_me_rejects_when_user_missing(tmp_db: str, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("TEST_SESSION_SECRET", "x" * 32)
     app.dependency_overrides.clear()
     # Valid signature but a user id that does not exist in the DB.
@@ -192,7 +189,7 @@ def test_exchange_userinfo_failure(monkeypatch: pytest.MonkeyPatch) -> None:
     assert exc.value.status_code == 401
 
 
-def test_exchange_success_creates_user(tmp_db: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_exchange_success_creates_user(tmp_db: str, monkeypatch: pytest.MonkeyPatch) -> None:
     _enable_keycloak(monkeypatch)
     _patch_httpx(
         monkeypatch,
@@ -207,7 +204,7 @@ def test_exchange_success_creates_user(tmp_db: Path, monkeypatch: pytest.MonkeyP
 # ── admin user CRUD endpoints (admin override is autouse) ────────────────────
 
 
-def test_admin_get_user_found_and_missing(tmp_db: Path) -> None:
+def test_admin_get_user_found_and_missing(tmp_db: str) -> None:
     created = create_user("dora", "pw123456", email="dora@example.com")
     client = TestClient(app)
     ok = client.get(f"/api/admin/users/{created['id']}")
@@ -217,7 +214,7 @@ def test_admin_get_user_found_and_missing(tmp_db: Path) -> None:
     assert missing.status_code == 404
 
 
-def test_admin_update_password_found_and_missing(tmp_db: Path) -> None:
+def test_admin_update_password_found_and_missing(tmp_db: str) -> None:
     created = create_user("evan", "pw123456")
     client = TestClient(app)
     ok = client.patch(f"/api/admin/users/{created['id']}/password", json={"password": "newpass123"})
@@ -227,7 +224,7 @@ def test_admin_update_password_found_and_missing(tmp_db: Path) -> None:
     assert missing.status_code == 404
 
 
-def test_admin_create_user_conflict_on_duplicate(tmp_db: Path) -> None:
+def test_admin_create_user_conflict_on_duplicate(tmp_db: str) -> None:
     client = TestClient(app)
     first = client.post("/api/admin/users", json={"username": "frank", "password": "pw123456"})
     assert first.status_code == 200
@@ -235,7 +232,7 @@ def test_admin_create_user_conflict_on_duplicate(tmp_db: Path) -> None:
     assert dup.status_code == 409
 
 
-def test_admin_generate_user_returns_credentials(tmp_db: Path) -> None:
+def test_admin_generate_user_returns_credentials(tmp_db: str) -> None:
     client = TestClient(app)
     resp = client.post("/api/admin/users/generate", json={"username": "grace"})
     assert resp.status_code == 200
@@ -252,13 +249,13 @@ def test_admin_generate_user_returns_credentials(tmp_db: Path) -> None:
     assert login.status_code == 200
 
 
-def test_admin_generate_user_rejects_blank_username(tmp_db: Path) -> None:
+def test_admin_generate_user_rejects_blank_username(tmp_db: str) -> None:
     client = TestClient(app)
     resp = client.post("/api/admin/users/generate", json={"username": "   "})
     assert resp.status_code == 422
 
 
-def test_admin_generate_user_conflict_on_duplicate(tmp_db: Path) -> None:
+def test_admin_generate_user_conflict_on_duplicate(tmp_db: str) -> None:
     client = TestClient(app)
     first = client.post("/api/admin/users/generate", json={"username": "heidi"})
     assert first.status_code == 200
@@ -267,7 +264,7 @@ def test_admin_generate_user_conflict_on_duplicate(tmp_db: Path) -> None:
 
 
 def test_admin_generate_user_uses_keycloak_when_enabled(
-    tmp_db: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_db: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     _enable_keycloak(monkeypatch)
     monkeypatch.setenv("KEYCLOAK_ADMIN_CLIENT_SECRET", secrets.token_hex(8))

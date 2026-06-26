@@ -23,7 +23,6 @@ from typing import Any
 import pytest
 from fastapi.testclient import TestClient
 
-import news_dashboard.db as db_mod
 from news_dashboard.auth import require_auth
 from news_dashboard.db import connect, init_db
 from news_dashboard.main import app
@@ -35,15 +34,13 @@ pytestmark = pytest.mark.postgres
 # ── Fixtures / helpers ────────────────────────────────────────────────────────
 
 
-def _setup_db(tmp_path: Path, monkeypatch: Any, pg_url: str, name: str) -> Path:
-    db_path = tmp_path / name
+def _setup_db(monkeypatch: Any, pg_url: str) -> str:
     monkeypatch.setenv("DATABASE_URL", pg_url)
-    monkeypatch.setattr(db_mod, "DB_PATH", db_path)
-    init_db(db_path)
-    return db_path
+    init_db(database_url=pg_url)
+    return pg_url
 
 
-def _make_user(db_path: Path, username: str) -> int:
+def _make_user(db_path: str, username: str) -> int:
     with connect(db_path) as conn:
         row = conn.execute(
             "INSERT INTO users(username, password_hash) VALUES (%s, %s) RETURNING id",
@@ -53,7 +50,7 @@ def _make_user(db_path: Path, username: str) -> int:
     return int(row["id"])
 
 
-def _insert_source(db_path: Path, slug: str, *, category: str = "tech", priority: int = 50) -> None:
+def _insert_source(db_path: str, slug: str, *, category: str = "tech", priority: int = 50) -> None:
     with connect(db_path) as conn:
         conn.execute(
             """
@@ -66,7 +63,7 @@ def _insert_source(db_path: Path, slug: str, *, category: str = "tech", priority
 
 
 def _insert_article(
-    db_path: Path,
+    db_path: str,
     slug: str,
     suffix: str,
     *,
@@ -121,7 +118,7 @@ def test_today_ranks_by_score_while_keeping_all_eligible_article_kinds_visible(
 ) -> None:
     """Today is ranked by persisted score, yet low-signal, stale, missing-score,
     and missing-embedding articles all remain in the feed and usable."""
-    db_path = _setup_db(tmp_path, monkeypatch, pg_clean, "contracts-ranking.db")
+    db_path = _setup_db(monkeypatch, pg_clean)
     _insert_source(db_path, "quiet-source", category="misc", priority=1)
     user_id = _make_user(db_path, "alice")
 
@@ -166,7 +163,7 @@ def test_low_signal_and_unscored_articles_remain_usable(
     tmp_path: Path, monkeypatch: Any, pg_clean: str
 ) -> None:
     """A low-signal article keeps its link/title payload so it stays actionable."""
-    db_path = _setup_db(tmp_path, monkeypatch, pg_clean, "contracts-lowsignal.db")
+    db_path = _setup_db(monkeypatch, pg_clean)
     _insert_source(db_path, "quiet-source", category="misc", priority=1)
     user_id = _make_user(db_path, "alice")
     low = _insert_article(db_path, "quiet-source", "low", category="misc", importance=1)
@@ -192,7 +189,7 @@ def test_same_article_carries_different_score_metadata_per_user(
 ) -> None:
     """One shared article exposes different recommendation_score to each user,
     which is what drives the different compact labels in the UI."""
-    db_path = _setup_db(tmp_path, monkeypatch, pg_clean, "contracts-isolation.db")
+    db_path = _setup_db(monkeypatch, pg_clean)
     _insert_source(db_path, "shared", category="misc", priority=1)
     alice = _make_user(db_path, "alice")
     bob = _make_user(db_path, "bob")
@@ -223,7 +220,7 @@ def test_today_stays_intact_when_no_scores_have_been_computed(
 ) -> None:
     """If scoring never ran (ingestion/recalc failure), Today still serves every
     eligible article via the cold-start fallback rather than breaking."""
-    db_path = _setup_db(tmp_path, monkeypatch, pg_clean, "contracts-noscore.db")
+    db_path = _setup_db(monkeypatch, pg_clean)
     _insert_source(db_path, "src", category="ai", priority=80)
     user_id = _make_user(db_path, "alice")
     first = _insert_article(db_path, "src", "first", category="ai", importance=70)
@@ -256,7 +253,7 @@ def test_single_article_read_exposes_recommendation_metadata(
     carry the same per-user recommendation_score / signals as the Today list, so
     a refresh that personalizes scores is reflected on the reader rather than
     always falling back to "Not personalized yet"."""
-    db_path = _setup_db(tmp_path, monkeypatch, pg_clean, "contracts-reader.db")
+    db_path = _setup_db(monkeypatch, pg_clean)
     _insert_source(db_path, "src", category="ai", priority=80)
     user_id = _make_user(db_path, "alice")
     article = _insert_article(db_path, "src", "reader", category="ai", importance=70)
@@ -280,7 +277,7 @@ def test_single_article_read_returns_null_score_when_unranked(
 ) -> None:
     """An article with no stored score returns a null score/signals on the reader
     path so the frontend uses its cold-start explanation, not a stale one."""
-    db_path = _setup_db(tmp_path, monkeypatch, pg_clean, "contracts-reader-null.db")
+    db_path = _setup_db(monkeypatch, pg_clean)
     _insert_source(db_path, "src", category="ai", priority=80)
     user_id = _make_user(db_path, "alice")
     article = _insert_article(db_path, "src", "unranked", category="ai", importance=70)
@@ -305,7 +302,7 @@ def test_release_stays_scoped_to_ranking_without_hiding_or_separate_feed(
 ) -> None:
     """The recommendation release reorders Today; it must not suppress articles
     nor introduce a separate Recommended endpoint."""
-    db_path = _setup_db(tmp_path, monkeypatch, pg_clean, "contracts-scope.db")
+    db_path = _setup_db(monkeypatch, pg_clean)
     _insert_source(db_path, "src", category="misc", priority=1)
     user_id = _make_user(db_path, "alice")
     disliked = _insert_article(db_path, "src", "disliked", category="misc", importance=1)

@@ -100,7 +100,7 @@ def test_run_briefing_logs_generation_error(caplog: pytest.LogCaptureFixture) ->
 #   from apscheduler.schedulers.background import BackgroundScheduler
 #   from .db import get_setting, init_db
 _BGSCHED_PATH = "apscheduler.schedulers.background.BackgroundScheduler"
-_INIT_DB_PATH = "news_dashboard.db.init_db"
+_INIT_DB_PATCH_PATH = "news_dashboard.db.init_db"
 _GET_SETTING_PATH = "news_dashboard.db.get_setting"
 
 
@@ -127,7 +127,7 @@ def _start_with_env(monkeypatch: pytest.MonkeyPatch, briefing_cron: str | None =
 
     with (
         patch(_BGSCHED_PATH, return_value=mock_sched),
-        patch(_INIT_DB_PATH),
+        patch(_INIT_DB_PATCH_PATH),
         patch(_GET_SETTING_PATH, return_value=None),
     ):
         from news_dashboard import scheduler
@@ -367,7 +367,7 @@ def test_start_scheduler_pauses_when_db_flag_set(monkeypatch: pytest.MonkeyPatch
 
     with (
         patch(_BGSCHED_PATH, return_value=mock_sched),
-        patch(_INIT_DB_PATH),
+        patch(_INIT_DB_PATCH_PATH),
         patch(_GET_SETTING_PATH, side_effect=get_setting),
     ):
         from news_dashboard import scheduler
@@ -387,7 +387,7 @@ def test_start_scheduler_uses_db_interval(monkeypatch: pytest.MonkeyPatch) -> No
 
     with (
         patch(_BGSCHED_PATH, return_value=mock_sched),
-        patch(_INIT_DB_PATH),
+        patch(_INIT_DB_PATCH_PATH),
         patch(_GET_SETTING_PATH, side_effect=get_setting),
     ):
         from news_dashboard import scheduler
@@ -429,7 +429,7 @@ def test_start_scheduler_ignores_saved_pause_when_interval_ingest_disabled(
 
     with (
         patch(_BGSCHED_PATH, return_value=mock_sched),
-        patch(_INIT_DB_PATH),
+        patch(_INIT_DB_PATCH_PATH),
         patch(_GET_SETTING_PATH, side_effect=get_setting),
     ):
         from news_dashboard import scheduler
@@ -600,7 +600,7 @@ def test_start_scheduler_pause_failure_is_suppressed(monkeypatch: pytest.MonkeyP
 
     with (
         patch(_BGSCHED_PATH, return_value=mock_sched),
-        patch(_INIT_DB_PATH),
+        patch(_INIT_DB_PATCH_PATH),
         patch(_GET_SETTING_PATH, side_effect=get_setting),
     ):
         from news_dashboard import scheduler

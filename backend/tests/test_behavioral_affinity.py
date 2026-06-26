@@ -5,7 +5,6 @@ from typing import Any
 
 import pytest
 
-import news_dashboard.db as db_mod
 from news_dashboard.db import connect, init_db
 from news_dashboard.recommendations import (
     AFFINITY_SCORE_SPAN,
@@ -114,15 +113,13 @@ def test_scores_are_clamped_to_unit_range() -> None:
 # ── Database-backed recompute ─────────────────────────────────────────────────
 
 
-def _setup_db(tmp_path: Path, monkeypatch: Any, pg_url: str, name: str) -> Path:
-    db_path = tmp_path / name
+def _setup_db(monkeypatch: Any, pg_url: str) -> str:
     monkeypatch.setenv("DATABASE_URL", pg_url)
-    monkeypatch.setattr(db_mod, "DB_PATH", db_path)
-    init_db(db_path)
-    return db_path
+    init_db(database_url=pg_url)
+    return pg_url
 
 
-def _make_user(db_path: Path, username: str) -> int:
+def _make_user(db_path: str, username: str) -> int:
     with connect(db_path) as conn:
         row = conn.execute(
             "INSERT INTO users(username, password_hash) VALUES (%s, %s) RETURNING id",
@@ -132,7 +129,7 @@ def _make_user(db_path: Path, username: str) -> int:
     return int(row["id"])
 
 
-def _insert_source(db_path: Path, slug: str, *, category: str = "tech", priority: int = 50) -> None:
+def _insert_source(db_path: str, slug: str, *, category: str = "tech", priority: int = 50) -> None:
     with connect(db_path) as conn:
         conn.execute(
             """
@@ -145,7 +142,7 @@ def _insert_source(db_path: Path, slug: str, *, category: str = "tech", priority
 
 
 def _insert_article(
-    db_path: Path,
+    db_path: str,
     slug: str,
     suffix: str,
     *,
@@ -180,7 +177,7 @@ def _insert_article(
 
 
 def _set_state(
-    db_path: Path, user_id: int, article_id: int, *, state: str, starred: bool = False
+    db_path: str, user_id: int, article_id: int, *, state: str, starred: bool = False
 ) -> None:
     with connect(db_path) as conn:
         conn.execute(
@@ -194,7 +191,7 @@ def _set_state(
         )
 
 
-def _persisted_score(db_path: Path, user_id: int, article_id: int) -> float:
+def _persisted_score(db_path: str, user_id: int, article_id: int) -> float:
     with connect(db_path) as conn:
         row = conn.execute(
             "SELECT recommendation_score FROM user_article_recommendations"
@@ -208,7 +205,7 @@ def _persisted_score(db_path: Path, user_id: int, article_id: int) -> float:
 def test_recompute_persists_affinity_adjusted_scores(
     tmp_path: Path, monkeypatch: Any, pg_clean: str
 ) -> None:
-    db_path = _setup_db(tmp_path, monkeypatch, pg_clean, "recompute.db")
+    db_path = _setup_db(monkeypatch, pg_clean)
     _insert_source(db_path, "loved", category="ai", priority=50)
     _insert_source(db_path, "hated", category="crypto", priority=50)
     user_id = _make_user(db_path, "alice")
@@ -230,7 +227,7 @@ def test_recompute_persists_affinity_adjusted_scores(
 
 
 def test_recompute_is_isolated_per_user(tmp_path: Path, monkeypatch: Any, pg_clean: str) -> None:
-    db_path = _setup_db(tmp_path, monkeypatch, pg_clean, "isolated.db")
+    db_path = _setup_db(monkeypatch, pg_clean)
     _insert_source(db_path, "src-a", category="ai")
     _insert_source(db_path, "src-b", category="crypto")
     alice = _make_user(db_path, "alice")
@@ -258,7 +255,7 @@ def test_recompute_is_isolated_per_user(tmp_path: Path, monkeypatch: Any, pg_cle
 def test_recompute_with_no_history_keeps_base_scores(
     tmp_path: Path, monkeypatch: Any, pg_clean: str
 ) -> None:
-    db_path = _setup_db(tmp_path, monkeypatch, pg_clean, "no-history.db")
+    db_path = _setup_db(monkeypatch, pg_clean)
     _insert_source(db_path, "src", category="ai")
     user_id = _make_user(db_path, "alice")
     article = _insert_article(db_path, "src", "only", category="ai")

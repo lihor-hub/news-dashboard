@@ -11,7 +11,7 @@ from news_dashboard.main import app
 client = TestClient(app, raise_server_exceptions=True)
 
 
-def _seed_db(db_path: Path) -> tuple[int, int]:
+def _seed_db(db_path: Path | str) -> tuple[int, int]:
     init_db(db_path)
     with connect(db_path) as conn:
         r1 = conn.execute(
@@ -58,13 +58,9 @@ def _seed_db(db_path: Path) -> tuple[int, int]:
     return int(r1), int(r2)
 
 
-def test_list_runs_returns_paginated_response(tmp_path: Path, monkeypatch: Any) -> None:
-    db = tmp_path / "api_runs.db"
-    import news_dashboard.db as db_mod
-    import news_dashboard.run_history as rh_mod
-
-    monkeypatch.setattr(db_mod, "DB_PATH", db)
-    monkeypatch.setattr(rh_mod, "DB_PATH", db, raising=False)
+def test_list_runs_returns_paginated_response(pg_clean: str, monkeypatch: Any) -> None:
+    db = pg_clean
+    monkeypatch.setenv("DATABASE_URL", db)
     _seed_db(db)
 
     resp = client.get("/api/ingest/runs?page=1&per_page=10")
@@ -79,13 +75,9 @@ def test_list_runs_returns_paginated_response(tmp_path: Path, monkeypatch: Any) 
     assert ids[0] > ids[1]
 
 
-def test_list_runs_pagination(tmp_path: Path, monkeypatch: Any) -> None:
-    db = tmp_path / "api_page.db"
-    import news_dashboard.db as db_mod
-    import news_dashboard.run_history as rh_mod
-
-    monkeypatch.setattr(db_mod, "DB_PATH", db)
-    monkeypatch.setattr(rh_mod, "DB_PATH", db, raising=False)
+def test_list_runs_pagination(pg_clean: str, monkeypatch: Any) -> None:
+    db = pg_clean
+    monkeypatch.setenv("DATABASE_URL", db)
     _seed_db(db)
 
     resp = client.get("/api/ingest/runs?page=1&per_page=1")
@@ -104,13 +96,9 @@ def test_list_runs_pagination(tmp_path: Path, monkeypatch: Any) -> None:
     assert body2["items"][0]["id"] != body["items"][0]["id"]
 
 
-def test_get_run_sources_returns_breakdown(tmp_path: Path, monkeypatch: Any) -> None:
-    db = tmp_path / "api_sources.db"
-    import news_dashboard.db as db_mod
-    import news_dashboard.run_history as rh_mod
-
-    monkeypatch.setattr(db_mod, "DB_PATH", db)
-    monkeypatch.setattr(rh_mod, "DB_PATH", db, raising=False)
+def test_get_run_sources_returns_breakdown(pg_clean: str, monkeypatch: Any) -> None:
+    db = pg_clean
+    monkeypatch.setenv("DATABASE_URL", db)
     r1, _ = _seed_db(db)
 
     resp = client.get(f"/api/ingest/runs/{r1}")
@@ -126,26 +114,18 @@ def test_get_run_sources_returns_breakdown(tmp_path: Path, monkeypatch: Any) -> 
     assert python_insider["duplicates"] == 2  # 5 found - 3 new
 
 
-def test_get_run_sources_404_for_unknown_id(tmp_path: Path, monkeypatch: Any) -> None:
-    db = tmp_path / "api_404.db"
-    import news_dashboard.db as db_mod
-    import news_dashboard.run_history as rh_mod
-
-    monkeypatch.setattr(db_mod, "DB_PATH", db)
-    monkeypatch.setattr(rh_mod, "DB_PATH", db, raising=False)
+def test_get_run_sources_404_for_unknown_id(pg_clean: str, monkeypatch: Any) -> None:
+    db = pg_clean
+    monkeypatch.setenv("DATABASE_URL", db)
     init_db(db)
 
     resp = client.get("/api/ingest/runs/9999")
     assert resp.status_code == 404
 
 
-def test_list_runs_empty_state(tmp_path: Path, monkeypatch: Any) -> None:
-    db = tmp_path / "api_empty.db"
-    import news_dashboard.db as db_mod
-    import news_dashboard.run_history as rh_mod
-
-    monkeypatch.setattr(db_mod, "DB_PATH", db)
-    monkeypatch.setattr(rh_mod, "DB_PATH", db, raising=False)
+def test_list_runs_empty_state(pg_clean: str, monkeypatch: Any) -> None:
+    db = pg_clean
+    monkeypatch.setenv("DATABASE_URL", db)
     init_db(db)
 
     resp = client.get("/api/ingest/runs")

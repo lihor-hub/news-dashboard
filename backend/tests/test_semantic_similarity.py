@@ -6,7 +6,6 @@ from typing import Any
 
 import pytest
 
-import news_dashboard.db as db_mod
 import news_dashboard.embeddings as embeddings_mod
 from news_dashboard.db import connect, init_db
 from news_dashboard.embeddings import embedding_text, ensure_article_embedded
@@ -61,15 +60,13 @@ def test_semantic_adjustment_degrades_when_vectors_missing() -> None:
 # ── Database-backed recompute ─────────────────────────────────────────────────
 
 
-def _setup_db(tmp_path: Path, monkeypatch: Any, pg_url: str, name: str) -> Path:
-    db_path = tmp_path / name
+def _setup_db(monkeypatch: Any, pg_url: str) -> str:
     monkeypatch.setenv("DATABASE_URL", pg_url)
-    monkeypatch.setattr(db_mod, "DB_PATH", db_path)
-    init_db(db_path)
-    return db_path
+    init_db(database_url=pg_url)
+    return pg_url
 
 
-def _make_user(db_path: Path, username: str) -> int:
+def _make_user(db_path: str, username: str) -> int:
     with connect(db_path) as conn:
         row = conn.execute(
             "INSERT INTO users(username, password_hash) VALUES (%s, %s) RETURNING id",
@@ -79,7 +76,7 @@ def _make_user(db_path: Path, username: str) -> int:
     return int(row["id"])
 
 
-def _insert_source(db_path: Path, slug: str, *, category: str = "tech", priority: int = 50) -> None:
+def _insert_source(db_path: str, slug: str, *, category: str = "tech", priority: int = 50) -> None:
     with connect(db_path) as conn:
         conn.execute(
             """
@@ -92,7 +89,7 @@ def _insert_source(db_path: Path, slug: str, *, category: str = "tech", priority
 
 
 def _insert_article(
-    db_path: Path,
+    db_path: str,
     slug: str,
     suffix: str,
     *,
@@ -128,7 +125,7 @@ def _insert_article(
 
 
 def _set_state(
-    db_path: Path, user_id: int, article_id: int, *, state: str, starred: bool = False
+    db_path: str, user_id: int, article_id: int, *, state: str, starred: bool = False
 ) -> None:
     with connect(db_path) as conn:
         conn.execute(
@@ -142,7 +139,7 @@ def _set_state(
         )
 
 
-def _persisted_score(db_path: Path, user_id: int, article_id: int) -> float:
+def _persisted_score(db_path: str, user_id: int, article_id: int) -> float:
     with connect(db_path) as conn:
         row = conn.execute(
             "SELECT recommendation_score FROM user_article_recommendations"
@@ -156,7 +153,7 @@ def _persisted_score(db_path: Path, user_id: int, article_id: int) -> float:
 def test_semantic_lift_raises_similar_articles(
     tmp_path: Path, monkeypatch: Any, pg_clean: str
 ) -> None:
-    db_path = _setup_db(tmp_path, monkeypatch, pg_clean, "semantic-lift.db")
+    db_path = _setup_db(monkeypatch, pg_clean)
     _insert_source(db_path, "src", category="tech", priority=50)
     user_id = _make_user(db_path, "alice")
 
@@ -178,7 +175,7 @@ def test_semantic_lift_raises_similar_articles(
 def test_missing_candidate_embedding_falls_back_to_non_semantic(
     tmp_path: Path, monkeypatch: Any, pg_clean: str
 ) -> None:
-    db_path = _setup_db(tmp_path, monkeypatch, pg_clean, "missing-embed.db")
+    db_path = _setup_db(monkeypatch, pg_clean)
     _insert_source(db_path, "src", category="tech", priority=50)
     user_id = _make_user(db_path, "alice")
 
@@ -204,7 +201,7 @@ def test_missing_candidate_embedding_falls_back_to_non_semantic(
 def test_recompute_survives_unavailable_embedding_generation(
     tmp_path: Path, monkeypatch: Any, pg_clean: str
 ) -> None:
-    db_path = _setup_db(tmp_path, monkeypatch, pg_clean, "embed-down.db")
+    db_path = _setup_db(monkeypatch, pg_clean)
     _insert_source(db_path, "src", category="tech", priority=50)
     user_id = _make_user(db_path, "alice")
 
@@ -239,7 +236,7 @@ def test_recompute_survives_unavailable_embedding_generation(
 def test_semantic_scoring_is_isolated_per_user(
     tmp_path: Path, monkeypatch: Any, pg_clean: str
 ) -> None:
-    db_path = _setup_db(tmp_path, monkeypatch, pg_clean, "semantic-isolated.db")
+    db_path = _setup_db(monkeypatch, pg_clean)
     _insert_source(db_path, "src", category="tech", priority=50)
     alice = _make_user(db_path, "alice")
     bob = _make_user(db_path, "bob")

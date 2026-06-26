@@ -17,7 +17,9 @@ def parse_range(from_value: str, to_value: str) -> tuple[datetime, datetime]:
     return start, end
 
 
-def stats_overview(from_value: str, to_value: str, db_path: Path | None = None) -> dict[str, Any]:
+def stats_overview(
+    from_value: str, to_value: str, db_path: Path | str | None = None
+) -> dict[str, Any]:
     start, end = parse_range(from_value, to_value)
     runs, source_rows = _load_stats_rows(start, end, db_path)
 
@@ -57,7 +59,7 @@ def stats_overview(from_value: str, to_value: str, db_path: Path | None = None) 
 
 
 def articles_over_time(
-    from_value: str, to_value: str, db_path: Path | None = None
+    from_value: str, to_value: str, db_path: Path | str | None = None
 ) -> list[dict[str, Any]]:
     start, end = parse_range(from_value, to_value)
     runs, _ = _load_stats_rows(start, end, db_path)
@@ -80,7 +82,7 @@ def articles_over_time(
 
 
 def sources_volume(
-    from_value: str, to_value: str, db_path: Path | None = None
+    from_value: str, to_value: str, db_path: Path | str | None = None
 ) -> list[dict[str, Any]]:
     start, end = parse_range(from_value, to_value)
     _, source_rows = _load_stats_rows(start, end, db_path)
@@ -95,7 +97,7 @@ def sources_volume(
     ]
 
 
-def ingested_vs_handled(db_path: Path | None = None, days: int = 14) -> list[dict[str, Any]]:
+def ingested_vs_handled(db_path: Path | str | None = None, days: int = 14) -> list[dict[str, Any]]:
     """Return per-day ingested and handled article counts for the last `days` days."""
     since = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
     init_db(db_path)
@@ -146,7 +148,7 @@ def ingested_vs_handled(db_path: Path | None = None, days: int = 14) -> list[dic
     ]
 
 
-def article_counts(db_path: Path | None = None) -> dict[str, int]:
+def article_counts(db_path: Path | str | None = None) -> dict[str, int]:
     """Return total article count per status across all time.
 
     Reads from user_article_state (the live state machine table) rather than
@@ -186,7 +188,7 @@ def article_counts(db_path: Path | None = None) -> dict[str, int]:
     }
 
 
-def triage_metrics(db_path: Path | None = None) -> dict[str, Any]:
+def triage_metrics(db_path: Path | str | None = None) -> dict[str, Any]:
     """Return habit metrics for articles discovered in the last 7 days.
 
     All counts read from user_article_state rather than the legacy
@@ -270,7 +272,7 @@ def triage_metrics(db_path: Path | None = None) -> dict[str, Any]:
     }
 
 
-def source_quality(db_path: Path | None = None) -> list[dict[str, Any]]:
+def source_quality(db_path: Path | str | None = None) -> list[dict[str, Any]]:
     """Return per-source quality stats computed from the articles table."""
     init_db(db_path)
     with connect(db_path) as conn:
@@ -331,7 +333,7 @@ def source_quality(db_path: Path | None = None) -> list[dict[str, Any]]:
     return result
 
 
-def category_mix(db_path: Path | None = None, days: int = 14) -> list[dict[str, Any]]:
+def category_mix(db_path: Path | str | None = None, days: int = 14) -> list[dict[str, Any]]:
     """Return per-day article counts broken down by category for the last `days` days."""
     since = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
     init_db(db_path)
@@ -372,7 +374,7 @@ def category_mix(db_path: Path | None = None, days: int = 14) -> list[dict[str, 
 def _load_stats_rows(
     start: datetime,
     end: datetime,
-    db_path: Path | None,
+    db_path: Path | str | None,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     init_db(db_path)
     with connect(db_path) as conn:

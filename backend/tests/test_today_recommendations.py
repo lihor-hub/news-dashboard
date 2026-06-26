@@ -6,7 +6,6 @@ from typing import Any
 import pytest
 from fastapi.testclient import TestClient
 
-import news_dashboard.db as db_mod
 from news_dashboard.auth import require_auth
 from news_dashboard.db import connect, init_db
 from news_dashboard.ingest import sync_sources
@@ -16,15 +15,13 @@ from news_dashboard.recommendations import upsert_recommendation_score
 pytestmark = pytest.mark.postgres
 
 
-def _setup_db(tmp_path: Path, monkeypatch: Any, pg_url: str, name: str) -> Path:
-    db_path = tmp_path / name
+def _setup_db(monkeypatch: Any, pg_url: str) -> str:
     monkeypatch.setenv("DATABASE_URL", pg_url)
-    monkeypatch.setattr(db_mod, "DB_PATH", db_path)
-    init_db(db_path)
-    return db_path
+    init_db(database_url=pg_url)
+    return pg_url
 
 
-def _make_user(db_path: Path, username: str) -> int:
+def _make_user(db_path: str, username: str) -> int:
     with connect(db_path) as conn:
         row = conn.execute(
             "INSERT INTO users(username, password_hash) VALUES (%s, %s) RETURNING id",
@@ -35,7 +32,7 @@ def _make_user(db_path: Path, username: str) -> int:
 
 
 def _insert_source(
-    db_path: Path,
+    db_path: str,
     slug: str,
     *,
     category: str = "tech",
@@ -58,7 +55,7 @@ def _insert_source(
 
 
 def _insert_article(
-    db_path: Path,
+    db_path: str,
     slug: str,
     suffix: str,
     *,
@@ -122,7 +119,7 @@ def test_today_endpoint_exposes_cold_start_score_for_unscored_candidate(
     that same score (not ``null``) — otherwise the UI shows "no recommendation
     insight" for them.
     """
-    db_path = _setup_db(tmp_path, monkeypatch, pg_clean, "cold-start-expose.db")
+    db_path = _setup_db(monkeypatch, pg_clean)
     _insert_source(db_path, "hacker-news-ai", category="ai", priority=95)
     user_id = _make_user(db_path, "alice")
 
@@ -153,7 +150,7 @@ def test_today_endpoint_keeps_persisted_score_over_cold_start(
     tmp_path: Path, monkeypatch: Any, pg_clean: str
 ) -> None:
     """A persisted personalized score must win over the cold-start fallback."""
-    db_path = _setup_db(tmp_path, monkeypatch, pg_clean, "persisted-wins.db")
+    db_path = _setup_db(monkeypatch, pg_clean)
     _insert_source(db_path, "quiet-source", category="misc", priority=1)
     user_id = _make_user(db_path, "alice")
     scored = _insert_article(db_path, "quiet-source", "scored", category="misc", importance=1)
@@ -176,7 +173,7 @@ def test_today_endpoint_keeps_persisted_score_over_cold_start(
 def test_today_endpoint_orders_by_persisted_scores_and_keeps_missing_visible(
     tmp_path: Path, monkeypatch: Any, pg_clean: str
 ) -> None:
-    db_path = _setup_db(tmp_path, monkeypatch, pg_clean, "today-recs.db")
+    db_path = _setup_db(monkeypatch, pg_clean)
     _insert_source(db_path, "quiet-source", category="misc", priority=1)
     user_id = _make_user(db_path, "alice")
 
@@ -221,7 +218,7 @@ def test_today_endpoint_orders_by_persisted_scores_and_keeps_missing_visible(
 def test_today_recommendation_scores_are_isolated_per_user(
     tmp_path: Path, monkeypatch: Any, pg_clean: str
 ) -> None:
-    db_path = _setup_db(tmp_path, monkeypatch, pg_clean, "per-user-recs.db")
+    db_path = _setup_db(monkeypatch, pg_clean)
     _insert_source(db_path, "shared-source", category="misc", priority=1)
     alice_id = _make_user(db_path, "alice")
     bob_id = _make_user(db_path, "bob")
@@ -248,7 +245,7 @@ def test_today_recommendation_scores_are_isolated_per_user(
 def test_today_endpoint_uses_cold_start_fallback_for_missing_scores(
     tmp_path: Path, monkeypatch: Any, pg_clean: str
 ) -> None:
-    db_path = _setup_db(tmp_path, monkeypatch, pg_clean, "cold-start-recs.db")
+    db_path = _setup_db(monkeypatch, pg_clean)
     sync_sources(db_path)
     _insert_source(db_path, "hot-ai-source", category="ai", priority=95)
     _insert_source(db_path, "low-priority-source", category="misc", priority=1)
@@ -294,7 +291,7 @@ def test_today_endpoint_uses_cold_start_fallback_for_missing_scores(
 def test_recalculate_mine_scores_callers_own_feed(
     tmp_path: Path, monkeypatch: Any, pg_clean: str
 ) -> None:
-    db_path = _setup_db(tmp_path, monkeypatch, pg_clean, "recalc-mine.db")
+    db_path = _setup_db(monkeypatch, pg_clean)
     _insert_source(db_path, "hot-ai-source", category="ai", priority=95)
     user_id = _make_user(db_path, "alice")
 
@@ -319,7 +316,7 @@ def test_cold_start_ai_llm_category_ranks_above_generic_tech(
     Before the fix, `ai-llm` fell through to ELSE 2.0, silently demoting every
     Google AI Blog / HuggingFace / Anthropic / OpenAI article in cold-start rank.
     """
-    db_path = _setup_db(tmp_path, monkeypatch, pg_clean, "ai-llm-category.db")
+    db_path = _setup_db(monkeypatch, pg_clean)
     sync_sources(db_path)
     _insert_source(db_path, "google-ai-test", category="ai-llm", priority=75)
     _insert_source(db_path, "generic-tech", category="tech", priority=75)
