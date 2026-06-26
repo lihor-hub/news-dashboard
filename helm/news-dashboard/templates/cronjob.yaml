@@ -1,9 +1,10 @@
+{{- if .Values.ingestCronJob.enabled }}
 apiVersion: batch/v1
 kind: CronJob
 metadata:
   name: {{ include "news-dashboard.fullname" . }}-ingest
 spec:
-  schedule: "17 */6 * * *"
+  schedule: {{ .Values.ingestCronJob.schedule | quote }}
   successfulJobsHistoryLimit: 2
   failedJobsHistoryLimit: 3
   jobTemplate:
@@ -25,7 +26,7 @@ spec:
                 runAsNonRoot: true
                 runAsUser: 1000
                 runAsGroup: 1000
-              command: ["news-dashboard", "ingest"]
+              command: ["news-dashboard", "scheduled-ingest"]
               env:
 {{- if .Values.postgresql.enabled }}
                 - name: POSTGRES_HOST
@@ -73,4 +74,5 @@ spec:
   {{- else }}
     {{- fail "External PostgreSQL configuration is required when postgresql.enabled=false. Provide app.postgresExternal or app.databaseUrl." }}
   {{- end }}
+{{- end }}
 {{- end }}

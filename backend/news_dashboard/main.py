@@ -71,6 +71,7 @@ from news_dashboard.run_history import get_ingest_run_sources, list_ingest_runs
 from news_dashboard.scheduler import (
     get_interval_minutes,
     get_next_ingest_at,
+    is_ingest_interval_enabled,
     is_paused,
     pause_scheduler,
     resume_scheduler,
@@ -774,12 +775,15 @@ def set_source_enabled(
 
 @api.get("/api/scheduler/status")
 def scheduler_status() -> dict[str, Any]:
+    interval_enabled = is_ingest_interval_enabled()
     next_run = get_next_ingest_at()
-    paused = is_paused()
+    paused = is_paused() if interval_enabled else False
     return {
         "interval_minutes": get_interval_minutes(),
         "paused": paused,
         "next_run_at": next_run,
+        "interval_ingest_enabled": interval_enabled,
+        "ingest_authority": "in_process" if interval_enabled else "external",
     }
 
 

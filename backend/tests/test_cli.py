@@ -33,6 +33,18 @@ def test_ingest_prints_per_source_counts_and_total() -> None:
     assert "inserted: 5" in result.stdout
 
 
+def test_scheduled_ingest_uses_scheduler_runner() -> None:
+    with patch(
+        "news_dashboard.scheduler.run_scheduled_ingest",
+        return_value={"a": 2, "b": 0, "c": -1},
+    ) as run:
+        result = runner.invoke(app, ["scheduled-ingest"])
+    assert result.exit_code == 0
+    run.assert_called_once_with()
+    assert "a: 2" in result.stdout
+    assert "inserted: 2" in result.stdout
+
+
 def test_articles_lists_rows() -> None:
     fake = [{"id": 7, "status": "new", "title": "Hello", "source_name": "Src"}]
     with patch("news_dashboard.cli.list_articles", return_value=fake) as listed:

@@ -25,6 +25,20 @@ def ingest() -> None:
     flush()
 
 
+@app.command(name="scheduled-ingest")
+def scheduled_ingest() -> None:
+    from news_dashboard.scheduler import run_scheduled_ingest
+
+    results = run_scheduled_ingest()
+    for source, count in results.items():
+        typer.echo(f"{source}: {count}")
+    typer.echo(f"inserted: {sum(value for value in results.values() if value > 0)}")
+    # Short-lived process: flush any buffered Langfuse traces before exit.
+    from news_dashboard.ai_client import flush
+
+    flush()
+
+
 @app.command()
 def articles(status: str | None = None, limit: int = 20) -> None:
     for article in list_articles(status=status, limit=limit):

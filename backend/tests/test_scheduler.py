@@ -6,6 +6,7 @@ No APScheduler or database is required; all external dependencies are patched.
 from __future__ import annotations
 
 import logging
+from collections.abc import Generator
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -103,6 +104,17 @@ _INIT_DB_PATH = "news_dashboard.db.init_db"
 _GET_SETTING_PATH = "news_dashboard.db.get_setting"
 
 
+@pytest.fixture(autouse=True)
+def _reset_scheduler_state() -> Generator[None]:
+    from news_dashboard import scheduler
+
+    scheduler._state.scheduler = None
+    scheduler._state.ingest_interval_enabled = True
+    yield
+    scheduler._state.scheduler = None
+    scheduler._state.ingest_interval_enabled = True
+
+
 def _start_with_env(monkeypatch: pytest.MonkeyPatch, briefing_cron: str | None = None) -> MagicMock:
     """Run start_scheduler() with APScheduler mocked; return the mock scheduler."""
     mock_sched = MagicMock()
@@ -184,6 +196,22 @@ def test_run_ingest_prefetches_when_new_articles() -> None:
     ):
         scheduler._run_ingest()
 
+    ingest.assert_called_once()
+    prefetch.assert_called_once()
+    recalc.assert_called_once()
+
+
+def test_run_scheduled_ingest_returns_results_and_runs_maintenance() -> None:
+    from news_dashboard import scheduler
+
+    with (
+        patch("news_dashboard.ingest.ingest_all", return_value={"a": 2, "b": -1}) as ingest,
+        patch("news_dashboard.body_fetch.prefetch_article_bodies") as prefetch,
+        patch.object(scheduler, "_run_recommendation_recalc") as recalc,
+    ):
+        results = scheduler.run_scheduled_ingest()
+
+    assert results == {"a": 2, "b": -1}
     ingest.assert_called_once()
     prefetch.assert_called_once()
     recalc.assert_called_once()
@@ -372,6 +400,44 @@ def test_start_scheduler_uses_db_interval(monkeypatch: pytest.MonkeyPatch) -> No
         c for c in mock_sched.add_job.call_args_list if c.kwargs.get("id") == "ingest"
     )
     assert ingest_call.kwargs["minutes"] == 12
+
+
+def test_start_scheduler_can_disable_only_interval_ingest(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("INGEST_INTERVAL_SCHEDULER_ENABLED", "false")
+    mock_sched = _start_with_env(monkeypatch)
+
+    ids = [c.kwargs.get("id") for c in mock_sched.add_job.call_args_list]
+    assert "ingest" not in ids
+    assert {"digest", "briefing", "recommendations", "per_user_briefings"} <= set(ids)
+
+    from news_dashboard import scheduler
+
+    assert scheduler.is_ingest_interval_enabled() is False
+
+
+def test_start_scheduler_ignores_saved_pause_when_interval_ingest_disabled(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("INGEST_INTERVAL_SCHEDULER_ENABLED", "false")
+    mock_sched = MagicMock()
+    mock_sched.get_job.return_value = None
+
+    def get_setting(key: str) -> str | None:
+        return "true" if key == "scheduler_paused" else None
+
+    with (
+        patch(_BGSCHED_PATH, return_value=mock_sched),
+        patch(_INIT_DB_PATH),
+        patch(_GET_SETTING_PATH, side_effect=get_setting),
+    ):
+        from news_dashboard import scheduler
+
+        scheduler._state.scheduler = None
+        scheduler.start_scheduler()
+
+    mock_sched.pause_job.assert_not_called()
 
 
 # ── lifecycle: stop / next-run / pause-state / interval ───────────────────────
@@ -614,3 +680,22 @@ def test_resume_scheduler_suppresses_error() -> None:
             scheduler.resume_scheduler()  # must not raise
         finally:
             scheduler._state.scheduler = None
+
+
+def test_scheduler_status_reports_external_ingest_authority(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from news_dashboard import main
+
+    monkeypatch.setattr(main, "is_ingest_interval_enabled", lambda: False)
+    monkeypatch.setattr(main, "get_interval_minutes", lambda: 30)
+    monkeypatch.setattr(main, "get_next_ingest_at", lambda: None)
+    monkeypatch.setattr(main, "is_paused", lambda: True)
+
+    assert main.scheduler_status() == {
+        "interval_minutes": 30,
+        "paused": False,
+        "next_run_at": None,
+        "interval_ingest_enabled": False,
+        "ingest_authority": "external",
+    }
