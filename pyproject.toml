@@ -50,7 +50,7 @@ packages = ["backend/news_dashboard"]
 # ── pytest ───────────────────────────────────────────────────────────────────
 [tool.pytest.ini_options]
 pythonpath = ["backend"]
-testpaths = ["backend/tests"]
+testpaths = ["backend/tests", "scripts"]
 addopts = "-ra --strict-markers --strict-config"
 filterwarnings = ["error::DeprecationWarning:news_dashboard.*"]
 
@@ -125,6 +125,10 @@ ignore = [
   "T201",    # print is the intended CLI output for shell consumption
 ]
 "scripts/test_bump_version.py" = [
+  "S101",    # asserts are the point of tests
+  "PT009",   # plain assert is preferred over self.assertEqual here
+]
+"scripts/test_update_changelog.py" = [
   "S101",    # asserts are the point of tests
   "PT009",   # plain assert is preferred over self.assertEqual here
 ]

@@ -1,19 +1,20 @@
 name: Release
 
-# Automatic semantic version bump + build on every push to main.
+# Tags each release and builds the downloadable Android / Desktop artifacts.
 #
-# Job graph:
-#   version  →  android   (ubuntu, ~5 min)
-#            ↘  desktop   (macos,  ~10 min)
+# The version itself is NOT committed to git — it is derived from the latest v*
+# tag plus the Conventional Commits since it (see scripts/next_version.sh), and
+# baked into the Docker image by ci.yml at build time. That keeps the deployed
+# app's /api/version and /api/changelog in step with the code on every push,
+# instead of trailing a separate post-merge bump commit by one release.
 #
-# version job:
-#   1. Reads commits since the last v* tag (Conventional Commits)
-#   2. Determines bump: feat → minor, fix/perf → patch, BREAKING → major
-#   3. Updates VERSION, android/app/build.gradle, android/twa-manifest.json,
-#      desktop/package.json, commits "chore: bump version to vX.Y.Z", pushes tag
+# This workflow only ever pushes a *tag* ref — never the protected main branch —
+# so it can't hit branch-protection (GH006).
 #
-# android / desktop jobs build only when a bump occurred.
-# GITHUB_TOKEN pushes never re-trigger workflows — no infinite loop risk.
+# Job graph (push to main):
+#   release  →  android   (ubuntu)
+#            ↘  desktop   (macos)
+# android / desktop run only when a new tag was created.
 
 on:
   push:
@@ -25,19 +26,17 @@ permissions:
   models: read # GitHub Models inference for the changelog entry
 
 jobs:
-  # ── 1. Compute bump and update version files ─────────────────────────────────
+  # ── 1. Compute version, create the tag, summarize the changelog ──────────────
 
-  version:
-    name: Compute & bump version
+  release:
+    name: Tag release
     runs-on: ubuntu-latest
-    if: github.actor != 'github-actions[bot]'
     outputs:
-      bumped: ${{ steps.compute.outputs.bumped }}
-      version: ${{ steps.compute.outputs.version }}
-      code: ${{ steps.compute.outputs.code }}
-      tag: ${{ steps.compute.outputs.tag }}
+      released: ${{ steps.tag.outputs.released }}
+      version: ${{ steps.version.outputs.version }}
+      code: ${{ steps.version.outputs.code }}
+      tag: ${{ steps.version.outputs.tag }}
       notes: ${{ steps.ai.outputs.response }}
-
     steps:
       - uses: actions/checkout@v4
         with:
@@ -48,53 +47,42 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-      - name: Run bump script
-        id: compute
+      - name: Compute version
+        id: version
+        run: bash scripts/next_version.sh >> "$GITHUB_OUTPUT"
+
+      - name: Create and push tag (tag ref only)
+        id: tag
         run: |
-          CURRENT=$(cat VERSION)
-          LAST_TAG=$(git tag --list 'v*' --sort=-version:refname | head -1)
-
-          if [ -z "$LAST_TAG" ]; then
-            echo "No v* tags found — bootstrapping from all commits"
-            RESULT=$(python3 scripts/bump_version.py --current "$CURRENT")
+          TAG="${{ steps.version.outputs.tag }}"
+          if git rev-parse -q --verify "refs/tags/$TAG" >/dev/null; then
+            echo "Tag $TAG already exists — nothing to release."
+            echo "released=false" >> "$GITHUB_OUTPUT"
           else
-            echo "Computing bump since $LAST_TAG"
-            RESULT=$(python3 scripts/bump_version.py --current "$CURRENT" --since-tag "$LAST_TAG")
+            echo "Tagging $TAG"
+            git tag "$TAG"
+            git push origin "refs/tags/$TAG"
+            echo "released=true" >> "$GITHUB_OUTPUT"
           fi
 
-          echo "$RESULT"
-          BUMP=$(echo "$RESULT" | grep '^bump=' | cut -d= -f2)
-          NEXT=$(echo "$RESULT" | grep '^next=' | cut -d= -f2)
-          CODE=$(echo "$RESULT" | grep '^code=' | cut -d= -f2)
+      # ── Changelog notes for the GitHub Releases (GITHUB_TOKEN only) ──
 
-          if [ "$BUMP" = "none" ]; then
-            echo "No version bump needed (only ci/docs/test/chore commits)"
-            echo "bumped=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "Bump: $BUMP  |  $CURRENT → $NEXT  (versionCode $CODE)"
-            echo "bumped=true"  >> "$GITHUB_OUTPUT"
-            echo "version=$NEXT" >> "$GITHUB_OUTPUT"
-            echo "code=$CODE"    >> "$GITHUB_OUTPUT"
-            echo "tag=v$NEXT"   >> "$GITHUB_OUTPUT"
-          fi
-
-      # ── Changelog: summarize commits with GitHub Models (GITHUB_TOKEN only) ──
-      # Single-shot inference via actions/ai-inference — no external API key.
-
-      - name: Collect commits since last tag
-        if: steps.compute.outputs.bumped == 'true'
+      - name: Collect commits since previous tag
+        if: steps.tag.outputs.released == 'true'
         id: log
         run: |
-          LAST_TAG=$(git tag --list 'v*' --sort=-version:refname | head -1)
+          PREV_TAG=$(git tag --list 'v*' --sort=-version:refname | grep -vx "${{ steps.version.outputs.tag }}" | head -1)
+          RANGE="HEAD"
+          [ -n "$PREV_TAG" ] && RANGE="${PREV_TAG}..HEAD"
           {
             echo "commits<<COMMITS_EOF"
-            git log --no-merges --pretty=format:'- %s' "${LAST_TAG}..HEAD"
+            git log --no-merges --pretty=format:'- %s' "$RANGE"
             echo
             echo "COMMITS_EOF"
           } >> "$GITHUB_OUTPUT"
 
       - name: Generate changelog entry (GitHub Models)
-        if: steps.compute.outputs.bumped == 'true'
+        if: steps.tag.outputs.released == 'true'
         id: ai
         uses: actions/ai-inference@v1
         with:
@@ -121,71 +109,35 @@ jobs:
               bullet like "Stability and performance improvements."
             Output no headings, no version number, and no preamble — bullets only.
           prompt: |
-            Commits for release ${{ steps.compute.outputs.tag }}:
+            Commits for release ${{ steps.version.outputs.tag }}:
             ${{ steps.log.outputs.commits }}
-
-      - name: Prepend entry to CHANGELOG.md
-        if: steps.compute.outputs.bumped == 'true'
-        env:
-          V: ${{ steps.compute.outputs.version }}
-          BODY: ${{ steps.ai.outputs.response }}
-        run: |
-          python3 - <<'PY'
-          import os, pathlib
-          v = os.environ["V"]
-          body = os.environ["BODY"].strip()
-          # Fallback to raw commit subjects if inference returned nothing.
-          if not body:
-              body = """${{ steps.log.outputs.commits }}""".strip()
-          path = pathlib.Path("CHANGELOG.md")
-          text = path.read_text() if path.exists() else "# Changelog\n"
-          head, _, rest = text.partition("\n")
-          path.write_text(f"{head}\n\n## {v}\n{body}\n\n{rest.lstrip()}")
-          PY
-
-      - name: Update version files and push tag
-        if: steps.compute.outputs.bumped == 'true'
-        run: |
-          V="${{ steps.compute.outputs.version }}"
-          CODE="${{ steps.compute.outputs.code }}"
-          TAG="${{ steps.compute.outputs.tag }}"
-
-          # Primary source of truth
-          echo "$V" > VERSION
-
-          # Android Gradle build file — patterns require at least one digit to
-          # avoid matching empty strings (POSIX BRE: [0-9][0-9]* = one or more)
-          sed -i "s/versionCode [0-9][0-9]*/versionCode $CODE/" android/app/build.gradle
-          sed -i "s/versionName \"[0-9][^\"]*\"/versionName \"$V\"/" android/app/build.gradle
-
-          # android/twa-manifest.json
-          jq --arg v "$V" --argjson c "$CODE" \
-            '.appVersionName = $v | .appVersionCode = $c' \
-            android/twa-manifest.json > /tmp/twa.json
-          mv /tmp/twa.json android/twa-manifest.json
-
-          # desktop/package.json
-          jq --arg v "$V" '.version = $v' \
-            desktop/package.json > /tmp/pkg.json
-          mv /tmp/pkg.json desktop/package.json
-
-          git add VERSION CHANGELOG.md android/app/build.gradle android/twa-manifest.json desktop/package.json
-          git commit -m "chore: bump version to $TAG"
-          git tag "$TAG"
-          git push origin HEAD:main --tags
 
   # ── 2a. Build and sign Android APK ───────────────────────────────────────────
 
   android:
     name: Android APK
-    needs: version
-    if: needs.version.outputs.bumped == 'true'
+    needs: release
+    if: needs.release.outputs.released == 'true'
     runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ needs.version.outputs.tag }}
+          ref: ${{ needs.release.outputs.tag }}
+
+      - name: Inject version (not committed — only for this build)
+        env:
+          V: ${{ needs.release.outputs.version }}
+          CODE: ${{ needs.release.outputs.code }}
+        run: |
+          # Patterns require at least one digit to avoid matching empty strings
+          # (POSIX BRE: [0-9][0-9]* = one or more).
+          sed -i "s/versionCode [0-9][0-9]*/versionCode $CODE/" android/app/build.gradle
+          sed -i "s/versionName \"[0-9][^\"]*\"/versionName \"$V\"/" android/app/build.gradle
+          jq --arg v "$V" --argjson c "$CODE" \
+            '.appVersionName = $v | .appVersionCode = $c' \
+            android/twa-manifest.json > /tmp/twa.json
+          mv /tmp/twa.json android/twa-manifest.json
 
       - uses: actions/setup-java@v4
         with:
@@ -211,7 +163,7 @@ jobs:
         id: apk
         run: |
           APK=$(find android/app/build/outputs/apk/release -name "*.apk" | head -1)
-          V="${{ needs.version.outputs.version }}"
+          V="${{ needs.release.outputs.version }}"
           DEST="news-dashboard-android-v${V}.apk"
           cp "$APK" "$DEST"
           echo "path=$DEST" >> "$GITHUB_OUTPUT"
@@ -219,15 +171,15 @@ jobs:
       - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
-          CHANGELOG: ${{ needs.version.outputs.notes }}
+          CHANGELOG: ${{ needs.release.outputs.notes }}
         run: |
-          V="${{ needs.version.outputs.version }}"
+          V="${{ needs.release.outputs.version }}"
           NOTES_FILE="$RUNNER_TEMP/android-notes.md"
           {
             if [ -n "$CHANGELOG" ]; then
               printf "## What's new\n\n%s\n\n---\n\n" "$CHANGELOG"
             fi
-            echo "Signed APK built from ${{ needs.version.outputs.tag }}."
+            echo "Signed APK built from ${{ needs.release.outputs.tag }}."
           } > "$NOTES_FILE"
           gh release create "android-v$V" \
             "${{ steps.apk.outputs.path }}" \
@@ -245,14 +197,22 @@ jobs:
 
   desktop:
     name: Desktop DMG
-    needs: version
-    if: needs.version.outputs.bumped == 'true'
+    needs: release
+    if: needs.release.outputs.released == 'true'
     runs-on: macos-latest
 
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ needs.version.outputs.tag }}
+          ref: ${{ needs.release.outputs.tag }}
+
+      - name: Inject version (not committed — only for this build)
+        env:
+          V: ${{ needs.release.outputs.version }}
+        run: |
+          jq --arg v "$V" '.version = $v' \
+            desktop/package.json > /tmp/pkg.json
+          mv /tmp/pkg.json desktop/package.json
 
       - uses: actions/setup-node@v4
         with:
@@ -286,15 +246,15 @@ jobs:
       - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
-          CHANGELOG: ${{ needs.version.outputs.notes }}
+          CHANGELOG: ${{ needs.release.outputs.notes }}
         run: |
-          V="${{ needs.version.outputs.version }}"
+          V="${{ needs.release.outputs.version }}"
           NOTES="Unsigned macOS DMG (universal — Intel + Apple Silicon).
 
           First launch: right-click News Dashboard.app in Finder → Open → Open
           Or in Terminal: xattr -cr \"/Applications/News Dashboard.app\"
 
-          Built from ${{ needs.version.outputs.tag }}."
+          Built from ${{ needs.release.outputs.tag }}."
           if [ -n "$CHANGELOG" ]; then
             NOTES="## What's new
 

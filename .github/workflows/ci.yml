@@ -18,9 +18,11 @@ env:
 
 # Minimum permissions. packages:write is only exercised by the publish job;
 # GitHub scopes GITHUB_TOKEN to the individual job automatically.
+# models:read lets the publish job summarize the changelog via GitHub Models.
 permissions:
   contents: read
   packages: write
+  models: read
 
 jobs:
   # ── 1. LINT ────────────────────────────────────────────────────────────────
@@ -115,6 +117,74 @@ jobs:
       image_tag: ${{ github.sha }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # tags + history for version computation
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.14'
+
+      # Derive the release version from tags + commits and bake it into the
+      # image, so /api/version and /api/changelog match the deployed code.
+      # release.yml computes the same value from the same script and tags it.
+      - name: Compute version
+        id: version
+        run: bash scripts/next_version.sh >> "$GITHUB_OUTPUT"
+
+      - name: Collect commits since last tag
+        id: log
+        run: |
+          LAST_TAG=$(git tag --list 'v*' --sort=-version:refname | head -1)
+          RANGE="HEAD"
+          [ -n "$LAST_TAG" ] && RANGE="${LAST_TAG}..HEAD"
+          {
+            echo "commits<<COMMITS_EOF"
+            git log --no-merges --pretty=format:'- %s' "$RANGE"
+            echo
+            echo "COMMITS_EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Generate changelog entry (GitHub Models)
+        id: ai
+        uses: actions/ai-inference@v1
+        with:
+          model: openai/gpt-4o
+          system-prompt: |
+            You write the "What's new" notes that everyday users of a news
+            dashboard app see in an in-app popup after the app updates. Your
+            readers are NOT developers — write for them, not for engineers.
+
+            Given raw git commit subjects, output ONLY markdown "- " bullet
+            lines. Rules:
+            - Describe the benefit to the user — what they can now do, see, or
+              no longer have to deal with — not the technical change that
+              delivered it.
+            - Write in plain, friendly language. Address the user as "you" /
+              "your" where natural.
+            - NO jargon, internal names, file paths, config keys, library or
+              service names (e.g. Helm, Langfuse, cache, endpoint, API, schema,
+              migration), version numbers, or ticket/PR references.
+            - Merge related commits into a single user-facing bullet.
+            - Omit anything with no visible effect for users — chore, ci, test,
+              refactor, docs, deploy/infra, observability, and other internal
+              work. If a release is entirely internal, summarize it as a single
+              bullet like "Stability and performance improvements."
+            Output no headings, no version number, and no preamble — bullets only.
+          prompt: |
+            Commits for release ${{ steps.version.outputs.tag }}:
+            ${{ steps.log.outputs.commits }}
+
+      - name: Bake version + changelog into the build context
+        env:
+          V: ${{ steps.version.outputs.version }}
+          NOTES: ${{ steps.ai.outputs.response }}
+          COMMITS: ${{ steps.log.outputs.commits }}
+        run: |
+          echo "$V" > VERSION
+          # Fall back to raw commit subjects if inference returned nothing.
+          BODY="$NOTES"
+          [ -z "$(printf '%s' "$BODY" | tr -d '[:space:]')" ] && BODY="$COMMITS"
+          printf '%s\n' "$BODY" | python3 scripts/update_changelog.py --version "$V"
 
       - uses: docker/login-action@v3
         with:
