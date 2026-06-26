@@ -404,10 +404,16 @@ def test_api_articles_includes_recommendation_score(
         app.dependency_overrides.pop(require_auth, None)
 
 
-def test_api_articles_recommendation_score_null_when_unranked(
+def test_api_articles_recommendation_score_falls_back_to_cold_start_when_unranked(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """GET /api/articles?state=today returns null recommendation_score for unranked articles."""
+    """GET /api/articles?state=today exposes the cold-start score for unranked articles.
+
+    The feed already *ranks* unranked articles by their cold-start score, so it
+    surfaces that same score (not ``null``) and labels the model cold-start —
+    otherwise high-churn sources whose fresh items outpace the recompute sweep
+    would show no recommendation insight at all.
+    """
     db = tmp_path / "rec-score-null.db"
     monkeypatch.setattr(db_mod, "DB_PATH", db)
     sync_sources(db)
@@ -430,6 +436,8 @@ def test_api_articles_recommendation_score_null_when_unranked(
             items = resp.json()["items"]
             article = next((a for a in items if a["id"] == aid), None)
             assert article is not None
-            assert article["recommendation_score"] is None
+            assert article["recommendation_score"] is not None
+            assert article["recommendation_score"] > 0
+            assert article["recommendation_model"] == "cold-start-v1"
     finally:
         app.dependency_overrides.pop(require_auth, None)
