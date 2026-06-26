@@ -105,6 +105,74 @@ def _today_ids(client: TestClient) -> list[int]:
     return [int(item["id"]) for item in response.json()["items"]]
 
 
+def _today_items_by_id(client: TestClient) -> dict[int, dict[str, Any]]:
+    response = client.get("/api/articles", params={"state": "today", "limit": 20})
+    assert response.status_code == 200
+    return {int(item["id"]): item for item in response.json()["items"]}
+
+
+def test_today_endpoint_exposes_cold_start_score_for_unscored_candidate(
+    tmp_path: Path, monkeypatch: Any, pg_clean: str
+) -> None:
+    """Every feed candidate must carry a score/label, even with no persisted row.
+
+    A high-churn source (e.g. Hacker News AI) constantly ingests fresh articles
+    that outpace the recompute sweep, so they have no ``user_article_recommendations``
+    row.  The feed still ranks them by the cold-start score, so it must expose
+    that same score (not ``null``) — otherwise the UI shows "no recommendation
+    insight" for them.
+    """
+    db_path = _setup_db(tmp_path, monkeypatch, pg_clean, "cold-start-expose.db")
+    _insert_source(db_path, "hacker-news-ai", category="ai", priority=95)
+    user_id = _make_user(db_path, "alice")
+
+    unscored = _insert_article(
+        db_path,
+        "hacker-news-ai",
+        "fresh-ai",
+        category="ai",
+        importance=80,
+        tags="agents,llm",
+        discovered_at="2026-06-21T12:00:00+00:00",
+    )
+
+    try:
+        with _client_for(user_id, "alice") as client:
+            items = _today_items_by_id(client)
+    finally:
+        app.dependency_overrides.pop(require_auth, None)
+
+    assert unscored in items
+    item = items[unscored]
+    assert item["recommendation_score"] is not None
+    assert item["recommendation_score"] > 0
+    assert item["recommendation_model"] == "cold-start-v1"
+
+
+def test_today_endpoint_keeps_persisted_score_over_cold_start(
+    tmp_path: Path, monkeypatch: Any, pg_clean: str
+) -> None:
+    """A persisted personalized score must win over the cold-start fallback."""
+    db_path = _setup_db(tmp_path, monkeypatch, pg_clean, "persisted-wins.db")
+    _insert_source(db_path, "quiet-source", category="misc", priority=1)
+    user_id = _make_user(db_path, "alice")
+    scored = _insert_article(db_path, "quiet-source", "scored", category="misc", importance=1)
+
+    upsert_recommendation_score(
+        user_id, scored, 42.0, db_path=db_path, model_version="behavioral-affinity-v1"
+    )
+
+    try:
+        with _client_for(user_id, "alice") as client:
+            items = _today_items_by_id(client)
+    finally:
+        app.dependency_overrides.pop(require_auth, None)
+
+    item = items[scored]
+    assert item["recommendation_score"] == 42.0
+    assert item["recommendation_model"] == "behavioral-affinity-v1"
+
+
 def test_today_endpoint_orders_by_persisted_scores_and_keeps_missing_visible(
     tmp_path: Path, monkeypatch: Any, pg_clean: str
 ) -> None:

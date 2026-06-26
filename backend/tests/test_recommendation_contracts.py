@@ -237,10 +237,13 @@ def test_today_stays_intact_when_no_scores_have_been_computed(
 
     ids = {int(item["id"]) for item in items}
     assert {first, second} <= ids
-    # Unscored articles surface a null score rather than erroring.
+    # Unscored articles surface the cold-start score the feed already ranks by,
+    # so every candidate carries a score/label rather than showing no insight.
     for item in items:
         if int(item["id"]) in {first, second}:
-            assert item["recommendation_score"] is None
+            assert item["recommendation_score"] is not None
+            assert item["recommendation_score"] > 0
+            assert item["recommendation_model"] == "cold-start-v1"
 
 
 # ── Reader path exposes the same score metadata as the Today list ─────────────

@@ -8,6 +8,7 @@ from typing import Any
 
 from .db import connect, init_db, row_to_dict
 
+COLD_START_MODEL_VERSION = "cold-start-v1"
 BEHAVIORAL_MODEL_VERSION = "behavioral-affinity-v1"
 SEMANTIC_MODEL_VERSION = "semantic-hybrid-v1"
 NOVELTY_MODEL_VERSION = "novelty-freshness-v1"
@@ -289,7 +290,7 @@ def upsert_recommendation_score(  # noqa: PLR0913
     database_url: str | None = None,
     cold_start_score: float | None = None,
     signals: dict[str, Any] | None = None,
-    model_version: str = "cold-start-v1",
+    model_version: str = COLD_START_MODEL_VERSION,
 ) -> None:
     """Persist recommendation metadata for one user/article pair."""
     init_db(db_path, database_url=database_url)
