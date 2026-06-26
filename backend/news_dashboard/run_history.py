@@ -61,7 +61,7 @@ def list_ingest_runs(
     to: datetime | str | None = None,
     page: int = 1,
     per_page: int = 20,
-    db_path: Path | None = None,
+    db_path: Path | str | None = None,
 ) -> dict[str, Any]:
     init_db(db_path)
     filters = ["finished_at IS NOT NULL"]
@@ -128,7 +128,7 @@ def list_ingest_runs(
 
 
 def get_ingest_run_sources(
-    run_id: int, *, db_path: Path | None = None
+    run_id: int, *, db_path: Path | str | None = None
 ) -> list[dict[str, Any]] | None:
     init_db(db_path)
     with connect(db_path) as conn:

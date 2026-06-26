@@ -7,7 +7,6 @@ from pathlib import Path
 
 import pytest
 
-import news_dashboard.db as db_mod
 from news_dashboard.auth import create_user
 from news_dashboard.db import connect
 from news_dashboard.ingest import (
@@ -28,7 +27,7 @@ def _setup_db(tmp_path: Path) -> Path:
     return db
 
 
-def _insert_article(db_path: Path, *, url_suffix: str = "1", state: str = "today") -> int:
+def _insert_article(db_path: Path | str, *, url_suffix: str = "1", state: str = "today") -> int:
     with connect(db_path) as conn:
         row = conn.execute(
             """
@@ -52,14 +51,8 @@ def _insert_article(db_path: Path, *, url_suffix: str = "1", state: str = "today
     return int(row["id"] if isinstance(row, dict) else row[0])
 
 
-def _make_user(db_path: Path, username: str = "alice") -> int:
-    """Create a user and return their id, patching DB_PATH so auth uses our test DB."""
-    orig = db_mod.DB_PATH
-    db_mod.DB_PATH = db_path
-    try:
-        user = create_user(username, "password123")
-    finally:
-        db_mod.DB_PATH = orig
+def _make_user(db_path: Path | str, username: str = "alice") -> int:
+    user = create_user(username, "password123", db_path=db_path)
     return int(user["id"])
 
 
@@ -302,10 +295,10 @@ def test_search_excludes_archived_by_default(tmp_path: Path) -> None:
 # ── API layer integration ──────────────────────────────────────────────────────
 
 
-def test_api_articles_uses_user_state(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_api_articles_uses_user_state(pg_clean: str, monkeypatch: pytest.MonkeyPatch) -> None:
     """GET /api/articles returns per-user state for the authenticated user."""
-    monkeypatch.setattr(db_mod, "DB_PATH", tmp_path / "api.db")
-    sync_sources(tmp_path / "api.db")
+    monkeypatch.setenv("DATABASE_URL", str(pg_clean))
+    sync_sources(pg_clean)
 
     from fastapi.testclient import TestClient
 
@@ -313,8 +306,8 @@ def test_api_articles_uses_user_state(tmp_path: Path, monkeypatch: pytest.Monkey
     from news_dashboard.main import app
 
     # Create a real user in our test DB
-    uid = _make_user(tmp_path / "api.db", "testuser")
-    aid = _insert_article(tmp_path / "api.db", url_suffix="api1")
+    uid = _make_user(pg_clean, "testuser")
+    aid = _insert_article(pg_clean, url_suffix="api1")
 
     fake_user = {"id": uid, "username": "testuser", "email": None, "is_admin": False}
     app.dependency_overrides[require_auth] = lambda: fake_user
@@ -329,18 +322,18 @@ def test_api_articles_uses_user_state(tmp_path: Path, monkeypatch: pytest.Monkey
         app.dependency_overrides.pop(require_auth, None)
 
 
-def test_api_state_transition_writes_uas(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_api_state_transition_writes_uas(pg_clean: str, monkeypatch: pytest.MonkeyPatch) -> None:
     """PATCH /api/articles/{id}/state writes to user_article_state."""
-    monkeypatch.setattr(db_mod, "DB_PATH", tmp_path / "api2.db")
-    sync_sources(tmp_path / "api2.db")
+    monkeypatch.setenv("DATABASE_URL", str(pg_clean))
+    sync_sources(pg_clean)
 
     from fastapi.testclient import TestClient
 
     from news_dashboard.auth import require_auth
     from news_dashboard.main import app
 
-    uid = _make_user(tmp_path / "api2.db", "testuser2")
-    aid = _insert_article(tmp_path / "api2.db", url_suffix="api2")
+    uid = _make_user(pg_clean, "testuser2")
+    aid = _insert_article(pg_clean, url_suffix="api2")
 
     fake_user = {"id": uid, "username": "testuser2", "email": None, "is_admin": False}
     app.dependency_overrides[require_auth] = lambda: fake_user
@@ -352,7 +345,7 @@ def test_api_state_transition_writes_uas(tmp_path: Path, monkeypatch: pytest.Mon
             assert resp.json()["state"] == "done"
 
         # Confirm UAS row was written, article table state unchanged
-        with connect(tmp_path / "api2.db") as conn:
+        with connect(pg_clean) as conn:
             uas = conn.execute(
                 "SELECT * FROM user_article_state WHERE article_id = %s AND user_id = %s",
                 (aid, uid),
@@ -371,11 +364,11 @@ def test_api_state_transition_writes_uas(tmp_path: Path, monkeypatch: pytest.Mon
 
 
 def test_api_articles_includes_recommendation_score(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    pg_clean: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """GET /api/articles?state=today includes recommendation_score when ranked."""
-    db = tmp_path / "rec-score-api.db"
-    monkeypatch.setattr(db_mod, "DB_PATH", db)
+    db = pg_clean
+    monkeypatch.setenv("DATABASE_URL", str(db))
     sync_sources(db)
 
     from fastapi.testclient import TestClient
@@ -405,7 +398,7 @@ def test_api_articles_includes_recommendation_score(
 
 
 def test_api_articles_recommendation_score_falls_back_to_cold_start_when_unranked(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    pg_clean: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """GET /api/articles?state=today exposes the cold-start score for unranked articles.
 
@@ -414,8 +407,8 @@ def test_api_articles_recommendation_score_falls_back_to_cold_start_when_unranke
     otherwise high-churn sources whose fresh items outpace the recompute sweep
     would show no recommendation insight at all.
     """
-    db = tmp_path / "rec-score-null.db"
-    monkeypatch.setattr(db_mod, "DB_PATH", db)
+    db = pg_clean
+    monkeypatch.setenv("DATABASE_URL", str(db))
     sync_sources(db)
 
     from fastapi.testclient import TestClient

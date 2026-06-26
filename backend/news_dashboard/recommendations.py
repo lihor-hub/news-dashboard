@@ -286,7 +286,7 @@ def upsert_recommendation_score(  # noqa: PLR0913
     article_id: int,
     recommendation_score: float,
     *,
-    db_path: Path | None = None,
+    db_path: Path | str | None = None,
     database_url: str | None = None,
     cold_start_score: float | None = None,
     signals: dict[str, Any] | None = None,
@@ -407,7 +407,7 @@ def _load_candidates(conn: Any, user_id: int, limit: int) -> list[dict[str, Any]
 def recompute_user_recommendations(
     user_id: int,
     *,
-    db_path: Path | None = None,
+    db_path: Path | str | None = None,
     database_url: str | None = None,
     limit: int = 1000,
 ) -> int:

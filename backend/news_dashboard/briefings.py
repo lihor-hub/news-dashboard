@@ -527,7 +527,7 @@ def generate_briefing(
 
 
 def get_latest_briefing(
-    db_path: Path | None = None,
+    db_path: Path | str | None = None,
     database_url: str | None = None,
     user_id: int | None = None,
 ) -> dict[str, Any] | None:
@@ -568,7 +568,7 @@ def get_latest_briefing(
 def list_briefings(
     limit: int = 50,
     offset: int = 0,
-    db_path: Path | None = None,
+    db_path: Path | str | None = None,
     database_url: str | None = None,
     user_id: int | None = None,
 ) -> list[dict[str, Any]]:
@@ -603,7 +603,7 @@ def list_briefings(
 
 def get_briefing(
     briefing_id: int,
-    db_path: Path | None = None,
+    db_path: Path | str | None = None,
     database_url: str | None = None,
     user_id: int | None = None,
 ) -> dict[str, Any] | None:

@@ -269,7 +269,7 @@ def _article_from_row(row: Any, conn: Any, article_id: int, user_id: int | None)
 
 def get_article(
     article_id: int,
-    db_path: Path | None = None,
+    db_path: Path | str | None = None,
     user_id: int | None = None,
 ) -> dict[str, Any] | None:
     """Fetch a single article by ID, stripping internal columns.
@@ -288,7 +288,7 @@ def get_article(
 
 def fetch_and_cache_body(
     article_id: int,
-    db_path: Path | None = None,
+    db_path: Path | str | None = None,
     user_id: int | None = None,
 ) -> dict[str, Any] | None:
     """Fetch and store body for an article. Returns the updated article dict or None if not found.
@@ -320,7 +320,7 @@ def fetch_and_cache_body(
     return get_article(article_id, db_path=db_path, user_id=user_id)
 
 
-def prefetch_article_bodies(limit: int = 20, db_path: Path | None = None) -> int:
+def prefetch_article_bodies(limit: int = 20, db_path: Path | str | None = None) -> int:
     """Fetch and cache bodies for recently ingested articles that are still missing a body.
 
     Called as a background task after each ingest run to warm the body cache

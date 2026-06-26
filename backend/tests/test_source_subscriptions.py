@@ -7,7 +7,6 @@ from typing import Any
 
 import pytest
 
-import news_dashboard.db as db_mod
 from news_dashboard.auth import create_user
 from news_dashboard.db import connect, row_to_dict
 from news_dashboard.ingest import list_articles, sync_sources
@@ -21,17 +20,12 @@ def _setup_db(tmp_path: Path) -> Path:
     return db
 
 
-def _make_user(db_path: Path, username: str = "alice") -> int:
-    orig = db_mod.DB_PATH
-    db_mod.DB_PATH = db_path
-    try:
-        user = create_user(username, "pw")
-    finally:
-        db_mod.DB_PATH = orig
+def _make_user(db_path: Path | str, username: str = "alice") -> int:
+    user = create_user(username, "pw", db_path=db_path)
     return int(user["id"])
 
 
-def _insert_article(db_path: Path, *, source_slug: str, url_suffix: str = "1") -> int:
+def _insert_article(db_path: Path | str, *, source_slug: str, url_suffix: str = "1") -> int:
     with connect(db_path) as conn:
         row = conn.execute(
             """
@@ -51,7 +45,7 @@ def _insert_article(db_path: Path, *, source_slug: str, url_suffix: str = "1") -
     return int(row["id"] if isinstance(row, dict) else row[0])
 
 
-def _global_slug(db_path: Path) -> str:
+def _global_slug(db_path: Path | str) -> str:
     """Return the slug of an arbitrary global source."""
     with connect(db_path) as conn:
         row = conn.execute(
@@ -60,7 +54,7 @@ def _global_slug(db_path: Path) -> str:
         return str(row_to_dict(row)["slug"])
 
 
-def _add_private_source(db_path: Path, *, slug: str, owner_user_id: int) -> None:
+def _add_private_source(db_path: Path | str, *, slug: str, owner_user_id: int) -> None:
     with connect(db_path) as conn:
         conn.execute(
             """
@@ -173,7 +167,7 @@ def test_unsubscription_is_per_user(tmp_path: Path) -> None:
 # ── API layer ─────────────────────────────────────────────────────────────────
 
 
-def _api_client(db_path: Path, user_id: int, is_admin: bool = False) -> Any:
+def _api_client(db_path: Path | str | str, user_id: int, is_admin: bool = False) -> Any:
     from fastapi.testclient import TestClient
 
     from news_dashboard.auth import require_admin, require_auth
@@ -186,13 +180,13 @@ def _api_client(db_path: Path, user_id: int, is_admin: bool = False) -> Any:
 
 
 def test_api_list_sources_returns_subscription_status(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    pg_clean: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(db_mod, "DB_PATH", tmp_path / "api.db")
-    sync_sources(tmp_path / "api.db")
-    uid = _make_user(tmp_path / "api.db")
+    monkeypatch.setenv("DATABASE_URL", str(pg_clean))
+    sync_sources(pg_clean)
+    uid = _make_user(pg_clean)
 
-    client = _api_client(tmp_path / "api.db", uid)
+    client = _api_client(pg_clean, uid)
     try:
         resp = client.get("/api/sources")
         assert resp.status_code == 200
@@ -208,12 +202,12 @@ def test_api_list_sources_returns_subscription_status(
         app.dependency_overrides.pop(require_admin, None)
 
 
-def test_api_create_private_source(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(db_mod, "DB_PATH", tmp_path / "api2.db")
-    sync_sources(tmp_path / "api2.db")
-    uid = _make_user(tmp_path / "api2.db")
+def test_api_create_private_source(pg_clean: str, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("DATABASE_URL", str(pg_clean))
+    sync_sources(pg_clean)
+    uid = _make_user(pg_clean)
 
-    client = _api_client(tmp_path / "api2.db", uid)
+    client = _api_client(pg_clean, uid)
     try:
         resp = client.post(
             "/api/sources",
@@ -242,15 +236,15 @@ def test_api_create_private_source(tmp_path: Path, monkeypatch: pytest.MonkeyPat
 
 
 def test_api_private_source_not_visible_to_other_user(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    pg_clean: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(db_mod, "DB_PATH", tmp_path / "api3.db")
-    sync_sources(tmp_path / "api3.db")
-    uid_a = _make_user(tmp_path / "api3.db", "alice")
-    uid_b = _make_user(tmp_path / "api3.db", "bob")
+    monkeypatch.setenv("DATABASE_URL", str(pg_clean))
+    sync_sources(pg_clean)
+    uid_a = _make_user(pg_clean, "alice")
+    uid_b = _make_user(pg_clean, "bob")
 
     # Alice creates a private source
-    client_a = _api_client(tmp_path / "api3.db", uid_a)
+    client_a = _api_client(pg_clean, uid_a)
     try:
         resp = client_a.post(
             "/api/sources",
@@ -269,7 +263,7 @@ def test_api_private_source_not_visible_to_other_user(
         app.dependency_overrides.pop(require_admin, None)
 
     # Bob doesn't see it
-    client_b = _api_client(tmp_path / "api3.db", uid_b)
+    client_b = _api_client(pg_clean, uid_b)
     try:
         resp2 = client_b.get("/api/sources")
         slugs = [i["slug"] for i in resp2.json()["items"]]
@@ -282,12 +276,12 @@ def test_api_private_source_not_visible_to_other_user(
         app.dependency_overrides.pop(require_admin, None)
 
 
-def test_api_delete_own_private_source(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(db_mod, "DB_PATH", tmp_path / "api4.db")
-    sync_sources(tmp_path / "api4.db")
-    uid = _make_user(tmp_path / "api4.db")
+def test_api_delete_own_private_source(pg_clean: str, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("DATABASE_URL", str(pg_clean))
+    sync_sources(pg_clean)
+    uid = _make_user(pg_clean)
 
-    client = _api_client(tmp_path / "api4.db", uid)
+    client = _api_client(pg_clean, uid)
     try:
         client.post(
             "/api/sources",
@@ -308,13 +302,13 @@ def test_api_delete_own_private_source(tmp_path: Path, monkeypatch: pytest.Monke
         app.dependency_overrides.pop(require_admin, None)
 
 
-def test_api_cannot_delete_others_source(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(db_mod, "DB_PATH", tmp_path / "api5.db")
-    sync_sources(tmp_path / "api5.db")
-    uid_a = _make_user(tmp_path / "api5.db", "alice")
-    uid_b = _make_user(tmp_path / "api5.db", "bob")
+def test_api_cannot_delete_others_source(pg_clean: str, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("DATABASE_URL", str(pg_clean))
+    sync_sources(pg_clean)
+    uid_a = _make_user(pg_clean, "alice")
+    uid_b = _make_user(pg_clean, "bob")
 
-    client_a = _api_client(tmp_path / "api5.db", uid_a)
+    client_a = _api_client(pg_clean, uid_a)
     try:
         client_a.post(
             "/api/sources",
@@ -331,7 +325,7 @@ def test_api_cannot_delete_others_source(tmp_path: Path, monkeypatch: pytest.Mon
         app.dependency_overrides.pop(require_auth, None)
         app.dependency_overrides.pop(require_admin, None)
 
-    client_b = _api_client(tmp_path / "api5.db", uid_b)
+    client_b = _api_client(pg_clean, uid_b)
     try:
         resp = client_b.delete("/api/sources/alice-src")
         assert resp.status_code == 403
@@ -343,13 +337,13 @@ def test_api_cannot_delete_others_source(tmp_path: Path, monkeypatch: pytest.Mon
         app.dependency_overrides.pop(require_admin, None)
 
 
-def test_api_toggle_subscription(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(db_mod, "DB_PATH", tmp_path / "api6.db")
-    sync_sources(tmp_path / "api6.db")
-    uid = _make_user(tmp_path / "api6.db")
+def test_api_toggle_subscription(pg_clean: str, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("DATABASE_URL", str(pg_clean))
+    sync_sources(pg_clean)
+    uid = _make_user(pg_clean)
 
-    slug = _global_slug(tmp_path / "api6.db")
-    client = _api_client(tmp_path / "api6.db", uid)
+    slug = _global_slug(pg_clean)
+    client = _api_client(pg_clean, uid)
     try:
         # Unsubscribe
         resp = client.patch(f"/api/sources/{slug}/enabled", json={"enabled": False})

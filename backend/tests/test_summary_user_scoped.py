@@ -16,9 +16,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
 from fastapi.testclient import TestClient
 
-import news_dashboard.db as db_mod
 from news_dashboard.auth import create_user
 from news_dashboard.db import connect
 from news_dashboard.ingest import (
@@ -37,18 +37,13 @@ def _setup_db(tmp_path: Path) -> Path:
     return db
 
 
-def _make_user(db_path: Path, username: str = "alice") -> int:
-    orig = db_mod.DB_PATH
-    db_mod.DB_PATH = db_path
-    try:
-        user = create_user(username, "password123")
-    finally:
-        db_mod.DB_PATH = orig
+def _make_user(db_path: Path | str, username: str = "alice") -> int:
+    user = create_user(username, "password123", db_path=db_path)
     return int(user["id"])
 
 
 def _insert_article(
-    db_path: Path,
+    db_path: Path | str,
     *,
     url_suffix: str = "1",
     category: str = "AI/LLM",
@@ -77,7 +72,7 @@ def _insert_article(
     return int(row["id"] if isinstance(row, dict) else row[0])
 
 
-def _insert_private_source(db_path: Path, *, slug: str, owner_user_id: int) -> None:
+def _insert_private_source(db_path: Path | str, *, slug: str, owner_user_id: int) -> None:
     with connect(db_path) as conn:
         conn.execute(
             """
@@ -262,95 +257,81 @@ def test_multiple_states_counted_independently(tmp_path: Path) -> None:
 # ── /api/summary API endpoint tests ──────────────────────────────────────────
 
 
-def test_api_summary_requires_auth(tmp_path: Path) -> None:
+def test_api_summary_requires_auth(pg_clean: str, monkeypatch: pytest.MonkeyPatch) -> None:
     """Without the auth override, /api/summary returns 401."""
-    orig = db_mod.DB_PATH
-    db_mod.DB_PATH = _setup_db(tmp_path)
-    try:
-        from news_dashboard.auth import require_auth
-        from news_dashboard.main import app
+    monkeypatch.setenv("DATABASE_URL", pg_clean)
+    sync_sources(pg_clean)
+    from news_dashboard.auth import require_auth
+    from news_dashboard.main import app
 
-        # Clear the autouse override
-        app.dependency_overrides.pop(require_auth, None)
-        client = TestClient(app, raise_server_exceptions=False)
-        try:
-            resp = client.get("/api/summary")
-            assert resp.status_code == 401
-        finally:
-            # Restore for other tests (conftest autouse will re-inject after this test)
-            pass
-    finally:
-        db_mod.DB_PATH = orig
+    app.dependency_overrides.pop(require_auth, None)
+    client = TestClient(app, raise_server_exceptions=False)
+    resp = client.get("/api/summary")
+    assert resp.status_code == 401
 
 
-def test_api_summary_returns_by_status_and_category(tmp_path: Path) -> None:
+def test_api_summary_returns_by_status_and_category(
+    pg_clean: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """Authenticated call returns the expected shape with byStatus and byCategory."""
-    db = _setup_db(tmp_path)
-    orig = db_mod.DB_PATH
-    db_mod.DB_PATH = db
+    monkeypatch.setenv("DATABASE_URL", pg_clean)
+    sync_sources(pg_clean)
+    uid = _make_user(pg_clean, "apitestuser")
+    _insert_article(pg_clean, url_suffix="a1")
+
+    from news_dashboard.auth import require_auth
+    from news_dashboard.main import app
+
+    fake_user = {"id": uid, "username": "apitestuser", "is_admin": False}
+    app.dependency_overrides[require_auth] = lambda: fake_user
+    client = TestClient(app)
     try:
-        uid = _make_user(db, "apitestuser")
-        _insert_article(db, url_suffix="a1")
-
-        from news_dashboard.auth import require_auth
-        from news_dashboard.main import app
-
-        fake_user = {"id": uid, "username": "apitestuser", "is_admin": False}
-        app.dependency_overrides[require_auth] = lambda: fake_user
-        client = TestClient(app)
-        try:
-            resp = client.get("/api/summary")
-            assert resp.status_code == 200
-            data = resp.json()
-            assert "byStatus" in data
-            assert "byCategory" in data
-            assert data["byStatus"]["new"] == 1
-        finally:
-            app.dependency_overrides.pop(require_auth, None)
+        resp = client.get("/api/summary")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "byStatus" in data
+        assert "byCategory" in data
+        assert data["byStatus"]["new"] == 1
     finally:
-        db_mod.DB_PATH = orig
-
-
-def test_api_summary_isolates_users(tmp_path: Path) -> None:
-    """Two users hitting /api/summary each see only their own counts."""
-    db = _setup_db(tmp_path)
-    orig = db_mod.DB_PATH
-    db_mod.DB_PATH = db
-    try:
-        uid_a = _make_user(db, "user_a")
-        uid_b = _make_user(db, "user_b")
-        aid = _insert_article(db)
-
-        # User A marks article as done
-        transition_article_state(aid, "done", db_path=db, user_id=uid_a)
-
-        from news_dashboard.auth import require_auth
-        from news_dashboard.main import app
-
-        # Check as user A
-        app.dependency_overrides[require_auth] = lambda: {
-            "id": uid_a,
-            "username": "user_a",
-            "is_admin": False,
-        }
-        client = TestClient(app)
-        resp_a = client.get("/api/summary")
-        data_a = resp_a.json()
-
-        # Check as user B
-        app.dependency_overrides[require_auth] = lambda: {
-            "id": uid_b,
-            "username": "user_b",
-            "is_admin": False,
-        }
-        resp_b = client.get("/api/summary")
-        data_b = resp_b.json()
-
         app.dependency_overrides.pop(require_auth, None)
 
-        assert data_a["byStatus"]["read"] == 1
-        assert data_a["byStatus"]["new"] == 0
-        assert data_b["byStatus"]["new"] == 1
-        assert data_b["byStatus"]["read"] == 0
-    finally:
-        db_mod.DB_PATH = orig
+
+def test_api_summary_isolates_users(pg_clean: str, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Two users hitting /api/summary each see only their own counts."""
+    monkeypatch.setenv("DATABASE_URL", pg_clean)
+    sync_sources(pg_clean)
+    uid_a = _make_user(pg_clean, "user_a")
+    uid_b = _make_user(pg_clean, "user_b")
+    aid = _insert_article(pg_clean)
+
+    # User A marks article as done
+    transition_article_state(aid, "done", db_path=pg_clean, user_id=uid_a)
+
+    from news_dashboard.auth import require_auth
+    from news_dashboard.main import app
+
+    # Check as user A
+    app.dependency_overrides[require_auth] = lambda: {
+        "id": uid_a,
+        "username": "user_a",
+        "is_admin": False,
+    }
+    client = TestClient(app)
+    resp_a = client.get("/api/summary")
+    data_a = resp_a.json()
+
+    # Check as user B
+    app.dependency_overrides[require_auth] = lambda: {
+        "id": uid_b,
+        "username": "user_b",
+        "is_admin": False,
+    }
+    resp_b = client.get("/api/summary")
+    data_b = resp_b.json()
+
+    app.dependency_overrides.pop(require_auth, None)
+
+    assert data_a["byStatus"]["read"] == 1
+    assert data_a["byStatus"]["new"] == 0
+    assert data_b["byStatus"]["new"] == 1
+    assert data_b["byStatus"]["read"] == 0

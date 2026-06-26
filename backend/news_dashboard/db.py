@@ -15,7 +15,6 @@ from psycopg import sql
 from psycopg.rows import dict_row
 
 POSTGRES_PREFIXES = ("postgres:" + "//", "postgresql:" + "//")
-DB_PATH: Path | None = None
 
 logger = logging.getLogger(__name__)
 _INIT_DB_LOCK = threading.Lock()
@@ -407,7 +406,7 @@ def active_database_url(database_url: str | None = None) -> str:
     return f"postgresql://{user}:{password}@{host}:{port}/{database}"
 
 
-def describe_database(_db_path: Path | None = None, database_url: str | None = None) -> str:
+def describe_database(database_url: str | None = None) -> str:
     url = active_database_url(database_url)
     parts = urlsplit(url)
     if parts.password:
@@ -421,17 +420,19 @@ def describe_database(_db_path: Path | None = None, database_url: str | None = N
 
 @contextmanager
 def connect(
-    _db_path: Path | None = None,
+    db_path: Path | str | None = None,
     database_url: str | None = None,
 ) -> Iterator[Any]:
     """Open a PostgreSQL connection using psycopg-native SQL and parameters."""
+    if isinstance(db_path, str) and db_path.startswith(POSTGRES_PREFIXES):
+        database_url = db_path
+        db_path = None
     # ty mis-resolves psycopg's overloaded connect() and infers the default
     # tuple row_factory; mypy and pyrefly both accept dict_row here.
     conn = psycopg.connect(active_database_url(database_url), row_factory=dict_row)  # ty: ignore[invalid-argument-type]
-    schema_token = _db_path or DB_PATH
     try:
-        if schema_token is not None:
-            schema = _schema_name(schema_token)
+        if isinstance(db_path, Path):
+            schema = _schema_name(db_path)
             conn.execute(sql.SQL("CREATE SCHEMA IF NOT EXISTS {}").format(sql.Identifier(schema)))
             conn.execute(sql.SQL("SET search_path TO {}").format(sql.Identifier(schema)))
         yield conn
@@ -443,7 +444,10 @@ def connect(
         conn.close()
 
 
-def init_db(_db_path: Path | None = None, database_url: str | None = None) -> None:
+def init_db(db_path: Path | str | None = None, database_url: str | None = None) -> None:
+    if isinstance(db_path, str) and db_path.startswith(POSTGRES_PREFIXES):
+        database_url = db_path
+        db_path = None
     schema_fingerprint = sha256(
         "\0".join(POSTGRES_SCHEMA + POSTGRES_MULTIUSER_SCHEMA).encode("utf-8")
     ).hexdigest()
@@ -460,7 +464,7 @@ def init_db(_db_path: Path | None = None, database_url: str | None = None) -> No
         )
     )
     cache_key = (
-        str(_db_path or DB_PATH or ""),
+        str(db_path or ""),
         env_key,
         schema_fingerprint,
     )
@@ -473,7 +477,7 @@ def init_db(_db_path: Path | None = None, database_url: str | None = None) -> No
     applied = 0
     for statement in POSTGRES_SCHEMA + POSTGRES_MULTIUSER_SCHEMA:
         try:
-            with connect(_db_path, database_url=database_url) as conn:
+            with connect(db_path, database_url=database_url) as conn:
                 conn.execute(statement)
                 applied += 1
         except Exception:  # idempotent best-effort schema statements

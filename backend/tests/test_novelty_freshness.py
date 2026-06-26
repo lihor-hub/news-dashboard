@@ -6,7 +6,6 @@ from typing import Any
 
 import pytest
 
-import news_dashboard.db as db_mod
 from news_dashboard.db import connect, init_db
 from news_dashboard.recommendations import (
     FRESHNESS_SCORE_SPAN,
@@ -66,15 +65,13 @@ def test_novelty_degrades_when_vectors_missing() -> None:
 # ── Database-backed recompute ─────────────────────────────────────────────────
 
 
-def _setup_db(tmp_path: Path, monkeypatch: Any, pg_url: str, name: str) -> Path:
-    db_path = tmp_path / name
+def _setup_db(monkeypatch: Any, pg_url: str) -> str:
     monkeypatch.setenv("DATABASE_URL", pg_url)
-    monkeypatch.setattr(db_mod, "DB_PATH", db_path)
-    init_db(db_path)
-    return db_path
+    init_db(database_url=pg_url)
+    return pg_url
 
 
-def _make_user(db_path: Path, username: str) -> int:
+def _make_user(db_path: str, username: str) -> int:
     with connect(db_path) as conn:
         row = conn.execute(
             "INSERT INTO users(username, password_hash) VALUES (%s, %s) RETURNING id",
@@ -84,7 +81,7 @@ def _make_user(db_path: Path, username: str) -> int:
     return int(row["id"])
 
 
-def _insert_source(db_path: Path, slug: str, *, category: str = "tech", priority: int = 50) -> None:
+def _insert_source(db_path: str, slug: str, *, category: str = "tech", priority: int = 50) -> None:
     with connect(db_path) as conn:
         conn.execute(
             """
@@ -97,7 +94,7 @@ def _insert_source(db_path: Path, slug: str, *, category: str = "tech", priority
 
 
 def _insert_article(
-    db_path: Path,
+    db_path: str,
     slug: str,
     suffix: str,
     *,
@@ -134,7 +131,7 @@ def _insert_article(
 
 
 def _set_state(
-    db_path: Path, user_id: int, article_id: int, *, state: str, starred: bool = False
+    db_path: str, user_id: int, article_id: int, *, state: str, starred: bool = False
 ) -> None:
     with connect(db_path) as conn:
         conn.execute(
@@ -148,7 +145,7 @@ def _set_state(
         )
 
 
-def _signals(db_path: Path, user_id: int, article_id: int) -> dict[str, Any]:
+def _signals(db_path: str, user_id: int, article_id: int) -> dict[str, Any]:
     with connect(db_path) as conn:
         row = conn.execute(
             "SELECT recommendation_score, signals FROM user_article_recommendations"
@@ -164,7 +161,7 @@ def _signals(db_path: Path, user_id: int, article_id: int) -> dict[str, Any]:
 def test_freshness_lifts_recent_article_over_older_twin(
     tmp_path: Path, monkeypatch: Any, pg_clean: str
 ) -> None:
-    db_path = _setup_db(tmp_path, monkeypatch, pg_clean, "freshness.db")
+    db_path = _setup_db(monkeypatch, pg_clean)
     _insert_source(db_path, "src")
     user_id = _make_user(db_path, "alice")
 
@@ -187,7 +184,7 @@ def test_freshness_lifts_recent_article_over_older_twin(
 def test_novelty_contributes_positively_and_relevance_does_not_dominate(
     tmp_path: Path, monkeypatch: Any, pg_clean: str
 ) -> None:
-    db_path = _setup_db(tmp_path, monkeypatch, pg_clean, "novelty.db")
+    db_path = _setup_db(monkeypatch, pg_clean)
     _insert_source(db_path, "src")
     user_id = _make_user(db_path, "alice")
 
@@ -217,7 +214,7 @@ def test_novelty_contributes_positively_and_relevance_does_not_dominate(
 def test_low_signal_articles_remain_visible(
     tmp_path: Path, monkeypatch: Any, pg_clean: str
 ) -> None:
-    db_path = _setup_db(tmp_path, monkeypatch, pg_clean, "low-signal.db")
+    db_path = _setup_db(monkeypatch, pg_clean)
     _insert_source(db_path, "src")
     user_id = _make_user(db_path, "alice")
 

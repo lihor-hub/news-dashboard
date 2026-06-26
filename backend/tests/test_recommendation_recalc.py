@@ -5,7 +5,6 @@ from typing import Any
 
 import pytest
 
-import news_dashboard.db as db_mod
 import news_dashboard.recommendation_jobs as jobs
 from news_dashboard.db import connect, init_db
 from news_dashboard.ingest import list_articles, transition_article_state
@@ -22,15 +21,13 @@ pytestmark = pytest.mark.postgres
 # ── Fixtures / helpers ────────────────────────────────────────────────────────
 
 
-def _setup_db(tmp_path: Path, monkeypatch: Any, pg_url: str, name: str) -> Path:
-    db_path = tmp_path / name
+def _setup_db(monkeypatch: Any, pg_url: str) -> str:
     monkeypatch.setenv("DATABASE_URL", pg_url)
-    monkeypatch.setattr(db_mod, "DB_PATH", db_path)
-    init_db(db_path)
-    return db_path
+    init_db(database_url=pg_url)
+    return pg_url
 
 
-def _make_user(db_path: Path, username: str) -> int:
+def _make_user(db_path: str, username: str) -> int:
     with connect(db_path) as conn:
         row = conn.execute(
             "INSERT INTO users(username, password_hash) VALUES (%s, %s) RETURNING id",
@@ -40,7 +37,7 @@ def _make_user(db_path: Path, username: str) -> int:
     return int(row["id"])
 
 
-def _insert_source(db_path: Path, slug: str, *, category: str = "tech", priority: int = 50) -> None:
+def _insert_source(db_path: str, slug: str, *, category: str = "tech", priority: int = 50) -> None:
     with connect(db_path) as conn:
         conn.execute(
             """
@@ -52,7 +49,7 @@ def _insert_source(db_path: Path, slug: str, *, category: str = "tech", priority
         )
 
 
-def _insert_article(db_path: Path, slug: str, suffix: str, *, category: str = "tech") -> int:
+def _insert_article(db_path: str, slug: str, suffix: str, *, category: str = "tech") -> int:
     with connect(db_path) as conn:
         row = conn.execute(
             """
@@ -77,7 +74,7 @@ def _insert_article(db_path: Path, slug: str, suffix: str, *, category: str = "t
     return int(row["id"])
 
 
-def _set_state(db_path: Path, user_id: int, article_id: int, *, state: str) -> None:
+def _set_state(db_path: str, user_id: int, article_id: int, *, state: str) -> None:
     with connect(db_path) as conn:
         conn.execute(
             """
@@ -90,7 +87,7 @@ def _set_state(db_path: Path, user_id: int, article_id: int, *, state: str) -> N
 
 
 def _insert_rec(
-    db_path: Path,
+    db_path: str,
     user_id: int,
     article_id: int,
     *,
@@ -110,7 +107,7 @@ def _insert_rec(
         )
 
 
-def _rec_row(db_path: Path, user_id: int, article_id: int) -> dict[str, Any] | None:
+def _rec_row(db_path: str, user_id: int, article_id: int) -> dict[str, Any] | None:
     with connect(db_path) as conn:
         row = conn.execute(
             "SELECT recommendation_score, model_version, stale"
@@ -126,7 +123,7 @@ def _rec_row(db_path: Path, user_id: int, article_id: int) -> dict[str, Any] | N
 def test_stale_score_is_recalculated_and_cleared(
     tmp_path: Path, monkeypatch: Any, pg_clean: str
 ) -> None:
-    db_path = _setup_db(tmp_path, monkeypatch, pg_clean, "stale.db")
+    db_path = _setup_db(monkeypatch, pg_clean)
     _insert_source(db_path, "src", category="ai")
     user_id = _make_user(db_path, "alice")
     article = _insert_article(db_path, "src", "a", category="ai")
@@ -144,7 +141,7 @@ def test_stale_score_is_recalculated_and_cleared(
 
 
 def test_missing_score_is_created(tmp_path: Path, monkeypatch: Any, pg_clean: str) -> None:
-    db_path = _setup_db(tmp_path, monkeypatch, pg_clean, "missing.db")
+    db_path = _setup_db(monkeypatch, pg_clean)
     _insert_source(db_path, "src", category="ai")
     user_id = _make_user(db_path, "alice")
     article = _insert_article(db_path, "src", "a", category="ai")
@@ -160,7 +157,7 @@ def test_missing_score_is_created(tmp_path: Path, monkeypatch: Any, pg_clean: st
 def test_superseded_model_version_is_repaired(
     tmp_path: Path, monkeypatch: Any, pg_clean: str
 ) -> None:
-    db_path = _setup_db(tmp_path, monkeypatch, pg_clean, "superseded.db")
+    db_path = _setup_db(monkeypatch, pg_clean)
     _insert_source(db_path, "src", category="ai")
     user_id = _make_user(db_path, "alice")
     article = _insert_article(db_path, "src", "a", category="ai")
@@ -182,7 +179,7 @@ def test_superseded_model_version_is_repaired(
 def test_per_user_failure_does_not_abort_sweep(
     tmp_path: Path, monkeypatch: Any, pg_clean: str
 ) -> None:
-    db_path = _setup_db(tmp_path, monkeypatch, pg_clean, "failure.db")
+    db_path = _setup_db(monkeypatch, pg_clean)
     _insert_source(db_path, "src", category="ai")
     alice = _make_user(db_path, "alice")
     bob = _make_user(db_path, "bob")
@@ -214,7 +211,7 @@ def test_per_user_failure_does_not_abort_sweep(
 def test_today_read_does_not_compute_scores(
     tmp_path: Path, monkeypatch: Any, pg_clean: str
 ) -> None:
-    db_path = _setup_db(tmp_path, monkeypatch, pg_clean, "today-read.db")
+    db_path = _setup_db(monkeypatch, pg_clean)
     _insert_source(db_path, "src", category="ai")
     user_id = _make_user(db_path, "alice")
     article = _insert_article(db_path, "src", "a", category="ai")
@@ -232,7 +229,7 @@ def test_today_read_does_not_compute_scores(
 def test_preference_change_marks_scores_stale(
     tmp_path: Path, monkeypatch: Any, pg_clean: str
 ) -> None:
-    db_path = _setup_db(tmp_path, monkeypatch, pg_clean, "pref.db")
+    db_path = _setup_db(monkeypatch, pg_clean)
     _insert_source(db_path, "src", category="ai")
     user_id = _make_user(db_path, "alice")
     art_one = _insert_article(db_path, "src", "one", category="ai")
@@ -253,7 +250,7 @@ def test_preference_change_marks_scores_stale(
 def test_recommendation_health_reports_stale_and_missing(
     tmp_path: Path, monkeypatch: Any, pg_clean: str
 ) -> None:
-    db_path = _setup_db(tmp_path, monkeypatch, pg_clean, "health.db")
+    db_path = _setup_db(monkeypatch, pg_clean)
     _insert_source(db_path, "src", category="ai")
     user_id = _make_user(db_path, "alice")
     scored = _insert_article(db_path, "src", "scored", category="ai")
@@ -273,7 +270,7 @@ def test_recommendation_health_reports_stale_and_missing(
 def test_recalculate_all_refreshes_non_stale_current_scores(
     tmp_path: Path, monkeypatch: Any, pg_clean: str
 ) -> None:
-    db_path = _setup_db(tmp_path, monkeypatch, pg_clean, "daily.db")
+    db_path = _setup_db(monkeypatch, pg_clean)
     _insert_source(db_path, "src", category="ai")
     user_id = _make_user(db_path, "alice")
     article = _insert_article(db_path, "src", "a", category="ai")

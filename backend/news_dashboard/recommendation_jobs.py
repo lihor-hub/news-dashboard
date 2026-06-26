@@ -74,7 +74,7 @@ def mark_user_recommendations_stale(
 
 def find_recalculation_candidates(
     *,
-    db_path: Path | None = None,
+    db_path: Path | str | None = None,
     database_url: str | None = None,
 ) -> list[int]:
     """Return ids of users with stale, missing, or superseded scores.
@@ -117,7 +117,7 @@ def find_recalculation_candidates(
 
 def recalculate_stale_recommendations(
     *,
-    db_path: Path | None = None,
+    db_path: Path | str | None = None,
     database_url: str | None = None,
     limit_per_user: int = 1000,
 ) -> RecalculationSummary:
@@ -159,7 +159,9 @@ def recalculate_stale_recommendations(
     return summary
 
 
-def _all_user_ids(*, db_path: Path | None = None, database_url: str | None = None) -> list[int]:
+def _all_user_ids(
+    *, db_path: Path | str | None = None, database_url: str | None = None
+) -> list[int]:
     """Return every user id, ordered, for an unconditional recompute sweep."""
     init_db(db_path, database_url=database_url)
     with connect(db_path, database_url=database_url) as conn:
@@ -169,7 +171,7 @@ def _all_user_ids(*, db_path: Path | None = None, database_url: str | None = Non
 
 def recalculate_all_recommendations(
     *,
-    db_path: Path | None = None,
+    db_path: Path | str | None = None,
     database_url: str | None = None,
     limit_per_user: int = 1000,
 ) -> RecalculationSummary:
@@ -216,7 +218,7 @@ def recalculate_all_recommendations(
 
 def recommendation_health(
     *,
-    db_path: Path | None = None,
+    db_path: Path | str | None = None,
     database_url: str | None = None,
 ) -> dict[str, Any]:
     """Diagnostic snapshot of stored recommendation freshness.
