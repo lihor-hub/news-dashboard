@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from typing import Any
+from unittest.mock import MagicMock, patch
+
 import pytest
 
 from news_dashboard.embeddings import (
@@ -49,12 +52,15 @@ def test_answer_uses_openai_api_key_and_default_model(
         completions = FakeCompletions()
 
     class FakeOpenAI:
-        def __init__(self, api_key: str) -> None:
-            calls.append({"api_key": api_key})
+        def __init__(self, api_key: str, **kwargs: Any) -> None:
+            calls.append({"api_key": api_key, **kwargs})
             self.chat = FakeChat()
 
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")
     monkeypatch.delenv("OPENAI_ANSWER_MODEL", raising=False)
+    monkeypatch.delenv("OPENAI_ANSWER_BASE_URL", raising=False)
+    monkeypatch.delenv("OPENAI_BASE_URL", raising=False)
+    monkeypatch.delenv("OPENAI_ANSWER_API_KEY", raising=False)
     import sys
     from types import SimpleNamespace
 
@@ -169,3 +175,64 @@ def test_embeddings_ai_config_uses_model_override(
     _, _, model = _embeddings_ai_config()
 
     assert model == "gateway-embedding-model"
+
+
+# ── _answer gateway tests ─────────────────────────────────────────────────────
+
+
+def _make_fake_client() -> MagicMock:
+    fake_response = MagicMock()
+    fake_response.choices[0].message.content = "answer"
+    fake_client = MagicMock()
+    fake_client.chat.completions.create.return_value = fake_response
+    return fake_client
+
+
+def test_answer_uses_no_base_url_when_gateway_not_configured(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-default")
+    monkeypatch.delenv("OPENAI_ANSWER_API_KEY", raising=False)
+    monkeypatch.delenv("OPENAI_ANSWER_BASE_URL", raising=False)
+    monkeypatch.delenv("OPENAI_BASE_URL", raising=False)
+
+    patch_target = "news_dashboard.ai_client.get_openai_client"
+    with patch(patch_target, return_value=_make_fake_client()) as mock_factory:
+        _answer("sys", "usr")
+    mock_factory.assert_called_once_with(api_key="sk-default", base_url=None)
+
+
+def test_answer_uses_shared_base_url_when_set(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-default")
+    monkeypatch.delenv("OPENAI_ANSWER_API_KEY", raising=False)
+    monkeypatch.delenv("OPENAI_ANSWER_BASE_URL", raising=False)
+    monkeypatch.setenv("OPENAI_BASE_URL", "http://gateway:9130/v1")
+
+    patch_target = "news_dashboard.ai_client.get_openai_client"
+    with patch(patch_target, return_value=_make_fake_client()) as mock_factory:
+        _answer("sys", "usr")
+    mock_factory.assert_called_once_with(api_key="sk-default", base_url="http://gateway:9130/v1")
+
+
+def test_answer_feature_base_url_overrides_shared(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-default")
+    monkeypatch.delenv("OPENAI_ANSWER_API_KEY", raising=False)
+    monkeypatch.setenv("OPENAI_ANSWER_BASE_URL", "http://answer-gw:9130/v1")
+    monkeypatch.setenv("OPENAI_BASE_URL", "http://shared-gw:9130/v1")
+
+    patch_target = "news_dashboard.ai_client.get_openai_client"
+    with patch(patch_target, return_value=_make_fake_client()) as mock_factory:
+        _answer("sys", "usr")
+    mock_factory.assert_called_once_with(api_key="sk-default", base_url="http://answer-gw:9130/v1")
+
+
+def test_answer_feature_api_key_overrides_default(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-default")
+    monkeypatch.setenv("OPENAI_ANSWER_API_KEY", "sk-answer-specific")
+    monkeypatch.delenv("OPENAI_ANSWER_BASE_URL", raising=False)
+    monkeypatch.delenv("OPENAI_BASE_URL", raising=False)
+
+    patch_target = "news_dashboard.ai_client.get_openai_client"
+    with patch(patch_target, return_value=_make_fake_client()) as mock_factory:
+        _answer("sys", "usr")
+    mock_factory.assert_called_once_with(api_key="sk-answer-specific", base_url=None)
