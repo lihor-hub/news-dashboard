@@ -18,6 +18,7 @@ if TYPE_CHECKING:
 MIN_ARTICLES = 5  # refuse to answer if fewer than this many articles are embedded
 TOP_K = 8  # articles to include as context
 DEFAULT_ANSWER_MODEL = "gpt-4o-mini"
+DEFAULT_EMBEDDING_MODEL = "text-embedding-3-small"
 
 # Local fallback for the Ask AI system prompt. The live prompt is managed in
 # Langfuse (name "ask-system", label "production"); this string is used verbatim
@@ -79,16 +80,17 @@ def embedding_text(
     return " ".join(parts)
 
 
-# ── OpenAI embedding ───────────────────────────────────────────────────────
+# ── OpenAI-compatible embedding ────────────────────────────────────────────
 
 
-def _embeddings_ai_config() -> tuple[str, str | None]:
+def _embeddings_ai_config() -> tuple[str, str | None, str]:
     """Resolve the (api_key, base_url) for embedding generation.
 
     Embeddings can target any OpenAI-compatible endpoint (e.g. a self-hosted
     gateway) via ``OPENAI_EMBEDDINGS_BASE_URL`` / ``OPENAI_EMBEDDINGS_API_KEY``,
-    falling back to the shared ``OPENAI_BASE_URL`` / ``OPENAI_API_KEY``. The
-    base URL is optional; when unset the official OpenAI endpoint is used.
+    falling back to the briefing gateway and then the shared
+    ``OPENAI_BASE_URL`` / ``OPENAI_API_KEY``. The base URL is optional; when
+    unset the official OpenAI endpoint is used.
     """
     api_key = os.getenv("OPENAI_EMBEDDINGS_API_KEY") or os.getenv("OPENAI_API_KEY")
     if not api_key:
@@ -97,18 +99,24 @@ def _embeddings_ai_config() -> tuple[str, str | None]:
             "generate article embeddings. Set it in the app environment."
         )
         raise MissingAICredentialsError(msg)
-    base_url = os.getenv("OPENAI_EMBEDDINGS_BASE_URL") or os.getenv("OPENAI_BASE_URL") or None
-    return api_key, base_url
+    base_url = (
+        os.getenv("OPENAI_EMBEDDINGS_BASE_URL")
+        or os.getenv("OPENAI_BRIEFING_BASE_URL")
+        or os.getenv("OPENAI_BASE_URL")
+        or None
+    )
+    model = os.getenv("OPENAI_EMBEDDING_MODEL", DEFAULT_EMBEDDING_MODEL)
+    return api_key, base_url, model
 
 
 def _embed(text: str) -> list[float]:
-    """Embed *text* with text-embedding-3-small via the OpenAI SDK."""
+    """Embed *text* via the configured OpenAI-compatible endpoint."""
     from news_dashboard.ai_client import get_openai_client, trace_params
 
-    api_key, base_url = _embeddings_ai_config()
+    api_key, base_url, model = _embeddings_ai_config()
     client = get_openai_client(api_key=api_key, base_url=base_url)
     response = client.embeddings.create(
-        model="text-embedding-3-small",
+        model=model,
         input=text,
         **trace_params("article-embedding", tags=["embedding"], user_id="system"),
     )

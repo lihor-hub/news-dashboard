@@ -97,6 +97,86 @@ def test_embed_passes_system_user_id_to_trace_params() -> None:
     mock_tp.assert_called_once_with("article-embedding", tags=["embedding"], user_id="system")
 
 
+def test_embed_uses_briefing_gateway_base_url_when_configured() -> None:
+    from news_dashboard.embeddings import _embed
+
+    mock_response = MagicMock()
+    mock_response.data[0].embedding = [0.1, 0.2, 0.3]
+    mock_client = MagicMock()
+    mock_client.embeddings.create.return_value = mock_response
+
+    with (
+        patch.dict(
+            "os.environ",
+            {
+                "OPENAI_API_KEY": "sk-test",
+                "OPENAI_BRIEFING_BASE_URL": "http://127.0.0.1:9130/v1",
+            },
+            clear=True,
+        ),
+        patch(
+            "news_dashboard.ai_client.get_openai_client",
+            return_value=mock_client,
+        ) as mock_client_factory,
+    ):
+        _embed("some text")
+
+    mock_client_factory.assert_called_once_with(
+        api_key="sk-test",
+        base_url="http://127.0.0.1:9130/v1",
+    )
+
+
+def test_embed_uses_shared_openai_base_url_when_briefing_gateway_missing() -> None:
+    from news_dashboard.embeddings import _embed
+
+    mock_response = MagicMock()
+    mock_response.data[0].embedding = [0.1, 0.2, 0.3]
+    mock_client = MagicMock()
+    mock_client.embeddings.create.return_value = mock_response
+
+    with (
+        patch.dict(
+            "os.environ",
+            {
+                "OPENAI_API_KEY": "sk-test",
+                "OPENAI_BASE_URL": "http://shared-gateway:9130/v1",
+            },
+            clear=True,
+        ),
+        patch(
+            "news_dashboard.ai_client.get_openai_client",
+            return_value=mock_client,
+        ) as mock_client_factory,
+    ):
+        _embed("some text")
+
+    mock_client_factory.assert_called_once_with(
+        api_key="sk-test",
+        base_url="http://shared-gateway:9130/v1",
+    )
+
+
+def test_embed_falls_back_to_openai_when_no_gateway_configured() -> None:
+    from news_dashboard.embeddings import _embed
+
+    mock_response = MagicMock()
+    mock_response.data[0].embedding = [0.1, 0.2, 0.3]
+    mock_client = MagicMock()
+    mock_client.embeddings.create.return_value = mock_response
+
+    with (
+        patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}, clear=True),
+        patch(
+            "news_dashboard.ai_client.get_openai_client",
+            return_value=mock_client,
+        ) as mock_client_factory,
+    ):
+        _embed("some text")
+
+    mock_client_factory.assert_called_once_with(api_key="sk-test", base_url=None)
+
+
 # ── embeddings: ask-ai answer threads real user_id ────────────────────────────
 
 
