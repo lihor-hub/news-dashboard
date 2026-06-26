@@ -16,16 +16,25 @@ class _SchedulerState:
     def __init__(self) -> None:
         self.scheduler: Any = None  # APScheduler BackgroundScheduler instance
         self.interval_minutes: int = 30  # may differ from env var after live update
+        self.ingest_interval_enabled: bool = True
 
 
 _state = _SchedulerState()
 
 
-def _run_ingest() -> None:
+def _env_flag_enabled(name: str, *, default: bool) -> bool:
+    value = os.getenv(name)
+    if value is None:
+        return default
+    return value.strip().lower() not in {"0", "false", "no", "off"}
+
+
+def run_scheduled_ingest() -> dict[str, int]:
     from news_dashboard.body_fetch import prefetch_article_bodies
     from news_dashboard.ingest import ingest_all
 
     logger.info("Scheduled ingest starting…")
+    results: dict[str, int] = {}
     try:
         results = ingest_all()
         total = sum(v for v in results.values() if v > 0)
@@ -37,6 +46,11 @@ def _run_ingest() -> None:
     # Repair stale/missing scores out-of-band.  Guarded separately so a
     # recalculation or scoring failure never fails the ingest run itself.
     _run_recommendation_recalc()
+    return results
+
+
+def _run_ingest() -> None:
+    run_scheduled_ingest()
 
 
 def _run_recommendation_recalc() -> None:
@@ -175,6 +189,9 @@ def start_scheduler() -> None:
     db_interval = get_setting("ingest_interval_minutes")
     interval_minutes = int(db_interval) if db_interval is not None else env_interval
     _state.interval_minutes = interval_minutes
+    _state.ingest_interval_enabled = _env_flag_enabled(
+        "INGEST_INTERVAL_SCHEDULER_ENABLED", default=True
+    )
 
     db_paused = get_setting("scheduler_paused")
     start_paused = db_paused == "true" if db_paused is not None else False
@@ -185,13 +202,16 @@ def start_scheduler() -> None:
 
     scheduler = BackgroundScheduler(timezone="UTC")
 
-    scheduler.add_job(
-        _run_ingest,
-        trigger="interval",
-        minutes=interval_minutes,
-        id="ingest",
-        replace_existing=True,
-    )
+    if _state.ingest_interval_enabled:
+        scheduler.add_job(
+            _run_ingest,
+            trigger="interval",
+            minutes=interval_minutes,
+            id="ingest",
+            replace_existing=True,
+        )
+    else:
+        logger.info("Interval ingest scheduler disabled by INGEST_INTERVAL_SCHEDULER_ENABLED.")
 
     cron_minute, cron_hour = _parse_cron_hm(digest_cron, "0", "8")
     scheduler.add_job(
@@ -234,7 +254,7 @@ def start_scheduler() -> None:
     scheduler.start()
     _state.scheduler = scheduler
 
-    if start_paused:
+    if start_paused and _state.ingest_interval_enabled:
         try:
             scheduler.pause_job("ingest")
             logger.info("Scheduler started (ingest paused per saved settings).")
@@ -252,6 +272,11 @@ def start_scheduler() -> None:
             r_hour.zfill(2),
             r_minute.zfill(2),
         )
+
+
+def is_ingest_interval_enabled() -> bool:
+    """Return whether this process owns the interval ingest job."""
+    return _state.ingest_interval_enabled
 
 
 def stop_scheduler() -> None:
@@ -303,7 +328,7 @@ def set_interval(minutes: int) -> None:
     _state.interval_minutes = minutes
     set_setting("ingest_interval_minutes", str(minutes))
 
-    if _state.scheduler is None:
+    if _state.scheduler is None or not _state.ingest_interval_enabled:
         return
     try:
         _state.scheduler.reschedule_job("ingest", trigger="interval", minutes=minutes)
@@ -317,7 +342,7 @@ def pause_scheduler() -> None:
     from news_dashboard.db import set_setting
 
     set_setting("scheduler_paused", "true")
-    if _state.scheduler is None:
+    if _state.scheduler is None or not _state.ingest_interval_enabled:
         return
     try:
         _state.scheduler.pause_job("ingest")
@@ -331,7 +356,7 @@ def resume_scheduler() -> None:
     from news_dashboard.db import set_setting
 
     set_setting("scheduler_paused", "false")
-    if _state.scheduler is None:
+    if _state.scheduler is None or not _state.ingest_interval_enabled:
         return
     try:
         _state.scheduler.resume_job("ingest")

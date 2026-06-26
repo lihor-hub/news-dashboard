@@ -47,6 +47,10 @@ export function SchedulerPage() {
 
   useEffect(() => {
     if (!status) return;
+    if (status.interval_ingest_enabled === false) {
+      setCountdown('Externally scheduled');
+      return;
+    }
     if (status.paused) {
       setCountdown('Paused');
       return;
@@ -59,6 +63,7 @@ export function SchedulerPage() {
   }, [status]);
 
   async function handlePreset(minutes: number) {
+    if (status?.interval_ingest_enabled === false) return;
     setActionPending(true);
     try {
       const res = await setSchedulerInterval(minutes);
@@ -85,6 +90,7 @@ export function SchedulerPage() {
 
   async function handleTogglePause() {
     if (!status) return;
+    if (status.interval_ingest_enabled === false) return;
     setActionPending(true);
     try {
       if (status.paused) {
@@ -137,18 +143,36 @@ export function SchedulerPage() {
           Status
         </h3>
         <div className="flex items-center gap-3 mb-2">
-          <Badge variant={status?.paused ? 'secondary' : 'default'}>
-            {status?.paused ? '⏸ Paused' : '▶ Running'}
+          <Badge
+            variant={
+              status?.paused || status?.interval_ingest_enabled === false ? 'secondary' : 'default'
+            }
+          >
+            {status?.interval_ingest_enabled === false
+              ? 'External schedule'
+              : status?.paused
+                ? '⏸ Paused'
+                : '▶ Running'}
           </Badge>
           <span className="text-sm text-muted-foreground">
-            {status?.paused ? 'No runs scheduled' : `Next run in ${countdown}`}
+            {status?.interval_ingest_enabled === false
+              ? 'Interval ingest is managed outside this scheduler'
+              : status?.paused
+                ? 'No runs scheduled'
+                : `Next run in ${countdown}`}
           </span>
         </div>
         <div className="flex gap-2 text-sm mt-2">
           <span className="text-muted-foreground">Interval:</span>
           <span className="font-medium">{status?.interval_minutes ?? '—'} minutes</span>
         </div>
-        {!status?.paused && status?.next_run_at && (
+        {status?.interval_ingest_enabled === false && (
+          <div className="flex gap-2 text-sm mt-1">
+            <span className="text-muted-foreground">Authority:</span>
+            <span className="text-muted-foreground">External CronJob</span>
+          </div>
+        )}
+        {status?.interval_ingest_enabled !== false && !status?.paused && status?.next_run_at && (
           <div className="flex gap-2 text-sm mt-1">
             <span className="text-muted-foreground">Next run at:</span>
             <span className="text-muted-foreground">
@@ -172,7 +196,7 @@ export function SchedulerPage() {
               size="sm"
               variant={status?.interval_minutes === p.value ? 'default' : 'outline'}
               onClick={() => void handlePreset(p.value)}
-              disabled={actionPending}
+              disabled={actionPending || status?.interval_ingest_enabled === false}
             >
               {p.label}
             </Button>
@@ -188,14 +212,14 @@ export function SchedulerPage() {
             onKeyDown={(e) => {
               if (e.key === 'Enter') void handleCustomSave();
             }}
-            disabled={actionPending}
+            disabled={actionPending || status?.interval_ingest_enabled === false}
             className="max-w-[180px] h-9"
             aria-label="Custom interval in minutes"
           />
           <Button
             size="sm"
             onClick={() => void handleCustomSave()}
-            disabled={actionPending || !customMinutes}
+            disabled={actionPending || !customMinutes || status?.interval_ingest_enabled === false}
           >
             Save
           </Button>
@@ -210,7 +234,7 @@ export function SchedulerPage() {
           <Button
             variant={status?.paused ? 'default' : 'secondary'}
             onClick={() => void handleTogglePause()}
-            disabled={actionPending}
+            disabled={actionPending || status?.interval_ingest_enabled === false}
           >
             {status?.paused ? '▶ Resume' : '⏸ Pause'}
           </Button>

@@ -155,6 +155,23 @@ describe('SchedulerPage', () => {
     await waitFor(() => expect(apiMock.pauseScheduler).toHaveBeenCalled());
   });
 
+  it('shows external scheduler state without mutable interval controls', async () => {
+    apiMock.fetchSchedulerStatus.mockResolvedValue({
+      ...running,
+      interval_ingest_enabled: false,
+      ingest_authority: 'external',
+      next_run_at: null,
+    });
+    withProviders(<SchedulerPage />);
+
+    expect(await screen.findByText('External schedule')).toBeTruthy();
+    expect(screen.getByText('External CronJob')).toBeTruthy();
+    fireEvent.click(screen.getByText('⏸ Pause'));
+    fireEvent.click(screen.getByText('1h'));
+    expect(apiMock.pauseScheduler).not.toHaveBeenCalled();
+    expect(apiMock.setSchedulerInterval).not.toHaveBeenCalled();
+  });
+
   it('resumes a paused scheduler', async () => {
     apiMock.fetchSchedulerStatus.mockResolvedValue({ ...running, paused: true });
     apiMock.resumeScheduler.mockResolvedValue({ paused: false, next_run_at: null });

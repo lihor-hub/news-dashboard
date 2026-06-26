@@ -32,6 +32,8 @@ spec:
             runAsUser: 1000
             runAsGroup: 1000
           env:
+            - name: INGEST_INTERVAL_SCHEDULER_ENABLED
+              value: {{ ternary "false" "true" .Values.ingestCronJob.enabled | quote }}
 {{- if .Values.postgresql.enabled }}
             - name: POSTGRES_HOST
               value: {{ printf "%s-postgres" (include "news-dashboard.fullname" .) | quote }}

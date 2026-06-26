@@ -140,6 +140,8 @@ export interface SchedulerStatus {
   interval_minutes: number;
   paused: boolean;
   next_run_at: string | null;
+  interval_ingest_enabled?: boolean;
+  ingest_authority?: 'in_process' | 'external';
 }
 
 export async function fetchSchedulerStatus(): Promise<SchedulerStatus> {

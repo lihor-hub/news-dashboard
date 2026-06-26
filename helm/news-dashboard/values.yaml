@@ -75,6 +75,10 @@ app:
       publicKeyKey: LANGFUSE_PUBLIC_KEY
       secretKeyKey: LANGFUSE_SECRET_KEY
 
+ingestCronJob:
+  enabled: true
+  schedule: "17 */6 * * *"
+
 postgresql:
   enabled: true
   image: postgres:16-alpine
