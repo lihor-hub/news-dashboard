@@ -37,6 +37,18 @@ export default defineConfig({
         importScripts: ['/push-handler.js'],
         runtimeCaching: [
           {
+            // Font assets: cache-first, 1 year TTL
+            urlPattern: /\.(?:woff2)$/,
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'pwa-fonts',
+              expiration: {
+                maxEntries: 10,
+                maxAgeSeconds: 60 * 60 * 24 * 365,
+              },
+            },
+          },
+          {
             // Icon/image assets: cache-first, long TTL
             urlPattern: /\/icons\/.+\.(png|svg|webp|ico)$/,
             handler: 'CacheFirst',
