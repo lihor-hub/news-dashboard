@@ -79,6 +79,15 @@ describe('ArticleListView', () => {
     expect(screen.getByText('All')).toBeTruthy();
   });
 
+  it('marks article rows for deferred off-screen rendering', async () => {
+    renderArticleList(() => Promise.resolve([makeArticle()]));
+
+    await waitFor(() => expect(screen.getByText('Readable article')).toBeTruthy());
+
+    const link = screen.getByRole('link', { name: /readable article/i });
+    expect(link.closest('.content-visibility-auto')).toBeTruthy();
+  });
+
   it('renders the configured empty state after a successful empty response', async () => {
     renderArticleList(() => Promise.resolve([]));
 
