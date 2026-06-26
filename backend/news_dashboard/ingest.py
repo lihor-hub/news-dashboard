@@ -15,10 +15,10 @@ from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
 import feedparser
 
-from .db import connect, init_db, insert_article_sql, placeholders, row_to_dict
-from .ingest_events import ingest_events
-from .recommendations import COLD_START_MODEL_VERSION
-from .sources import DEFAULT_SOURCES, SourceDefinition
+from news_dashboard.db import connect, init_db, insert_article_sql, placeholders, row_to_dict
+from news_dashboard.ingest_events import ingest_events
+from news_dashboard.recommendations import COLD_START_MODEL_VERSION
+from news_dashboard.sources import DEFAULT_SOURCES, SourceDefinition
 
 try:
     from rapidfuzz.distance import Levenshtein
@@ -298,7 +298,7 @@ def _fetch_article_snippet(url: str) -> str:
     can treat a missing snippet as a no-op rather than an error.
     """
     try:
-        from .body_fetch import extract_body  # lazy — optional dep
+        from news_dashboard.body_fetch import extract_body  # lazy — optional dep
 
         text, status = extract_body(url)
         if status == "ok" and text:
@@ -422,7 +422,7 @@ def _fetch_nitter_feed(source: SourceDefinition) -> list[dict[str, Any]]:
 
 def _ingest_source(source: SourceDefinition, db_path: Path | None = None) -> SourceIngestOutcome:
     """Fetch and insert articles for a single source. Returns count inserted."""
-    from .scraper import scrape_source
+    from news_dashboard.scraper import scrape_source
 
     checked_at = now_iso()
     inserted = 0
@@ -920,7 +920,7 @@ def _upsert_uas(  # noqa: PLR0913
     # A workflow/star change reshapes this user's affinity + semantic profile, so
     # every stored score derived from it is now stale and eligible for a
     # background recalculation (see recommendation_jobs.recalculate_stale_recommendations).
-    from .recommendation_jobs import mark_user_recommendations_stale
+    from news_dashboard.recommendation_jobs import mark_user_recommendations_stale
 
     mark_user_recommendations_stale(conn, user_id)
 
@@ -1366,7 +1366,7 @@ def set_article_status(
     # Lazily embed articles when they become saved/read (fire-and-forget; ignore errors)
     if result and status in {"saved", "read"}:
         try:
-            from .embeddings import ensure_article_embedded
+            from news_dashboard.embeddings import ensure_article_embedded
 
             ensure_article_embedded(article_id, db_path)
         except Exception:  # embedding is optional — don't break the status update

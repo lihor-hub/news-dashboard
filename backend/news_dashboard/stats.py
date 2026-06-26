@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
-from .db import connect, init_db, placeholders, row_to_dict
+from news_dashboard.db import connect, init_db, placeholders, row_to_dict
 
 
 def parse_range(from_value: str, to_value: str) -> tuple[datetime, datetime]:

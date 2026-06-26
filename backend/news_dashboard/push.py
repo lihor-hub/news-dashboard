@@ -69,7 +69,7 @@ def save_push_subscription(
     database_url: str | None = None,
 ) -> None:
     """Upsert a push subscription for a user."""
-    from .db import connect
+    from news_dashboard.db import connect
 
     with connect(database_url=database_url) as conn:
         conn.execute(
@@ -92,7 +92,7 @@ def delete_push_subscriptions(
     database_url: str | None = None,
 ) -> None:
     """Remove push subscriptions for a user.  Deletes all if endpoint is None."""
-    from .db import connect
+    from news_dashboard.db import connect
 
     with connect(database_url=database_url) as conn:
         if endpoint is not None:
@@ -113,7 +113,7 @@ def get_user_push_subscriptions(
     database_url: str | None = None,
 ) -> list[dict[str, Any]]:
     """Return all push subscriptions for a user."""
-    from .db import connect, row_to_dict
+    from news_dashboard.db import connect, row_to_dict
 
     with connect(database_url=database_url) as conn:
         rows = conn.execute(

@@ -7,8 +7,8 @@ from typing import Annotated, Any
 
 import typer
 
-from .auth import hash_password
-from .db import connect, init_db, row_to_dict
+from news_dashboard.auth import hash_password
+from news_dashboard.db import connect, init_db, row_to_dict
 
 app = typer.Typer(help="Migration helpers for news-dashboard")
 

@@ -15,7 +15,7 @@ from functools import partial
 from pathlib import Path
 from typing import Any
 
-from .db import connect, row_to_dict
+from news_dashboard.db import connect, row_to_dict
 
 CANDIDATE_LIMIT = 40
 DEFAULT_BRIEFING_MODEL = "gpt-4o-mini"

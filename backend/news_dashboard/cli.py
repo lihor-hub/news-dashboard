@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import typer
 
-from .ingest import ingest_all, list_articles, sync_sources
+from news_dashboard.ingest import ingest_all, list_articles, sync_sources
 
 app = typer.Typer(help="News dashboard maintenance CLI")
 
@@ -20,7 +20,7 @@ def ingest() -> None:
         typer.echo(f"{source}: {count}")
     typer.echo(f"inserted: {sum(value for value in results.values() if value > 0)}")
     # Short-lived process: flush any buffered Langfuse traces before exit.
-    from .ai_client import flush
+    from news_dashboard.ai_client import flush
 
     flush()
 
@@ -36,7 +36,7 @@ def articles(status: str | None = None, limit: int = 20) -> None:
 @app.command(name="rec-health")
 def rec_health() -> None:
     """Print a diagnostic snapshot of stale/missing recommendation scores."""
-    from .recommendation_jobs import recommendation_health
+    from news_dashboard.recommendation_jobs import recommendation_health
 
     health = recommendation_health()
     for key in ("total_scores", "stale_scores", "outdated_scores", "missing_scores"):
@@ -49,7 +49,7 @@ def rec_health() -> None:
 @app.command(name="rec-recalc")
 def rec_recalc() -> None:
     """Recalculate stale, missing, or superseded recommendation scores."""
-    from .recommendation_jobs import recalculate_stale_recommendations
+    from news_dashboard.recommendation_jobs import recalculate_stale_recommendations
 
     summary = recalculate_stale_recommendations()
     for key, value in summary.as_dict().items():
@@ -68,8 +68,8 @@ def improve_prompt(
     the result to Langfuse under the 'candidate' label for human review. Does NOT
     auto-deploy: promote the candidate to 'production' in the Langfuse UI.
     """
-    from .embeddings import ASK_SYSTEM_PROMPT
-    from .prompt_optimizer import PromptOptimizerError, optimize_prompt
+    from news_dashboard.embeddings import ASK_SYSTEM_PROMPT
+    from news_dashboard.prompt_optimizer import PromptOptimizerError, optimize_prompt
 
     fallback = ASK_SYSTEM_PROMPT if name == "ask-system" else ""
     try:
@@ -90,7 +90,7 @@ def improve_prompt(
     )
     typer.echo("review it in Langfuse and promote to 'production' if it is an improvement.")
 
-    from .ai_client import flush
+    from news_dashboard.ai_client import flush
 
     flush()
 

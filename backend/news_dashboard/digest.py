@@ -13,7 +13,7 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from typing import Any
 
-from .db import connect, init_db, row_to_dict
+from news_dashboard.db import connect, init_db, row_to_dict
 
 logger = logging.getLogger(__name__)
 

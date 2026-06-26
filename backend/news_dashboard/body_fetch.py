@@ -15,8 +15,8 @@ from html.parser import HTMLParser
 from pathlib import Path
 from typing import Any
 
-from .db import connect, init_db, row_to_dict
-from .scraper import TIMEOUT_SECS, USER_AGENT
+from news_dashboard.db import connect, init_db, row_to_dict
+from news_dashboard.scraper import TIMEOUT_SECS, USER_AGENT
 
 logger = logging.getLogger(__name__)
 

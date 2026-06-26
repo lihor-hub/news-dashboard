@@ -15,7 +15,7 @@ from typing import Any
 import httpx
 from fastapi import HTTPException
 
-from .auth import keycloak_config
+from news_dashboard.auth import keycloak_config
 
 logger = logging.getLogger(__name__)
 

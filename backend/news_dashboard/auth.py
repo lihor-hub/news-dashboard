@@ -14,7 +14,7 @@ import httpx
 from fastapi import Depends, HTTPException, Request
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 
-from .db import connect, init_db, row_to_dict
+from news_dashboard.db import connect, init_db, row_to_dict
 
 logger = logging.getLogger(__name__)
 

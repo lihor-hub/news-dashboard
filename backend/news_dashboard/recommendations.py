@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from .db import connect, init_db, row_to_dict
+from news_dashboard.db import connect, init_db, row_to_dict
 
 COLD_START_MODEL_VERSION = "cold-start-v1"
 BEHAVIORAL_MODEL_VERSION = "behavioral-affinity-v1"
@@ -234,7 +234,7 @@ def semantic_adjustment(
         return 0.0
     if len(candidate_vector) != len(profile_vector):
         return 0.0
-    from .embeddings import cosine_similarity
+    from news_dashboard.embeddings import cosine_similarity
 
     similarity = cosine_similarity(candidate_vector, profile_vector)
     return _clamp(similarity, -1.0, 1.0) * SEMANTIC_SCORE_SPAN
@@ -272,7 +272,7 @@ def novelty_adjustment(
         return 0.0
     if len(candidate_vector) != len(profile_vector):
         return 0.0
-    from .embeddings import cosine_similarity
+    from news_dashboard.embeddings import cosine_similarity
 
     similarity = cosine_similarity(candidate_vector, profile_vector)
     # Map similarity [-1, 1] onto a dissimilarity factor [0, 1]: the further the
@@ -358,7 +358,7 @@ def _load_user_history_vectors(conn: Any, user_id: int) -> list[list[float]]:
     Articles without an embedding are skipped, so an empty list means "no
     embedded history" and semantic scoring stays disabled for this user.
     """
-    from .embeddings import decode_embedding
+    from news_dashboard.embeddings import decode_embedding
 
     rows = conn.execute(
         """
@@ -381,7 +381,7 @@ def _load_user_history_vectors(conn: Any, user_id: int) -> list[list[float]]:
 
 def _load_candidates(conn: Any, user_id: int, limit: int) -> list[dict[str, Any]]:
     """Read today/later-eligible articles with their cold-start base score."""
-    from .ingest import _COLD_START_RECOMMENDATION_SCORE_SQL
+    from news_dashboard.ingest import _COLD_START_RECOMMENDATION_SCORE_SQL
 
     rows = conn.execute(
         f"""
@@ -476,6 +476,6 @@ def _decode_candidate_embedding(blob: Any) -> list[float] | None:
     """Best-effort decode of a candidate's stored embedding, ``None`` if absent."""
     if blob is None:
         return None
-    from .embeddings import decode_embedding
+    from news_dashboard.embeddings import decode_embedding
 
     return decode_embedding(bytes(blob))

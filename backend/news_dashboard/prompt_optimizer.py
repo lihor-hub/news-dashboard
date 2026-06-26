@@ -21,7 +21,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from .ai_client import _client, chat_create, get_openai_client, langfuse_enabled
+from news_dashboard.ai_client import _client, chat_create, get_openai_client, langfuse_enabled
 
 logger = logging.getLogger(__name__)
 

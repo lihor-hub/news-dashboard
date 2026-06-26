@@ -11,8 +11,8 @@ import logging
 import os
 from typing import Any
 
-from .body_fetch import get_article
-from .db import connect, init_db
+from news_dashboard.body_fetch import get_article
+from news_dashboard.db import connect, init_db
 
 logger = logging.getLogger(__name__)
 

@@ -12,7 +12,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from .db import connect, row_to_dict
+from news_dashboard.db import connect, row_to_dict
 
 logger = logging.getLogger(__name__)
 

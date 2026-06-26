@@ -13,7 +13,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
-from .db import connect, init_db
+from news_dashboard.db import connect, init_db
 
 logger = logging.getLogger(__name__)
 

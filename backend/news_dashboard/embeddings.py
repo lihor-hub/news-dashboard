@@ -82,12 +82,31 @@ def embedding_text(
 # ── OpenAI embedding ───────────────────────────────────────────────────────
 
 
+def _embeddings_ai_config() -> tuple[str, str | None]:
+    """Resolve the (api_key, base_url) for embedding generation.
+
+    Embeddings can target any OpenAI-compatible endpoint (e.g. a self-hosted
+    gateway) via ``OPENAI_EMBEDDINGS_BASE_URL`` / ``OPENAI_EMBEDDINGS_API_KEY``,
+    falling back to the shared ``OPENAI_BASE_URL`` / ``OPENAI_API_KEY``. The
+    base URL is optional; when unset the official OpenAI endpoint is used.
+    """
+    api_key = os.getenv("OPENAI_EMBEDDINGS_API_KEY") or os.getenv("OPENAI_API_KEY")
+    if not api_key:
+        msg = (
+            "Ask AI requires OPENAI_EMBEDDINGS_API_KEY (or OPENAI_API_KEY) to "
+            "generate article embeddings. Set it in the app environment."
+        )
+        raise MissingAICredentialsError(msg)
+    base_url = os.getenv("OPENAI_EMBEDDINGS_BASE_URL") or os.getenv("OPENAI_BASE_URL") or None
+    return api_key, base_url
+
+
 def _embed(text: str) -> list[float]:
     """Embed *text* with text-embedding-3-small via the OpenAI SDK."""
     from news_dashboard.ai_client import get_openai_client, trace_params
 
-    api_key = _require_env("OPENAI_API_KEY", "generate article embeddings")
-    client = get_openai_client(api_key=api_key)
+    api_key, base_url = _embeddings_ai_config()
+    client = get_openai_client(api_key=api_key, base_url=base_url)
     response = client.embeddings.create(
         model="text-embedding-3-small",
         input=text,
@@ -145,7 +164,7 @@ def cosine_similarity(a: list[float], b: list[float]) -> float:
 
 def ensure_article_embedded(article_id: int, db_path: Any = None) -> None:
     """Generate and persist an embedding for *article_id* if not already set."""
-    from .db import connect, init_db
+    from news_dashboard.db import connect, init_db
 
     init_db(db_path)
     with connect(db_path) as conn:
@@ -172,7 +191,7 @@ def embed_all_eligible(db_path: Any = None, *, include_all: bool = False) -> int
     Called lazily on the first /api/ask request to backfill existing articles.
     Returns the number of articles newly embedded.
     """
-    from .db import connect, init_db
+    from news_dashboard.db import connect, init_db
 
     status_filter = "status != 'archived'" if include_all else "status IN ('saved', 'read')"
     init_db(db_path)
@@ -190,7 +209,7 @@ def embed_all_eligible(db_path: Any = None, *, include_all: bool = False) -> int
             continue
         vector = _embed(text)
         blob = _pack(vector)
-        from .db import connect as _connect
+        from news_dashboard.db import connect as _connect
 
         with _connect(db_path) as conn:
             conn.execute(
@@ -224,7 +243,7 @@ def ask(
           "sources": [{"id": int, "title": str, "url": str}, ...]
         }
     """
-    from .db import connect, init_db
+    from news_dashboard.db import connect, init_db
 
     # 1. Backfill embeddings for any eligible articles not yet embedded
     embed_all_eligible(db_path, include_all=include_all)

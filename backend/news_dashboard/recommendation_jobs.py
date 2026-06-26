@@ -23,8 +23,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from .db import connect, init_db, row_to_dict
-from .recommendations import CURRENT_MODEL_VERSIONS, recompute_user_recommendations
+from news_dashboard.db import connect, init_db, row_to_dict
+from news_dashboard.recommendations import CURRENT_MODEL_VERSIONS, recompute_user_recommendations
 
 logger = logging.getLogger(__name__)
 

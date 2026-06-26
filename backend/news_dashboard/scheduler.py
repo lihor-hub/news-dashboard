@@ -22,8 +22,8 @@ _state = _SchedulerState()
 
 
 def _run_ingest() -> None:
-    from .body_fetch import prefetch_article_bodies
-    from .ingest import ingest_all
+    from news_dashboard.body_fetch import prefetch_article_bodies
+    from news_dashboard.ingest import ingest_all
 
     logger.info("Scheduled ingest starting…")
     try:
@@ -40,7 +40,7 @@ def _run_ingest() -> None:
 
 
 def _run_recommendation_recalc() -> None:
-    from .recommendation_jobs import recalculate_stale_recommendations
+    from news_dashboard.recommendation_jobs import recalculate_stale_recommendations
 
     try:
         summary = recalculate_stale_recommendations()
@@ -50,7 +50,7 @@ def _run_recommendation_recalc() -> None:
 
 
 def _run_daily_recommendation_recalc() -> None:
-    from .recommendation_jobs import recalculate_all_recommendations
+    from news_dashboard.recommendation_jobs import recalculate_all_recommendations
 
     logger.info("Daily recommendation recalculation starting…")
     try:
@@ -61,7 +61,7 @@ def _run_daily_recommendation_recalc() -> None:
 
 
 def _run_briefing() -> None:
-    from .briefings import (
+    from news_dashboard.briefings import (
         BriefingAINotConfiguredError,
         BriefingGenerationError,
         generate_briefing,
@@ -84,13 +84,13 @@ def _run_briefing() -> None:
 
 def _run_per_user_briefings() -> None:
     """Generate briefings for users whose scheduled time matches the current UTC HH:MM."""
-    from .briefings import (
+    from news_dashboard.briefings import (
         BriefingAINotConfiguredError,
         BriefingGenerationError,
         generate_briefing,
     )
-    from .db import connect, row_to_dict
-    from .push import send_push_for_user
+    from news_dashboard.db import connect, row_to_dict
+    from news_dashboard.push import send_push_for_user
 
     now = datetime.now(timezone.utc)
     current_hm = now.strftime("%H:%M")
@@ -131,7 +131,7 @@ def _run_per_user_briefings() -> None:
 
 
 def _run_digest() -> None:
-    from .digest import send_digest
+    from news_dashboard.digest import send_digest
 
     logger.info("Sending daily digest…")
     try:
@@ -167,7 +167,7 @@ def start_scheduler() -> None:
         return
 
     # Read settings from DB (overrides env var)
-    from .db import get_setting, init_db
+    from news_dashboard.db import get_setting, init_db
 
     init_db()
 
@@ -298,7 +298,7 @@ def get_interval_minutes() -> int:
 
 def set_interval(minutes: int) -> None:
     """Reschedule the ingest job with a new interval and persist it."""
-    from .db import set_setting
+    from news_dashboard.db import set_setting
 
     _state.interval_minutes = minutes
     set_setting("ingest_interval_minutes", str(minutes))
@@ -314,7 +314,7 @@ def set_interval(minutes: int) -> None:
 
 def pause_scheduler() -> None:
     """Pause the ingest job and persist state."""
-    from .db import set_setting
+    from news_dashboard.db import set_setting
 
     set_setting("scheduler_paused", "true")
     if _state.scheduler is None:
@@ -328,7 +328,7 @@ def pause_scheduler() -> None:
 
 def resume_scheduler() -> None:
     """Resume the ingest job and persist state."""
-    from .db import set_setting
+    from news_dashboard.db import set_setting
 
     set_setting("scheduler_paused", "false")
     if _state.scheduler is None:

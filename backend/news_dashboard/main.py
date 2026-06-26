@@ -26,8 +26,8 @@ from pydantic import BaseModel
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.responses import Response as StarletteResponse
 
-from .analytics import admin_analytics, record_events
-from .auth import (
+from news_dashboard.analytics import admin_analytics, record_events
+from news_dashboard.auth import (
     _session_days,
     authenticate,
     create_session_token,
@@ -45,8 +45,8 @@ from .auth import (
     require_auth,
     update_password,
 )
-from .body_fetch import fetch_and_cache_body, get_article, prefetch_article_bodies
-from .briefings import (
+from news_dashboard.body_fetch import fetch_and_cache_body, get_article, prefetch_article_bodies
+from news_dashboard.briefings import (
     BriefingAINotConfiguredError,
     BriefingGenerationError,
     generate_briefing,
@@ -54,8 +54,8 @@ from .briefings import (
     get_latest_briefing,
     list_briefings,
 )
-from .db import connect, describe_database, init_db, row_to_dict
-from .ingest import (
+from news_dashboard.db import connect, describe_database, init_db, row_to_dict
+from news_dashboard.ingest import (
     get_user_summary,
     ingest_all,
     list_articles,
@@ -66,9 +66,9 @@ from .ingest import (
     sync_sources,
     transition_article_state,
 )
-from .ingest_events import stream_ingest_events
-from .run_history import get_ingest_run_sources, list_ingest_runs
-from .scheduler import (
+from news_dashboard.ingest_events import stream_ingest_events
+from news_dashboard.run_history import get_ingest_run_sources, list_ingest_runs
+from news_dashboard.scheduler import (
     get_interval_minutes,
     get_next_ingest_at,
     is_paused,
@@ -78,8 +78,8 @@ from .scheduler import (
     start_scheduler,
     stop_scheduler,
 )
-from .source_health import list_source_health
-from .stats import (
+from news_dashboard.source_health import list_source_health
+from news_dashboard.stats import (
     article_counts,
     articles_over_time,
     category_mix,
@@ -306,7 +306,7 @@ app.include_router(public_router)
 def _embed_article_background(article_id: int) -> None:
     """Background task: generate embedding for a 'done' article, silently skipping on errors."""
     try:
-        from .embeddings import ensure_article_embedded
+        from news_dashboard.embeddings import ensure_article_embedded
 
         ensure_article_embedded(article_id)
     except Exception:
@@ -476,7 +476,7 @@ def article_audio(
     article_id: int,
     current_user: Annotated[dict[str, Any], Depends(require_auth)],
 ) -> FileResponse:
-    from .tts import TTSNotConfiguredError, generate_audio
+    from news_dashboard.tts import TTSNotConfiguredError, generate_audio
 
     article = get_article(article_id, user_id=current_user["id"])
     if not article:
@@ -495,7 +495,7 @@ def article_insights(
     article_id: int,
     current_user: Annotated[dict[str, Any], Depends(require_auth)],
 ) -> dict[str, Any]:
-    from .insights import InsightsNotConfiguredError, get_or_generate_insights
+    from news_dashboard.insights import InsightsNotConfiguredError, get_or_generate_insights
 
     try:
         bullets = get_or_generate_insights(article_id, user_id=current_user["id"])
@@ -568,7 +568,7 @@ def snooze_later(
 def list_shareable_users(
     current_user: Annotated[dict[str, Any], Depends(require_auth)],
 ) -> dict[str, Any]:
-    from .shares import shareable_users
+    from news_dashboard.shares import shareable_users
 
     return {"items": shareable_users(current_user["id"])}
 
@@ -580,7 +580,7 @@ def share_article_endpoint(
     current_user: Annotated[dict[str, Any], Depends(require_auth)],
     background_tasks: BackgroundTasks,
 ) -> dict[str, Any]:
-    from .shares import ShareError, share_article
+    from news_dashboard.shares import ShareError, share_article
 
     try:
         share = share_article(
@@ -604,7 +604,7 @@ def share_article_endpoint(
 
 
 def _notify_share_recipient(*, to_user_id: int, sender: str, article_title: str) -> None:
-    from .push import send_push_for_user
+    from news_dashboard.push import send_push_for_user
 
     send_push_for_user(
         to_user_id,
@@ -617,7 +617,7 @@ def _notify_share_recipient(*, to_user_id: int, sender: str, article_title: str)
 def list_shares(
     current_user: Annotated[dict[str, Any], Depends(require_auth)],
 ) -> dict[str, Any]:
-    from .shares import list_received_shares, unread_share_count
+    from news_dashboard.shares import list_received_shares, unread_share_count
 
     return {
         "items": list_received_shares(current_user["id"]),
@@ -629,7 +629,7 @@ def list_shares(
 def shares_unread_count(
     current_user: Annotated[dict[str, Any], Depends(require_auth)],
 ) -> dict[str, Any]:
-    from .shares import unread_share_count
+    from news_dashboard.shares import unread_share_count
 
     return {"unread": unread_share_count(current_user["id"])}
 
@@ -639,14 +639,14 @@ def mark_share_read_endpoint(
     share_id: int,
     current_user: Annotated[dict[str, Any], Depends(require_auth)],
 ) -> dict[str, Any]:
-    from .shares import mark_share_read
+    from news_dashboard.shares import mark_share_read
 
     return {"ok": mark_share_read(share_id, current_user["id"])}
 
 
 @api.get("/api/articles/{article_id}/read")
 def mark_read_via_token(article_id: int, token: Annotated[str, Query()]) -> dict[str, Any]:
-    from .digest import verify_read_token
+    from news_dashboard.digest import verify_read_token
 
     if not verify_read_token(article_id, token):
         raise HTTPException(status_code=403, detail="invalid or expired token")
@@ -836,14 +836,14 @@ def health_details() -> dict[str, Any]:
 
 @api.get("/api/recommendations/health", dependencies=_admin_dep)
 def recommendations_health_endpoint() -> dict[str, Any]:
-    from .recommendation_jobs import recommendation_health
+    from news_dashboard.recommendation_jobs import recommendation_health
 
     return recommendation_health()
 
 
 @api.post("/api/recommendations/recalculate", dependencies=_admin_dep)
 def recommendations_recalculate_endpoint() -> dict[str, Any]:
-    from .recommendation_jobs import recalculate_stale_recommendations
+    from news_dashboard.recommendation_jobs import recalculate_stale_recommendations
 
     return recalculate_stale_recommendations().as_dict()
 
@@ -859,7 +859,7 @@ def recommendations_recalculate_mine_endpoint(
     client can tell the user whether personalization has anything to learn from
     yet (zero means no interaction history exists).
     """
-    from .recommendations import recompute_user_recommendations
+    from news_dashboard.recommendations import recompute_user_recommendations
 
     scored = recompute_user_recommendations(current_user["id"])
     return {"scored": scored}
@@ -985,7 +985,7 @@ class PushSubscribeRequest(BaseModel):
 def get_notification_settings(
     current_user: Annotated[dict[str, Any], Depends(require_auth)],
 ) -> dict[str, Any]:
-    from .push import get_vapid_public_key
+    from news_dashboard.push import get_vapid_public_key
 
     uid = current_user["id"]
     with connect() as conn:
@@ -1040,7 +1040,7 @@ def push_subscribe(
     current_user: Annotated[dict[str, Any], Depends(require_auth)],
     payload: PushSubscribeRequest,
 ) -> dict[str, Any]:
-    from .push import save_push_subscription
+    from news_dashboard.push import save_push_subscription
 
     save_push_subscription(
         current_user["id"],
@@ -1055,7 +1055,7 @@ def push_subscribe(
 def push_unsubscribe(
     current_user: Annotated[dict[str, Any], Depends(require_auth)],
 ) -> dict[str, Any]:
-    from .push import delete_push_subscriptions
+    from news_dashboard.push import delete_push_subscriptions
 
     delete_push_subscriptions(current_user["id"])
     return {"unsubscribed": True}
@@ -1071,7 +1071,7 @@ def ask_ai(
     payload: AskRequest,
     current_user: Annotated[dict[str, Any], Depends(require_auth)],
 ) -> dict[str, Any]:
-    from .embeddings import ask
+    from news_dashboard.embeddings import ask
 
     q = payload.query.strip()
     if not q:
@@ -1100,7 +1100,7 @@ def submit_feedback(
     BOOLEAN score to that trace. A no-op (``recorded: False``) when Langfuse is
     disabled, so feedback never errors for the user.
     """
-    from .ai_client import create_score
+    from news_dashboard.ai_client import create_score
 
     comment = (payload.comment or "").strip() or None
     recorded = create_score(
@@ -1136,7 +1136,7 @@ def admin_ai_metrics(days: Annotated[int, Query(ge=1, le=365)] = 30) -> dict[str
 
     Returns ``{"enabled": False}`` when Langfuse tracing is not configured.
     """
-    from .ai_client import fetch_metrics
+    from news_dashboard.ai_client import fetch_metrics
 
     return fetch_metrics(days=days)
 
@@ -1177,7 +1177,7 @@ async def admin_generate_user(payload: GenerateUserRequest) -> dict[str, Any]:
     password = secrets.token_urlsafe(12)
 
     if keycloak_config().enabled:
-        from .keycloak_admin import create_keycloak_user
+        from news_dashboard.keycloak_admin import create_keycloak_user
 
         result = await create_keycloak_user(username, password, email=payload.email)
         return {**result, "password": password, "provider": "keycloak"}
