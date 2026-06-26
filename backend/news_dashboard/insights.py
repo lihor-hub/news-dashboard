@@ -1,6 +1,6 @@
 """AI-generated 'Why it matters' bullet points for articles.
 
-Calls gpt-4o-mini with the article text and caches the result in
+Calls an OpenAI-compatible chat model with the article text and caches the result in
 articles.insights (JSON) so the AI is invoked at most once per article.
 """
 
@@ -16,7 +16,7 @@ from news_dashboard.db import connect, init_db
 
 logger = logging.getLogger(__name__)
 
-_MODEL = "gpt-4o-mini"
+DEFAULT_INSIGHTS_MODEL = "gpt-4o-mini"
 _MAX_CHARS = 8_000
 _PROMPT = (
     "You are analyzing a news article. Based ONLY on the information explicitly stated in the "
@@ -54,16 +54,30 @@ def _parse_bullets(response_text: str) -> list[str]:
     return bullets
 
 
+def _insights_ai_config() -> tuple[str, str | None, str]:
+    """Resolve the (api_key, base_url, model) for article insight generation.
+
+    Insights can target any OpenAI-compatible endpoint via
+    ``OPENAI_INSIGHTS_BASE_URL`` / ``OPENAI_INSIGHTS_API_KEY``, falling back to
+    the shared ``OPENAI_BASE_URL`` / ``OPENAI_API_KEY``. The base URL is
+    optional; when unset the official OpenAI endpoint is used.
+    """
+    api_key = os.getenv("OPENAI_INSIGHTS_API_KEY") or os.getenv("OPENAI_API_KEY")
+    if not api_key:
+        msg = "OPENAI_API_KEY is not configured"
+        raise InsightsNotConfiguredError(msg)
+    base_url = os.getenv("OPENAI_INSIGHTS_BASE_URL") or os.getenv("OPENAI_BASE_URL") or None
+    model = os.getenv("OPENAI_INSIGHTS_MODEL", DEFAULT_INSIGHTS_MODEL)
+    return api_key, base_url, model
+
+
 def generate_insights(article: dict[str, Any], *, user_id: int | None = None) -> list[str]:
     """Call OpenAI and return a list of bullet-point strings.
 
     Raises InsightsNotConfiguredError when OPENAI_API_KEY is absent.
     Raises RuntimeError on API failure.
     """
-    api_key = os.getenv("OPENAI_API_KEY")
-    if not api_key:
-        msg = "OPENAI_API_KEY is not configured"
-        raise InsightsNotConfiguredError(msg)
+    api_key, base_url, model = _insights_ai_config()
 
     text = _build_text(article)
     if not text.strip():
@@ -71,7 +85,7 @@ def generate_insights(article: dict[str, Any], *, user_id: int | None = None) ->
 
     from news_dashboard.ai_client import chat_create, get_openai_client, get_prompt
 
-    client = get_openai_client(api_key=api_key)
+    client = get_openai_client(api_key=api_key, base_url=base_url)
     prompt = get_prompt("article-insights", fallback=_PROMPT)
     logger.info("Generating insights for article %s", article.get("id"))
     result = chat_create(
@@ -80,7 +94,7 @@ def generate_insights(article: dict[str, Any], *, user_id: int | None = None) ->
         tags=["insights"],
         user_id=user_id,
         prompt=prompt,
-        model=_MODEL,
+        model=model,
         messages=[{"role": "user", "content": f"{prompt.text}\n\n{text}"}],
         max_tokens=512,
     )

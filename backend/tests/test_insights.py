@@ -14,8 +14,10 @@ import pytest
 
 from news_dashboard.db import connect
 from news_dashboard.insights import (
+    DEFAULT_INSIGHTS_MODEL,
     InsightsNotConfiguredError,
     _build_text,
+    _insights_ai_config,
     _parse_bullets,
     generate_insights,
     get_or_generate_insights,
@@ -129,9 +131,53 @@ def test_generate_insights_raises_without_api_key() -> None:
     with patch.dict("os.environ", {}, clear=False):
         import os
 
+        os.environ.pop("OPENAI_INSIGHTS_API_KEY", None)
         os.environ.pop("OPENAI_API_KEY", None)
         with pytest.raises(InsightsNotConfiguredError):
             generate_insights(_ARTICLE)
+
+
+def test_insights_ai_config_uses_gateway_when_configured(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-openai")
+    monkeypatch.setenv("OPENAI_BASE_URL", "http://shared-gateway:9130/v1")
+
+    api_key, base_url, model = _insights_ai_config()
+
+    assert api_key == "sk-openai"
+    assert base_url == "http://shared-gateway:9130/v1"
+    assert model == DEFAULT_INSIGHTS_MODEL
+
+
+def test_insights_ai_config_prefers_insights_gateway_settings(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-openai")
+    monkeypatch.setenv("OPENAI_BASE_URL", "http://shared-gateway/v1")
+    monkeypatch.setenv("OPENAI_INSIGHTS_API_KEY", "freellmapi-key")
+    monkeypatch.setenv("OPENAI_INSIGHTS_BASE_URL", "http://insights-gateway/v1")
+    monkeypatch.setenv("OPENAI_INSIGHTS_MODEL", "gateway-chat-model")
+
+    api_key, base_url, model = _insights_ai_config()
+
+    assert api_key == "freellmapi-key"
+    assert base_url == "http://insights-gateway/v1"
+    assert model == "gateway-chat-model"
+
+
+def test_insights_ai_config_falls_back_to_openai_when_gateway_missing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-openai")
+    monkeypatch.delenv("OPENAI_BASE_URL", raising=False)
+    monkeypatch.delenv("OPENAI_INSIGHTS_BASE_URL", raising=False)
+
+    api_key, base_url, model = _insights_ai_config()
+
+    assert api_key == "sk-openai"
+    assert base_url is None
+    assert model == DEFAULT_INSIGHTS_MODEL
 
 
 def test_generate_insights_returns_parsed_bullets() -> None:
@@ -143,7 +189,14 @@ def test_generate_insights_returns_parsed_bullets() -> None:
     mock_client.chat.completions.create.return_value = mock_completion
 
     with (
-        patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}),
+        patch.dict(
+            "os.environ",
+            {
+                "OPENAI_API_KEY": "sk-test",
+                "OPENAI_BASE_URL": "http://shared-gateway:9130/v1",
+                "OPENAI_INSIGHTS_MODEL": "gateway-chat-model",
+            },
+        ),
         patch("openai.OpenAI", return_value=mock_client),
     ):
         bullets = generate_insights(_ARTICLE)
@@ -151,7 +204,7 @@ def test_generate_insights_returns_parsed_bullets() -> None:
     assert bullets == ["First bullet point", "Second bullet point", "Third bullet point"]
     mock_client.chat.completions.create.assert_called_once()
     call_kwargs = mock_client.chat.completions.create.call_args.kwargs
-    assert call_kwargs["model"] == "gpt-4o-mini"
+    assert call_kwargs["model"] == "gateway-chat-model"
     assert "Test Headline" in call_kwargs["messages"][0]["content"]
 
 
