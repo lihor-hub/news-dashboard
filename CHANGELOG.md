@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.21.0
+- You can now share articles with other users directly within the platform!
+
 ## 1.20.0
 - You can now enjoy smarter and more personalized news recommendations, as the app gets better at learning from your feedback and improving over time.
 
