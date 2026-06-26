@@ -45,11 +45,18 @@ Capture the intent before writing code, so the change has a tracked rationale.
 
 ```bash
 gh issue create --title "<concise imperative title>" \
-  --body "<what & why; acceptance criteria as a checklist>"
+  --body "<what & why; acceptance criteria as a checklist>" \
+  --label "ready-for-agent"
 ```
 
 Keep the title in the repo's voice (e.g. `fix:`/`feat:` style matches commits).
 Note the issue number — you'll reference it in the branch and the PR.
+
+**Always apply the `ready-for-agent` label** to every issue you open. The body
+must be fully specified — context, file references, and acceptance criteria as a
+checklist — so an agent can pick it up with no further human context. If you add
+the label to an existing issue, use `gh issue edit <issue#> --add-label
+"ready-for-agent"`.
 
 ### 2. Branch off `main`
 
