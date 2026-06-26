@@ -12,7 +12,14 @@ CHART_DIR = Path(__file__).resolve().parents[2] / "helm" / "news-dashboard"
 def test_helm_template_default() -> None:
     assert HELM_BIN is not None
     res = subprocess.run(  # noqa: S603
-        [HELM_BIN, "template", "news-dashboard", str(CHART_DIR)],
+        [
+            HELM_BIN,
+            "template",
+            "news-dashboard",
+            str(CHART_DIR),
+            "--set",
+            "app.auth.sessionSecret=dummy-session-secret",
+        ],
         capture_output=True,
         text=True,
         check=False,
@@ -34,6 +41,8 @@ def test_helm_template_external_postgres() -> None:
             "template",
             "news-dashboard",
             str(CHART_DIR),
+            "--set",
+            "app.auth.sessionSecret=dummy-session-secret",
             "--set",
             "postgresql.enabled=false",
             "--set",
@@ -68,6 +77,8 @@ def test_helm_template_external_database_url() -> None:
             "news-dashboard",
             str(CHART_DIR),
             "--set",
+            "app.auth.sessionSecret=dummy-session-secret",
+            "--set",
             "postgresql.enabled=false",
             "--set",
             "app.databaseUrl.existingSecret=my-db-secret",
@@ -92,6 +103,8 @@ def test_helm_template_fails_without_postgres_config() -> None:
             "template",
             "news-dashboard",
             str(CHART_DIR),
+            "--set",
+            "app.auth.sessionSecret=dummy-session-secret",
             "--set",
             "postgresql.enabled=false",
         ],
