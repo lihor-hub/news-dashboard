@@ -129,9 +129,38 @@ def build_optimizer_prompt(current_text: str, examples: list[NegativeExample]) -
     return "\n".join(blocks)
 
 
+def _optimizer_ai_config() -> tuple[str, str | None]:
+    """Resolve (api_key, base_url) for prompt optimization.
+
+    Targets the free LLM gateway via ``OPENAI_OPTIMIZER_BASE_URL`` /
+    ``OPENAI_OPTIMIZER_API_KEY``, falling back to the briefing gateway config
+    and then the shared ``OPENAI_BASE_URL`` / ``OPENAI_API_KEY``. The base URL
+    is optional; when unset the official OpenAI endpoint is used.
+    """
+    api_key = (
+        os.getenv("OPENAI_OPTIMIZER_API_KEY")
+        or os.getenv("OPENAI_BRIEFING_API_KEY")
+        or os.getenv("OPENAI_API_KEY")
+    )
+    if not api_key:
+        msg = (
+            "Prompt optimization requires an API key. Set OPENAI_OPTIMIZER_API_KEY "
+            "(or OPENAI_API_KEY) in the app environment."
+        )
+        raise PromptOptimizerError(msg)
+    base_url = (
+        os.getenv("OPENAI_OPTIMIZER_BASE_URL")
+        or os.getenv("OPENAI_BRIEFING_BASE_URL")
+        or os.getenv("OPENAI_BASE_URL")
+        or None
+    )
+    return api_key, base_url
+
+
 def _propose_revision(current_text: str, examples: list[NegativeExample], *, model: str) -> str:
     """Call the LLM to draft an improved prompt. Traced like any other call."""
-    client = get_openai_client(api_key=_require_openai_key())
+    api_key, base_url = _optimizer_ai_config()
+    client = get_openai_client(api_key=api_key, base_url=base_url)
     response = chat_create(
         client,
         name="prompt-optimizer",
@@ -146,14 +175,6 @@ def _propose_revision(current_text: str, examples: list[NegativeExample], *, mod
     return (response.choices[0].message.content or "").strip()
 
 
-def _require_openai_key() -> str:
-    key = os.getenv("OPENAI_API_KEY")
-    if not key:
-        msg = "OPENAI_API_KEY is required to propose prompt improvements."
-        raise PromptOptimizerError(msg)
-    return key
-
-
 def optimize_prompt(
     *,
     prompt_name: str,
@@ -161,7 +182,7 @@ def optimize_prompt(
     score_name: str = "user-thumbs",
     days: int = 14,
     max_examples: int = 50,
-    model: str = DEFAULT_OPTIMIZER_MODEL,
+    model: str | None = None,
 ) -> OptimizationResult:
     """Run one feedback-driven improvement pass for *prompt_name*.
 
@@ -171,6 +192,9 @@ def optimize_prompt(
     when there is nothing to learn from (no negative feedback) or Langfuse is
     unavailable.
     """
+    resolved_model = (
+        model if model is not None else os.getenv("OPENAI_OPTIMIZER_MODEL", DEFAULT_OPTIMIZER_MODEL)
+    )
     examples = collect_negative_examples(score_name=score_name, days=days, limit=max_examples)
     if not examples:
         msg = f"No '{score_name}' thumbs-down feedback in the last {days} days; nothing to do."
@@ -184,7 +208,7 @@ def optimize_prompt(
         msg = f"Could not load current prompt '{prompt_name}': {exc}"
         raise PromptOptimizerError(msg) from exc
 
-    proposed = _propose_revision(current_text, examples, model=model)
+    proposed = _propose_revision(current_text, examples, model=resolved_model)
     if not proposed:
         msg = "The optimizer model returned an empty prompt."
         raise PromptOptimizerError(msg)

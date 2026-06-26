@@ -6,6 +6,7 @@ from news_dashboard.prompt_optimizer import (
     NegativeExample,
     PromptOptimizerError,
     _extract_question,
+    _optimizer_ai_config,
     _score_is_negative,
     build_optimizer_prompt,
     collect_negative_examples,
@@ -54,3 +55,62 @@ def test_build_optimizer_prompt_includes_current_and_examples() -> None:
 def test_collect_negative_examples_requires_langfuse() -> None:
     with pytest.raises(PromptOptimizerError, match="not configured"):
         collect_negative_examples()
+
+
+def test_optimizer_ai_config_requires_api_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    for var in ("OPENAI_OPTIMIZER_API_KEY", "OPENAI_BRIEFING_API_KEY", "OPENAI_API_KEY"):
+        monkeypatch.delenv(var, raising=False)
+    with pytest.raises(PromptOptimizerError, match="API key"):
+        _optimizer_ai_config()
+
+
+def test_optimizer_ai_config_uses_optimizer_key_and_base_url(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("OPENAI_OPTIMIZER_API_KEY", "opt-key")
+    monkeypatch.setenv("OPENAI_OPTIMIZER_BASE_URL", "http://optimizer-gw/v1")
+    for var in (
+        "OPENAI_BRIEFING_API_KEY",
+        "OPENAI_BRIEFING_BASE_URL",
+        "OPENAI_API_KEY",
+        "OPENAI_BASE_URL",
+    ):
+        monkeypatch.delenv(var, raising=False)
+
+    api_key, base_url = _optimizer_ai_config()
+
+    assert api_key == "opt-key"
+    assert base_url == "http://optimizer-gw/v1"
+
+
+def test_optimizer_ai_config_falls_back_to_briefing_gateway(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    for var in ("OPENAI_OPTIMIZER_API_KEY", "OPENAI_OPTIMIZER_BASE_URL"):
+        monkeypatch.delenv(var, raising=False)
+    monkeypatch.setenv("OPENAI_BRIEFING_API_KEY", "briefing-key")
+    monkeypatch.setenv("OPENAI_BRIEFING_BASE_URL", "http://briefing-gw/v1")
+    for var in ("OPENAI_API_KEY", "OPENAI_BASE_URL"):
+        monkeypatch.delenv(var, raising=False)
+
+    api_key, base_url = _optimizer_ai_config()
+
+    assert api_key == "briefing-key"
+    assert base_url == "http://briefing-gw/v1"
+
+
+def test_optimizer_ai_config_falls_back_to_openai(monkeypatch: pytest.MonkeyPatch) -> None:
+    for var in (
+        "OPENAI_OPTIMIZER_API_KEY",
+        "OPENAI_OPTIMIZER_BASE_URL",
+        "OPENAI_BRIEFING_API_KEY",
+        "OPENAI_BRIEFING_BASE_URL",
+        "OPENAI_BASE_URL",
+    ):
+        monkeypatch.delenv(var, raising=False)
+    monkeypatch.setenv("OPENAI_API_KEY", "plain-key")
+
+    api_key, base_url = _optimizer_ai_config()
+
+    assert api_key == "plain-key"
+    assert base_url is None
