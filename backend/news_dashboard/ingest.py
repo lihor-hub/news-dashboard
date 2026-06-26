@@ -1141,7 +1141,7 @@ def _attach_also_from(conn: Any, articles: list[dict[str, Any]]) -> None:
         article["also_from"] = dupes_by_canonical.get(article["id"], [])
 
 
-def search_articles(  # noqa: PLR0913
+def search_articles(  # noqa: PLR0912, PLR0913
     q: str = "",
     limit: int = 50,
     db_path: Path | None = None,
@@ -1221,12 +1221,19 @@ def search_articles(  # noqa: PLR0913
         params.append(now_ts)
 
     where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+
+    if tsquery:
+        params.append(tsquery)
+        order_by = (
+            "ts_rank_cd(search_vector, to_tsquery('english', %s)) DESC,"
+            " importance_score DESC, discovered_at DESC, id DESC"
+        )
+    else:
+        order_by = "importance_score DESC, discovered_at DESC"
+
     params.append(limit)
 
-    sql = (
-        f"SELECT {_article_list_select()} FROM articles {where}"
-        " ORDER BY importance_score DESC, discovered_at DESC LIMIT %s"
-    )
+    sql = f"SELECT {_article_list_select()} FROM articles {where} ORDER BY {order_by} LIMIT %s"
 
     with connect(db_path) as conn:
         rows = conn.execute(sql, params).fetchall()
@@ -1299,8 +1306,18 @@ def _search_articles_for_user(  # noqa: PLR0912, PLR0913, PLR0915
 
     where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
 
-    # Param order: us_src JOIN, uas JOIN, WHERE params, owner check, limit
-    all_params: list[Any] = [user_id, user_id, *where_params, user_id, limit]
+    if tsquery:
+        user_order_by = (
+            "ts_rank_cd(a.search_vector, to_tsquery('english', %s)) DESC,"
+            " a.importance_score DESC, a.discovered_at DESC, a.id DESC"
+        )
+        rank_params: list[Any] = [tsquery]
+    else:
+        user_order_by = "a.importance_score DESC, a.discovered_at DESC"
+        rank_params = []
+
+    # Param order: us_src JOIN, uas JOIN, WHERE params, owner check, rank (if any), limit
+    all_params: list[Any] = [user_id, user_id, *where_params, user_id, *rank_params, limit]
 
     sql = f"""
         SELECT {_article_list_select("a")},
@@ -1317,7 +1334,7 @@ def _search_articles_for_user(  # noqa: PLR0912, PLR0913, PLR0915
         LEFT JOIN user_sources us_src ON us_src.user_id = %s AND us_src.source_slug = a.source_slug
         LEFT JOIN user_article_state uas ON uas.article_id = a.id AND uas.user_id = %s
         {where}
-        ORDER BY a.importance_score DESC, a.discovered_at DESC LIMIT %s
+        ORDER BY {user_order_by} LIMIT %s
     """
     with connect(db_path) as conn:
         rows = conn.execute(sql, all_params).fetchall()

@@ -354,3 +354,117 @@ def test_search_endpoint_returns_matching_articles(client: TestClient, api_db: P
     titles = [it["title"] for it in items]
     assert "Pytest Tips" in titles
     assert "Rust Intro" not in titles
+
+
+# ─── Text relevance ordering ──────────────────────────────────────────────────
+
+
+def _insert_with_score(  # noqa: PLR0913
+    db_path: Path,
+    *,
+    importance_score: int,
+    title: str = "Article",
+    summary: str = "",
+    reason: str = "",
+    body: str | None = None,
+    category: str = "python",
+    source_slug: str = "python-insider",
+    source_name: str = "Python Insider",
+    state: str = "today",
+    starred: bool = False,
+    url_suffix: str = "",
+) -> int:
+    article_id = _insert(
+        db_path,
+        title=title,
+        summary=summary,
+        reason=reason,
+        body=body,
+        category=category,
+        source_slug=source_slug,
+        source_name=source_name,
+        state=state,
+        starred=starred,
+        url_suffix=url_suffix,
+    )
+    with connect(db_path) as conn:
+        conn.execute(
+            "UPDATE articles SET importance_score = %s WHERE id = %s",
+            (importance_score, article_id),
+        )
+    return article_id
+
+
+def test_title_match_outranks_high_importance_weak_match(db: Path) -> None:
+    """A direct title match should rank above a higher-importance article with only a body match."""
+    _insert_with_score(
+        db,
+        title="asyncio Deep Dive",
+        summary="asyncio event loop internals",
+        importance_score=90,
+        url_suffix="-strong",
+    )
+    _insert_with_score(
+        db,
+        title="Web Frameworks Overview",
+        summary="overview of python web frameworks",
+        body="mentions asyncio briefly in passing",
+        importance_score=50,
+        url_suffix="-weak",
+    )
+
+    results = search_articles("asyncio", db_path=db)
+    titles = [r["title"] for r in results]
+    assert titles.index("asyncio Deep Dive") < titles.index("Web Frameworks Overview"), (
+        "Direct title/summary match should rank before weak body-only match"
+    )
+
+
+def _make_user(db_path: Path, username: str) -> int:
+    with connect(db_path) as conn:
+        row = conn.execute(
+            "INSERT INTO users(username, password_hash) VALUES (%s, %s) RETURNING id",
+            (username, "test-hash"),
+        ).fetchone()
+    assert row is not None
+    return int(row["id"] if isinstance(row, dict) else row[0])
+
+
+def test_user_scoped_title_match_outranks_high_importance_weak_match(db: Path) -> None:
+    """User-scoped search should also rank by text relevance before importance_score."""
+    user_id = _make_user(db, "rel_test_user")
+
+    _insert_with_score(
+        db,
+        title="pydantic Validation Guide",
+        summary="pydantic model validation explained",
+        importance_score=90,
+        url_suffix="-strong-user",
+    )
+    _insert_with_score(
+        db,
+        title="General Python Tips",
+        summary="various python tips",
+        body="pydantic is mentioned once here",
+        importance_score=50,
+        url_suffix="-weak-user",
+    )
+
+    results = search_articles("pydantic", db_path=db, user_id=user_id)
+    titles = [r["title"] for r in results]
+    assert "pydantic Validation Guide" in titles
+    assert titles.index("pydantic Validation Guide") < titles.index("General Python Tips"), (
+        "User-scoped direct title/summary match should rank before weak body-only match"
+    )
+
+
+def test_empty_query_keeps_importance_ordering(db: Path) -> None:
+    """Filter-only search (empty q) must preserve importance_score DESC ordering."""
+    _insert_with_score(db, title="Low Importance", importance_score=10, url_suffix="-low")
+    _insert_with_score(db, title="High Importance", importance_score=99, url_suffix="-high")
+
+    results = search_articles("", db_path=db)
+    titles = [r["title"] for r in results]
+    assert titles.index("High Importance") < titles.index("Low Importance"), (
+        "Empty-query search must order by importance_score DESC, not text rank"
+    )
