@@ -91,7 +91,7 @@ def _embed(text: str) -> list[float]:
     response = client.embeddings.create(
         model="text-embedding-3-small",
         input=text,
-        **trace_params("article-embedding", tags=["embedding"]),
+        **trace_params("article-embedding", tags=["embedding"], user_id="system"),
     )
     return list(response.data[0].embedding)
 

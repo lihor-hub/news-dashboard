@@ -75,6 +75,9 @@ def generate_audio(
 
     client = get_openai_client(api_key=api_key)
     logger.info("Generating TTS audio for article %d (%d chars)", article_id, len(text))
+    # audio/speech does not accept Langfuse trace kwargs, so TTS calls are
+    # intentionally untraced. The wrapped client still routes through the same
+    # factory but no span metadata is attached.
     with client.audio.speech.with_streaming_response.create(
         model=_MODEL, voice=_VOICE, input=text
     ) as response:
