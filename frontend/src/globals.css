@@ -216,9 +216,10 @@
 
 /* Guard against content (e.g. long unbroken tokens in AI-generated briefings)
    forcing horizontal overflow, which would stretch the fixed bottom nav past
-   the viewport. */
+   the viewport. `clip` (not `hidden`) avoids establishing a scroll container,
+   which would otherwise break `position: sticky` on the desktop nav rail. */
 .app-shell {
-  overflow-x: hidden;
+  overflow-x: clip;
 }
 
 /* Neutralise global a { color: ... } from legacy styles.css inside new shell */
