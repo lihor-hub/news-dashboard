@@ -17,6 +17,7 @@ import feedparser
 
 from .db import connect, init_db, insert_article_sql, placeholders, row_to_dict
 from .ingest_events import ingest_events
+from .recommendations import COLD_START_MODEL_VERSION
 from .sources import DEFAULT_SOURCES, SourceDefinition
 
 try:
@@ -706,6 +707,33 @@ _ARTICLE_LIST_COLUMNS = (
 )
 
 
+def _apply_recommendation_fields(d: dict[str, Any]) -> None:
+    """Resolve a feed row's recommendation score/model/signals in place.
+
+    Falls back to the cold-start score the feed already *ranks* by when no
+    personalized row has been persisted yet, so every candidate carries a
+    score/label.  Without this, high-churn sources (e.g. Hacker News AI) whose
+    fresh articles outpace the recompute sweep would show no recommendation
+    insight at all.
+    """
+    rec_score = d.pop("_uar_recommendation_score", None)
+    cold_start = d.pop("_cold_start_score", None)
+    persisted_model = d.pop("_uar_recommendation_model", None)
+    if rec_score is not None:
+        d["recommendation_score"] = float(rec_score)
+        d["recommendation_model"] = persisted_model
+    elif cold_start is not None:
+        d["recommendation_score"] = float(cold_start)
+        d["recommendation_model"] = COLD_START_MODEL_VERSION
+    else:
+        d["recommendation_score"] = None
+        d["recommendation_model"] = persisted_model
+    # The signals JSONB carries the per-factor breakdown (affinity, semantic,
+    # freshness, novelty) used to produce on-demand explanations; absent for
+    # unranked articles.
+    d["recommendation_signals"] = d.pop("_uar_recommendation_signals", None)
+
+
 def _article_list_select(alias: str | None = None) -> str:
     if alias is None:
         return _ARTICLE_LIST_COLUMNS
@@ -1056,7 +1084,8 @@ def _list_articles_for_user(  # noqa: PLR0913
           uas.restored_at AS _uas_restored_at,
           uar.recommendation_score AS _uar_recommendation_score,
           uar.model_version        AS _uar_recommendation_model,
-          uar.signals              AS _uar_recommendation_signals
+          uar.signals              AS _uar_recommendation_signals,
+          {_COLD_START_RECOMMENDATION_SCORE_SQL} AS _cold_start_score
         FROM articles a
         LEFT JOIN sources src ON src.slug = a.source_slug
         LEFT JOIN user_sources us_src ON us_src.user_id = %s AND us_src.source_slug = a.source_slug
@@ -1085,13 +1114,7 @@ def _list_articles_for_user(  # noqa: PLR0913
             d["archived_at"] = d.pop("_uas_archived_at", None)
             d["later_until"] = d.pop("_uas_later_until", None)
             d["restored_at"] = d.pop("_uas_restored_at", None)
-            rec_score = d.pop("_uar_recommendation_score", None)
-            d["recommendation_score"] = float(rec_score) if rec_score is not None else None
-            d["recommendation_model"] = d.pop("_uar_recommendation_model", None)
-            # The signals JSONB carries the per-factor breakdown (affinity,
-            # semantic, freshness, novelty) used to produce on-demand
-            # explanations; absent for unranked articles.
-            d["recommendation_signals"] = d.pop("_uar_recommendation_signals", None)
+            _apply_recommendation_fields(d)
             articles.append(d)
         _attach_also_from(conn, articles)
         return articles

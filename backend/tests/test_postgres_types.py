@@ -211,10 +211,13 @@ def test_pg_list_articles_exposes_recommendation_metadata(pg_env: str) -> None:
     assert scored["recommendation_signals"]["semantic_adjustment"] == pytest.approx(12.0)
     assert scored["recommendation_signals"]["affinity_adjustment"] == pytest.approx(8.0)
 
-    # Articles without recommendation metadata degrade gracefully to None.
+    # Articles without a persisted personalized row fall back to the cold-start
+    # score the feed already ranks by, so every candidate carries a score/label.
+    # The per-factor signal breakdown stays None (no personalized factors yet).
     unscored = by_id[aid_unscored]
-    assert unscored["recommendation_score"] is None
-    assert unscored["recommendation_model"] is None
+    assert unscored["recommendation_score"] is not None
+    assert unscored["recommendation_score"] > 0
+    assert unscored["recommendation_model"] == "cold-start-v1"
     assert unscored["recommendation_signals"] is None
 
 
