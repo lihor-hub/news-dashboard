@@ -45,6 +45,26 @@ export interface User {
   is_admin: boolean;
 }
 
+export interface ShareableUser {
+  id: number;
+  username: string;
+  email?: string | null;
+}
+
+export interface ReceivedShare {
+  id: number;
+  note?: string | null;
+  created_at: string;
+  read_at?: string | null;
+  from_user_id: number;
+  from_username: string;
+  article_id: number;
+  article_title: string;
+  article_url: string;
+  article_source_name: string;
+  article_summary?: string | null;
+}
+
 export interface Source {
   slug: string;
   name: string;

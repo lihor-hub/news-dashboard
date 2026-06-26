@@ -541,7 +541,9 @@ describe('ArticlePage — Share button', () => {
 
     renderReader();
     await waitFor(() => screen.getByText('Test Article Title'));
+    // Open the share dialog, then pick the external option.
     await userEvent.click(screen.getByRole('button', { name: /share/i }));
+    await userEvent.click(await screen.findByText('Share externally'));
 
     expect(shareMock).toHaveBeenCalledWith({
       title: 'Test Article Title',
@@ -560,6 +562,7 @@ describe('ArticlePage — Share button', () => {
     renderReader();
     await waitFor(() => screen.getByText('Test Article Title'));
     await userEvent.click(screen.getByRole('button', { name: /share/i }));
+    await userEvent.click(await screen.findByText('Share externally'));
 
     expect(clipboardMock).toHaveBeenCalledWith('https://example.com/article');
   });

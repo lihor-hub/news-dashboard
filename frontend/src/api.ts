@@ -13,6 +13,8 @@ import type {
   NotificationSettings,
   NotificationSettingsUpdate,
   PushSubscribeRequest,
+  ReceivedShare,
+  ShareableUser,
   Source,
   SourceHealth,
   SourceQualityRow,
@@ -347,4 +349,38 @@ export async function subscribePush(
 
 export async function unsubscribePush(): Promise<{ unsubscribed: boolean }> {
   return requestJson('/api/notifications/subscribe', { method: 'DELETE' });
+}
+
+// ─── In-platform sharing ──────────────────────────────────────────────────────
+
+export async function fetchShareableUsers(): Promise<ShareableUser[]> {
+  const data = await requestJson<{ items: ShareableUser[] }>('/api/users');
+  return data.items;
+}
+
+export async function shareArticle(
+  articleId: number,
+  toUserId: number,
+  note?: string
+): Promise<void> {
+  await requestJson(`/api/articles/${articleId}/share`, {
+    method: 'POST',
+    body: JSON.stringify({ to_user_id: toUserId, note: note ?? null }),
+  });
+}
+
+export async function fetchReceivedShares(): Promise<{
+  items: ReceivedShare[];
+  unread: number;
+}> {
+  return requestJson('/api/shares');
+}
+
+export async function fetchSharesUnreadCount(): Promise<number> {
+  const data = await requestJson<{ unread: number }>('/api/shares/unread_count');
+  return data.unread;
+}
+
+export async function markShareRead(shareId: number): Promise<void> {
+  await requestJson(`/api/shares/${shareId}/read`, { method: 'POST' });
 }

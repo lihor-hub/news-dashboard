@@ -6,6 +6,7 @@ import { AppShell } from './components/AppShell';
 import { LoginPage } from './pages/LoginPage';
 import { BriefPage } from './pages/BriefPage';
 import { InboxPage } from './pages/InboxPage';
+import { SharedPage } from './pages/SharedPage';
 import { LaterPage } from './pages/LaterPage';
 import { StarredPage } from './pages/StarredPage';
 import { SearchPage } from './pages/SearchPage';
@@ -72,6 +73,7 @@ export const routes: RouteObject[] = [
       { path: 'today', element: <InboxPage /> },
       { path: 'later', element: <LaterPage /> },
       { path: 'starred', element: <StarredPage /> },
+      { path: 'shared', element: <SharedPage /> },
       { path: 'search', element: <SearchPage /> },
       { path: 'ask', element: <AskPage /> },
       {

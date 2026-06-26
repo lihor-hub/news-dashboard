@@ -29,6 +29,7 @@ import { getReaderList } from '@/lib/readerList';
 import { recommendationExplanation } from '@/lib/recommendation';
 import { trackArticleOpen, trackArticleClose } from '@/lib/analytics';
 import { cn } from '@/lib/utils';
+import { ShareDialog } from '@/components/ShareDialog';
 
 function renderBody(md: string): string {
   const escape = (s: string) =>
@@ -280,14 +281,11 @@ export function ArticlePage() {
     audioMutation.mutate();
   }
 
-  async function handleShare() {
+  const [shareOpen, setShareOpen] = useState(false);
+
+  function handleShare() {
     if (!article) return;
-    if (navigator.share) {
-      await navigator.share({ title: article.title, url: article.url });
-    } else {
-      await navigator.clipboard.writeText(article.url);
-      toast('Link copied!');
-    }
+    setShareOpen(true);
   }
 
   // On-demand recommendation explanation — kept collapsed by default so the
@@ -642,6 +640,11 @@ export function ArticlePage() {
         </div>,
         document.body
       )}
+      <ShareDialog
+        open={shareOpen}
+        onOpenChange={setShareOpen}
+        article={{ id: Number(article.id), title: article.title, url: article.url }}
+      />
     </div>
   );
 }

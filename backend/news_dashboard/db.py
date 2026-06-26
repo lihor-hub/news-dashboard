@@ -364,6 +364,21 @@ POSTGRES_MULTIUSER_SCHEMA = [
     )
     """,
     "CREATE INDEX IF NOT EXISTS idx_push_subs_user ON user_push_subscriptions(user_id)",
+    """
+    CREATE TABLE IF NOT EXISTS article_shares (
+      id            BIGSERIAL PRIMARY KEY,
+      article_id    BIGINT NOT NULL REFERENCES articles(id) ON DELETE CASCADE,
+      from_user_id  INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      to_user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      note          TEXT,
+      created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      read_at       TIMESTAMPTZ
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_article_shares_recipient"
+    " ON article_shares(to_user_id, created_at DESC)",
+    "CREATE INDEX IF NOT EXISTS idx_article_shares_unread"
+    " ON article_shares(to_user_id) WHERE read_at IS NULL",
 ]
 
 

@@ -8,6 +8,7 @@ import {
   Newspaper,
   Radio,
   Search,
+  Send,
   Settings,
   Sparkles,
   Star,
@@ -28,6 +29,7 @@ export const primaryNavigationItems: NavigationItem[] = [
   { to: '/today', label: 'Today', icon: Inbox, shortcut: 't' },
   { to: '/later', label: 'Later', icon: Clock, shortcut: 'l' },
   { to: '/starred', label: 'Starred', icon: Star, shortcut: 's' },
+  { to: '/shared', label: 'Shared', icon: Send },
   { to: '/search', label: 'Search', icon: Search },
   { to: '/ask', label: 'Ask', commandLabel: 'Ask AI', icon: Sparkles, shortcut: 'a' },
 ];
@@ -52,7 +54,12 @@ export function secondaryNavigationItemsFor(isAdmin: boolean): NavigationItem[] 
     : secondaryNavigationItems;
 }
 
-export const mobileNavigationItems = primaryNavigationItems.slice(0, 5);
+// The mobile bottom bar is a fixed 5-column grid. Keep the five most-used
+// destinations here explicitly so adding desktop-only items (e.g. Shared) does
+// not silently push one off the bar.
+export const mobileNavigationItems = primaryNavigationItems.filter((item) =>
+  ['/', '/today', '/later', '/starred', '/search'].includes(item.to)
+);
 
 export const commandNavigationItems = [...primaryNavigationItems, ...secondaryNavigationItems].map(
   (item) => ({
@@ -90,6 +97,7 @@ export function getPageTitle(pathname: string): string {
   if (pathname === '/today') return 'Today';
   if (pathname.startsWith('/later')) return 'Later';
   if (pathname.startsWith('/starred')) return 'Starred';
+  if (pathname.startsWith('/shared')) return 'Shared';
   if (pathname.startsWith('/search')) return 'Search';
   if (pathname.startsWith('/ask')) return 'Ask AI';
   if (pathname.startsWith('/briefs')) return 'Briefs';

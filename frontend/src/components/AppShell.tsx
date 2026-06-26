@@ -8,7 +8,7 @@ import { ShortcutOverlay } from './ShortcutOverlay';
 import { WhatsNewDialog } from './WhatsNewDialog';
 import { useWhatsNew } from '@/hooks/useWhatsNew';
 import { cn } from '@/lib/utils';
-import { fetchSummary, logoutUser } from '@/api';
+import { fetchSummary, fetchSharesUnreadCount, logoutUser } from '@/api';
 import { startAnalytics, stopAnalytics, trackRoute } from '@/lib/analytics';
 import { useAuth } from '@/contexts/auth';
 import {
@@ -28,9 +28,15 @@ function useNavCounts() {
     staleTime: 30_000,
     refetchOnWindowFocus: false,
   });
+  const { data: sharesUnread } = useQuery({
+    queryKey: ['shares-unread'],
+    queryFn: fetchSharesUnreadCount,
+    staleTime: 30_000,
+  });
   return {
     today: data?.byStatus?.new ?? null,
     starred: data?.byStatus?.saved ?? null,
+    shared: sharesUnread ?? null,
   };
 }
 
@@ -39,7 +45,13 @@ function DesktopRail({ pathname }: { pathname: string }) {
   const { user, setUser } = useAuth();
   const navigate = useNavigate();
   const countFor = (item: NavigationItem): number | null =>
-    item.to === '/today' ? counts.today : item.to === '/starred' ? counts.starred : null;
+    item.to === '/today'
+      ? counts.today
+      : item.to === '/starred'
+        ? counts.starred
+        : item.to === '/shared'
+          ? counts.shared
+          : null;
 
   async function handleLogout() {
     await logoutUser();

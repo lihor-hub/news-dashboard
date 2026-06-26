@@ -153,6 +153,11 @@ class LaterUpdate(BaseModel):
     days: int = 1
 
 
+class ShareArticleRequest(BaseModel):
+    to_user_id: int
+    note: str | None = None
+
+
 class EnabledUpdate(BaseModel):
     enabled: bool
 
@@ -557,6 +562,86 @@ def snooze_later(
     if not article:
         raise HTTPException(status_code=404, detail="article not found")
     return article
+
+
+@api.get("/api/users")
+def list_shareable_users(
+    current_user: Annotated[dict[str, Any], Depends(require_auth)],
+) -> dict[str, Any]:
+    from .shares import shareable_users
+
+    return {"items": shareable_users(current_user["id"])}
+
+
+@api.post("/api/articles/{article_id}/share")
+def share_article_endpoint(
+    article_id: int,
+    payload: ShareArticleRequest,
+    current_user: Annotated[dict[str, Any], Depends(require_auth)],
+    background_tasks: BackgroundTasks,
+) -> dict[str, Any]:
+    from .shares import ShareError, share_article
+
+    try:
+        share = share_article(
+            article_id=article_id,
+            from_user_id=current_user["id"],
+            to_user_id=payload.to_user_id,
+            note=payload.note,
+        )
+    except ShareError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    article = get_article(article_id, user_id=current_user["id"])
+    title = article["title"] if article else "an article"
+    background_tasks.add_task(
+        _notify_share_recipient,
+        to_user_id=payload.to_user_id,
+        sender=current_user["username"],
+        article_title=title,
+    )
+    return share
+
+
+def _notify_share_recipient(*, to_user_id: int, sender: str, article_title: str) -> None:
+    from .push import send_push_for_user
+
+    send_push_for_user(
+        to_user_id,
+        f"{sender} shared an article",
+        article_title,
+    )
+
+
+@api.get("/api/shares")
+def list_shares(
+    current_user: Annotated[dict[str, Any], Depends(require_auth)],
+) -> dict[str, Any]:
+    from .shares import list_received_shares, unread_share_count
+
+    return {
+        "items": list_received_shares(current_user["id"]),
+        "unread": unread_share_count(current_user["id"]),
+    }
+
+
+@api.get("/api/shares/unread_count")
+def shares_unread_count(
+    current_user: Annotated[dict[str, Any], Depends(require_auth)],
+) -> dict[str, Any]:
+    from .shares import unread_share_count
+
+    return {"unread": unread_share_count(current_user["id"])}
+
+
+@api.post("/api/shares/{share_id}/read")
+def mark_share_read_endpoint(
+    share_id: int,
+    current_user: Annotated[dict[str, Any], Depends(require_auth)],
+) -> dict[str, Any]:
+    from .shares import mark_share_read
+
+    return {"ok": mark_share_read(share_id, current_user["id"])}
 
 
 @api.get("/api/articles/{article_id}/read")
