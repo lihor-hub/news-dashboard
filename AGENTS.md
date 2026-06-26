@@ -13,3 +13,8 @@
 - Before starting work, fetch and rebase on `origin/main`.
 - Keep working branches fast-forwardable with `origin/main`; resolve divergence by rebasing rather than merging.
 - Do not use `git push --no-verify` when pushing changes.
+
+## Agent Skills
+
+- Keep Claude and Codex skill access synchronized at all times.
+- `.agents/skills` must point at `.claude/skills` so Codex agents see the same project skills without maintaining duplicate copies.

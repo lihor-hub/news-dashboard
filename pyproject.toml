@@ -132,6 +132,9 @@ ignore = [
   "S101",    # asserts are the point of tests
   "PT009",   # plain assert is preferred over self.assertEqual here
 ]
+"scripts/test_agent_skill_sync.py" = [
+  "S101",    # asserts are the point of tests
+]
 
 [tool.ruff.lint.pylint]
 max-args = 7
