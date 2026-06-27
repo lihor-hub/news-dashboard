@@ -410,6 +410,29 @@ POSTGRES_MULTIUSER_SCHEMA = [
     )
     """,
     "CREATE INDEX IF NOT EXISTS idx_user_quizzes_user ON user_quizzes(user_id, created_at DESC)",
+    "ALTER TABLE article_shares ADD COLUMN IF NOT EXISTS context_summary TEXT",
+    """
+    CREATE TABLE IF NOT EXISTS share_annotations (
+      id              BIGSERIAL PRIMARY KEY,
+      share_id        BIGINT NOT NULL REFERENCES article_shares(id) ON DELETE CASCADE,
+      highlighted_text TEXT NOT NULL,
+      offset_chars    INTEGER NOT NULL DEFAULT 0,
+      note            TEXT,
+      created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_share_annotations_share"
+    " ON share_annotations(share_id, created_at)",
+    """
+    CREATE TABLE IF NOT EXISTS share_messages (
+      id          BIGSERIAL PRIMARY KEY,
+      share_id    BIGINT NOT NULL REFERENCES article_shares(id) ON DELETE CASCADE,
+      user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      message     TEXT NOT NULL,
+      created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_share_messages_share ON share_messages(share_id, created_at)",
 ]
 
 
