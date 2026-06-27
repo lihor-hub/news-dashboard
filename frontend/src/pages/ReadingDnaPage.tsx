@@ -1,14 +1,30 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
-import { Loader2, RefreshCw } from 'lucide-react';
+import { CheckCircle, Loader2, Plus, RefreshCw, Trash2, XCircle } from 'lucide-react';
 import {
+  createGoal,
+  deleteGoal,
+  fetchGoals,
+  fetchLatestQuiz,
   fetchReadingDna,
   fetchRecommendationPreferences,
+  generateQuiz,
   saveRecommendationPreferences,
+  submitQuiz,
 } from '../api';
-import type { ReadingDna, ReadingDnaBucket, RecommendationPreferences } from '../types';
+import type {
+  Quiz,
+  QuizQuestion,
+  QuizResult,
+  ReadingDna,
+  ReadingDnaBucket,
+  ReadingGoal,
+  RecommendationPreferences,
+} from '../types';
 
 const DEFAULT_CATEGORIES = ['tech', 'science', 'business', 'world', 'ai'];
+
+type Tab = 'dna' | 'learning';
 
 interface PageState {
   dna: ReadingDna | null;
@@ -19,6 +35,7 @@ interface PageState {
 }
 
 export function ReadingDnaPage() {
+  const [tab, setTab] = useState<Tab>('dna');
   const [state, setState] = useState<PageState>({
     dna: null,
     preferences: null,
@@ -100,81 +117,471 @@ export function ReadingDnaPage() {
         </div>
       )}
 
-      <section className="grid grid-cols-2 gap-2 md:grid-cols-4">
-        <Metric label="Window" value={`${dna?.range_days ?? 30}d`} />
-        <Metric label="Avg dwell" value={`${dna?.average_dwell_seconds ?? 0}s`} />
-        <Metric
-          label="Read"
-          value={String(dna?.categories.reduce((sum, item) => sum + item.done, 0) ?? 0)}
-        />
-        <Metric
-          label="Skipped"
-          value={String(dna?.categories.reduce((sum, item) => sum + item.skipped, 0) ?? 0)}
-        />
-      </section>
+      <div className="flex gap-1 border-b border-border">
+        <TabButton active={tab === 'dna'} onClick={() => setTab('dna')}>
+          Reading DNA
+        </TabButton>
+        <TabButton active={tab === 'learning'} onClick={() => setTab('learning')}>
+          Learning Center
+        </TabButton>
+      </div>
 
-      <section className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <Panel title="Category mix">
-          <BucketBars items={dna?.categories ?? []} labelKey="category" />
-        </Panel>
-        <Panel title="Source mix">
-          <BucketBars items={dna?.sources ?? []} labelKey="source" />
-        </Panel>
-      </section>
-
-      <section className="grid grid-cols-1 gap-4 lg:grid-cols-[1.2fr_0.8fr]">
-        <Panel title="Time on app">
-          <div className="flex h-40 items-end gap-2">
-            {(dna?.monthly_time ?? []).map((point) => {
-              const max = Math.max(...(dna?.monthly_time ?? []).map((p) => p.minutes), 1);
-              return (
-                <div key={point.month} className="flex h-full flex-1 flex-col justify-end gap-2">
-                  <div
-                    className="min-h-1 rounded-t bg-chart-2"
-                    style={{ height: `${Math.max(4, (point.minutes / max) * 100)}%` }}
-                    title={`${point.minutes} min`}
-                  />
-                  <div className="truncate text-center text-[10px] text-subtle">{point.month}</div>
-                </div>
-              );
-            })}
-            {dna?.monthly_time.length === 0 && <EmptyLine />}
-          </div>
-        </Panel>
-
-        <Panel title="Active nudges">
-          <div className="space-y-4">
-            {categories.map((category) => {
-              const value = preferences?.category_weights[category] ?? 1;
-              return (
-                <SliderRow
-                  key={category}
-                  label={category}
-                  value={value}
-                  onChange={(next) =>
-                    void updatePreferences({
-                      category_weights: {
-                        ...(preferences?.category_weights ?? {}),
-                        [category]: next,
-                      },
-                    })
-                  }
-                />
-              );
-            })}
-            <SliderRow
-              label="novelty"
-              value={preferences?.novelty_weight ?? 1}
-              onChange={(next) => void updatePreferences({ novelty_weight: next })}
+      {tab === 'dna' && (
+        <>
+          <section className="grid grid-cols-2 gap-2 md:grid-cols-4">
+            <Metric label="Window" value={`${dna?.range_days ?? 30}d`} />
+            <Metric label="Avg dwell" value={`${dna?.average_dwell_seconds ?? 0}s`} />
+            <Metric
+              label="Read"
+              value={String(dna?.categories.reduce((sum, item) => sum + item.done, 0) ?? 0)}
             />
-            <div className="flex items-center gap-2 text-xs text-muted-foreground">
-              {saving && <RefreshCw className="size-3 animate-spin" />}
-              <span>{saving ? 'Saving and recalculating' : 'Changes save immediately'}</span>
-            </div>
-          </div>
-        </Panel>
-      </section>
+            <Metric
+              label="Skipped"
+              value={String(dna?.categories.reduce((sum, item) => sum + item.skipped, 0) ?? 0)}
+            />
+          </section>
+
+          <section className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+            <Panel title="Category mix">
+              <BucketBars items={dna?.categories ?? []} labelKey="category" />
+            </Panel>
+            <Panel title="Source mix">
+              <BucketBars items={dna?.sources ?? []} labelKey="source" />
+            </Panel>
+          </section>
+
+          <section className="grid grid-cols-1 gap-4 lg:grid-cols-[1.2fr_0.8fr]">
+            <Panel title="Time on app">
+              <div className="flex h-40 items-end gap-2">
+                {(dna?.monthly_time ?? []).map((point) => {
+                  const max = Math.max(...(dna?.monthly_time ?? []).map((p) => p.minutes), 1);
+                  return (
+                    <div
+                      key={point.month}
+                      className="flex h-full flex-1 flex-col justify-end gap-2"
+                    >
+                      <div
+                        className="min-h-1 rounded-t bg-chart-2"
+                        style={{ height: `${Math.max(4, (point.minutes / max) * 100)}%` }}
+                        title={`${point.minutes} min`}
+                      />
+                      <div className="truncate text-center text-[10px] text-subtle">
+                        {point.month}
+                      </div>
+                    </div>
+                  );
+                })}
+                {dna?.monthly_time.length === 0 && <EmptyLine />}
+              </div>
+            </Panel>
+
+            <Panel title="Active nudges">
+              <div className="space-y-4">
+                {categories.map((category) => {
+                  const value = preferences?.category_weights[category] ?? 1;
+                  return (
+                    <SliderRow
+                      key={category}
+                      label={category}
+                      value={value}
+                      onChange={(next) =>
+                        void updatePreferences({
+                          category_weights: {
+                            ...(preferences?.category_weights ?? {}),
+                            [category]: next,
+                          },
+                        })
+                      }
+                    />
+                  );
+                })}
+                <SliderRow
+                  label="novelty"
+                  value={preferences?.novelty_weight ?? 1}
+                  onChange={(next) => void updatePreferences({ novelty_weight: next })}
+                />
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  {saving && <RefreshCw className="size-3 animate-spin" />}
+                  <span>{saving ? 'Saving and recalculating' : 'Changes save immediately'}</span>
+                </div>
+              </div>
+            </Panel>
+          </section>
+        </>
+      )}
+
+      {tab === 'learning' && <LearningCenter />}
     </div>
+  );
+}
+
+function LearningCenter() {
+  const [goals, setGoals] = useState<ReadingGoal[]>([]);
+  const [quiz, setQuiz] = useState<Quiz | null>(null);
+  const [result, setResult] = useState<QuizResult | null>(null);
+  const [answers, setAnswers] = useState<Record<number, number>>({});
+  const [loadingGoals, setLoadingGoals] = useState(true);
+  const [loadingQuiz, setLoadingQuiz] = useState(true);
+  const [generatingQuiz, setGeneratingQuiz] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [newDescription, setNewDescription] = useState('');
+  const [newKeywords, setNewKeywords] = useState('');
+  const [addingGoal, setAddingGoal] = useState(false);
+  const [showGoalForm, setShowGoalForm] = useState(false);
+
+  useEffect(() => {
+    fetchGoals()
+      .then(setGoals)
+      .catch(() => setGoals([]))
+      .finally(() => setLoadingGoals(false));
+    fetchLatestQuiz()
+      .then(setQuiz)
+      .catch(() => setQuiz(null))
+      .finally(() => setLoadingQuiz(false));
+  }, []);
+
+  async function handleAddGoal() {
+    if (!newDescription.trim()) return;
+    setAddingGoal(true);
+    setError(null);
+    try {
+      const goal = await createGoal(newDescription.trim(), newKeywords.trim());
+      setGoals((prev) => [goal, ...prev]);
+      setNewDescription('');
+      setNewKeywords('');
+      setShowGoalForm(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to add goal');
+    } finally {
+      setAddingGoal(false);
+    }
+  }
+
+  async function handleDeleteGoal(goalId: number) {
+    try {
+      await deleteGoal(goalId);
+      setGoals((prev) => prev.filter((g) => g.id !== goalId));
+    } catch {
+      setError('Failed to delete goal');
+    }
+  }
+
+  async function handleGenerateQuiz() {
+    setGeneratingQuiz(true);
+    setError(null);
+    setResult(null);
+    setAnswers({});
+    try {
+      const newQuiz = await generateQuiz();
+      setQuiz(newQuiz);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to generate quiz');
+    } finally {
+      setGeneratingQuiz(false);
+    }
+  }
+
+  async function handleSubmitQuiz() {
+    if (!quiz) return;
+    const answerList = quiz.questions.map((_, i) => answers[i] ?? -1);
+    setSubmitting(true);
+    setError(null);
+    try {
+      const quizResult = await submitQuiz(quiz.id, answerList);
+      setResult(quizResult);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to submit quiz');
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <div className="space-y-6">
+      {error && (
+        <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+          {error}
+        </div>
+      )}
+
+      {/* Goals section */}
+      <Panel title="Learning Goals">
+        <div className="space-y-3">
+          {loadingGoals ? (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Loader2 className="size-3 animate-spin" /> Loading goals…
+            </div>
+          ) : goals.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              No goals yet. Add one to boost relevant articles.
+            </p>
+          ) : (
+            <ul className="space-y-2">
+              {goals.map((goal) => (
+                <li
+                  key={goal.id}
+                  className="flex items-start justify-between gap-3 rounded border border-border px-3 py-2 text-sm"
+                >
+                  <div>
+                    <div className="font-medium">{goal.description}</div>
+                    {goal.keywords && (
+                      <div className="mt-0.5 text-xs text-muted-foreground">
+                        Keywords: {goal.keywords}
+                      </div>
+                    )}
+                  </div>
+                  <button
+                    className="shrink-0 text-muted-foreground hover:text-destructive"
+                    onClick={() => void handleDeleteGoal(goal.id)}
+                    title="Delete goal"
+                  >
+                    <Trash2 className="size-3.5" />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          {showGoalForm ? (
+            <div className="space-y-2 rounded border border-border p-3">
+              <input
+                className="w-full rounded border border-border bg-background px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+                placeholder="Goal description (e.g. Understand transformer architectures)"
+                value={newDescription}
+                onChange={(e) => setNewDescription(e.target.value)}
+              />
+              <input
+                className="w-full rounded border border-border bg-background px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+                placeholder="Keywords (space-separated, optional)"
+                value={newKeywords}
+                onChange={(e) => setNewKeywords(e.target.value)}
+              />
+              <div className="flex gap-2">
+                <button
+                  className="rounded bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground disabled:opacity-50"
+                  disabled={!newDescription.trim() || addingGoal}
+                  onClick={() => void handleAddGoal()}
+                >
+                  {addingGoal ? 'Saving…' : 'Save goal'}
+                </button>
+                <button
+                  className="rounded border border-border px-3 py-1.5 text-xs"
+                  onClick={() => {
+                    setShowGoalForm(false);
+                    setNewDescription('');
+                    setNewKeywords('');
+                  }}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button
+              className="flex items-center gap-1.5 text-xs text-primary hover:underline"
+              onClick={() => setShowGoalForm(true)}
+            >
+              <Plus className="size-3" /> Add goal
+            </button>
+          )}
+        </div>
+      </Panel>
+
+      {/* Quiz section */}
+      <Panel title="Weekly Knowledge Quiz">
+        {loadingQuiz ? (
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <Loader2 className="size-3 animate-spin" /> Loading quiz…
+          </div>
+        ) : result ? (
+          <QuizResultView result={result} />
+        ) : quiz ? (
+          <QuizView
+            quiz={quiz}
+            answers={answers}
+            onAnswer={(qi, ai) => setAnswers((prev) => ({ ...prev, [qi]: ai }))}
+            onSubmit={() => void handleSubmitQuiz()}
+            submitting={submitting}
+          />
+        ) : (
+          <div className="space-y-3">
+            <p className="text-sm text-muted-foreground">
+              No quiz yet. Generate one based on your recent reading.
+            </p>
+            <button
+              className="flex items-center gap-1.5 rounded bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground disabled:opacity-50"
+              disabled={generatingQuiz}
+              onClick={() => void handleGenerateQuiz()}
+            >
+              {generatingQuiz && <Loader2 className="size-3 animate-spin" />}
+              {generatingQuiz ? 'Generating…' : 'Generate quiz'}
+            </button>
+          </div>
+        )}
+        {quiz && !result && (
+          <div className="mt-3">
+            <button
+              className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground"
+              disabled={generatingQuiz}
+              onClick={() => void handleGenerateQuiz()}
+            >
+              {generatingQuiz ? (
+                <Loader2 className="size-3 animate-spin" />
+              ) : (
+                <RefreshCw className="size-3" />
+              )}
+              Regenerate quiz
+            </button>
+          </div>
+        )}
+      </Panel>
+    </div>
+  );
+}
+
+function QuizView({
+  quiz,
+  answers,
+  onAnswer,
+  onSubmit,
+  submitting,
+}: {
+  quiz: Quiz;
+  answers: Record<number, number>;
+  onAnswer: (questionIndex: number, answerIndex: number) => void;
+  onSubmit: () => void;
+  submitting: boolean;
+}) {
+  const allAnswered = quiz.questions.every((_, i) => answers[i] !== undefined);
+
+  return (
+    <div className="space-y-5">
+      {quiz.questions.map((q, qi) => (
+        <QuestionCard
+          key={qi}
+          question={q}
+          questionIndex={qi}
+          selectedAnswer={answers[qi]}
+          onSelect={(ai) => onAnswer(qi, ai)}
+        />
+      ))}
+      <button
+        className="flex items-center gap-1.5 rounded bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50"
+        disabled={!allAnswered || submitting}
+        onClick={onSubmit}
+      >
+        {submitting && <Loader2 className="size-3.5 animate-spin" />}
+        {submitting ? 'Submitting…' : 'Submit answers'}
+      </button>
+    </div>
+  );
+}
+
+function QuestionCard({
+  question,
+  questionIndex,
+  selectedAnswer,
+  onSelect,
+}: {
+  question: QuizQuestion;
+  questionIndex: number;
+  selectedAnswer: number | undefined;
+  onSelect: (answerIndex: number) => void;
+}) {
+  return (
+    <div className="rounded border border-border p-3 space-y-2">
+      <p className="text-sm font-medium">
+        {questionIndex + 1}. {question.question}
+      </p>
+      <div className="space-y-1.5">
+        {question.options.map((opt, ai) => (
+          <label
+            key={ai}
+            className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-muted"
+          >
+            <input
+              type="radio"
+              name={`q-${questionIndex}`}
+              checked={selectedAnswer === ai}
+              onChange={() => onSelect(ai)}
+              className="accent-primary"
+            />
+            {opt}
+          </label>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function QuizResultView({ result }: { result: QuizResult }) {
+  const pct = Math.round((result.score / result.total) * 100);
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-3">
+        <div className="text-3xl font-bold tabular-nums">
+          {result.score}/{result.total}
+        </div>
+        <div className="text-sm text-muted-foreground">{pct}% correct</div>
+      </div>
+      <div className="space-y-3">
+        {result.questions.map((q, qi) => {
+          const isCorrect = q.your_answer === q.correct_index;
+          return (
+            <div
+              key={qi}
+              className={`rounded border p-3 space-y-1.5 ${isCorrect ? 'border-green-500/40 bg-green-500/5' : 'border-destructive/40 bg-destructive/5'}`}
+            >
+              <div className="flex items-start gap-2">
+                {isCorrect ? (
+                  <CheckCircle className="mt-0.5 size-3.5 shrink-0 text-green-500" />
+                ) : (
+                  <XCircle className="mt-0.5 size-3.5 shrink-0 text-destructive" />
+                )}
+                <p className="text-sm font-medium">{q.question}</p>
+              </div>
+              <div className="space-y-1 pl-5">
+                {q.options.map((opt, ai) => (
+                  <div
+                    key={ai}
+                    className={`text-xs ${ai === q.correct_index ? 'font-semibold text-green-600' : ai === q.your_answer && !isCorrect ? 'text-destructive line-through' : 'text-muted-foreground'}`}
+                  >
+                    {opt}
+                  </div>
+                ))}
+              </div>
+              {q.explanation && (
+                <p className="pl-5 text-xs text-muted-foreground">{q.explanation}</p>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function TabButton({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      className={`px-4 py-2 text-sm font-medium transition-colors ${
+        active
+          ? 'border-b-2 border-primary text-foreground'
+          : 'text-muted-foreground hover:text-foreground'
+      }`}
+      onClick={onClick}
+    >
+      {children}
+    </button>
   );
 }
 

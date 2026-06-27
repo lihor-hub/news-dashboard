@@ -13,7 +13,10 @@ import type {
   NotificationSettings,
   NotificationSettingsUpdate,
   PushSubscribeRequest,
+  Quiz,
+  QuizResult,
   ReadingDna,
+  ReadingGoal,
   RecommendationPreferences,
   ReceivedShare,
   ShareableUser,
@@ -460,6 +463,43 @@ export async function fetchReceivedShares(): Promise<{
 export async function fetchSharesUnreadCount(): Promise<number> {
   const data = await requestJson<{ unread: number }>('/api/shares/unread_count');
   return data.unread;
+}
+
+// ── Reading Goals & Quizzes ───────────────────────────────────────────────────
+
+export async function fetchGoals(): Promise<ReadingGoal[]> {
+  const data = await requestJson<{ items: ReadingGoal[] }>('/api/goals');
+  return data.items;
+}
+
+export async function createGoal(description: string, keywords: string): Promise<ReadingGoal> {
+  return requestJson<ReadingGoal>('/api/goals', {
+    method: 'POST',
+    body: JSON.stringify({ description, keywords }),
+  });
+}
+
+export async function deleteGoal(goalId: number): Promise<void> {
+  await requestJson(`/api/goals/${goalId}`, { method: 'DELETE' });
+}
+
+export async function fetchLatestQuiz(): Promise<Quiz | null> {
+  try {
+    return await requestJson<Quiz>('/api/quizzes/latest');
+  } catch {
+    return null;
+  }
+}
+
+export async function generateQuiz(): Promise<Quiz> {
+  return requestJson<Quiz>('/api/quizzes/generate', { method: 'POST' });
+}
+
+export async function submitQuiz(quizId: number, answers: number[]): Promise<QuizResult> {
+  return requestJson<QuizResult>(`/api/quizzes/${quizId}/submit`, {
+    method: 'POST',
+    body: JSON.stringify({ answers }),
+  });
 }
 
 export async function markShareRead(shareId: number): Promise<void> {

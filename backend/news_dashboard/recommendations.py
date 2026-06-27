@@ -562,7 +562,7 @@ def _load_candidates(conn: Any, user_id: int, limit: int) -> list[dict[str, Any]
 
     rows = conn.execute(
         f"""
-        SELECT a.id, a.source_slug, a.category, a.tags, a.embedding,
+        SELECT a.id, a.title, a.source_slug, a.category, a.tags, a.embedding,
           a.importance_score,
           EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - a.discovered_at::timestamptz))
             / 3600.0 AS age_hours,
@@ -606,6 +606,13 @@ def recompute_user_recommendations(
             database_url=database_url,
         )
         candidates = _load_candidates(conn, user_id, limit)
+        goal_rows = conn.execute(
+            "SELECT description, keywords FROM user_goals WHERE user_id = %s",
+            (user_id,),
+        ).fetchall()
+        goals = [dict(r) for r in goal_rows]
+
+    from news_dashboard.quiz import goal_alignment_adjustment
 
     # Novelty needs an embedded taste vector to measure surprise against; without
     # one it degrades to a no-op, so the version only advertises novelty when the
@@ -630,8 +637,14 @@ def recompute_user_recommendations(
             novelty_adjustment(candidate_vector, semantic_profile, importance)
             * preferences.novelty_weight
         )
+        goal_boost = goal_alignment_adjustment(
+            candidate.get("title"),
+            str(category) if category else None,
+            candidate.get("tags"),
+            goals,
+        )
         final_score = _clamp(
-            base + adjustment + manual_category + semantic + freshness + novelty,
+            base + adjustment + manual_category + semantic + freshness + novelty + goal_boost,
             0.0,
             100.0,
         )
@@ -650,6 +663,7 @@ def recompute_user_recommendations(
                 "freshness_adjustment": round(freshness, 4),
                 "novelty_adjustment": round(novelty, 4),
                 "novelty_weight": round(preferences.novelty_weight, 4),
+                "goal_alignment_adjustment": round(goal_boost, 4),
                 "source_slug": source_slug,
                 "category": category,
             },

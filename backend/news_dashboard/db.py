@@ -390,6 +390,26 @@ POSTGRES_MULTIUSER_SCHEMA = [
     "CREATE INDEX IF NOT EXISTS idx_article_shares_unread"
     " ON article_shares(to_user_id) WHERE read_at IS NULL",
     "ALTER TABLE articles ADD COLUMN IF NOT EXISTS perspective_analysis JSONB",
+    """
+    CREATE TABLE IF NOT EXISTS user_goals (
+      id          SERIAL PRIMARY KEY,
+      user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      description TEXT NOT NULL,
+      keywords    TEXT NOT NULL DEFAULT '',
+      created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_user_goals_user ON user_goals(user_id)",
+    """
+    CREATE TABLE IF NOT EXISTS user_quizzes (
+      id          SERIAL PRIMARY KEY,
+      user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      questions   JSONB NOT NULL DEFAULT '[]'::jsonb,
+      score       INTEGER
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_user_quizzes_user ON user_quizzes(user_id, created_at DESC)",
 ]
 
 

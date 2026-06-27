@@ -348,3 +348,35 @@ export interface AdminAnalytics {
   skip_rate_trend: { day: string; skips: number; reads: number }[];
   recommendation_funnel: { recommended: number; read: number; skipped: number };
 }
+
+export interface ReadingGoal {
+  id: number;
+  user_id: number;
+  description: string;
+  keywords: string;
+  created_at: string;
+}
+
+export interface QuizQuestion {
+  question: string;
+  options: string[];
+  correct_index: number;
+  explanation: string;
+  article_id: number | null;
+  your_answer?: number | null;
+}
+
+export interface Quiz {
+  id: number;
+  user_id: number;
+  created_at: string;
+  questions: QuizQuestion[];
+  score: number | null;
+}
+
+export interface QuizResult {
+  quiz_id: number;
+  score: number;
+  total: number;
+  questions: QuizQuestion[];
+}

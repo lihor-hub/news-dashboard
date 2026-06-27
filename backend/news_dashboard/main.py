@@ -1350,6 +1350,93 @@ def summary(
     return get_user_summary(user_id=current_user["id"])
 
 
+# ── Reading Goals & Quizzes ───────────────────────────────────────────────────
+
+
+class GoalCreateRequest(BaseModel):
+    description: str
+    keywords: str = ""
+
+
+class QuizSubmitRequest(BaseModel):
+    answers: list[int]
+
+
+@api.post("/api/goals")
+def create_goal_endpoint(
+    payload: GoalCreateRequest,
+    current_user: Annotated[dict[str, Any], Depends(require_auth)],
+) -> dict[str, Any]:
+    from news_dashboard.quiz import create_goal
+
+    description = payload.description.strip()
+    if not description:
+        raise HTTPException(status_code=400, detail="description must not be empty")
+    return create_goal(current_user["id"], description, payload.keywords)
+
+
+@api.get("/api/goals")
+def list_goals_endpoint(
+    current_user: Annotated[dict[str, Any], Depends(require_auth)],
+) -> dict[str, Any]:
+    from news_dashboard.quiz import list_goals
+
+    return {"items": list_goals(current_user["id"])}
+
+
+@api.delete("/api/goals/{goal_id}")
+def delete_goal_endpoint(
+    goal_id: int,
+    current_user: Annotated[dict[str, Any], Depends(require_auth)],
+) -> dict[str, Any]:
+    from news_dashboard.quiz import delete_goal
+
+    if not delete_goal(goal_id, current_user["id"]):
+        raise HTTPException(status_code=404, detail="goal not found")
+    return {"deleted": True}
+
+
+@api.get("/api/quizzes/latest")
+def get_latest_quiz_endpoint(
+    current_user: Annotated[dict[str, Any], Depends(require_auth)],
+) -> dict[str, Any]:
+    from news_dashboard.quiz import get_latest_quiz
+
+    quiz = get_latest_quiz(current_user["id"])
+    if not quiz:
+        raise HTTPException(status_code=404, detail="no quiz available")
+    return quiz
+
+
+@api.post("/api/quizzes/generate")
+def generate_quiz_endpoint(
+    current_user: Annotated[dict[str, Any], Depends(require_auth)],
+) -> dict[str, Any]:
+    from news_dashboard.quiz import generate_weekly_quiz
+
+    try:
+        quiz = generate_weekly_quiz(current_user["id"])
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    if not quiz:
+        raise HTTPException(status_code=404, detail="no eligible articles to quiz on")
+    return quiz
+
+
+@api.post("/api/quizzes/{quiz_id}/submit")
+def submit_quiz_endpoint(
+    quiz_id: int,
+    payload: QuizSubmitRequest,
+    current_user: Annotated[dict[str, Any], Depends(require_auth)],
+) -> dict[str, Any]:
+    from news_dashboard.quiz import submit_quiz
+
+    try:
+        return submit_quiz(quiz_id, current_user["id"], payload.answers)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
 # ── Admin user-management routes ─────────────────────────────────────────────
 
 admin = APIRouter(prefix="/api/admin", dependencies=[Depends(require_admin)])
