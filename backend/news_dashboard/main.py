@@ -69,6 +69,7 @@ from news_dashboard.ingest import (
     transition_article_state,
 )
 from news_dashboard.ingest_events import stream_ingest_events
+from news_dashboard.login_throttle import clear_failures, is_throttled, record_failure
 from news_dashboard.run_history import get_ingest_run_sources, list_ingest_runs
 from news_dashboard.scheduler import (
     get_interval_minutes,
@@ -321,9 +322,16 @@ def keycloak_logout() -> RedirectResponse:
 def login(payload: LoginRequest, response: Response) -> dict[str, Any]:
     if keycloak_config().enabled:
         raise HTTPException(status_code=409, detail="Password login is disabled; use Keycloak")
+    if is_throttled(payload.username):
+        raise HTTPException(
+            status_code=429,
+            detail="Too many failed login attempts; try again later",
+        )
     user = authenticate(payload.username, payload.password)
     if not user:
+        record_failure(payload.username)
         raise HTTPException(status_code=401, detail="Invalid credentials")
+    clear_failures(payload.username)
     token = create_session_token(user["id"], bool(user["is_admin"]))
     response.set_cookie(
         key=_SESSION_COOKIE,
