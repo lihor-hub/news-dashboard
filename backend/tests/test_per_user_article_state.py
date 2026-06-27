@@ -363,6 +363,100 @@ def test_api_state_transition_writes_uas(pg_clean: str, monkeypatch: pytest.Monk
         app.dependency_overrides.pop(require_auth, None)
 
 
+def test_legacy_status_endpoint_updates_only_current_user_state(
+    pg_clean: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """PATCH /api/articles/{id}/status maps legacy read to caller-scoped state."""
+    monkeypatch.setenv("DATABASE_URL", str(pg_clean))
+    sync_sources(pg_clean)
+
+    from fastapi.testclient import TestClient
+
+    from news_dashboard.auth import require_auth
+    from news_dashboard.main import app
+
+    uid_a = _make_user(pg_clean, "legacy_status_alice")
+    uid_b = _make_user(pg_clean, "legacy_status_bob")
+    aid = _insert_article(pg_clean, url_suffix="legacy-status")
+
+    fake_user = {
+        "id": uid_a,
+        "username": "legacy_status_alice",
+        "email": None,
+        "is_admin": False,
+    }
+    app.dependency_overrides[require_auth] = lambda: fake_user
+
+    try:
+        with TestClient(app, raise_server_exceptions=True) as client:
+            resp = client.patch(f"/api/articles/{aid}/status", json={"status": "read"})
+            assert resp.status_code == 200
+            assert resp.json()["state"] == "done"
+
+        alice_done = list_articles(state="done", db_path=pg_clean, user_id=uid_a)
+        bob_today = list_articles(state="today", db_path=pg_clean, user_id=uid_b)
+        bob_done = list_articles(state="done", db_path=pg_clean, user_id=uid_b)
+
+        assert any(article["id"] == aid for article in alice_done)
+        assert any(article["id"] == aid for article in bob_today)
+        assert not any(article["id"] == aid for article in bob_done)
+
+        with connect(pg_clean) as conn:
+            art = conn.execute("SELECT state FROM articles WHERE id = %s", (aid,)).fetchone()
+            assert art is not None
+            assert art["state"] == "today"
+    finally:
+        app.dependency_overrides.pop(require_auth, None)
+
+
+def test_legacy_saved_status_stars_only_current_user(
+    pg_clean: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """PATCH /api/articles/{id}/status maps legacy saved to caller-scoped star."""
+    monkeypatch.setenv("DATABASE_URL", str(pg_clean))
+    sync_sources(pg_clean)
+
+    from fastapi.testclient import TestClient
+
+    from news_dashboard.auth import require_auth
+    from news_dashboard.main import app
+
+    uid_a = _make_user(pg_clean, "legacy_saved_alice")
+    uid_b = _make_user(pg_clean, "legacy_saved_bob")
+    aid = _insert_article(pg_clean, url_suffix="legacy-saved")
+
+    fake_user = {
+        "id": uid_a,
+        "username": "legacy_saved_alice",
+        "email": None,
+        "is_admin": False,
+    }
+    app.dependency_overrides[require_auth] = lambda: fake_user
+
+    try:
+        with TestClient(app, raise_server_exceptions=True) as client:
+            resp = client.patch(f"/api/articles/{aid}/status", json={"status": "saved"})
+            assert resp.status_code == 200
+            assert resp.json()["state"] == "today"
+            assert resp.json()["starred"] is True
+
+        alice_starred = list_articles(starred=True, db_path=pg_clean, user_id=uid_a)
+        bob_starred = list_articles(starred=True, db_path=pg_clean, user_id=uid_b)
+
+        assert any(article["id"] == aid for article in alice_starred)
+        assert not any(article["id"] == aid for article in bob_starred)
+
+        with connect(pg_clean) as conn:
+            art = conn.execute(
+                "SELECT state, saved_at FROM articles WHERE id = %s", (aid,)
+            ).fetchone()
+            assert art is not None
+            assert art["state"] == "today"
+            assert art["saved_at"] is None
+    finally:
+        app.dependency_overrides.pop(require_auth, None)
+
+
 def test_api_articles_includes_recommendation_score(
     pg_clean: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:

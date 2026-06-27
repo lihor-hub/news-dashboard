@@ -581,13 +581,37 @@ def article_perspectives(
 
 
 @api.patch("/api/articles/{article_id}/status")
-def update_status(article_id: int, payload: StatusUpdate) -> dict[str, Any]:
+def update_status(
+    article_id: int,
+    payload: StatusUpdate,
+    current_user: Annotated[dict[str, Any], Depends(require_auth)],
+) -> dict[str, Any]:
+    legacy_state_map = {
+        "read": "done",
+        "skipped": "skipped",
+        "archived": "archived",
+        "new": "today",
+        "saved": "today",
+    }
+    state = legacy_state_map.get(payload.status)
+    if state is None:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"invalid status: {payload.status!r} (expected one of {sorted(legacy_state_map)})"
+            ),
+        )
+
     try:
-        article = set_article_status(article_id, payload.status)
+        article = transition_article_state(article_id, state, user_id=current_user["id"])
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     if not article:
         raise HTTPException(status_code=404, detail="article not found")
+    if payload.status == "saved":
+        article = set_article_starred(article_id, True, user_id=current_user["id"])
+        if not article:
+            raise HTTPException(status_code=404, detail="article not found")
     return article
 
 
