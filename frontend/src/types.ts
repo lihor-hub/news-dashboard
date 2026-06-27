@@ -405,6 +405,16 @@ export interface Quiz {
   completed_result?: QuizResult | null;
 }
 
+export interface QuizHistoryItem {
+  id: number;
+  user_id: number;
+  created_at: string;
+  score: number | null;
+  total: number;
+  completed: boolean;
+  submitted_at?: string | null;
+}
+
 export interface QuizResult {
   quiz_id: number;
   score: number;

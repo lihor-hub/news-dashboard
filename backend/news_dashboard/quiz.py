@@ -355,6 +355,30 @@ def get_latest_quiz(
     return quiz
 
 
+def list_quizzes(
+    user_id: int,
+    limit: int = 12,
+    offset: int = 0,
+    db_path: Path | str | None = None,
+    database_url: str | None = None,
+) -> list[dict[str, Any]]:
+    init_db(db_path, database_url=database_url)
+    with connect(db_path, database_url=database_url) as conn:
+        rows = conn.execute(
+            """
+            SELECT id, user_id, created_at, score, submitted_at,
+                   jsonb_array_length(questions) AS total,
+                   (submitted_at IS NOT NULL OR score IS NOT NULL) AS completed
+            FROM user_quizzes
+            WHERE user_id = %s
+            ORDER BY created_at DESC, id DESC
+            LIMIT %s OFFSET %s
+            """,
+            (user_id, limit, offset),
+        ).fetchall()
+    return [dict(row) for row in rows]
+
+
 def submit_quiz(
     quiz_id: int,
     user_id: int,
