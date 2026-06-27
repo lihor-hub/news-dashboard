@@ -320,6 +320,7 @@ export interface AuthConfig {
   keycloak_enabled: boolean;
   login_url: string | null;
   logout_url: string;
+  registration_url?: string | null;
 }
 
 export async function fetchAuthConfig(): Promise<AuthConfig> {

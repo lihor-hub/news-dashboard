@@ -40,6 +40,7 @@ from news_dashboard.auth import (
     keycloak_authorization_url,
     keycloak_config,
     keycloak_logout_url,
+    keycloak_registration_url,
     list_users,
     require_admin,
     require_auth,
@@ -242,12 +243,35 @@ def auth_config() -> dict[str, Any]:
     return keycloak_auth_metadata()
 
 
+@public_router.get("/api/auth/metadata")
+def auth_metadata() -> dict[str, Any]:
+    return keycloak_auth_metadata()
+
+
 @public_router.get("/auth/login")
 def keycloak_login() -> RedirectResponse:
     if not keycloak_config().enabled:
         return RedirectResponse(url="/login")
     state = secrets.token_urlsafe(32)
     redirect = RedirectResponse(url=keycloak_authorization_url(state))
+    redirect.set_cookie(
+        key=_OAUTH_STATE_COOKIE,
+        value=state,
+        httponly=True,
+        secure=True,
+        samesite="lax",
+        max_age=600,
+        path="/auth/callback",
+    )
+    return redirect
+
+
+@public_router.get("/auth/register")
+def keycloak_register() -> RedirectResponse:
+    if not keycloak_config().enabled:
+        return RedirectResponse(url="/login")
+    state = secrets.token_urlsafe(32)
+    redirect = RedirectResponse(url=keycloak_registration_url(state))
     redirect.set_cookie(
         key=_OAUTH_STATE_COOKIE,
         value=state,

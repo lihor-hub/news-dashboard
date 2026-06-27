@@ -19,6 +19,7 @@ from news_dashboard.auth import (
     init_auth,
     keycloak_auth_metadata,
     keycloak_authorization_url,
+    keycloak_registration_url,
     keycloak_token_request_data,
     list_users,
     update_password,
@@ -26,7 +27,7 @@ from news_dashboard.auth import (
     verify_password,
     verify_session_token,
 )
-from news_dashboard.db import init_db
+from news_dashboard.db import connect, init_db
 from news_dashboard.main import app
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
@@ -435,3 +436,62 @@ def test_health_details_requires_admin(tmp_db: str) -> None:
     client = _fresh_client()
     resp = client.get("/api/health/details")
     assert resp.status_code in (401, 403)
+
+
+def test_ensure_keycloak_user_provisions_default_sources(
+    tmp_db: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Keycloak auth enabled to run ensure_keycloak_user
+    monkeypatch.setenv("KEYCLOAK_AUTH_ENABLED", "1")
+    user = ensure_keycloak_user(
+        {
+            "preferred_username": "newkeycloakuser",
+            "email": "newuser@example.test",
+            "sub": "kc-sub-2",
+        }
+    )
+    assert user["username"] == "newkeycloakuser"
+
+    # Verify that the user is subscribed to all sources in the sources table.
+    with connect() as conn:
+        # Get count of default sources
+        default_sources_count = conn.execute(
+            "SELECT COUNT(*) AS count FROM sources WHERE owner_user_id IS NULL"
+        ).fetchone()["count"]
+        # Get count of user subscriptions
+        user_subs_count = conn.execute(
+            "SELECT COUNT(*) AS count FROM user_sources WHERE user_id = %s AND enabled IS TRUE",
+            (user["id"],),
+        ).fetchone()["count"]
+
+        assert default_sources_count > 0
+        assert user_subs_count == default_sources_count
+
+
+def test_keycloak_registration_url(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("KEYCLOAK_AUTH_ENABLED", "1")
+    monkeypatch.setenv("NEWS_DASHBOARD_BASE_URL", "https://news.lihor.ro")
+    monkeypatch.setenv("KEYCLOAK_SERVER_URL", "https://news.lihor.ro/keycloak")
+    url = keycloak_registration_url("state-456")
+    assert url.startswith(
+        "https://news.lihor.ro/keycloak/realms/news-dashboard/protocol/openid-connect/registrations?"
+    )
+    assert "client_id=news-dashboard" in url
+    assert "redirect_uri=https%3A%2F%2Fnews.lihor.ro%2Fauth%2Fcallback" in url
+    assert "state=state-456" in url
+
+
+def test_keycloak_register_endpoint_redirects_and_sets_cookie(
+    tmp_db: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("KEYCLOAK_AUTH_ENABLED", "1")
+    monkeypatch.setenv("KEYCLOAK_SERVER_URL", "https://news.lihor.ro/keycloak")
+    monkeypatch.setenv("SESSION_SECRET", "test-secret")
+
+    client = _fresh_client()
+    resp = client.get("/auth/register", follow_redirects=False)
+    assert resp.status_code == 307
+    assert resp.headers["location"].startswith(
+        "https://news.lihor.ro/keycloak/realms/news-dashboard/protocol/openid-connect/registrations?"
+    )
+    assert "nd_oauth_state" in resp.cookies

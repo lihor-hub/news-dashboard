@@ -62,12 +62,24 @@ export function LoginPage() {
         </div>
 
         {keycloakLoginUrl ? (
-          <a
-            href={keycloakLoginUrl}
-            className="flex w-full items-center justify-center rounded-md bg-foreground px-4 py-2.5 text-sm font-medium text-background transition-opacity hover:opacity-90"
-          >
-            Sign in with Keycloak
-          </a>
+          <div className="space-y-4">
+            <a
+              href={keycloakLoginUrl}
+              className="flex w-full items-center justify-center rounded-md bg-foreground px-4 py-2.5 text-sm font-medium text-background transition-opacity hover:opacity-90"
+            >
+              Sign in with Keycloak
+            </a>
+            {authConfig?.registration_url && (
+              <div className="text-center">
+                <a
+                  href={authConfig.registration_url}
+                  className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors underline underline-offset-4"
+                >
+                  Create Account
+                </a>
+              </div>
+            )}
+          </div>
         ) : (
           <form onSubmit={(e) => void handleSubmit(e)} className="space-y-4">
             <div className="space-y-1">
