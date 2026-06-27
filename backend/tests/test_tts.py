@@ -11,7 +11,14 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from news_dashboard.tts import TTSNotConfiguredError, _build_text, _tts_ai_config, generate_audio
+from news_dashboard.tts import (
+    TTSNotConfiguredError,
+    _build_text,
+    _tts_ai_config,
+    generate_audio,
+    generate_podcast_audio,
+    generate_podcast_script,
+)
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────
 
@@ -234,3 +241,71 @@ def test_generate_audio_creates_audio_directory(tmp_path: Path) -> None:
 
     assert path.parent.is_dir()
     assert path.exists()
+
+
+def test_generate_podcast_script() -> None:
+    mock_response = MagicMock()
+    mock_response.choices = [
+        MagicMock(
+            message=MagicMock(
+                content=(
+                    '{"script": ['
+                    '{"speaker": "Alex", "voice": "alloy", "text": "Hello!"}, '
+                    '{"speaker": "Taylor", "voice": "shimmer", "text": "Hi Alex!"}'
+                    "]}"
+                )
+            )
+        )
+    ]
+    with (
+        patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}),
+        patch("news_dashboard.ai_client.chat_create", return_value=mock_response),
+    ):
+        script = generate_podcast_script(
+            {
+                "title": "Briefing",
+                "summary": "Briefing Summary",
+                "sections": [{"title": "S1", "body": "Body 1"}],
+            }
+        )
+    assert len(script) == 2
+    assert script[0]["speaker"] == "Alex"
+    assert script[0]["voice"] == "alloy"
+    assert script[0]["text"] == "Hello!"
+    assert script[1]["speaker"] == "Taylor"
+    assert script[1]["voice"] == "shimmer"
+    assert script[1]["text"] == "Hi Alex!"
+
+
+def test_generate_podcast_audio(tmp_path: Path) -> None:
+    mock_response = MagicMock()
+    written_chunks = []
+
+    def fake_stream(path: Path) -> None:
+        written_chunks.append(path.name)
+        path.write_bytes(f"fake-mp3-chunk-{len(written_chunks)}".encode())
+
+    mock_response.stream_to_file.side_effect = fake_stream
+    mock_response.__enter__ = MagicMock(return_value=mock_response)
+    mock_response.__exit__ = MagicMock(return_value=False)
+
+    mock_client = MagicMock()
+    mock_client.audio.speech.with_streaming_response.create.return_value = mock_response
+
+    script = [
+        {"speaker": "Alex", "voice": "alloy", "text": "Chunk 1 text"},
+        {"speaker": "Taylor", "voice": "shimmer", "text": "Chunk 2 text"},
+    ]
+
+    with (
+        patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}),
+        patch("openai.OpenAI", return_value=mock_client),
+    ):
+        path = generate_podcast_audio(123, script, data_dir=tmp_path)
+
+    assert path.exists()
+    assert path.read_bytes() == b"fake-mp3-chunk-1fake-mp3-chunk-2"
+    assert len(written_chunks) == 2
+    for idx in range(2):
+        chunk_file = tmp_path / "audio" / f"podcast-123-chunk-{idx}.mp3"
+        assert not chunk_file.exists()

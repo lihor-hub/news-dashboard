@@ -175,6 +175,9 @@ export function BriefPage() {
       briefing={data}
       onGenerate={generate}
       isGenerating={isGenerating}
+      onRefreshBriefing={() => {
+        void refetch();
+      }}
       afterMeta={
         <Link
           to="/briefs"

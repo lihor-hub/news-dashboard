@@ -537,7 +537,7 @@ def get_latest_briefing(
             row = conn.execute(
                 """
                 SELECT id, created_at, scope, since_at, until_at, status,
-                       title, summary, content, model, error
+                       title, summary, content, model, error, script
                 FROM briefings
                 WHERE user_id = %s
                 ORDER BY created_at DESC
@@ -549,7 +549,7 @@ def get_latest_briefing(
             row = conn.execute(
                 """
                 SELECT id, created_at, scope, since_at, until_at, status,
-                       title, summary, content, model, error
+                       title, summary, content, model, error, script
                 FROM briefings
                 WHERE user_id IS NULL
                 ORDER BY created_at DESC
@@ -561,6 +561,7 @@ def get_latest_briefing(
             return None
         briefing = row_to_dict(row)
         briefing["content"] = _coerce_content(briefing.get("content"))
+        briefing["script"] = _coerce_content(briefing.get("script"))
         briefing["articles"] = _fetch_cited_articles(conn, briefing["id"])
         return briefing
 
@@ -613,7 +614,7 @@ def get_briefing(
             row = conn.execute(
                 """
                 SELECT id, created_at, scope, since_at, until_at, status,
-                       title, summary, content, model, error
+                       title, summary, content, model, error, script
                 FROM briefings
                 WHERE id = %s AND user_id = %s
                 """,
@@ -623,7 +624,7 @@ def get_briefing(
             row = conn.execute(
                 """
                 SELECT id, created_at, scope, since_at, until_at, status,
-                       title, summary, content, model, error
+                       title, summary, content, model, error, script
                 FROM briefings
                 WHERE id = %s AND user_id IS NULL
                 """,
@@ -633,5 +634,19 @@ def get_briefing(
             return None
         briefing = row_to_dict(row)
         briefing["content"] = _coerce_content(briefing.get("content"))
+        briefing["script"] = _coerce_content(briefing.get("script"))
         briefing["articles"] = _fetch_cited_articles(conn, briefing["id"])
         return briefing
+
+
+def update_briefing_script(
+    briefing_id: int,
+    script: list[dict[str, str]],
+    database_url: str | None = None,
+) -> None:
+    """Update the script JSONB column for the given briefing."""
+    with connect(database_url=database_url) as conn:
+        conn.execute(
+            "UPDATE briefings SET script = %s::jsonb WHERE id = %s",
+            (json.dumps(script), briefing_id),
+        )

@@ -218,6 +218,12 @@ export interface BriefingArticle {
   summary?: string;
 }
 
+export interface PodcastTurn {
+  speaker: string;
+  voice: string;
+  text: string;
+}
+
 export interface Briefing {
   id: number;
   created_at: string;
@@ -231,6 +237,7 @@ export interface Briefing {
   model: string;
   error: string | null;
   articles: BriefingArticle[];
+  script?: PodcastTurn[] | null;
 }
 
 export type BriefingLatestResponse = Briefing | { status: 'empty' };

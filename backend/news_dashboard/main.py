@@ -957,6 +957,68 @@ def briefings_detail(
     return briefing
 
 
+@api.post("/api/briefings/{briefing_id}/podcast")
+def generate_podcast_endpoint(
+    briefing_id: int,
+    current_user: Annotated[dict[str, Any], Depends(require_auth)],
+) -> dict[str, str]:
+    from news_dashboard.briefings import update_briefing_script
+    from news_dashboard.tts import (
+        TTSNotConfiguredError,
+        _podcast_audio_path,
+        generate_podcast_audio,
+        generate_podcast_script,
+    )
+
+    briefing = get_briefing(briefing_id, user_id=current_user["id"])
+    if not briefing:
+        raise HTTPException(status_code=404, detail="briefing not found")
+
+    audio_path = _podcast_audio_path(briefing_id)
+    if not audio_path.exists():
+        script = briefing.get("script")
+        if not script:
+            content_dict = {
+                "title": briefing.get("title", ""),
+                "summary": briefing.get("summary", ""),
+                "sections": briefing.get("content", {}).get("sections", []),
+            }
+            try:
+                script = generate_podcast_script(content_dict)
+                update_briefing_script(briefing_id, script)
+            except Exception as exc:
+                raise HTTPException(
+                    status_code=500, detail=f"Failed to generate podcast script: {exc}"
+                ) from exc
+
+        try:
+            generate_podcast_audio(briefing_id, script)
+        except TTSNotConfiguredError as exc:
+            raise HTTPException(status_code=501, detail=str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    return {"url": f"/api/briefings/{briefing_id}/podcast"}
+
+
+@api.get("/api/briefings/{briefing_id}/podcast")
+def get_podcast_audio_endpoint(
+    briefing_id: int,
+    current_user: Annotated[dict[str, Any], Depends(require_auth)],
+) -> FileResponse:
+    from news_dashboard.tts import _podcast_audio_path
+
+    briefing = get_briefing(briefing_id, user_id=current_user["id"])
+    if not briefing:
+        raise HTTPException(status_code=404, detail="briefing not found")
+
+    audio_path = _podcast_audio_path(briefing_id)
+    if not audio_path.exists():
+        raise HTTPException(status_code=404, detail="podcast audio file not found")
+
+    return FileResponse(audio_path, media_type="audio/mpeg", filename=f"podcast-{briefing_id}.mp3")
+
+
 @api.post("/api/briefings")
 def briefings_create(
     current_user: Annotated[dict[str, Any], Depends(require_auth)],

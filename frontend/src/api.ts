@@ -242,6 +242,10 @@ export async function fetchBriefings(limit = 50, offset = 0): Promise<{ items: B
   return requestJson<{ items: Briefing[] }>(`/api/briefings?${params}`);
 }
 
+export async function generateBriefingPodcast(id: number): Promise<{ url: string }> {
+  return requestJson<{ url: string }>(`/api/briefings/${id}/podcast`, { method: 'POST' });
+}
+
 // ── Auth ──────────────────────────────────────────────────────────────────────
 
 export interface AuthConfig {

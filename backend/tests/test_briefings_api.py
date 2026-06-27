@@ -13,7 +13,9 @@ actual psycopg %s parameterisation, JSONB round-trip, and NULLS LAST ordering.
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
+from unittest.mock import MagicMock
 
 from fastapi.testclient import TestClient
 
@@ -299,3 +301,55 @@ def test_create_returns_existing_briefing_inside_idempotency_window(monkeypatch:
     resp = client.post("/api/briefings")
     assert resp.status_code == 200
     assert resp.json()["id"] == existing["id"]
+
+
+def test_generate_podcast_endpoint_success(monkeypatch: Any) -> None:
+    briefing = dict(_SAMPLE_BRIEFING)
+    briefing["script"] = None
+    monkeypatch.setattr(main_mod, "get_briefing", lambda _, **__: briefing)
+
+    from pathlib import Path
+
+    mock_path = MagicMock(spec=Path)
+    mock_path.exists.return_value = False
+    monkeypatch.setattr("news_dashboard.tts._podcast_audio_path", lambda *_, **__: mock_path)
+
+    monkeypatch.setattr(
+        "news_dashboard.tts.generate_podcast_script",
+        lambda *_, **__: [{"speaker": "Alex", "voice": "alloy", "text": "Hi"}],
+    )
+    monkeypatch.setattr("news_dashboard.briefings.update_briefing_script", lambda *_, **__: None)
+    monkeypatch.setattr("news_dashboard.tts.generate_podcast_audio", lambda *_, **__: mock_path)
+
+    resp = client.post("/api/briefings/1/podcast")
+    assert resp.status_code == 200
+    assert resp.json() == {"url": "/api/briefings/1/podcast"}
+
+
+def test_get_podcast_audio_endpoint_success(monkeypatch: Any, tmp_path: Path) -> None:
+    briefing = dict(_SAMPLE_BRIEFING)
+    monkeypatch.setattr(main_mod, "get_briefing", lambda _, **__: briefing)
+
+    audio_file = tmp_path / "podcast-1.mp3"
+    audio_file.write_bytes(b"podcast-data")
+    monkeypatch.setattr("news_dashboard.tts._podcast_audio_path", lambda *_, **__: audio_file)
+
+    resp = client.get("/api/briefings/1/podcast")
+    assert resp.status_code == 200
+    assert resp.headers["content-type"] == "audio/mpeg"
+    assert resp.read() == b"podcast-data"
+
+
+def test_get_podcast_audio_endpoint_not_found(monkeypatch: Any) -> None:
+    briefing = dict(_SAMPLE_BRIEFING)
+    monkeypatch.setattr(main_mod, "get_briefing", lambda _, **__: briefing)
+
+    from pathlib import Path
+
+    mock_path = MagicMock(spec=Path)
+    mock_path.exists.return_value = False
+    monkeypatch.setattr("news_dashboard.tts._podcast_audio_path", lambda *_, **__: mock_path)
+
+    resp = client.get("/api/briefings/1/podcast")
+    assert resp.status_code == 404
+    assert resp.json()["detail"] == "podcast audio file not found"

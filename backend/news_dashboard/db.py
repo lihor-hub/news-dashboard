@@ -245,6 +245,7 @@ POSTGRES_SCHEMA = [
     ),
     "ALTER TABLE briefings ADD COLUMN IF NOT EXISTS user_id INTEGER REFERENCES users(id)",
     "CREATE INDEX IF NOT EXISTS idx_briefings_user ON briefings(user_id, created_at DESC)",
+    "ALTER TABLE briefings ADD COLUMN IF NOT EXISTS script JSONB",
 ]
 
 POSTGRES_MULTIUSER_SCHEMA = [

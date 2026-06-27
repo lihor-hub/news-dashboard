@@ -22,7 +22,7 @@ export function BriefingDetailPage() {
   const navigate = useNavigate();
   const briefingId = id ? parseInt(id, 10) : NaN;
 
-  const { data, isLoading, isError } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['briefings', briefingId],
     queryFn: () => fetchBriefing(briefingId),
     enabled: !isNaN(briefingId),
@@ -92,7 +92,12 @@ export function BriefingDetailPage() {
   return (
     <>
       <BackLink />
-      <BriefingView briefing={data} />
+      <BriefingView
+        briefing={data}
+        onRefreshBriefing={() => {
+          void refetch();
+        }}
+      />
     </>
   );
 }
