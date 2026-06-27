@@ -281,6 +281,98 @@ def novelty_adjustment(
     return dissimilarity * _quality_factor(importance) * NOVELTY_SCORE_SPAN
 
 
+def generate_recommendation_explanation(
+    user_id: int,
+    article_id: int,
+    *,
+    db_path: Path | str | None = None,
+    database_url: str | None = None,
+) -> str | None:
+    """Generate a natural language explanation of why an article was recommended.
+
+    Queries the user's recent positive interactions (starred/done) and the
+    article's metadata, then asks the LLM for a single concise sentence
+    (under 20 words).  Returns ``None`` when the AI client is not configured or
+    the call fails, so callers treat it as an optional enrichment.
+    """
+    import os
+
+    from news_dashboard.ai_client import chat_create, get_openai_client
+
+    api_key = os.getenv("OPENAI_BRIEFING_API_KEY") or os.getenv("OPENAI_API_KEY")
+    if not api_key:
+        return None
+
+    base_url = os.getenv("OPENAI_BRIEFING_BASE_URL") or os.getenv("OPENAI_BASE_URL") or None
+    model = os.getenv("OPENAI_BRIEFING_MODEL", "gpt-4o-mini")
+
+    init_db(db_path, database_url=database_url)
+    with connect(db_path, database_url=database_url) as conn:
+        article_row = conn.execute(
+            "SELECT title, category, tags, source_name FROM articles WHERE id = %s",
+            (article_id,),
+        ).fetchone()
+        if article_row is None:
+            return None
+        article = row_to_dict(article_row)
+
+        history_rows = conn.execute(
+            """
+            SELECT a.title, a.category, a.source_name, a.tags, uas.starred
+            FROM user_article_state uas
+            JOIN articles a ON a.id = uas.article_id
+            WHERE uas.user_id = %s
+              AND (uas.starred IS TRUE OR uas.state = 'done')
+            ORDER BY uas.done_at DESC NULLS LAST, uas.starred_at DESC NULLS LAST
+            LIMIT 10
+            """,
+            (user_id,),
+        ).fetchall()
+
+    history = [row_to_dict(r) for r in history_rows]
+
+    if not history:
+        history_text = "No reading history yet."
+    else:
+        lines = []
+        for h in history:
+            label = "starred" if h.get("starred") else "read"
+            lines.append(
+                f'- {label}: "{h.get("title", "")}" '
+                f"({h.get('source_name', '')} / {h.get('category', '')})"
+            )
+        history_text = "\n".join(lines)
+
+    tags = article.get("tags") or ""
+    prompt = (
+        f"You are a personalized news assistant. Explain in one short sentence (under 20 words) "
+        f"why this article matches the user's reading interests.\n\n"
+        f'Article: "{article.get("title", "")}"\n'
+        f"Source: {article.get('source_name', '')}\n"
+        f"Category: {article.get('category', '')}\n"
+        f"Tags: {tags}\n\n"
+        f"User's recent reading history:\n{history_text}\n\n"
+        f"Reply with just the explanation sentence, no preamble."
+    )
+
+    try:
+        client = get_openai_client(api_key=api_key, base_url=base_url)
+        response = chat_create(
+            client,
+            name="recommendation-explanation",
+            tags=["recommendation", "explanation"],
+            user_id=user_id,
+            model=model,
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=60,
+            temperature=0.3,
+        )
+        text = response.choices[0].message.content
+        return text.strip() if text else None
+    except Exception:
+        return None
+
+
 def upsert_recommendation_score(  # noqa: PLR0913
     user_id: int,
     article_id: int,
@@ -291,6 +383,7 @@ def upsert_recommendation_score(  # noqa: PLR0913
     cold_start_score: float | None = None,
     signals: dict[str, Any] | None = None,
     model_version: str = COLD_START_MODEL_VERSION,
+    explanation: str | None = None,
 ) -> None:
     """Persist recommendation metadata for one user/article pair."""
     init_db(db_path, database_url=database_url)
@@ -299,15 +392,18 @@ def upsert_recommendation_score(  # noqa: PLR0913
             """
             INSERT INTO user_article_recommendations(
               user_id, article_id, recommendation_score, cold_start_score,
-              signals, model_version, stale
+              signals, model_version, stale, explanation
             )
-            VALUES (%s, %s, %s, %s, %s::jsonb, %s, FALSE)
+            VALUES (%s, %s, %s, %s, %s::jsonb, %s, FALSE, %s)
             ON CONFLICT(user_id, article_id) DO UPDATE SET
               recommendation_score = excluded.recommendation_score,
               cold_start_score = excluded.cold_start_score,
               signals = excluded.signals,
               model_version = excluded.model_version,
               stale = FALSE,
+              explanation = COALESCE(
+                excluded.explanation, user_article_recommendations.explanation
+              ),
               updated_at = NOW()
             """,
             (
@@ -317,6 +413,7 @@ def upsert_recommendation_score(  # noqa: PLR0913
                 cold_start_score,
                 json.dumps(signals or {}),
                 model_version,
+                explanation,
             ),
         )
 
@@ -430,6 +527,7 @@ def recompute_user_recommendations(
     # semantic profile is present.
     model_version = NOVELTY_MODEL_VERSION if semantic_profile else BEHAVIORAL_MODEL_VERSION
     scored = 0
+    scored_items: list[tuple[int, float]] = []
     for candidate in candidates:
         base = float(candidate["base_score"])
         source_slug = str(candidate["source_slug"])
@@ -461,7 +559,27 @@ def recompute_user_recommendations(
             },
             model_version=model_version,
         )
+        scored_items.append((int(candidate["id"]), final_score))
         scored += 1
+
+    # Generate explanations for the top 20 articles only; the rest are low-signal
+    # enough that a generic label suffices and the AI quota stays manageable.
+    top_articles = sorted(scored_items, key=lambda x: x[1], reverse=True)[:20]
+    for article_id, _ in top_articles:
+        explanation = generate_recommendation_explanation(
+            user_id,
+            article_id,
+            db_path=db_path,
+            database_url=database_url,
+        )
+        if explanation:
+            with connect(db_path, database_url=database_url) as conn:
+                conn.execute(
+                    "UPDATE user_article_recommendations SET explanation = %s"
+                    " WHERE user_id = %s AND article_id = %s AND explanation IS NULL",
+                    (explanation, user_id, article_id),
+                )
+
     return scored
 
 

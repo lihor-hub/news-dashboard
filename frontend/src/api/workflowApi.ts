@@ -66,6 +66,7 @@ export function adaptArticle(a: LegacyArticle): WorkflowArticle {
     recommendationScore: a.recommendation_score ?? undefined,
     recommendationModel: a.recommendation_model ?? undefined,
     recommendationSignals: a.recommendation_signals ?? undefined,
+    recommendationExplanation: a.recommendation_explanation ?? undefined,
     tags: parseTags(a.tags),
     body: a.body ?? undefined,
     bodyStatus: a.body_status ?? 'missing',

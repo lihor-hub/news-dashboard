@@ -524,6 +524,7 @@ export function ArticlePage() {
               </button>
               {showWhyRecommended &&
                 (() => {
+                  const aiExplanation = article.recommendationExplanation;
                   const explanation = recommendationExplanation({
                     score: article.recommendationScore,
                     signals: article.recommendationSignals,
@@ -536,17 +537,26 @@ export function ArticlePage() {
                       <div className="text-[10px] font-medium uppercase tracking-wider text-subtle mb-2">
                         Why recommended
                       </div>
-                      <ul className="space-y-1.5">
-                        {explanation.reasons.map((reason, i) => (
-                          <li
-                            key={i}
-                            className="flex items-start gap-2 text-[13px] leading-snug text-foreground"
-                          >
-                            <span className="mt-0.5 shrink-0 text-accent">•</span>
-                            <span>{reason}</span>
-                          </li>
-                        ))}
-                      </ul>
+                      {aiExplanation ? (
+                        <p
+                          className="text-[13px] leading-snug text-foreground"
+                          data-testid="why-recommended-ai-explanation"
+                        >
+                          {aiExplanation}
+                        </p>
+                      ) : (
+                        <ul className="space-y-1.5">
+                          {explanation.reasons.map((reason, i) => (
+                            <li
+                              key={i}
+                              className="flex items-start gap-2 text-[13px] leading-snug text-foreground"
+                            >
+                              <span className="mt-0.5 shrink-0 text-accent">•</span>
+                              <span>{reason}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
                     </div>
                   );
                 })()}

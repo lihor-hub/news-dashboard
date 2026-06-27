@@ -757,6 +757,9 @@ def _apply_recommendation_fields(d: dict[str, Any]) -> None:
     # freshness, novelty) used to produce on-demand explanations; absent for
     # unranked articles.
     d["recommendation_signals"] = d.pop("_uar_recommendation_signals", None)
+    # Natural language explanation of why this article was recommended; only
+    # present for personalized (non-cold-start) scored articles.
+    d["recommendation_explanation"] = d.pop("_uar_recommendation_explanation", None)
 
 
 def _article_list_select(alias: str | None = None) -> str:
@@ -1110,6 +1113,7 @@ def _list_articles_for_user(  # noqa: PLR0913
           uar.recommendation_score AS _uar_recommendation_score,
           uar.model_version        AS _uar_recommendation_model,
           uar.signals              AS _uar_recommendation_signals,
+          uar.explanation          AS _uar_recommendation_explanation,
           {_COLD_START_RECOMMENDATION_SCORE_SQL} AS _cold_start_score
         FROM articles a
         LEFT JOIN sources src ON src.slug = a.source_slug

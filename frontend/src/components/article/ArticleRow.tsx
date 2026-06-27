@@ -1,6 +1,6 @@
-import { memo } from 'react';
+import { memo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Star } from 'lucide-react';
+import { Star, Info } from 'lucide-react';
 import type { WorkflowArticle } from '@/lib/workflowTypes';
 import { relativeTime, signalLabel } from '@/lib/format';
 import { recommendationLabel, RECOMMENDATION_LABEL_TEXT } from '@/lib/recommendation';
@@ -85,6 +85,9 @@ function ArticleRowComponent({ article, focused, showLaterUntil }: Props) {
                 </span>
               </>
             )}
+            {article.recommendationExplanation && (
+              <RecommendationExplanationIcon explanation={article.recommendationExplanation} />
+            )}
             {showLaterUntil && article.later_until && (
               <>
                 <span className="text-subtle">·</span>
@@ -95,6 +98,38 @@ function ArticleRowComponent({ article, focused, showLaterUntil }: Props) {
         </Link>
       </SwipeableRow>
     </div>
+  );
+}
+
+function RecommendationExplanationIcon({ explanation }: { explanation: string }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <span className="relative inline-flex items-center">
+      <button
+        type="button"
+        aria-label="Why recommended"
+        data-testid="recommendation-explanation-trigger"
+        className="text-muted-foreground/60 hover:text-muted-foreground transition-colors"
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          setOpen((v) => !v);
+        }}
+        onMouseEnter={() => setOpen(true)}
+        onMouseLeave={() => setOpen(false)}
+      >
+        <Info className="size-3.5" strokeWidth={1.5} />
+      </button>
+      {open && (
+        <span
+          role="tooltip"
+          data-testid="recommendation-explanation-tooltip"
+          className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 z-50 w-56 rounded-md bg-popover border border-border px-2.5 py-1.5 text-[11px] leading-snug text-popover-foreground shadow-md"
+        >
+          {explanation}
+        </span>
+      )}
+    </span>
   );
 }
 

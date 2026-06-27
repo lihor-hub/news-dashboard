@@ -245,7 +245,7 @@ def _merge_user_recommendation(
     its cold-start explanation rather than a stale one.
     """
     rec_row = conn.execute(
-        "SELECT recommendation_score, model_version, signals"
+        "SELECT recommendation_score, model_version, signals, explanation"
         " FROM user_article_recommendations WHERE user_id = %s AND article_id = %s",
         (user_id, article_id),
     ).fetchone()
@@ -254,6 +254,7 @@ def _merge_user_recommendation(
     d["recommendation_score"] = float(score) if score is not None else None
     d["recommendation_model"] = rec.get("model_version") if rec else None
     d["recommendation_signals"] = rec.get("signals") if rec else None
+    d["recommendation_explanation"] = rec.get("explanation") if rec else None
     return d
 
 

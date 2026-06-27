@@ -322,3 +322,114 @@ def test_release_stays_scoped_to_ranking_without_hiding_or_separate_feed(
     ids = {int(item["id"]) for item in items}
     assert {disliked, liked} <= ids
     assert recommended_feed.status_code == 404
+
+
+# ── Explanation column stored and serialised ───────────────────────────────────
+
+
+def test_explanation_stored_and_returned_by_article_list(
+    tmp_path: Path, monkeypatch: Any, pg_clean: str
+) -> None:
+    """An explanation written directly to the DB is returned in the Today feed."""
+    db_path = _setup_db(monkeypatch, pg_clean)
+    _insert_source(db_path, "src", category="ai", priority=80)
+    user_id = _make_user(db_path, "alice")
+    article = _insert_article(db_path, "src", "expl-list", category="ai", importance=70)
+
+    upsert_recommendation_score(
+        user_id,
+        article,
+        85.0,
+        db_path=db_path,
+        explanation="You read several Python articles recently.",
+    )
+
+    try:
+        with _client_for(user_id, "alice") as client:
+            items = _today_items(client)
+    finally:
+        app.dependency_overrides.pop(require_auth, None)
+
+    item = next(it for it in items if int(it["id"]) == article)
+    assert item["recommendation_explanation"] == "You read several Python articles recently."
+
+
+def test_explanation_stored_and_returned_by_single_article_endpoint(
+    tmp_path: Path, monkeypatch: Any, pg_clean: str
+) -> None:
+    """The single-article reader endpoint also exposes the explanation field."""
+    db_path = _setup_db(monkeypatch, pg_clean)
+    _insert_source(db_path, "src", category="ai", priority=80)
+    user_id = _make_user(db_path, "alice")
+    article = _insert_article(db_path, "src", "expl-reader", category="ai", importance=70)
+
+    upsert_recommendation_score(
+        user_id,
+        article,
+        88.0,
+        db_path=db_path,
+        explanation="Matches your interest in FastAPI.",
+    )
+
+    try:
+        with _client_for(user_id, "alice") as client:
+            response = client.get(f"/api/articles/{article}")
+    finally:
+        app.dependency_overrides.pop(require_auth, None)
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["recommendation_explanation"] == "Matches your interest in FastAPI."
+
+
+def test_explanation_null_when_not_generated(
+    tmp_path: Path, monkeypatch: Any, pg_clean: str
+) -> None:
+    """An article with a score but no explanation returns null for the field."""
+    db_path = _setup_db(monkeypatch, pg_clean)
+    _insert_source(db_path, "src", category="ai", priority=80)
+    user_id = _make_user(db_path, "alice")
+    article = _insert_article(db_path, "src", "no-expl", category="ai", importance=70)
+
+    upsert_recommendation_score(user_id, article, 75.0, db_path=db_path)
+
+    try:
+        with _client_for(user_id, "alice") as client:
+            response = client.get(f"/api/articles/{article}")
+            items = _today_items(client)
+    finally:
+        app.dependency_overrides.pop(require_auth, None)
+
+    assert response.status_code == 200
+    assert response.json()["recommendation_explanation"] is None
+    item = next(it for it in items if int(it["id"]) == article)
+    assert item["recommendation_explanation"] is None
+
+
+def test_explanation_not_overwritten_on_rescore(
+    tmp_path: Path, monkeypatch: Any, pg_clean: str
+) -> None:
+    """Re-upserting a score without an explanation preserves an existing one."""
+    db_path = _setup_db(monkeypatch, pg_clean)
+    _insert_source(db_path, "src", category="ai", priority=80)
+    user_id = _make_user(db_path, "alice")
+    article = _insert_article(db_path, "src", "preserve-expl", category="ai", importance=70)
+
+    upsert_recommendation_score(
+        user_id,
+        article,
+        80.0,
+        db_path=db_path,
+        explanation="Covers topics you follow.",
+    )
+    # Re-score without providing explanation — existing explanation must survive.
+    upsert_recommendation_score(user_id, article, 85.0, db_path=db_path)
+
+    try:
+        with _client_for(user_id, "alice") as client:
+            response = client.get(f"/api/articles/{article}")
+    finally:
+        app.dependency_overrides.pop(require_auth, None)
+
+    assert response.status_code == 200
+    assert response.json()["recommendation_explanation"] == "Covers topics you follow."

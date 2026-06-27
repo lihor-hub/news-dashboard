@@ -36,6 +36,8 @@ export interface WorkflowArticle {
   recommendationModel?: string;
   /** Per-factor breakdown powering on-demand explanations; undefined when unranked. */
   recommendationSignals?: RecommendationSignals;
+  /** Natural language explanation of why this article was recommended; undefined when unavailable. */
+  recommendationExplanation?: string;
   tags: string[];
   body?: string;
   bodyStatus: 'ok' | 'missing' | 'error';

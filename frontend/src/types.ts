@@ -36,6 +36,7 @@ export interface Article {
   recommendation_score?: number | null;
   recommendation_model?: string | null;
   recommendation_signals?: RecommendationSignals | null;
+  recommendation_explanation?: string | null;
 }
 
 export interface User {

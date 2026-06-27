@@ -329,6 +329,7 @@ POSTGRES_MULTIUSER_SCHEMA = [
     CREATE INDEX IF NOT EXISTS idx_uar_user_stale
       ON user_article_recommendations(user_id) WHERE stale = TRUE
     """,
+    ("ALTER TABLE user_article_recommendations ADD COLUMN IF NOT EXISTS explanation TEXT"),
     # Behavioral telemetry: every row is one client-emitted event. A single
     # table covers time-on-app (heartbeat), page popularity (route), per-article
     # dwell (article_open/article_close), and feature usage (feature). Sessions
