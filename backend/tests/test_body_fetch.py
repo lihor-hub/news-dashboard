@@ -100,7 +100,8 @@ def test_extract_body_rejects_non_http() -> None:
 
 def test_extract_body_empty_page_returns_error() -> None:
     url, thread = _start_server(b"<html><body></body></html>")
-    _body, status = extract_body(url)
+    with patch("news_dashboard.body_fetch._selenium_extract_body", return_value=("", "error")):
+        _body, status = extract_body(url)
     thread.join(timeout=2)
     assert status == "error"
 
@@ -532,3 +533,103 @@ def test_fetch_and_cache_body_ai_fallback_result_is_cached(tmp_path: Path) -> No
     assert result1["body"] == "AI body text"
     assert result2["body"] == "AI body text"
     assert len(ai_calls) == 1, "AI fallback must be called only once; second call uses cache"
+
+
+# ── _selenium_extract_body ────────────────────────────────────────────────────
+
+
+def test_extract_body_falls_back_to_selenium_when_static_empty() -> None:
+    url, thread = _start_server(b"<html><body></body></html>")
+    spa_content = "SPA article content rendered by JavaScript and extracted by headless browser."
+    with patch(
+        "news_dashboard.body_fetch._selenium_extract_body",
+        return_value=(spa_content, "ok"),
+    ) as mock_sel:
+        body, status = extract_body(url)
+    thread.join(timeout=2)
+    mock_sel.assert_called_once_with(url)
+    assert status == "ok"
+    assert body == spa_content
+
+
+def test_extract_body_does_not_call_selenium_when_static_ok() -> None:
+    html = b"""
+    <html><body>
+      <p>This is a long enough paragraph that should be extracted by the body parser.</p>
+    </body></html>
+    """
+    url, thread = _start_server(html)
+    with patch("news_dashboard.body_fetch._selenium_extract_body") as mock_sel:
+        _body, status = extract_body(url)
+    thread.join(timeout=2)
+    mock_sel.assert_not_called()
+    assert status == "ok"
+
+
+def test_extract_body_skips_selenium_on_network_failure() -> None:
+    with patch("news_dashboard.body_fetch._selenium_extract_body") as mock_sel:
+        body, status = extract_body("http://127.0.0.1:1/")
+    mock_sel.assert_not_called()
+    assert status == "error"
+    assert body == ""
+
+
+def _make_selenium_client_mock(fetch_spa_html_impl: object) -> object:
+    """Build a minimal sys.modules mock for news_dashboard.selenium_client."""
+    from types import ModuleType
+    from unittest.mock import MagicMock
+
+    mod = ModuleType("news_dashboard.selenium_client")
+    mod.fetch_spa_html = fetch_spa_html_impl  # type: ignore[attr-defined]  # ty: ignore[unresolved-attribute]
+    mod.__spec__ = MagicMock()
+    return mod
+
+
+def test_selenium_extract_body_returns_ok_on_rendered_html() -> None:
+    import sys
+
+    from news_dashboard.body_fetch import _selenium_extract_body
+
+    rendered = (
+        "<html><body>"
+        "<article><p>This SPA article paragraph is long enough to be extracted.</p>"
+        "<p>A second paragraph confirming the headless renderer worked correctly.</p></article>"
+        "</body></html>"
+    )
+    mock_mod = _make_selenium_client_mock(lambda _url: rendered)
+    with patch.dict(sys.modules, {"news_dashboard.selenium_client": mock_mod}):
+        body, status = _selenium_extract_body("http://example.com/spa")
+
+    assert status == "ok"
+    assert "SPA article paragraph" in body
+
+
+def test_selenium_extract_body_returns_error_when_fetch_fails() -> None:
+    import sys
+
+    from news_dashboard.body_fetch import _selenium_extract_body
+
+    err_msg = "browser crashed"
+
+    def _crash(_url: str) -> str:
+        raise RuntimeError(err_msg)
+
+    mock_mod = _make_selenium_client_mock(_crash)
+    with patch.dict(sys.modules, {"news_dashboard.selenium_client": mock_mod}):
+        body, status = _selenium_extract_body("http://example.com/spa")
+
+    assert status == "error"
+    assert body == ""
+
+
+def test_selenium_extract_body_returns_error_on_empty_rendered_page() -> None:
+    import sys
+
+    from news_dashboard.body_fetch import _selenium_extract_body
+
+    mock_mod = _make_selenium_client_mock(lambda _url: "<html><body></body></html>")
+    with patch.dict(sys.modules, {"news_dashboard.selenium_client": mock_mod}):
+        body, status = _selenium_extract_body("http://example.com/spa")
+
+    assert status == "error"
+    assert body == ""

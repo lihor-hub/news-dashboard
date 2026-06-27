@@ -167,10 +167,41 @@ class _BodyExtractor(HTMLParser):
         return "\n\n".join(paragraphs)
 
 
+def _selenium_extract_body(url: str) -> tuple[str, str]:
+    """Fallback: fetch via headless browser and extract body text.
+
+    Returns ('', 'error') if selenium is unavailable or rendering fails.
+    """
+    try:
+        from news_dashboard.selenium_client import fetch_spa_html
+
+        html = fetch_spa_html(url)
+    except ImportError:
+        return "", "error"
+    except Exception as exc:
+        logger.warning("selenium_body_fetch: fetch failed for %r: %s", url, exc)
+        return "", "error"
+
+    try:
+        parser = _BodyExtractor()
+        parser.feed(html)
+        text = parser.result()
+    except Exception as exc:
+        logger.warning("selenium_body_fetch: parse failed for %r: %s", url, exc)
+        return "", "error"
+
+    if not text.strip():
+        return "", "error"
+
+    return text, "ok"
+
+
 def extract_body(url: str) -> tuple[str, str]:
     """Fetch URL and extract readable text.
 
-    Returns (body_text, 'ok') on success or ('', 'error') on failure.
+    Falls back to headless browser rendering when static HTML yields no content
+    (e.g. JS-rendered SPAs).  Returns (body_text, 'ok') on success or
+    ('', 'error') on failure.
     """
     if not url.startswith(("http:", "https:")):
         return "", "error"
@@ -195,7 +226,7 @@ def extract_body(url: str) -> tuple[str, str]:
         return "", "error"
 
     if not text.strip():
-        return "", "error"
+        return _selenium_extract_body(url)
 
     return text, "ok"
 

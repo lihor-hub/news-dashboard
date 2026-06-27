@@ -18,6 +18,8 @@ dependencies = [
   "httpx>=0.27.0",
   "itsdangerous>=2.2.0",
   "pywebpush>=2.0.0",
+  "selenium>=4.0.0",
+  "webdriver-manager>=4.0.0",
 ]
 
 [project.optional-dependencies]
@@ -155,7 +157,7 @@ warn_unreachable = true
 pretty = true
 
 [[tool.mypy.overrides]]
-module = ["feedparser.*", "apscheduler.*", "testcontainers.*", "pywebpush.*", "py_vapid.*"]
+module = ["feedparser.*", "apscheduler.*", "testcontainers.*", "pywebpush.*", "py_vapid.*", "webdriver_manager.*", "selenium.*"]
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]

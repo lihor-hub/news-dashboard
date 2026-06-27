@@ -15,10 +15,14 @@ USER_AGENT = "news-dashboard/0.1 (personal RSS reader; contact@lihor.ro)"
 TIMEOUT_SECS = 15
 
 
-def _fetch_html(url: str) -> str:
+def _fetch_html(url: str, *, use_selenium: bool = False) -> str:
     if not url.startswith(("http:", "https:")):
         message = f"Refusing to fetch non-HTTP URL: {url!r}"
         raise ValueError(message)
+    if use_selenium:
+        from news_dashboard.selenium_client import fetch_spa_html
+
+        return fetch_spa_html(url)
     req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})  # noqa: S310 - scheme validated above
     with urllib.request.urlopen(req, timeout=TIMEOUT_SECS) as resp:  # noqa: S310 - scheme validated above
         raw: bytes = resp.read()
