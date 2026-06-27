@@ -282,3 +282,55 @@ def test_push_unsubscribe_endpoint() -> None:
     assert resp.status_code == 200
     assert resp.json() == {"unsubscribed": True}
     mock_del.assert_called_once_with(1)
+
+
+@pytest.mark.postgres
+def test_send_push_for_user_prunes_expired_endpoints(
+    pg_clean: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("DATABASE_URL", pg_clean)
+    monkeypatch.setenv("VAPID_PRIVATE_KEY", "fake-private-key")
+    init_db(database_url=pg_clean)
+    from news_dashboard.auth import create_user
+
+    user = create_user("pushuser7", "pass")
+    uid = int(user["id"])
+
+    ep_success = "https://ep-success.example.com"
+    ep_gone = "https://ep-gone.example.com"
+    ep_transient = "https://ep-transient.example.com"
+
+    save_push_subscription(uid, ep_success, "k1", "a1", database_url=pg_clean)
+    save_push_subscription(uid, ep_gone, "k2", "a2", database_url=pg_clean)
+    save_push_subscription(uid, ep_transient, "k3", "a3", database_url=pg_clean)
+
+    class _FakeResponse:
+        def __init__(self, status_code: int) -> None:
+            self.status_code = status_code
+
+    class _FakeWebPushError(Exception):
+        def __init__(self, message: str, response: Any = None) -> None:
+            super().__init__(message)
+            self.response = response
+
+    def mock_webpush(subscription_info: dict[str, Any], **kwargs: Any) -> None:
+        endpoint = subscription_info["endpoint"]
+        if endpoint == ep_gone:
+            msg = "Gone"
+            raise _FakeWebPushError(msg, response=_FakeResponse(410))
+        if endpoint == ep_transient:
+            msg = "Server Error"
+            raise _FakeWebPushError(msg, response=_FakeResponse(500))
+
+    fake_module: dict[str, Any] = {
+        "webpush": mock_webpush,
+        "WebPushException": _FakeWebPushError,
+    }
+    with patch.dict("sys.modules", {"pywebpush": MagicMock(**fake_module)}):
+        send_push_for_user(uid, "Title", "Body", database_url=pg_clean)
+
+    remaining = get_user_push_subscriptions(uid, database_url=pg_clean)
+    endpoints = {sub["endpoint"] for sub in remaining}
+    assert ep_success in endpoints
+    assert ep_transient in endpoints
+    assert ep_gone not in endpoints

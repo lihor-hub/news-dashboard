@@ -5,9 +5,21 @@ from __future__ import annotations
 import json
 import logging
 import os
-from typing import Any
+from typing import Any, Literal
 
 logger = logging.getLogger(__name__)
+
+PushDeliveryResult = Literal["sent", "skipped_not_configured", "temporary_failure", "gone"]
+
+
+def _is_permanent_push_failure(exc: Exception) -> bool:
+    """Return True if the exception represents a permanent failure (e.g. HTTP 404 or 410)."""
+    response = getattr(exc, "response", None)
+    if response is not None:
+        status_code = getattr(response, "status_code", None)
+        if status_code in (404, 410):
+            return True
+    return False
 
 
 def get_vapid_public_key() -> str | None:
@@ -35,13 +47,13 @@ def send_push_notification(
     auth: str,
     title: str,
     body: str,
-) -> None:
+) -> PushDeliveryResult:
     """Send a single Web Push notification to the given subscription."""
     try:
         from pywebpush import WebPushException, webpush
     except ImportError:
         logger.warning("pywebpush not installed — push notification skipped")
-        return
+        return "skipped_not_configured"
 
     payload = json.dumps({"title": title, "body": body})
     try:
@@ -54,10 +66,16 @@ def send_push_notification(
             vapid_private_key=_vapid_private_key(),
             vapid_claims=_vapid_claims(),
         )
+        return "sent"
     except WebPushException as exc:
-        logger.warning("Push notification to %s failed: %s", endpoint[:40], exc)
+        if _is_permanent_push_failure(exc):
+            logger.warning("Push notification to %s failed permanently: %s", endpoint[:40], exc)
+            return "gone"
+        logger.warning("Push notification to %s failed temporarily: %s", endpoint[:40], exc)
+        return "temporary_failure"
     except RuntimeError:
         logger.warning("Push notification skipped: VAPID key not configured")
+        return "skipped_not_configured"
 
 
 def save_push_subscription(
@@ -137,10 +155,16 @@ def send_push_for_user(
     """Send a push notification to all subscriptions registered by a user."""
     subs = get_user_push_subscriptions(user_id, database_url=database_url)
     for sub in subs:
-        send_push_notification(
+        result = send_push_notification(
             endpoint=sub["endpoint"],
             p256dh=sub["p256dh_key"],
             auth=sub["auth_key"],
             title=title,
             body=body,
         )
+        if result == "gone":
+            delete_push_subscriptions(
+                user_id,
+                endpoint=sub["endpoint"],
+                database_url=database_url,
+            )

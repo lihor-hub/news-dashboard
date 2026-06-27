@@ -464,7 +464,8 @@ function DailyBriefSection() {
 
   const canEnablePush =
     !pushEnabled &&
-    (!!window.electronAPI || ('serviceWorker' in navigator && 'PushManager' in window));
+    (!!window.electronAPI ||
+      (!!vapidKey && 'serviceWorker' in navigator && 'PushManager' in window));
 
   if (!loaded) return null;
 
@@ -523,11 +524,12 @@ function DailyBriefSection() {
               )}
               {pushState === 'requesting' ? 'Requesting…' : 'Enable push notifications'}
             </button>
-          ) : (
+          ) : !window.electronAPI &&
+            (!('serviceWorker' in navigator) || !('PushManager' in window)) ? (
             <p className="text-xs text-muted-foreground">
               Push notifications are not supported in this environment.
             </p>
-          )}
+          ) : null}
 
           {pushState === 'denied' && (
             <p className="text-xs text-destructive">

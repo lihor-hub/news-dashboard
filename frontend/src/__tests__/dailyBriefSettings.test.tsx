@@ -171,4 +171,22 @@ describe('DailyBriefSection', () => {
     await waitFor(() => expect(mockUpdateSettings).toHaveBeenCalledWith({ push_enabled: true }));
     await waitFor(() => expect(screen.getByText('Enabled')).toBeInTheDocument());
   });
+
+  it('hides Enable button and shows server-configuration warning when PushManager is present but VAPID key is missing', async () => {
+    vi.stubGlobal('navigator', { serviceWorker: {} });
+    vi.stubGlobal('PushManager', {});
+    mockFetchSettings.mockResolvedValue({
+      ...defaultSettings,
+      vapid_public_key: null,
+    });
+    renderSettings();
+    await waitFor(() => expect(screen.getByText('Push notifications')).toBeInTheDocument());
+    expect(screen.queryByRole('button', { name: /enable push/i })).not.toBeInTheDocument();
+    expect(
+      screen.queryByText('Push notifications are not supported in this environment.')
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByText('Push notifications require server configuration (VAPID keys).')
+    ).toBeInTheDocument();
+  });
 });
