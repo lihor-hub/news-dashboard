@@ -101,6 +101,7 @@ from news_dashboard.stats import (
     stats_overview,
     triage_metrics,
 )
+from news_dashboard.url_safety import UnsafeUrlError, validate_server_fetch_url
 
 logger = logging.getLogger(__name__)
 
@@ -1219,18 +1220,15 @@ def create_source(
     current_user: Annotated[dict[str, Any], Depends(require_auth)],
 ) -> dict[str, Any]:
     """Create a private custom source owned by the current user."""
-    from urllib.parse import urlparse
-
     uid = current_user["id"]
 
     if not payload.name.strip():
         raise HTTPException(status_code=400, detail="name must not be empty")
 
-    parsed = urlparse(payload.url)
-    if parsed.scheme not in ("http", "https"):
-        raise HTTPException(status_code=400, detail="url must use http or https scheme")
-    if not parsed.netloc:
-        raise HTTPException(status_code=400, detail="url must include a valid host")
+    try:
+        validate_server_fetch_url(payload.url)
+    except UnsafeUrlError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     slug = payload.validated_slug(payload.name)
 

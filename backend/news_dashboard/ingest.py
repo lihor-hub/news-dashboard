@@ -22,6 +22,11 @@ from news_dashboard.db import connect, init_db, insert_article_sql, placeholders
 from news_dashboard.ingest_events import ingest_events
 from news_dashboard.recommendations import COLD_START_MODEL_VERSION
 from news_dashboard.sources import DEFAULT_SOURCES, SourceDefinition
+from news_dashboard.url_safety import (
+    UnsafeUrlError,
+    open_server_fetch_url,
+    validate_server_fetch_url,
+)
 
 try:
     from rapidfuzz.distance import Levenshtein
@@ -419,12 +424,13 @@ FEED_FETCH_TIMEOUT_SECS = 15
 
 def _fetch_feed_content(url: str) -> bytes:
     """Fetch raw feed bytes with an explicit timeout. Raises FeedFetchError on failure."""
-    if not url.startswith(("http:", "https:")):
-        msg = f"Refusing to fetch non-HTTP URL: {url!r}"
-        raise FeedFetchError(msg)
+    try:
+        validate_server_fetch_url(url)
+    except UnsafeUrlError as exc:
+        raise FeedFetchError(str(exc)) from exc
     req = urllib.request.Request(url, headers={"User-Agent": _FEED_AGENT})  # noqa: S310
     try:
-        with urllib.request.urlopen(req, timeout=FEED_FETCH_TIMEOUT_SECS) as resp:  # noqa: S310
+        with open_server_fetch_url(req, timeout=FEED_FETCH_TIMEOUT_SECS) as resp:
             return resp.read()  # type: ignore[no-any-return]
     except TimeoutError as exc:
         msg = f"Feed fetch timed out after {FEED_FETCH_TIMEOUT_SECS}s: {url}"

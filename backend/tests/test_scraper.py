@@ -73,6 +73,23 @@ def test_scrape_source_uses_fixture(monkeypatch: pytest.MonkeyPatch) -> None:
     assert len(entries) >= 2
 
 
+def test_fetch_html_rejects_private_network_url(monkeypatch: pytest.MonkeyPatch) -> None:
+    from news_dashboard.scraper import _fetch_html
+
+    called = False
+
+    def fake_urlopen(_req: object, timeout: float) -> None:
+        nonlocal called
+        called = True
+
+    monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
+
+    with pytest.raises(ValueError, match="unsafe host"):
+        _fetch_html("http://127.0.0.1/admin")
+
+    assert called is False
+
+
 def test_scrape_source_unknown_slug_raises() -> None:
     source = SourceDefinition(
         "no-scraper", "No Scraper", "https://example.com", "python", "scraped_page", 50
