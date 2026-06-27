@@ -510,6 +510,27 @@ def article_insights(
     return {"bullets": bullets}
 
 
+@api.get("/api/articles/{article_id}/perspectives")
+def article_perspectives(
+    article_id: int,
+    current_user: Annotated[dict[str, Any], Depends(require_auth)],
+) -> dict[str, Any]:
+    from news_dashboard.perspectives import (
+        PerspectivesNotConfiguredError,
+        get_or_generate_perspectives,
+    )
+
+    try:
+        analysis = get_or_generate_perspectives(article_id, user_id=current_user["id"])
+    except PerspectivesNotConfiguredError as exc:
+        raise HTTPException(status_code=501, detail=str(exc)) from exc
+
+    if analysis is None:
+        raise HTTPException(status_code=404, detail="article not found")
+
+    return analysis
+
+
 @api.patch("/api/articles/{article_id}/status")
 def update_status(article_id: int, payload: StatusUpdate) -> dict[str, Any]:
     try:

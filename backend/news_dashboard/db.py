@@ -380,6 +380,7 @@ POSTGRES_MULTIUSER_SCHEMA = [
     " ON article_shares(to_user_id, created_at DESC)",
     "CREATE INDEX IF NOT EXISTS idx_article_shares_unread"
     " ON article_shares(to_user_id) WHERE read_at IS NULL",
+    "ALTER TABLE articles ADD COLUMN IF NOT EXISTS perspective_analysis JSONB",
 ]
 
 

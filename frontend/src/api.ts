@@ -86,6 +86,16 @@ export async function fetchArticleInsights(id: number | string): Promise<string[
   return data.bullets;
 }
 
+export interface PerspectiveAnalysis {
+  verified_facts: string[];
+  omissions: string[];
+  alternative_perspectives: string[];
+}
+
+export async function fetchArticlePerspectives(id: number | string): Promise<PerspectiveAnalysis> {
+  return requestJson<PerspectiveAnalysis>(`/api/articles/${id}/perspectives`);
+}
+
 export async function fetchSources(): Promise<Source[]> {
   const data = await requestJson<{ items: Source[] }>('/api/sources');
   return data.items;
