@@ -309,6 +309,19 @@ export interface RecommendationPreferences {
   recomputed?: number;
 }
 
+export interface PersonalizationNudge {
+  id: string;
+  kind: 'source' | 'topic';
+  title: string;
+  message: string;
+  reason: string;
+  skip_rate: number;
+  articles_last_30_days: number;
+  action: 'disable_source' | 'reduce_topic_weight';
+  target: string;
+  target_label: string;
+}
+
 export interface AnalyticsSummary {
   dau: number;
   wau: number;

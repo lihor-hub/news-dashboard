@@ -448,6 +448,19 @@ POSTGRES_MULTIUSER_SCHEMA = [
     "ALTER TABLE articles ADD COLUMN IF NOT EXISTS original_title TEXT",
     "ALTER TABLE articles ADD COLUMN IF NOT EXISTS original_body TEXT",
     "ALTER TABLE articles ADD COLUMN IF NOT EXISTS detected_lang VARCHAR(5) DEFAULT 'en'",
+    """
+    CREATE TABLE IF NOT EXISTS user_nudge_dismissals (
+      id              SERIAL PRIMARY KEY,
+      user_id         INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      nudge_kind      VARCHAR(20) NOT NULL,
+      nudge_target    TEXT NOT NULL,
+      dismissed_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      cooldown_until  TIMESTAMPTZ NOT NULL,
+      UNIQUE(user_id, nudge_kind, nudge_target)
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_nudge_dismissals_user"
+    " ON user_nudge_dismissals(user_id, cooldown_until)",
 ]
 
 

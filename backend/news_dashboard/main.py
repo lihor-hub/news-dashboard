@@ -1179,6 +1179,51 @@ def source_cleanup(
     }
 
 
+# ── Personalization nudges ────────────────────────────────────────────────────
+
+
+class NudgeActionRequest(BaseModel):
+    nudge_id: str
+
+
+class NudgeDismissRequest(BaseModel):
+    nudge_id: str
+    cooldown_days: int = 7
+
+
+@api.get("/api/personalization/nudges")
+def get_personalization_nudges(
+    current_user: Annotated[dict[str, Any], Depends(require_auth)],
+) -> dict[str, Any]:
+    from news_dashboard.personalization_nudges import generate_nudges
+
+    return {"items": generate_nudges(int(current_user["id"]))}
+
+
+@api.post("/api/personalization/nudges/apply")
+def apply_personalization_nudge(
+    payload: NudgeActionRequest,
+    current_user: Annotated[dict[str, Any], Depends(require_auth)],
+) -> dict[str, Any]:
+    from news_dashboard.personalization_nudges import apply_nudge
+
+    return apply_nudge(int(current_user["id"]), payload.nudge_id)
+
+
+@api.post("/api/personalization/nudges/dismiss")
+def dismiss_personalization_nudge(
+    payload: NudgeDismissRequest,
+    current_user: Annotated[dict[str, Any], Depends(require_auth)],
+) -> dict[str, Any]:
+    from news_dashboard.personalization_nudges import dismiss_nudge
+
+    return dismiss_nudge(
+        int(current_user["id"]),
+        payload.nudge_id,
+        cooldown_days=payload.cooldown_days,
+    )
+
+
 @api.patch("/api/sources/{slug}/enabled")
 def set_source_enabled(
     slug: str,

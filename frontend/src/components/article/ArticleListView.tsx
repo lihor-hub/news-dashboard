@@ -24,6 +24,7 @@ interface ArticleListViewProps {
   showCategoryFilter?: boolean;
   showLaterUntil?: boolean;
   sortArticles?: (articles: WorkflowArticle[]) => WorkflowArticle[];
+  banner?: React.ReactNode;
 }
 
 export function ArticleListView({
@@ -35,6 +36,7 @@ export function ArticleListView({
   showCategoryFilter,
   showLaterUntil,
   sortArticles,
+  banner,
 }: ArticleListViewProps) {
   const navigate = useNavigate();
   const { data: articles = [], isLoading } = useQuery({
@@ -69,6 +71,7 @@ export function ArticleListView({
         </p>
       </div>
       {showCategoryFilter && <CategoryFilter />}
+      {banner}
       {isLoading ? (
         <ArticleListSkeleton />
       ) : list.length === 0 ? (
