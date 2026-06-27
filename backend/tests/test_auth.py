@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+from collections.abc import Generator
 from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
 
+from news_dashboard import login_throttle
 from news_dashboard.auth import (
     authenticate,
     bootstrap_admin,
@@ -495,3 +497,102 @@ def test_keycloak_register_endpoint_redirects_and_sets_cookie(
         "https://news.lihor.ro/keycloak/realms/news-dashboard/protocol/openid-connect/registrations?"
     )
     assert "nd_oauth_state" in resp.cookies
+
+
+# ── Login throttle ────────────────────────────────────────────────────────────
+
+
+@pytest.fixture(autouse=False)
+def clean_throttle() -> Generator[None]:
+    login_throttle.reset_all()
+    login_throttle._reset_clock()
+    yield
+    login_throttle.reset_all()
+    login_throttle._reset_clock()
+
+
+def test_throttle_returns_429_after_threshold(tmp_db: str, clean_throttle: None) -> None:
+    create_user("throttled_user", "correct")
+    client = _fresh_client()
+    payload = {"username": "throttled_user", "password": "wrong"}
+    for _ in range(5):
+        resp = client.post("/api/auth/login", json=payload)
+        assert resp.status_code == 401
+    resp = client.post("/api/auth/login", json=payload)
+    assert resp.status_code == 429
+
+
+def test_throttle_response_body_does_not_reveal_username(tmp_db: str, clean_throttle: None) -> None:
+    create_user("secret_user", "correct")
+    client = _fresh_client()
+    for _ in range(5):
+        client.post("/api/auth/login", json={"username": "secret_user", "password": "wrong"})
+    resp = client.post("/api/auth/login", json={"username": "secret_user", "password": "wrong"})
+    assert resp.status_code == 429
+    body = resp.text
+    assert "secret_user" not in body
+
+
+def test_successful_login_clears_throttle(tmp_db: str, clean_throttle: None) -> None:
+    create_user("clearme", "right")
+    client = _fresh_client()
+    for _ in range(4):
+        client.post("/api/auth/login", json={"username": "clearme", "password": "wrong"})
+    # Correct password resets the counter
+    resp = client.post("/api/auth/login", json={"username": "clearme", "password": "right"})
+    assert resp.status_code == 200
+    # Should be able to fail again without immediately hitting 429
+    resp = client.post("/api/auth/login", json={"username": "clearme", "password": "wrong"})
+    assert resp.status_code == 401
+
+
+def test_throttle_window_expiry(tmp_db: str, clean_throttle: None) -> None:
+    from datetime import datetime, timezone
+
+    create_user("windowed", "correct")
+    client = _fresh_client()
+
+    # Record 5 failures at t=0
+    t0 = datetime(2025, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
+    login_throttle._set_clock(lambda: t0)
+    for _ in range(5):
+        client.post("/api/auth/login", json={"username": "windowed", "password": "wrong"})
+
+    # Confirm throttled at t=0
+    resp = client.post("/api/auth/login", json={"username": "windowed", "password": "wrong"})
+    assert resp.status_code == 429
+
+    # Advance clock past the 15-minute window
+    from datetime import timedelta
+
+    t_after = t0 + timedelta(minutes=16)
+    login_throttle._set_clock(lambda: t_after)
+
+    # Failures should have expired; a wrong-password attempt returns 401, not 429
+    resp = client.post("/api/auth/login", json={"username": "windowed", "password": "wrong"})
+    assert resp.status_code == 401
+
+
+def test_throttle_below_threshold_returns_401(tmp_db: str, clean_throttle: None) -> None:
+    create_user("below", "correct")
+    client = _fresh_client()
+    for _ in range(4):
+        resp = client.post("/api/auth/login", json={"username": "below", "password": "wrong"})
+        assert resp.status_code == 401
+
+
+def test_throttle_does_not_affect_keycloak_mode(
+    clean_throttle: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("KEYCLOAK_AUTH_ENABLED", "1")
+    monkeypatch.setenv("KEYCLOAK_SERVER_URL", "https://kc.example.com")
+    client = _fresh_client()
+    # Saturate the throttle counter for this key
+    login_throttle.record_failure("anyuser")
+    login_throttle.record_failure("anyuser")
+    login_throttle.record_failure("anyuser")
+    login_throttle.record_failure("anyuser")
+    login_throttle.record_failure("anyuser")
+    # Keycloak mode should still return 409, not 429
+    resp = client.post("/api/auth/login", json={"username": "anyuser", "password": "pw"})
+    assert resp.status_code == 409
