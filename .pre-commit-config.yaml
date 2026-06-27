@@ -96,7 +96,7 @@ repos:
         stages: [pre-push]
       - id: pytest
         name: pytest (backend)
-        entry: zsh -c 'set -a; if [ -f .env ]; then source .env; fi; set +a; pytest'
+        entry: zsh -c 'set -a; if [ -f .env ]; then source .env; fi; set +a; pytest -p no:xdist'
         language: system
         types: [python]
         pass_filenames: false
