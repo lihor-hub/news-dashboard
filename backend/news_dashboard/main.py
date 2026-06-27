@@ -1817,6 +1817,17 @@ def get_latest_quiz_endpoint(
     return quiz
 
 
+@api.get("/api/quizzes")
+def list_quizzes_endpoint(
+    current_user: Annotated[dict[str, Any], Depends(require_auth)],
+    limit: Annotated[int, Query(ge=1, le=50)] = 12,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> dict[str, Any]:
+    from news_dashboard.quiz import list_quizzes
+
+    return {"items": list_quizzes(current_user["id"], limit=limit, offset=offset)}
+
+
 @api.post("/api/quizzes/generate")
 def generate_quiz_endpoint(
     current_user: Annotated[dict[str, Any], Depends(require_auth)],

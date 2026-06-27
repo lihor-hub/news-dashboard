@@ -6,6 +6,7 @@ import {
   deleteGoal,
   fetchGoals,
   fetchLatestQuiz,
+  fetchQuizHistory,
   fetchReadingDna,
   fetchRecommendationPreferences,
   generateQuiz,
@@ -14,6 +15,7 @@ import {
 } from '../api';
 import type {
   Quiz,
+  QuizHistoryItem,
   QuizQuestion,
   QuizResult,
   ReadingDna,
@@ -218,6 +220,7 @@ export function ReadingDnaPage() {
 function LearningCenter() {
   const [goals, setGoals] = useState<ReadingGoal[]>([]);
   const [quiz, setQuiz] = useState<Quiz | null>(null);
+  const [quizHistory, setQuizHistory] = useState<QuizHistoryItem[]>([]);
   const [result, setResult] = useState<QuizResult | null>(null);
   const [answers, setAnswers] = useState<Record<number, number>>({});
   const [loadingGoals, setLoadingGoals] = useState(true);
@@ -229,6 +232,14 @@ function LearningCenter() {
   const [newKeywords, setNewKeywords] = useState('');
   const [addingGoal, setAddingGoal] = useState(false);
   const [showGoalForm, setShowGoalForm] = useState(false);
+
+  const refreshQuizHistory = async () => {
+    try {
+      setQuizHistory(await fetchQuizHistory());
+    } catch {
+      setQuizHistory([]);
+    }
+  };
 
   useEffect(() => {
     fetchGoals()
@@ -244,6 +255,7 @@ function LearningCenter() {
       })
       .catch(() => setQuiz(null))
       .finally(() => setLoadingQuiz(false));
+    void refreshQuizHistory();
   }, []);
 
   async function handleAddGoal() {
@@ -280,6 +292,7 @@ function LearningCenter() {
     try {
       const newQuiz = await generateQuiz();
       setQuiz(newQuiz);
+      await refreshQuizHistory();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to generate quiz');
     } finally {
@@ -295,6 +308,7 @@ function LearningCenter() {
     try {
       const quizResult = await submitQuiz(quiz.id, answerList);
       setResult(quizResult);
+      await refreshQuizHistory();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to submit quiz');
     } finally {
@@ -441,6 +455,64 @@ function LearningCenter() {
           </div>
         )}
       </Panel>
+
+      {quizHistory.length > 0 && <QuizHistoryPanel items={quizHistory} />}
+    </div>
+  );
+}
+
+function QuizHistoryPanel({ items }: { items: QuizHistoryItem[] }) {
+  const completed = items.filter((item) => item.completed && item.score !== null);
+  const average =
+    completed.length > 0
+      ? Math.round(
+          (completed.reduce((sum, item) => sum + (item.score ?? 0) / item.total, 0) /
+            completed.length) *
+            100
+        )
+      : null;
+  const streak = items.findIndex((item) => !item.completed);
+  const currentStreak = streak === -1 ? items.length : streak;
+
+  return (
+    <Panel title="Quiz Progress">
+      <div className="space-y-3">
+        <div className="grid gap-2 sm:grid-cols-3">
+          <ProgressStat label="Attempts" value={String(items.length)} />
+          <ProgressStat label="Average" value={average === null ? '—' : `${average}%`} />
+          <ProgressStat label="Streak" value={String(currentStreak)} />
+        </div>
+        <ul className="divide-y divide-border rounded border border-border">
+          {items.map((item) => (
+            <li key={item.id} className="flex items-center justify-between gap-3 px-3 py-2">
+              <div className="min-w-0">
+                <div className="truncate text-sm font-medium">
+                  {new Date(item.created_at).toLocaleDateString(undefined, {
+                    month: 'short',
+                    day: 'numeric',
+                    year: 'numeric',
+                  })}
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  {item.completed ? 'Completed' : 'Not completed'}
+                </div>
+              </div>
+              <div className="shrink-0 text-sm font-semibold tabular-nums">
+                {item.score === null ? `—/${item.total}` : `${item.score}/${item.total}`}
+              </div>
+            </li>
+          ))}
+        </ul>
+      </div>
+    </Panel>
+  );
+}
+
+function ProgressStat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded border border-border px-3 py-2">
+      <div className="text-xs text-muted-foreground">{label}</div>
+      <div className="text-lg font-semibold tabular-nums">{value}</div>
     </div>
   );
 }
