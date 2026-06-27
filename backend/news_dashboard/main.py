@@ -1280,12 +1280,18 @@ def get_podcast_audio_endpoint(
     return FileResponse(audio_path, media_type="audio/mpeg", filename=f"podcast-{briefing_id}.mp3")
 
 
+class BriefingCreateRequest(BaseModel):
+    focus_prompt: str | None = None
+
+
 @api.post("/api/briefings")
 def briefings_create(
     current_user: Annotated[dict[str, Any], Depends(require_auth)],
+    payload: BriefingCreateRequest | None = None,
 ) -> dict[str, Any]:
     try:
-        return generate_briefing(user_id=current_user["id"])
+        focus = payload.focus_prompt if payload is not None else None
+        return generate_briefing(user_id=current_user["id"], focus_prompt=focus)
     except BriefingAINotConfiguredError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     except BriefingGenerationError as exc:

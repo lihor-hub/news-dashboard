@@ -1132,3 +1132,133 @@ def test_generate_briefing_does_not_retry_when_ai_not_configured(pg_clean: str) 
 
     # Misconfiguration fails fast — no retries.
     assert calls["n"] == 1
+
+
+# ── Steerable briefings tests ───────────────────────────────────────────────
+
+
+def test_generate_briefing_re_ranks_candidates_based_on_focus_prompt(pg_clean: str) -> None:
+    _seed_source(pg_clean)
+    a1 = _seed_article(
+        pg_clean,
+        url="https://example.com/art1",
+        title="Exploring deep space exploration",
+        state="today",
+        importance_score=50,
+    )
+    a2 = _seed_article(
+        pg_clean,
+        url="https://example.com/art2",
+        title="Unlocking nuclear fusion energy",
+        state="today",
+        importance_score=10,
+    )
+    _seed_article(
+        pg_clean,
+        url="https://example.com/art3",
+        title="Standard news article on agriculture",
+        state="today",
+        importance_score=90,
+    )
+
+    called_candidates = []
+
+    def _ai_spy(candidates: list[dict[str, Any]], model: str) -> dict[str, Any]:
+        nonlocal called_candidates
+        called_candidates = list(candidates)
+        return {
+            "title": "Fusion Briefing",
+            "summary": "Nuclear fusion news.",
+            "sections": [{"title": "Energy", "body": "Fusion update.", "citations": [a2]}],
+            "worth_opening": [a2],
+        }
+
+    result = generate_briefing(database_url=pg_clean, ai_fn=_ai_spy, focus_prompt="fusion energy")
+    assert result["title"] == "Fusion Briefing"
+    assert called_candidates[0]["id"] == a2
+    assert called_candidates[1]["id"] == a1
+
+
+def test_call_openai_includes_focus_prompt_in_system_instruction(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
+    captured_messages = []
+
+    def _mock_chat_create(*args: Any, messages: list[dict[str, str]], **kwargs: Any) -> Any:
+        nonlocal captured_messages
+        captured_messages = messages
+        message = SimpleNamespace(content='{"title": "T", "sections": []}')
+        choice = SimpleNamespace(message=message)
+        return SimpleNamespace(choices=[choice])
+
+    import news_dashboard.ai_client as ai_client_mod
+
+    monkeypatch.setattr(ai_client_mod, "chat_create", _mock_chat_create)
+
+    _call_openai([{"id": 1, "title": "A"}], model="gpt-x", focus_prompt="FUSION ENERGY")
+    assert any("FUSION ENERGY" in msg.get("content", "") for msg in captured_messages)
+
+
+def test_generate_briefing_idempotency_respects_focus_prompt(pg_clean: str) -> None:
+    _seed_source(pg_clean)
+    _seed_article(
+        pg_clean, url="https://example.com/art1", title="Nuclear fusion energy", state="today"
+    )
+
+    calls = {"n": 0}
+
+    def _ai_fn(candidates: list[dict[str, Any]], model: str) -> dict[str, Any]:
+        calls["n"] += 1
+        return {
+            "title": f"Briefing {calls['n']}",
+            "summary": "Summary",
+            "sections": [],
+            "worth_opening": [],
+        }
+
+    res1 = generate_briefing(database_url=pg_clean, ai_fn=_ai_fn, focus_prompt="fusion")
+    assert res1["title"] == "Briefing 1"
+    assert calls["n"] == 1
+
+    res2 = generate_briefing(database_url=pg_clean, ai_fn=_ai_fn, focus_prompt="fusion")
+    assert res2["title"] == "Briefing 1"
+    assert calls["n"] == 1
+
+    res3 = generate_briefing(database_url=pg_clean, ai_fn=_ai_fn, focus_prompt="space")
+    assert res3["title"] == "Briefing 2"
+    assert calls["n"] == 2
+
+    res4 = generate_briefing(database_url=pg_clean, ai_fn=_ai_fn, focus_prompt=None)
+    assert res4["title"] == "Briefing 3"
+    assert calls["n"] == 3
+
+
+def test_get_latest_briefing_and_list_returns_focus_prompt(pg_clean: str) -> None:
+    _seed_source(pg_clean)
+    _seed_article(
+        pg_clean, url="https://example.com/art1", title="Nuclear fusion energy", state="today"
+    )
+
+    def _ai_fn(candidates: list[dict[str, Any]], model: str) -> dict[str, Any]:
+        return {
+            "title": "Fusion Brief",
+            "summary": "Summary",
+            "sections": [],
+            "worth_opening": [],
+        }
+
+    res = generate_briefing(database_url=pg_clean, ai_fn=_ai_fn, focus_prompt="fusion")
+    assert res["focus_prompt"] == "fusion"
+
+    latest = get_latest_briefing(database_url=pg_clean)
+    assert latest is not None
+    assert latest["focus_prompt"] == "fusion"
+
+    detail = get_briefing(latest["id"], database_url=pg_clean)
+    assert detail is not None
+    assert detail["focus_prompt"] == "fusion"
+
+    history = list_briefings(database_url=pg_clean)
+    assert len(history) == 1
+    assert history[0]["focus_prompt"] == "fusion"

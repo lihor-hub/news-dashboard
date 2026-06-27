@@ -248,6 +248,7 @@ POSTGRES_SCHEMA = [
     "CREATE INDEX IF NOT EXISTS idx_briefings_user ON briefings(user_id, created_at DESC)",
     "ALTER TABLE briefings ADD COLUMN IF NOT EXISTS script JSONB",
     "ALTER TABLE ingest_run_sources ADD COLUMN IF NOT EXISTS duration_ms INTEGER",
+    "ALTER TABLE briefings ADD COLUMN IF NOT EXISTS focus_prompt TEXT",
 ]
 
 POSTGRES_MULTIUSER_SCHEMA = [

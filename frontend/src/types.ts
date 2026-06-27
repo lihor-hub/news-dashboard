@@ -257,6 +257,7 @@ export interface Briefing {
   error: string | null;
   articles: BriefingArticle[];
   script?: PodcastTurn[] | null;
+  focus_prompt?: string | null;
 }
 
 export type BriefingLatestResponse = Briefing | { status: 'empty' };

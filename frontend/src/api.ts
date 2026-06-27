@@ -300,8 +300,11 @@ export async function fetchLatestBriefing(): Promise<BriefingLatestResponse> {
   return requestJson<BriefingLatestResponse>('/api/briefings/latest');
 }
 
-export async function createBriefing(): Promise<BriefingCreateResponse> {
-  return requestJson<BriefingCreateResponse>('/api/briefings', { method: 'POST' });
+export async function createBriefing(focusPrompt?: string): Promise<BriefingCreateResponse> {
+  return requestJson<BriefingCreateResponse>('/api/briefings', {
+    method: 'POST',
+    ...(focusPrompt ? { body: JSON.stringify({ focus_prompt: focusPrompt }) } : {}),
+  });
 }
 
 export async function fetchBriefing(id: number): Promise<Briefing> {

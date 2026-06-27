@@ -356,6 +356,12 @@ describe('ingest runs & briefings', () => {
     expect(calls[0].init?.method).toBe('POST');
   });
 
+  it('createBriefing sends focus_prompt when provided', async () => {
+    const { calls } = stubFetch(() => jsonOk({ id: 1 }));
+    await api.createBriefing('tech policy');
+    expect(calls[0].init?.body).toBe(JSON.stringify({ focus_prompt: 'tech policy' }));
+  });
+
   it('fetchBriefing GETs by id', async () => {
     const { calls } = stubFetch(() => jsonOk({ id: 4 }));
     await api.fetchBriefing(4);

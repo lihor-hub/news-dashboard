@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { Newspaper, RefreshCw, AlertCircle, Inbox, History } from 'lucide-react';
+import { Newspaper, RefreshCw, AlertCircle, Inbox, History, Wand2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { fetchLatestBriefing, createBriefing } from '@/api';
 import { BriefingView, BriefSkeleton } from '@/components/BriefingView';
 import { BriefingChat } from '@/components/BriefingChat';
@@ -23,23 +24,28 @@ export function BriefPage() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [generateError, setGenerateError] = useState<GenerateError | null>(null);
   const [noCandidates, setNoCandidates] = useState<NoCandidates>({ shown: false });
+  const [focusInput, setFocusInput] = useState('');
 
   const { data, isLoading, refetch } = useQuery({
     queryKey: ['briefings', 'latest'],
     queryFn: fetchLatestBriefing,
   });
 
-  function generate() {
+  function generate(focusPrompt?: string) {
+    void handleGenerate(focusPrompt);
+  }
+
+  function generateDefault() {
     void handleGenerate();
   }
 
-  async function handleGenerate() {
+  async function handleGenerate(focusPrompt?: string) {
     trackFeature('generate_briefing');
     setIsGenerating(true);
     setGenerateError(null);
     setNoCandidates({ shown: false });
     try {
-      const result = await createBriefing();
+      const result = await createBriefing(focusPrompt);
       if ('status' in result && result.status === 'no_candidates') {
         setNoCandidates({ shown: true });
       } else {
@@ -83,7 +89,7 @@ export function BriefPage() {
         </div>
         <div className="flex gap-2 flex-wrap">
           {generateError.kind === 'failed' && (
-            <Button size="sm" onClick={generate} disabled={isGenerating}>
+            <Button size="sm" onClick={generateDefault} disabled={isGenerating}>
               <RefreshCw className={isGenerating ? 'animate-spin' : ''} />
               {isGenerating ? 'Retrying…' : 'Retry'}
             </Button>
@@ -131,7 +137,7 @@ export function BriefPage() {
           </div>
         </div>
         <div className="flex gap-2 justify-center flex-wrap">
-          <Button size="sm" onClick={generate} disabled={isGenerating}>
+          <Button size="sm" onClick={generateDefault} disabled={isGenerating}>
             <RefreshCw className={isGenerating ? 'animate-spin' : ''} />
             {isGenerating ? 'Generating…' : 'Generate briefing'}
           </Button>
@@ -158,7 +164,7 @@ export function BriefPage() {
           </div>
         </div>
         <div className="flex gap-2 flex-wrap">
-          <Button size="sm" onClick={generate} disabled={isGenerating}>
+          <Button size="sm" onClick={generateDefault} disabled={isGenerating}>
             <RefreshCw className={isGenerating ? 'animate-spin' : ''} />
             {isGenerating ? 'Retrying…' : 'Retry'}
           </Button>
@@ -172,25 +178,49 @@ export function BriefPage() {
   }
 
   return (
-    <BriefingView
-      briefing={data}
-      onGenerate={generate}
-      isGenerating={isGenerating}
-      onRefreshBriefing={() => {
-        void refetch();
-      }}
-      afterMeta={
-        <div className="flex items-center gap-2 mt-1">
-          <Link
-            to="/briefs"
-            className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+    <div>
+      <div className="px-4 md:px-5 pt-4 pb-2">
+        <div className="flex gap-2 items-center">
+          <Input
+            placeholder="Focus on… (e.g. AI safety, tech policy)"
+            value={focusInput}
+            onChange={(e) => setFocusInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && focusInput.trim()) generate(focusInput.trim());
+            }}
+            className="h-8 text-sm"
+          />
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={isGenerating || !focusInput.trim()}
+            onClick={() => generate(focusInput.trim())}
           >
-            <History className="size-3" />
-            View history
-          </Link>
-          <BriefingChat briefingId={data.id} />
+            <Wand2 className="size-3.5 mr-1" />
+            Generate
+          </Button>
         </div>
-      }
-    />
+      </div>
+      <BriefingView
+        briefing={data}
+        onGenerate={generateDefault}
+        isGenerating={isGenerating}
+        onRefreshBriefing={() => {
+          void refetch();
+        }}
+        afterMeta={
+          <div className="flex items-center gap-2 mt-1">
+            <Link
+              to="/briefs"
+              className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <History className="size-3" />
+              View history
+            </Link>
+            <BriefingChat briefingId={data.id} />
+          </div>
+        }
+      />
+    </div>
   );
 }

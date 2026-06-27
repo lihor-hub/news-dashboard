@@ -186,7 +186,11 @@ def _briefing_ai_config() -> tuple[str, str | None]:
 
 
 def _call_openai(
-    candidates: list[dict[str, Any]], model: str, *, user_id: int | None = None
+    candidates: list[dict[str, Any]],
+    model: str,
+    *,
+    user_id: int | None = None,
+    focus_prompt: str | None = None,
 ) -> dict[str, Any]:
     """Call an OpenAI-compatible API to generate structured briefing JSON."""
 
@@ -206,6 +210,10 @@ def _call_openai(
 
     prompt = get_prompt("briefing-system", fallback=_BRIEFING_SYSTEM_PROMPT)
     system = prompt.text
+    if focus_prompt:
+        system += (
+            f"\n\nFocus the briefing on the following user-directed topic/style: {focus_prompt}"
+        )
     user = "Articles:\n\n" + "\n\n".join(article_lines)
 
     client = get_openai_client(api_key=api_key, base_url=base_url)
@@ -273,7 +281,7 @@ def _validate_content(raw: dict[str, Any], candidate_ids: set[int]) -> dict[str,
     }
 
 
-def _save_briefing(
+def _save_briefing(  # noqa: PLR0913
     since_at: datetime,
     until_at: datetime,
     content: dict[str, Any],
@@ -281,6 +289,7 @@ def _save_briefing(
     model: str,
     database_url: str | None = None,
     user_id: int | None = None,
+    focus_prompt: str | None = None,
 ) -> dict[str, Any]:
     """Insert briefing + article links; return the full briefing dict."""
     title = content.get("title") or ""
@@ -294,9 +303,10 @@ def _save_briefing(
         row = conn.execute(
             """
             INSERT INTO briefings(
-                scope, since_at, until_at, status, title, summary, content, model, user_id
+                scope, since_at, until_at, status,
+                title, summary, content, model, user_id, focus_prompt
             )
-            VALUES (%s, %s, %s, %s, %s, %s, %s::jsonb, %s, %s)
+            VALUES (%s, %s, %s, %s, %s, %s, %s::jsonb, %s, %s, %s)
             RETURNING id
             """,
             (
@@ -309,6 +319,7 @@ def _save_briefing(
                 json.dumps(content_blob),
                 model,
                 user_id,
+                focus_prompt,
             ),
         ).fetchone()
         if row is None:
@@ -356,6 +367,7 @@ def _find_recent_briefing(
     window_minutes: int,
     database_url: str | None = None,
     user_id: int | None = None,
+    focus_prompt: str | None = None,
 ) -> dict[str, Any] | None:
     """Return the most recent complete briefing if created within window_minutes, else None."""
     cutoff = datetime.now(timezone.utc) - timedelta(minutes=window_minutes)
@@ -365,20 +377,22 @@ def _find_recent_briefing(
                 """
                 SELECT id FROM briefings
                 WHERE status = 'complete' AND created_at >= %s AND user_id = %s
+                  AND focus_prompt IS NOT DISTINCT FROM %s
                 ORDER BY created_at DESC
                 LIMIT 1
                 """,
-                (cutoff, user_id),
+                (cutoff, user_id, focus_prompt),
             ).fetchone()
         else:
             row = conn.execute(
                 """
                 SELECT id FROM briefings
                 WHERE status = 'complete' AND created_at >= %s AND user_id IS NULL
+                  AND focus_prompt IS NOT DISTINCT FROM %s
                 ORDER BY created_at DESC
                 LIMIT 1
                 """,
-                (cutoff,),
+                (cutoff, focus_prompt),
             ).fetchone()
     if row is None:
         return None
@@ -392,16 +406,28 @@ def _save_failed_briefing(
     model: str,
     database_url: str | None = None,
     user_id: int | None = None,
+    focus_prompt: str | None = None,
 ) -> None:
     """Persist a failed-status row for observability; DB errors are swallowed."""
     try:
         with connect(database_url=database_url) as conn:
             conn.execute(
                 """
-                INSERT INTO briefings(scope, since_at, until_at, status, model, error, user_id)
-                VALUES (%s, %s, %s, %s, %s, %s, %s)
+                INSERT INTO briefings(
+                    scope, since_at, until_at, status, model, error, user_id, focus_prompt
+                )
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
                 """,
-                (CURRENT_DAY_SCOPE, since_at, until_at, "failed", model, str(exc), user_id),
+                (
+                    CURRENT_DAY_SCOPE,
+                    since_at,
+                    until_at,
+                    "failed",
+                    model,
+                    str(exc),
+                    user_id,
+                    focus_prompt,
+                ),
             )
     except Exception:
         logger.exception("Failed to persist failed-briefing row — original error follows")
@@ -436,7 +462,25 @@ def select_candidates(
         return [row_to_dict(r) for r in rows]
 
 
-def generate_briefing(
+def _keyword_score(article: dict[str, Any], keywords: list[str]) -> float:
+    if not keywords:
+        return 0.0
+    title = (article.get("title") or "").lower()
+    category = (article.get("category") or "").lower()
+    summary = (article.get("summary") or "").lower()
+
+    score = 0.0
+    for kw in keywords:
+        if kw in title:
+            score += 10.0
+        if kw in category:
+            score += 5.0
+        if kw in summary:
+            score += 2.0
+    return score
+
+
+def generate_briefing(  # noqa: PLR0913
     database_url: str | None = None,
     *,
     model: str | None = None,
@@ -445,6 +489,7 @@ def generate_briefing(
     user_id: int | None = None,
     max_attempts: int = BRIEFING_MAX_ATTEMPTS,
     retry_base_delay_seconds: float = BRIEFING_RETRY_BASE_DELAY_SECONDS,
+    focus_prompt: str | None = None,
 ) -> dict[str, Any]:
     """Generate and persist a briefing from eligible Today articles.
 
@@ -465,7 +510,9 @@ def generate_briefing(
         BriefingGenerationError: AI returned an invalid or unparseable response
             on every attempt.
     """
-    recent = _find_recent_briefing(idempotency_window_minutes, database_url, user_id=user_id)
+    recent = _find_recent_briefing(
+        idempotency_window_minutes, database_url, user_id=user_id, focus_prompt=focus_prompt
+    )
     if recent is not None:
         return recent
 
@@ -480,8 +527,27 @@ def generate_briefing(
     if not candidates:
         return {"status": "no_candidates"}
 
+    keywords = []
+    if focus_prompt:
+        cleaned = "".join(c if c.isalnum() else " " for c in focus_prompt.lower())
+        keywords = [w for w in cleaned.split() if len(w) >= 3]
+
+    if keywords:
+        candidates = sorted(
+            candidates,
+            key=lambda a: (
+                _keyword_score(a, keywords),
+                -float(a["importance_score"]) if a.get("importance_score") is not None else -50.0,
+            ),
+            reverse=True,
+        )
+
     candidate_ids = {int(a["id"]) for a in candidates}
-    call_ai: AiFn = ai_fn if ai_fn is not None else partial(_call_openai, user_id=user_id)
+    call_ai: AiFn = (
+        ai_fn
+        if ai_fn is not None
+        else partial(_call_openai, user_id=user_id, focus_prompt=focus_prompt)
+    )
     attempts = max(1, max_attempts)
     content: dict[str, Any] | None = None
     for attempt in range(1, attempts + 1):
@@ -492,13 +558,25 @@ def generate_briefing(
         except BriefingAINotConfiguredError as exc:
             # Misconfiguration won't fix itself on retry — fail fast.
             _save_failed_briefing(
-                since_at, until_at, exc, resolved_model, database_url, user_id=user_id
+                since_at,
+                until_at,
+                exc,
+                resolved_model,
+                database_url,
+                user_id=user_id,
+                focus_prompt=focus_prompt,
             )
             raise
         except BriefingGenerationError as exc:
             if attempt >= attempts:
                 _save_failed_briefing(
-                    since_at, until_at, exc, resolved_model, database_url, user_id=user_id
+                    since_at,
+                    until_at,
+                    exc,
+                    resolved_model,
+                    database_url,
+                    user_id=user_id,
+                    focus_prompt=focus_prompt,
                 )
                 raise
             delay = retry_base_delay_seconds * (2 ** (attempt - 1))
@@ -516,7 +594,14 @@ def generate_briefing(
         msg = "Briefing generation produced no content"
         raise BriefingGenerationError(msg)
     return _save_briefing(
-        since_at, until_at, content, candidate_ids, resolved_model, database_url, user_id=user_id
+        since_at,
+        until_at,
+        content,
+        candidate_ids,
+        resolved_model,
+        database_url,
+        user_id=user_id,
+        focus_prompt=focus_prompt,
     )
 
 
@@ -531,7 +616,7 @@ def get_latest_briefing(
             row = conn.execute(
                 """
                 SELECT id, created_at, scope, since_at, until_at, status,
-                       title, summary, content, model, error, script
+                       title, summary, content, model, error, script, focus_prompt
                 FROM briefings
                 WHERE user_id = %s
                 ORDER BY created_at DESC
@@ -543,7 +628,7 @@ def get_latest_briefing(
             row = conn.execute(
                 """
                 SELECT id, created_at, scope, since_at, until_at, status,
-                       title, summary, content, model, error, script
+                       title, summary, content, model, error, script, focus_prompt
                 FROM briefings
                 WHERE user_id IS NULL
                 ORDER BY created_at DESC
@@ -573,7 +658,7 @@ def list_briefings(
             rows = conn.execute(
                 """
                 SELECT id, created_at, scope, since_at, until_at, status,
-                       title, summary, model, error
+                       title, summary, model, error, focus_prompt
                 FROM briefings
                 WHERE user_id = %s
                 ORDER BY created_at DESC
@@ -585,7 +670,7 @@ def list_briefings(
             rows = conn.execute(
                 """
                 SELECT id, created_at, scope, since_at, until_at, status,
-                       title, summary, model, error
+                       title, summary, model, error, focus_prompt
                 FROM briefings
                 WHERE user_id IS NULL
                 ORDER BY created_at DESC
@@ -608,7 +693,7 @@ def get_briefing(
             row = conn.execute(
                 """
                 SELECT id, created_at, scope, since_at, until_at, status,
-                       title, summary, content, model, error, script
+                       title, summary, content, model, error, script, focus_prompt
                 FROM briefings
                 WHERE id = %s AND user_id = %s
                 """,
@@ -618,7 +703,7 @@ def get_briefing(
             row = conn.execute(
                 """
                 SELECT id, created_at, scope, since_at, until_at, status,
-                       title, summary, content, model, error, script
+                       title, summary, content, model, error, script, focus_prompt
                 FROM briefings
                 WHERE id = %s AND user_id IS NULL
                 """,
