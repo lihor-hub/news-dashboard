@@ -271,6 +271,8 @@ jobs:
           # Pull eagerly — surfaces auth failures before touching the cluster.
           docker pull "${IMG}:${SHA}"
 
+          kubectl create namespace news-dashboard --dry-run=client -o yaml | kubectl apply -f -
+
           # Let Kubernetes pull the private GHCR image during rollout.
           kubectl -n news-dashboard create secret docker-registry ghcr-pull-secret \
             --docker-server=ghcr.io \

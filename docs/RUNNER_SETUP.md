@@ -71,16 +71,17 @@ Once generated, add the public and private keys as GitHub Actions **Secrets**, a
 | `VAPID_PRIVATE_KEY` | Secret | The generated VAPID private key |
 | `VAPID_EMAIL` | Variable | The contact email address (e.g., `admin@example.com`) |
 
-### 6. Create the Kubernetes namespace (first time only)
+### 6. Check Kubernetes access
 
 ```bash
-kubectl create namespace news-dashboard --dry-run=client -o yaml | kubectl apply -f -
+kubectl get nodes
 ```
 
-The `helm upgrade --install ... --create-namespace` flag in the workflow does this
-automatically, but running it once now confirms `kubectl` is working.
+The deploy workflow creates the `news-dashboard` namespace before refreshing
+secrets, and Helm still runs with `--create-namespace` during install/upgrade.
+No manual namespace creation is required before the first workflow deploy.
 
-### 6. Make the GHCR package visible to the runner
+### 7. Make the GHCR package visible to the runner
 
 The workflow's "Refresh GHCR pull secret" step handles cluster-side pull auth
 automatically on every deploy.  If you want to test a manual pull first:

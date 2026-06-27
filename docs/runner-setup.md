@@ -96,15 +96,15 @@ are not in the runner user's `PATH`, add them to `~/.profile` for that user.
 
 ## Step 4 — First-time cluster check
 
-Confirm `kubectl` is pointing at the correct cluster and the namespace exists:
+Confirm `kubectl` is pointing at the correct cluster:
 
 ```bash
 kubectl get nodes
-kubectl create namespace news-dashboard --dry-run=client -o yaml | kubectl apply -f -
 ```
 
-The `helm upgrade --install ... --create-namespace` flag in the workflow also
-creates the namespace automatically on first deploy.
+The deploy workflow creates the `news-dashboard` namespace before refreshing
+secrets, and Helm still runs with `--create-namespace` during install/upgrade.
+No manual namespace creation is required before the first workflow deploy.
 
 ## How the full flow works after setup
 
