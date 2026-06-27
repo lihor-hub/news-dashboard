@@ -375,6 +375,16 @@ export interface ReadingGoal {
   created_at: string;
 }
 
+export interface QuizCandidate {
+  id: number;
+  title: string;
+  category: string | null;
+  source_name: string | null;
+  done_at: string | null;
+  goal_matched: boolean;
+  matched_keywords: string[];
+}
+
 export interface QuizQuestion {
   question: string;
   options: string[];

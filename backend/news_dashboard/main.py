@@ -1805,6 +1805,16 @@ def delete_goal_endpoint(
     return {"deleted": True}
 
 
+@api.get("/api/quizzes/candidates")
+def get_quiz_candidates_endpoint(
+    current_user: Annotated[dict[str, Any], Depends(require_auth)],
+) -> dict[str, Any]:
+    from news_dashboard.quiz import get_quiz_candidate_articles
+
+    candidates = get_quiz_candidate_articles(current_user["id"])
+    return {"candidates": candidates}
+
+
 @api.get("/api/quizzes/latest")
 def get_latest_quiz_endpoint(
     current_user: Annotated[dict[str, Any], Depends(require_auth)],

@@ -19,6 +19,7 @@ from news_dashboard.quiz import (
     delete_goal,
     generate_weekly_quiz,
     get_latest_quiz,
+    get_quiz_candidate_articles,
     goal_alignment_adjustment,
     list_goals,
     list_quizzes,
@@ -488,3 +489,62 @@ def test_get_latest_quiz_unanswered_has_no_completed_result(tmp_path: Path) -> N
     latest = get_latest_quiz(user_id, db_path=db_path)
     assert latest is not None
     assert latest.get("completed_result") is None
+
+
+# ── get_quiz_candidate_articles tests ────────────────────────────────────────
+
+
+def test_candidates_empty_when_no_done_articles(tmp_path: Path) -> None:
+    db_path = tmp_path / "c.db"
+    _seed(db_path)
+    candidates = get_quiz_candidate_articles(1, db_path=db_path)
+    assert candidates == []
+
+
+def test_candidates_fallback_to_recent_done(tmp_path: Path) -> None:
+    db_path = tmp_path / "c.db"
+    user_id, article_id = _seed(db_path)
+    _seed_done_article(db_path, user_id, article_id)
+
+    candidates = get_quiz_candidate_articles(user_id, db_path=db_path)
+    assert len(candidates) == 1
+    c = candidates[0]
+    assert c["id"] == article_id
+    assert c["title"] == "AI Transformer Deep Dive"
+    assert c["goal_matched"] is False
+    assert c["matched_keywords"] == []
+    assert "body" not in c
+
+
+def test_candidates_goal_matched(tmp_path: Path) -> None:
+    db_path = tmp_path / "c.db"
+    user_id, article_id = _seed(db_path)
+    _seed_done_article(db_path, user_id, article_id)
+    create_goal(user_id, "Deep learning", keywords="transformer ai", db_path=db_path)
+
+    candidates = get_quiz_candidate_articles(user_id, db_path=db_path)
+    assert len(candidates) == 1
+    c = candidates[0]
+    assert c["goal_matched"] is True
+    assert "transformer" in c["matched_keywords"] or "ai" in c["matched_keywords"]
+
+
+def test_candidates_user_isolation(tmp_path: Path) -> None:
+    db_path = tmp_path / "c.db"
+    user_id, article_id = _seed(db_path)
+    _seed_done_article(db_path, user_id, article_id)
+
+    # User 2 should see no candidates
+    candidates = get_quiz_candidate_articles(999, db_path=db_path)
+    assert candidates == []
+
+
+def test_candidates_no_body_text(tmp_path: Path) -> None:
+    db_path = tmp_path / "c.db"
+    user_id, article_id = _seed(db_path)
+    _seed_done_article(db_path, user_id, article_id)
+
+    candidates = get_quiz_candidate_articles(user_id, db_path=db_path)
+    for c in candidates:
+        assert "body" not in c
+        assert "summary" not in c

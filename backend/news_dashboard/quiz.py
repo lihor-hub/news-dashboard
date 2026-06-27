@@ -162,6 +162,104 @@ def _parse_questions(response_text: str) -> list[dict[str, Any]]:
         return []
 
 
+def get_quiz_candidate_articles(
+    user_id: int,
+    *,
+    db_path: Path | str | None = None,
+    database_url: str | None = None,
+    days: int = 7,
+    limit: int = 10,
+) -> list[dict[str, Any]]:
+    """Return candidate articles for quiz generation without invoking any LLM.
+
+    Each returned dict contains: id, title, category, source_name, done_at,
+    goal_matched (bool), matched_keywords (list[str]).  No body text is included.
+    """
+    init_db(db_path, database_url=database_url)
+    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+
+    with connect(db_path, database_url=database_url) as conn:
+        goals = conn.execute(
+            "SELECT description, keywords FROM user_goals WHERE user_id = %s",
+            (user_id,),
+        ).fetchall()
+        goal_list = [dict(g) for g in goals]
+
+        keyword_terms: list[str] = []
+        for g in goal_list:
+            kw_str = g.get("keywords") or g.get("description") or ""
+            keyword_terms.extend(kw_str.lower().split())
+
+        goal_candidates: list[dict[str, Any]] = []
+        if keyword_terms:
+            ilike_clauses = " OR ".join(
+                "(LOWER(a.title) LIKE %s OR LOWER(a.category) LIKE %s)" for _ in keyword_terms
+            )
+            params: list[Any] = []
+            for kw in keyword_terms:
+                params.extend([f"%{kw}%", f"%{kw}%"])
+            params.extend([user_id, cutoff])
+            rows = conn.execute(
+                f"""
+                SELECT a.id, a.title, a.category, a.source_name, s.done_at
+                FROM articles a
+                JOIN user_article_state s ON s.article_id = a.id
+                WHERE ({ilike_clauses})
+                  AND s.user_id = %s
+                  AND s.state = 'done'
+                  AND s.done_at >= %s
+                ORDER BY s.done_at DESC
+                LIMIT {limit}
+                """,
+                params,
+            ).fetchall()
+            for row in rows:
+                r = dict(row)
+                article_text = " ".join(filter(None, [r.get("title"), r.get("category")])).lower()
+                matched = [kw for kw in keyword_terms if kw and kw in article_text]
+                goal_candidates.append(
+                    {
+                        "id": r["id"],
+                        "title": r["title"],
+                        "category": r.get("category"),
+                        "source_name": r.get("source_name"),
+                        "done_at": r["done_at"].isoformat() if r.get("done_at") else None,
+                        "goal_matched": True,
+                        "matched_keywords": matched,
+                    }
+                )
+
+        if goal_candidates:
+            return goal_candidates
+
+        # Fall back to any recently done articles when no goal keywords match.
+        rows = conn.execute(
+            """
+            SELECT a.id, a.title, a.category, a.source_name, s.done_at
+            FROM articles a
+            JOIN user_article_state s ON s.article_id = a.id
+            WHERE s.user_id = %s
+              AND s.state = 'done'
+              AND s.done_at >= %s
+            ORDER BY s.done_at DESC
+            LIMIT %s
+            """,
+            (user_id, cutoff, limit),
+        ).fetchall()
+        return [
+            {
+                "id": r["id"],
+                "title": r["title"],
+                "category": r.get("category"),
+                "source_name": r.get("source_name"),
+                "done_at": r["done_at"].isoformat() if r.get("done_at") else None,
+                "goal_matched": False,
+                "matched_keywords": [],
+            }
+            for r in rows
+        ]
+
+
 def generate_weekly_quiz(
     user_id: int,
     *,
@@ -176,74 +274,24 @@ def generate_weekly_quiz(
 
     Returns the saved quiz row, or None when no eligible articles are found.
     """
-    init_db(db_path, database_url=database_url)
-    cutoff = datetime.now(timezone.utc) - timedelta(days=7)
-
-    with connect(db_path, database_url=database_url) as conn:
-        goals = conn.execute(
-            "SELECT description, keywords FROM user_goals WHERE user_id = %s",
-            (user_id,),
-        ).fetchall()
-        goal_list = [dict(g) for g in goals]
-
-        # Build keyword filter for the SQL query when goals are present.
-        articles: list[dict[str, Any]]
-        if goal_list:
-            keyword_terms: list[str] = []
-            for g in goal_list:
-                kw_str = g.get("keywords") or g.get("description") or ""
-                keyword_terms.extend(kw_str.lower().split())
-            if keyword_terms:
-                ilike_clauses = " OR ".join(
-                    "(LOWER(a.title) LIKE %s OR LOWER(a.category) LIKE %s)" for _ in keyword_terms
-                )
-                params: list[Any] = []
-                for kw in keyword_terms:
-                    params.extend([f"%{kw}%", f"%{kw}%"])
-                params.extend([user_id, cutoff])
-                rows = conn.execute(
-                    f"""
-                    SELECT a.id, a.title, a.body, a.summary, a.category
-                    FROM articles a
-                    JOIN user_article_state s ON s.article_id = a.id
-                    WHERE ({ilike_clauses})
-                      AND s.user_id = %s
-                      AND s.state = 'done'
-                      AND s.done_at >= %s
-                    ORDER BY s.done_at DESC
-                    LIMIT 10
-                    """,
-                    params,
-                ).fetchall()
-                articles = [dict(r) for r in rows]
-            else:
-                articles = []
-        else:
-            articles = []
-
-        # Fall back to any recently-read articles when no goal matches.
-        if not articles:
-            rows = conn.execute(
-                """
-                SELECT a.id, a.title, a.body, a.summary, a.category
-                FROM articles a
-                JOIN user_article_state s ON s.article_id = a.id
-                WHERE s.user_id = %s
-                  AND s.state = 'done'
-                  AND s.done_at >= %s
-                ORDER BY s.done_at DESC
-                LIMIT 10
-                """,
-                (user_id, cutoff),
-            ).fetchall()
-            articles = [dict(r) for r in rows]
-
-    if not articles:
+    candidates = get_quiz_candidate_articles(user_id, db_path=db_path, database_url=database_url)
+    if not candidates:
         logger.info("No eligible articles for quiz generation for user %s", user_id)
         return None
 
+    # Fetch full article bodies for the LLM; candidate objects only carry metadata.
+    candidate_ids = [c["id"] for c in candidates[:5]]
+    placeholders = ", ".join("%s" for _ in candidate_ids)
+    init_db(db_path, database_url=database_url)
+    with connect(db_path, database_url=database_url) as conn:
+        rows = conn.execute(
+            f"SELECT id, title, body, summary, category FROM articles WHERE id IN ({placeholders})",
+            candidate_ids,
+        ).fetchall()
+    articles = [dict(r) for r in rows]
+
     api_key, base_url, model = _quiz_ai_config()
-    blurbs = "\n\n---\n\n".join(_build_article_blurb(a) for a in articles[:5])
+    blurbs = "\n\n---\n\n".join(_build_article_blurb(a) for a in articles)
     messages = [{"role": "user", "content": f"{_QUIZ_PROMPT}\n\nArticles:\n{blurbs}"}]
 
     from news_dashboard.ai_client import chat_create, get_chat_client
