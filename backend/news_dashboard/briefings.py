@@ -650,3 +650,73 @@ def update_briefing_script(
             "UPDATE briefings SET script = %s::jsonb WHERE id = %s",
             (json.dumps(script), briefing_id),
         )
+
+
+_CHAT_SYSTEM_PROMPT = """\
+You are the Briefing Q&A Assistant. Your job is to answer follow-up questions \
+about the daily briefing provided below. Ground every answer in the briefing \
+summary and the full article texts supplied. If information is not present in \
+the provided context, say so clearly rather than guessing.
+
+--- BRIEFING ---
+{briefing_context}
+
+--- CITED ARTICLES ---
+{articles_context}
+"""
+
+
+def chat_with_briefing(
+    briefing_id: int,
+    message: str,
+    history: list[dict[str, str]],
+    *,
+    user_id: int | None = None,
+    database_url: str | None = None,
+) -> str:
+    """Answer a follow-up question grounded in the cited articles of a briefing."""
+    api_key, base_url = _briefing_ai_config()
+    model = os.getenv("OPENAI_BRIEFING_MODEL", DEFAULT_BRIEFING_MODEL)
+
+    briefing = get_briefing(briefing_id, database_url=database_url, user_id=user_id)
+    if briefing is None:
+        msg = f"briefing {briefing_id} not found"
+        raise KeyError(msg)
+
+    briefing_context = f"Title: {briefing.get('title', '')}\nSummary: {briefing.get('summary', '')}"
+
+    articles = briefing.get("articles") or []
+    if articles:
+        article_parts: list[str] = []
+        with connect(database_url=database_url) as conn:
+            for a in articles:
+                row = conn.execute("SELECT body FROM articles WHERE id = %s", (a["id"],)).fetchone()
+                body = (row[0] or "") if row else ""
+                article_parts.append(
+                    f"[{a['id']}] {a['title']} ({a.get('source_name', '')})\n{body[:3000]}"
+                )
+        articles_context = "\n\n".join(article_parts)
+    else:
+        articles_context = "(No articles cited — answer from the briefing summary only.)"
+
+    system = _CHAT_SYSTEM_PROMPT.format(
+        briefing_context=briefing_context,
+        articles_context=articles_context,
+    )
+
+    from news_dashboard.ai_client import chat_create, get_openai_client
+
+    client = get_openai_client(api_key=api_key, base_url=base_url)
+    messages: list[dict[str, str]] = [{"role": "system", "content": system}]
+    messages.extend(history)
+    messages.append({"role": "user", "content": message})
+
+    response = chat_create(
+        client,
+        name="briefing-chat",
+        tags=["briefing", "chat"],
+        user_id=user_id,
+        model=model,
+        messages=messages,
+    )
+    return response.choices[0].message.content or ""

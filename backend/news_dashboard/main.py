@@ -49,6 +49,7 @@ from news_dashboard.body_fetch import fetch_and_cache_body, get_article, prefetc
 from news_dashboard.briefings import (
     BriefingAINotConfiguredError,
     BriefingGenerationError,
+    chat_with_briefing,
     generate_briefing,
     get_briefing,
     get_latest_briefing,
@@ -1029,6 +1030,36 @@ def briefings_create(
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     except BriefingGenerationError as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+class BriefingChatMessage(BaseModel):
+    role: str
+    content: str
+
+
+class BriefingChatRequest(BaseModel):
+    message: str
+    history: list[BriefingChatMessage] = []
+
+
+@api.post("/api/briefings/{briefing_id}/chat")
+def briefings_chat(
+    briefing_id: int,
+    body: BriefingChatRequest,
+    current_user: Annotated[dict[str, Any], Depends(require_auth)],
+) -> dict[str, Any]:
+    try:
+        reply = chat_with_briefing(
+            briefing_id,
+            body.message,
+            [{"role": m.role, "content": m.content} for m in body.history],
+            user_id=current_user["id"],
+        )
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="briefing not found") from exc
+    except BriefingAINotConfiguredError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    return {"reply": reply}
 
 
 # ── Notification settings & push subscriptions ───────────────────────────────

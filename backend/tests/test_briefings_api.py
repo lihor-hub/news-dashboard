@@ -353,3 +353,105 @@ def test_get_podcast_audio_endpoint_not_found(monkeypatch: Any) -> None:
     resp = client.get("/api/briefings/1/podcast")
     assert resp.status_code == 404
     assert resp.json()["detail"] == "podcast audio file not found"
+
+
+# ── POST /api/briefings/{id}/chat ─────────────────────────────────────────────
+
+
+def test_chat_returns_reply_from_assistant(monkeypatch: Any) -> None:
+    monkeypatch.setattr(
+        main_mod,
+        "chat_with_briefing",
+        lambda *_args, **_kwargs: "The layoffs were driven by cost cuts.",
+    )
+    resp = client.post(
+        "/api/briefings/1/chat",
+        json={"message": "Why did the company announce layoffs?", "history": []},
+    )
+    assert resp.status_code == 200
+    assert resp.json() == {"reply": "The layoffs were driven by cost cuts."}
+
+
+def test_chat_passes_history_to_backend(monkeypatch: Any) -> None:
+    captured: dict[str, Any] = {}
+
+    def _fake(briefing_id: int, message: str, history: list[dict[str, str]], **_: Any) -> str:
+        captured["briefing_id"] = briefing_id
+        captured["message"] = message
+        captured["history"] = history
+        return "answer"
+
+    monkeypatch.setattr(main_mod, "chat_with_briefing", _fake)
+    history = [
+        {"role": "user", "content": "Hello"},
+        {"role": "assistant", "content": "Hi! Ask me anything."},
+    ]
+    resp = client.post(
+        "/api/briefings/7/chat",
+        json={"message": "What happened in section 2?", "history": history},
+    )
+    assert resp.status_code == 200
+    assert captured["briefing_id"] == 7
+    assert captured["message"] == "What happened in section 2?"
+    assert captured["history"] == history
+
+
+def test_chat_returns_404_when_briefing_missing(monkeypatch: Any) -> None:
+    def _raise(*_: Any, **__: Any) -> str:
+        msg = "briefing 99 not found"
+        raise KeyError(msg)
+
+    monkeypatch.setattr(main_mod, "chat_with_briefing", _raise)
+    resp = client.post("/api/briefings/99/chat", json={"message": "hello", "history": []})
+    assert resp.status_code == 404
+
+
+def test_chat_returns_503_when_ai_not_configured(monkeypatch: Any) -> None:
+    def _raise(*_: Any, **__: Any) -> str:
+        msg = "OPENAI_API_KEY not set"
+        raise BriefingAINotConfiguredError(msg)
+
+    monkeypatch.setattr(main_mod, "chat_with_briefing", _raise)
+    resp = client.post("/api/briefings/1/chat", json={"message": "hello", "history": []})
+    assert resp.status_code == 503
+    assert "OPENAI_API_KEY" in resp.json()["detail"]
+
+
+def test_chat_constructs_prompt_with_article_bodies(monkeypatch: Any) -> None:
+    """Verify the system prompt includes briefing summary and article body text."""
+    from unittest.mock import MagicMock, patch
+
+    sample_briefing = dict(_SAMPLE_BRIEFING)
+    article_body = "Detailed article body text about the announcement."
+
+    captured_messages: list[Any] = []
+
+    def fake_chat_create(client: Any, *, messages: list[Any], **kwargs: Any) -> Any:
+        captured_messages.extend(messages)
+        mock_response = MagicMock()
+        mock_response.choices[0].message.content = "grounded answer"
+        return mock_response
+
+    with (
+        patch("news_dashboard.briefings.get_briefing", return_value=sample_briefing),
+        patch("news_dashboard.briefings._briefing_ai_config", return_value=("key", None)),
+        patch("news_dashboard.ai_client.get_openai_client", return_value=MagicMock()),
+        patch("news_dashboard.ai_client.chat_create", side_effect=fake_chat_create),
+        patch(
+            "news_dashboard.briefings.connect",
+        ) as mock_connect,
+    ):
+        mock_conn = MagicMock()
+        mock_conn.__enter__ = MagicMock(return_value=mock_conn)
+        mock_conn.__exit__ = MagicMock(return_value=False)
+        mock_conn.execute.return_value.fetchone.return_value = (article_body,)
+        mock_connect.return_value = mock_conn
+
+        from news_dashboard.briefings import chat_with_briefing
+
+        reply = chat_with_briefing(1, "What are the benchmarks?", [], user_id=1)
+
+    assert reply == "grounded answer"
+    system_msg = next(m for m in captured_messages if m["role"] == "system")
+    assert "AI Frameworks Tighten Production Workflows" in system_msg["content"]
+    assert article_body in system_msg["content"]

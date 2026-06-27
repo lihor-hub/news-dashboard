@@ -4,6 +4,7 @@ import { ArrowLeft, AlertCircle, Newspaper } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { fetchBriefing } from '@/api';
 import { BriefingView, BriefSkeleton } from '@/components/BriefingView';
+import { BriefingChat } from '@/components/BriefingChat';
 
 function BackLink() {
   return (
@@ -94,6 +95,7 @@ export function BriefingDetailPage() {
       <BackLink />
       <BriefingView
         briefing={data}
+        afterMeta={<BriefingChat briefingId={data.id} />}
         onRefreshBriefing={() => {
           void refetch();
         }}

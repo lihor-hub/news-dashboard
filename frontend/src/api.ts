@@ -246,6 +246,23 @@ export async function generateBriefingPodcast(id: number): Promise<{ url: string
   return requestJson<{ url: string }>(`/api/briefings/${id}/podcast`, { method: 'POST' });
 }
 
+export interface ChatMessage {
+  role: 'user' | 'assistant';
+  content: string;
+}
+
+export async function chatWithBriefing(
+  briefingId: number,
+  message: string,
+  history: ChatMessage[]
+): Promise<{ reply: string }> {
+  return requestJson<{ reply: string }>(`/api/briefings/${briefingId}/chat`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ message, history }),
+  });
+}
+
 // ── Auth ──────────────────────────────────────────────────────────────────────
 
 export interface AuthConfig {

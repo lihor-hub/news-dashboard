@@ -5,6 +5,7 @@ import { Newspaper, RefreshCw, AlertCircle, Inbox, History } from 'lucide-react'
 import { Button } from '@/components/ui/button';
 import { fetchLatestBriefing, createBriefing } from '@/api';
 import { BriefingView, BriefSkeleton } from '@/components/BriefingView';
+import { BriefingChat } from '@/components/BriefingChat';
 import { trackFeature } from '@/lib/analytics';
 
 // ── Main page ─────────────────────────────────────────────────────────────────
@@ -179,13 +180,16 @@ export function BriefPage() {
         void refetch();
       }}
       afterMeta={
-        <Link
-          to="/briefs"
-          className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground mt-1 transition-colors"
-        >
-          <History className="size-3" />
-          View history
-        </Link>
+        <div className="flex items-center gap-2 mt-1">
+          <Link
+            to="/briefs"
+            className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <History className="size-3" />
+            View history
+          </Link>
+          <BriefingChat briefingId={data.id} />
+        </div>
       }
     />
   );
