@@ -41,6 +41,27 @@ def _tts_ai_config() -> tuple[str, str | None]:
     return api_key, base_url
 
 
+def _script_ai_config() -> tuple[str, str | None]:
+    """Resolve the (api_key, base_url) for podcast script (LLM chat) generation.
+
+    Script generation is a chat-completion call, so it uses the same
+    briefing AI credentials (``OPENAI_BRIEFING_API_KEY`` /
+    ``OPENAI_BRIEFING_BASE_URL``) as every other LLM feature, falling back to
+    ``OPENAI_API_KEY`` / ``OPENAI_BASE_URL``. This is intentionally separate
+    from ``_tts_ai_config`` because the free LLM gateway supports chat
+    completions but not the ``audio/speech`` endpoint required for TTS.
+    """
+    api_key = os.getenv("OPENAI_BRIEFING_API_KEY") or os.getenv("OPENAI_API_KEY")
+    if not api_key:
+        msg = (
+            "Podcast script generation requires an API key. "
+            "Set OPENAI_BRIEFING_API_KEY or OPENAI_API_KEY"
+        )
+        raise TTSNotConfiguredError(msg)
+    base_url = os.getenv("OPENAI_BRIEFING_BASE_URL") or os.getenv("OPENAI_BASE_URL") or None
+    return api_key, base_url
+
+
 def _data_dir() -> Path:
     return Path(os.getenv("DATA_DIR", str(_DEFAULT_DATA_DIR)))
 
@@ -179,7 +200,7 @@ _PODCAST_SYSTEM_PROMPT = (
 
 def generate_podcast_script(briefing_content: dict[str, Any]) -> list[dict[str, str]]:
     """Generate a conversational podcast script from briefing content using LLM."""
-    api_key, base_url = _tts_ai_config()
+    api_key, base_url = _script_ai_config()
 
     from news_dashboard.ai_client import chat_create, get_openai_client
 

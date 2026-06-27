@@ -14,6 +14,7 @@ import pytest
 from news_dashboard.tts import (
     TTSNotConfiguredError,
     _build_text,
+    _script_ai_config,
     _tts_ai_config,
     generate_audio,
     generate_podcast_audio,
@@ -243,6 +244,42 @@ def test_generate_audio_creates_audio_directory(tmp_path: Path) -> None:
     assert path.exists()
 
 
+# ── _script_ai_config ─────────────────────────────────────────────────────────
+
+
+def test_script_ai_config_uses_briefing_specific_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("OPENAI_BRIEFING_API_KEY", "sk-briefing")
+    monkeypatch.setenv("OPENAI_BRIEFING_BASE_URL", "http://briefing-gw:9130/v1")
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+
+    api_key, base_url = _script_ai_config()
+
+    assert api_key == "sk-briefing"
+    assert base_url == "http://briefing-gw:9130/v1"
+
+
+def test_script_ai_config_falls_back_to_openai_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-shared")
+    monkeypatch.delenv("OPENAI_BRIEFING_API_KEY", raising=False)
+    monkeypatch.delenv("OPENAI_BRIEFING_BASE_URL", raising=False)
+
+    api_key, base_url = _script_ai_config()
+
+    assert api_key == "sk-shared"
+    assert base_url is None
+
+
+def test_script_ai_config_raises_when_no_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("OPENAI_BRIEFING_API_KEY", raising=False)
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+
+    with pytest.raises(TTSNotConfiguredError):
+        _script_ai_config()
+
+
+# ── generate_podcast_script ───────────────────────────────────────────────────
+
+
 def test_generate_podcast_script() -> None:
     mock_response = MagicMock()
     mock_response.choices = [
@@ -258,7 +295,7 @@ def test_generate_podcast_script() -> None:
         )
     ]
     with (
-        patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}),
+        patch.dict("os.environ", {"OPENAI_BRIEFING_API_KEY": "sk-briefing"}),
         patch("news_dashboard.ai_client.chat_create", return_value=mock_response),
     ):
         script = generate_podcast_script(
@@ -275,6 +312,16 @@ def test_generate_podcast_script() -> None:
     assert script[1]["speaker"] == "Taylor"
     assert script[1]["voice"] == "shimmer"
     assert script[1]["text"] == "Hi Alex!"
+
+
+def test_generate_podcast_script_raises_when_no_briefing_key(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("OPENAI_BRIEFING_API_KEY", raising=False)
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+
+    with pytest.raises(TTSNotConfiguredError):
+        generate_podcast_script({"title": "T", "summary": "S", "sections": []})
 
 
 def test_generate_podcast_audio(tmp_path: Path) -> None:

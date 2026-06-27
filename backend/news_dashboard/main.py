@@ -1231,6 +1231,8 @@ def generate_podcast_endpoint(
             try:
                 script = generate_podcast_script(content_dict)
                 update_briefing_script(briefing_id, script)
+            except TTSNotConfiguredError as exc:
+                raise HTTPException(status_code=501, detail=str(exc)) from exc
             except Exception as exc:
                 raise HTTPException(
                     status_code=500, detail=f"Failed to generate podcast script: {exc}"
