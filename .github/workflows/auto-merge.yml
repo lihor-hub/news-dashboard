@@ -1,0 +1,34 @@
+name: Auto-merge
+
+# Repo policy: every PR uses auto-merge. When a non-draft PR is opened, reopened,
+# or marked ready for review, enable squash auto-merge so it lands the moment the
+# required checks pass — no manual merge step. Branch protection on `main` (the
+# `Lint & typecheck` and `Test & build` checks) still gates the actual merge, so
+# this never merges anything that isn't green.
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, reopened, ready_for_review]
+
+# Least privilege: enabling auto-merge needs to write the PR and the merge ref.
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: auto-merge-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  enable-auto-merge:
+    name: Enable auto-merge
+    # Draft PRs are works in progress — don't queue them to merge.
+    if: github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    steps:
+      - name: Enable squash auto-merge
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+        run: gh pr merge --auto --squash --delete-branch "$PR_URL"
