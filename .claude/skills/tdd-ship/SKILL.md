@@ -58,16 +58,22 @@ checklist — so an agent can pick it up with no further human context. If you a
 the label to an existing issue, use `gh issue edit <issue#> --add-label
 "ready-for-agent"`.
 
-### 2. Branch off `main`
+### 2. Branch off an up-to-date `main`
 
-Never commit to `main` directly. Branch first:
+Never commit to `main` directly, and never start from a stale base. Sync with
+`origin/main` first, then branch:
 
 ```bash
+git fetch origin
 git switch main && git pull --ff-only
 git switch -c <type>/<short-slug>-<issue#>   # e.g. feat/share-internal-123
 ```
 
-If you're already on a feature branch for this work, stay on it.
+If you're already on a feature branch for this work (e.g. a worktree where you
+can't `git switch main`), stay on it — but rebase it onto the freshly fetched
+base before you write anything: `git fetch origin && git rebase origin/main`.
+Starting from an up-to-date `main` keeps the diff clean and avoids merge
+conflicts when you push.
 
 ### 3. TDD — write the failing test first
 
@@ -99,9 +105,14 @@ pytest hook can connect to PostgreSQL.
 Push only once the relevant tests and type/lint gates pass locally — CI runs the
 same gates, so green-locally is the cheapest way to a green PR.
 
-### 4. Open the PR (it must close the issue)
+### 4. Rebase on `origin/main`, then open the PR (it must close the issue)
+
+`main` may have moved while you worked, so re-sync immediately before pushing.
+Rebase (don't merge) so the branch stays linear, re-run the gates if the rebase
+pulled anything in, then push:
 
 ```bash
+git fetch origin && git rebase origin/main
 git push -u origin HEAD
 gh pr create --fill --base main \
   --body "Closes #<issue#>\n\n<summary of the change and the test that backs it>"
