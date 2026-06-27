@@ -452,7 +452,7 @@ def detect_and_translate_article(
     import json
     import re
 
-    from news_dashboard.ai_client import chat_create, get_openai_client
+    from news_dashboard.ai_client import chat_create, get_chat_client
 
     is_non_eng = source_lang != "en"
     if not is_non_eng:
@@ -478,7 +478,7 @@ def detect_and_translate_article(
         return title, summary, source_lang, None
 
     try:
-        client = get_openai_client(api_key=api_key, base_url=base_url)
+        client = get_chat_client(api_key=api_key, base_url=base_url)
         prompt = (
             "You are a translation assistant. Detect the language of the following text. "
             "If it is not English, translate both the title and the "

@@ -100,10 +100,10 @@ def _embeddings_ai_config() -> tuple[str, str | None, str]:
 
 def _embed(text: str) -> list[float]:
     """Embed *text* via the configured OpenAI-compatible endpoint."""
-    from news_dashboard.ai_client import get_openai_client, trace_params
+    from news_dashboard.ai_client import get_chat_client, trace_params
 
     api_key, base_url, model = _embeddings_ai_config()
-    client = get_openai_client(api_key=api_key, base_url=base_url)
+    client = get_chat_client(api_key=api_key, base_url=base_url)
     response = client.embeddings.create(
         model=model,
         input=text,
@@ -120,12 +120,12 @@ def _answer(
     prompt: ManagedPrompt | None = None,
 ) -> str:
     """Generate an answer via the free LLM gateway when configured, else OpenAI."""
-    from news_dashboard.ai_client import chat_create, free_llm_config, get_openai_client
+    from news_dashboard.ai_client import chat_create, free_llm_config, get_chat_client
 
     api_key, base_url = free_llm_config()
     if not api_key:
         _require_env("FREE_LLM_API_KEY", "use Ask AI")
-    client = get_openai_client(api_key=api_key, base_url=base_url)
+    client = get_chat_client(api_key=api_key, base_url=base_url)
     response = chat_create(
         client,
         name="ask-ai",

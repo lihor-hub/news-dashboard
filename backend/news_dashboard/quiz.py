@@ -246,9 +246,9 @@ def generate_weekly_quiz(
     blurbs = "\n\n---\n\n".join(_build_article_blurb(a) for a in articles[:5])
     messages = [{"role": "user", "content": f"{_QUIZ_PROMPT}\n\nArticles:\n{blurbs}"}]
 
-    from news_dashboard.ai_client import chat_create, get_openai_client
+    from news_dashboard.ai_client import chat_create, get_chat_client
 
-    client = get_openai_client(api_key=api_key, base_url=base_url)
+    client = get_chat_client(api_key=api_key, base_url=base_url)
     logger.info("Generating weekly quiz for user %s from %d articles", user_id, len(articles))
     result = chat_create(
         client,

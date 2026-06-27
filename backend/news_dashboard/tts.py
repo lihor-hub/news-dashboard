@@ -195,10 +195,10 @@ def generate_podcast_script(briefing_content: dict[str, Any]) -> list[dict[str, 
     """Generate a conversational podcast script from briefing content using LLM."""
     api_key, base_url = _script_ai_config()
 
-    from news_dashboard.ai_client import chat_create, get_openai_client
+    from news_dashboard.ai_client import chat_create, get_chat_client
 
     model = os.getenv("OPENAI_BRIEFING_MODEL", "gpt-4o-mini")
-    client = get_openai_client(api_key=api_key, base_url=base_url)
+    client = get_chat_client(api_key=api_key, base_url=base_url)
 
     title = briefing_content.get("title", "")
     summary = briefing_content.get("summary", "")

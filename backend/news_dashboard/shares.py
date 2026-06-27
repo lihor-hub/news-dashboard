@@ -297,9 +297,9 @@ def generate_share_context(share_id: int) -> str | None:
         "Be specific and personal, not generic."
     )
 
-    from news_dashboard.ai_client import chat_create, get_openai_client
+    from news_dashboard.ai_client import chat_create, get_chat_client
 
-    client = get_openai_client(api_key=api_key, base_url=base_url)
+    client = get_chat_client(api_key=api_key, base_url=base_url)
     try:
         completion = chat_create(
             client,
