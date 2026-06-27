@@ -1,5 +1,5 @@
 # Staged only. Do not import/reload until news.lihor.ro DNS resolves.
-# Add basic_auth before public exposure.
+# Authentication is enforced by the app before public exposure.
 
 news.lihor.ro {
   encode zstd gzip

@@ -7,7 +7,7 @@ The system is not a large microservice platform. It is best understood as a modu
 - `news-dashboard`: the FastAPI backend, which also serves the built React frontend in container and Kubernetes deployments.
 - `postgres`: the durable production database.
 - `news-dashboard-ingest`: a Kubernetes CronJob batch workload that runs ingestion on a schedule.
-- Optional external integrations: RSS/Atom feeds, a scraped Anthropic News page, SMTP, GHCR, GitHub Actions, and host-level Caddy.
+- Optional external integrations: RSS/Atom feeds, a scraped Anthropic News page, SMTP, GHCR, GitHub Actions, Keycloak SSO, and host-level Caddy.
 
 ## Database Contract
 
@@ -35,7 +35,8 @@ flowchart TB
   end
 
   subgraph Kubernetes["Kubernetes via Helm"]
-    Caddy["Host Caddy<br/>news.lihor.ro<br/>Basic Auth"]
+    Caddy["Host Caddy<br/>news.lihor.ro<br/>reverse proxy"]
+    Keycloak["Keycloak<br/>optional SSO under /keycloak"]
     Service["K8s Service<br/>NodePort 30088 or ClusterIP"]
     Deployment["news-dashboard Deployment<br/>replicas: 1"]
     CronJob["K8s CronJob<br/>news-dashboard ingest<br/>every 6 hours"]
@@ -56,7 +57,9 @@ flowchart TB
   Vite --> FastAPIDev
   FastAPIDev --> PostgresDev
 
-  User --> Caddy --> Service --> Deployment
+  User --> Caddy
+  Caddy --> Service --> Deployment
+  Caddy --> Keycloak
   Deployment --> App
   App --> PostgresSvc --> Postgres --> PVC
   CronJob --> PostgresSvc
@@ -229,7 +232,7 @@ The database has two main tables:
 - `sources`: source registry and health information, including `last_checked_at`, `last_success_at`, `last_error`, `last_fetched_count`, and `last_inserted_count`.
 - `articles`: normalized article records, including source metadata, category, kind, publication/discovery timestamps, status, importance score, summary, reason, tags, and status-specific timestamps.
 
-PostgreSQL adds a generated `tsvector` column and GIN index. User-facing search uses PostgreSQL-native `ILIKE` filters today, leaving the generated full-text index available for a future ranking pass.
+PostgreSQL adds generated `tsvector` columns and GIN indexes in `backend/news_dashboard/db.py`. User-facing search uses PostgreSQL-native predicates today, with the generated full-text index available for ranked search behavior without adding another runtime database.
 
 ## How It Works
 
@@ -239,11 +242,11 @@ During ingestion, each source is fetched through either `feedparser` for RSS/Ato
 
 The React UI reads articles by status and category, displays summary counts, shows source health, and lets the user update article status. Status changes are persisted through `PATCH /api/articles/{article_id}/status`, and the UI reloads articles and counts afterward. Search calls `/api/search` and returns matching articles across statuses.
 
-For production, GitHub Actions tests the Python backend, builds the frontend, builds a Docker image, pushes it to GHCR, and deploys it on a self-hosted runner with Helm. The host-level Caddy route exposes the Kubernetes NodePort at `news.lihor.ro` and applies Basic Auth outside the app.
+For production, GitHub Actions tests the Python backend, builds the frontend, builds a Docker image, pushes it to GHCR, and deploys it on a self-hosted runner with Helm. The host-level Caddy route exposes the Kubernetes NodePort at `news.lihor.ro` and can also proxy `/keycloak` to the colocated identity provider. Authentication is enforced by the FastAPI app through local password sessions or optional Keycloak SSO; see `docs/KEYCLOAK_AUTH.md` and `deploy/news.lihor.ro.caddyfile`.
 
 ## Operational Notes
 
 - PostgreSQL is required in every runtime environment. SQLite is only a legacy migration input for importing old local data into PostgreSQL.
 - The React app is served separately only in local development. In the production image, the built frontend is served by FastAPI.
 - There are two scheduling mechanisms: in-process APScheduler and the Kubernetes CronJob. If duplicate ingestion is undesirable, configure one of them as the authoritative scheduler.
-- Authentication is handled outside the app by host-level Caddy Basic Auth, according to the repository deployment notes.
+- Authentication is handled by the app. Local password login is always part of the app model, and production can enable Keycloak SSO with `KEYCLOAK_AUTH_ENABLED=1` plus the related `KEYCLOAK_*` settings documented in `README.md` and `docs/KEYCLOAK_AUTH.md`.

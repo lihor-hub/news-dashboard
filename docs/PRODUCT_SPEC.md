@@ -101,11 +101,12 @@ After ≥ 100 saved/read articles exist:
 - Fetch full article body for saved/read articles (via Trafilatura or goose3).
 - Run FTS over full_text when available.
 
-### Embeddings / vector search (v1.2)
+### Embeddings / semantic search (v1.2)
 
-- Embed title + summary via OpenAI.
-- Store in the `articles` table as a `BYTEA` column.
-- Enables semantic search and similarity grouping.
+- Embed title + summary via the configured OpenAI-compatible embeddings provider.
+- Store embeddings in PostgreSQL-managed article data structures; runtime storage remains PostgreSQL only.
+- Enables semantic search and similarity grouping without adding a second runtime database.
+- Configure with feature-specific variables such as `OPENAI_EMBEDDINGS_API_KEY`, `OPENAI_EMBEDDINGS_BASE_URL`, and `OPENAI_EMBEDDING_MODEL`; see `README.md` and `backend/news_dashboard/embeddings.py`.
 
 ### Ask Clau endpoint (v1.3)
 
@@ -125,16 +126,17 @@ Implementation:
 4. Return answer + article IDs used as citations.
 
 Privacy/security:
-- Endpoint is internal-only (behind Caddy basic_auth).
-- No article content is sent to external APIs unless the user explicitly enables the AI hook.
+- Endpoint requires the app authentication boundary, either local password sessions or optional Keycloak SSO.
+- No article content is sent to external APIs unless the relevant AI feature is configured with an API key.
 - OpenAI API key stored as an environment secret, never in source.
-- The AI hook is behind an `AI_ENABLED=1` env flag — disabled by default.
+- Briefing generation can use `OPENAI_BRIEFING_API_KEY`, `OPENAI_BRIEFING_BASE_URL`, and `OPENAI_BRIEFING_MODEL`; see `README.md` and `backend/news_dashboard/briefings.py`.
 
 ### Privacy/security boundaries
 
-- No article content leaves the server unless `AI_ENABLED=1` is set.
+- No article content leaves the server unless the relevant feature-specific AI provider variables are configured.
 - Search index uses PostgreSQL full-text search.
-- Caddy basic_auth is the only authentication layer at v1.
+- Local password auth is built into the app, and production can enable Keycloak SSO while preserving local `user_id` authorization boundaries. See `docs/KEYCLOAK_AUTH.md`.
+- Caddy is a reverse proxy for the app and Keycloak paths, not the primary authentication layer.
 
 ## Deployment
 
