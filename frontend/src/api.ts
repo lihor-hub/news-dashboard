@@ -18,6 +18,7 @@ import type {
   PersonalizationNudge,
   PushSubscribeRequest,
   Quiz,
+  QuizHistoryItem,
   QuizResult,
   ReadingDna,
   ReadingGoal,
@@ -519,6 +520,11 @@ export async function fetchLatestQuiz(): Promise<Quiz | null> {
   } catch {
     return null;
   }
+}
+
+export async function fetchQuizHistory(): Promise<QuizHistoryItem[]> {
+  const data = await requestJson<{ items: QuizHistoryItem[] }>('/api/quizzes');
+  return data.items;
 }
 
 export async function generateQuiz(): Promise<Quiz> {
