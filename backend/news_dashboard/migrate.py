@@ -25,6 +25,7 @@ SOURCE_COLUMNS = [
     "last_error",
     "last_fetched_count",
     "last_inserted_count",
+    "lang",
 ]
 ARTICLE_COLUMNS = [
     "url",
@@ -63,6 +64,8 @@ def _coerce_source_value(column: str, row: sqlite3.Row) -> Any:
         return None if value is None else bool(value)
     if column in not_null_counts and value is None:
         return 0
+    if column == "lang" and value is None:
+        return "en"
     return value
 
 
@@ -97,9 +100,9 @@ def sqlite_to_postgres(
                 """
                 INSERT INTO sources(
                   slug, name, url, category, kind, priority, enabled, last_checked_at,
-                  last_success_at, last_error, last_fetched_count, last_inserted_count
+                  last_success_at, last_error, last_fetched_count, last_inserted_count, lang
                 )
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 ON CONFLICT(slug) DO UPDATE SET
                   name=excluded.name,
                   url=excluded.url,
@@ -111,7 +114,8 @@ def sqlite_to_postgres(
                   last_success_at=excluded.last_success_at,
                   last_error=excluded.last_error,
                   last_fetched_count=excluded.last_fetched_count,
-                  last_inserted_count=excluded.last_inserted_count
+                  last_inserted_count=excluded.last_inserted_count,
+                  lang=excluded.lang
                 """,
                 source_values,
             )

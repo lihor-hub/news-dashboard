@@ -318,6 +318,42 @@ def get_article(
         return _article_from_row(row, conn, article_id, user_id)
 
 
+def translate_body(body: str, from_lang: str) -> str:
+    """Translate the body text to English using OpenAI GPT models."""
+    api_key = os.getenv("OPENAI_API_KEY")
+    if not api_key or not body.strip():
+        return body
+
+    try:
+        from news_dashboard.ai_client import chat_create, get_openai_client
+
+        client = get_openai_client(api_key=api_key)
+        prompt = (
+            f"You are a translation assistant. Translate the following body text from "
+            f"language code '{from_lang}' to English. Return only the translated plain text, "
+            f"preserving paragraph breaks, and no additional commentary."
+        )
+
+        result = chat_create(
+            client,
+            name="translate-body",
+            tags=["translation"],
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": prompt},
+                {"role": "user", "content": body},
+            ],
+            max_tokens=2048,
+            temperature=0.0,
+        )
+        translated = (result.choices[0].message.content or "").strip()
+        if translated:
+            return translated
+    except Exception as exc:
+        logger.warning("Failed to translate body: %s", exc)
+    return body
+
+
 def fetch_and_cache_body(
     article_id: int,
     db_path: Path | str | None = None,
@@ -342,11 +378,17 @@ def fetch_and_cache_body(
     if status == "error":
         body, status = _ai_extract_body(url, user_id=user_id)
 
+    original_body = None
+    detected_lang = row_d.get("detected_lang") or "en"
+    if status == "ok" and detected_lang != "en":
+        original_body = body
+        body = translate_body(body, detected_lang)
+
     with connect(db_path) as conn:
         conn.execute(
-            "UPDATE articles SET body = %s, body_status = %s,"
+            "UPDATE articles SET body = %s, original_body = %s, body_status = %s,"
             " updated_at = CURRENT_TIMESTAMP WHERE id = %s",
-            (body if status == "ok" else None, status, article_id),
+            (body if status == "ok" else None, original_body, status, article_id),
         )
 
     return get_article(article_id, db_path=db_path, user_id=user_id)

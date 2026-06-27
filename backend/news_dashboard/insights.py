@@ -1,14 +1,19 @@
-"""AI-generated 'Why it matters' bullet points for articles.
+"""AI-generated 'Why it matters' bullet points and topic clustering for articles.
 
 Calls an OpenAI-compatible chat model with the article text and caches the result in
 articles.insights (JSON) so the AI is invoked at most once per article.
+
+cluster_recent_articles() groups articles from the last 7 days by embedding similarity
+and generates AI headlines and trend summaries for each cluster.
 """
 
 from __future__ import annotations
 
 import json
 import logging
+import math
 import os
+import struct
 from typing import Any
 
 from news_dashboard.body_fetch import get_article
@@ -143,3 +148,288 @@ def get_or_generate_insights(
         )
 
     return bullets
+
+
+# ── Topic Map / Story Clustering ──────────────────────────────────────────────
+
+_CLUSTER_THRESHOLD = 0.72  # cosine similarity threshold for same-cluster assignment
+_MIN_CLUSTER_SIZE = 3  # minimum articles per cluster to surface
+_MAX_ARTICLES = 300  # cap to keep computation bounded
+_CLUSTER_LABEL_PROMPT = (
+    "You are analyzing a group of related news articles that cover the same story or topic arc. "
+    "Based ONLY on the article titles and summaries provided below, generate:\n"
+    "1. A concise Story Headline (max 8 words) capturing the central theme.\n"
+    "2. A one-sentence Trend Summary explaining the story arc or why these "
+    "articles are connected.\n\n"
+    "Respond in this exact format:\n"
+    "HEADLINE: <headline here>\n"
+    "SUMMARY: <one-sentence summary here>"
+)
+
+DEFAULT_CLUSTER_MODEL = "gpt-4o-mini"
+
+
+def _cluster_ai_config() -> tuple[str, str | None, str]:
+    api_key = os.getenv("OPENAI_INSIGHTS_API_KEY") or os.getenv("OPENAI_API_KEY")
+    if not api_key:
+        msg = "OPENAI_API_KEY is not configured"
+        raise InsightsNotConfiguredError(msg)
+    base_url = os.getenv("OPENAI_INSIGHTS_BASE_URL") or os.getenv("OPENAI_BASE_URL") or None
+    model = os.getenv("OPENAI_INSIGHTS_MODEL", DEFAULT_CLUSTER_MODEL)
+    return api_key, base_url, model
+
+
+def _unpack_embedding(blob: bytes) -> list[float]:
+    n = len(blob) // 4
+    return list(struct.unpack(f"{n}f", blob))
+
+
+def _cosine_sim(a: list[float], b: list[float]) -> float:
+    dot = sum(x * y for x, y in zip(a, b, strict=False))
+    norm_a = math.sqrt(sum(x * x for x in a))
+    norm_b = math.sqrt(sum(x * x for x in b))
+    if norm_a == 0 or norm_b == 0:
+        return 0.0
+    return dot / (norm_a * norm_b)
+
+
+def _normalize(vec: list[float]) -> list[float]:
+    norm = math.sqrt(sum(x * x for x in vec))
+    if norm == 0:
+        return list(vec)
+    return [x / norm for x in vec]
+
+
+def _vec_mean(vecs: list[list[float]]) -> list[float]:
+    if not vecs:
+        return []
+    dim = len(vecs[0])
+    result = [0.0] * dim
+    for v in vecs:
+        for i, x in enumerate(v):
+            result[i] += x
+    n = len(vecs)
+    return [x / n for x in result]
+
+
+def _pca_2d(vecs: list[list[float]]) -> list[tuple[float, float]]:
+    """Project vectors into 2D using the first two principal components via power iteration."""
+    if len(vecs) == 1:
+        return [(0.0, 0.0)]
+    if len(vecs) == 2:
+        return [(-0.5, 0.0), (0.5, 0.0)]
+
+    dim = len(vecs[0])
+    n = len(vecs)
+    mean = _vec_mean(vecs)
+    centered = [[vecs[i][j] - mean[j] for j in range(dim)] for i in range(n)]
+
+    def _power_iter(
+        matrix: list[list[float]], deflation_vec: list[float] | None = None
+    ) -> list[float]:
+        import random
+
+        rng = random.Random(42)  # noqa: S311
+        pc = _normalize([rng.gauss(0, 1) for _ in range(dim)])
+        for _ in range(50):
+            scores = [sum(row[j] * pc[j] for j in range(dim)) for row in matrix]
+            new_pc = [sum(scores[i] * matrix[i][j] for i in range(n)) for j in range(dim)]
+            if deflation_vec is not None:
+                dot = sum(new_pc[j] * deflation_vec[j] for j in range(dim))
+                new_pc = [new_pc[j] - dot * deflation_vec[j] for j in range(dim)]
+            pc = _normalize(new_pc)
+        return pc
+
+    pc1 = _power_iter(centered)
+    pc2 = _power_iter(centered, deflation_vec=pc1)
+
+    coords = [
+        (
+            sum(centered[i][j] * pc1[j] for j in range(dim)),
+            sum(centered[i][j] * pc2[j] for j in range(dim)),
+        )
+        for i in range(n)
+    ]
+    max_abs = max((max(abs(x), abs(y)) for x, y in coords), default=1.0)
+    if max_abs > 0:
+        coords = [(x / max_abs, y / max_abs) for x, y in coords]
+    return coords
+
+
+def _greedy_cluster(normalized_vecs: list[list[float]], threshold: float) -> list[int]:
+    """Assign each vector to the nearest cluster centroid if similarity >= threshold."""
+    assignments: list[int] = []
+    centroids: list[list[float]] = []
+    centroid_counts: list[int] = []
+
+    for vec in normalized_vecs:
+        best_cluster = -1
+        best_sim = threshold
+
+        for ci, centroid in enumerate(centroids):
+            sim = _cosine_sim(vec, centroid)
+            if sim > best_sim:
+                best_sim = sim
+                best_cluster = ci
+
+        if best_cluster >= 0:
+            count = centroid_counts[best_cluster]
+            old = centroids[best_cluster]
+            new_centroid = [(old[j] * count + vec[j]) / (count + 1) for j in range(len(vec))]
+            centroids[best_cluster] = _normalize(new_centroid)
+            centroid_counts[best_cluster] += 1
+            assignments.append(best_cluster)
+        else:
+            assignments.append(len(centroids))
+            centroids.append(list(vec))
+            centroid_counts.append(1)
+
+    return assignments
+
+
+def _generate_cluster_label(
+    articles: list[dict[str, Any]],
+    user_id: int | None = None,
+) -> tuple[str, str]:
+    """Call the LLM to generate a headline and trend summary for a cluster."""
+    api_key, base_url, model = _cluster_ai_config()
+
+    articles_text = "\n".join(
+        f"- Title: {a.get('title', '')}\n  Summary: {a.get('summary', '')}" for a in articles[:10]
+    )
+
+    from news_dashboard.ai_client import chat_create, get_openai_client
+
+    client = get_openai_client(api_key=api_key, base_url=base_url)
+    result = chat_create(
+        client,
+        name="topic-cluster-label",
+        tags=["clustering"],
+        user_id=user_id,
+        prompt=None,
+        model=model,
+        messages=[
+            {
+                "role": "user",
+                "content": f"{_CLUSTER_LABEL_PROMPT}\n\nArticles:\n{articles_text}",
+            },
+        ],
+        max_tokens=200,
+    )
+    text = (result.choices[0].message.content or "").strip()
+
+    headline = ""
+    trend_summary = ""
+    for line in text.splitlines():
+        if line.startswith("HEADLINE:"):
+            headline = line[len("HEADLINE:") :].strip()
+        elif line.startswith("SUMMARY:"):
+            trend_summary = line[len("SUMMARY:") :].strip()
+
+    if not headline:
+        headline = articles[0].get("title", "Untitled Story")
+    if not trend_summary:
+        trend_summary = f"A cluster of {len(articles)} related articles."
+
+    return headline, trend_summary
+
+
+def cluster_recent_articles(
+    user_id: int | None = None,
+    database_url: str | None = None,
+) -> list[dict[str, Any]]:
+    """Cluster articles from the last 7 days by embedding similarity.
+
+    Returns a list of story cluster dicts:
+      - id: int
+      - headline: str
+      - trend_summary: str
+      - x, y: float (2D coordinates in [-1, 1])
+      - article_ids: list[int]
+      - articles: list[{id, title, url, summary}]
+    """
+    init_db(database_url=database_url)
+
+    with connect(database_url=database_url) as conn:
+        rows = conn.execute(
+            """
+            SELECT id, title, url, summary, category, embedding
+            FROM articles
+            WHERE discovered_at::timestamptz >= NOW() - INTERVAL '7 days'
+              AND embedding IS NOT NULL
+            ORDER BY discovered_at DESC
+            LIMIT %s
+            """,
+            (_MAX_ARTICLES,),
+        ).fetchall()
+
+    if not rows:
+        return []
+
+    article_data: list[dict[str, Any]] = []
+    norm_vecs: list[list[float]] = []
+    for row in rows:
+        vec = _unpack_embedding(bytes(row["embedding"]))
+        norm_vec = _normalize(vec)
+        article_data.append(
+            {
+                "id": row["id"],
+                "title": row["title"],
+                "url": row["url"],
+                "summary": row["summary"],
+                "category": row["category"],
+            }
+        )
+        norm_vecs.append(norm_vec)
+
+    assignments = _greedy_cluster(norm_vecs, _CLUSTER_THRESHOLD)
+
+    cluster_map: dict[int, list[int]] = {}
+    for idx, cid in enumerate(assignments):
+        cluster_map.setdefault(cid, []).append(idx)
+
+    valid_clusters = [
+        (cid, indices) for cid, indices in cluster_map.items() if len(indices) >= _MIN_CLUSTER_SIZE
+    ]
+
+    if not valid_clusters:
+        return []
+
+    centroids = [
+        _normalize(_vec_mean([norm_vecs[i] for i in indices])) for _, indices in valid_clusters
+    ]
+    coords_2d = _pca_2d(centroids)
+
+    result: list[dict[str, Any]] = []
+    for cluster_seq, ((cid, indices), (cx, cy)) in enumerate(
+        zip(valid_clusters, coords_2d, strict=False)
+    ):
+        cluster_articles = [article_data[i] for i in indices]
+        try:
+            headline, trend_summary = _generate_cluster_label(cluster_articles, user_id=user_id)
+        except Exception:
+            logger.exception("Failed to generate label for cluster %d", cid)
+            headline = cluster_articles[0]["title"]
+            trend_summary = f"A cluster of {len(cluster_articles)} related articles."
+
+        result.append(
+            {
+                "id": cluster_seq,
+                "headline": headline,
+                "trend_summary": trend_summary,
+                "x": cx,
+                "y": cy,
+                "article_ids": [a["id"] for a in cluster_articles],
+                "articles": [
+                    {
+                        "id": a["id"],
+                        "title": a["title"],
+                        "url": a["url"],
+                        "summary": a["summary"],
+                    }
+                    for a in cluster_articles
+                ],
+            }
+        )
+
+    return result

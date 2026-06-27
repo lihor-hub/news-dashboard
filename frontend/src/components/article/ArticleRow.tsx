@@ -55,6 +55,14 @@ function ArticleRowComponent({ article, focused, showLaterUntil }: Props) {
               <span className="shrink-0">{relativeTime(article.publishedAt)}</span>
               <span>·</span>
               <span className="truncate">{article.category}</span>
+              {article.detectedLang && article.detectedLang !== 'en' && article.originalTitle && (
+                <>
+                  <span>·</span>
+                  <span className="px-1 py-0.2 rounded bg-surface border border-border text-[9px] text-accent shrink-0 font-medium">
+                    {article.detectedLang.toUpperCase()} → EN
+                  </span>
+                </>
+              )}
             </div>
             {article.starred && (
               <Star className="size-3.5 shrink-0 fill-star text-star" strokeWidth={1.5} />

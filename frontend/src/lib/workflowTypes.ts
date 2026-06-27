@@ -41,6 +41,9 @@ export interface WorkflowArticle {
   tags: string[];
   body?: string;
   bodyStatus: 'ok' | 'missing' | 'error';
+  originalTitle?: string;
+  originalBody?: string;
+  detectedLang?: string;
   state: WorkflowState;
   starred: boolean;
   done_at?: string;

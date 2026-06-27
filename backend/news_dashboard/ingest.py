@@ -348,14 +348,15 @@ def sync_sources(db_path: Path | str | None = None) -> None:
         for source in DEFAULT_SOURCES:
             conn.execute(
                 """
-                INSERT INTO sources(slug, name, url, category, kind, priority, enabled)
-                VALUES (%s, %s, %s, %s, %s, %s, TRUE)
+                INSERT INTO sources(slug, name, url, category, kind, priority, enabled, lang)
+                VALUES (%s, %s, %s, %s, %s, %s, TRUE, %s)
                 ON CONFLICT(slug) DO UPDATE SET
                   name=excluded.name,
                   url=excluded.url,
                   category=excluded.category,
                   kind=excluded.kind,
-                  priority=excluded.priority
+                  priority=excluded.priority,
+                  lang=excluded.lang
                 """,
                 (
                     source.slug,
@@ -364,6 +365,7 @@ def sync_sources(db_path: Path | str | None = None) -> None:
                     source.category,
                     source.kind,
                     source.priority,
+                    source.lang,
                 ),
             )
 
@@ -441,6 +443,81 @@ def _fetch_nitter_feed(source: SourceDefinition) -> list[dict[str, Any]]:
     raise FeedFetchError(msg) from last_exc
 
 
+def detect_and_translate_article(
+    title: str,
+    summary: str,
+    source_lang: str = "en",
+) -> tuple[str, str, str, str | None]:
+    """Detect language and translate title and summary to English if needed."""
+    import json
+    import os
+    import re
+
+    from news_dashboard.ai_client import chat_create, get_openai_client
+
+    is_non_eng = source_lang != "en"
+    if not is_non_eng:
+        combined = f"{title} {summary}"
+        # Check CJK, Cyrillic, Arabic etc.
+        if re.search(
+            r"[\u4e00-\u9fff\u3040-\u309f\u30a0-\u30ff\uac00-\ud7af\u0400-\u04ff\u0600-\u06ff]",
+            combined,
+        ):
+            is_non_eng = True
+        else:
+            non_ascii = sum(1 for c in combined if ord(c) > 127)
+            if non_ascii > 5:
+                is_non_eng = True
+
+    if not is_non_eng:
+        return title, summary, "en", None
+
+    api_key = os.getenv("OPENAI_API_KEY")
+    if not api_key:
+        return title, summary, source_lang, None
+
+    try:
+        client = get_openai_client(api_key=api_key)
+        prompt = (
+            "You are a translation assistant. Detect the language of the following text. "
+            "If it is not English, translate both the title and the "
+            "summary/description to English. "
+            "Return a JSON object with the following keys:\n"
+            '- "detected_lang": the 2-letter ISO 639-1 language code '
+            '(e.g. "ja", "zh", "ru", "fr", "de", "en")\n'
+            '- "translated_title": the translated title in English\n'
+            '- "translated_summary": the translated summary/description in English\n'
+            '- "needs_translation": boolean indicating if it was translated\n'
+        )
+
+        result = chat_create(
+            client,
+            name="translate-article",
+            tags=["translation"],
+            model="gpt-4o-mini",
+            response_format={"type": "json_object"},
+            messages=[
+                {"role": "system", "content": prompt},
+                {"role": "user", "content": f"Title: {title}\nSummary: {summary}"},
+            ],
+            max_tokens=1024,
+            temperature=0.0,
+        )
+
+        data = json.loads(result.choices[0].message.content or "{}")
+        detected_lang = data.get("detected_lang", source_lang)
+        needs_translation = data.get("needs_translation", False)
+
+        if needs_translation and detected_lang != "en":
+            t_title = data.get("translated_title") or title
+            t_summary = data.get("translated_summary") or summary
+            return t_title, t_summary, detected_lang, title
+    except Exception as exc:
+        logger.warning("Failed to translate article %r: %s", title, exc)
+
+    return title, summary, source_lang, None
+
+
 def _ingest_source(
     source: SourceDefinition, db_path: Path | str | None = None
 ) -> SourceIngestOutcome:
@@ -494,26 +571,35 @@ def _ingest_source(
                             description = snippet
                             snippet_fetches_remaining -= 1
 
-                if not _should_include(title, description, source.slug):
+                translated_title, translated_desc, detected_lang, original_title = (
+                    detect_and_translate_article(title, description, source.lang)
+                )
+
+                if not _should_include(translated_title, translated_desc, source.slug):
                     continue
 
-                summary, reason, score, tags = make_summary(title, description, source)
+                summary, reason, score, tags = make_summary(
+                    translated_title, translated_desc, source
+                )
 
                 # Deduplication: check if this article is a duplicate of an existing canonical
-                canonical_id = _find_canonical(conn, url, title)
+                canonical_id = _find_canonical(conn, url, translated_title)
                 if canonical_id is not None:
                     # Insert as archived duplicate pointing to canonical
                     conn.execute(
                         """INSERT INTO articles(
                              url, canonical_url, title, source_slug, source_name, category, kind,
                              published_at, summary, reason, importance_score, tags,
-                             status, canonical_id
-                           ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'archived', %s)
+                             status, canonical_id, original_title, detected_lang
+                           ) VALUES (
+                             %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                             'archived', %s, %s, %s
+                           )
                            ON CONFLICT (url) DO NOTHING""",
                         (
                             url,
                             url,
-                            title,
+                            translated_title,
                             source.slug,
                             source.name,
                             source.category,
@@ -524,6 +610,8 @@ def _ingest_source(
                             score,
                             tags,
                             canonical_id,
+                            original_title,
+                            detected_lang,
                         ),
                     )
                     # Tag canonical article's source list (stored in reason prefix)
@@ -542,7 +630,7 @@ def _ingest_source(
                         (
                             url,
                             url,
-                            title,
+                            translated_title,
                             source.slug,
                             source.name,
                             source.category,
@@ -552,6 +640,9 @@ def _ingest_source(
                             reason,
                             score,
                             tags,
+                            original_title,
+                            None,
+                            detected_lang,
                         ),
                     )
                     inserted += cursor.rowcount
@@ -679,7 +770,7 @@ def ingest_all(db_path: Path | str | None = None) -> dict[str, int]:
         sources_to_ingest: list[SourceDefinition] = [s for s in DEFAULT_SOURCES if s.enabled]
         with connect(db_path) as conn:
             private_rows = conn.execute(
-                "SELECT slug, name, url, category, kind, priority"
+                "SELECT slug, name, url, category, kind, priority, lang"
                 " FROM sources WHERE owner_user_id IS NOT NULL AND enabled IS TRUE"
             ).fetchall()
         for row in private_rows:
@@ -692,6 +783,7 @@ def ingest_all(db_path: Path | str | None = None) -> dict[str, int]:
                     category=r["category"],
                     kind=r["kind"],
                     priority=int(r["priority"] or 0),
+                    lang=r.get("lang") or "en",
                 )
             )
 
@@ -728,7 +820,8 @@ _ARTICLE_LIST_COLUMNS = (
     "id, url, canonical_url, canonical_id, title, source_slug, source_name,"
     " category, kind, published_at, discovered_at, status, importance_score,"
     " summary, reason, tags, read_at, saved_at, skipped_at, archived_at,"
-    " updated_at, body_status, state, starred, done_at, starred_at, later_until, restored_at"
+    " updated_at, body_status, state, starred, done_at, starred_at, later_until, restored_at,"
+    " original_title, original_body, detected_lang"
 )
 
 

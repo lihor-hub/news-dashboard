@@ -12,6 +12,7 @@ class SourceDefinition:
     kind: str = "rss_feed"
     priority: int = 50
     enabled: bool = True
+    lang: str = "en"
 
 
 DEFAULT_SOURCES: list[SourceDefinition] = [

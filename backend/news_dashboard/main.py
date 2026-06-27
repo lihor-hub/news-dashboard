@@ -574,6 +574,20 @@ def article_insights(
     return {"bullets": bullets}
 
 
+@api.get("/api/articles/topic-map")
+def articles_topic_map(
+    current_user: Annotated[dict[str, Any], Depends(require_auth)],
+) -> dict[str, Any]:
+    from news_dashboard.insights import InsightsNotConfiguredError, cluster_recent_articles
+
+    try:
+        clusters = cluster_recent_articles(user_id=current_user["id"])
+    except InsightsNotConfiguredError as exc:
+        raise HTTPException(status_code=501, detail=str(exc)) from exc
+
+    return {"clusters": clusters}
+
+
 @api.get("/api/articles/{article_id}/perspectives")
 def article_perspectives(
     article_id: int,

@@ -33,6 +33,9 @@ export interface Article {
   canonical_id?: number | null;
   body?: string | null;
   body_status?: 'ok' | 'missing' | 'error';
+  original_title?: string | null;
+  original_body?: string | null;
+  detected_lang?: string | null;
   recommendation_score?: number | null;
   recommendation_model?: string | null;
   recommendation_signals?: RecommendationSignals | null;

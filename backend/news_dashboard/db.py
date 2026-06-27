@@ -433,6 +433,10 @@ POSTGRES_MULTIUSER_SCHEMA = [
     )
     """,
     "CREATE INDEX IF NOT EXISTS idx_share_messages_share ON share_messages(share_id, created_at)",
+    "ALTER TABLE sources ADD COLUMN IF NOT EXISTS lang VARCHAR(5) DEFAULT 'en'",
+    "ALTER TABLE articles ADD COLUMN IF NOT EXISTS original_title TEXT",
+    "ALTER TABLE articles ADD COLUMN IF NOT EXISTS original_body TEXT",
+    "ALTER TABLE articles ADD COLUMN IF NOT EXISTS detected_lang VARCHAR(5) DEFAULT 'en'",
 ]
 
 
@@ -590,8 +594,9 @@ def insert_article_sql() -> str:
     return """
         INSERT INTO articles(
           url, canonical_url, title, source_slug, source_name, category, kind,
-          published_at, summary, reason, importance_score, tags
-        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+          published_at, summary, reason, importance_score, tags,
+          original_title, original_body, detected_lang
+        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         ON CONFLICT (url) DO NOTHING
         """
 

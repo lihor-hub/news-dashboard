@@ -38,6 +38,22 @@ import { trackArticleOpen, trackArticleClose } from '@/lib/analytics';
 import { cn } from '@/lib/utils';
 import { ShareDialog } from '@/components/ShareDialog';
 
+const LANGUAGE_NAMES: Record<string, string> = {
+  en: 'English',
+  ja: 'Japanese',
+  zh: 'Chinese',
+  ru: 'Russian',
+  fr: 'French',
+  de: 'German',
+  es: 'Spanish',
+  ko: 'Korean',
+  it: 'Italian',
+  pt: 'Portuguese',
+  vi: 'Vietnamese',
+  ar: 'Arabic',
+  tr: 'Turkish',
+};
+
 function renderBody(md: string): string {
   const escape = (s: string) =>
     s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
@@ -152,6 +168,11 @@ export function ArticlePage() {
   });
 
   const article = rawArticle ? adaptArticle(rawArticle) : null;
+  const [showOriginal, setShowOriginal] = useState(false);
+
+  useEffect(() => {
+    setShowOriginal(false);
+  }, [id]);
 
   // Trigger body fetch in parallel with metadata — fire at mount so we don't
   // wait for the GET /api/articles/:id round-trip before starting the slow scrape.
@@ -455,11 +476,24 @@ export function ArticlePage() {
                 <ExternalLink className="size-3" />
                 Open original
               </a>
+              {article.detectedLang && article.detectedLang !== 'en' && article.originalTitle && (
+                <>
+                  <span>·</span>
+                  <button
+                    onClick={() => setShowOriginal(!showOriginal)}
+                    className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-surface border border-border text-[10px] font-medium text-accent hover:bg-surface-hover hover:text-foreground transition-colors"
+                  >
+                    {showOriginal
+                      ? `Show English (Translated from ${LANGUAGE_NAMES[article.detectedLang] || article.detectedLang.toUpperCase()})`
+                      : `Show Original (${article.detectedLang.toUpperCase()} → EN)`}
+                  </button>
+                </>
+              )}
             </div>
 
             {/* Title */}
             <h1 className="mt-3 text-[26px] md:text-[30px] font-semibold tracking-tight leading-tight">
-              {article.title}
+              {showOriginal && article.originalTitle ? article.originalTitle : article.title}
             </h1>
 
             {/* Reading time — only shown once body is available */}
@@ -676,7 +710,11 @@ export function ArticlePage() {
               ) : (
                 <div
                   className="reader-prose"
-                  dangerouslySetInnerHTML={{ __html: renderBody(article.body) }}
+                  dangerouslySetInnerHTML={{
+                    __html: renderBody(
+                      showOriginal && article.originalBody ? article.originalBody : article.body
+                    ),
+                  }}
                 />
               )}
             </div>
