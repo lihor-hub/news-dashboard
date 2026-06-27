@@ -144,9 +144,9 @@ def generate_perspectives(
     if not text.strip():
         return {"verified_facts": [], "omissions": [], "alternative_perspectives": []}
 
-    from news_dashboard.ai_client import chat_create, get_openai_client, get_prompt
+    from news_dashboard.ai_client import chat_create, get_chat_client, get_prompt
 
-    client = get_openai_client(api_key=api_key, base_url=base_url)
+    client = get_chat_client(api_key=api_key, base_url=base_url)
     prompt = get_prompt("article-perspectives", fallback=_PROMPT)
     logger.info("Generating perspectives for article %s", article.get("id"))
     result = chat_create(

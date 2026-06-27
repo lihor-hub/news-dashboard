@@ -57,9 +57,9 @@ def _ai_extract_body(url: str, *, user_id: int | None = None) -> tuple[str, str]
         return "", "error"
 
     try:
-        from news_dashboard.ai_client import chat_create, get_openai_client
+        from news_dashboard.ai_client import chat_create, get_chat_client
 
-        client = get_openai_client(api_key=api_key, base_url=base_url)
+        client = get_chat_client(api_key=api_key, base_url=base_url)
         result = chat_create(
             client,
             name="ai-body-fetch",
@@ -331,9 +331,9 @@ def translate_body(body: str, from_lang: str) -> str:
         return body
 
     try:
-        from news_dashboard.ai_client import chat_create, get_openai_client
+        from news_dashboard.ai_client import chat_create, get_chat_client
 
-        client = get_openai_client(api_key=api_key, base_url=base_url)
+        client = get_chat_client(api_key=api_key, base_url=base_url)
         prompt = (
             f"You are a translation assistant. Translate the following body text from "
             f"language code '{from_lang}' to English. Return only the translated plain text, "

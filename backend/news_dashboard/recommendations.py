@@ -377,7 +377,7 @@ def generate_recommendation_explanation(
     """
     import os
 
-    from news_dashboard.ai_client import chat_create, free_llm_config, get_openai_client
+    from news_dashboard.ai_client import chat_create, free_llm_config, get_chat_client
 
     api_key, base_url = free_llm_config()
     if not api_key:
@@ -435,7 +435,7 @@ def generate_recommendation_explanation(
     )
 
     try:
-        client = get_openai_client(api_key=api_key, base_url=base_url)
+        client = get_chat_client(api_key=api_key, base_url=base_url)
         response = chat_create(
             client,
             name="recommendation-explanation",

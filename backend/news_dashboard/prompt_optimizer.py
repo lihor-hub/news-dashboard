@@ -21,7 +21,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from news_dashboard.ai_client import _client, chat_create, get_openai_client, langfuse_enabled
+from news_dashboard.ai_client import _client, chat_create, get_chat_client, langfuse_enabled
 
 logger = logging.getLogger(__name__)
 
@@ -152,7 +152,7 @@ def _optimizer_ai_config() -> tuple[str, str | None]:
 def _propose_revision(current_text: str, examples: list[NegativeExample], *, model: str) -> str:
     """Call the LLM to draft an improved prompt. Traced like any other call."""
     api_key, base_url = _optimizer_ai_config()
-    client = get_openai_client(api_key=api_key, base_url=base_url)
+    client = get_chat_client(api_key=api_key, base_url=base_url)
     response = chat_create(
         client,
         name="prompt-optimizer",

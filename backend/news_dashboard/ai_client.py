@@ -18,7 +18,7 @@ from __future__ import annotations
 import importlib
 import logging
 import os
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Literal, cast
@@ -166,6 +166,99 @@ def get_openai_client(*, api_key: str, base_url: str | None = None) -> OpenAI:
     from openai import OpenAI as PlainOpenAI
 
     return PlainOpenAI(**kwargs)
+
+
+# ── Runtime free-LLM → OpenAI fallback ─────────────────────────────────────
+
+
+def _invoke[T](
+    primary: OpenAI,
+    fallback: tuple[str, str | None] | None,
+    call: Callable[[OpenAI], T],
+) -> T:
+    """Run *call* against *primary*; on OpenAIError retry once on the OpenAI fallback.
+
+    The same request is replayed verbatim (same model and kwargs) against a
+    lazily-built OpenAI client, so the fallback is only constructed when the free
+    LLM gateway actually fails. When no distinct fallback is configured, the call
+    runs directly against *primary* and any error propagates unchanged.
+    """
+    if fallback is None:
+        return call(primary)
+
+    from openai import OpenAIError  # lazy import — optional dep at import time
+
+    try:
+        return call(primary)
+    except OpenAIError as exc:
+        api_key, base_url = fallback
+        logger.warning("free LLM request failed (%s); retrying on OpenAI fallback", exc)
+        return call(get_openai_client(api_key=api_key, base_url=base_url))
+
+
+class _FallbackCompletions:
+    """``chat.completions`` shim that routes ``create`` through :func:`_invoke`."""
+
+    def __init__(self, primary: OpenAI, fallback: tuple[str, str | None] | None) -> None:
+        self._primary = primary
+        self._fallback = fallback
+
+    def create(self, **kwargs: Any) -> Any:
+        return _invoke(self._primary, self._fallback, lambda c: c.chat.completions.create(**kwargs))
+
+
+class _FallbackChat:
+    """``chat`` namespace exposing a fallback-aware ``completions``."""
+
+    def __init__(self, primary: OpenAI, fallback: tuple[str, str | None] | None) -> None:
+        self.completions = _FallbackCompletions(primary, fallback)
+
+
+class _FallbackEmbeddings:
+    """``embeddings`` shim that routes ``create`` through :func:`_invoke`."""
+
+    def __init__(self, primary: OpenAI, fallback: tuple[str, str | None] | None) -> None:
+        self._primary = primary
+        self._fallback = fallback
+
+    def create(self, **kwargs: Any) -> Any:
+        return _invoke(self._primary, self._fallback, lambda c: c.embeddings.create(**kwargs))
+
+
+class _FallbackClient:
+    """Chat/embedding client that prefers the free LLM gateway, then OpenAI.
+
+    Exposes only the ``chat.completions.create`` and ``embeddings.create``
+    surfaces the backend uses through it; each request prefers the primary (free
+    LLM) client and falls back to OpenAI on failure (see :func:`get_chat_client`).
+    """
+
+    def __init__(self, primary: OpenAI, fallback: tuple[str, str | None] | None) -> None:
+        self.chat = _FallbackChat(primary, fallback)
+        self.embeddings = _FallbackEmbeddings(primary, fallback)
+
+
+def get_chat_client(*, api_key: str, base_url: str | None = None) -> OpenAI:
+    """Return a chat/embedding client that prefers the free LLM gateway.
+
+    *api_key* / *base_url* are the primary (free LLM) credentials, as resolved by
+    :func:`free_llm_config`. When a distinct, configured OpenAI endpoint exists —
+    a non-empty ``OPENAI_API_KEY`` whose ``(key, base_url)`` differs from the
+    primary — any chat or embedding request that raises ``openai.OpenAIError`` is
+    retried once against OpenAI with the same model and arguments. For single-key
+    setups, where the free config already *is* the OpenAI endpoint, no fallback
+    is attempted and errors propagate unchanged.
+
+    The returned object is API-compatible with ``openai.OpenAI`` for the
+    ``chat.completions.create`` and ``embeddings.create`` calls made through it.
+    The OpenAI fallback client is built lazily, only on the first failure.
+    """
+    primary = get_openai_client(api_key=api_key, base_url=base_url)
+    openai_key, openai_base = openai_config()
+    fallback: tuple[str, str | None] | None = None
+    if openai_key and (openai_key, openai_base) != (api_key, base_url):
+        fallback = (openai_key, openai_base)
+    return cast("OpenAI", _FallbackClient(primary, fallback))
 
 
 # ── Trace context ────────────────────────────────────────────────────────

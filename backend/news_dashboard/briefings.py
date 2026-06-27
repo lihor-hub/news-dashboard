@@ -206,7 +206,7 @@ def _call_openai(
 
     from openai import OpenAIError  # lazy import — optional dep at import time
 
-    from news_dashboard.ai_client import chat_create, get_openai_client, get_prompt
+    from news_dashboard.ai_client import chat_create, get_chat_client, get_prompt
 
     prompt = get_prompt("briefing-system", fallback=_BRIEFING_SYSTEM_PROMPT)
     system = prompt.text
@@ -216,7 +216,7 @@ def _call_openai(
         )
     user = "Articles:\n\n" + "\n\n".join(article_lines)
 
-    client = get_openai_client(api_key=api_key, base_url=base_url)
+    client = get_chat_client(api_key=api_key, base_url=base_url)
     try:
         response = chat_create(
             client,
@@ -783,9 +783,9 @@ def chat_with_briefing(
         articles_context=articles_context,
     )
 
-    from news_dashboard.ai_client import chat_create, get_openai_client
+    from news_dashboard.ai_client import chat_create, get_chat_client
 
-    client = get_openai_client(api_key=api_key, base_url=base_url)
+    client = get_chat_client(api_key=api_key, base_url=base_url)
     messages: list[dict[str, str]] = [{"role": "system", "content": system}]
     messages.extend(history)
     messages.append({"role": "user", "content": message})

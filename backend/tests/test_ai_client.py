@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -157,3 +158,157 @@ def test_fetch_metrics_disabled_returns_enabled_false() -> None:
 def test_compile_fallback_substitutes_double_brace_vars() -> None:
     assert _compile_fallback("Hi {{name}}, {{name}}!", {"name": "Sam"}) == "Hi Sam, Sam!"
     assert _compile_fallback("no vars here", {}) == "no vars here"
+
+
+# ── get_chat_client runtime free-LLM→OpenAI fallback ───────────────────────
+
+
+def _raising_client(exc: Exception) -> MagicMock:
+    client = MagicMock()
+    client.chat.completions.create.side_effect = exc
+    client.embeddings.create.side_effect = exc
+    return client
+
+
+def _ok_client(result: object) -> MagicMock:
+    client = MagicMock()
+    client.chat.completions.create.return_value = result
+    client.embeddings.create.return_value = result
+    return client
+
+
+def _clear_ai_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    for var in ("FREE_LLM_API_KEY", "FREE_LLM_BASE_URL", "OPENAI_API_KEY", "OPENAI_BASE_URL"):
+        monkeypatch.delenv(var, raising=False)
+
+
+@pytest.mark.usefixtures("_no_langfuse")
+def test_get_chat_client_falls_back_to_openai_on_chat_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from unittest.mock import patch
+
+    from openai import OpenAIError
+
+    from news_dashboard.ai_client import get_chat_client
+
+    class _UpstreamError(OpenAIError):
+        pass
+
+    _clear_ai_env(monkeypatch)
+    monkeypatch.setenv("FREE_LLM_API_KEY", "free-key")
+    monkeypatch.setenv("FREE_LLM_BASE_URL", "http://gw/v1")
+    monkeypatch.setenv("OPENAI_API_KEY", "oa-key")
+
+    primary = _raising_client(_UpstreamError("gateway down"))
+    fallback = _ok_client("fallback-result")
+    with patch(
+        "news_dashboard.ai_client.get_openai_client", side_effect=[primary, fallback]
+    ) as factory:
+        client = get_chat_client(api_key="free-key", base_url="http://gw/v1")
+        result: object = client.chat.completions.create(model="m", messages=[])
+
+    assert result == "fallback-result"
+    assert factory.call_args_list[0].kwargs == {"api_key": "free-key", "base_url": "http://gw/v1"}
+    assert factory.call_args_list[1].kwargs == {"api_key": "oa-key", "base_url": None}
+
+
+@pytest.mark.usefixtures("_no_langfuse")
+def test_get_chat_client_falls_back_to_openai_on_embedding_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from unittest.mock import patch
+
+    from openai import OpenAIError
+
+    from news_dashboard.ai_client import get_chat_client
+
+    class _UpstreamError(OpenAIError):
+        pass
+
+    _clear_ai_env(monkeypatch)
+    monkeypatch.setenv("FREE_LLM_API_KEY", "free-key")
+    monkeypatch.setenv("OPENAI_API_KEY", "oa-key")
+
+    primary = _raising_client(_UpstreamError("gateway down"))
+    fallback = _ok_client("embedding-result")
+    with patch(
+        "news_dashboard.ai_client.get_openai_client", side_effect=[primary, fallback]
+    ) as factory:
+        client = get_chat_client(api_key="free-key", base_url=None)
+        result: object = client.embeddings.create(model="m", input="x")
+
+    assert result == "embedding-result"
+    assert factory.call_count == 2
+
+
+@pytest.mark.usefixtures("_no_langfuse")
+def test_get_chat_client_no_fallback_when_single_endpoint(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from unittest.mock import patch
+
+    from openai import OpenAIError
+
+    from news_dashboard.ai_client import get_chat_client
+
+    class _UpstreamError(OpenAIError):
+        pass
+
+    _clear_ai_env(monkeypatch)
+    monkeypatch.setenv("OPENAI_API_KEY", "oa-key")
+
+    primary = _raising_client(_UpstreamError("boom"))
+    with patch("news_dashboard.ai_client.get_openai_client", side_effect=[primary]) as factory:
+        client = get_chat_client(api_key="oa-key", base_url=None)
+        with pytest.raises(OpenAIError):
+            client.chat.completions.create(model="m", messages=[])
+
+    assert factory.call_count == 1
+
+
+@pytest.mark.usefixtures("_no_langfuse")
+def test_get_chat_client_no_fallback_when_openai_key_absent(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from unittest.mock import patch
+
+    from openai import OpenAIError
+
+    from news_dashboard.ai_client import get_chat_client
+
+    class _UpstreamError(OpenAIError):
+        pass
+
+    _clear_ai_env(monkeypatch)
+    monkeypatch.setenv("FREE_LLM_API_KEY", "free-key")
+
+    primary = _raising_client(_UpstreamError("boom"))
+    with patch("news_dashboard.ai_client.get_openai_client", side_effect=[primary]) as factory:
+        client = get_chat_client(api_key="free-key", base_url=None)
+        with pytest.raises(OpenAIError):
+            client.chat.completions.create(model="m", messages=[])
+
+    assert factory.call_count == 1
+
+
+@pytest.mark.usefixtures("_no_langfuse")
+def test_get_chat_client_happy_path_builds_one_client(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from unittest.mock import patch
+
+    from news_dashboard.ai_client import get_chat_client
+
+    _clear_ai_env(monkeypatch)
+    monkeypatch.setenv("FREE_LLM_API_KEY", "free-key")
+    monkeypatch.setenv("OPENAI_API_KEY", "oa-key")
+
+    primary = _ok_client("primary-result")
+    # Only one client provided: if the fallback were built eagerly, StopIteration would raise.
+    with patch("news_dashboard.ai_client.get_openai_client", side_effect=[primary]) as factory:
+        client = get_chat_client(api_key="free-key", base_url=None)
+        result: object = client.chat.completions.create(model="m", messages=[])
+
+    assert result == "primary-result"
+    assert factory.call_count == 1

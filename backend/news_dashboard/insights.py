@@ -89,9 +89,9 @@ def generate_insights(article: dict[str, Any], *, user_id: int | None = None) ->
     if not text.strip():
         return []
 
-    from news_dashboard.ai_client import chat_create, get_openai_client, get_prompt
+    from news_dashboard.ai_client import chat_create, get_chat_client, get_prompt
 
-    client = get_openai_client(api_key=api_key, base_url=base_url)
+    client = get_chat_client(api_key=api_key, base_url=base_url)
     prompt = get_prompt("article-insights", fallback=_PROMPT)
     logger.info("Generating insights for article %s", article.get("id"))
     result = chat_create(
@@ -300,9 +300,9 @@ def _generate_cluster_label(
         f"- Title: {a.get('title', '')}\n  Summary: {a.get('summary', '')}" for a in articles[:10]
     )
 
-    from news_dashboard.ai_client import chat_create, get_openai_client
+    from news_dashboard.ai_client import chat_create, get_chat_client
 
-    client = get_openai_client(api_key=api_key, base_url=base_url)
+    client = get_chat_client(api_key=api_key, base_url=base_url)
     result = chat_create(
         client,
         name="topic-cluster-label",
