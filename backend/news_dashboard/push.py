@@ -9,6 +9,61 @@ from typing import Any, Literal
 
 logger = logging.getLogger(__name__)
 
+_DEFAULT_PUSH_TITLE = "Your daily brief is ready"
+
+
+def generate_push_hook(briefing: dict[str, Any]) -> str:
+    """Generate a punchy AI push notification hook from a briefing dict.
+
+    Takes the briefing result from ``generate_briefing()`` (keys: ``title``,
+    ``content`` → ``sections``).  Uses the free LLM gateway to produce a
+    single engaging sentence (≤ 15 words) for the lock screen.  Falls back to
+    a clean default if the LLM is not configured or the call fails.
+    """
+    title: str = briefing.get("title") or ""
+    content: dict[str, Any] = briefing.get("content") or {}
+    sections: list[dict[str, Any]] = content.get("sections") or []
+    headlines = [s.get("title", "") for s in sections if s.get("title")][:3]
+
+    fallback = f"Your daily brief: {title}" if title else _DEFAULT_PUSH_TITLE
+
+    try:
+        from news_dashboard.ai_client import free_llm_config, get_chat_client
+
+        api_key, base_url = free_llm_config()
+        if not api_key:
+            return fallback
+
+        client = get_chat_client(api_key=api_key, base_url=base_url)
+        model = os.getenv("OPENAI_BRIEFING_MODEL", "gpt-4o-mini")
+
+        if headlines:
+            headline_block = "\n".join(f"- {h}" for h in headlines)
+        else:
+            headline_block = f"- {title}" if title else "(no headlines)"
+
+        prompt = (
+            "Write a single punchy mobile push notification hook (max 15 words) "
+            "that entices the user to open their news briefing. "
+            f"Top headlines:\n{headline_block}\n\n"
+            "Reply with only the hook text, no quotes or punctuation at the end."
+        )
+
+        response = client.chat.completions.create(
+            model=model,
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=40,
+            temperature=0.7,
+        )
+        hook = (response.choices[0].message.content or "").strip()
+        if hook:
+            return hook
+    except Exception:
+        logger.warning("Push hook LLM generation failed; using default message")
+
+    return fallback
+
+
 PushDeliveryResult = Literal["sent", "skipped_not_configured", "temporary_failure", "gone"]
 
 

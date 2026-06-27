@@ -104,7 +104,7 @@ def _run_per_user_briefings() -> None:
         generate_briefing,
     )
     from news_dashboard.db import connect, row_to_dict
-    from news_dashboard.push import send_push_for_user
+    from news_dashboard.push import generate_push_hook, send_push_for_user
 
     now = datetime.now(timezone.utc)
     current_hm = now.strftime("%H:%M")
@@ -133,9 +133,10 @@ def _run_per_user_briefings() -> None:
                 try:
                     briefing_id = result.get("id")
                     target_url = f"/briefs/{briefing_id}" if briefing_id is not None else None
+                    push_title = generate_push_hook(result)
                     send_push_for_user(
                         user_id,
-                        "Your daily brief is ready",
+                        push_title,
                         "",
                         target_url=target_url,
                     )

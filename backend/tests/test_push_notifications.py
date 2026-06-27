@@ -13,6 +13,7 @@ from news_dashboard.db import POSTGRES_MULTIUSER_SCHEMA, init_db
 from news_dashboard.main import app
 from news_dashboard.push import (
     delete_push_subscriptions,
+    generate_push_hook,
     get_user_push_subscriptions,
     save_push_subscription,
     send_push_for_user,
@@ -402,3 +403,111 @@ def test_send_push_for_user_prunes_expired_endpoints(
     assert ep_success in endpoints
     assert ep_transient in endpoints
     assert ep_gone not in endpoints
+
+
+# ── generate_push_hook ─────────────────────────────────────────────────────────
+
+
+def _make_briefing(
+    title: str = "Tech Digest",
+    sections: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    return {
+        "id": 1,
+        "title": title,
+        "content": {
+            "sections": sections
+            or [
+                {"title": "Claude 4 released", "body": "...", "citations": []},
+                {"title": "Markets hit record high", "body": "...", "citations": []},
+            ]
+        },
+    }
+
+
+def test_generate_push_hook_returns_llm_hook(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("FREE_LLM_API_KEY", "fake-key")
+
+    hook_text = "Claude 4 drops; markets soar — your brief awaits"
+    mock_client = MagicMock()
+    mock_client.chat.completions.create.return_value = MagicMock(
+        choices=[MagicMock(message=MagicMock(content=hook_text))]
+    )
+
+    with (
+        patch("news_dashboard.ai_client.get_chat_client", return_value=mock_client),
+        patch("news_dashboard.ai_client.free_llm_config", return_value=("fake-key", None)),
+    ):
+        result = generate_push_hook(_make_briefing())
+
+    assert result == hook_text
+    mock_client.chat.completions.create.assert_called_once()
+    call_kwargs = mock_client.chat.completions.create.call_args.kwargs
+    assert call_kwargs["max_tokens"] == 40
+    assert "Claude 4 released" in call_kwargs["messages"][0]["content"]
+
+
+def test_generate_push_hook_falls_back_on_llm_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("FREE_LLM_API_KEY", "fake-key")
+
+    mock_client = MagicMock()
+    mock_client.chat.completions.create.side_effect = RuntimeError("LLM unavailable")
+
+    with (
+        patch("news_dashboard.ai_client.get_chat_client", return_value=mock_client),
+        patch("news_dashboard.ai_client.free_llm_config", return_value=("fake-key", None)),
+    ):
+        result = generate_push_hook(_make_briefing(title="Morning Brief"))
+
+    assert result == "Your daily brief: Morning Brief"
+
+
+def test_generate_push_hook_falls_back_when_no_api_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("FREE_LLM_API_KEY", raising=False)
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+
+    with patch("news_dashboard.ai_client.free_llm_config", return_value=("", None)):
+        result = generate_push_hook(_make_briefing(title="Evening Digest"))
+
+    assert result == "Your daily brief: Evening Digest"
+
+
+def test_generate_push_hook_fallback_no_title() -> None:
+    with patch("news_dashboard.ai_client.free_llm_config", return_value=("", None)):
+        result = generate_push_hook({"title": "", "content": {"sections": []}})
+
+    assert result == "Your daily brief is ready"
+
+
+def test_generate_push_hook_uses_section_titles_in_prompt(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("FREE_LLM_API_KEY", "fake-key")
+
+    captured_prompt: list[str] = []
+
+    def fake_create(**kwargs: Any) -> Any:
+        captured_prompt.append(kwargs["messages"][0]["content"])
+        return MagicMock(
+            choices=[MagicMock(message=MagicMock(content="Breaking: AI takes over coding"))]
+        )
+
+    mock_client = MagicMock()
+    mock_client.chat.completions.create.side_effect = fake_create
+
+    sections = [
+        {"title": "AI milestone achieved", "body": "", "citations": []},
+        {"title": "Economy grows 3%", "body": "", "citations": []},
+        {"title": "Sports finals tonight", "body": "", "citations": []},
+        {"title": "This one should be excluded", "body": "", "citations": []},
+    ]
+
+    with (
+        patch("news_dashboard.ai_client.get_chat_client", return_value=mock_client),
+        patch("news_dashboard.ai_client.free_llm_config", return_value=("fake-key", None)),
+    ):
+        generate_push_hook(_make_briefing(sections=sections))
+
+    prompt = captured_prompt[0]
+    assert "AI milestone achieved" in prompt
+    assert "Economy grows 3%" in prompt
+    assert "Sports finals tonight" in prompt
+    assert "This one should be excluded" not in prompt
