@@ -131,7 +131,14 @@ def _run_per_user_briefings() -> None:
                     "Per-user briefing: complete for user_id=%s id=%s", user_id, result.get("id")
                 )
                 try:
-                    send_push_for_user(user_id, "Your daily brief is ready", "")
+                    briefing_id = result.get("id")
+                    target_url = f"/briefs/{briefing_id}" if briefing_id is not None else None
+                    send_push_for_user(
+                        user_id,
+                        "Your daily brief is ready",
+                        "",
+                        target_url=target_url,
+                    )
                 except Exception:
                     logger.exception(
                         "Per-user briefing: push notification failed for user_id=%s", user_id

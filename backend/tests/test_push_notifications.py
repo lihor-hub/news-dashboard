@@ -160,6 +160,66 @@ def test_send_push_notification_calls_webpush(monkeypatch: pytest.MonkeyPatch) -
     assert call_kwargs["vapid_claims"]["sub"] == "mailto:test@example.com"
 
 
+def test_send_push_notification_payload_without_url(monkeypatch: pytest.MonkeyPatch) -> None:
+    import json
+
+    import news_dashboard.push as push_mod
+
+    monkeypatch.setenv("VAPID_PRIVATE_KEY", "fake-private-key")
+
+    mock_webpush = MagicMock()
+
+    class _FakeWebPushError(Exception):
+        pass
+
+    fake_module: dict[str, Any] = {
+        "webpush": mock_webpush,
+        "WebPushException": _FakeWebPushError,
+    }
+    with patch.dict("sys.modules", {"pywebpush": MagicMock(**fake_module)}):
+        push_mod.send_push_notification(
+            endpoint="https://ep.example.com",
+            p256dh="abc",
+            auth="xyz",
+            title="T",
+            body="B",
+        )
+
+    payload = json.loads(mock_webpush.call_args.kwargs["data"])
+    assert payload == {"title": "T", "body": "B"}
+    assert "url" not in payload
+
+
+def test_send_push_notification_payload_with_url(monkeypatch: pytest.MonkeyPatch) -> None:
+    import json
+
+    import news_dashboard.push as push_mod
+
+    monkeypatch.setenv("VAPID_PRIVATE_KEY", "fake-private-key")
+
+    mock_webpush = MagicMock()
+
+    class _FakeWebPushError(Exception):
+        pass
+
+    fake_module: dict[str, Any] = {
+        "webpush": mock_webpush,
+        "WebPushException": _FakeWebPushError,
+    }
+    with patch.dict("sys.modules", {"pywebpush": MagicMock(**fake_module)}):
+        push_mod.send_push_notification(
+            endpoint="https://ep.example.com",
+            p256dh="abc",
+            auth="xyz",
+            title="T",
+            body="B",
+            target_url="/briefs/42",
+        )
+
+    payload = json.loads(mock_webpush.call_args.kwargs["data"])
+    assert payload == {"title": "T", "body": "B", "url": "/briefs/42"}
+
+
 def test_send_push_notification_logs_on_webpush_exception(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

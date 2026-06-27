@@ -47,6 +47,7 @@ def send_push_notification(
     auth: str,
     title: str,
     body: str,
+    target_url: str | None = None,
 ) -> PushDeliveryResult:
     """Send a single Web Push notification to the given subscription."""
     try:
@@ -55,7 +56,10 @@ def send_push_notification(
         logger.warning("pywebpush not installed — push notification skipped")
         return "skipped_not_configured"
 
-    payload = json.dumps({"title": title, "body": body})
+    data: dict[str, str] = {"title": title, "body": body}
+    if target_url is not None:
+        data["url"] = target_url
+    payload = json.dumps(data)
     try:
         webpush(
             subscription_info={
@@ -150,6 +154,7 @@ def send_push_for_user(
     title: str,
     body: str,
     *,
+    target_url: str | None = None,
     database_url: str | None = None,
 ) -> None:
     """Send a push notification to all subscriptions registered by a user."""
@@ -161,6 +166,7 @@ def send_push_for_user(
             auth=sub["auth_key"],
             title=title,
             body=body,
+            target_url=target_url,
         )
         if result == "gone":
             delete_push_subscriptions(
