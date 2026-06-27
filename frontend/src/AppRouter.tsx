@@ -48,6 +48,9 @@ const BriefingsHistoryPage = lazy(() =>
 const BriefingDetailPage = lazy(() =>
   import('./pages/BriefingDetailPage').then((m) => ({ default: m.BriefingDetailPage }))
 );
+const TopicMapPage = lazy(() =>
+  import('./pages/TopicMapPage').then((m) => ({ default: m.TopicMapPage }))
+);
 
 function PageLoader() {
   return (
@@ -124,6 +127,7 @@ export const routes: RouteObject[] = [
       },
       { path: 'briefs', element: withSuspense(BriefingsHistoryPage) },
       { path: 'briefs/:id', element: withSuspense(BriefingDetailPage) },
+      { path: 'topic-map', element: withSuspense(TopicMapPage) },
       { path: 'stats', element: withSuspense(StatsPage) },
       { path: 'reading-dna', element: withSuspense(ReadingDnaPage) },
       { path: 'archive', element: <ArchivePage /> },

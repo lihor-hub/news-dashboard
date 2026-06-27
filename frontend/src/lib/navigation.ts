@@ -5,6 +5,7 @@ import {
   Clock,
   History,
   Inbox,
+  Network,
   Newspaper,
   Radio,
   Search,
@@ -37,6 +38,7 @@ export const primaryNavigationItems: NavigationItem[] = [
 
 export const secondaryNavigationItems: NavigationItem[] = [
   { to: '/briefs', label: 'Briefing History', icon: History, shortcut: 'h' },
+  { to: '/topic-map', label: 'Topic Map', icon: Network },
   { to: '/feeds', label: 'Feeds', icon: Radio, shortcut: 'f' },
   { to: '/stats', label: 'Stats', icon: BarChart3 },
   { to: '/reading-dna', label: 'Reading DNA', icon: SlidersHorizontal },
@@ -106,6 +108,7 @@ export function getPageTitle(pathname: string): string {
   if (pathname.startsWith('/shared')) return 'Shared';
   if (pathname.startsWith('/search')) return 'Search';
   if (pathname.startsWith('/ask')) return 'Ask AI';
+  if (pathname.startsWith('/topic-map')) return 'Topic Map';
   if (pathname.startsWith('/briefs')) return 'Briefs';
   if (pathname.startsWith('/feeds')) return 'Feeds';
   if (pathname.startsWith('/stats')) return 'Stats';

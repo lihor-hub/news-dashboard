@@ -30,6 +30,7 @@ import type {
   TriageMetrics,
   IngestRunPage,
   IngestRunSource,
+  TopicMapResponse,
   User,
 } from './types';
 
@@ -525,4 +526,8 @@ export async function submitQuiz(quizId: number, answers: number[]): Promise<Qui
 
 export async function markShareRead(shareId: number): Promise<void> {
   await requestJson(`/api/shares/${shareId}/read`, { method: 'POST' });
+}
+
+export async function fetchTopicMap(): Promise<TopicMapResponse> {
+  return requestJson<TopicMapResponse>('/api/articles/topic-map');
 }

@@ -384,3 +384,24 @@ export interface QuizResult {
   total: number;
   questions: QuizQuestion[];
 }
+
+export interface TopicMapArticle {
+  id: number;
+  title: string;
+  url: string;
+  summary: string;
+}
+
+export interface TopicCluster {
+  id: number;
+  headline: string;
+  trend_summary: string;
+  x: number;
+  y: number;
+  article_ids: number[];
+  articles: TopicMapArticle[];
+}
+
+export interface TopicMapResponse {
+  clusters: TopicCluster[];
+}
