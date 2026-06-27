@@ -289,4 +289,30 @@ describe('LoginPage', () => {
       expect(api.loginUser).toHaveBeenCalledWith('alice', 'correct');
     });
   });
+
+  it('renders Keycloak sign-in and registration links when Keycloak is enabled', async () => {
+    vi.spyOn(api, 'fetchAuthConfig').mockResolvedValue({
+      provider: 'keycloak',
+      keycloak_enabled: true,
+      login_url: '/auth/login',
+      logout_url: '/auth/logout',
+      registration_url: '/auth/register',
+    });
+
+    renderWithRouter(
+      <Routes>
+        <Route path="/" element={<LoginPage />} />
+      </Routes>
+    );
+
+    await waitFor(() => {
+      const loginLink = screen.getByRole('link', { name: /sign in with keycloak/i });
+      expect(loginLink).toBeTruthy();
+      expect(loginLink.getAttribute('href')).toBe('/auth/login');
+
+      const registerLink = screen.getByRole('link', { name: /create account/i });
+      expect(registerLink).toBeTruthy();
+      expect(registerLink.getAttribute('href')).toBe('/auth/register');
+    });
+  });
 });

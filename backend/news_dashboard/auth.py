@@ -85,6 +85,7 @@ def keycloak_auth_metadata() -> dict[str, Any]:
         "keycloak_enabled": config.enabled,
         "login_url": "/auth/login" if config.enabled else None,
         "logout_url": "/auth/logout" if config.enabled else "/api/auth/logout",
+        "registration_url": "/auth/register" if config.enabled else None,
     }
 
 
@@ -346,6 +347,22 @@ def keycloak_authorization_url(state: str) -> str:
     return f"{config.public_realm_url}/protocol/openid-connect/auth?{params}"
 
 
+def keycloak_registration_url(state: str) -> str:
+    config = keycloak_config()
+    if not config.enabled or not config.public_server_url:
+        raise HTTPException(status_code=500, detail="Keycloak authentication is not configured")
+    params = urlencode(
+        {
+            "client_id": config.client_id,
+            "response_type": "code",
+            "scope": "openid email profile",
+            "redirect_uri": config.redirect_uri,
+            "state": state,
+        }
+    )
+    return f"{config.public_realm_url}/protocol/openid-connect/registrations?{params}"
+
+
 def keycloak_token_request_data(code: str) -> dict[str, str]:
     config = keycloak_config()
     data = {
@@ -357,6 +374,22 @@ def keycloak_token_request_data(code: str) -> dict[str, str]:
     if config.client_secret:
         data["client_secret"] = config.client_secret
     return data
+
+
+def subscribe_user_to_default_sources(user_id: int) -> None:
+    from news_dashboard.ingest import sync_sources
+
+    sync_sources()
+    with connect() as conn:
+        rows = conn.execute("SELECT slug FROM sources WHERE owner_user_id IS NULL").fetchall()
+        for r in rows:
+            slug = row_to_dict(r)["slug"]
+            conn.execute(
+                "INSERT INTO user_sources(user_id, source_slug, enabled) "
+                "VALUES (%s, %s, TRUE) "
+                "ON CONFLICT(user_id, source_slug) DO NOTHING",
+                (user_id, slug),
+            )
 
 
 def ensure_keycloak_user(info: dict[str, Any]) -> dict[str, Any]:
@@ -382,6 +415,7 @@ def ensure_keycloak_user(info: dict[str, Any]) -> dict[str, Any]:
         email=email,
         is_admin=username.lower() in _keycloak_admin_usernames(),
     )
+    subscribe_user_to_default_sources(int(user["id"]))
     _touch_last_login(int(user["id"]))
     return get_user_by_id(int(user["id"])) or user
 
