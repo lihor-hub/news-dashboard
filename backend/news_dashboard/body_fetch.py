@@ -28,13 +28,21 @@ _AI_PROMPT = (
 )
 
 
+def _body_ai_config() -> tuple[str, str | None, str]:
+    """Resolve (api_key, base_url, model) for AI body extraction."""
+    api_key = os.getenv("OPENAI_BRIEFING_API_KEY") or os.getenv("OPENAI_API_KEY")
+    base_url = os.getenv("OPENAI_BRIEFING_BASE_URL") or os.getenv("OPENAI_BASE_URL") or None
+    model = os.getenv("OPENAI_BRIEFING_MODEL", _AI_MODEL)
+    return api_key or "", base_url, model
+
+
 def _ai_extract_body(url: str, *, user_id: int | None = None) -> tuple[str, str]:
-    """Fallback: fetch raw HTML via httpx and extract body text via OpenAI.
+    """Fallback: fetch raw HTML via httpx and extract body text via AI.
 
     Returns (text, 'ok') on success or ('', 'error') if OPENAI_API_KEY is
     absent, the HTTP fetch fails, or the AI call fails.
     """
-    api_key = os.getenv("OPENAI_API_KEY")
+    api_key, base_url, model = _body_ai_config()
     if not api_key:
         return "", "error"
 
@@ -55,13 +63,13 @@ def _ai_extract_body(url: str, *, user_id: int | None = None) -> tuple[str, str]
     try:
         from news_dashboard.ai_client import chat_create, get_openai_client
 
-        client = get_openai_client(api_key=api_key)
+        client = get_openai_client(api_key=api_key, base_url=base_url)
         result = chat_create(
             client,
             name="ai-body-fetch",
             tags=["body-fetch"],
             user_id=user_id,
-            model=_AI_MODEL,
+            model=model,
             messages=[{"role": "user", "content": f"{_AI_PROMPT}\n\n{html}"}],
             max_tokens=2048,
         )

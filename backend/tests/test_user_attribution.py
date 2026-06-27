@@ -247,6 +247,54 @@ def test_ai_extract_body_passes_none_user_id_by_default() -> None:
     assert mock_cc.call_args.kwargs["user_id"] is None
 
 
+def test_ai_extract_body_uses_briefing_gateway_config() -> None:
+    from news_dashboard.body_fetch import _ai_extract_body
+
+    mock_cc = MagicMock(return_value=_mock_completion("Article body text."))
+    mock_http_response = MagicMock()
+    mock_http_response.text = "<html><body><p>article content here</p></body></html>"
+
+    with (
+        patch.dict(
+            "os.environ",
+            {
+                "OPENAI_API_KEY": "sk-openai",
+                "OPENAI_BRIEFING_API_KEY": "sk-gateway",
+                "OPENAI_BRIEFING_BASE_URL": "http://gateway:9130/v1",
+                "OPENAI_BRIEFING_MODEL": "gateway-chat-model",
+            },
+        ),
+        patch("news_dashboard.ai_client.get_openai_client") as mock_client_factory,
+        patch("news_dashboard.ai_client.chat_create", new=mock_cc),
+        patch("httpx.get", return_value=mock_http_response),
+    ):
+        _ai_extract_body("https://example.com/article")
+
+    mock_client_factory.assert_called_once_with(
+        api_key="sk-gateway", base_url="http://gateway:9130/v1"
+    )
+    assert mock_cc.call_args.kwargs["model"] == "gateway-chat-model"
+
+
+def test_ai_extract_body_falls_back_to_openai_when_gateway_unset() -> None:
+    from news_dashboard.body_fetch import _ai_extract_body
+
+    mock_cc = MagicMock(return_value=_mock_completion("Article body text."))
+    mock_http_response = MagicMock()
+    mock_http_response.text = "<html><body><p>article content here</p></body></html>"
+
+    with (
+        patch.dict("os.environ", {"OPENAI_API_KEY": "sk-openai"}, clear=True),
+        patch("news_dashboard.ai_client.get_openai_client") as mock_client_factory,
+        patch("news_dashboard.ai_client.chat_create", new=mock_cc),
+        patch("httpx.get", return_value=mock_http_response),
+    ):
+        _ai_extract_body("https://example.com/article")
+
+    mock_client_factory.assert_called_once_with(api_key="sk-openai", base_url=None)
+    assert mock_cc.call_args.kwargs["model"] == "gpt-4o-mini"
+
+
 # ── briefings: generation threads user_id ─────────────────────────────────────
 
 
