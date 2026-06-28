@@ -50,7 +50,7 @@ interface AskError {
 
 function parseError(err: unknown): AskError {
   const msg = err instanceof Error ? err.message : String(err);
-  if (/OPENAI_API_KEY|credentials|API key/i.test(msg)) {
+  if (/FREE_LLM_API_KEY|OPENAI_API_KEY|credentials|API key/i.test(msg)) {
     return { kind: 'no_key', message: msg };
   }
   return { kind: 'generation_failed', message: msg };
@@ -60,7 +60,7 @@ function ErrorBanner({ error }: { error: AskError }) {
   const copy: Record<ErrorKind, { title: string; body: string }> = {
     no_key: {
       title: 'Ask AI is not configured',
-      body: 'An OpenAI API key is required. Set OPENAI_API_KEY in the app environment and restart.',
+      body: 'An AI API key is required. Set FREE_LLM_API_KEY (or OPENAI_API_KEY) in the app environment and restart.',
     },
     not_enough: {
       title: 'Not enough articles yet',

@@ -106,7 +106,7 @@ After ≥ 100 saved/read articles exist:
 - Embed title + summary via the configured OpenAI-compatible embeddings provider.
 - Store embeddings in PostgreSQL-managed article data structures; runtime storage remains PostgreSQL only.
 - Enables semantic search and similarity grouping without adding a second runtime database.
-- Configure with feature-specific variables such as `OPENAI_EMBEDDINGS_API_KEY`, `OPENAI_EMBEDDINGS_BASE_URL`, and `OPENAI_EMBEDDING_MODEL`; see `README.md` and `backend/news_dashboard/embeddings.py`.
+- Configure with `FREE_LLM_API_KEY` / `FREE_LLM_BASE_URL` (or the `OPENAI_API_KEY` / `OPENAI_BASE_URL` fallback); see `README.md` and `backend/news_dashboard/embeddings.py`.
 
 ### Ask Clau endpoint (v1.3)
 
@@ -129,7 +129,7 @@ Privacy/security:
 - Endpoint requires the app authentication boundary, either local password sessions or optional Keycloak SSO.
 - No article content is sent to external APIs unless the relevant AI feature is configured with an API key.
 - OpenAI API key stored as an environment secret, never in source.
-- Briefing generation can use `OPENAI_BRIEFING_API_KEY`, `OPENAI_BRIEFING_BASE_URL`, and `OPENAI_BRIEFING_MODEL`; see `README.md` and `backend/news_dashboard/briefings.py`.
+- Briefing generation uses `FREE_LLM_API_KEY` / `FREE_LLM_BASE_URL` (or the `OPENAI_API_KEY` fallback) and `OPENAI_BRIEFING_MODEL`; see `README.md` and `backend/news_dashboard/briefings.py`.
 
 ### Privacy/security boundaries
 

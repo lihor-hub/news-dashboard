@@ -82,7 +82,7 @@ export function BriefPage() {
             </div>
             <div className="text-xs text-muted-foreground mt-1">
               {generateError.kind === 'no_ai'
-                ? 'OPENAI_API_KEY is not set. Configure it in the app environment to enable briefings.'
+                ? 'FREE_LLM_API_KEY (or OPENAI_API_KEY) is not set. Configure it in the app environment to enable briefings.'
                 : 'The AI returned an unexpected response. Try again or review the raw feed.'}
             </div>
           </div>

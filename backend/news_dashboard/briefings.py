@@ -506,7 +506,7 @@ def generate_briefing(  # noqa: PLR0913
     when no eligible articles are found.
 
     Raises:
-        BriefingAINotConfiguredError: OPENAI_API_KEY is not set.
+        BriefingAINotConfiguredError: FREE_LLM_API_KEY (or OPENAI_API_KEY) is not set.
         BriefingGenerationError: AI returned an invalid or unparseable response
             on every attempt.
     """

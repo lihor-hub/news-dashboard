@@ -200,7 +200,7 @@ def test_get_share_returns_none_for_unauthorized(db: str) -> None:
 
 def test_generate_share_context_no_api_key(db: str, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
-    monkeypatch.delenv("OPENAI_BRIEFING_API_KEY", raising=False)
+    monkeypatch.delenv("FREE_LLM_API_KEY", raising=False)
 
     alice = _make_user(db, "alice")
     bob = _make_user(db, "bob")

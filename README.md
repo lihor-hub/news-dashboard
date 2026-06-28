@@ -30,7 +30,7 @@ optional OpenAI features for embeddings, Ask AI, and briefings.
 - Node.js and npm compatible with `package-lock.json`
 - PostgreSQL 16+
 - Docker and Docker Compose for the container flow
-- OpenAI API key for AI features
+- API key for AI features (`FREE_LLM_API_KEY` or `OPENAI_API_KEY`)
 
 ## Configuration
 
@@ -43,8 +43,9 @@ Runtime storage is PostgreSQL only. Set `DATABASE_URL` or the split
 | `POSTGRES_HOST`, `POSTGRES_PORT`, `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD` | PostgreSQL connection parts used when `DATABASE_URL` is unset. |
 | `SESSION_SECRET` | Signed session key. Generate with `python -c "import secrets; print(secrets.token_hex(32))"`. |
 | `BOOTSTRAP_ADMIN_USERNAME`, `BOOTSTRAP_ADMIN_PASSWORD` | First local admin account. Used only when no users exist. |
-| `OPENAI_API_KEY` | Enables embeddings, Ask AI, and briefings. |
-| `OPENAI_BRIEFING_BASE_URL`, `OPENAI_BRIEFING_API_KEY` | Point briefing generation at an OpenAI-compatible endpoint (e.g. a self-hosted gateway). Optional; falls back to `OPENAI_BASE_URL` / `OPENAI_API_KEY`. Pair with `OPENAI_BRIEFING_MODEL` (use `auto` for a routing gateway). |
+| `FREE_LLM_API_KEY`, `FREE_LLM_BASE_URL` | Primary API key and base URL for chat, embeddings, Ask AI, and briefings. Use these to point at a self-hosted OpenAI-compatible gateway. Falls back to `OPENAI_API_KEY` / `OPENAI_BASE_URL` when not set. |
+| `OPENAI_API_KEY`, `OPENAI_BASE_URL` | OpenAI credentials. Required for TTS/audio (not replaceable by the free LLM gateway). Also used as fallback for all other AI features when `FREE_LLM_API_KEY` is absent. |
+| `OPENAI_BRIEFING_MODEL` | Model name for briefing generation (e.g. `auto` for a routing gateway, or a specific model ID). Defaults to `gpt-4o-mini`. |
 | `LANGFUSE_HOST`, `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY` | Traces every OpenAI call (embeddings, Ask AI, briefings, insights, TTS, body fetch) in [Langfuse](https://langfuse.com), each tagged with a descriptive name (`ask-ai`, `briefing-generation`, …). Tracing activates only when both keys are set; otherwise the app uses a plain OpenAI client with no tracing. `LANGFUSE_BASE_URL` is accepted as an alias for `LANGFUSE_HOST`. |
 | `KEYCLOAK_AUTH_ENABLED`, `KEYCLOAK_SERVER_URL`, `KEYCLOAK_REALM`, `KEYCLOAK_CLIENT_ID`, `KEYCLOAK_CLIENT_SECRET` | Enables Keycloak. See [docs/KEYCLOAK_AUTH.md](docs/KEYCLOAK_AUTH.md). |
 | `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` | VAPID public and private keys for Web Push notifications. Generate using `npx web-push generate-vapid-keys`. |

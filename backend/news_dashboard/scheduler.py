@@ -104,7 +104,7 @@ def _run_briefing() -> None:
         else:
             logger.info("Scheduled briefing complete: id=%s", result.get("id"))
     except BriefingAINotConfiguredError:
-        logger.warning("Scheduled briefing skipped: OPENAI_API_KEY not configured.")
+        logger.warning("Briefing skipped: no AI key set (FREE_LLM_API_KEY / OPENAI_API_KEY).")
     except BriefingGenerationError:
         logger.exception("Scheduled briefing failed (generation error)")
     except Exception:
