@@ -1734,6 +1734,15 @@ def reading_dna_endpoint(
     return reading_dna(current_user["id"], days=days)
 
 
+@api.get("/api/users/me/export")
+def export_user_data(
+    current_user: Annotated[dict[str, Any], Depends(require_auth)],
+) -> dict[str, Any]:
+    from news_dashboard.export import assemble_user_export
+
+    return assemble_user_export(current_user["id"])
+
+
 @api.get("/api/users/me/recommendation-preferences")
 def get_recommendation_preferences_endpoint(
     current_user: Annotated[dict[str, Any], Depends(require_auth)],

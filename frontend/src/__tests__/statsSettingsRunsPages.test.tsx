@@ -15,6 +15,7 @@ const apiMock = vi.hoisted(() => ({
   fetchIngestRuns: vi.fn(),
   fetchIngestRunSources: vi.fn(),
   recalculateMyRecommendations: vi.fn(),
+  downloadUserExport: vi.fn(),
 }));
 vi.mock('../api', () => apiMock);
 vi.mock('@/api', () => apiMock);
@@ -193,6 +194,26 @@ describe('SettingsPage', () => {
     renderPage(<SettingsPage />);
     fireEvent.click(screen.getByText('Refresh recommendations'));
     await waitFor(() => expect(screen.getByText(/Couldn't refresh recommendations/)).toBeTruthy());
+  });
+
+  it('shows the export download button', () => {
+    renderPage(<SettingsPage />);
+    expect(screen.getByText('Download archive')).toBeTruthy();
+  });
+
+  it('calls downloadUserExport and shows success message', async () => {
+    apiMock.downloadUserExport.mockResolvedValue(undefined);
+    renderPage(<SettingsPage />);
+    fireEvent.click(screen.getByText('Download archive'));
+    await waitFor(() => expect(screen.getByText('Archive downloaded.')).toBeTruthy());
+    expect(apiMock.downloadUserExport).toHaveBeenCalledOnce();
+  });
+
+  it('shows an error message when export fails', async () => {
+    apiMock.downloadUserExport.mockRejectedValue(new Error('network error'));
+    renderPage(<SettingsPage />);
+    fireEvent.click(screen.getByText('Download archive'));
+    await waitFor(() => expect(screen.getByText('network error')).toBeTruthy());
   });
 });
 
