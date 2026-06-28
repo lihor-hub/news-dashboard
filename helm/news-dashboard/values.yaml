@@ -96,6 +96,17 @@ ingestCronJob:
   backoffLimit: 1
   # Optional cluster cleanup for finished Jobs. Leave empty to preserve history limits.
   ttlSecondsAfterFinished: ""
+  # Resource requests/limits for the ingest CronJob container.
+  # On a single-node deployment these prevent ingest spikes from crowding the app pod.
+  # Example override: helm upgrade --set ingestCronJob.resources.requests.cpu=100m
+  resources: {}
+  # resources:
+  #   requests:
+  #     cpu: 100m
+  #     memory: 256Mi
+  #   limits:
+  #     cpu: 500m
+  #     memory: 512Mi
 
 postgresql:
   enabled: true
@@ -105,6 +116,17 @@ postgresql:
   # Internal cluster password. Override in real environments.
   password: news-dashboard-local-password
   port: 5432
+  # Resource requests/limits for the bundled PostgreSQL StatefulSet container.
+  # On a single-node deployment these prevent Postgres memory spikes from crowding the app pod.
+  # Example override: helm upgrade --set postgresql.resources.requests.memory=256Mi
+  resources: {}
+  # resources:
+  #   requests:
+  #     cpu: 100m
+  #     memory: 256Mi
+  #   limits:
+  #     cpu: 500m
+  #     memory: 512Mi
   persistence:
     enabled: true
     size: 2Gi

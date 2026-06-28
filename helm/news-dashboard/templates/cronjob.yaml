@@ -40,6 +40,10 @@ spec:
                 runAsUser: 1000
                 runAsGroup: 1000
               command: ["news-dashboard", "scheduled-ingest"]
+              {{- with .Values.ingestCronJob.resources }}
+              resources:
+{{ toYaml . | indent 16 }}
+              {{- end }}
               env:
 {{- if .Values.postgresql.enabled }}
                 - name: POSTGRES_HOST
