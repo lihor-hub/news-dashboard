@@ -42,7 +42,7 @@ export function useArticleListNav(
       } else if (e.key === 'e' && cur) {
         mutations.setState(cur, 'archived', 'Archived');
       } else if (e.key === 'o' && cur) {
-        window.open(cur.url, '_blank');
+        window.open(cur.url, '_blank', 'noopener,noreferrer');
       }
     };
 

@@ -146,11 +146,11 @@ describe('useArticleListNav — action keys', () => {
     expect(mutations.setState).toHaveBeenCalledWith(article, 'archived', 'Archived');
   });
 
-  it('o opens original URL in new tab', () => {
+  it('o opens original URL in new tab with noopener,noreferrer', () => {
     const openSpy = vi.spyOn(window, 'open').mockImplementation(() => null);
     renderHook(() => useArticleListNav(articles, vi.fn(), mutations));
     act(() => fireKey('o'));
-    expect(openSpy).toHaveBeenCalledWith(article.url, '_blank');
+    expect(openSpy).toHaveBeenCalledWith(article.url, '_blank', 'noopener,noreferrer');
   });
 
   it('Enter calls openArticle', () => {
