@@ -86,6 +86,16 @@ app:
 ingestCronJob:
   enabled: true
   schedule: "17 */6 * * *"
+  # Keep private single-node ingestion serialized; skip new runs while one is active.
+  concurrencyPolicy: Forbid
+  # Allow one missed schedule window after node downtime, but avoid stale catch-up storms.
+  startingDeadlineSeconds: 1800
+  # Fail stuck ingest jobs visibly before the next six-hour schedule window.
+  activeDeadlineSeconds: 3600
+  # Retry once for transient pod failures without hiding persistent ingest problems.
+  backoffLimit: 1
+  # Optional cluster cleanup for finished Jobs. Leave empty to preserve history limits.
+  ttlSecondsAfterFinished: ""
 
 postgresql:
   enabled: true
