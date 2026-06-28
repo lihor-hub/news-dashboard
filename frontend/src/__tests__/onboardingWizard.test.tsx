@@ -243,6 +243,29 @@ describe('OnboardingWizard', () => {
     // Loading state should be visible
     expect(screen.getByTestId('onboarding-loading')).toBeTruthy();
   });
+
+  it('preselects recommended sources after recommendation data loads on step 2', async () => {
+    vi.spyOn(api, 'fetchOnboardingInterests').mockResolvedValue(MOCK_INTERESTS);
+    vi.spyOn(api, 'fetchOnboardingSourceRecommendations').mockResolvedValue(MOCK_RECOMMENDATIONS);
+    const save = vi.spyOn(api, 'saveOnboardingInterests').mockResolvedValue(undefined);
+    const onClose = vi.fn();
+    render(
+      <Wrapper>
+        <OnboardingWizard {...makeProps({ onClose })} />
+      </Wrapper>
+    );
+    await waitFor(() => expect(screen.getByText('Technology')).toBeTruthy());
+    fireEvent.click(screen.getByText('Technology'));
+    fireEvent.click(screen.getByRole('button', { name: /next/i }));
+    await waitFor(() => expect(screen.getByText('Hacker News')).toBeTruthy());
+    // Apply without manually selecting — recommended sources should already be selected
+    fireEvent.click(screen.getByRole('button', { name: /apply/i }));
+    await waitFor(() => expect(save).toHaveBeenCalled());
+    const payload = save.mock.calls[0][0];
+    // Both recommended sources should be in the enabled list
+    expect(payload.enabled_slugs).toContain('hn');
+    expect(payload.enabled_slugs).toContain('arxiv');
+  });
 });
 
 // ── API functions ─────────────────────────────────────────────────────────────

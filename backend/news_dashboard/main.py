@@ -948,11 +948,14 @@ def _source_recommendations(user_id: int, interests: list[str]) -> list[dict[str
             {
                 "source_slug": source.slug,
                 "source_name": source.name,
+                "kind": source.kind,
+                "url": source.url,
                 "category": source.category,
                 "matched_interests": matched,
                 "reason": reason,
                 "recommended": recommended,
                 "subscribed": subscriptions.get(source.slug, False),
+                "priority": source.priority,
                 "_score": score,
                 "_priority": source.priority,
             }
@@ -973,12 +976,123 @@ def _source_recommendations(user_id: int, interests: list[str]) -> list[dict[str
     return recommendations
 
 
+@api.get("/api/onboarding/status")
+def onboarding_status(
+    current_user: Annotated[dict[str, Any], Depends(require_auth)],
+) -> dict[str, Any]:
+    uid = int(current_user["id"])
+    init_db()
+    with connect() as conn:
+        row = conn.execute(
+            "SELECT completed_at FROM user_interest_profiles WHERE user_id = %s",
+            (uid,),
+        ).fetchone()
+    completed = row is not None and row["completed_at"] is not None
+    return {"completed": completed}
+
+
 @api.get("/api/onboarding/interests")
 def onboarding_interests(
     current_user: Annotated[dict[str, Any], Depends(require_auth)],
-) -> dict[str, Any]:
+) -> list[dict[str, Any]]:
     _ = current_user
-    return {"groups": list(INTEREST_GROUPS)}
+    return [
+        {"id": option["id"], "label": option["label"], "description": option.get("description", "")}
+        for group in INTEREST_GROUPS
+        for option in group["options"]
+    ]
+
+
+class OnboardingRecommendationsRequest(BaseModel):
+    interest_ids: list[str]
+
+
+class OnboardingProfileRequest(BaseModel):
+    interest_ids: list[str]
+    enabled_slugs: list[str] = Field(default_factory=list)
+
+
+def _frontend_recommendations(user_id: int, interests: list[str]) -> list[dict[str, Any]]:
+    """Return source recommendations using the frontend field-name contract (slug, name)."""
+    raw = _source_recommendations(user_id, interests)
+    return [
+        {
+            "slug": item["source_slug"],
+            "name": item["source_name"],
+            "category": item["category"],
+            "kind": item["kind"],
+            "url": item["url"],
+            "matched_interests": item["matched_interests"],
+            "reason": item["reason"],
+            "recommended": item["recommended"],
+            "enabled": 1 if item["subscribed"] else 0,
+            "priority": item["priority"],
+        }
+        for item in raw
+    ]
+
+
+@api.post("/api/onboarding/recommendations")
+def onboarding_recommendations(
+    payload: OnboardingRecommendationsRequest,
+    current_user: Annotated[dict[str, Any], Depends(require_auth)],
+) -> list[dict[str, Any]]:
+    uid = int(current_user["id"])
+    init_db()
+    return _frontend_recommendations(uid, payload.interest_ids)
+
+
+@api.post("/api/onboarding/profile")
+def save_onboarding_profile(
+    payload: OnboardingProfileRequest,
+    current_user: Annotated[dict[str, Any], Depends(require_auth)],
+) -> dict[str, Any]:
+    from news_dashboard.ingest import sync_sources
+
+    valid_interests = _interest_options()
+    interests = list(dict.fromkeys(payload.interest_ids))
+    invalid = [i for i in interests if i not in valid_interests]
+    if invalid:
+        raise HTTPException(status_code=400, detail=f"unknown interests: {', '.join(invalid)}")
+
+    uid = int(current_user["id"])
+    enabled_slugs = list(dict.fromkeys(payload.enabled_slugs))
+    sync_sources()
+    with connect() as conn:
+        if enabled_slugs:
+            rows = conn.execute(
+                "SELECT slug FROM sources WHERE owner_user_id IS NULL AND slug = ANY(%s)",
+                (enabled_slugs,),
+            ).fetchall()
+            allowed = {str(row["slug"]) for row in rows}
+            missing = [slug for slug in enabled_slugs if slug not in allowed]
+            if missing:
+                raise HTTPException(
+                    status_code=404, detail=f"unknown global sources: {', '.join(missing)}"
+                )
+
+        conn.execute(
+            """
+            INSERT INTO user_interest_profiles(user_id, interests, completed_at, updated_at)
+            VALUES (%s, %s, NOW(), NOW())
+            ON CONFLICT(user_id) DO UPDATE SET
+              interests = excluded.interests,
+              completed_at = NOW(),
+              updated_at = NOW()
+            """,
+            (uid, Jsonb(interests)),
+        )
+        for slug in enabled_slugs:
+            conn.execute(
+                """
+                INSERT INTO user_sources(user_id, source_slug, enabled)
+                VALUES (%s, %s, TRUE)
+                ON CONFLICT(user_id, source_slug) DO UPDATE SET enabled = TRUE
+                """,
+                (uid, slug),
+            )
+
+    return {"completed": True}
 
 
 @api.get("/api/onboarding/source-recommendations")

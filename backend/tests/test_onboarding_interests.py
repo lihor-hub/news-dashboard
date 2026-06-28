@@ -40,9 +40,102 @@ def test_onboarding_interest_options_are_stable(
         response = client.get("/api/onboarding/interests")
 
     assert response.status_code == 200
-    groups = response.json()["groups"]
-    option_ids = {option["id"] for group in groups for option in group["options"]}
+    items = response.json()
+    assert isinstance(items, list)
+    option_ids = {item["id"] for item in items}
     assert {"agents", "model-releases", "evals", "infra", "python", "cloud"} <= option_ids
+    for item in items:
+        assert "id" in item
+        assert "label" in item
+        assert "description" in item
+
+
+def test_onboarding_status_incomplete_for_new_user(
+    pg_clean: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("DATABASE_URL", pg_clean)
+    user_id = _make_user(pg_clean)
+
+    with _api_client(user_id) as client:
+        response = client.get("/api/onboarding/status")
+
+    assert response.status_code == 200
+    assert response.json() == {"completed": False}
+
+
+def test_onboarding_status_complete_after_profile_save(
+    pg_clean: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("DATABASE_URL", pg_clean)
+    sync_sources(pg_clean)
+    user_id = _make_user(pg_clean)
+
+    with _api_client(user_id) as client:
+        client.post(
+            "/api/onboarding/profile",
+            json={"interest_ids": ["agents"], "enabled_slugs": []},
+        )
+        response = client.get("/api/onboarding/status")
+
+    assert response.status_code == 200
+    assert response.json() == {"completed": True}
+
+
+def test_onboarding_recommendations_post_returns_ranked_sources(
+    pg_clean: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("DATABASE_URL", pg_clean)
+    sync_sources(pg_clean)
+    user_id = _make_user(pg_clean)
+
+    with _api_client(user_id) as client:
+        response = client.post(
+            "/api/onboarding/recommendations",
+            json={"interest_ids": ["agents", "python"]},
+        )
+
+    assert response.status_code == 200
+    items = response.json()
+    assert isinstance(items, list)
+    assert len(items) > 0
+    slugs = {item["slug"] for item in items}
+    assert "langgraph-releases" in slugs
+    first = items[0]
+    assert "slug" in first
+    assert "name" in first
+    assert "recommended" in first
+
+
+def test_save_onboarding_profile_persists_and_marks_complete(
+    pg_clean: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("DATABASE_URL", pg_clean)
+    sync_sources(pg_clean)
+    user_id = _make_user(pg_clean)
+
+    with _api_client(user_id) as client:
+        response = client.post(
+            "/api/onboarding/profile",
+            json={"interest_ids": ["agents", "python"], "enabled_slugs": ["langgraph-releases"]},
+        )
+
+    assert response.status_code == 200
+    assert response.json() == {"completed": True}
+    with connect(pg_clean) as conn:
+        profile = conn.execute(
+            "SELECT interests, completed_at FROM user_interest_profiles WHERE user_id = %s",
+            (user_id,),
+        ).fetchone()
+        sub = conn.execute(
+            "SELECT enabled FROM user_sources"
+            " WHERE user_id = %s AND source_slug = 'langgraph-releases'",
+            (user_id,),
+        ).fetchone()
+    assert profile is not None
+    assert profile["interests"] == ["agents", "python"]
+    assert profile["completed_at"] is not None
+    assert sub is not None
+    assert sub["enabled"] is True
 
 
 def test_onboarding_recommendations_rank_matches_and_subscription_state(

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Loader2 } from 'lucide-react';
 import {
@@ -29,6 +29,7 @@ export function OnboardingWizard({ open, onClose }: Props) {
   const [step, setStep] = useState<Step>('interests');
   const [selectedInterests, setSelectedInterests] = useState<Set<string>>(new Set());
   const [selectedSlugs, setSelectedSlugs] = useState<Set<string>>(new Set());
+  const didPreselect = useRef(false);
 
   const { data: interests, isLoading: loadingInterests } = useQuery({
     queryKey: ['onboarding-interests'],
@@ -43,6 +44,13 @@ export function OnboardingWizard({ open, onClose }: Props) {
     enabled: step === 'recommendations' && selectedInterests.size > 0,
     staleTime: Infinity,
   });
+
+  useEffect(() => {
+    if (step === 'recommendations' && !didPreselect.current && recommendations.length > 0) {
+      didPreselect.current = true;
+      setSelectedSlugs(new Set(recommendations.filter((r) => r.recommended).map((r) => r.slug)));
+    }
+  }, [step, recommendations]);
 
   const saveMutation = useMutation({
     mutationFn: saveOnboardingInterests,
@@ -85,10 +93,8 @@ export function OnboardingWizard({ open, onClose }: Props) {
     setStep('interests');
   }
 
-  // Pre-select recommended sources when moving to step 2
   function handleGoToRecommendations() {
-    const preselected = recommendations.filter((r) => r.recommended).map((r) => r.slug);
-    setSelectedSlugs(new Set(preselected));
+    didPreselect.current = false;
     setStep('recommendations');
   }
 
