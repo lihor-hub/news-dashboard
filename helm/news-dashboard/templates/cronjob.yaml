@@ -5,10 +5,23 @@ metadata:
   name: {{ include "news-dashboard.fullname" . }}-ingest
 spec:
   schedule: {{ .Values.ingestCronJob.schedule | quote }}
+  concurrencyPolicy: {{ .Values.ingestCronJob.concurrencyPolicy | default "Forbid" }}
+  {{- with .Values.ingestCronJob.startingDeadlineSeconds }}
+  startingDeadlineSeconds: {{ . }}
+  {{- end }}
   successfulJobsHistoryLimit: 2
   failedJobsHistoryLimit: 3
   jobTemplate:
     spec:
+      {{- with .Values.ingestCronJob.activeDeadlineSeconds }}
+      activeDeadlineSeconds: {{ . }}
+      {{- end }}
+      {{- with .Values.ingestCronJob.backoffLimit }}
+      backoffLimit: {{ . }}
+      {{- end }}
+      {{- with .Values.ingestCronJob.ttlSecondsAfterFinished }}
+      ttlSecondsAfterFinished: {{ . }}
+      {{- end }}
       template:
         spec:
           restartPolicy: OnFailure
