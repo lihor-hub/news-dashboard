@@ -88,4 +88,5 @@ spec:
     {{- fail "External PostgreSQL configuration is required when postgresql.enabled=false. Provide app.postgresExternal or app.databaseUrl." }}
   {{- end }}
 {{- end }}
+{{ include "news-dashboard.aiEnv" . | indent 16 }}
 {{- end }}

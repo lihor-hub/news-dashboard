@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import struct
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -130,6 +131,10 @@ def _insert_article(
     return int(row["id"])
 
 
+def _hours_ago(hours: int) -> str:
+    return (datetime.now(timezone.utc) - timedelta(hours=hours)).isoformat()
+
+
 def _set_state(
     db_path: str, user_id: int, article_id: int, *, state: str, starred: bool = False
 ) -> None:
@@ -166,12 +171,8 @@ def test_freshness_lifts_recent_article_over_older_twin(
     user_id = _make_user(db_path, "alice")
 
     # Two articles identical except for age; the recent one should score higher.
-    recent = _insert_article(
-        db_path, "src", "recent", importance=90, discovered_at="2026-06-21T09:00:00+00:00"
-    )
-    old = _insert_article(
-        db_path, "src", "old", importance=90, discovered_at="2026-05-01T09:00:00+00:00"
-    )
+    recent = _insert_article(db_path, "src", "recent", importance=90, discovered_at=_hours_ago(2))
+    old = _insert_article(db_path, "src", "old", importance=90, discovered_at=_hours_ago(1000))
 
     recompute_user_recommendations(user_id, db_path=db_path)
 
@@ -198,7 +199,7 @@ def test_novelty_contributes_positively_and_relevance_does_not_dominate(
         "src",
         "surprising",
         importance=95,
-        discovered_at="2026-06-21T09:30:00+00:00",
+        discovered_at=_hours_ago(2),
         embedding=[0.0, 1.0],
     )
 

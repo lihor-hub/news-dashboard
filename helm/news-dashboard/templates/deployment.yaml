@@ -81,46 +81,7 @@ spec:
     {{- fail "External PostgreSQL configuration is required when postgresql.enabled=false. Provide app.postgresExternal or app.databaseUrl." }}
   {{- end }}
 {{- end }}
-{{- if .Values.app.ai.existingSecret }}
-            - name: OPENAI_API_KEY
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .Values.app.ai.existingSecret | quote }}
-                  key: {{ .Values.app.ai.openaiApiKeyKey | quote }}
-                  optional: true
-            - name: FREE_LLM_API_KEY
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .Values.app.ai.existingSecret | quote }}
-                  key: {{ .Values.app.ai.freeLlmApiKeyKey | quote }}
-                  optional: true
-{{- end }}
-{{- if .Values.app.ai.freeLlmBaseUrl }}
-            - name: FREE_LLM_BASE_URL
-              value: {{ .Values.app.ai.freeLlmBaseUrl | quote }}
-{{- end }}
-{{- if .Values.app.ai.briefingModel }}
-            - name: OPENAI_BRIEFING_MODEL
-              value: {{ .Values.app.ai.briefingModel | quote }}
-{{- end }}
-{{- if .Values.app.ai.langfuse.host }}
-            - name: LANGFUSE_HOST
-              value: {{ .Values.app.ai.langfuse.host | quote }}
-{{- if .Values.app.ai.existingSecret }}
-            - name: LANGFUSE_PUBLIC_KEY
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .Values.app.ai.existingSecret | quote }}
-                  key: {{ .Values.app.ai.langfuse.publicKeyKey | default "LANGFUSE_PUBLIC_KEY" | quote }}
-                  optional: true
-            - name: LANGFUSE_SECRET_KEY
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .Values.app.ai.existingSecret | quote }}
-                  key: {{ .Values.app.ai.langfuse.secretKeyKey | default "LANGFUSE_SECRET_KEY" | quote }}
-                  optional: true
-{{- end }}
-{{- end }}
+{{ include "news-dashboard.aiEnv" . | indent 12 }}
 {{- if .Values.app.push }}
 {{- if .Values.app.push.existingSecret }}
             - name: VAPID_PUBLIC_KEY
