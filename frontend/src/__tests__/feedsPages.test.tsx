@@ -3,8 +3,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import type { ReactElement, ReactNode } from 'react';
-import type { Source } from '../types';
+import { useEffect, type ReactElement, type ReactNode } from 'react';
+import type { Source, User } from '../types';
+import { AuthProvider, useAuth } from '../contexts/auth';
 
 // ── Shared API mock ──────────────────────────────────────────────────────────
 // SourcesPage imports from '@/api', SchedulerPage from '../api'; both resolve to
@@ -39,13 +40,23 @@ import { FeedsLogsPage } from '../pages/FeedsLogsPage';
 import { SourcesPage } from '../pages/SourcesPage';
 import { SchedulerPage } from '../pages/SchedulerPage';
 
-function withProviders(ui: ReactElement, route = '/') {
+function SetUser({ user, children }: { user: User | null; children: ReactNode }) {
+  const { setUser } = useAuth();
+  useEffect(() => setUser(user), [user, setUser]);
+  return <>{children}</>;
+}
+
+function withProviders(ui: ReactElement, route = '/', user: User | null = null) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
   const wrapper = ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={client}>
-      <MemoryRouter initialEntries={[route]}>{children}</MemoryRouter>
+      <AuthProvider>
+        <SetUser user={user}>
+          <MemoryRouter initialEntries={[route]}>{children}</MemoryRouter>
+        </SetUser>
+      </AuthProvider>
     </QueryClientProvider>
   );
   return render(ui, { wrapper });
@@ -73,6 +84,9 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
+const adminUser: User = { id: 1, username: 'admin', is_admin: true };
+const regularUser: User = { id: 2, username: 'user', is_admin: false };
+
 // ── FeedsPage (pure layout) ──────────────────────────────────────────────────
 
 describe('FeedsPage', () => {
@@ -83,12 +97,45 @@ describe('FeedsPage', () => {
           <Route index element={<div>child content</div>} />
         </Route>
       </Routes>,
-      '/feeds'
+      '/feeds',
+      adminUser
     );
     expect(screen.getByRole('heading', { name: 'Feeds' })).toBeTruthy();
     expect(screen.getByText('Sources')).toBeTruthy();
     expect(screen.getByText('Schedule')).toBeTruthy();
     expect(screen.getByText('child content')).toBeTruthy();
+  });
+
+  it('shows all tabs to admin users', () => {
+    withProviders(
+      <Routes>
+        <Route path="/feeds" element={<FeedsPage />}>
+          <Route index element={<div>child content</div>} />
+        </Route>
+      </Routes>,
+      '/feeds',
+      adminUser
+    );
+    expect(screen.getByText('Sources')).toBeTruthy();
+    expect(screen.getByText('Schedule')).toBeTruthy();
+    expect(screen.getByText('Runs')).toBeTruthy();
+    expect(screen.getByText('Logs')).toBeTruthy();
+  });
+
+  it('hides Schedule, Runs, and Logs tabs from non-admin users', () => {
+    withProviders(
+      <Routes>
+        <Route path="/feeds" element={<FeedsPage />}>
+          <Route index element={<div>child content</div>} />
+        </Route>
+      </Routes>,
+      '/feeds',
+      regularUser
+    );
+    expect(screen.getByText('Sources')).toBeTruthy();
+    expect(screen.queryByText('Schedule')).toBeNull();
+    expect(screen.queryByText('Runs')).toBeNull();
+    expect(screen.queryByText('Logs')).toBeNull();
   });
 });
 

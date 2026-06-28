@@ -72,11 +72,13 @@ function renderPalette(open = true) {
   const qc = makeQc();
   return render(
     <QueryClientProvider client={qc}>
-      <MemoryRouter>
-        <FocusedArticleProvider>
-          <CommandPalette open={open} onOpenChange={vi.fn()} />
-        </FocusedArticleProvider>
-      </MemoryRouter>
+      <AuthProvider>
+        <MemoryRouter>
+          <FocusedArticleProvider>
+            <CommandPalette open={open} onOpenChange={vi.fn()} />
+          </FocusedArticleProvider>
+        </MemoryRouter>
+      </AuthProvider>
     </QueryClientProvider>
   );
 }

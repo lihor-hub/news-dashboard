@@ -4,8 +4,11 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { useEffect, type ReactNode } from 'react';
 import { CommandPalette } from '../components/CommandPalette';
 import { FocusedArticleProvider } from '../contexts/focusedArticle';
+import { AuthProvider, useAuth } from '../contexts/auth';
+import type { User } from '../types';
 import * as api from '../api';
 
 // Silence sonner in tests
@@ -27,16 +30,29 @@ vi.mock('../hooks/useTriageMutations', () => ({
   ARTICLES_KEY: 'articles',
 }));
 
-function Wrapper({ children }: { children: React.ReactNode }) {
+function SetUser({ user, children }: { user: User | null; children: ReactNode }) {
+  const { setUser } = useAuth();
+  useEffect(() => setUser(user), [user, setUser]);
+  return <>{children}</>;
+}
+
+function Wrapper({ children, user = null }: { children: React.ReactNode; user?: User | null }) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return (
     <QueryClientProvider client={qc}>
-      <MemoryRouter>
-        <FocusedArticleProvider>{children}</FocusedArticleProvider>
-      </MemoryRouter>
+      <AuthProvider>
+        <SetUser user={user}>
+          <MemoryRouter>
+            <FocusedArticleProvider>{children}</FocusedArticleProvider>
+          </MemoryRouter>
+        </SetUser>
+      </AuthProvider>
     </QueryClientProvider>
   );
 }
+
+const adminUser: User = { id: 1, username: 'admin', is_admin: true };
+const regularUser: User = { id: 2, username: 'user', is_admin: false };
 
 // ─── CommandPalette ───────────────────────────────────────────────────────────
 
@@ -85,13 +101,22 @@ describe('CommandPalette — navigation items', () => {
     expect(screen.getByText('Archive')).toBeTruthy();
   });
 
-  it('shows "Refresh feeds now" action', () => {
+  it('shows "Refresh feeds now" action to admin users', () => {
     render(
-      <Wrapper>
+      <Wrapper user={adminUser}>
         <CommandPalette open={true} onOpenChange={vi.fn()} />
       </Wrapper>
     );
     expect(screen.getByText(/refresh feeds now/i)).toBeTruthy();
+  });
+
+  it('hides "Refresh feeds now" action from non-admin users', () => {
+    render(
+      <Wrapper user={regularUser}>
+        <CommandPalette open={true} onOpenChange={vi.fn()} />
+      </Wrapper>
+    );
+    expect(screen.queryByText(/refresh feeds now/i)).toBeNull();
   });
 
   it('shows keyboard shortcuts item when onShortcuts provided', () => {
@@ -157,11 +182,11 @@ describe('CommandPalette — article search', () => {
 });
 
 describe('CommandPalette — ingest action', () => {
-  it('calls ingestNow when "Refresh feeds now" is selected', async () => {
+  it('calls ingestNow when "Refresh feeds now" is selected by admin', async () => {
     const ingestSpy = vi.spyOn(api, 'ingestNow').mockResolvedValue({ inserted: 3, results: {} });
     const onOpenChange = vi.fn();
     render(
-      <Wrapper>
+      <Wrapper user={adminUser}>
         <CommandPalette open={true} onOpenChange={onOpenChange} />
       </Wrapper>
     );

@@ -20,6 +20,7 @@ import { searchArticles, ingestNow } from '@/api';
 import { adaptArticle } from '@/api/workflowApi';
 import { useTriageMutations } from '@/hooks/useTriageMutations';
 import { useFocusedArticle } from '@/contexts/focusedArticle';
+import { useAuth } from '@/contexts/auth';
 import type { WorkflowArticle } from '@/lib/workflowTypes';
 import { commandNavigationItems } from '@/lib/navigation';
 import { trackFeature } from '@/lib/analytics';
@@ -40,6 +41,7 @@ export function CommandPalette({ open, onOpenChange, onShortcuts }: Props) {
   const navigate = useNavigate();
   const mutations = useTriageMutations();
   const { article: focusedArticle } = useFocusedArticle();
+  const { user } = useAuth();
 
   const [q, setQ] = useState('');
   const [searchResults, setSearchResults] = useState<WorkflowArticle[]>([]);
@@ -252,15 +254,17 @@ export function CommandPalette({ open, onOpenChange, onShortcuts }: Props) {
 
             {/* App actions */}
             <Command.Group heading="Actions" className={GROUP_CLS}>
-              <Command.Item
-                onSelect={() => {
-                  void handleIngest();
-                }}
-                className={ITEM_CLS}
-              >
-                <RefreshCw className="size-4 text-muted-foreground" />
-                <span className="text-sm">Refresh feeds now</span>
-              </Command.Item>
+              {user?.is_admin && (
+                <Command.Item
+                  onSelect={() => {
+                    void handleIngest();
+                  }}
+                  className={ITEM_CLS}
+                >
+                  <RefreshCw className="size-4 text-muted-foreground" />
+                  <span className="text-sm">Refresh feeds now</span>
+                </Command.Item>
+              )}
               {onShortcuts && (
                 <Command.Item
                   onSelect={() => {

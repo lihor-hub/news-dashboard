@@ -5,6 +5,7 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { FocusedArticleProvider } from '../contexts/focusedArticle';
+import { AuthProvider } from '../contexts/auth';
 import { CommandPalette } from '../components/CommandPalette';
 import * as api from '../api';
 import type { Article } from '../types';
@@ -53,21 +54,23 @@ function renderPalette() {
 
   return render(
     <QueryClientProvider client={queryClient}>
-      <MemoryRouter initialEntries={['/search']}>
-        <FocusedArticleProvider>
-          <Routes>
-            <Route
-              path="*"
-              element={
-                <>
-                  <LocationProbe />
-                  <CommandPalette open={true} onOpenChange={vi.fn()} />
-                </>
-              }
-            />
-          </Routes>
-        </FocusedArticleProvider>
-      </MemoryRouter>
+      <AuthProvider>
+        <MemoryRouter initialEntries={['/search']}>
+          <FocusedArticleProvider>
+            <Routes>
+              <Route
+                path="*"
+                element={
+                  <>
+                    <LocationProbe />
+                    <CommandPalette open={true} onOpenChange={vi.fn()} />
+                  </>
+                }
+              />
+            </Routes>
+          </FocusedArticleProvider>
+        </MemoryRouter>
+      </AuthProvider>
     </QueryClientProvider>
   );
 }

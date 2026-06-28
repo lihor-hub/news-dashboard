@@ -479,7 +479,7 @@ def auth_me(current_user: Annotated[dict[str, Any], Depends(require_auth)]) -> d
     }
 
 
-@api.post("/api/ingest")
+@api.post("/api/ingest", dependencies=[Depends(require_admin)])
 def ingest(background_tasks: BackgroundTasks) -> dict[str, Any]:
     results = ingest_all()
     inserted = sum(v for v in results.values() if v > 0)

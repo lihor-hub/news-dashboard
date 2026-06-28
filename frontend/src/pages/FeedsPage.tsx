@@ -1,15 +1,18 @@
 import { Outlet, NavLink, useLocation } from 'react-router-dom';
 import { cn } from '@/lib/utils';
+import { useAuth } from '@/contexts/auth';
 
-const TABS = [
-  { to: '/feeds', label: 'Sources', exact: true },
-  { to: '/feeds/schedule', label: 'Schedule' },
-  { to: '/feeds/runs', label: 'Runs' },
-  { to: '/feeds/logs', label: 'Logs' },
+const ALL_TABS = [
+  { to: '/feeds', label: 'Sources', exact: true, adminOnly: false },
+  { to: '/feeds/schedule', label: 'Schedule', adminOnly: true },
+  { to: '/feeds/runs', label: 'Runs', adminOnly: true },
+  { to: '/feeds/logs', label: 'Logs', adminOnly: true },
 ];
 
 export function FeedsPage() {
   const { pathname } = useLocation();
+  const { user } = useAuth();
+  const tabs = ALL_TABS.filter((t) => !t.adminOnly || user?.is_admin);
   return (
     <div>
       <div className="px-4 md:px-5 pt-4">
@@ -20,7 +23,7 @@ export function FeedsPage() {
       </div>
       <div className="px-4 md:px-5 mt-3 border-b border-border overflow-x-auto">
         <div className="flex gap-1">
-          {TABS.map((t) => {
+          {tabs.map((t) => {
             const active = t.exact ? pathname === t.to : pathname === t.to;
             return (
               <NavLink
