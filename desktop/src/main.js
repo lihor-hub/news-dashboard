@@ -100,11 +100,24 @@ function createWindow() {
 
 // ── Native notification IPC ───────────────────────────────────────────────────
 
-ipcMain.on('notification:show', (_event, { title, body }) => {
+// Keep a reference to the most-recently focused window so notification clicks
+// can bring it forward and load the target route.
+let mainWindow = null;
+
+ipcMain.on('notification:show', (_event, { title, body, targetUrl }) => {
   const { Notification } = require('electron');
-  if (Notification.isSupported()) {
-    new Notification({ title: String(title), body: String(body) }).show();
+  if (!Notification.isSupported()) return;
+  const n = new Notification({ title: String(title), body: String(body) });
+  if (targetUrl && typeof targetUrl === 'string') {
+    n.on('click', () => {
+      if (mainWindow) {
+        if (mainWindow.isMinimized()) mainWindow.restore();
+        mainWindow.focus();
+        mainWindow.webContents.send('notification:clicked', targetUrl);
+      }
+    });
   }
+  n.show();
 });
 
 // ── Auto-updater IPC bridge ───────────────────────────────────────────────────
@@ -225,12 +238,14 @@ ipcMain.on('get-app-version', (event) => {
 
 app.whenReady().then(() => {
   const win = createWindow();
+  mainWindow = win;
   Menu.setApplicationMenu(buildMenu(win));
   setupUpdater(win);
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
       const w = createWindow();
+      mainWindow = w;
       Menu.setApplicationMenu(buildMenu(w));
       setupUpdater(w);
     }

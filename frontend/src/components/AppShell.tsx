@@ -10,6 +10,7 @@ import { WhatsNewDialog } from './WhatsNewDialog';
 import { OnboardingWizard } from './OnboardingWizard';
 import { useWhatsNew } from '@/hooks/useWhatsNew';
 import { useOnboardingWizard } from '@/hooks/useOnboardingWizard';
+import { useElectronBriefNotifier } from '@/hooks/useElectronBriefNotifier';
 import { cn } from '@/lib/utils';
 import { fetchSummary, fetchSharesUnreadCount, logoutUser } from '@/api';
 import { startAnalytics, stopAnalytics, trackRoute } from '@/lib/analytics';
@@ -138,6 +139,7 @@ export function AppShell() {
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const whatsNew = useWhatsNew();
   const onboarding = useOnboardingWizard();
+  useElectronBriefNotifier(navigate);
 
   async function handleLogout() {
     await logoutUser();

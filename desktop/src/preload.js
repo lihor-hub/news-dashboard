@@ -49,5 +49,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // ── Native notifications ──────────────────────────────────────────────────
 
-  showNotification: (title, body) => ipcRenderer.send('notification:show', { title, body }),
+  showNotification: (title, body, targetUrl) =>
+    ipcRenderer.send('notification:show', { title, body, targetUrl }),
+
+  onNotificationClick: (cb) =>
+    ipcRenderer.on('notification:clicked', (_e, url) => cb(url)),
+
+  removeNotificationClickListener: () =>
+    ipcRenderer.removeAllListeners('notification:clicked'),
 });
