@@ -65,6 +65,18 @@ docker compose up --build
 
 Open [http://localhost:8080](http://localhost:8080).
 
+Log in with the default local-development credentials:
+
+| Field | Default value |
+| --- | --- |
+| Username | `admin` |
+| Password | `change-me` |
+
+> **These are local-development defaults only.** Before deploying anywhere
+> outside your own machine, set `SESSION_SECRET`, `BOOTSTRAP_ADMIN_USERNAME`,
+> and `BOOTSTRAP_ADMIN_PASSWORD` to strong, unique values via environment
+> variables or a `.env` file — never use these defaults in production.
+
 Run ingestion in the app container:
 
 ```bash
