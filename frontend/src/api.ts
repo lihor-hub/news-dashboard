@@ -634,3 +634,14 @@ export async function dismissPersonalizationNudge(
     body: JSON.stringify({ nudge_id: nudgeId, cooldown_days: cooldownDays }),
   });
 }
+
+export async function downloadUserExport(): Promise<void> {
+  const data = await requestJson<unknown>('/api/users/me/export');
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `reading-archive-${new Date().toISOString().slice(0, 10)}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
