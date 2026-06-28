@@ -363,7 +363,7 @@ export function ArticlePage() {
       else if (e.key === 's' && article) void doStar();
       else if (e.key === 'x' && article) void doAction('skipped', 'Skipped');
       else if (e.key === 'e' && article) void doAction('archived', 'Archived');
-      else if (e.key === 'o' && article) window.open(article.url, '_blank');
+      else if (e.key === 'o' && article) window.open(article.url, '_blank', 'noopener,noreferrer');
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);

@@ -352,6 +352,31 @@ describe('ArticlePage — back navigation', () => {
   });
 });
 
+// ─── Keyboard shortcuts ───────────────────────────────────────────────────────
+
+describe('ArticlePage — keyboard shortcuts', () => {
+  beforeEach(() => {
+    vi.spyOn(api, 'fetchArticle').mockResolvedValue(
+      makeArticle({ body_status: 'ok', body: 'Text' })
+    );
+    vi.spyOn(api, 'fetchArticleBody').mockResolvedValue(
+      makeArticle({ body_status: 'ok', body: 'Text' })
+    );
+  });
+
+  it('o opens article URL in new tab with noopener,noreferrer', async () => {
+    const openSpy = vi.spyOn(window, 'open').mockImplementation(() => null);
+    renderReader();
+    await waitFor(() => screen.getByText('Test Article Title'));
+    fireEvent.keyDown(window, { key: 'o' });
+    expect(openSpy).toHaveBeenCalledWith(
+      'https://example.com/article',
+      '_blank',
+      'noopener,noreferrer'
+    );
+  });
+});
+
 // ─── Touch gesture handling ────────────────────────────────────────────────────
 
 describe('ArticlePage — touch gesture state', () => {
