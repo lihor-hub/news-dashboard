@@ -221,7 +221,50 @@ jobs:
           fi
           echo "All test lanes passed (backend=$backend, frontend=$frontend)"
 
-  # ── 6. PUBLISH ─────────────────────────────────────────────────────────────
+  # ── 6. HELM VALIDATE ───────────────────────────────────────────────────────
+  # Lints and renders the Helm chart with default and production-like values.
+  # Runs on every push/PR so a broken template fails well before the deploy job.
+  # No live cluster is required — this is render/lint only.
+  helm-validate:
+    name: Helm chart validation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: azure/setup-helm@v4
+        with:
+          version: latest
+
+      - name: helm lint
+        run: helm lint ./helm/news-dashboard
+
+      - name: helm template (defaults)
+        run: helm template news-dashboard ./helm/news-dashboard
+
+      - name: helm template (production-like overrides)
+        run: |
+          helm template news-dashboard ./helm/news-dashboard \
+            --set "image.repository=ghcr.io/ioachim-hub/news-dashboard" \
+            --set "image.tag=abc1234" \
+            --set "image.pullSecretName=ghcr-pull-secret" \
+            --set "service.type=NodePort" \
+            --set "service.nodePort=30088" \
+            --set "postgresql.persistence.hostPath=/home/ioachim-minipc/news-dashboard-postgres-data" \
+            --set-string "app.auth.sessionSecret=dummy-session-secret-for-render-only" \
+            --set "app.ai.existingSecret=news-dashboard-ai" \
+            --set "app.push.existingSecret=news-dashboard-push" \
+            --set-string "app.ai.freeLlmBaseUrl=http://192.168.0.75:9130/v1" \
+            --set-string "app.ai.briefingModel=gpt-4o" \
+            --set-string "app.ai.langfuse.host=http://langfuse.local" \
+            --set-string "app.push.email=test@example.com"
+
+      - name: helm template (external postgresql)
+        run: |
+          helm template news-dashboard ./helm/news-dashboard \
+            --set "postgresql.enabled=false" \
+            --set "app.databaseUrl.existingSecret=news-dashboard-db"
+
+  # ── 7. PUBLISH ─────────────────────────────────────────────────────────────
   # Builds one image and pushes two tags:
   #   :<sha>    — immutable, pinned to this exact commit; used by the deploy step
   #   :latest   — floating convenience tag for manual pulls / rollback reference
@@ -234,7 +277,7 @@ jobs:
   # packages:write by default for the repo that owns the package.
   publish:
     name: Build & push image
-    needs: [lint, test]
+    needs: [lint, test, helm-validate]
     runs-on: ubuntu-latest
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     outputs:
@@ -328,7 +371,7 @@ jobs:
             ${{ env.IMAGE }}:${{ github.sha }}
             ${{ env.IMAGE }}:latest
 
-  # ── 7. DEPLOY ──────────────────────────────────────────────────────────────
+  # ── 8. DEPLOY ──────────────────────────────────────────────────────────────
   # Runs directly on the self-hosted runner (the mini PC itself) — no SSH hop
   # needed. The runner process on the mini PC picks up the job and executes
   # the deploy commands locally.
