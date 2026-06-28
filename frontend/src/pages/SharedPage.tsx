@@ -68,7 +68,7 @@ export function SharedPage() {
               </div>
 
               <Link
-                to={`/a/${s.article_id}`}
+                to={`/shared/${s.id}`}
                 className="mt-1 block font-medium text-foreground hover:underline"
               >
                 {s.article_title}
@@ -77,13 +77,13 @@ export function SharedPage() {
 
               {s.note ? (
                 <div className="mt-2 rounded-md bg-surface-2 px-2.5 py-1.5 text-sm text-foreground">
-                  “{s.note}”
+                  "{s.note}"
                 </div>
               ) : null}
 
               <div className="mt-2 flex items-center gap-3 text-xs">
-                <Link to={`/a/${s.article_id}`} className="text-accent-foreground hover:underline">
-                  Read
+                <Link to={`/shared/${s.id}`} className="text-accent-foreground hover:underline">
+                  View
                 </Link>
                 <a
                   href={s.article_url}
