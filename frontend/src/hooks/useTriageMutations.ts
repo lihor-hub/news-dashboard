@@ -102,6 +102,13 @@ function settleArticleCaches(queryClient: ReturnType<typeof useQueryClient>) {
   void queryClient.invalidateQueries({ queryKey: ['summary'] });
 }
 
+function triageErrorMessage(err: unknown): string {
+  const detail = err instanceof Error && err.message ? err.message : null;
+  return detail
+    ? `Action failed — ${detail}. Changes reverted.`
+    : 'Action failed — changes reverted';
+}
+
 // ─── Hook ───────────────────────────────────────────────────────────────────
 
 export function useTriageMutations() {
@@ -128,10 +135,10 @@ export function useTriageMutations() {
       return { snap, querySnapshots };
     },
 
-    onError: (_err, _vars, context) => {
+    onError: (err, _vars, context) => {
       if (context?.querySnapshots) restoreQuerySnapshots(queryClient, context.querySnapshots);
       else if (context?.snap) restoreToCache(queryClient, context.snap.article);
-      toast.error('Action failed — changes reverted', { id: TRIAGE_TOAST_ID });
+      toast.error(triageErrorMessage(err), { id: TRIAGE_TOAST_ID });
     },
 
     onSettled: () => {
@@ -154,10 +161,10 @@ export function useTriageMutations() {
       return { snap, querySnapshots };
     },
 
-    onError: (_err, _vars, context) => {
+    onError: (err, _vars, context) => {
       if (context?.querySnapshots) restoreQuerySnapshots(queryClient, context.querySnapshots);
       else if (context?.snap) restoreToCache(queryClient, context.snap.article);
-      toast.error('Action failed — changes reverted', { id: TRIAGE_TOAST_ID });
+      toast.error(triageErrorMessage(err), { id: TRIAGE_TOAST_ID });
     },
 
     onSettled: () => {
@@ -179,10 +186,10 @@ export function useTriageMutations() {
       return { snap, querySnapshots };
     },
 
-    onError: (_err, _vars, context) => {
+    onError: (err, _vars, context) => {
       if (context?.querySnapshots) restoreQuerySnapshots(queryClient, context.querySnapshots);
       else if (context?.snap) restoreToCache(queryClient, context.snap.article);
-      toast.error('Action failed — changes reverted', { id: TRIAGE_TOAST_ID });
+      toast.error(triageErrorMessage(err), { id: TRIAGE_TOAST_ID });
     },
 
     onSettled: () => {

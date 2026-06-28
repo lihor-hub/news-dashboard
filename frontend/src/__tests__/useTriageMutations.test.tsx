@@ -252,6 +252,112 @@ describe('useTriageMutations — undo calls the API to revert server state', () 
   });
 });
 
+describe('useTriageMutations — surfaces backend error details in error toast', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    patchArticleStatePromise = Promise.resolve({});
+  });
+
+  it('setState shows backend error detail and reverted message on API failure', async () => {
+    patchArticleStatePromise = Promise.reject(
+      new Error("transition 'later' → 'skipped' is not allowed")
+    );
+    const { wrapper } = makeWrapper();
+    const { result } = renderHook(() => useTriageMutations(), { wrapper });
+    const article = makeArticle({ state: 'later', starred: false });
+
+    await act(async () => {
+      result.current.setState(article, 'skipped', 'Skipped');
+      await patchArticleStatePromise.catch(() => undefined);
+    });
+
+    await waitFor(() => {
+      expect(vi.mocked(toast).error).toHaveBeenCalledWith(
+        "Action failed — transition 'later' → 'skipped' is not allowed. Changes reverted.",
+        { id: 'triage' }
+      );
+    });
+  });
+
+  it('setState falls back to generic message when error has no detail', async () => {
+    patchArticleStatePromise = Promise.reject(new Error(''));
+    const { wrapper } = makeWrapper();
+    const { result } = renderHook(() => useTriageMutations(), { wrapper });
+    const article = makeArticle({ state: 'today', starred: false });
+
+    await act(async () => {
+      result.current.setState(article, 'done', 'Marked as read');
+      await patchArticleStatePromise.catch(() => undefined);
+    });
+
+    await waitFor(() => {
+      expect(vi.mocked(toast).error).toHaveBeenCalledWith('Action failed — changes reverted', {
+        id: 'triage',
+      });
+    });
+  });
+
+  it('setState restores cache after error with backend detail message', async () => {
+    patchArticleStatePromise = Promise.reject(new Error('some backend error'));
+    const { wrapper, queryClient } = makeWrapper();
+    const { result } = renderHook(() => useTriageMutations(), { wrapper });
+    const article = makeArticle({ state: 'today' });
+    queryClient.setQueryData([ARTICLES_KEY, 'today'], [article]);
+
+    await act(async () => {
+      result.current.setState(article, 'done', 'Marked as read');
+      await patchArticleStatePromise.catch(() => undefined);
+    });
+
+    await waitFor(() => {
+      const cached = queryClient.getQueryData<WorkflowArticle[]>([ARTICLES_KEY, 'today']);
+      expect(cached?.some((a) => a.id === article.id)).toBe(true);
+    });
+  });
+
+  it('starMutation surfaces backend error detail', async () => {
+    vi.mocked(workflowApi.patchArticleStar).mockRejectedValueOnce(
+      new Error('star update rejected by server')
+    );
+    const { wrapper } = makeWrapper();
+    const { result } = renderHook(() => useTriageMutations(), { wrapper });
+    const article = makeArticle({ starred: false });
+
+    await act(async () => {
+      result.current.toggleStar(article);
+      await Promise.resolve();
+    });
+
+    await waitFor(() => {
+      expect(vi.mocked(toast).error).toHaveBeenCalledWith(
+        'Action failed — star update rejected by server. Changes reverted.',
+        { id: 'triage' }
+      );
+    });
+  });
+
+  it('sendLaterMutation surfaces backend error detail', async () => {
+    vi.mocked(workflowApi.patchArticleLater).mockRejectedValueOnce(
+      new Error('snooze window not allowed')
+    );
+    const { wrapper } = makeWrapper();
+    const { result } = renderHook(() => useTriageMutations(), { wrapper });
+    const article = makeArticle({ state: 'today' });
+
+    await act(async () => {
+      result.current.sendLater(article, 1);
+      await Promise.resolve();
+    });
+
+    await waitFor(() => {
+      expect(vi.mocked(toast).error).toHaveBeenCalledWith(
+        'Action failed — snooze window not allowed. Changes reverted.',
+        { id: 'triage' }
+      );
+    });
+  });
+});
+
 describe('useTriageMutations — settles caches without a full article refetch', () => {
   beforeEach(() => {
     vi.clearAllMocks();
