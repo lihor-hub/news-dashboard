@@ -353,17 +353,46 @@ def cluster_recent_articles(
     init_db(database_url=database_url)
 
     with connect(database_url=database_url) as conn:
-        rows = conn.execute(
-            """
-            SELECT id, title, url, summary, category, embedding
-            FROM articles
-            WHERE discovered_at::timestamptz >= NOW() - INTERVAL '7 days'
-              AND embedding IS NOT NULL
-            ORDER BY discovered_at DESC
-            LIMIT %s
-            """,
-            (_MAX_ARTICLES,),
-        ).fetchall()
+        if user_id is None:
+            rows = conn.execute(
+                """
+                SELECT id, title, url, summary, category, embedding
+                FROM articles
+                WHERE discovered_at::timestamptz >= NOW() - INTERVAL '7 days'
+                  AND embedding IS NOT NULL
+                ORDER BY discovered_at DESC
+                LIMIT %s
+                """,
+                (_MAX_ARTICLES,),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                """
+                SELECT a.id, a.title, a.url, a.summary, a.category, a.embedding
+                FROM articles a
+                JOIN sources src ON src.slug = a.source_slug
+                LEFT JOIN user_sources us
+                  ON us.source_slug = src.slug AND us.user_id = %s
+                LEFT JOIN user_article_state uas
+                  ON uas.article_id = a.id AND uas.user_id = %s
+                WHERE a.discovered_at::timestamptz >= NOW() - INTERVAL '7 days'
+                  AND a.embedding IS NOT NULL
+                  AND COALESCE(uas.state, 'today') != 'archived'
+                  AND (
+                    (
+                      src.owner_user_id IS NULL
+                      AND COALESCE(us.enabled, TRUE) IS TRUE
+                    )
+                    OR (
+                      src.owner_user_id = %s
+                      AND src.enabled IS TRUE
+                    )
+                  )
+                ORDER BY a.discovered_at DESC
+                LIMIT %s
+                """,
+                (user_id, user_id, user_id, _MAX_ARTICLES),
+            ).fetchall()
 
     if not rows:
         return []

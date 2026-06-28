@@ -513,6 +513,150 @@ def _seed_articles_with_embeddings(pg_url: str, groups: list[list[list[float]]])
     return ids
 
 
+def _seed_topic_map_article(
+    pg_url: str,
+    *,
+    source_slug: str,
+    title: str,
+    url_slug: str,
+    embedding: bytes,
+) -> int:
+    with connect(database_url=pg_url) as conn:
+        row = conn.execute(
+            """
+            INSERT INTO articles(
+              url, canonical_url, title, source_slug, source_name,
+              category, kind, summary, embedding, discovered_at
+            )
+            VALUES (
+              %s, %s, %s, %s, %s, 'tech', 'rss_feed', %s, %s, NOW()
+            )
+            RETURNING id
+            """,
+            (
+                f"https://example.com/topic-map/{url_slug}",
+                f"https://example.com/topic-map/{url_slug}",
+                title,
+                source_slug,
+                source_slug,
+                f"Summary for {title}",
+                embedding,
+            ),
+        ).fetchone()
+    assert row is not None
+    return int(row["id"])
+
+
+def test_cluster_recent_articles_scopes_corpus_to_user_visible_articles(pg_clean: str) -> None:
+    """Topic Map must not leak titles or summaries from articles hidden from the user."""
+    vec = _pack_vec(_normalize([1.0, 0.01, 0.02, 0.03]))
+
+    with connect(database_url=pg_clean) as conn:
+        user_row = conn.execute(
+            "INSERT INTO users(username, password_hash) VALUES ('scoped-user', 'x') RETURNING id"
+        ).fetchone()
+        other_user_row = conn.execute(
+            "INSERT INTO users(username, password_hash) VALUES ('other-user', 'x') RETURNING id"
+        ).fetchone()
+        assert user_row is not None
+        assert other_user_row is not None
+        user_id = int(user_row["id"])
+        other_user_id = int(other_user_row["id"])
+
+        conn.execute(
+            """
+            INSERT INTO sources(slug, name, url, category, kind, owner_user_id)
+            VALUES
+              (
+                'visible-global', 'Visible Global', 'https://visible.example',
+                'tech', 'rss_feed', NULL
+              ),
+              (
+                'disabled-global', 'Disabled Global', 'https://disabled.example',
+                'tech', 'rss_feed', NULL
+              ),
+              ('owned-private', 'Owned Private', 'https://owned.example', 'tech', 'rss_feed', %s),
+              ('other-private', 'Other Private', 'https://other.example', 'tech', 'rss_feed', %s)
+            """,
+            (user_id, other_user_id),
+        )
+        conn.execute(
+            """
+            INSERT INTO user_sources(user_id, source_slug, enabled)
+            VALUES (%s, 'disabled-global', FALSE)
+            """,
+            (user_id,),
+        )
+
+    visible_ids = [
+        _seed_topic_map_article(
+            pg_clean,
+            source_slug="visible-global",
+            title=f"Visible global {idx}",
+            url_slug=f"visible-global-{idx}",
+            embedding=vec,
+        )
+        for idx in range(3)
+    ]
+    visible_ids.append(
+        _seed_topic_map_article(
+            pg_clean,
+            source_slug="owned-private",
+            title="Owned private visible",
+            url_slug="owned-private",
+            embedding=vec,
+        )
+    )
+    disabled_id = _seed_topic_map_article(
+        pg_clean,
+        source_slug="disabled-global",
+        title="Disabled global hidden",
+        url_slug="disabled-global",
+        embedding=vec,
+    )
+    other_private_id = _seed_topic_map_article(
+        pg_clean,
+        source_slug="other-private",
+        title="Other private hidden",
+        url_slug="other-private",
+        embedding=vec,
+    )
+    archived_id = visible_ids.pop()
+    with connect(database_url=pg_clean) as conn:
+        conn.execute(
+            """
+            INSERT INTO user_article_state(user_id, article_id, state)
+            VALUES (%s, %s, 'archived')
+            """,
+            (user_id, archived_id),
+        )
+
+    with patch(
+        "news_dashboard.insights._generate_cluster_label",
+        return_value=("Scoped cluster", "Only visible articles."),
+    ):
+        clusters = cluster_recent_articles(user_id=user_id, database_url=pg_clean)
+        unscoped_clusters = cluster_recent_articles(user_id=None, database_url=pg_clean)
+
+    scoped_articles = [article for cluster in clusters for article in cluster["articles"]]
+    scoped_ids = {int(article["id"]) for article in scoped_articles}
+    scoped_text = " ".join(
+        f"{article['title']} {article['summary']}" for article in scoped_articles
+    )
+    assert scoped_ids == set(visible_ids)
+    assert disabled_id not in scoped_ids
+    assert other_private_id not in scoped_ids
+    assert archived_id not in scoped_ids
+    assert "Disabled global hidden" not in scoped_text
+    assert "Other private hidden" not in scoped_text
+    assert "Owned private visible" not in scoped_text
+
+    unscoped_ids = {
+        int(article["id"]) for cluster in unscoped_clusters for article in cluster["articles"]
+    }
+    assert {disabled_id, other_private_id, archived_id}.issubset(unscoped_ids)
+
+
 def test_cluster_recent_articles_groups_similar_embeddings(pg_clean: str) -> None:
     """Articles with near-identical embeddings should form clusters."""
     dim = 16
