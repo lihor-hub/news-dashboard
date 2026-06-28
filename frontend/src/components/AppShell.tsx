@@ -19,6 +19,7 @@ import {
   getPageTitle,
   getShortcutTarget,
   isNavigationItemActive,
+  mobilePrimaryOverflowItems,
   mobileNavigationItems,
   primaryNavigationItems,
   secondaryNavigationItemsFor,
@@ -241,6 +242,29 @@ export function AppShell() {
                   )}
                 </SheetHeader>
                 <nav className="p-2">
+                  {mobilePrimaryOverflowItems.map((m) => {
+                    const Icon = m.icon;
+                    const active = isNavigationItemActive(m.to, pathname);
+                    return (
+                      <Link
+                        key={m.to}
+                        to={m.to}
+                        onClick={() => setMoreOpen(false)}
+                        className={cn(
+                          'flex items-center gap-3 rounded-md px-3 py-2.5 text-sm',
+                          active
+                            ? 'bg-surface-2 text-foreground'
+                            : 'text-muted-foreground hover:bg-surface hover:text-foreground'
+                        )}
+                      >
+                        <Icon className="size-4" />
+                        {m.label}
+                      </Link>
+                    );
+                  })}
+                  {mobilePrimaryOverflowItems.length > 0 && (
+                    <div className="mx-1 my-1 h-px bg-border" />
+                  )}
                   {secondaryNavigationItemsFor(Boolean(user?.is_admin)).map((m) => {
                     const Icon = m.icon;
                     const active = isNavigationItemActive(m.to, pathname);

@@ -63,11 +63,18 @@ export function secondaryNavigationItemsFor(isAdmin: boolean): NavigationItem[] 
 // bar. Mobile surfaces Shared (articles sent to you by other people) here in
 // place of Later, which remains reachable on desktop.
 const mobileNavigationOrder = ['/', '/today', '/shared', '/starred', '/search'];
+const mobileNavigationSet = new Set(mobileNavigationOrder);
 const primaryNavigationByTo = new Map(primaryNavigationItems.map((item) => [item.to, item]));
 export const mobileNavigationItems = mobileNavigationOrder.flatMap((to) => {
   const item = primaryNavigationByTo.get(to);
   return item ? [item] : [];
 });
+
+// Primary destinations omitted from the mobile bottom bar (e.g. Later, Ask).
+// Rendered in the mobile More sheet so they remain reachable on small screens.
+export const mobilePrimaryOverflowItems = primaryNavigationItems.filter(
+  (item) => !mobileNavigationSet.has(item.to)
+);
 
 export const commandNavigationItems = [...primaryNavigationItems, ...secondaryNavigationItems].map(
   (item) => ({

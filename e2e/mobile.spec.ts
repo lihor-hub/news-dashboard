@@ -60,9 +60,11 @@ test.describe('Mobile — navigation', () => {
     await expect(page.locator('h1').filter({ hasText: 'Today' })).toBeVisible();
   });
 
-  test('tapping Later in mobile nav goes to /later', async ({ page }) => {
+  test('Later is reachable from the More sheet', async ({ page }) => {
     await page.goto('/');
-    await page.locator('nav.fixed a[href="/later"]').first().click();
+    await page.getByRole('button', { name: 'More' }).click();
+    const sheet = page.getByRole('dialog');
+    await sheet.getByRole('link', { name: 'Later' }).click();
     await expect(page).toHaveURL('/later');
   });
 
@@ -98,6 +100,13 @@ test.describe('Mobile — header', () => {
     await expect(sheet.getByText('Stats')).toBeVisible();
     await expect(sheet.getByText('Archive')).toBeVisible();
     await expect(sheet.getByText('Settings')).toBeVisible();
+  });
+
+  test('More sheet exposes Later in primary overflow', async ({ page }) => {
+    await page.goto('/');
+    await page.getByRole('button', { name: 'More' }).click();
+    const sheet = page.getByRole('dialog');
+    await expect(sheet.getByRole('link', { name: 'Later' })).toBeVisible();
   });
 });
 

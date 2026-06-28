@@ -126,10 +126,14 @@ test.describe('Mobile bottom navigation', () => {
     await expect(todayLink).toBeVisible();
   });
 
-  test('shows Later in mobile nav', async ({ page }) => {
+  test('Later is absent from fixed mobile nav but reachable from More sheet', async ({ page }) => {
     await page.goto('/');
-    const laterLink = page.locator('nav.fixed a[href="/later"]').first();
-    await expect(laterLink).toBeVisible();
+    // Later must not be in the fixed bottom bar.
+    await expect(page.locator('nav.fixed a[href="/later"]')).toHaveCount(0);
+    // Later must be reachable via the More sheet.
+    await page.getByRole('button', { name: 'More' }).click();
+    const sheet = page.getByRole('dialog');
+    await expect(sheet.getByRole('link', { name: 'Later' })).toBeVisible();
   });
 
   test('shows Starred in mobile nav', async ({ page }) => {

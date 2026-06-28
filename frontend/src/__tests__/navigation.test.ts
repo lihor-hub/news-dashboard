@@ -4,6 +4,7 @@ import {
   getPageTitle,
   getShortcutTarget,
   isNavigationItemActive,
+  mobilePrimaryOverflowItems,
   mobileNavigationItems,
   primaryNavigationItems,
   secondaryNavigationItems,
@@ -38,6 +39,15 @@ describe('navigation metadata', () => {
     expect(mobileTargets).toEqual(['/', '/today', '/shared', '/starred', '/search']);
     expect(mobileTargets).toContain('/shared');
     expect(mobileTargets).not.toContain('/later');
+  });
+
+  it('puts Later (and Ask) in the mobile primary overflow for the More sheet', () => {
+    const overflowTargets = mobilePrimaryOverflowItems.map((item) => item.to);
+    expect(overflowTargets).toContain('/later');
+    expect(overflowTargets).toContain('/ask');
+    // Overflow must not duplicate items already in the bottom bar.
+    expect(overflowTargets).not.toContain('/shared');
+    expect(overflowTargets).not.toContain('/');
   });
 
   it('matches exact roots but prefix-matches nested families', () => {
