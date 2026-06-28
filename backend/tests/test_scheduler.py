@@ -7,19 +7,39 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Generator
+from datetime import datetime, timezone
 from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 from news_dashboard.briefings import BriefingAINotConfiguredError, BriefingGenerationError
-from news_dashboard.scheduler import _run_briefing
+from news_dashboard.scheduler import _run_briefing, _run_per_user_briefings
 
 # ── helpers ───────────────────────────────────────────────────────────────────
 
 # _run_briefing does `from .briefings import generate_briefing` lazily,
 # so the correct patch target is the briefings module itself.
 _GEN_PATH = "news_dashboard.briefings.generate_briefing"
+
+
+class _FakeRowsConn:
+    def __init__(self, rows: list[dict[str, object]]) -> None:
+        self.rows = rows
+        self.sql = ""
+
+    def __enter__(self) -> _FakeRowsConn:
+        return self
+
+    def __exit__(self, *_exc: object) -> None:
+        return None
+
+    def execute(self, sql: str, _params: tuple[object, ...] | None = None) -> _FakeRowsConn:
+        self.sql = sql
+        return self
+
+    def fetchall(self) -> list[dict[str, object]]:
+        return self.rows
 
 
 # ── _run_briefing — happy path ────────────────────────────────────────────────
@@ -93,6 +113,66 @@ def test_run_briefing_logs_generation_error(caplog: pytest.LogCaptureFixture) ->
         mock_gen.side_effect = BriefingGenerationError("bad json")
         _run_briefing()
     assert any(r.levelno >= logging.ERROR for r in caplog.records)
+
+
+# ── _run_per_user_briefings ──────────────────────────────────────────────────
+
+
+def test_run_per_user_briefings_sends_push_when_enabled() -> None:
+    fake_conn = _FakeRowsConn(
+        [
+            {
+                "id": 42,
+                "briefing_time": "09:00",
+                "briefing_timezone": "UTC",
+                "briefing_push_enabled": True,
+            }
+        ]
+    )
+    now = datetime(2026, 6, 29, 9, 0, 0, tzinfo=timezone.utc)
+
+    with (
+        patch("news_dashboard.scheduler.datetime") as mock_dt,
+        patch("news_dashboard.db.connect", return_value=fake_conn),
+        patch(_GEN_PATH, return_value={"id": 7, "status": "complete"}) as generate,
+        patch("news_dashboard.push.generate_push_hook", return_value="Brief ready") as hook,
+        patch("news_dashboard.push.send_push_for_user") as send_push,
+    ):
+        mock_dt.now.return_value = now
+        _run_per_user_briefings()
+
+    assert "briefing_push_enabled" in fake_conn.sql
+    generate.assert_called_once_with(user_id=42)
+    hook.assert_called_once_with({"id": 7, "status": "complete"})
+    send_push.assert_called_once_with(42, "Brief ready", "", target_url="/briefs/7")
+
+
+def test_run_per_user_briefings_generates_but_skips_push_when_disabled() -> None:
+    fake_conn = _FakeRowsConn(
+        [
+            {
+                "id": 42,
+                "briefing_time": "09:00",
+                "briefing_timezone": "UTC",
+                "briefing_push_enabled": False,
+            }
+        ]
+    )
+    now = datetime(2026, 6, 29, 9, 0, 0, tzinfo=timezone.utc)
+
+    with (
+        patch("news_dashboard.scheduler.datetime") as mock_dt,
+        patch("news_dashboard.db.connect", return_value=fake_conn),
+        patch(_GEN_PATH, return_value={"id": 7, "status": "complete"}) as generate,
+        patch("news_dashboard.push.generate_push_hook") as hook,
+        patch("news_dashboard.push.send_push_for_user") as send_push,
+    ):
+        mock_dt.now.return_value = now
+        _run_per_user_briefings()
+
+    generate.assert_called_once_with(user_id=42)
+    hook.assert_not_called()
+    send_push.assert_not_called()
 
 
 # ── start_scheduler — BRIEFING_CRON wiring ───────────────────────────────────

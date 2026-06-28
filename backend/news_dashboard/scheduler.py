@@ -119,7 +119,7 @@ def _run_briefing() -> tuple[str, str | None]:
         return "failure", str(exc)[:500]
 
 
-def _generate_briefing_for_user(user_id: int) -> bool:
+def _generate_briefing_for_user(user_id: int, *, push_enabled: bool = True) -> bool:
     """Generate and push a briefing for one user. Returns True on success."""
     from news_dashboard.briefings import (
         BriefingAINotConfiguredError,
@@ -137,14 +137,15 @@ def _generate_briefing_for_user(user_id: int) -> bool:
             logger.info(
                 "Per-user briefing: complete for user_id=%s id=%s", user_id, result.get("id")
             )
-            try:
-                briefing_id = result.get("id")
-                target_url = f"/briefs/{briefing_id}" if briefing_id is not None else None
-                send_push_for_user(user_id, generate_push_hook(result), "", target_url=target_url)
-            except Exception:
-                logger.exception(
-                    "Per-user briefing: push notification failed for user_id=%s", user_id
-                )
+            if push_enabled:
+                try:
+                    briefing_id = result.get("id")
+                    target_url = f"/briefs/{briefing_id}" if briefing_id is not None else None
+                    send_push_for_user(user_id, generate_push_hook(result), "", target_url=target_url)
+                except Exception:
+                    logger.exception(
+                        "Per-user briefing: push notification failed for user_id=%s", user_id
+                    )
         return True
     except BriefingAINotConfiguredError:
         logger.warning("Per-user briefing: skipped for user_id=%s (AI not configured)", user_id)
@@ -171,7 +172,7 @@ def _run_per_user_briefings() -> tuple[str, str | None] | None:
     try:
         with connect() as conn:
             rows = conn.execute(
-                "SELECT id, briefing_time, briefing_timezone FROM users"
+                "SELECT id, briefing_time, briefing_timezone, briefing_push_enabled FROM users"
                 " WHERE briefing_push_enabled = TRUE OR briefing_time IS NOT NULL",
             ).fetchall()
         user_rows = [row_to_dict(r) for r in rows]
@@ -179,7 +180,7 @@ def _run_per_user_briefings() -> tuple[str, str | None] | None:
         logger.exception("Per-user briefing: failed to query users")
         return "failure", str(exc)[:500]
 
-    user_ids: list[int] = []
+    scheduled_users: list[tuple[int, bool]] = []
     for row in user_rows:
         tz_name: str = row.get("briefing_timezone") or "UTC"
         briefing_time: str = row.get("briefing_time") or "09:00"
@@ -188,15 +189,18 @@ def _run_per_user_briefings() -> tuple[str, str | None] | None:
         except (ZoneInfoNotFoundError, KeyError):
             tz = ZoneInfo("UTC")
         if now.astimezone(tz).strftime("%H:%M") == briefing_time:
-            user_ids.append(int(row["id"]))
+            scheduled_users.append((int(row["id"]), bool(row.get("briefing_push_enabled"))))
 
-    if not user_ids:
+    if not scheduled_users:
         return None  # nothing scheduled this minute — skip recording
 
-    results = [_generate_briefing_for_user(uid) for uid in user_ids]
+    results = [
+        _generate_briefing_for_user(uid, push_enabled=push_enabled)
+        for uid, push_enabled in scheduled_users
+    ]
     succeeded = sum(1 for ok in results if ok)
     failed = len(results) - succeeded
-    total = len(user_ids)
+    total = len(scheduled_users)
     noun = "user" if total == 1 else "users"
     msg = f"{total} {noun} targeted, {succeeded} succeeded, {failed} failed"
     status = "failure" if failed == total else "success"
