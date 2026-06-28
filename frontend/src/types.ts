@@ -58,6 +58,7 @@ export interface ShareableUser {
 export interface ReceivedShare {
   id: number;
   note?: string | null;
+  context_summary?: string | null;
   created_at: string;
   read_at?: string | null;
   from_user_id: number;
@@ -67,6 +68,29 @@ export interface ReceivedShare {
   article_url: string;
   article_source_name: string;
   article_summary?: string | null;
+}
+
+export interface ShareAnnotation {
+  id: number;
+  share_id: number;
+  highlighted_text: string;
+  offset_chars: number;
+  note?: string | null;
+  created_at: string;
+}
+
+export interface ShareMessage {
+  id: number;
+  share_id: number;
+  user_id: number;
+  username: string;
+  message: string;
+  created_at: string;
+}
+
+export interface ShareDetail extends ReceivedShare {
+  annotations: ShareAnnotation[];
+  messages: ShareMessage[];
 }
 
 export interface Source {

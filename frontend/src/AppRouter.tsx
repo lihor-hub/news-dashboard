@@ -9,6 +9,7 @@ import { LoginPage } from './pages/LoginPage';
 import { BriefPage } from './pages/BriefPage';
 import { InboxPage } from './pages/InboxPage';
 import { SharedPage } from './pages/SharedPage';
+import { SharedDetailPage } from './pages/SharedDetailPage';
 import { LaterPage } from './pages/LaterPage';
 import { StarredPage } from './pages/StarredPage';
 import { FeedsPage } from './pages/FeedsPage';
@@ -113,6 +114,7 @@ export const routes: RouteObject[] = [
       { path: 'later', element: <LaterPage /> },
       { path: 'starred', element: <StarredPage /> },
       { path: 'shared', element: <SharedPage /> },
+      { path: 'shared/:shareId', element: <SharedDetailPage /> },
       { path: 'search', element: withSuspense(SearchPage) },
       { path: 'ask', element: withSuspense(AskPage) },
       {
