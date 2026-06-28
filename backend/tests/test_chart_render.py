@@ -30,6 +30,47 @@ def test_helm_template_default() -> None:
     # Check that it renders standard postgres config
     assert "name: POSTGRES_HOST" in output
     assert 'value: "news-dashboard-news-dashboard-postgres"' in output
+    assert "concurrencyPolicy: Forbid" in output
+    assert "startingDeadlineSeconds: 1800" in output
+    assert "activeDeadlineSeconds: 3600" in output
+    assert "backoffLimit: 1" in output
+    assert "successfulJobsHistoryLimit: 2" in output
+    assert "failedJobsHistoryLimit: 3" in output
+
+
+@pytest.mark.skipif(HELM_BIN is None, reason="helm binary not found on path")
+def test_helm_template_ingest_cronjob_operational_overrides() -> None:
+    assert HELM_BIN is not None
+    res = subprocess.run(  # noqa: S603
+        [
+            HELM_BIN,
+            "template",
+            "news-dashboard",
+            str(CHART_DIR),
+            "--set",
+            "app.auth.sessionSecret=dummy-session-secret",
+            "--set",
+            "ingestCronJob.concurrencyPolicy=Replace",
+            "--set",
+            "ingestCronJob.startingDeadlineSeconds=900",
+            "--set",
+            "ingestCronJob.activeDeadlineSeconds=1200",
+            "--set",
+            "ingestCronJob.backoffLimit=2",
+            "--set",
+            "ingestCronJob.ttlSecondsAfterFinished=86400",
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert res.returncode == 0, f"helm template failed: {res.stderr}"
+    output = res.stdout
+    assert "concurrencyPolicy: Replace" in output
+    assert "startingDeadlineSeconds: 900" in output
+    assert "activeDeadlineSeconds: 1200" in output
+    assert "backoffLimit: 2" in output
+    assert "ttlSecondsAfterFinished: 86400" in output
 
 
 @pytest.mark.skipif(HELM_BIN is None, reason="helm binary not found on path")
