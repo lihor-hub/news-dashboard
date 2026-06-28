@@ -193,7 +193,29 @@ jobs:
       - name: build (includes tsc)
         run: npm run build
 
-  # ── 5. PUBLISH ─────────────────────────────────────────────────────────────
+  # ── 5. TEST ROLLUP ─────────────────────────────────────────────────────────
+  # Satisfies the "Test & build" required status check while the component jobs
+  # use the new change-aware names. Skips if either component job is skipped
+  # (both-skipped = no relevant files changed, so the check still passes).
+  test:
+    name: Test & build
+    needs: [test-backend, test-frontend]
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Aggregate test results
+        run: |
+          backend="${{ needs.test-backend.result }}"
+          frontend="${{ needs.test-frontend.result }}"
+          if [[ "$backend" == "failure" || "$backend" == "cancelled" ]]; then
+            echo "Backend tests failed or were cancelled ($backend)" && exit 1
+          fi
+          if [[ "$frontend" == "failure" || "$frontend" == "cancelled" ]]; then
+            echo "Frontend tests failed or were cancelled ($frontend)" && exit 1
+          fi
+          echo "All test lanes passed (backend=$backend, frontend=$frontend)"
+
+  # ── 6. PUBLISH ─────────────────────────────────────────────────────────────
   # Builds one image and pushes two tags:
   #   :<sha>    — immutable, pinned to this exact commit; used by the deploy step
   #   :latest   — floating convenience tag for manual pulls / rollback reference
@@ -206,7 +228,7 @@ jobs:
   # packages:write by default for the repo that owns the package.
   publish:
     name: Build & push image
-    needs: [lint, test-backend, test-frontend]
+    needs: [lint, test]
     runs-on: ubuntu-latest
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     outputs:
@@ -300,7 +322,7 @@ jobs:
             ${{ env.IMAGE }}:${{ github.sha }}
             ${{ env.IMAGE }}:latest
 
-  # ── 6. DEPLOY ──────────────────────────────────────────────────────────────
+  # ── 7. DEPLOY ──────────────────────────────────────────────────────────────
   # Runs directly on the self-hosted runner (the mini PC itself) — no SSH hop
   # needed. The runner process on the mini PC picks up the job and executes
   # the deploy commands locally.
