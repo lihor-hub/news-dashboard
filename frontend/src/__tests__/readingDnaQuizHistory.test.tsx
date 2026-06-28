@@ -67,6 +67,7 @@ function mockBasics() {
   });
   vi.spyOn(api, 'fetchGoals').mockResolvedValue([]);
   vi.spyOn(api, 'fetchLatestQuiz').mockResolvedValue(null);
+  vi.spyOn(api, 'fetchQuizCandidates').mockRejectedValue(new Error('not available'));
   vi.spyOn(api, 'fetchQuizHistory').mockResolvedValue([]);
 }
 
@@ -129,7 +130,7 @@ describe('ReadingDnaPage quiz history', () => {
 
     await renderLearningCenter();
     await userEvent.click(await screen.findByLabelText('Transformer'));
-    await userEvent.click(screen.getByRole('button', { name: 'Submit answers' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Submit final answers' }));
 
     await waitFor(() => expect(fetchHistory).toHaveBeenCalledTimes(2));
     expect(screen.getByText('Quiz Progress')).toBeTruthy();
