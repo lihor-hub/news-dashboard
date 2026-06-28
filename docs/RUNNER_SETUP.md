@@ -132,5 +132,6 @@ at `news.lihor.ro` (required for PWA install, service worker, and Basic Auth),
 a host-level Caddy reverse proxy is needed.
 
 See **[docs/CADDY_HTTPS_SETUP.md](CADDY_HTTPS_SETUP.md)** for the full walkthrough,
-including the Caddyfile (at `deploy/Caddyfile` in this repo), DNS configuration,
-router port forwarding, and Let's Encrypt certificate setup.
+including the production Caddyfile (the repo source of truth is
+`deploy/Caddyfile`), DNS configuration, router port forwarding, and Let's
+Encrypt certificate setup.

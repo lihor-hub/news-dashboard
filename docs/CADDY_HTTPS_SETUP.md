@@ -99,7 +99,7 @@ sudo systemctl status caddy    # should show "active (running)"
 
 ### Step 5 — Deploy the Caddyfile
 
-Copy the Caddyfile from the repo to the system Caddy config location:
+Copy the production Caddyfile from the repo to the system Caddy config location:
 
 ```bash
 # From the repo root on the mini PC:
@@ -140,7 +140,9 @@ Screen" as a standalone app (no browser chrome).
 
 ## Keeping the Caddyfile in sync with the repo
 
-The `deploy/Caddyfile` in this repo is the source of truth for the Caddy config.
+The `deploy/Caddyfile` in this repo is the only production source of truth for
+the `news.lihor.ro` Caddy config. It includes the app NodePort proxy, the
+same-host `/keycloak` proxy, compression, and browser security headers.
 After any change, copy it to the mini PC and reload:
 
 ```bash

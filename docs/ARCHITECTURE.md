@@ -242,7 +242,7 @@ During ingestion, each source is fetched through either `feedparser` for RSS/Ato
 
 The React UI reads articles by status and category, displays summary counts, shows source health, and lets the user update article status. Status changes are persisted through `PATCH /api/articles/{article_id}/status`, and the UI reloads articles and counts afterward. Search calls `/api/search` and returns matching articles across statuses.
 
-For production, GitHub Actions tests the Python backend, builds the frontend, builds a Docker image, pushes it to GHCR, and deploys it on a self-hosted runner with Helm. The host-level Caddy route exposes the Kubernetes NodePort at `news.lihor.ro` and can also proxy `/keycloak` to the colocated identity provider. Authentication is enforced by the FastAPI app through local password sessions or optional Keycloak SSO; see `docs/KEYCLOAK_AUTH.md` and `deploy/news.lihor.ro.caddyfile`.
+For production, GitHub Actions tests the Python backend, builds the frontend, builds a Docker image, pushes it to GHCR, and deploys it on a self-hosted runner with Helm. The host-level Caddy route in `deploy/Caddyfile` exposes the Kubernetes NodePort at `news.lihor.ro` and proxies `/keycloak` to the colocated identity provider. Authentication is enforced by the FastAPI app through local password sessions or optional Keycloak SSO; see `docs/KEYCLOAK_AUTH.md`.
 
 ## Operational Notes
 
