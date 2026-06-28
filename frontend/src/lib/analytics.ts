@@ -103,6 +103,10 @@ function handleVisibility(): void {
   }
 }
 
+function handlePageHide(): void {
+  flush(true);
+}
+
 export function startAnalytics(): void {
   // Never emit telemetry under the test runner — it would issue real network
   // calls from any component test that mounts the app shell.
@@ -112,7 +116,7 @@ export function startAnalytics(): void {
   heartbeatTimer = setInterval(beat, HEARTBEAT_MS);
   flushTimer = setInterval(() => flush(), FLUSH_MS);
   document.addEventListener('visibilitychange', handleVisibility);
-  window.addEventListener('pagehide', () => flush(true));
+  window.addEventListener('pagehide', handlePageHide);
 }
 
 export function stopAnalytics(): void {
@@ -123,5 +127,6 @@ export function stopAnalytics(): void {
   heartbeatTimer = null;
   flushTimer = null;
   document.removeEventListener('visibilitychange', handleVisibility);
+  window.removeEventListener('pagehide', handlePageHide);
   flush(true);
 }

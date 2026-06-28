@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   flush,
+  startAnalytics,
+  stopAnalytics,
   trackArticleClose,
   trackArticleOpen,
   trackFeature,
@@ -70,6 +72,90 @@ describe('analytics tracker', () => {
     trackArticleClose(999);
     flush();
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('analytics pagehide lifecycle', () => {
+  let fetchMock: ReturnType<typeof vi.fn>;
+  const registered: EventListener[] = [];
+  const unregistered: EventListener[] = [];
+  let origAdd: typeof window.addEventListener;
+  let origRemove: typeof window.removeEventListener;
+
+  beforeEach(() => {
+    fetchMock = vi.fn().mockResolvedValue({ ok: true });
+    vi.stubGlobal('fetch', fetchMock);
+    vi.stubEnv('MODE', 'production');
+    registered.length = 0;
+    unregistered.length = 0;
+    origAdd = window.addEventListener.bind(window);
+    origRemove = window.removeEventListener.bind(window);
+    window.addEventListener = (
+      type: string,
+      listener: EventListenerOrEventListenerObject,
+      options?: boolean | AddEventListenerOptions
+    ): void => {
+      if (type === 'pagehide') registered.push(listener as EventListener);
+      origAdd(type, listener, options);
+    };
+    window.removeEventListener = (
+      type: string,
+      listener: EventListenerOrEventListenerObject,
+      options?: boolean | EventListenerOptions
+    ): void => {
+      if (type === 'pagehide') unregistered.push(listener as EventListener);
+      origRemove(type, listener, options);
+    };
+  });
+
+  afterEach(() => {
+    window.addEventListener = origAdd;
+    window.removeEventListener = origRemove;
+    stopAnalytics();
+    vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
+  });
+
+  it('registers a pagehide listener on start', () => {
+    startAnalytics();
+    expect(registered).toHaveLength(1);
+    expect(typeof registered[0]).toBe('function');
+  });
+
+  it('removes the same pagehide handler on stop', () => {
+    startAnalytics();
+    const added = registered[0];
+    stopAnalytics();
+    expect(unregistered[0]).toBe(added);
+  });
+
+  it('does not accumulate pagehide listeners across start/stop cycles', () => {
+    startAnalytics();
+    stopAnalytics();
+    registered.length = 0;
+    startAnalytics();
+    expect(registered).toHaveLength(1);
+  });
+
+  it('fires flush via beacon on pagehide after start', () => {
+    const beaconMock = vi.fn().mockReturnValue(true);
+    vi.stubGlobal('navigator', { sendBeacon: beaconMock });
+    trackRoute('/test');
+    startAnalytics();
+    window.dispatchEvent(new Event('pagehide'));
+    expect(beaconMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not fire flush on pagehide after stop', () => {
+    const beaconMock = vi.fn().mockReturnValue(true);
+    vi.stubGlobal('navigator', { sendBeacon: beaconMock });
+    startAnalytics();
+    stopAnalytics();
+    // beacon called once by stopAnalytics flush; reset counter
+    beaconMock.mockClear();
+    trackRoute('/test');
+    window.dispatchEvent(new Event('pagehide'));
+    expect(beaconMock).not.toHaveBeenCalled();
   });
 });
 
