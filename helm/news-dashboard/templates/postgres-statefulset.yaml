@@ -58,6 +58,10 @@ spec:
               command: ["pg_isready", "-U", {{ .Values.postgresql.username | quote }}, "-d", {{ .Values.postgresql.database | quote }}]
             initialDelaySeconds: 30
             periodSeconds: 20
+          {{- with .Values.postgresql.resources }}
+          resources:
+{{ toYaml . | indent 12 }}
+          {{- end }}
       volumes:
         - name: postgres-data
 {{- if .Values.postgresql.persistence.hostPath }}
