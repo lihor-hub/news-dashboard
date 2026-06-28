@@ -239,7 +239,9 @@ jobs:
         run: helm lint ./helm/news-dashboard
 
       - name: helm template (defaults)
-        run: helm template news-dashboard ./helm/news-dashboard
+        run: |
+          helm template news-dashboard ./helm/news-dashboard \
+            --set-string "app.auth.sessionSecret=dummy-session-secret-for-render-only"
 
       - name: helm template (production-like overrides)
         run: |

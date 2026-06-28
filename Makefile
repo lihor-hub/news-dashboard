@@ -68,7 +68,8 @@ test-full: test-nightly
 ## helm-validate: lint and render the Helm chart with default and production-like values
 helm-validate:
 	helm lint ./helm/news-dashboard
-	helm template news-dashboard ./helm/news-dashboard
+	helm template news-dashboard ./helm/news-dashboard \
+		--set-string "app.auth.sessionSecret=dummy-session-secret-for-render-only"
 	helm template news-dashboard ./helm/news-dashboard \
 		--set "image.tag=abc1234" \
 		--set "image.pullSecretName=ghcr-pull-secret" \
