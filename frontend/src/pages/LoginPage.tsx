@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { fetchAuthConfig, loginUser, type AuthConfig } from '@/api';
 import { useAuth } from '@/contexts/auth';
+import { AppLogo } from '@/components/AppLogo';
 
 export function LoginPage() {
   const { setUser } = useAuth();
@@ -50,9 +51,7 @@ export function LoginPage() {
     <div className="min-h-screen flex items-center justify-center bg-background px-4">
       <div className="w-full max-w-sm rounded-xl border border-border bg-card p-6 shadow-sm">
         <div className="mb-6 text-center space-y-2">
-          <div className="mx-auto size-10 rounded-xl bg-foreground/90 grid place-items-center text-background text-sm font-bold tracking-tight">
-            RD
-          </div>
+          <AppLogo className="mx-auto size-10 rounded-xl" />
           <div>
             <h1 className="text-xl font-semibold text-foreground">Sign in</h1>
             <p className="mt-1 text-sm text-muted-foreground">

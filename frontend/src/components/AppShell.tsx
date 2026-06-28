@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { LogOut, MoreHorizontal, Search } from 'lucide-react';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
+import { AppLogo } from './AppLogo';
 import { CommandPalette } from './CommandPalette';
 import { ShortcutOverlay } from './ShortcutOverlay';
 import { WhatsNewDialog } from './WhatsNewDialog';
@@ -209,9 +210,7 @@ export function AppShell() {
       <header className="sticky top-0 z-30 border-b border-border bg-background/85 backdrop-blur">
         <div className="mx-auto max-w-6xl flex h-12 items-center justify-between px-4">
           <div className="flex items-center gap-2 min-w-0">
-            <div className="size-6 rounded-md bg-foreground/90 grid place-items-center text-background text-[10px] font-bold tracking-tight">
-              RD
-            </div>
+            <AppLogo className="size-6 rounded-md" />
             <h1 className="text-[13px] font-semibold tracking-tight truncate">{title}</h1>
           </div>
           <div className="flex items-center gap-1">
