@@ -111,6 +111,23 @@ postgresql:
     storageClassName: ""
     # Local single-node durable storage. This survives pod restarts/upgrades.
     hostPath: /home/ioachim-minipc/news-dashboard-postgres-data
+  backup:
+    # Set to true to enable scheduled PostgreSQL logical backups.
+    enabled: false
+    # Cron schedule for the backup job. Default: daily at 02:00.
+    schedule: "0 2 * * *"
+    # Number of days to retain backup files. Dumps older than this are pruned.
+    retentionDays: 7
+    # Host path for backup storage. Must differ from the live data hostPath.
+    # Example: /home/ioachim-minipc/news-dashboard-postgres-backups
+    hostPath: ""
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+      limits:
+        cpu: 200m
+        memory: 128Mi
 
 ingress:
   enabled: false
