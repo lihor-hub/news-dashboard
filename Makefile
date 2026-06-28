@@ -1,6 +1,6 @@
 .PHONY: install ci-install lint format typecheck \
         test test-smoke test-backend test-frontend test-e2e test-nightly test-full \
-        check build
+        helm-validate check build
 
 ## install: install backend (editable + dev tools) and update local frontend dependencies
 install:
@@ -64,6 +64,27 @@ test-nightly:
 
 ## test-full: alias for test-nightly (complete suite with coverage)
 test-full: test-nightly
+
+## helm-validate: lint and render the Helm chart with default and production-like values
+helm-validate:
+	helm lint ./helm/news-dashboard
+	helm template news-dashboard ./helm/news-dashboard
+	helm template news-dashboard ./helm/news-dashboard \
+		--set "image.tag=abc1234" \
+		--set "image.pullSecretName=ghcr-pull-secret" \
+		--set "service.type=NodePort" \
+		--set "service.nodePort=30088" \
+		--set-string "app.auth.sessionSecret=dummy-session-secret-for-render-only" \
+		--set "app.ai.existingSecret=news-dashboard-ai" \
+		--set "app.push.existingSecret=news-dashboard-push" \
+		--set-string "app.ai.freeLlmBaseUrl=http://192.168.0.75:9130/v1" \
+		--set-string "app.ai.briefingModel=gpt-4o" \
+		--set-string "app.ai.langfuse.host=http://langfuse.local" \
+		--set-string "app.push.email=test@example.com" \
+		--set "postgresql.persistence.hostPath=/home/ioachim-minipc/news-dashboard-postgres-data"
+	helm template news-dashboard ./helm/news-dashboard \
+		--set "postgresql.enabled=false" \
+		--set "app.databaseUrl.existingSecret=news-dashboard-db"
 
 ## check: everything CI runs — lint, typecheck, test, build
 check: lint typecheck test build
