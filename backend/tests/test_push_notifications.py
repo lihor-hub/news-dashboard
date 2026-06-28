@@ -227,6 +227,37 @@ def test_send_push_notification_payload_with_url(monkeypatch: pytest.MonkeyPatch
     assert payload == {"title": "T", "body": "B", "url": "/briefs/42"}
 
 
+def test_send_push_notification_payload_with_tag(monkeypatch: pytest.MonkeyPatch) -> None:
+    import json
+
+    import news_dashboard.push as push_mod
+
+    monkeypatch.setenv("VAPID_PRIVATE_KEY", "fake-private-key")
+
+    mock_webpush = MagicMock()
+
+    class _FakeWebPushError(Exception):
+        pass
+
+    fake_module: dict[str, Any] = {
+        "webpush": mock_webpush,
+        "WebPushException": _FakeWebPushError,
+    }
+    with patch.dict("sys.modules", {"pywebpush": MagicMock(**fake_module)}):
+        push_mod.send_push_notification(
+            endpoint="https://ep.example.com",
+            p256dh="abc",
+            auth="xyz",
+            title="T",
+            body="B",
+            target_url="/shared",
+            tag="shared-article",
+        )
+
+    payload = json.loads(mock_webpush.call_args.kwargs["data"])
+    assert payload == {"title": "T", "body": "B", "url": "/shared", "tag": "shared-article"}
+
+
 def test_send_push_notification_logs_on_webpush_exception(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -286,6 +317,25 @@ def test_send_push_for_user_calls_send_for_each_sub(
         send_push_for_user(uid, "Brief ready", "", database_url=pg_clean)
 
     assert mock_send.call_count == 2
+
+
+def test_notify_share_recipient_routes_push_to_shared_inbox() -> None:
+    from news_dashboard.main import _notify_share_recipient
+
+    with patch("news_dashboard.push.send_push_for_user") as mock_send:
+        _notify_share_recipient(
+            to_user_id=42,
+            sender="alice",
+            article_title="Interesting article",
+        )
+
+    mock_send.assert_called_once_with(
+        42,
+        "alice shared an article",
+        "Interesting article",
+        target_url="/shared",
+        tag="shared-article",
+    )
 
 
 # ── API endpoints ──────────────────────────────────────────────────────────────

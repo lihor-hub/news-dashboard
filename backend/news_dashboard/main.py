@@ -779,6 +779,8 @@ def _notify_share_recipient(*, to_user_id: int, sender: str, article_title: str)
         to_user_id,
         f"{sender} shared an article",
         article_title,
+        target_url="/shared",
+        tag="shared-article",
     )
 
 

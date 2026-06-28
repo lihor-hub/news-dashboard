@@ -114,6 +114,38 @@ describe('push event — payload handling', () => {
       expect.objectContaining({ data: { url: '/' } })
     );
   });
+
+  it('uses explicit notification tag from payload', () => {
+    const ev = makePushEvent({
+      title: 'Shared',
+      body: 'Article',
+      url: '/shared',
+      tag: 'shared-article',
+    });
+    fireEvent('push', ev);
+    expect(mockSelf.registration.showNotification).toHaveBeenCalledWith(
+      'Shared',
+      expect.objectContaining({ tag: 'shared-article', data: { url: '/shared' } })
+    );
+  });
+
+  it('keeps daily brief tag when payload has no tag', () => {
+    const ev = makePushEvent({ title: 'Brief', body: 'Ready', url: '/briefs/99' });
+    fireEvent('push', ev);
+    expect(mockSelf.registration.showNotification).toHaveBeenCalledWith(
+      'Brief',
+      expect.objectContaining({ tag: 'daily-brief' })
+    );
+  });
+
+  it('rejects unsafe notification tag and falls back to daily brief', () => {
+    const ev = makePushEvent({ title: 'T', body: 'B', tag: '../../bad' });
+    fireEvent('push', ev);
+    expect(mockSelf.registration.showNotification).toHaveBeenCalledWith(
+      'T',
+      expect.objectContaining({ tag: 'daily-brief' })
+    );
+  });
 });
 
 // ── notificationclick event tests ─────────────────────────────────────────────

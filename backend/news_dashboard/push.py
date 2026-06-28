@@ -103,6 +103,7 @@ def send_push_notification(
     title: str,
     body: str,
     target_url: str | None = None,
+    tag: str | None = None,
 ) -> PushDeliveryResult:
     """Send a single Web Push notification to the given subscription."""
     try:
@@ -114,6 +115,8 @@ def send_push_notification(
     data: dict[str, str] = {"title": title, "body": body}
     if target_url is not None:
         data["url"] = target_url
+    if tag is not None:
+        data["tag"] = tag
     payload = json.dumps(data)
     try:
         webpush(
@@ -210,6 +213,7 @@ def send_push_for_user(
     body: str,
     *,
     target_url: str | None = None,
+    tag: str | None = None,
     database_url: str | None = None,
 ) -> None:
     """Send a push notification to all subscriptions registered by a user."""
@@ -222,6 +226,7 @@ def send_push_for_user(
             title=title,
             body=body,
             target_url=target_url,
+            tag=tag,
         )
         if result == "gone":
             delete_push_subscriptions(
