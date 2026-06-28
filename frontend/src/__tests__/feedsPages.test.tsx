@@ -15,6 +15,8 @@ const apiMock = vi.hoisted(() => ({
   fetchSourceCleanupSuggestions: vi.fn(),
   updateSourceEnabled: vi.fn(),
   applySourceCleanup: vi.fn(),
+  createSource: vi.fn(),
+  deleteSource: vi.fn(),
   fetchSchedulerStatus: vi.fn(),
   setSchedulerInterval: vi.fn(),
   pauseScheduler: vi.fn(),
@@ -177,6 +179,87 @@ describe('SourcesPage', () => {
     const toggles = await screen.findAllByRole('switch');
     fireEvent.click(toggles[0]);
     await waitFor(() => expect(apiMock.updateSourceEnabled).toHaveBeenCalledWith('acme', false));
+  });
+
+  it('opens the Add source dialog when "Add source" is clicked', async () => {
+    apiMock.fetchSources.mockResolvedValue([source()]);
+    withProviders(<SourcesPage />, '/', regularUser);
+    await screen.findAllByText('Acme News');
+    fireEvent.click(screen.getByRole('button', { name: /add source/i }));
+    expect(await screen.findByRole('dialog')).toBeTruthy();
+    expect(screen.getByLabelText(/name/i)).toBeTruthy();
+    expect(screen.getByLabelText(/feed url/i)).toBeTruthy();
+  });
+
+  it('calls createSource with form data and closes dialog on success', async () => {
+    const newSource = source({ slug: 'my-blog', name: 'My Blog', owner_user_id: 2 });
+    apiMock.fetchSources.mockResolvedValue([source()]);
+    apiMock.createSource.mockResolvedValue(newSource);
+    withProviders(<SourcesPage />, '/', regularUser);
+    await screen.findAllByText('Acme News');
+
+    fireEvent.click(screen.getByRole('button', { name: /add source/i }));
+    await screen.findByRole('dialog');
+
+    fireEvent.change(screen.getByLabelText(/^name$/i), { target: { value: 'My Blog' } });
+    fireEvent.change(screen.getByLabelText(/feed url/i), {
+      target: { value: 'https://myblog.com/feed' },
+    });
+
+    // Re-mock to include the new source after creation
+    apiMock.fetchSources.mockResolvedValue([source(), newSource]);
+    fireEvent.click(screen.getByRole('button', { name: /^add source$/i }));
+
+    await waitFor(() =>
+      expect(apiMock.createSource).toHaveBeenCalledWith(
+        expect.objectContaining({ name: 'My Blog', url: 'https://myblog.com/feed' })
+      )
+    );
+  });
+
+  it('shows error message when createSource fails', async () => {
+    apiMock.fetchSources.mockResolvedValue([source()]);
+    apiMock.createSource.mockRejectedValue(new Error('slug already exists'));
+    withProviders(<SourcesPage />, '/', regularUser);
+    await screen.findAllByText('Acme News');
+
+    fireEvent.click(screen.getByRole('button', { name: /add source/i }));
+    await screen.findByRole('dialog');
+
+    fireEvent.change(screen.getByLabelText(/^name$/i), { target: { value: 'My Blog' } });
+    fireEvent.change(screen.getByLabelText(/feed url/i), {
+      target: { value: 'https://myblog.com/feed' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /^add source$/i }));
+
+    await waitFor(() => expect(screen.getByText('slug already exists')).toBeTruthy());
+  });
+
+  it('shows delete button for sources owned by current user', async () => {
+    apiMock.fetchSources.mockResolvedValue([
+      source({ slug: 'global', name: 'Global News', owner_user_id: null }),
+      source({ slug: 'mine', name: 'My Blog', owner_user_id: regularUser.id }),
+    ]);
+    withProviders(<SourcesPage />, '/', regularUser);
+    await screen.findAllByText('Global News');
+
+    const deleteButtons = screen.getAllByRole('button', { name: /delete my blog/i });
+    expect(deleteButtons.length).toBeGreaterThan(0);
+    expect(screen.queryByRole('button', { name: /delete global news/i })).toBeNull();
+  });
+
+  it('calls deleteSource when delete button is clicked', async () => {
+    apiMock.fetchSources.mockResolvedValue([
+      source({ slug: 'mine', name: 'My Blog', owner_user_id: regularUser.id }),
+    ]);
+    apiMock.deleteSource.mockResolvedValue({ status: 'deleted' });
+    withProviders(<SourcesPage />, '/', regularUser);
+    await screen.findAllByText('My Blog');
+
+    const [deleteBtn] = screen.getAllByRole('button', { name: /delete my blog/i });
+    fireEvent.click(deleteBtn);
+
+    await waitFor(() => expect(apiMock.deleteSource).toHaveBeenCalledWith('mine'));
   });
 });
 

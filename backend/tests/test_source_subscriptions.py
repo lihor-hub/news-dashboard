@@ -316,3 +316,92 @@ def test_api_toggle_subscription(pg_clean: str, monkeypatch: pytest.MonkeyPatch)
         resp2 = client.patch(f"/api/sources/{slug}/enabled", json={"enabled": True})
         assert resp2.status_code == 200
         assert resp2.json()["subscribed"] is True
+
+
+# ── Validation ────────────────────────────────────────────────────────────────
+
+
+def test_api_create_source_rejects_invalid_url_scheme(
+    pg_clean: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("DATABASE_URL", str(pg_clean))
+    sync_sources(pg_clean)
+    uid = _make_user(pg_clean)
+
+    with _api_client(pg_clean, uid) as client:
+        for bad_url in ("ftp://example.com/feed", "file:///etc/passwd", "javascript:alert(1)"):
+            resp = client.post("/api/sources", json={"url": bad_url, "name": "Bad"})
+            assert resp.status_code == 400, f"expected 400 for {bad_url!r}"
+            assert "http" in resp.json()["detail"].lower()
+
+
+def test_api_create_source_rejects_missing_host(
+    pg_clean: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("DATABASE_URL", str(pg_clean))
+    sync_sources(pg_clean)
+    uid = _make_user(pg_clean)
+
+    with _api_client(pg_clean, uid) as client:
+        resp = client.post("/api/sources", json={"url": "https://", "name": "Bad Host"})
+        assert resp.status_code == 400
+
+
+def test_api_create_source_rejects_empty_name(
+    pg_clean: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("DATABASE_URL", str(pg_clean))
+    sync_sources(pg_clean)
+    uid = _make_user(pg_clean)
+
+    with _api_client(pg_clean, uid) as client:
+        resp = client.post("/api/sources", json={"url": "https://example.com/feed", "name": "   "})
+        assert resp.status_code == 400
+
+
+def test_api_create_source_rejects_bad_slug(pg_clean: str, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("DATABASE_URL", str(pg_clean))
+    sync_sources(pg_clean)
+    uid = _make_user(pg_clean)
+
+    with _api_client(pg_clean, uid) as client:
+        resp = client.post(
+            "/api/sources",
+            json={"url": "https://example.com/feed", "name": "My Blog", "slug": "BAD_SLUG!"},
+        )
+        assert resp.status_code == 400
+
+
+def test_api_create_source_duplicate_slug_returns_409(
+    pg_clean: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("DATABASE_URL", str(pg_clean))
+    sync_sources(pg_clean)
+    uid = _make_user(pg_clean)
+
+    with _api_client(pg_clean, uid) as client:
+        payload = {"url": "https://example.com/feed", "name": "My Blog", "slug": "my-blog"}
+        resp1 = client.post("/api/sources", json=payload)
+        assert resp1.status_code == 200
+        resp2 = client.post("/api/sources", json=payload)
+        assert resp2.status_code == 409
+        assert "already exists" in resp2.json()["detail"]
+
+
+def test_api_create_source_auto_generates_slug(
+    pg_clean: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("DATABASE_URL", str(pg_clean))
+    sync_sources(pg_clean)
+    uid = _make_user(pg_clean)
+
+    with _api_client(pg_clean, uid) as client:
+        resp = client.post(
+            "/api/sources",
+            json={"url": "https://example.com/feed", "name": "Hello World Blog"},
+        )
+        assert resp.status_code == 200
+        slug = resp.json()["slug"]
+        assert slug
+        assert slug == slug.lower()
+        assert " " not in slug

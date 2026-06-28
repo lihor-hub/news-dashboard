@@ -191,6 +191,21 @@ class CreateSourceRequest(BaseModel):
     category: str = "tech"
     slug: str | None = None
 
+    def validated_slug(self, name: str) -> str:
+        """Return a non-empty slug, normalised from name if not provided."""
+        import re
+
+        raw = self.slug or re.sub(r"[^a-z0-9-]", "-", name.lower()).strip("-")
+        slug = re.sub(r"-{2,}", "-", raw).strip("-")[:80]
+        if not slug:
+            raise HTTPException(status_code=400, detail="slug must not be empty")
+        if not re.fullmatch(r"[a-z0-9][a-z0-9-]*[a-z0-9]|[a-z0-9]", slug):
+            raise HTTPException(
+                status_code=400,
+                detail="slug must contain only lowercase letters, digits, and hyphens",
+            )
+        return slug
+
 
 class SourceCleanupRequest(BaseModel):
     source_slugs: list[str]
@@ -1078,21 +1093,32 @@ def create_source(
     current_user: Annotated[dict[str, Any], Depends(require_auth)],
 ) -> dict[str, Any]:
     """Create a private custom source owned by the current user."""
-    import re
+    from urllib.parse import urlparse
 
     uid = current_user["id"]
-    slug = payload.slug or re.sub(r"[^a-z0-9-]", "-", payload.name.lower()).strip("-")
+
+    if not payload.name.strip():
+        raise HTTPException(status_code=400, detail="name must not be empty")
+
+    parsed = urlparse(payload.url)
+    if parsed.scheme not in ("http", "https"):
+        raise HTTPException(status_code=400, detail="url must use http or https scheme")
+    if not parsed.netloc:
+        raise HTTPException(status_code=400, detail="url must include a valid host")
+
+    slug = payload.validated_slug(payload.name)
+
     init_db()
     with connect() as conn:
         existing = conn.execute("SELECT 1 FROM sources WHERE slug = %s", (slug,)).fetchone()
         if existing:
-            raise HTTPException(status_code=409, detail=f"source slug {slug!r} already exists")
+            raise HTTPException(status_code=409, detail=f"source slug '{slug}' already exists")
         conn.execute(
             """
             INSERT INTO sources(slug, name, url, category, kind, priority, enabled, owner_user_id)
             VALUES (%s, %s, %s, %s, 'rss_feed', 0, TRUE, %s)
             """,
-            (slug, payload.name, payload.url, payload.category, uid),
+            (slug, payload.name.strip(), payload.url, payload.category, uid),
         )
         row = conn.execute("SELECT * FROM sources WHERE slug = %s", (slug,)).fetchone()
     return row_to_dict(row)

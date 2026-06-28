@@ -157,6 +157,24 @@ export async function applySourceCleanup(sourceSlugs: string[]): Promise<{
   });
 }
 
+export interface CreateSourcePayload {
+  url: string;
+  name: string;
+  category?: string;
+  slug?: string;
+}
+
+export async function createSource(payload: CreateSourcePayload): Promise<Source> {
+  return requestJson<Source>('/api/sources', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function deleteSource(slug: string): Promise<{ status: string }> {
+  return requestJson<{ status: string }>(`/api/sources/${slug}`, { method: 'DELETE' });
+}
+
 export async function fetchSummary(): Promise<Summary> {
   return requestJson<Summary>('/api/summary');
 }
