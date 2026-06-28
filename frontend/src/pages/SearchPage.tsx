@@ -9,6 +9,7 @@ import { useTriageMutations } from '@/hooks/useTriageMutations';
 import { useFocusedArticle } from '@/contexts/focusedArticle';
 import { setReaderList } from '@/lib/readerList';
 import { searchArticlesFiltered } from '@/api/workflowApi';
+import { fetchSources } from '@/api';
 import type { WorkflowState } from '@/lib/workflowTypes';
 import { cn } from '@/lib/utils';
 
@@ -124,6 +125,12 @@ export function SearchPage() {
     includeArchived ||
     dateRange !== 'all';
 
+  const { data: availableSources = [] } = useQuery({
+    queryKey: ['sources'],
+    queryFn: fetchSources,
+    staleTime: 5 * 60_000,
+  });
+
   const { data: results = [], isLoading } = useQuery({
     queryKey: ['search', q, states, categories, sources, starredOnly, includeArchived, dateRange],
     queryFn: () =>
@@ -222,6 +229,17 @@ export function SearchPage() {
             render={(v) => DATE_OPTIONS.find((d) => d.value === v)?.label ?? v}
             single
           />
+
+          {/* Source group */}
+          {availableSources.length > 0 && (
+            <FilterGroup
+              label="Source"
+              all={availableSources.map((s) => s.slug)}
+              selected={sources}
+              onChange={(next) => updateParams({ sources: next })}
+              render={(slug) => availableSources.find((s) => s.slug === slug)?.name ?? slug}
+            />
+          )}
         </div>
       </div>
 

@@ -6,13 +6,29 @@ import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { SearchPage } from '../pages/SearchPage';
 import * as workflowApi from '../api/workflowApi';
+import * as api from '../api';
 import type { WorkflowArticle } from '../lib/workflowTypes';
+import type { Source } from '../types';
 import { FocusedArticleProvider } from '../contexts/focusedArticle';
 
 vi.spyOn(console, 'error').mockImplementation(() => undefined);
 
+function makeSource(overrides: Partial<Source> = {}): Source {
+  return {
+    slug: 'test-source',
+    name: 'Test Source',
+    url: 'https://example.com',
+    category: 'engineering',
+    kind: 'rss',
+    priority: 1,
+    enabled: 1,
+    ...overrides,
+  };
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
+  vi.spyOn(api, 'fetchSources').mockResolvedValue([]);
 });
 
 function makeArticle(overrides: Partial<WorkflowArticle> = {}): WorkflowArticle {
@@ -183,5 +199,75 @@ describe('SearchPage — reader navigation', () => {
 
     const link = screen.getByRole('link');
     expect(link.getAttribute('href')).toContain('/a/42');
+  });
+});
+
+// ─── Source filter ────────────────────────────────────────────────────────────
+
+describe('SearchPage — source filter', () => {
+  it('renders Source filter group when sources are available', async () => {
+    vi.spyOn(api, 'fetchSources').mockResolvedValue([
+      makeSource({ slug: 'hn', name: 'Hacker News' }),
+      makeSource({ slug: 'openai-blog', name: 'OpenAI Blog' }),
+    ]);
+
+    renderSearch();
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /Source/i })).toBeTruthy();
+    });
+  });
+
+  it('does not render Source filter group when no sources available', async () => {
+    vi.spyOn(api, 'fetchSources').mockResolvedValue([]);
+    renderSearch();
+
+    await waitFor(() => {
+      expect(screen.queryByRole('button', { name: /^Source/i })).toBeNull();
+    });
+  });
+
+  it('shows source names in dropdown when Source button is clicked', async () => {
+    vi.spyOn(api, 'fetchSources').mockResolvedValue([
+      makeSource({ slug: 'hn', name: 'Hacker News' }),
+      makeSource({ slug: 'openai-blog', name: 'OpenAI Blog' }),
+    ]);
+
+    renderSearch();
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /Source/i })).toBeTruthy();
+    });
+
+    await userEvent.click(screen.getByRole('button', { name: /^Source/i }));
+
+    expect(screen.getByText('Hacker News')).toBeTruthy();
+    expect(screen.getByText('OpenAI Blog')).toBeTruthy();
+  });
+
+  it('passes selected sources to searchArticlesFiltered', async () => {
+    const spy = vi.spyOn(workflowApi, 'searchArticlesFiltered').mockResolvedValue([]);
+    vi.spyOn(api, 'fetchSources').mockResolvedValue([
+      makeSource({ slug: 'hn', name: 'Hacker News' }),
+    ]);
+
+    renderSearch('?q=test&sources=hn');
+
+    await waitFor(() => {
+      expect(spy).toHaveBeenCalledWith(expect.objectContaining({ sources: ['hn'] }));
+    });
+  });
+
+  it('preselects sources from URL params', async () => {
+    vi.spyOn(api, 'fetchSources').mockResolvedValue([
+      makeSource({ slug: 'hn', name: 'Hacker News' }),
+      makeSource({ slug: 'openai-blog', name: 'OpenAI Blog' }),
+    ]);
+
+    renderSearch('?q=test&sources=hn');
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /Source · 1/i })).toBeTruthy();
+    });
   });
 });
