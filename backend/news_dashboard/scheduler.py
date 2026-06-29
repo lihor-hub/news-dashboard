@@ -141,7 +141,12 @@ def _generate_briefing_for_user(user_id: int, *, push_enabled: bool = True) -> b
                 try:
                     briefing_id = result.get("id")
                     target_url = f"/briefs/{briefing_id}" if briefing_id is not None else None
-                    send_push_for_user(user_id, generate_push_hook(result), "", target_url=target_url)
+                    send_push_for_user(
+                        user_id,
+                        generate_push_hook(result),
+                        "",
+                        target_url=target_url,
+                    )
                 except Exception:
                     logger.exception(
                         "Per-user briefing: push notification failed for user_id=%s", user_id
