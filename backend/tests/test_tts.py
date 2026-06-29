@@ -302,10 +302,10 @@ def test_generate_podcast_script() -> None:
         )
     assert len(script) == 2
     assert script[0]["speaker"] == "Alex"
-    assert script[0]["voice"] == "alloy"
+    assert script[0]["voice"] == "onyx"
     assert script[0]["text"] == "Hello!"
     assert script[1]["speaker"] == "Taylor"
-    assert script[1]["voice"] == "shimmer"
+    assert script[1]["voice"] == "nova"
     assert script[1]["text"] == "Hi Alex!"
 
 
@@ -335,8 +335,8 @@ def test_generate_podcast_audio(tmp_path: Path) -> None:
     mock_client.audio.speech.with_streaming_response.create.return_value = mock_response
 
     script = [
-        {"speaker": "Alex", "voice": "alloy", "text": "Chunk 1 text"},
-        {"speaker": "Taylor", "voice": "shimmer", "text": "Chunk 2 text"},
+        {"speaker": "Alex", "voice": "onyx", "text": "Chunk 1 text"},
+        {"speaker": "Taylor", "voice": "nova", "text": "Chunk 2 text"},
     ]
 
     with (
@@ -351,3 +351,24 @@ def test_generate_podcast_audio(tmp_path: Path) -> None:
     for idx in range(2):
         chunk_file = tmp_path / "audio" / f"podcast-123-chunk-{idx}.mp3"
         assert not chunk_file.exists()
+
+    create = mock_client.audio.speech.with_streaming_response.create
+    assert create.call_count == 2
+    models = {call.kwargs["model"] for call in create.call_args_list}
+    voices = [call.kwargs["voice"] for call in create.call_args_list]
+    assert models == {"gpt-4o-mini-tts"}
+    assert voices == ["onyx", "nova"]
+
+
+def test_generate_podcast_script_fallback_uses_alex_onyx() -> None:
+    """When the LLM returns an empty script, the fallback turn is Alex/onyx."""
+    mock_response = MagicMock()
+    mock_response.choices = [MagicMock(message=MagicMock(content='{"script": []}'))]
+    with (
+        patch.dict("os.environ", {"FREE_LLM_API_KEY": "sk-free-llm"}),
+        patch("news_dashboard.ai_client.chat_create", return_value=mock_response),
+    ):
+        script = generate_podcast_script({"title": "T", "summary": "Summary text", "sections": []})
+    assert len(script) == 1
+    assert script[0]["speaker"] == "Alex"
+    assert script[0]["voice"] == "onyx"
