@@ -88,10 +88,25 @@ export function adaptArticle(a: LegacyArticle): WorkflowArticle {
 
 type TriageView = 'today' | 'later' | 'starred' | 'archived';
 
+export interface TriageArticlePage {
+  items: WorkflowArticle[];
+  limit: number;
+  offset: number;
+  hasMore: boolean;
+}
+
+interface TriageArticleApiPage {
+  items: LegacyArticle[];
+  limit?: number;
+  offset?: number;
+  has_more?: boolean;
+}
+
 export async function fetchTriageArticles(
   view: TriageView,
-  category?: string
-): Promise<WorkflowArticle[]> {
+  category?: string,
+  options: { limit?: number; offset?: number } = {}
+): Promise<TriageArticlePage> {
   const params = new URLSearchParams();
   if (view === 'starred') {
     params.set('starred', 'true');
@@ -99,9 +114,16 @@ export async function fetchTriageArticles(
     params.set('state', view);
   }
   if (category) params.set('category', category);
+  if (options.limit) params.set('limit', String(options.limit));
+  if (options.offset) params.set('offset', String(options.offset));
   const suffix = params.size ? `?${params}` : '';
-  const data = await requestJson<{ items: LegacyArticle[] }>(`/api/articles${suffix}`);
-  return data.items.map(adaptArticle);
+  const data = await requestJson<TriageArticleApiPage>(`/api/articles${suffix}`);
+  return {
+    items: data.items.map(adaptArticle),
+    limit: data.limit ?? options.limit ?? data.items.length,
+    offset: data.offset ?? options.offset ?? 0,
+    hasMore: Boolean(data.has_more),
+  };
 }
 
 // ─── Mutations ──────────────────────────────────────────────────────────────

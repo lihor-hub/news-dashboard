@@ -518,16 +518,20 @@ def articles(
     limit: Annotated[int, Query(ge=1, le=500)] = 100,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> dict[str, Any]:
+    items = list_articles(
+        status=status,
+        state=state,
+        starred=starred,
+        category=category,
+        limit=limit + 1,
+        offset=offset,
+        user_id=current_user["id"],
+    )
     return {
-        "items": list_articles(
-            status=status,
-            state=state,
-            starred=starred,
-            category=category,
-            limit=limit,
-            offset=offset,
-            user_id=current_user["id"],
-        )
+        "items": items[:limit],
+        "limit": limit,
+        "offset": offset,
+        "has_more": len(items) > limit,
     }
 
 

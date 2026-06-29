@@ -18,9 +18,11 @@ export function ArchivePage() {
   return (
     <ArticleListView
       title="Archive"
-      description={() => 'Hidden from daily surfaces · still searchable'}
+      description={({ loadedCount, hasMore }) =>
+        `${loadedCount}${hasMore ? '+' : ''} archived · still searchable`
+      }
       queryKey={[ARTICLES_KEY, 'archived', category]}
-      queryFn={() => fetchTriageArticles('archived', category)}
+      queryFn={(params) => fetchTriageArticles('archived', category, params)}
       empty={{ icon: ArchiveIcon, title: 'Archive empty' }}
       showCategoryFilter
       sortArticles={sortByArchivedDate}

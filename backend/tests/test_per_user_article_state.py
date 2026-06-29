@@ -366,6 +366,49 @@ def test_api_articles_uses_user_state(pg_clean: str, monkeypatch: pytest.MonkeyP
         app.dependency_overrides.pop(require_auth, None)
 
 
+def test_api_articles_exposes_pagination_metadata(
+    pg_clean: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """GET /api/articles tells clients when another queue page is available."""
+    monkeypatch.setenv("DATABASE_URL", str(pg_clean))
+    sync_sources(pg_clean)
+
+    from fastapi.testclient import TestClient
+
+    from news_dashboard.auth import require_auth
+    from news_dashboard.main import app
+
+    uid = _make_user(pg_clean, "pagination-user")
+    for index in range(3):
+        _insert_article(pg_clean, url_suffix=f"page-{index}")
+
+    fake_user = {"id": uid, "username": "pagination-user", "email": None, "is_admin": False}
+    app.dependency_overrides[require_auth] = lambda: fake_user
+
+    try:
+        with TestClient(app, raise_server_exceptions=True) as client:
+            first = client.get("/api/articles", params={"state": "today", "limit": 2})
+            assert first.status_code == 200
+            first_payload = first.json()
+            assert len(first_payload["items"]) == 2
+            assert first_payload["limit"] == 2
+            assert first_payload["offset"] == 0
+            assert first_payload["has_more"] is True
+
+            second = client.get(
+                "/api/articles",
+                params={"state": "today", "limit": 2, "offset": 2},
+            )
+            assert second.status_code == 200
+            second_payload = second.json()
+            assert len(second_payload["items"]) == 1
+            assert second_payload["limit"] == 2
+            assert second_payload["offset"] == 2
+            assert second_payload["has_more"] is False
+    finally:
+        app.dependency_overrides.pop(require_auth, None)
+
+
 def test_api_state_transition_writes_uas(pg_clean: str, monkeypatch: pytest.MonkeyPatch) -> None:
     """PATCH /api/articles/{id}/state writes to user_article_state."""
     monkeypatch.setenv("DATABASE_URL", str(pg_clean))

@@ -6,6 +6,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { FocusedArticleProvider } from '../contexts/focusedArticle';
 import { ArticleListView } from '../components/article/ArticleListView';
 import type { WorkflowArticle } from '../lib/workflowTypes';
+import type { TriageArticlePage } from '../api/workflowApi';
 import { Inbox } from 'lucide-react';
 
 vi.mock('../hooks/useTriageMutations', () => ({
@@ -34,7 +35,22 @@ function makeArticle(overrides: Partial<WorkflowArticle> = {}): WorkflowArticle 
   };
 }
 
-function renderArticleList(queryFn: () => Promise<WorkflowArticle[]>) {
+function page(
+  items: WorkflowArticle[],
+  overrides: Partial<Omit<TriageArticlePage, 'items'>> = {}
+): TriageArticlePage {
+  return {
+    items,
+    limit: 100,
+    offset: 0,
+    hasMore: false,
+    ...overrides,
+  };
+}
+
+function renderArticleList(
+  queryFn: (params: { limit: number; offset: number }) => Promise<TriageArticlePage>
+) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
@@ -67,7 +83,7 @@ function renderArticleList(queryFn: () => Promise<WorkflowArticle[]>) {
 
 describe('ArticleListView', () => {
   it('renders a configured heading, category filter, count, and article links', async () => {
-    renderArticleList(() => Promise.resolve([makeArticle()]));
+    renderArticleList(() => Promise.resolve(page([makeArticle()])));
 
     await waitFor(() => expect(screen.getByText('Readable article')).toBeTruthy());
 
@@ -80,7 +96,7 @@ describe('ArticleListView', () => {
   });
 
   it('marks article rows for deferred off-screen rendering', async () => {
-    renderArticleList(() => Promise.resolve([makeArticle()]));
+    renderArticleList(() => Promise.resolve(page([makeArticle()])));
 
     await waitFor(() => expect(screen.getByText('Readable article')).toBeTruthy());
 
@@ -89,15 +105,41 @@ describe('ArticleListView', () => {
   });
 
   it('renders the configured empty state after a successful empty response', async () => {
-    renderArticleList(() => Promise.resolve([]));
+    renderArticleList(() => Promise.resolve(page([])));
 
     await waitFor(() => expect(screen.getByText('Queue clear')).toBeTruthy());
+  });
+
+  it('loads and appends another page when more articles are available', async () => {
+    const queryFn = vi
+      .fn()
+      .mockResolvedValueOnce(
+        page([makeArticle({ id: '1', title: 'First page' })], { hasMore: true })
+      )
+      .mockResolvedValueOnce(
+        page([makeArticle({ id: '2', title: 'Second page' })], {
+          offset: 1,
+          hasMore: false,
+        })
+      );
+
+    renderArticleList(queryFn);
+
+    await waitFor(() => expect(screen.getByText('First page')).toBeTruthy());
+    expect(screen.getByText('1 unhandled')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Load more' }));
+
+    await waitFor(() => expect(screen.getByText('Second page')).toBeTruthy());
+    expect(queryFn).toHaveBeenNthCalledWith(1, { limit: 100, offset: 0 });
+    expect(queryFn).toHaveBeenNthCalledWith(2, { limit: 100, offset: 1 });
+    expect(screen.getByText('2 unhandled')).toBeTruthy();
   });
 });
 
 describe('ArticleListView — list-view triage actions do not navigate', () => {
   it('swipe-right (done) calls setState but stays on the list page', async () => {
-    renderArticleList(() => Promise.resolve([makeArticle()]));
+    renderArticleList(() => Promise.resolve(page([makeArticle()])));
     await waitFor(() => screen.getByText('Readable article'));
 
     // The SwipeableRow inner div (touch target) wraps the article Link.

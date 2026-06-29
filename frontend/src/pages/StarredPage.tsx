@@ -18,11 +18,11 @@ export function StarredPage() {
   return (
     <ArticleListView
       title="Starred"
-      description={({ count, isLoading }) =>
-        `${isLoading ? '…' : `${count} reference articles`} · always available to Ask AI`
+      description={({ loadedCount, hasMore, isLoading }) =>
+        `${isLoading ? '...' : `${loadedCount}${hasMore ? '+' : ''} reference articles`} · always available to Ask AI`
       }
       queryKey={[ARTICLES_KEY, 'starred', category]}
-      queryFn={() => fetchTriageArticles('starred', category)}
+      queryFn={(params) => fetchTriageArticles('starred', category, params)}
       empty={{
         icon: Star,
         title: 'No stars yet',

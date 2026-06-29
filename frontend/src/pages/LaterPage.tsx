@@ -14,9 +14,11 @@ export function LaterPage() {
   return (
     <ArticleListView
       title="Later"
-      description={({ count }) => `${count} snoozed · returns to Today automatically`}
+      description={({ loadedCount, hasMore }) =>
+        `${loadedCount}${hasMore ? '+' : ''} snoozed · returns to Today automatically`
+      }
       queryKey={[ARTICLES_KEY, 'later']}
-      queryFn={() => fetchTriageArticles('later')}
+      queryFn={(params) => fetchTriageArticles('later', undefined, params)}
       empty={{
         icon: Clock,
         title: 'Nothing snoozed',
