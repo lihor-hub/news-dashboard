@@ -17,6 +17,7 @@ from news_dashboard.perspectives import (
     DEFAULT_PERSPECTIVES_MODEL,
     PerspectivesNotConfiguredError,
     _build_text,
+    _fetch_related_articles,
     _parse_analysis,
     _perspectives_ai_config,
     generate_perspectives,
@@ -73,6 +74,58 @@ def _seed_article(pg_url: str, *, perspective_analysis: str | None = None) -> in
             RETURNING id
             """,
             (perspective_analysis,),
+        ).fetchone()
+    assert row is not None
+    return int(row["id"])
+
+
+def _seed_user(pg_url: str, username: str) -> int:
+    with connect(database_url=pg_url) as conn:
+        row = conn.execute(
+            "INSERT INTO users(username, password_hash) VALUES (%s, 'x') RETURNING id",
+            (username,),
+        ).fetchone()
+    assert row is not None
+    return int(row["id"])
+
+
+def _seed_private_article(
+    pg_url: str,
+    *,
+    owner_user_id: int,
+    url_slug: str = "priv-p",
+    category: str = "tech",
+    perspective_analysis: str | None = None,
+) -> int:
+    slug = f"private-src-{url_slug}"
+    with connect(database_url=pg_url) as conn:
+        conn.execute(
+            """
+            INSERT INTO sources(slug, name, url, category, kind, owner_user_id)
+            VALUES (%s, 'Private', %s, %s, 'rss_feed', %s)
+            ON CONFLICT(slug) DO NOTHING
+            """,
+            (slug, f"https://{slug}.example", category, owner_user_id),
+        )
+        row = conn.execute(
+            """
+            INSERT INTO articles(
+              url, canonical_url, title, source_slug, source_name,
+              category, kind, summary, body, perspective_analysis
+            )
+            VALUES (
+              %s, %s, 'Private Article', %s, 'Private', %s,
+              'rss_feed', 'Summary.', 'Body text here.', %s
+            )
+            RETURNING id
+            """,
+            (
+                f"https://{slug}.example/a",
+                f"https://{slug}.example/a",
+                slug,
+                category,
+                perspective_analysis,
+            ),
         ).fetchone()
     assert row is not None
     return int(row["id"])
@@ -309,3 +362,82 @@ def test_get_or_generate_second_call_uses_cache(pg_clean: str) -> None:
 
     assert r1 == r2
     assert len(call_count) == 1, "AI called more than once — cache not working"
+
+
+# ── visibility / authorization tests ─────────────────────────────────────────
+
+
+def test_get_or_generate_returns_none_for_unauthorized_user_cached(pg_clean: str) -> None:
+    """Cached perspectives for a private article must not be returned to another user."""
+    owner_id = _seed_user(pg_clean, "owner-p-1")
+    other_id = _seed_user(pg_clean, "other-p-1")
+    article_id = _seed_private_article(
+        pg_clean,
+        owner_user_id=owner_id,
+        url_slug="vis1",
+        perspective_analysis=json.dumps(_VALID_ANALYSIS),
+    )
+
+    result = get_or_generate_perspectives(article_id, user_id=other_id, database_url=pg_clean)
+
+    assert result is None
+
+
+def test_get_or_generate_returns_cached_for_owner(pg_clean: str) -> None:
+    """Owner can still retrieve cached perspectives for their private article."""
+    owner_id = _seed_user(pg_clean, "owner-p-2")
+    article_id = _seed_private_article(
+        pg_clean,
+        owner_user_id=owner_id,
+        url_slug="vis2",
+        perspective_analysis=json.dumps(_VALID_ANALYSIS),
+    )
+
+    result = get_or_generate_perspectives(article_id, user_id=owner_id, database_url=pg_clean)
+
+    assert result is not None
+    assert result["verified_facts"] == ["Fact one"]
+
+
+def test_fetch_related_articles_excludes_invisible_sources(pg_clean: str) -> None:
+    """Related articles from sources invisible to the user must be excluded."""
+    owner_id = _seed_user(pg_clean, "owner-p-3")
+    other_id = _seed_user(pg_clean, "other-p-3")
+
+    pivot_id = _seed_private_article(
+        pg_clean, owner_user_id=owner_id, url_slug="pivot", category="tech"
+    )
+    _seed_private_article(pg_clean, owner_user_id=owner_id, url_slug="related1", category="tech")
+
+    related_as_owner = _fetch_related_articles(pivot_id, user_id=owner_id, database_url=pg_clean)
+    related_as_other = _fetch_related_articles(pivot_id, user_id=other_id, database_url=pg_clean)
+
+    assert len(related_as_owner) == 1
+    assert len(related_as_other) == 0
+
+
+def test_perspectives_endpoint_returns_404_for_unauthorized_cached(pg_clean: str) -> None:
+    """GET /api/articles/{id}/perspectives returns 404 when user cannot access the article."""
+    from fastapi.testclient import TestClient
+
+    from news_dashboard.auth import require_auth
+    from news_dashboard.main import app
+
+    owner_id = _seed_user(pg_clean, "owner-p-4")
+    other_id = _seed_user(pg_clean, "other-p-4")
+    article_id = _seed_private_article(
+        pg_clean,
+        owner_user_id=owner_id,
+        url_slug="vis4",
+        perspective_analysis=json.dumps(_VALID_ANALYSIS),
+    )
+
+    other_user = {"id": other_id, "is_admin": False, "username": "other-p-4"}
+    app.dependency_overrides[require_auth] = lambda: other_user
+    try:
+        client = TestClient(app)
+        resp = client.get(f"/api/articles/{article_id}/perspectives")
+    finally:
+        del app.dependency_overrides[require_auth]
+
+    assert resp.status_code == 404

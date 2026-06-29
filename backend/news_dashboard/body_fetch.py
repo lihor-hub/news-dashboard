@@ -310,13 +310,31 @@ def get_article(
 ) -> dict[str, Any] | None:
     """Fetch a single article by ID, stripping internal columns.
 
-    When user_id is given the per-user state from user_article_state is merged
-    in so that state/starred/timestamps reflect the calling user, not the
-    global articles table defaults.
+    When user_id is given the article must be visible to that user
+    (global source not disabled, or private source owned by the user).
+    Returns None for invisible articles as well as non-existent ones.
+    Per-user state from user_article_state is merged in for the returned dict.
     """
     init_db(db_path)
     with connect(db_path) as conn:
-        row = conn.execute("SELECT * FROM articles WHERE id = %s", (article_id,)).fetchone()
+        if user_id is not None:
+            row = conn.execute(
+                """
+                SELECT a.*
+                FROM articles a
+                JOIN sources src ON src.slug = a.source_slug
+                LEFT JOIN user_sources us_src
+                  ON us_src.source_slug = a.source_slug AND us_src.user_id = %s
+                WHERE a.id = %s
+                  AND (
+                    (src.owner_user_id IS NULL AND COALESCE(us_src.enabled, TRUE))
+                    OR src.owner_user_id = %s
+                  )
+                """,
+                (user_id, article_id, user_id),
+            ).fetchone()
+        else:
+            row = conn.execute("SELECT * FROM articles WHERE id = %s", (article_id,)).fetchone()
         if row is None:
             return None
         return _article_from_row(row, conn, article_id, user_id)

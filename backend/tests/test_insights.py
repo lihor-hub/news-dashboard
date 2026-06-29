@@ -86,6 +86,55 @@ def _seed_article(pg_url: str, *, insights: str | None = None) -> int:
     return int(row["id"])
 
 
+def _seed_user(pg_url: str, username: str) -> int:
+    with connect(database_url=pg_url) as conn:
+        row = conn.execute(
+            "INSERT INTO users(username, password_hash) VALUES (%s, 'x') RETURNING id",
+            (username,),
+        ).fetchone()
+    assert row is not None
+    return int(row["id"])
+
+
+def _seed_private_article(
+    pg_url: str,
+    *,
+    owner_user_id: int,
+    url_slug: str = "priv-a",
+    insights: str | None = None,
+) -> int:
+    slug = f"private-src-{url_slug}"
+    with connect(database_url=pg_url) as conn:
+        conn.execute(
+            """
+            INSERT INTO sources(slug, name, url, category, kind, owner_user_id)
+            VALUES (%s, 'Private', %s, 'tech', 'rss_feed', %s)
+            ON CONFLICT(slug) DO NOTHING
+            """,
+            (slug, f"https://{slug}.example", owner_user_id),
+        )
+        row = conn.execute(
+            """
+            INSERT INTO articles(
+              url, canonical_url, title, source_slug, source_name,
+              category, kind, summary, insights
+            )
+            VALUES (
+              %s, %s, 'Private Article', %s, 'Private', 'tech', 'rss_feed', 'Summary.', %s
+            )
+            RETURNING id
+            """,
+            (
+                f"https://{slug}.example/a",
+                f"https://{slug}.example/a",
+                slug,
+                insights,
+            ),
+        ).fetchone()
+    assert row is not None
+    return int(row["id"])
+
+
 # ── _parse_bullets ────────────────────────────────────────────────────────────
 
 
@@ -383,6 +432,71 @@ def test_get_or_generate_insights_returns_empty_when_body_is_empty_string(pg_cle
 
     assert result == []
     mock_client.chat.completions.create.assert_not_called()
+
+
+def test_get_or_generate_insights_cached_blocked_for_unauthorized_user(pg_clean: str) -> None:
+    """Cached insights for a private article must not be returned to another user."""
+    owner_id = _seed_user(pg_clean, "owner-ins-1")
+    other_id = _seed_user(pg_clean, "other-ins-1")
+    cached = json.dumps(["Secret insight"])
+    article_id = _seed_private_article(
+        pg_clean, owner_user_id=owner_id, url_slug="auth1", insights=cached
+    )
+
+    mock_client = MagicMock()
+    with (
+        patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}),
+        patch("openai.OpenAI", return_value=mock_client),
+    ):
+        result = get_or_generate_insights(article_id, user_id=other_id, database_url=pg_clean)
+
+    assert result == []
+    mock_client.chat.completions.create.assert_not_called()
+
+
+def test_get_or_generate_insights_cached_returned_for_owner(pg_clean: str) -> None:
+    """Owner can still retrieve cached insights for their private article."""
+    owner_id = _seed_user(pg_clean, "owner-ins-2")
+    cached = ["Owner insight"]
+    article_id = _seed_private_article(
+        pg_clean,
+        owner_user_id=owner_id,
+        url_slug="auth2",
+        insights=json.dumps(cached),
+    )
+
+    result = get_or_generate_insights(article_id, user_id=owner_id, database_url=pg_clean)
+
+    assert result == cached
+
+
+def test_get_or_generate_insights_endpoint_returns_404_for_unauthorized_cached(
+    pg_clean: str,
+) -> None:
+    """GET /api/articles/{id}/insights returns 404 when user cannot access the article."""
+    from fastapi.testclient import TestClient
+
+    from news_dashboard.auth import require_auth
+    from news_dashboard.main import app
+
+    owner_id = _seed_user(pg_clean, "owner-ins-3")
+    other_id = _seed_user(pg_clean, "other-ins-3")
+    article_id = _seed_private_article(
+        pg_clean,
+        owner_user_id=owner_id,
+        url_slug="auth3",
+        insights=json.dumps(["Cached"]),
+    )
+
+    other_user = {"id": other_id, "is_admin": False, "username": "other-ins-3"}
+    app.dependency_overrides[require_auth] = lambda: other_user
+    try:
+        client = TestClient(app)
+        resp = client.get(f"/api/articles/{article_id}/insights")
+    finally:
+        del app.dependency_overrides[require_auth]
+
+    assert resp.status_code == 404
 
 
 # ── clustering unit tests (no DB, no AI) ─────────────────────────────────────

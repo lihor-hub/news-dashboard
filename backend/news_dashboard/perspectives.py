@@ -108,23 +108,51 @@ def _parse_analysis(response_text: str) -> dict[str, list[str]]:
 
 
 def _fetch_related_articles(
-    article_id: int, *, database_url: str | None = None
+    article_id: int,
+    *,
+    user_id: int | None = None,
+    database_url: str | None = None,
 ) -> list[dict[str, Any]]:
-    """Return up to _MAX_RELATED articles that share the same source/category."""
+    """Return up to _MAX_RELATED articles sharing the same category.
+
+    When user_id is provided, only articles visible to that user are included.
+    """
     with connect(database_url=database_url) as conn:
-        rows = conn.execute(
-            """
-            SELECT a.title, a.body, a.summary
-            FROM articles a
-            JOIN articles pivot ON pivot.id = %s
-            WHERE a.id <> %s
-              AND a.category = pivot.category
-              AND (a.body IS NOT NULL OR a.summary IS NOT NULL)
-            ORDER BY a.discovered_at DESC
-            LIMIT %s
-            """,
-            (article_id, article_id, _MAX_RELATED),
-        ).fetchall()
+        if user_id is not None:
+            rows = conn.execute(
+                """
+                SELECT a.title, a.body, a.summary
+                FROM articles a
+                JOIN sources src ON src.slug = a.source_slug
+                LEFT JOIN user_sources us_src
+                  ON us_src.source_slug = a.source_slug AND us_src.user_id = %s
+                JOIN articles pivot ON pivot.id = %s
+                WHERE a.id <> %s
+                  AND a.category = pivot.category
+                  AND (a.body IS NOT NULL OR a.summary IS NOT NULL)
+                  AND (
+                    (src.owner_user_id IS NULL AND COALESCE(us_src.enabled, TRUE))
+                    OR src.owner_user_id = %s
+                  )
+                ORDER BY a.discovered_at DESC
+                LIMIT %s
+                """,
+                (user_id, article_id, article_id, user_id, _MAX_RELATED),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                """
+                SELECT a.title, a.body, a.summary
+                FROM articles a
+                JOIN articles pivot ON pivot.id = %s
+                WHERE a.id <> %s
+                  AND a.category = pivot.category
+                  AND (a.body IS NOT NULL OR a.summary IS NOT NULL)
+                ORDER BY a.discovered_at DESC
+                LIMIT %s
+                """,
+                (article_id, article_id, _MAX_RELATED),
+            ).fetchall()
     return [dict(r) for r in rows]
 
 
@@ -172,16 +200,32 @@ def get_or_generate_perspectives(
 ) -> dict[str, list[str]] | None:
     """Return cached perspective analysis or generate and cache it.
 
-    Returns None if the article does not exist.
+    Returns None if the article does not exist or is not visible to user_id.
     Raises PerspectivesNotConfiguredError when OPENAI_API_KEY is absent and
     no cached analysis exists.
     """
     init_db(database_url=database_url)
 
     with connect(database_url=database_url) as conn:
-        row = conn.execute(
-            "SELECT perspective_analysis FROM articles WHERE id = %s", (article_id,)
-        ).fetchone()
+        if user_id is not None:
+            row = conn.execute(
+                """
+                SELECT a.perspective_analysis
+                FROM articles a
+                JOIN sources src ON src.slug = a.source_slug
+                LEFT JOIN user_sources us_src
+                  ON us_src.source_slug = a.source_slug AND us_src.user_id = %s
+                WHERE a.id = %s AND (
+                  (src.owner_user_id IS NULL AND COALESCE(us_src.enabled, TRUE))
+                  OR src.owner_user_id = %s
+                )
+                """,
+                (user_id, article_id, user_id),
+            ).fetchone()
+        else:
+            row = conn.execute(
+                "SELECT perspective_analysis FROM articles WHERE id = %s", (article_id,)
+            ).fetchone()
 
     if row is None:
         return None
@@ -200,7 +244,7 @@ def get_or_generate_perspectives(
     if not str(article.get("body") or "").strip():
         return {"verified_facts": [], "omissions": [], "alternative_perspectives": []}
 
-    related = _fetch_related_articles(article_id, database_url=database_url)
+    related = _fetch_related_articles(article_id, user_id=user_id, database_url=database_url)
     analysis = generate_perspectives(article, related, user_id=user_id)
 
     with connect(database_url=database_url) as conn:

@@ -117,13 +117,35 @@ def get_or_generate_insights(
 ) -> list[str]:
     """Return cached insights or generate + cache them.
 
+    When user_id is provided the article must be visible to that user
+    (global source not disabled, or private source owned by the user).
+    Returns [] for invisible or non-existent articles.
+
     Raises InsightsNotConfiguredError when OPENAI_API_KEY is absent and
     no cached insights exist.
     """
     init_db(database_url=database_url)
 
     with connect(database_url=database_url) as conn:
-        row = conn.execute("SELECT insights FROM articles WHERE id = %s", (article_id,)).fetchone()
+        if user_id is not None:
+            row = conn.execute(
+                """
+                SELECT a.insights
+                FROM articles a
+                JOIN sources src ON src.slug = a.source_slug
+                LEFT JOIN user_sources us_src
+                  ON us_src.source_slug = a.source_slug AND us_src.user_id = %s
+                WHERE a.id = %s AND (
+                  (src.owner_user_id IS NULL AND COALESCE(us_src.enabled, TRUE))
+                  OR src.owner_user_id = %s
+                )
+                """,
+                (user_id, article_id, user_id),
+            ).fetchone()
+        else:
+            row = conn.execute(
+                "SELECT insights FROM articles WHERE id = %s", (article_id,)
+            ).fetchone()
 
     if row is None:
         return []
