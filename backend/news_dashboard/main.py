@@ -509,7 +509,7 @@ def ingest(background_tasks: BackgroundTasks) -> dict[str, Any]:
     }
 
 
-@api.get("/api/ingest/stream")
+@api.get("/api/ingest/stream", dependencies=[Depends(require_admin)])
 def ingest_stream() -> StreamingResponse:
     return StreamingResponse(stream_ingest_events(), media_type="text/event-stream")
 
@@ -1414,7 +1414,10 @@ def set_source_enabled(
     return {**row_to_dict(row), "subscribed": payload.enabled}
 
 
-@api.get("/api/scheduler/status")
+_admin_dep = [Depends(require_admin)]
+
+
+@api.get("/api/scheduler/status", dependencies=_admin_dep)
 def scheduler_status() -> dict[str, Any]:
     interval_enabled = is_ingest_interval_enabled()
     next_run = get_next_ingest_at()
@@ -1426,9 +1429,6 @@ def scheduler_status() -> dict[str, Any]:
         "interval_ingest_enabled": interval_enabled,
         "ingest_authority": "in_process" if interval_enabled else "external",
     }
-
-
-_admin_dep = [Depends(require_admin)]
 
 
 @api.post("/api/scheduler/interval", dependencies=_admin_dep)
