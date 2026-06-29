@@ -30,7 +30,7 @@ export function useArticleListNav(
       } else if (key === 'k') {
         setFocused((f) => Math.max(0, f - 1));
         e.preventDefault();
-      } else if (e.key === 'Enter' && cur) {
+      } else if (key === 'enter' && cur) {
         openArticle(cur);
         e.preventDefault();
       } else if ((key === 'r' || key === 'd') && cur) {
