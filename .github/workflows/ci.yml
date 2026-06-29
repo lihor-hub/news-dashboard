@@ -416,8 +416,8 @@ jobs:
           GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
           GHCR_ACTOR: ${{ github.actor }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          FREE_LLM_API_KEY: ${{ secrets.FREE_LLM_API_KEY }}
-          FREE_LLM_BASE_URL: ${{ vars.FREE_LLM_BASE_URL }}
+          FREE_LLM_API_KEY: ${{ secrets.OPENAI_BRIEFING_API_KEY }}
+          FREE_LLM_BASE_URL: ${{ vars.OPENAI_BRIEFING_BASE_URL }}
           OPENAI_BRIEFING_MODEL: ${{ vars.OPENAI_BRIEFING_MODEL }}
           LANGFUSE_PUBLIC_KEY: ${{ secrets.LANGFUSE_PUBLIC_KEY }}
           LANGFUSE_SECRET_KEY: ${{ secrets.LANGFUSE_SECRET_KEY }}
