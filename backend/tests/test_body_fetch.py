@@ -215,6 +215,33 @@ def _seed_user(db_path: Path, username: str = "alice") -> int:
     return int(row["id"] if isinstance(row, dict) else row[0])
 
 
+def _seed_private_article(db_path: Path, *, owner_user_id: int, slug: str = "private") -> int:
+    with connect(db_path) as conn:
+        conn.execute(
+            """
+            INSERT INTO sources(slug, name, url, category, kind, owner_user_id)
+            VALUES (%s, %s, %s, 'private', 'rss_feed', %s)
+            """,
+            (slug, slug, f"https://{slug}.example.com/feed.xml", owner_user_id),
+        )
+        row = conn.execute(
+            """
+            INSERT INTO articles(
+              url, canonical_url, title, source_slug, source_name, category, kind
+            )
+            VALUES (%s, %s, 'Private Article', %s, %s, 'private', 'rss_feed')
+            RETURNING id
+            """,
+            (
+                f"https://{slug}.example.com/article",
+                f"https://{slug}.example.com/article",
+                slug,
+                slug,
+            ),
+        ).fetchone()
+    return int(row["id"] if isinstance(row, dict) else row[0])
+
+
 def test_get_article_with_no_uas_defaults_to_today(tmp_path: Path) -> None:
     db_path = _db(tmp_path)
     article_id = _seed_article(db_path)
@@ -268,6 +295,17 @@ def test_get_article_with_user_id_does_not_bleed_across_users(tmp_path: Path) ->
     assert result_b["starred"] is False
 
 
+def test_get_article_with_user_id_hides_other_users_private_source(tmp_path: Path) -> None:
+    db_path = _db(tmp_path)
+    sync_sources(db_path)
+    owner_id = _seed_user(db_path, "owner")
+    other_id = _seed_user(db_path, "other")
+    article_id = _seed_private_article(db_path, owner_user_id=owner_id)
+
+    assert get_article(article_id, db_path=db_path, user_id=owner_id) is not None
+    assert get_article(article_id, db_path=db_path, user_id=other_id) is None
+
+
 # ── fetch_and_cache_body with user_id ────────────────────────────────────────
 
 
@@ -292,6 +330,29 @@ def test_fetch_and_cache_body_with_user_id_reflects_state(tmp_path: Path) -> Non
     assert result["body_status"] == "ok"
     assert result["state"] == "done"
     assert result["starred"] is True
+
+
+def test_fetch_and_cache_body_with_user_id_hides_other_users_private_source(
+    tmp_path: Path,
+) -> None:
+    db_path = _db(tmp_path)
+    sync_sources(db_path)
+    owner_id = _seed_user(db_path, "owner")
+    other_id = _seed_user(db_path, "other")
+    article_id = _seed_private_article(db_path, owner_user_id=owner_id)
+
+    with patch("news_dashboard.body_fetch.extract_body") as extract:
+        result = fetch_and_cache_body(article_id, db_path=db_path, user_id=other_id)
+
+    assert result is None
+    extract.assert_not_called()
+    with connect(db_path) as conn:
+        row = conn.execute(
+            "SELECT body_status, body FROM articles WHERE id = %s",
+            (article_id,),
+        ).fetchone()
+    assert row["body_status"] == "missing"
+    assert row["body"] is None
 
 
 # ── prefetch_article_bodies ───────────────────────────────────────────────────

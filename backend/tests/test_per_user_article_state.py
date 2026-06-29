@@ -56,6 +56,29 @@ def _make_user(db_path: Path | str, username: str = "alice") -> int:
     return int(user["id"])
 
 
+def _insert_private_article(db_path: Path | str, *, owner_user_id: int) -> int:
+    with connect(db_path) as conn:
+        conn.execute(
+            """
+            INSERT INTO sources(slug, name, url, category, kind, owner_user_id)
+            VALUES ('owner-private', 'Owner Private', 'https://private.example.com/feed.xml',
+                    'private', 'rss_feed', %s)
+            """,
+            (owner_user_id,),
+        )
+        row = conn.execute(
+            """
+            INSERT INTO articles(url, canonical_url, title, source_slug, source_name,
+                                 category, kind, state)
+            VALUES ('https://private.example.com/art', 'https://private.example.com/art',
+                    'Private Article', 'owner-private', 'Owner Private',
+                    'private', 'rss_feed', 'today')
+            RETURNING id
+            """
+        ).fetchone()
+    return int(row["id"] if isinstance(row, dict) else row[0])
+
+
 # ── implicit today (no UAS row yet) ──────────────────────────────────────────
 
 
@@ -261,6 +284,39 @@ def test_snooze_cannot_snooze_done(tmp_path: Path) -> None:
     transition_article_state(aid, "done", db_path=db, user_id=uid)
     with pytest.raises(ValueError, match="cannot snooze"):
         send_article_later(aid, days=1, db_path=db, user_id=uid)
+
+
+@pytest.mark.parametrize(
+    "operation",
+    ["state", "star", "later"],
+)
+def test_article_state_operations_hide_other_users_private_source(
+    tmp_path: Path, operation: str
+) -> None:
+    db = _setup_db(tmp_path)
+    owner_id = _make_user(db, "owner")
+    other_id = _make_user(db, "other")
+    aid = _insert_private_article(db, owner_user_id=owner_id)
+
+    if operation == "state":
+        result = transition_article_state(aid, "done", db_path=db, user_id=other_id)
+    elif operation == "star":
+        result = set_article_starred(aid, True, db_path=db, user_id=other_id)
+    else:
+        result = send_article_later(aid, days=1, db_path=db, user_id=other_id)
+
+    assert result is None
+    with connect(db) as conn:
+        row = conn.execute(
+            """
+            SELECT COUNT(*) AS count
+            FROM user_article_state
+            WHERE article_id = %s AND user_id = %s
+            """,
+            (aid, other_id),
+        ).fetchone()
+    assert row["count"] == 0
+    assert transition_article_state(aid, "done", db_path=db, user_id=owner_id) is not None
 
 
 def test_snooze_returns_to_today_after_expiry(tmp_path: Path) -> None:

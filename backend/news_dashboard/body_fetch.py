@@ -15,6 +15,7 @@ from html.parser import HTMLParser
 from pathlib import Path
 from typing import Any
 
+from news_dashboard.article_visibility import get_visible_article_row
 from news_dashboard.db import connect, init_db, row_to_dict
 from news_dashboard.scraper import TIMEOUT_SECS, USER_AGENT
 
@@ -317,24 +318,7 @@ def get_article(
     """
     init_db(db_path)
     with connect(db_path) as conn:
-        if user_id is not None:
-            row = conn.execute(
-                """
-                SELECT a.*
-                FROM articles a
-                JOIN sources src ON src.slug = a.source_slug
-                LEFT JOIN user_sources us_src
-                  ON us_src.source_slug = a.source_slug AND us_src.user_id = %s
-                WHERE a.id = %s
-                  AND (
-                    (src.owner_user_id IS NULL AND COALESCE(us_src.enabled, TRUE))
-                    OR src.owner_user_id = %s
-                  )
-                """,
-                (user_id, article_id, user_id),
-            ).fetchone()
-        else:
-            row = conn.execute("SELECT * FROM articles WHERE id = %s", (article_id,)).fetchone()
+        row = get_visible_article_row(conn, article_id, user_id)
         if row is None:
             return None
         return _article_from_row(row, conn, article_id, user_id)
@@ -390,7 +374,7 @@ def fetch_and_cache_body(
     """
     init_db(db_path)
     with connect(db_path) as conn:
-        row = conn.execute("SELECT * FROM articles WHERE id = %s", (article_id,)).fetchone()
+        row = get_visible_article_row(conn, article_id, user_id)
         if row is None:
             return None
         row_d = row_to_dict(row)

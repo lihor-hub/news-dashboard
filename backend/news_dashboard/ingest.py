@@ -17,6 +17,7 @@ from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
 import feedparser
 
+from news_dashboard.article_visibility import get_visible_article_row
 from news_dashboard.db import connect, init_db, insert_article_sql, placeholders, row_to_dict
 from news_dashboard.ingest_events import ingest_events
 from news_dashboard.recommendations import COLD_START_MODEL_VERSION
@@ -1747,6 +1748,13 @@ def _get_article_row(conn: Any, article_id: int) -> dict[str, Any] | None:
     return _article_dict(row) if row else None
 
 
+def _get_article_row_for_user(
+    conn: Any, article_id: int, user_id: int | None
+) -> dict[str, Any] | None:
+    row = get_visible_article_row(conn, article_id, user_id)
+    return _article_dict(row) if row else None
+
+
 def transition_article_state(  # noqa: PLR0912
     article_id: int,
     new_state: str,
@@ -1764,7 +1772,7 @@ def transition_article_state(  # noqa: PLR0912
 
     init_db(db_path)
     with connect(db_path) as conn:
-        base = _get_article_row(conn, article_id)
+        base = _get_article_row_for_user(conn, article_id, user_id)
         if base is None:
             return None
 
@@ -1847,7 +1855,7 @@ def set_article_starred(
     """Set the starred flag on an article. Raises ValueError if starring a skipped article."""
     init_db(db_path)
     with connect(db_path) as conn:
-        base = _get_article_row(conn, article_id)
+        base = _get_article_row_for_user(conn, article_id, user_id)
         if base is None:
             return None
 
@@ -1900,7 +1908,7 @@ def send_article_later(
 
     init_db(db_path)
     with connect(db_path) as conn:
-        base = _get_article_row(conn, article_id)
+        base = _get_article_row_for_user(conn, article_id, user_id)
         if base is None:
             return None
 

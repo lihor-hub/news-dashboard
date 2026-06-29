@@ -60,6 +60,29 @@ def _insert_article(db_path: str, suffix: str = "1") -> int:
     return int(row["id"])
 
 
+def _insert_private_article(db_path: str, *, owner_user_id: int) -> int:
+    with connect(db_path) as conn:
+        conn.execute(
+            """
+            INSERT INTO sources(slug, name, url, category, kind, owner_user_id)
+            VALUES ('private-share', 'Private Share', 'https://private.example.com/feed.xml',
+                    'private', 'rss_feed', %s)
+            """,
+            (owner_user_id,),
+        )
+        row = conn.execute(
+            """
+            INSERT INTO articles(url, canonical_url, title, source_slug,
+              source_name, category, kind, state)
+            VALUES ('https://private.example.com/share', 'https://private.example.com/share',
+                    'Private Share Article', 'private-share', 'Private Share',
+                    'private', 'rss_feed', 'today')
+            RETURNING id
+            """
+        ).fetchone()
+    return int(row["id"])
+
+
 def test_share_and_list(db: str) -> None:
     alice = _make_user(db, "alice")
     bob = _make_user(db, "bob")
@@ -113,6 +136,21 @@ def test_share_unknown_article_raises(db: str) -> None:
     bob = _make_user(db, "bob")
     with pytest.raises(ShareError):
         share_article(article_id=999999, from_user_id=alice, to_user_id=bob)
+
+
+def test_cannot_share_other_users_private_source_article(db: str) -> None:
+    alice = _make_user(db, "alice")
+    bob = _make_user(db, "bob")
+    article_id = _insert_private_article(db, owner_user_id=alice)
+
+    with pytest.raises(ShareError, match="not found"):
+        share_article(article_id=article_id, from_user_id=bob, to_user_id=alice)
+
+    with connect(db) as conn:
+        row = conn.execute("SELECT COUNT(*) AS count FROM article_shares").fetchone()
+    assert row["count"] == 0
+    share = share_article(article_id=article_id, from_user_id=alice, to_user_id=bob)
+    assert share["article_id"] == article_id
 
 
 # ── Annotation tests ──────────────────────────────────────────────────────────

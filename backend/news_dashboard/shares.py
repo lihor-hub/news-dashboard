@@ -13,6 +13,7 @@ import logging
 import os
 from typing import Any
 
+from news_dashboard.article_visibility import get_visible_article_row
 from news_dashboard.db import connect, row_to_dict
 
 logger = logging.getLogger(__name__)
@@ -52,7 +53,7 @@ def share_article(
 
     clean_note = (note or "").strip() or None
     with connect() as conn:
-        if conn.execute("SELECT 1 FROM articles WHERE id = %s", (article_id,)).fetchone() is None:
+        if get_visible_article_row(conn, article_id, from_user_id) is None:
             msg = f"Article {article_id} not found"
             raise ShareError(msg)
         if conn.execute("SELECT 1 FROM users WHERE id = %s", (to_user_id,)).fetchone() is None:
