@@ -116,15 +116,33 @@ describe('useArticleListNav — action keys', () => {
     expect(mutations.setState).toHaveBeenCalledWith(article, 'done', 'Done');
   });
 
+  it('R marks article done', () => {
+    renderHook(() => useArticleListNav(articles, vi.fn(), mutations));
+    act(() => fireKey('R', { shiftKey: true }));
+    expect(mutations.setState).toHaveBeenCalledWith(article, 'done', 'Done');
+  });
+
   it('d marks article done', () => {
     renderHook(() => useArticleListNav(articles, vi.fn(), mutations));
     act(() => fireKey('d'));
     expect(mutations.setState).toHaveBeenCalledWith(article, 'done', 'Done');
   });
 
+  it('D marks article done', () => {
+    renderHook(() => useArticleListNav(articles, vi.fn(), mutations));
+    act(() => fireKey('D', { shiftKey: true }));
+    expect(mutations.setState).toHaveBeenCalledWith(article, 'done', 'Done');
+  });
+
   it('l sends to later', () => {
     renderHook(() => useArticleListNav(articles, vi.fn(), mutations));
     act(() => fireKey('l'));
+    expect(mutations.sendLater).toHaveBeenCalledWith(article);
+  });
+
+  it('L sends to later', () => {
+    renderHook(() => useArticleListNav(articles, vi.fn(), mutations));
+    act(() => fireKey('L', { shiftKey: true }));
     expect(mutations.sendLater).toHaveBeenCalledWith(article);
   });
 
