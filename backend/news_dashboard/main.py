@@ -1861,7 +1861,12 @@ def push_subscribe(
     current_user: Annotated[dict[str, Any], Depends(require_auth)],
     payload: PushSubscribeRequest,
 ) -> dict[str, Any]:
-    from news_dashboard.push import save_push_subscription
+    from news_dashboard.push import save_push_subscription, validate_push_subscription
+
+    try:
+        validate_push_subscription(payload.endpoint, payload.p256dh, payload.auth)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     save_push_subscription(
         current_user["id"],

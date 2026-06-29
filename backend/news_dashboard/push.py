@@ -2,12 +2,76 @@
 
 from __future__ import annotations
 
+import ipaddress
 import json
 import logging
 import os
+import re
 from typing import Any, Literal
+from urllib.parse import urlparse
 
 logger = logging.getLogger(__name__)
+
+# Maximum lengths for push subscription fields
+_MAX_ENDPOINT_LEN = 2083
+_MAX_KEY_LEN = 256
+
+# Base64url alphabet (no padding required)
+_BASE64URL_RE = re.compile(r"^[A-Za-z0-9_\-]+=*$")
+
+
+def validate_push_subscription(endpoint: str, p256dh: str, auth: str) -> None:
+    """Raise ValueError if the subscription fields fail basic sanity checks.
+
+    Checks performed:
+    - endpoint is an HTTPS URL with a non-empty hostname
+    - endpoint does not target localhost, loopback, link-local or private IPs (IP literals only)
+    - endpoint and key lengths are within reasonable Web Push bounds
+    - p256dh and auth are non-empty base64url-like strings
+    """
+    if len(endpoint) > _MAX_ENDPOINT_LEN:
+        msg = "endpoint too long"
+        raise ValueError(msg)
+    if len(p256dh) > _MAX_KEY_LEN:
+        msg = "p256dh too long"
+        raise ValueError(msg)
+    if len(auth) > _MAX_KEY_LEN:
+        msg = "auth too long"
+        raise ValueError(msg)
+
+    parsed = urlparse(endpoint)
+    if parsed.scheme != "https":
+        msg = "endpoint must use the https scheme"
+        raise ValueError(msg)
+    hostname = parsed.hostname or ""
+    if not hostname:
+        msg = "endpoint must have a non-empty hostname"
+        raise ValueError(msg)
+
+    # Reject IP-literal hosts that are not publicly routable (no DNS lookup)
+    _non_public_ip = False
+    try:
+        ip = ipaddress.ip_address(hostname)
+        _non_public_ip = not ip.is_global or ip.is_loopback or ip.is_link_local or ip.is_private
+    except ValueError:
+        pass  # hostname is not an IP literal; skip IP-range check
+    if _non_public_ip:
+        msg = "endpoint hostname resolves to a non-public IP address"
+        raise ValueError(msg)
+
+    if not p256dh:
+        msg = "p256dh must not be empty"
+        raise ValueError(msg)
+    if not auth:
+        msg = "auth must not be empty"
+        raise ValueError(msg)
+    if not _BASE64URL_RE.match(p256dh):
+        msg = "p256dh must be a base64url string"
+        raise ValueError(msg)
+    if not _BASE64URL_RE.match(auth):
+        msg = "auth must be a base64url string"
+        raise ValueError(msg)
+
 
 _DEFAULT_PUSH_TITLE = "Your daily brief is ready"
 

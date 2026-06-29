@@ -17,6 +17,7 @@ from news_dashboard.push import (
     get_user_push_subscriptions,
     save_push_subscription,
     send_push_for_user,
+    validate_push_subscription,
 )
 
 
@@ -457,6 +458,118 @@ def test_push_unsubscribe_endpoint(client: TestClient) -> None:
     assert resp.status_code == 200
     assert resp.json() == {"unsubscribed": True}
     mock_del.assert_called_once_with(1)
+
+
+# ── validate_push_subscription unit tests ─────────────────────────────────────
+
+
+def test_validate_push_subscription_accepts_valid() -> None:
+    # Real-shaped Chrome FCM and Firefox Mozilla push endpoints
+    validate_push_subscription(
+        "https://fcm.googleapis.com/fcm/send/abcdefgh",
+        "BNQtHLiP_xyz-base64url",
+        "authkeyABC",
+    )
+    validate_push_subscription(
+        "https://updates.push.services.mozilla.com/push/v1/someid",
+        "BNQtHLiP_xyz-base64url",
+        "authkeyABC",
+    )
+
+
+def test_validate_push_subscription_rejects_http_scheme() -> None:
+    with pytest.raises(ValueError, match="https"):
+        validate_push_subscription("http://ep.example.com/push", "key", "auth")
+
+
+def test_validate_push_subscription_rejects_relative_url() -> None:
+    with pytest.raises(ValueError, match="https"):
+        validate_push_subscription("/push/v1/endpoint", "key", "auth")
+
+
+def test_validate_push_subscription_rejects_empty_endpoint() -> None:
+    with pytest.raises(ValueError, match="https"):
+        validate_push_subscription("", "key", "auth")
+
+
+def test_validate_push_subscription_rejects_localhost() -> None:
+    with pytest.raises(ValueError, match="non-public"):
+        validate_push_subscription("https://127.0.0.1/push", "key", "auth")
+
+
+def test_validate_push_subscription_rejects_loopback_ipv6() -> None:
+    with pytest.raises(ValueError, match="non-public"):
+        validate_push_subscription("https://[::1]/push", "key", "auth")
+
+
+def test_validate_push_subscription_rejects_private_ip() -> None:
+    with pytest.raises(ValueError, match="non-public"):
+        validate_push_subscription("https://192.168.1.1/push", "key", "auth")
+
+
+def test_validate_push_subscription_rejects_link_local() -> None:
+    with pytest.raises(ValueError, match="non-public"):
+        validate_push_subscription("https://169.254.1.1/push", "key", "auth")
+
+
+def test_validate_push_subscription_rejects_empty_p256dh() -> None:
+    with pytest.raises(ValueError, match="p256dh"):
+        validate_push_subscription("https://ep.example.com/push", "", "auth")
+
+
+def test_validate_push_subscription_rejects_empty_auth() -> None:
+    with pytest.raises(ValueError, match="auth"):
+        validate_push_subscription("https://ep.example.com/push", "key", "")
+
+
+def test_validate_push_subscription_rejects_oversized_endpoint() -> None:
+    with pytest.raises(ValueError, match="too long"):
+        validate_push_subscription("https://ep.example.com/" + "a" * 2100, "key", "auth")
+
+
+def test_validate_push_subscription_rejects_non_base64url_p256dh() -> None:
+    with pytest.raises(ValueError, match="base64url"):
+        validate_push_subscription("https://ep.example.com/push", "key with spaces!", "auth")
+
+
+def test_validate_push_subscription_rejects_non_base64url_auth() -> None:
+    with pytest.raises(ValueError, match="base64url"):
+        validate_push_subscription("https://ep.example.com/push", "validkey", "auth with spaces!")
+
+
+# ── Subscribe endpoint validation integration ──────────────────────────────────
+
+
+def test_push_subscribe_endpoint_rejects_http_endpoint(client: TestClient) -> None:
+    resp = client.post(
+        "/api/notifications/subscribe",
+        json={"endpoint": "http://ep.example.com/push", "p256dh": "abc", "auth": "xyz"},
+    )
+    assert resp.status_code == 422
+
+
+def test_push_subscribe_endpoint_rejects_private_ip(client: TestClient) -> None:
+    resp = client.post(
+        "/api/notifications/subscribe",
+        json={"endpoint": "https://10.0.0.1/push", "p256dh": "abc", "auth": "xyz"},
+    )
+    assert resp.status_code == 422
+
+
+def test_push_subscribe_endpoint_rejects_empty_keys(client: TestClient) -> None:
+    resp = client.post(
+        "/api/notifications/subscribe",
+        json={"endpoint": "https://ep.example.com/push", "p256dh": "", "auth": "xyz"},
+    )
+    assert resp.status_code == 422
+
+
+def test_push_subscribe_endpoint_rejects_localhost(client: TestClient) -> None:
+    resp = client.post(
+        "/api/notifications/subscribe",
+        json={"endpoint": "https://127.0.0.1/push", "p256dh": "abc", "auth": "xyz"},
+    )
+    assert resp.status_code == 422
 
 
 @pytest.mark.postgres
