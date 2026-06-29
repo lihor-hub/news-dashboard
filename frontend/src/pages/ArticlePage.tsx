@@ -355,6 +355,7 @@ export function ArticlePage() {
     const onKey = (e: KeyboardEvent) => {
       const t = e.target as HTMLElement;
       if (t?.tagName === 'INPUT' || t?.tagName === 'TEXTAREA' || t?.isContentEditable) return;
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
       if (e.key === 'Escape') goBack();
       else if (e.key === 'ArrowLeft') goPrev();
       else if (e.key === 'ArrowRight') goNext();

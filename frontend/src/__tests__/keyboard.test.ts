@@ -38,8 +38,8 @@ function makeMutations(): Mutations {
   };
 }
 
-function fireKey(key: string) {
-  window.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true }));
+function fireKey(key: string, init: KeyboardEventInit = {}) {
+  window.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, ...init }));
 }
 
 // ─── useArticleListNav — j/k navigation ──────────────────────────────────────
@@ -83,6 +83,14 @@ describe('useArticleListNav — j/k navigation', () => {
   it('k does not go below 0', () => {
     const { result } = renderHook(() => useArticleListNav(articles, vi.fn(), makeMutations()));
     act(() => fireKey('k'));
+    expect(result.current.focused).toBe(0);
+  });
+
+  it('ignores modified navigation keys', () => {
+    const { result } = renderHook(() => useArticleListNav(articles, vi.fn(), makeMutations()));
+    act(() => fireKey('j', { metaKey: true }));
+    act(() => fireKey('j', { ctrlKey: true }));
+    act(() => fireKey('j', { altKey: true }));
     expect(result.current.focused).toBe(0);
   });
 });
@@ -158,6 +166,17 @@ describe('useArticleListNav — action keys', () => {
     renderHook(() => useArticleListNav(articles, openArticle, mutations));
     act(() => fireKey('Enter'));
     expect(openArticle).toHaveBeenCalledWith(article);
+  });
+
+  it('ignores modified action keys', () => {
+    const openSpy = vi.spyOn(window, 'open').mockImplementation(() => null);
+    renderHook(() => useArticleListNav(articles, vi.fn(), mutations));
+    act(() => fireKey('s', { altKey: true }));
+    act(() => fireKey('r', { ctrlKey: true }));
+    act(() => fireKey('o', { metaKey: true }));
+    expect(mutations.toggleStar).not.toHaveBeenCalled();
+    expect(mutations.setState).not.toHaveBeenCalled();
+    expect(openSpy).not.toHaveBeenCalled();
   });
 
   it('ignores keys when target is an INPUT', () => {
