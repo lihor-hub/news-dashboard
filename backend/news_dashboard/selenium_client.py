@@ -254,13 +254,28 @@ def fetch_spa_html(url: str, timeout: float = _DEFAULT_TIMEOUT) -> str:
 def _fetch_with_cleanup(url: str, timeout: float = _DEFAULT_TIMEOUT) -> str:
     """Fetch *url* with headless Chrome, run overlay dismissal, return page source."""
     with headless_browser() as driver:
-        driver.get(url)
+        driver.set_page_load_timeout(timeout)
+        driver.set_script_timeout(timeout)
+        navigation_timed_out = False
         try:
-            WebDriverWait(driver, timeout).until(
-                presence_of_element_located((By.CSS_SELECTOR, _ARTICLE_SELECTORS))
-            )
+            driver.get(url)
         except TimeoutException:
-            logger.debug("selenium: article selector timeout for %r — using raw page source", url)
+            navigation_timed_out = True
+            logger.debug("selenium: page load timeout for %r — using partial page source", url)
+            try:
+                driver.execute_script("window.stop()")
+            except Exception as exc:
+                logger.debug("selenium: failed to stop loading after timeout for %r: %s", url, exc)
+
+        if not navigation_timed_out:
+            try:
+                WebDriverWait(driver, timeout).until(
+                    presence_of_element_located((By.CSS_SELECTOR, _ARTICLE_SELECTORS))
+                )
+            except TimeoutException:
+                logger.debug(
+                    "selenium: article selector timeout for %r — using raw page source", url
+                )
 
         dismiss_overlays(driver, url)
         return str(driver.page_source)

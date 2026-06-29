@@ -8,13 +8,14 @@ from __future__ import annotations
 pytest = __import__("pytest")
 pytest.importorskip("selenium")
 
-from unittest.mock import MagicMock, patch  # noqa: E402
+from unittest.mock import MagicMock, call, patch  # noqa: E402
 
-from selenium.common.exceptions import NoSuchElementException  # noqa: E402
+from selenium.common.exceptions import NoSuchElementException, TimeoutException  # noqa: E402
 
 from news_dashboard.selenium_client import (  # noqa: E402
     _click_consent_buttons,
     _dismiss_modal_close_buttons,
+    _fetch_with_cleanup,
     _get_domain_handler,
     _remove_overlays_js,
     _try_amp_url,
@@ -168,3 +169,49 @@ def test_try_amp_url_medium_already_amp() -> None:
 
 def test_try_amp_url_non_medium_returns_none() -> None:
     assert _try_amp_url("https://example.com/article") is None
+
+
+# ── Fetch timeout handling ───────────────────────────────────────────────────
+
+
+def test_fetch_with_cleanup_configures_navigation_timeouts() -> None:
+    driver = MagicMock()
+    driver.page_source = "<html><article>loaded</article></html>"
+    browser_context = MagicMock()
+    browser_context.__enter__.return_value = driver
+
+    with (
+        patch("news_dashboard.selenium_client.headless_browser", return_value=browser_context),
+        patch("news_dashboard.selenium_client.WebDriverWait") as wait_cls,
+        patch("news_dashboard.selenium_client.dismiss_overlays") as dismiss_mock,
+    ):
+        result = _fetch_with_cleanup("https://example.com/article", timeout=3.5)
+
+    assert result == "<html><article>loaded</article></html>"
+    assert driver.mock_calls[:3] == [
+        call.set_page_load_timeout(3.5),
+        call.set_script_timeout(3.5),
+        call.get("https://example.com/article"),
+    ]
+    wait_cls.assert_called_once_with(driver, 3.5)
+    dismiss_mock.assert_called_once_with(driver, "https://example.com/article")
+
+
+def test_fetch_with_cleanup_stops_loading_after_navigation_timeout() -> None:
+    driver = MagicMock()
+    driver.get.side_effect = TimeoutException("page load timed out")
+    driver.page_source = "<html><p>partial text</p></html>"
+    browser_context = MagicMock()
+    browser_context.__enter__.return_value = driver
+
+    with (
+        patch("news_dashboard.selenium_client.headless_browser", return_value=browser_context),
+        patch("news_dashboard.selenium_client.WebDriverWait") as wait_cls,
+        patch("news_dashboard.selenium_client.dismiss_overlays") as dismiss_mock,
+    ):
+        result = _fetch_with_cleanup("https://example.com/slow", timeout=1.0)
+
+    assert result == "<html><p>partial text</p></html>"
+    driver.execute_script.assert_called_with("window.stop()")
+    wait_cls.return_value.until.assert_not_called()
+    dismiss_mock.assert_called_once_with(driver, "https://example.com/slow")
