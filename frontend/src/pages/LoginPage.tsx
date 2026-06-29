@@ -179,7 +179,7 @@ export function LoginPage() {
                 }}
                 className="text-sm text-muted-foreground hover:text-foreground transition-colors underline underline-offset-4"
               >
-                Sign in with email code
+                Use email code instead
               </button>
             </div>
           </div>
