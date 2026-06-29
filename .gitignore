@@ -22,3 +22,4 @@ android/*.p12
 # Electron desktop build outputs
 desktop/node_modules/
 desktop/dist/
+pi-output.log

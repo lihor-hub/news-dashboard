@@ -154,8 +154,10 @@ function UpdatesSection() {
         <div className="rounded-lg border border-border bg-card p-4 space-y-3">
           {info && (
             <div className="flex items-center justify-between text-sm">
-              <span className="text-muted-foreground">Current version</span>
-              <span className="tabular-nums font-mono text-xs">{info.currentVersion}</span>
+              <span className="text-muted-foreground">App version</span>
+              <span className="tabular-nums font-mono text-xs">
+                {info.installedVersionKnown ? info.currentVersion : 'Unknown'}
+              </span>
             </div>
           )}
 
@@ -178,30 +180,27 @@ function UpdatesSection() {
 
           {error && <p className="text-xs text-destructive">{error}</p>}
 
-          {info && !info.updateAvailable && !loading && (
-            <p className="text-xs text-green-600 dark:text-green-400">
-              You're on the latest version ({info.latestVersion}).
-            </p>
-          )}
-
-          {info?.updateAvailable && (
+          {info && !loading && (
             <div className="space-y-2">
-              <p className="text-xs text-muted-foreground">
-                Version <span className="font-mono">{info.latestVersion}</span> is available.
-              </p>
               {info.apkUrl ? (
-                <div className="space-y-1.5">
-                  <a
-                    href={info.apkUrl}
-                    className="flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 transition-colors w-fit"
-                  >
-                    <Download className="size-3" />
-                    Download APK
-                  </a>
-                  <p className="text-[11px] text-subtle">
-                    Android will prompt you to confirm the install — tap Install when it appears.
+                <>
+                  <p className="text-xs text-muted-foreground">
+                    Version <span className="font-mono">{info.latestVersion}</span> is available for
+                    download.
                   </p>
-                </div>
+                  <div className="space-y-1.5">
+                    <a
+                      href={info.apkUrl}
+                      className="flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 transition-colors w-fit"
+                    >
+                      <Download className="size-3" />
+                      Download APK
+                    </a>
+                    <p className="text-[11px] text-subtle">
+                      Android will prompt you to confirm the install — tap Install when it appears.
+                    </p>
+                  </div>
+                </>
               ) : (
                 <a
                   href={info.releaseUrl}
@@ -210,7 +209,7 @@ function UpdatesSection() {
                   className="flex items-center gap-1.5 text-xs text-primary hover:underline"
                 >
                   <ExternalLink className="size-3" />
-                  View release
+                  View Android releases
                 </a>
               )}
             </div>
