@@ -15,10 +15,10 @@ def init() -> None:
 
 @app.command()
 def ingest() -> None:
-    results = ingest_all()
-    for source, count in results.items():
+    ingest_result = ingest_all()
+    for source, count in ingest_result.results.items():
         typer.echo(f"{source}: {count}")
-    typer.echo(f"inserted: {sum(value for value in results.values() if value > 0)}")
+    typer.echo(f"inserted: {sum(value for value in ingest_result.results.values() if value > 0)}")
     # Short-lived process: flush any buffered Langfuse traces before exit.
     from news_dashboard.ai_client import flush
 

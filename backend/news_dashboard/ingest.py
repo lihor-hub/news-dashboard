@@ -83,6 +83,17 @@ class SourceIngestOutcome:
     error_message: str | None = None
 
 
+@dataclass(frozen=True)
+class IngestResult:
+    results: dict[str, int]
+    run_id: int
+    total_errors: int
+
+    @property
+    def failed_sources(self) -> list[str]:
+        return [slug for slug, count in self.results.items() if count < 0]
+
+
 TRACKING_PARAMS = {
     "utm_source",
     "utm_medium",
@@ -762,7 +773,7 @@ def _format_source_log(outcome: SourceIngestOutcome) -> str:
     )
 
 
-def ingest_all(db_path: Path | str | None = None) -> dict[str, int]:
+def ingest_all(db_path: Path | str | None = None) -> IngestResult:
     with _INGEST_RUN_LOCK:
         sync_sources(db_path)
         run_started_at = now_iso()
@@ -816,7 +827,7 @@ def ingest_all(db_path: Path | str | None = None) -> dict[str, int]:
             ingest_events.complete_run(
                 f"Summary — {total_new} new {article_word}{error_text} ({duration_seconds:.1f}s)"
             )
-    return results
+    return IngestResult(results=results, run_id=run_id, total_errors=total_errors)
 
 
 _INTERNAL_ARTICLE_COLUMNS = frozenset({"embedding", "fts_vector", "search_vector"})

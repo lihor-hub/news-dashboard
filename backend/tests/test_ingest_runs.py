@@ -38,7 +38,9 @@ def test_ingest_all_writes_run_rows_and_buffers_terminal_lines(
 
     monkeypatch.setattr(ingest_module, "_parse_feed_url", fake_parse_url)
 
-    assert ingest_all(db_path) == {"test-feed": 1}
+    result = ingest_all(db_path)
+    assert result.results == {"test-feed": 1}
+    assert result.total_errors == 0
 
     with connect(db_path) as conn:
         run = conn.execute("SELECT * FROM ingest_runs").fetchone()
@@ -73,7 +75,10 @@ def test_ingest_all_records_source_errors(tmp_path: Path, monkeypatch: Any) -> N
 
     monkeypatch.setattr(ingest_module, "_parse_feed_url", fake_parse_url)
 
-    assert ingest_all(db_path) == {"bad-feed": -1}
+    result = ingest_all(db_path)
+    assert result.results == {"bad-feed": -1}
+    assert result.total_errors == 1
+    assert result.failed_sources == ["bad-feed"]
 
     with connect(db_path) as conn:
         run = conn.execute("SELECT * FROM ingest_runs").fetchone()

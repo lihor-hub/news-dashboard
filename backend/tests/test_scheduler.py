@@ -229,9 +229,13 @@ def test_start_scheduler_briefing_fn_is_run_briefing(monkeypatch: pytest.MonkeyP
 
 def test_run_ingest_prefetches_when_new_articles() -> None:
     from news_dashboard import scheduler
+    from news_dashboard.ingest import IngestResult
 
     with (
-        patch("news_dashboard.ingest.ingest_all", return_value={"a": 2, "b": -1}) as ingest,
+        patch(
+            "news_dashboard.ingest.ingest_all",
+            return_value=IngestResult(results={"a": 2, "b": -1}, run_id=1, total_errors=1),
+        ) as ingest,
         patch("news_dashboard.body_fetch.prefetch_article_bodies") as prefetch,
         patch.object(scheduler, "_run_recommendation_recalc") as recalc,
     ):
@@ -244,9 +248,13 @@ def test_run_ingest_prefetches_when_new_articles() -> None:
 
 def test_run_scheduled_ingest_returns_results_and_runs_maintenance() -> None:
     from news_dashboard import scheduler
+    from news_dashboard.ingest import IngestResult
 
     with (
-        patch("news_dashboard.ingest.ingest_all", return_value={"a": 2, "b": -1}) as ingest,
+        patch(
+            "news_dashboard.ingest.ingest_all",
+            return_value=IngestResult(results={"a": 2, "b": -1}, run_id=1, total_errors=1),
+        ) as ingest,
         patch("news_dashboard.body_fetch.prefetch_article_bodies") as prefetch,
         patch.object(scheduler, "_run_recommendation_recalc") as recalc,
     ):
@@ -260,9 +268,13 @@ def test_run_scheduled_ingest_returns_results_and_runs_maintenance() -> None:
 
 def test_run_ingest_skips_prefetch_when_no_new_articles() -> None:
     from news_dashboard import scheduler
+    from news_dashboard.ingest import IngestResult
 
     with (
-        patch("news_dashboard.ingest.ingest_all", return_value={"a": 0}),
+        patch(
+            "news_dashboard.ingest.ingest_all",
+            return_value=IngestResult(results={"a": 0}, run_id=1, total_errors=0),
+        ),
         patch("news_dashboard.body_fetch.prefetch_article_bodies") as prefetch,
         patch.object(scheduler, "_run_recommendation_recalc"),
     ):

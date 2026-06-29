@@ -230,9 +230,14 @@ describe('sources, summary, ingest', () => {
   });
 
   it('ingestNow POSTs', async () => {
-    const { calls } = stubFetch(() => jsonOk({ inserted: 2, results: {} }));
+    const { calls } = stubFetch(() =>
+      jsonOk({ inserted: 2, results: {}, run_id: 5, total_errors: 0, failed_sources: [] })
+    );
     const r = await api.ingestNow();
     expect(r.inserted).toBe(2);
+    expect(r.run_id).toBe(5);
+    expect(r.total_errors).toBe(0);
+    expect(r.failed_sources).toEqual([]);
     expect(calls[0].init?.method).toBe('POST');
   });
 

@@ -116,9 +116,17 @@ export function SchedulerPage() {
     const id = toast.loading('Running ingest…');
     try {
       const result = await ingestNow();
-      toast.success(`Done — ${result.inserted} new article${result.inserted !== 1 ? 's' : ''}`, {
-        id,
-      });
+      if (result.total_errors > 0) {
+        const errCount = result.total_errors;
+        toast.warning(
+          `Done — ${result.inserted} new article${result.inserted !== 1 ? 's' : ''}, ${errCount} source${errCount !== 1 ? 's' : ''} failed. Check Feeds › Runs for details.`,
+          { id, duration: 8000 }
+        );
+      } else {
+        toast.success(`Done — ${result.inserted} new article${result.inserted !== 1 ? 's' : ''}`, {
+          id,
+        });
+      }
     } catch {
       toast.error('Ingest failed', { id });
     } finally {

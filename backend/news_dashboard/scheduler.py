@@ -36,7 +36,8 @@ def run_scheduled_ingest() -> dict[str, int]:
     logger.info("Scheduled ingest starting…")
     results: dict[str, int] = {}
     try:
-        results = ingest_all()
+        ingest_result = ingest_all()
+        results = ingest_result.results
         total = sum(v for v in results.values() if v > 0)
         logger.info("Scheduled ingest complete: %d new articles", total)
         if total > 0:

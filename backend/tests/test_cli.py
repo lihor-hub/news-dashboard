@@ -24,7 +24,10 @@ def test_init_syncs_sources() -> None:
 
 
 def test_ingest_prints_per_source_counts_and_total() -> None:
-    with patch("news_dashboard.cli.ingest_all", return_value={"a": 2, "b": 3, "c": -1}):
+    from news_dashboard.ingest import IngestResult
+
+    fake = IngestResult(results={"a": 2, "b": 3, "c": -1}, run_id=1, total_errors=1)
+    with patch("news_dashboard.cli.ingest_all", return_value=fake):
         result = runner.invoke(app, ["ingest"])
     assert result.exit_code == 0
     assert "a: 2" in result.stdout

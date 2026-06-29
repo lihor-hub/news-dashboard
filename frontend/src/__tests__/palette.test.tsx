@@ -183,7 +183,13 @@ describe('CommandPalette — article search', () => {
 
 describe('CommandPalette — ingest action', () => {
   it('calls ingestNow when "Refresh feeds now" is selected by admin', async () => {
-    const ingestSpy = vi.spyOn(api, 'ingestNow').mockResolvedValue({ inserted: 3, results: {} });
+    const ingestSpy = vi.spyOn(api, 'ingestNow').mockResolvedValue({
+      inserted: 3,
+      results: {},
+      run_id: 1,
+      total_errors: 0,
+      failed_sources: [],
+    });
     const onOpenChange = vi.fn();
     render(
       <Wrapper user={adminUser}>

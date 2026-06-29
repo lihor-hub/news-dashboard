@@ -208,7 +208,13 @@ export async function saveRecommendationPreferences(
   });
 }
 
-export async function ingestNow(): Promise<{ inserted: number; results: Record<string, number> }> {
+export async function ingestNow(): Promise<{
+  inserted: number;
+  results: Record<string, number>;
+  run_id: number;
+  total_errors: number;
+  failed_sources: string[];
+}> {
   return requestJson('/api/ingest', { method: 'POST' });
 }
 

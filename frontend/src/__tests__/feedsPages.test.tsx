@@ -32,6 +32,7 @@ vi.mock('../api', () => apiMock);
 vi.mock('sonner', () => ({
   toast: Object.assign(vi.fn(), {
     success: vi.fn(),
+    warning: vi.fn(),
     error: vi.fn(),
     loading: vi.fn(() => 'id'),
   }),
@@ -322,10 +323,54 @@ describe('SchedulerPage', () => {
 
   it('triggers an on-demand ingest', async () => {
     apiMock.fetchSchedulerStatus.mockResolvedValue(running);
-    apiMock.ingestNow.mockResolvedValue({ inserted: 2, results: {} });
+    apiMock.ingestNow.mockResolvedValue({
+      inserted: 2,
+      results: {},
+      run_id: 1,
+      total_errors: 0,
+      failed_sources: [],
+    });
     withProviders(<SchedulerPage />);
     fireEvent.click(await screen.findByText('↻ Fetch now'));
     await waitFor(() => expect(apiMock.ingestNow).toHaveBeenCalled());
+  });
+
+  it('shows success toast when all sources succeed', async () => {
+    const { toast } = await import('sonner');
+    apiMock.fetchSchedulerStatus.mockResolvedValue(running);
+    apiMock.ingestNow.mockResolvedValue({
+      inserted: 3,
+      results: { feed: 3 },
+      run_id: 1,
+      total_errors: 0,
+      failed_sources: [],
+    });
+    withProviders(<SchedulerPage />);
+    fireEvent.click(await screen.findByText('↻ Fetch now'));
+    await waitFor(() =>
+      expect(
+        (toast as unknown as { success: ReturnType<typeof vi.fn> }).success
+      ).toHaveBeenCalledWith(expect.stringContaining('3 new articles'), expect.anything())
+    );
+  });
+
+  it('shows warning toast when some sources fail', async () => {
+    const { toast } = await import('sonner');
+    apiMock.fetchSchedulerStatus.mockResolvedValue(running);
+    apiMock.ingestNow.mockResolvedValue({
+      inserted: 2,
+      results: { ok: 2, bad: -1 },
+      run_id: 42,
+      total_errors: 1,
+      failed_sources: ['bad'],
+    });
+    withProviders(<SchedulerPage />);
+    fireEvent.click(await screen.findByText('↻ Fetch now'));
+    await waitFor(() =>
+      expect(
+        (toast as unknown as { warning: ReturnType<typeof vi.fn> }).warning
+      ).toHaveBeenCalledWith(expect.stringContaining('1 source failed'), expect.anything())
+    );
   });
 
   it('saves a valid custom interval and rejects an invalid one', async () => {

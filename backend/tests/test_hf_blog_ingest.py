@@ -199,7 +199,7 @@ def test_hf_blog_snippet_fetch_failure_still_inserts_article(
 
     result = ingest_all(db_path)
 
-    assert result.get("huggingface-blog", -1) == 1
+    assert result.results.get("huggingface-blog", -1) == 1
 
     with connect(db_path) as conn:
         row = conn.execute("SELECT summary, title FROM articles").fetchone()

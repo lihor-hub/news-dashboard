@@ -496,11 +496,17 @@ def auth_me(current_user: Annotated[dict[str, Any], Depends(require_auth)]) -> d
 
 @api.post("/api/ingest", dependencies=[Depends(require_admin)])
 def ingest(background_tasks: BackgroundTasks) -> dict[str, Any]:
-    results = ingest_all()
-    inserted = sum(v for v in results.values() if v > 0)
+    ingest_result = ingest_all()
+    inserted = sum(v for v in ingest_result.results.values() if v > 0)
     if inserted > 0:
         background_tasks.add_task(prefetch_article_bodies)
-    return {"results": results, "inserted": inserted}
+    return {
+        "results": ingest_result.results,
+        "inserted": inserted,
+        "run_id": ingest_result.run_id,
+        "total_errors": ingest_result.total_errors,
+        "failed_sources": ingest_result.failed_sources,
+    }
 
 
 @api.get("/api/ingest/stream")
