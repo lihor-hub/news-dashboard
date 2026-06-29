@@ -15,6 +15,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from news_dashboard import digest
+from news_dashboard.auth import create_user
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────
 
@@ -42,38 +43,44 @@ _ARTICLES: list[dict[str, Any]] = [
 
 
 def test_token_roundtrip_verifies() -> None:
-    token = digest._make_token(42)
-    assert digest.verify_read_token(42, token) is True
+    token = digest._make_token(7, 42)
+    assert digest.verify_read_token(42, token) == 7
 
 
 def test_token_is_rejected_for_wrong_article() -> None:
-    token = digest._make_token(42)
-    assert digest.verify_read_token(43, token) is False
+    token = digest._make_token(7, 42)
+    assert digest.verify_read_token(43, token) is None
 
 
 def test_token_rejects_garbage() -> None:
-    assert digest.verify_read_token(42, "deadbeef") is False
+    assert digest.verify_read_token(42, "deadbeef") is None
+
+
+def test_token_is_rejected_for_wrong_user_signature() -> None:
+    token = digest._make_token(7, 42)
+    replayed = token.replace("7.", "8.", 1)
+    assert digest.verify_read_token(42, replayed) is None
 
 
 # ── HTML / text rendering ─────────────────────────────────────────────────────
 
 
 def test_render_html_includes_titles_and_mark_read_links() -> None:
-    html = digest._render_html(_ARTICLES)
+    html = digest._render_html(_ARTICLES, user_id=7)
     assert "First Headline" in html
     # Missing title falls back to "Untitled".
     assert "Untitled" in html
     # Each article gets a signed mark-read link.
-    assert f"/api/articles/1/read?token={digest._make_token(1)}" in html
+    assert f"/api/articles/1/read?token={digest._make_token(7, 1)}" in html
 
 
 def test_render_html_pluralises_count() -> None:
-    assert "1\n        new article today" in digest._render_html(_ARTICLES[:1])
-    assert "article" in digest._render_html(_ARTICLES)
+    assert "1\n        new article today" in digest._render_html(_ARTICLES[:1], user_id=7)
+    assert "article" in digest._render_html(_ARTICLES, user_id=7)
 
 
 def test_render_text_lists_articles_in_order() -> None:
-    text = digest._render_text(_ARTICLES)
+    text = digest._render_text(_ARTICLES, user_id=7)
     assert "1. First Headline" in text
     assert "2. Untitled" in text
     assert "Source: Example News | Score: 90" in text
@@ -138,7 +145,11 @@ def test_send_digest_returns_false_without_recipient(pg_clean: str) -> None:
 @pytest.mark.postgres
 def test_send_digest_returns_false_when_no_new_articles(pg_clean: str) -> None:
     with (
-        patch.dict("os.environ", {"DIGEST_TO": "me@example.com"}, clear=False),
+        patch.dict(
+            "os.environ",
+            {"DIGEST_TO": "me@example.com", "DIGEST_USER_ID": "1"},
+            clear=False,
+        ),
         patch.object(digest, "_send_email") as send,
     ):
         assert digest.send_digest() is False
@@ -147,6 +158,7 @@ def test_send_digest_returns_false_when_no_new_articles(pg_clean: str) -> None:
 
 @pytest.mark.postgres
 def test_send_digest_sends_when_new_articles_exist(pg_clean: str) -> None:
+    user = create_user("digest-user", "pw", email="me@example.com", db_path=pg_clean)
     with psycopg.connect(pg_clean) as conn:
         conn.execute(
             "INSERT INTO sources(slug, name, url, category, kind) VALUES (%s, %s, %s, %s, %s)",
@@ -176,13 +188,55 @@ def test_send_digest_sends_when_new_articles_exist(pg_clean: str) -> None:
         conn.commit()
 
     with (
-        patch.dict("os.environ", {"DIGEST_TO": "me@example.com"}, clear=False),
+        patch.dict(
+            "os.environ",
+            {"DIGEST_TO": "me@example.com", "DIGEST_USER_ID": str(user["id"])},
+            clear=False,
+        ),
         patch.object(digest, "_send_email") as send,
     ):
         assert digest.send_digest() is True
         send.assert_called_once()
         subject = send.call_args.args[0]
         assert "News Digest" in subject
+
+
+@pytest.mark.postgres
+def test_get_top_new_articles_uses_recipient_source_visibility(pg_clean: str) -> None:
+    user = create_user("digest-user", "pw", email="me@example.com", db_path=pg_clean)
+    with psycopg.connect(pg_clean) as conn:
+        conn.execute(
+            "INSERT INTO sources(slug, name, url, category, kind) VALUES (%s, %s, %s, %s, %s)",
+            ("visible", "Visible", "https://example.com/visible", "engineering", "rss"),
+        )
+        conn.execute(
+            "INSERT INTO sources(slug, name, url, category, kind) VALUES (%s, %s, %s, %s, %s)",
+            ("hidden", "Hidden", "https://example.com/hidden", "engineering", "rss"),
+        )
+        conn.execute(
+            "INSERT INTO user_sources(user_id, source_slug, enabled) VALUES (%s, %s, FALSE)",
+            (user["id"], "hidden"),
+        )
+        for slug in ("visible", "hidden"):
+            conn.execute(
+                """
+                INSERT INTO articles(
+                    url, canonical_url, title, source_slug, source_name,
+                    category, kind, state, importance_score
+                ) VALUES (%s, %s, %s, %s, %s, 'engineering', 'rss', 'today', 90)
+                """,
+                (
+                    f"https://example.com/{slug}/a",
+                    f"https://example.com/{slug}/a",
+                    slug,
+                    slug,
+                    slug.title(),
+                ),
+            )
+        conn.commit()
+
+    articles = digest._get_top_new_articles(int(user["id"]))
+    assert {article["source_slug"] for article in articles} == {"visible"}
 
 
 # ── HTML escaping ─────────────────────────────────────────────────────────────
@@ -199,7 +253,7 @@ def test_render_html_escapes_script_in_title() -> None:
             "importance_score": 50,
         }
     ]
-    html = digest._render_html(articles)
+    html = digest._render_html(articles, user_id=7)
     assert "<script>" not in html
     assert "&lt;script&gt;" in html
 
@@ -215,7 +269,7 @@ def test_render_html_escapes_quotes_in_url() -> None:
             "importance_score": 0,
         }
     ]
-    html = digest._render_html(articles)
+    html = digest._render_html(articles, user_id=7)
     assert '"evil"' not in html
 
 
@@ -230,7 +284,7 @@ def test_render_html_escapes_summary_and_source() -> None:
             "importance_score": 0,
         }
     ]
-    html = digest._render_html(articles)
+    html = digest._render_html(articles, user_id=7)
     assert "<b>" not in html
     assert "<em>" not in html
     assert "&lt;b&gt;" in html
@@ -251,6 +305,8 @@ def _fresh_client() -> TestClient:
 def test_mark_read_via_token_succeeds_without_session(pg_clean: str) -> None:
     import psycopg
 
+    user_a = create_user("alice", "pw", db_path=pg_clean)
+    user_b = create_user("bob", "pw", db_path=pg_clean)
     with psycopg.connect(pg_clean) as conn:
         conn.execute(
             "INSERT INTO sources(slug, name, url, category, kind) VALUES (%s, %s, %s, %s, %s)",
@@ -260,8 +316,8 @@ def test_mark_read_via_token_succeeds_without_session(pg_clean: str) -> None:
             """
             INSERT INTO articles(
                 url, canonical_url, title, source_slug, source_name,
-                category, kind, status, importance_score, summary, reason, tags
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s, 'new', 70, 'Sum', '', '')
+                category, kind, status, state, importance_score, summary, reason, tags
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, 'new', 'today', 70, 'Sum', '', '')
             """,
             (
                 "https://example.com/a",
@@ -278,11 +334,23 @@ def test_mark_read_via_token_succeeds_without_session(pg_clean: str) -> None:
         article_id: int = row[0]
         conn.commit()
 
-    token = digest._make_token(article_id)
+    token = digest._make_token(int(user_a["id"]), article_id)
     client = _fresh_client()
     resp = client.get(f"/api/articles/{article_id}/read", params={"token": token}, cookies={})
     assert resp.status_code == 200
     assert resp.json()["status"] == "marked_read"
+    with psycopg.connect(pg_clean) as conn:
+        states = conn.execute(
+            "SELECT user_id, state FROM user_article_state WHERE article_id = %s ORDER BY user_id",
+            (article_id,),
+        ).fetchall()
+        article_state = conn.execute(
+            "SELECT status, state FROM articles WHERE id = %s",
+            (article_id,),
+        ).fetchone()
+    assert [(row[0], row[1]) for row in states] == [(user_a["id"], "done")]
+    assert article_state == ("new", "today")
+    assert user_b["id"] not in {row[0] for row in states}
 
 
 @pytest.mark.postgres
@@ -294,7 +362,7 @@ def test_mark_read_via_token_rejects_bad_token(pg_clean: str) -> None:
 
 @pytest.mark.postgres
 def test_mark_read_via_token_rejects_wrong_article_token(pg_clean: str) -> None:
-    token = digest._make_token(1)
+    token = digest._make_token(7, 1)
     client = _fresh_client()
     resp = client.get("/api/articles/2/read", params={"token": token}, cookies={})
     assert resp.status_code == 403

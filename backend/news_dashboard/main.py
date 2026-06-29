@@ -70,7 +70,6 @@ from news_dashboard.ingest import (
     search_articles_page,
     send_article_later,
     set_article_starred,
-    set_article_status,
     sync_sources,
     transition_article_state,
 )
@@ -398,10 +397,11 @@ def logout(response: Response) -> dict[str, str]:
 def mark_read_via_token(article_id: int, token: Annotated[str, Query()]) -> dict[str, Any]:
     from news_dashboard.digest import verify_read_token
 
-    if not verify_read_token(article_id, token):
+    user_id = verify_read_token(article_id, token)
+    if user_id is None:
         raise HTTPException(status_code=403, detail="invalid or expired token")
     try:
-        article = set_article_status(article_id, "read")
+        article = transition_article_state(article_id, "done", user_id=user_id)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     if not article:
