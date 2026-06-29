@@ -424,6 +424,20 @@ export async function loginUser(username: string, password: string): Promise<Use
   });
 }
 
+export async function requestOtp(email: string): Promise<void> {
+  await requestJson<{ status: string }>('/api/auth/otp/request', {
+    method: 'POST',
+    body: JSON.stringify({ email }),
+  });
+}
+
+export async function loginWithOtp(email: string, otp: string): Promise<User> {
+  return requestJson<User>('/api/auth/otp/login', {
+    method: 'POST',
+    body: JSON.stringify({ email, otp }),
+  });
+}
+
 export interface GeneratedUser {
   id: number | string | null;
   username: string;

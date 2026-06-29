@@ -6,6 +6,7 @@ import logging
 import os
 import secrets
 from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Annotated, Any
 from urllib.parse import urlencode
@@ -459,3 +460,63 @@ def init_auth() -> None:
             raise RuntimeError(message)
         return
     bootstrap_admin()
+
+
+# --------------------------------------------------------------------------- #
+# OTP authentication                                                            #
+# --------------------------------------------------------------------------- #
+
+_OTP_TTL_MINUTES = 10
+
+
+def _generate_otp() -> str:
+    return f"{secrets.randbelow(1_000_000):06d}"
+
+
+def _hash_otp(otp: str) -> str:
+    return bcrypt.hashpw(otp.encode(), bcrypt.gensalt(_bcrypt_rounds())).decode()
+
+
+def _verify_otp_hash(otp: str, otp_hash: str) -> bool:
+    try:
+        return bcrypt.checkpw(otp.encode(), otp_hash.encode())
+    except Exception:
+        return False
+
+
+def create_otp_for_user(user_id: int) -> str:
+    """Generate a 6-digit OTP, store its hash, and return the plaintext pin."""
+    otp = _generate_otp()
+    otp_hash = _hash_otp(otp)
+    expires_at = datetime.now(timezone.utc) + timedelta(minutes=_OTP_TTL_MINUTES)
+    with connect() as conn:
+        conn.execute("DELETE FROM user_otps WHERE user_id = %s", (user_id,))
+        conn.execute(
+            "INSERT INTO user_otps (user_id, otp_hash, expires_at) VALUES (%s, %s, %s)",
+            (user_id, otp_hash, expires_at),
+        )
+    return otp
+
+
+def consume_otp(email: str, otp: str) -> dict[str, Any] | None:
+    """Verify OTP for the user with this email, delete it, return the user or None."""
+    user = get_user_by_email(email)
+    if not user:
+        return None
+    with connect() as conn:
+        row = conn.execute(
+            "SELECT id, otp_hash, expires_at FROM user_otps"
+            " WHERE user_id = %s ORDER BY expires_at DESC LIMIT 1",
+            (user["id"],),
+        ).fetchone()
+        if not row:
+            return None
+        record = row_to_dict(row)
+        if record["expires_at"] < datetime.now(timezone.utc):
+            conn.execute("DELETE FROM user_otps WHERE user_id = %s", (user["id"],))
+            return None
+        if not _verify_otp_hash(otp, record["otp_hash"]):
+            return None
+        conn.execute("DELETE FROM user_otps WHERE user_id = %s", (user["id"],))
+    _touch_last_login(int(user["id"]))
+    return get_user_by_id(int(user["id"]))

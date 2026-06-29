@@ -36,10 +36,13 @@ from news_dashboard.analytics import (
 from news_dashboard.auth import (
     _session_days,
     authenticate,
+    consume_otp,
+    create_otp_for_user,
     create_session_token,
     create_user,
     delete_user,
     exchange_keycloak_code,
+    get_user_by_email,
     get_user_by_id,
     init_auth,
     keycloak_auth_metadata,
@@ -256,6 +259,15 @@ class AnalyticsEventsRequest(BaseModel):
     events: list[AnalyticsEvent] = Field(max_length=MAX_EVENTS_PER_BATCH)
 
 
+class OTPRequestPayload(BaseModel):
+    email: str
+
+
+class OTPLoginPayload(BaseModel):
+    email: str
+    otp: str
+
+
 # ── Public auth routes (no session required) ──────────────────────────────────
 
 public_router = APIRouter()
@@ -392,6 +404,36 @@ def login(payload: LoginRequest, response: Response) -> dict[str, Any]:
 def logout(response: Response) -> dict[str, str]:
     response.delete_cookie(key=_SESSION_COOKIE, path="/")
     return {"status": "logged_out"}
+
+
+@public_router.post("/api/auth/otp/request")
+def otp_request(payload: OTPRequestPayload, background_tasks: BackgroundTasks) -> dict[str, str]:
+    from news_dashboard.email import send_otp_email
+
+    user = get_user_by_email(payload.email)
+    if user:
+        otp = create_otp_for_user(int(user["id"]))
+        background_tasks.add_task(send_otp_email, payload.email, otp)
+    # Always return success to prevent user enumeration
+    return {"status": "sent"}
+
+
+@public_router.post("/api/auth/otp/login")
+def otp_login(payload: OTPLoginPayload, response: Response) -> dict[str, Any]:
+    user = consume_otp(payload.email, payload.otp)
+    if not user:
+        raise HTTPException(status_code=401, detail="Invalid or expired code")
+    token = create_session_token(int(user["id"]), bool(user["is_admin"]))
+    response.set_cookie(
+        key=_SESSION_COOKIE,
+        value=token,
+        httponly=True,
+        secure=True,
+        samesite="strict",
+        max_age=_session_days() * 86400,
+        path="/",
+    )
+    return {"id": user["id"], "username": user["username"], "is_admin": bool(user["is_admin"])}
 
 
 @public_router.get("/api/articles/{article_id}/read")

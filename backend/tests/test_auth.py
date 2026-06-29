@@ -12,6 +12,8 @@ from news_dashboard import login_throttle
 from news_dashboard.auth import (
     authenticate,
     bootstrap_admin,
+    consume_otp,
+    create_otp_for_user,
     create_session_token,
     create_user,
     delete_user,
@@ -432,6 +434,91 @@ def test_health_is_public(tmp_db: str) -> None:
     # Public health must not leak internal DB details.
     assert "database" not in body
     assert "next_ingest_at" not in body
+
+
+# ── OTP authentication ────────────────────────────────────────────────────────
+
+
+def test_create_and_consume_otp(tmp_db: str) -> None:
+    user = create_user("otp_user", "irrelevant", email="otp@example.com")
+    otp = create_otp_for_user(user["id"])
+    assert len(otp) == 6
+    assert otp.isdigit()
+
+    result = consume_otp("otp@example.com", otp)
+    assert result is not None
+    assert result["username"] == "otp_user"
+
+
+def test_otp_wrong_code_rejected(tmp_db: str) -> None:
+    user = create_user("otp_wrong", "irrelevant", email="wrong@example.com")
+    create_otp_for_user(user["id"])
+    assert consume_otp("wrong@example.com", "000000") is None
+
+
+def test_otp_consumed_only_once(tmp_db: str) -> None:
+    user = create_user("otp_once", "irrelevant", email="once@example.com")
+    otp = create_otp_for_user(user["id"])
+    assert consume_otp("once@example.com", otp) is not None
+    # Second use of the same OTP must fail
+    assert consume_otp("once@example.com", otp) is None
+
+
+def test_otp_unknown_email_returns_none(tmp_db: str) -> None:
+    assert consume_otp("nobody@example.com", "123456") is None
+
+
+def test_otp_expired_rejected(tmp_db: str) -> None:
+    from news_dashboard.db import connect as db_connect
+
+    user = create_user("otp_exp", "irrelevant", email="exp@example.com")
+    create_otp_for_user(user["id"])
+
+    # Force expiry by backdating the record in the database
+    with db_connect() as conn:
+        conn.execute(
+            "UPDATE user_otps SET expires_at = NOW() - INTERVAL '1 hour' WHERE user_id = %s",
+            (user["id"],),
+        )
+    assert consume_otp("exp@example.com", "000000") is None
+
+
+def test_otp_request_endpoint_returns_sent_for_unknown_email(tmp_db: str) -> None:
+    client = _fresh_client()
+    resp = client.post("/api/auth/otp/request", json={"email": "ghost@example.com"})
+    assert resp.status_code == 200
+    assert resp.json() == {"status": "sent"}
+
+
+def test_otp_login_endpoint_full_flow(tmp_db: str, monkeypatch: pytest.MonkeyPatch) -> None:
+    import news_dashboard.email as email_mod
+
+    sent: list[tuple[str, str]] = []
+
+    def _fake_send(to: str, code: str) -> None:
+        sent.append((to, code))
+
+    monkeypatch.setattr(email_mod, "send_otp_email", _fake_send)
+
+    create_user("ep_user", "pw", email="ep@example.com")
+    client = _fresh_client()
+
+    resp = client.post("/api/auth/otp/request", json={"email": "ep@example.com"})
+    assert resp.status_code == 200
+    assert len(sent) == 1
+    _, code = sent[0]
+
+    resp = client.post("/api/auth/otp/login", json={"email": "ep@example.com", "otp": code})
+    assert resp.status_code == 200
+    assert resp.json()["username"] == "ep_user"
+    assert "nd_session" in resp.cookies
+
+
+def test_otp_login_endpoint_bad_code(tmp_db: str) -> None:
+    create_user("bad_otp", "pw", email="bad@example.com")
+    client = _fresh_client()
+    resp = client.post("/api/auth/otp/login", json={"email": "bad@example.com", "otp": "000000"})
+    assert resp.status_code == 401
 
 
 def test_health_details_requires_admin(tmp_db: str) -> None:

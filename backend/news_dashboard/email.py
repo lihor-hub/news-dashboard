@@ -1,4 +1,4 @@
-"""SMTP email dispatch: OTP and notification emails via Gmail SMTP."""
+"""SMTP email dispatch via Gmail SMTP (STARTTLS)."""
 
 from __future__ import annotations
 
@@ -21,13 +21,12 @@ def _smtp_credentials() -> tuple[str, str]:
 
 
 def send_otp_email(to_email: str, otp: str) -> None:
-    """Send a 6-digit OTP code to the given address via Gmail SMTP (STARTTLS)."""
+    """Send a 6-digit OTP to *to_email* via Gmail SMTP STARTTLS."""
     username, password = _smtp_credentials()
     if not username or not password:
         err = "SMTP_USERNAME and SMTP_PASSWORD must be set to send OTP emails"
         raise RuntimeError(err)
 
-    subject = "Your sign-in code"
     html_body = f"""\
 <!DOCTYPE html>
 <html>
@@ -41,13 +40,13 @@ def send_otp_email(to_email: str, otp: str) -> None:
     {otp}
   </div>
   <p style="color:#888;font-size:12px;margin-top:24px">
-    If you didn't request this code, you can safely ignore this email.
+    If you did not request this code, you can safely ignore this email.
   </p>
 </body>
 </html>"""
 
     msg = MIMEMultipart("alternative")
-    msg["Subject"] = subject
+    msg["Subject"] = "Your sign-in code"
     msg["From"] = username
     msg["To"] = to_email
     msg.attach(MIMEText(html_body, "html"))
