@@ -68,6 +68,7 @@ def test_hf_blog_empty_description_triggers_snippet_fetch(tmp_path: Path, monkey
     """New HF blog articles with no feed description should get a snippet from the page."""
     db_path = tmp_path / "hf_snippet.db"
     monkeypatch.setattr(ingest_module, "DEFAULT_SOURCES", [_hf_source()])
+    monkeypatch.setattr(ingest_module, "_fetch_feed_content", lambda _url: b"")
 
     monkeypatch.setattr(
         feedparser,
@@ -97,6 +98,7 @@ def test_hf_blog_non_empty_feed_description_skips_snippet_fetch(
     """If the feed does provide a description, no extra HTTP request is made."""
     db_path = tmp_path / "hf_has_desc.db"
     monkeypatch.setattr(ingest_module, "DEFAULT_SOURCES", [_hf_source()])
+    monkeypatch.setattr(ingest_module, "_fetch_feed_content", lambda _url: b"")
 
     entry_with_desc = _feed_entry("some-article")
     entry_with_desc["summary"] = "Feed-provided description already here."
@@ -131,6 +133,7 @@ def test_hf_blog_snippet_fetch_skipped_for_existing_articles(
     """Snippet fetch must not happen for articles already stored (repeat ingest run)."""
     db_path = tmp_path / "hf_repeat.db"
     monkeypatch.setattr(ingest_module, "DEFAULT_SOURCES", [_hf_source()])
+    monkeypatch.setattr(ingest_module, "_fetch_feed_content", lambda _url: b"")
 
     monkeypatch.setattr(
         feedparser,
@@ -160,6 +163,7 @@ def test_hf_blog_snippet_fetch_capped_per_run(tmp_path: Path, monkeypatch: Any) 
     """Snippet fetches must not exceed _MAX_SNIPPET_FETCHES_PER_RUN per ingest run."""
     db_path = tmp_path / "hf_cap.db"
     monkeypatch.setattr(ingest_module, "DEFAULT_SOURCES", [_hf_source()])
+    monkeypatch.setattr(ingest_module, "_fetch_feed_content", lambda _url: b"")
 
     # Produce more entries than the cap
     entries = [_feed_entry(f"article-{i}") for i in range(_MAX_SNIPPET_FETCHES_PER_RUN + 5)]
@@ -188,6 +192,7 @@ def test_hf_blog_snippet_fetch_failure_still_inserts_article(
     """A snippet fetch error must not prevent article insertion."""
     db_path = tmp_path / "hf_fail.db"
     monkeypatch.setattr(ingest_module, "DEFAULT_SOURCES", [_hf_source()])
+    monkeypatch.setattr(ingest_module, "_fetch_feed_content", lambda _url: b"")
 
     monkeypatch.setattr(
         feedparser,
@@ -215,6 +220,7 @@ def test_other_sources_not_affected_by_snippet_fetch(tmp_path: Path, monkeypatch
         "openai-blog", "OpenAI Blog", "https://openai.com/news/rss.xml", "ai-llm", "rss_feed", 85
     )
     monkeypatch.setattr(ingest_module, "DEFAULT_SOURCES", [other])
+    monkeypatch.setattr(ingest_module, "_fetch_feed_content", lambda _url: b"")
 
     monkeypatch.setattr(
         feedparser,

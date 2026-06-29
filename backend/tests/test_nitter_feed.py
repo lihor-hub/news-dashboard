@@ -75,6 +75,23 @@ def test_fetch_feed_content_rejects_file_url(monkeypatch: pytest.MonkeyPatch) ->
         _fetch_feed_content("file:///etc/passwd")
 
 
+def test_fetch_feed_content_rejects_private_network_url(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    called = False
+
+    def fake_open(_req: object, *, timeout: float) -> None:
+        nonlocal called
+        called = True
+
+    monkeypatch.setattr("news_dashboard.ingest.open_server_fetch_url", fake_open)
+
+    with pytest.raises(FeedFetchError, match="unsafe host"):
+        _fetch_feed_content("http://127.0.0.1/feed.xml")
+
+    assert called is False
+
+
 def test_fetch_feed_content_sends_user_agent(monkeypatch: pytest.MonkeyPatch) -> None:
     captured: list[str | None] = []
 
@@ -88,7 +105,7 @@ def test_fetch_feed_content_sends_user_agent(monkeypatch: pytest.MonkeyPatch) ->
         def __exit__(self, *_: object) -> None:
             pass
 
-    def fake_urlopen(req: object, timeout: float) -> _FakeResp:
+    def fake_open(req: object, *, timeout: float) -> _FakeResp:
         import urllib.request as ur
 
         assert isinstance(req, ur.Request)
@@ -96,27 +113,27 @@ def test_fetch_feed_content_sends_user_agent(monkeypatch: pytest.MonkeyPatch) ->
         assert timeout == FEED_FETCH_TIMEOUT_SECS
         return _FakeResp()
 
-    monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
+    monkeypatch.setattr("news_dashboard.ingest.open_server_fetch_url", fake_open)
     _fetch_feed_content("https://example.com/feed.xml")
     assert captured == [_FEED_AGENT]
 
 
 def test_fetch_feed_content_converts_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
-    def fake_urlopen(_req: object, timeout: float) -> None:
+    def fake_open(_req: object, *, timeout: float) -> None:
         msg = "timed out"
         raise TimeoutError(msg)
 
-    monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
+    monkeypatch.setattr("news_dashboard.ingest.open_server_fetch_url", fake_open)
     with pytest.raises(FeedFetchError, match="timed out"):
         _fetch_feed_content("https://example.com/feed.xml")
 
 
 def test_fetch_feed_content_converts_url_error(monkeypatch: pytest.MonkeyPatch) -> None:
-    def fake_urlopen(_req: object, timeout: float) -> None:
+    def fake_open(_req: object, *, timeout: float) -> None:
         msg = "Name or service not known"
         raise urllib.error.URLError(msg)
 
-    monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
+    monkeypatch.setattr("news_dashboard.ingest.open_server_fetch_url", fake_open)
     with pytest.raises(FeedFetchError, match="network error"):
         _fetch_feed_content("https://example.com/feed.xml")
 

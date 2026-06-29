@@ -4,8 +4,13 @@ from __future__ import annotations
 
 import http.server
 import threading
+import urllib.request
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 from unittest.mock import patch
+
+import pytest
 
 from news_dashboard.body_fetch import (
     extract_body,
@@ -64,6 +69,18 @@ def _start_server(html: bytes) -> tuple[str, threading.Thread]:
     return f"http://127.0.0.1:{port}/", thread
 
 
+@contextmanager
+def _allow_local_body_fetches() -> Iterator[None]:
+    def local_open(req: urllib.request.Request, *, timeout: float) -> object:
+        return urllib.request.urlopen(req, timeout=timeout)  # noqa: S310
+
+    with (
+        patch("news_dashboard.body_fetch.validate_server_fetch_url", return_value=None),
+        patch("news_dashboard.body_fetch.open_server_fetch_url", side_effect=local_open),
+    ):
+        yield
+
+
 # ── extract_body ──────────────────────────────────────────────────────────────
 
 
@@ -79,7 +96,8 @@ def test_extract_body_ok() -> None:
     </body></html>
     """
     url, thread = _start_server(html)
-    body, status = extract_body(url)
+    with _allow_local_body_fetches():
+        body, status = extract_body(url)
     thread.join(timeout=2)
     assert status == "ok"
     assert "long enough paragraph" in body
@@ -100,7 +118,10 @@ def test_extract_body_rejects_non_http() -> None:
 
 def test_extract_body_empty_page_returns_error() -> None:
     url, thread = _start_server(b"<html><body></body></html>")
-    with patch("news_dashboard.body_fetch._selenium_extract_body", return_value=("", "error")):
+    with (
+        _allow_local_body_fetches(),
+        patch("news_dashboard.body_fetch._selenium_extract_body", return_value=("", "error")),
+    ):
         _body, status = extract_body(url)
     thread.join(timeout=2)
     assert status == "error"
@@ -127,7 +148,8 @@ def test_fetch_and_cache_body_success(tmp_path: Path) -> None:
             (url, url, article_id),
         )
 
-    result = fetch_and_cache_body(article_id, db_path=db_path)
+    with _allow_local_body_fetches():
+        result = fetch_and_cache_body(article_id, db_path=db_path)
     thread.join(timeout=2)
 
     assert result is not None
@@ -382,7 +404,8 @@ def test_prefetch_article_bodies_fetches_missing(tmp_path: Path) -> None:
             (url, url, article_id),
         )
 
-    count = prefetch_article_bodies(db_path=db_path)
+    with _allow_local_body_fetches():
+        count = prefetch_article_bodies(db_path=db_path)
     thread.join(timeout=2)
 
     assert count == 1
@@ -430,6 +453,46 @@ def test_ai_extract_body_skipped_without_api_key(tmp_path: Path) -> None:
 
     assert status == "error"
     assert body == ""
+
+
+def test_extract_body_rejects_private_network_url_before_fetch(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from news_dashboard.body_fetch import extract_body
+
+    called = False
+
+    def fake_urlopen(_req: object, timeout: float) -> None:
+        nonlocal called
+        called = True
+
+    monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
+
+    body, status = extract_body("http://127.0.0.1/admin")
+
+    assert status == "error"
+    assert body == ""
+    assert called is False
+
+
+def test_ai_extract_body_rejects_private_network_url_before_fetch() -> None:
+    from news_dashboard.body_fetch import _ai_extract_body
+
+    called = False
+
+    def fake_get(*_: object, **__: object) -> None:
+        nonlocal called
+        called = True
+
+    with (
+        patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}),
+        patch("httpx.get", side_effect=fake_get),
+    ):
+        body, status = _ai_extract_body("http://169.254.169.254/latest/meta-data")
+
+    assert status == "error"
+    assert body == ""
+    assert called is False
 
 
 def test_ai_extract_body_calls_openai_on_html(tmp_path: Path) -> None:
@@ -602,10 +665,13 @@ def test_fetch_and_cache_body_ai_fallback_result_is_cached(tmp_path: Path) -> No
 def test_extract_body_falls_back_to_selenium_when_static_empty() -> None:
     url, thread = _start_server(b"<html><body></body></html>")
     spa_content = "SPA article content rendered by JavaScript and extracted by headless browser."
-    with patch(
-        "news_dashboard.body_fetch._selenium_extract_body",
-        return_value=(spa_content, "ok"),
-    ) as mock_sel:
+    with (
+        _allow_local_body_fetches(),
+        patch(
+            "news_dashboard.body_fetch._selenium_extract_body",
+            return_value=(spa_content, "ok"),
+        ) as mock_sel,
+    ):
         body, status = extract_body(url)
     thread.join(timeout=2)
     mock_sel.assert_called_once_with(url)
@@ -620,7 +686,10 @@ def test_extract_body_does_not_call_selenium_when_static_ok() -> None:
     </body></html>
     """
     url, thread = _start_server(html)
-    with patch("news_dashboard.body_fetch._selenium_extract_body") as mock_sel:
+    with (
+        _allow_local_body_fetches(),
+        patch("news_dashboard.body_fetch._selenium_extract_body") as mock_sel,
+    ):
         _body, status = extract_body(url)
     thread.join(timeout=2)
     mock_sel.assert_not_called()

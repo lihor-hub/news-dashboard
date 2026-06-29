@@ -233,6 +233,28 @@ def test_api_create_private_source(pg_clean: str, monkeypatch: pytest.MonkeyPatc
         assert "my-blog" in slugs
 
 
+def test_api_create_private_source_rejects_unsafe_url(
+    pg_clean: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("DATABASE_URL", str(pg_clean))
+    sync_sources(pg_clean)
+    uid = _make_user(pg_clean)
+
+    with _api_client(pg_clean, uid) as client:
+        resp = client.post(
+            "/api/sources",
+            json={
+                "url": "http://127.0.0.1/admin",
+                "name": "Local Admin",
+                "category": "tech",
+                "slug": "local-admin",
+            },
+        )
+
+    assert resp.status_code == 400
+    assert "unsafe" in resp.json()["detail"]
+
+
 def test_api_private_source_not_visible_to_other_user(
     pg_clean: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -246,7 +268,7 @@ def test_api_private_source_not_visible_to_other_user(
         resp = client_a.post(
             "/api/sources",
             json={
-                "url": "https://private.example.com/feed",
+                "url": "https://example.com/alice-feed.xml",
                 "name": "Alice Blog",
                 "slug": "alice-blog",
             },
@@ -269,7 +291,7 @@ def test_api_delete_own_private_source(pg_clean: str, monkeypatch: pytest.Monkey
         client.post(
             "/api/sources",
             json={
-                "url": "https://delete.example.com/feed",
+                "url": "https://example.com/delete-feed.xml",
                 "name": "To Delete",
                 "slug": "to-delete",
             },
@@ -289,7 +311,7 @@ def test_api_cannot_delete_others_source(pg_clean: str, monkeypatch: pytest.Monk
         client_a.post(
             "/api/sources",
             json={
-                "url": "https://alices.example.com/feed",
+                "url": "https://example.com/alices-feed.xml",
                 "name": "Alice Source",
                 "slug": "alice-src",
             },

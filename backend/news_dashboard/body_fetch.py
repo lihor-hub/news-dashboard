@@ -18,6 +18,11 @@ from typing import Any
 from news_dashboard.article_visibility import get_visible_article_row
 from news_dashboard.db import connect, init_db, row_to_dict
 from news_dashboard.scraper import TIMEOUT_SECS, USER_AGENT
+from news_dashboard.url_safety import (
+    UnsafeUrlError,
+    open_server_fetch_url,
+    validate_server_fetch_url,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -44,15 +49,19 @@ def _ai_extract_body(url: str, *, user_id: int | None = None) -> tuple[str, str]
     model = os.getenv("OPENAI_BRIEFING_MODEL", _AI_MODEL)
 
     try:
+        validate_server_fetch_url(url)
         import httpx  # lazy import — optional at module load time
 
         resp = httpx.get(
             url,
             timeout=15,
             headers={"User-Agent": USER_AGENT},
-            follow_redirects=True,
+            follow_redirects=False,
         )
         html = resp.text[:_AI_HTML_LIMIT]
+    except UnsafeUrlError as exc:
+        logger.warning("ai_body_fetch: unsafe URL %r: %s", url, exc)
+        return "", "error"
     except Exception as exc:
         logger.warning("ai_body_fetch: HTTP fetch failed for %r: %s", url, exc)
         return "", "error"
@@ -208,16 +217,18 @@ def extract_body(url: str) -> tuple[str, str]:
     (e.g. JS-rendered SPAs).  Returns (body_text, 'ok') on success or
     ('', 'error') on failure.
     """
-    if not url.startswith(("http:", "https:")):
-        return "", "error"
     try:
+        validate_server_fetch_url(url)
         req = urllib.request.Request(  # noqa: S310 - scheme validated above
             url, headers={"User-Agent": USER_AGENT}
         )
-        with urllib.request.urlopen(req, timeout=TIMEOUT_SECS) as resp:  # noqa: S310
+        with open_server_fetch_url(req, timeout=TIMEOUT_SECS) as resp:
             raw: bytes = resp.read(500_000)  # cap at ~500 KB
             charset = resp.headers.get_content_charset("utf-8") or "utf-8"
             html = raw.decode(str(charset), errors="replace")
+    except UnsafeUrlError as exc:
+        logger.warning("body_fetch: unsafe URL %r: %s", url, exc)
+        return "", "error"
     except Exception as exc:
         logger.warning("body_fetch: fetch failed for %r: %s", url, exc)
         return "", "error"
