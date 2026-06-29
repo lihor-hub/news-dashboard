@@ -556,7 +556,11 @@ def _load_user_history_vectors(conn: Any, user_id: int) -> list[list[float]]:
 
 
 def _load_candidates(conn: Any, user_id: int, limit: int) -> list[dict[str, Any]]:
-    """Read today/later-eligible articles with their cold-start base score."""
+    """Read today/later-eligible articles with their cold-start base score.
+
+    Scoped to the user's visible corpus: global sources the user has not
+    disabled, and private sources owned by this user.
+    """
     from news_dashboard.ingest import _COLD_START_RECOMMENDATION_SCORE_SQL
 
     rows = conn.execute(
@@ -568,14 +572,20 @@ def _load_candidates(conn: Any, user_id: int, limit: int) -> list[dict[str, Any]
           {_COLD_START_RECOMMENDATION_SCORE_SQL} AS base_score
         FROM articles a
         LEFT JOIN sources src ON src.slug = a.source_slug
+        LEFT JOIN user_sources us_src
+          ON us_src.user_id = %s AND us_src.source_slug = a.source_slug
         LEFT JOIN user_article_state uas
           ON uas.article_id = a.id AND uas.user_id = %s
         WHERE (a.canonical_id IS NULL OR COALESCE(uas.state, 'today') != 'archived')
           AND COALESCE(uas.state, 'today') IN ('today', 'later')
+          AND (
+            (src.owner_user_id IS NULL AND COALESCE(us_src.enabled, TRUE))
+            OR src.owner_user_id = %s
+          )
         ORDER BY a.discovered_at DESC, a.id DESC
         LIMIT %s
         """,
-        (user_id, limit),
+        (user_id, user_id, user_id, limit),
     ).fetchall()
     return [row_to_dict(row) for row in rows]
 

@@ -101,11 +101,18 @@ def find_recalculation_candidates(
             )
             OR EXISTS (
                 SELECT 1 FROM articles a
+                LEFT JOIN sources src ON src.slug = a.source_slug
+                LEFT JOIN user_sources us_src
+                  ON us_src.user_id = u.id AND us_src.source_slug = a.source_slug
                 LEFT JOIN user_article_state uas
                   ON uas.article_id = a.id AND uas.user_id = u.id
                 LEFT JOIN user_article_recommendations uar
                   ON uar.user_id = u.id AND uar.article_id = a.id
                 WHERE {_CANDIDATE_PREDICATE}
+                  AND (
+                    (src.owner_user_id IS NULL AND COALESCE(us_src.enabled, TRUE))
+                    OR src.owner_user_id = u.id
+                  )
                   AND uar.user_id IS NULL
             )
             ORDER BY u.id
@@ -251,11 +258,18 @@ def recommendation_health(
                 SELECT COUNT(*) AS missing_scores
                 FROM users u
                 JOIN articles a ON TRUE
+                LEFT JOIN sources src ON src.slug = a.source_slug
+                LEFT JOIN user_sources us_src
+                  ON us_src.user_id = u.id AND us_src.source_slug = a.source_slug
                 LEFT JOIN user_article_state uas
                   ON uas.article_id = a.id AND uas.user_id = u.id
                 LEFT JOIN user_article_recommendations uar
                   ON uar.user_id = u.id AND uar.article_id = a.id
                 WHERE {_CANDIDATE_PREDICATE}
+                  AND (
+                    (src.owner_user_id IS NULL AND COALESCE(us_src.enabled, TRUE))
+                    OR src.owner_user_id = u.id
+                  )
                   AND uar.user_id IS NULL
                 """,
             ).fetchone()

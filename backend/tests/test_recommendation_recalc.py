@@ -49,6 +49,38 @@ def _insert_source(db_path: str, slug: str, *, category: str = "tech", priority:
         )
 
 
+def _insert_private_source(
+    db_path: str, slug: str, owner_user_id: int, *, category: str = "tech"
+) -> None:
+    with connect(db_path) as conn:
+        conn.execute(
+            """
+            INSERT INTO sources(slug, name, url, category, kind, priority, enabled, owner_user_id)
+            VALUES (%s, %s, %s, %s, 'rss_feed', 50, TRUE, %s)
+            ON CONFLICT(slug) DO NOTHING
+            """,
+            (
+                slug,
+                slug.title(),
+                f"https://example.com/{slug}.xml",
+                category,
+                owner_user_id,
+            ),
+        )
+
+
+def _disable_source(db_path: str, user_id: int, source_slug: str) -> None:
+    with connect(db_path) as conn:
+        conn.execute(
+            """
+            INSERT INTO user_sources(user_id, source_slug, enabled)
+            VALUES (%s, %s, FALSE)
+            ON CONFLICT(user_id, source_slug) DO UPDATE SET enabled = FALSE
+            """,
+            (user_id, source_slug),
+        )
+
+
 def _insert_article(db_path: str, slug: str, suffix: str, *, category: str = "tech") -> int:
     with connect(db_path) as conn:
         row = conn.execute(
@@ -287,3 +319,84 @@ def test_recalculate_all_refreshes_non_stale_current_scores(
     row = _rec_row(db_path, user_id, article)
     assert row is not None
     assert row["recommendation_score"] != pytest.approx(1.0)
+
+
+# ── Source visibility scoping ─────────────────────────────────────────────────
+
+
+def test_hidden_private_source_not_scored_for_other_user(
+    tmp_path: Path, monkeypatch: Any, pg_clean: str
+) -> None:
+    """Articles from another user's private source must not appear in candidates."""
+    db_path = _setup_db(monkeypatch, pg_clean)
+    owner = _make_user(db_path, "owner")
+    other = _make_user(db_path, "other")
+    _insert_private_source(db_path, "private-src", owner)
+    hidden_article = _insert_article(db_path, "private-src", "hidden")
+
+    # 'other' has no scores → would normally appear as a missing candidate
+    # but private-src is owned by 'owner', so 'other' should not see it.
+    candidates = find_recalculation_candidates(db_path=db_path)
+    # 'other' must not need recalculation for a hidden private article
+    assert other not in candidates
+
+    # Scoring for 'other' must not write a row for the hidden article
+    from news_dashboard.recommendations import recompute_user_recommendations
+
+    recompute_user_recommendations(other, db_path=db_path)
+    assert _rec_row(db_path, other, hidden_article) is None
+
+
+def test_disabled_global_source_not_scored_for_user(
+    tmp_path: Path, monkeypatch: Any, pg_clean: str
+) -> None:
+    """Articles from a global source disabled by a user must not be candidates."""
+    db_path = _setup_db(monkeypatch, pg_clean)
+    user_id = _make_user(db_path, "alice")
+    _insert_source(db_path, "global-src")
+    disabled_article = _insert_article(db_path, "global-src", "disabled")
+    _disable_source(db_path, user_id, "global-src")
+
+    candidates = find_recalculation_candidates(db_path=db_path)
+    assert user_id not in candidates
+
+    from news_dashboard.recommendations import recompute_user_recommendations
+
+    recompute_user_recommendations(user_id, db_path=db_path)
+    assert _rec_row(db_path, user_id, disabled_article) is None
+
+
+def test_own_private_source_is_scored(tmp_path: Path, monkeypatch: Any, pg_clean: str) -> None:
+    """Articles from a user's own private source must still be scored for that user."""
+    db_path = _setup_db(monkeypatch, pg_clean)
+    owner = _make_user(db_path, "owner")
+    _insert_private_source(db_path, "my-private", owner)
+    own_article = _insert_article(db_path, "my-private", "own")
+
+    candidates = find_recalculation_candidates(db_path=db_path)
+    assert owner in candidates
+
+    from news_dashboard.recommendations import recompute_user_recommendations
+
+    recompute_user_recommendations(owner, db_path=db_path)
+    assert _rec_row(db_path, owner, own_article) is not None
+
+
+def test_health_missing_scores_excludes_invisible_articles(
+    tmp_path: Path, monkeypatch: Any, pg_clean: str
+) -> None:
+    """recommendation_health must not count hidden private articles as missing scores."""
+    db_path = _setup_db(monkeypatch, pg_clean)
+    owner = _make_user(db_path, "owner")
+    other = _make_user(db_path, "other")
+    _insert_private_source(db_path, "private-src", owner)
+    _insert_article(db_path, "private-src", "hidden")
+    # Add a global source disabled by 'other' — must not inflate missing_scores for 'other'.
+    _insert_source(db_path, "global-src")
+    _insert_article(db_path, "global-src", "visible")
+    _disable_source(db_path, other, "global-src")
+
+    health = recommendation_health(db_path=db_path)
+    # owner needs scores for own-private + global = 2; other sees neither → 0.
+    # Total missing must be exactly 2, not 3.
+    assert health["missing_scores"] == 2
