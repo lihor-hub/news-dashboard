@@ -30,6 +30,35 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 ScoreDataType = Literal["NUMERIC", "CATEGORICAL", "BOOLEAN"]
+_DEFAULT_AI_REQUEST_TIMEOUT_SECONDS = 30.0
+_DEFAULT_AI_TTS_TIMEOUT_SECONDS = 120.0
+
+
+def _timeout_seconds_from_env(name: str, default: float) -> float:
+    value = os.getenv(name)
+    if value is None:
+        return default
+    try:
+        parsed = float(value)
+    except ValueError:
+        logger.warning("Ignoring invalid %s=%r; using %.1fs", name, value, default)
+        return default
+    if parsed <= 0:
+        logger.warning("Ignoring non-positive %s=%r; using %.1fs", name, value, default)
+        return default
+    return parsed
+
+
+def request_timeout_seconds() -> float:
+    """Return the configured timeout for chat and embedding OpenAI-compatible calls."""
+    return _timeout_seconds_from_env(
+        "AI_REQUEST_TIMEOUT_SECONDS", _DEFAULT_AI_REQUEST_TIMEOUT_SECONDS
+    )
+
+
+def tts_timeout_seconds() -> float:
+    """Return the configured timeout for OpenAI TTS/audio calls."""
+    return _timeout_seconds_from_env("AI_TTS_TIMEOUT_SECONDS", _DEFAULT_AI_TTS_TIMEOUT_SECONDS)
 
 
 def langfuse_enabled() -> bool:
@@ -144,13 +173,21 @@ def free_llm_config() -> tuple[str, str | None]:
     return api_key, base_url
 
 
-def get_openai_client(*, api_key: str, base_url: str | None = None) -> OpenAI:
+def get_openai_client(
+    *,
+    api_key: str,
+    base_url: str | None = None,
+    timeout_seconds: float | None = None,
+) -> OpenAI:
     """Return an OpenAI client, Langfuse-wrapped when tracing is configured.
 
     The returned object is API-compatible with ``openai.OpenAI`` in both cases,
     so call sites are identical whether or not tracing is active.
     """
-    kwargs: dict[str, Any] = {"api_key": api_key}
+    kwargs: dict[str, Any] = {
+        "api_key": api_key,
+        "timeout": request_timeout_seconds() if timeout_seconds is None else timeout_seconds,
+    }
     if base_url is not None:
         kwargs["base_url"] = base_url
 

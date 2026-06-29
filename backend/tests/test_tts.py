@@ -146,7 +146,7 @@ def test_generate_audio_calls_openai_and_writes_file(tmp_path: Path) -> None:
     assert call_kwargs.kwargs["model"] == "tts-1"
     assert call_kwargs.kwargs["voice"] == "alloy"
     assert "Test Article Title" in call_kwargs.kwargs["input"]
-    mock_factory.assert_called_once_with(api_key="sk-test")
+    mock_factory.assert_called_once_with(api_key="sk-test", timeout=120.0)
 
 
 def test_generate_audio_uses_configured_gateway_base_url(tmp_path: Path) -> None:
@@ -176,7 +176,7 @@ def test_generate_audio_uses_configured_gateway_base_url(tmp_path: Path) -> None
 
     assert path.exists()
     mock_factory.assert_called_once_with(
-        api_key="sk-test", base_url="http://shared-gateway:9130/v1"
+        api_key="sk-test", base_url="http://shared-gateway:9130/v1", timeout=120.0
     )
 
 

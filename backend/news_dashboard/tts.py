@@ -99,9 +99,11 @@ def generate_audio(
 
     path.parent.mkdir(parents=True, exist_ok=True)
 
-    from news_dashboard.ai_client import get_openai_client
+    from news_dashboard.ai_client import get_openai_client, tts_timeout_seconds
 
-    client = get_openai_client(api_key=api_key, base_url=base_url)
+    client = get_openai_client(
+        api_key=api_key, base_url=base_url, timeout_seconds=tts_timeout_seconds()
+    )
     logger.info("Generating TTS audio for article %d (%d chars)", article_id, len(text))
     # audio/speech does not accept Langfuse trace kwargs, so TTS calls are
     # intentionally untraced. The wrapped client still routes through the same
@@ -139,9 +141,11 @@ def generate_podcast_audio(
 
     path.parent.mkdir(parents=True, exist_ok=True)
 
-    from news_dashboard.ai_client import get_openai_client
+    from news_dashboard.ai_client import get_openai_client, tts_timeout_seconds
 
-    client = get_openai_client(api_key=api_key, base_url=base_url)
+    client = get_openai_client(
+        api_key=api_key, base_url=base_url, timeout_seconds=tts_timeout_seconds()
+    )
 
     combined_bytes = bytearray()
     for idx, entry in enumerate(script):

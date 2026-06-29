@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
@@ -24,11 +25,14 @@ _LANGFUSE_VARS = (
     "LANGFUSE_HOST",
     "LANGFUSE_BASE_URL",
 )
+_AI_TIMEOUT_VARS = ("AI_REQUEST_TIMEOUT_SECONDS", "AI_TTS_TIMEOUT_SECONDS")
 
 
 @pytest.fixture
 def _no_langfuse(monkeypatch: pytest.MonkeyPatch) -> None:
     for var in _LANGFUSE_VARS:
+        monkeypatch.delenv(var, raising=False)
+    for var in _AI_TIMEOUT_VARS:
         monkeypatch.delenv(var, raising=False)
 
 
@@ -59,6 +63,34 @@ def test_base_url_is_forwarded() -> None:
     assert str(client.base_url).rstrip("/") == "http://gateway:9130/v1"
 
 
+@pytest.mark.usefixtures("_no_langfuse")
+def test_plain_openai_client_uses_configured_request_timeout(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from unittest.mock import patch
+
+    import openai
+
+    monkeypatch.setenv("AI_REQUEST_TIMEOUT_SECONDS", "12.5")
+
+    with patch.object(openai, "OpenAI", return_value=MagicMock()) as constructor:
+        get_openai_client(api_key="test-key")
+
+    assert constructor.call_args.kwargs["timeout"] == 12.5
+
+
+@pytest.mark.usefixtures("_no_langfuse")
+def test_plain_openai_client_accepts_explicit_timeout_override() -> None:
+    from unittest.mock import patch
+
+    import openai
+
+    with patch.object(openai, "OpenAI", return_value=MagicMock()) as constructor:
+        get_openai_client(api_key="test-key", timeout_seconds=90.0)
+
+    assert constructor.call_args.kwargs["timeout"] == 90.0
+
+
 def test_returns_langfuse_client_when_enabled(monkeypatch: pytest.MonkeyPatch) -> None:
     # The wrapped client requires the langfuse SDK; skip when it is not importable
     # in this interpreter (e.g. a system pytest outside the project venv). It is a
@@ -73,6 +105,41 @@ def test_returns_langfuse_client_when_enabled(monkeypatch: pytest.MonkeyPatch) -
     # Langfuse traces by wrapping the OpenAI SDK methods (wrapt), rather than
     # subclassing — a wrapt wrapper exposes the original via __wrapped__.
     assert hasattr(client.chat.completions.create, "__wrapped__")
+
+
+def test_langfuse_client_uses_configured_request_timeout(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from unittest.mock import patch
+
+    wrapped_openai = MagicMock(return_value=MagicMock())
+    monkeypatch.setenv("LANGFUSE_PUBLIC_KEY", "pk")
+    monkeypatch.setenv("LANGFUSE_SECRET_KEY", "sk")
+    monkeypatch.setenv("AI_REQUEST_TIMEOUT_SECONDS", "17")
+
+    with patch(
+        "news_dashboard.ai_client.importlib.import_module",
+        return_value=SimpleNamespace(OpenAI=wrapped_openai),
+    ):
+        get_openai_client(api_key="test-key", base_url="http://gateway:9130/v1")
+
+    assert wrapped_openai.call_args.kwargs == {
+        "api_key": "test-key",
+        "base_url": "http://gateway:9130/v1",
+        "timeout": 17.0,
+    }
+
+
+def test_tts_timeout_uses_separate_default_and_env_override(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from news_dashboard.ai_client import tts_timeout_seconds
+
+    monkeypatch.delenv("AI_TTS_TIMEOUT_SECONDS", raising=False)
+    assert tts_timeout_seconds() == 120.0
+
+    monkeypatch.setenv("AI_TTS_TIMEOUT_SECONDS", "240")
+    assert tts_timeout_seconds() == 240.0
 
 
 @pytest.mark.usefixtures("_no_langfuse")

@@ -67,7 +67,7 @@ def test_answer_uses_openai_api_key_and_default_model(
     monkeypatch.setitem(sys.modules, "openai", SimpleNamespace(OpenAI=FakeOpenAI))
 
     assert _answer("system", "user") == "answer text"
-    assert calls[0] == {"api_key": "test-key"}
+    assert calls[0] == {"api_key": "test-key", "timeout": 30.0}
     assert calls[1]["model"] == DEFAULT_ANSWER_MODEL
 
 
