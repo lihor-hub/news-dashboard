@@ -8,6 +8,7 @@
   "private": true,
   "scripts": {
     "start": "electron .",
+    "test": "node src/url-helper.test.js",
     "build": "electron-builder",
     "build:mac": "electron-builder --mac",
     "build:linux": "electron-builder --linux",

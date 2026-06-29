@@ -4,6 +4,7 @@ const { app, BrowserWindow, Menu, shell, ipcMain } = require('electron');
 const { autoUpdater } = require('electron-updater');
 const path = require('path');
 const fs = require('fs');
+const { isAppUrl } = require('./url-helper');
 
 const APP_URL = 'https://news.lihor.ro';
 const isDev = !app.isPackaged;
@@ -69,14 +70,14 @@ function createWindow() {
 
   // Open target=_blank and external links in the system browser.
   win.webContents.setWindowOpenHandler(({ url }) => {
-    if (url.startsWith(APP_URL)) return { action: 'allow' };
+    if (isAppUrl(url)) return { action: 'allow' };
     shell.openExternal(url);
     return { action: 'deny' };
   });
 
   // Prevent in-window navigation away from the site.
   win.webContents.on('will-navigate', (event, url) => {
-    if (!url.startsWith(APP_URL)) {
+    if (!isAppUrl(url)) {
       event.preventDefault();
       shell.openExternal(url);
     }
