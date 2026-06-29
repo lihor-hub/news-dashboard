@@ -22,27 +22,28 @@ export function useArticleListNav(
       if (e.metaKey || e.ctrlKey || e.altKey) return;
 
       const cur = list[focused];
+      const key = e.key.toLowerCase();
 
-      if (e.key === 'j') {
+      if (key === 'j') {
         setFocused((f) => Math.min(list.length - 1, f + 1));
         e.preventDefault();
-      } else if (e.key === 'k') {
+      } else if (key === 'k') {
         setFocused((f) => Math.max(0, f - 1));
         e.preventDefault();
       } else if (e.key === 'Enter' && cur) {
         openArticle(cur);
         e.preventDefault();
-      } else if ((e.key === 'r' || e.key === 'd') && cur) {
+      } else if ((key === 'r' || key === 'd') && cur) {
         mutations.setState(cur, 'done', 'Done');
-      } else if (e.key === 'l' && cur) {
+      } else if (key === 'l' && cur) {
         mutations.sendLater(cur);
-      } else if (e.key === 's' && cur) {
+      } else if (key === 's' && cur) {
         mutations.toggleStar(cur);
-      } else if (e.key === 'x' && cur && !cur.starred) {
+      } else if (key === 'x' && cur && !cur.starred) {
         mutations.setState(cur, 'skipped', 'Skipped');
-      } else if (e.key === 'e' && cur) {
+      } else if (key === 'e' && cur) {
         mutations.setState(cur, 'archived', 'Archived');
-      } else if (e.key === 'o' && cur) {
+      } else if (key === 'o' && cur) {
         window.open(cur.url, '_blank', 'noopener,noreferrer');
       }
     };
