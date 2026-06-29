@@ -15,6 +15,7 @@ class SourceDefinition:
     lang: str = "en"
     interest_tags: tuple[str, ...] = ()
     description: str | None = None
+    owner_user_id: int | None = None
 
 
 DEFAULT_SOURCES: list[SourceDefinition] = [

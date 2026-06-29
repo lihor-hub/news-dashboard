@@ -323,16 +323,35 @@ def _fetch_article_snippet(url: str) -> str:
     return ""
 
 
-def _find_canonical(conn: Any, canonical_url: str, title: str) -> int | None:
-    """Return the id of an existing canonical article matching by URL or fuzzy title, or None."""
+def _find_canonical(
+    conn: Any, canonical_url: str, title: str, owner_user_id: int | None = None
+) -> int | None:
+    """Return the id of an existing canonical article matching by URL or fuzzy title, or None.
+
+    Source-visibility rules for canonical selection:
+    - A global source (owner_user_id=None) may only canonicalize against other global canonicals.
+    - A private source (owner_user_id!=None) may canonicalize against global canonicals or
+      canonicals owned by the same user, but not private canonicals from a different owner.
+    """
+    if owner_user_id is None:
+        # Global source: only match global canonical articles
+        visibility_clause = "AND s.owner_user_id IS NULL"
+        visibility_params: tuple[int, ...] = ()
+    else:
+        # Private source: match global or same-owner private canonical articles
+        visibility_clause = "AND (s.owner_user_id IS NULL OR s.owner_user_id = %s)"
+        visibility_params = (owner_user_id,)
+
     # Exact URL match (canonical_url already stripped of tracking params)
     row = conn.execute(
-        """
-        SELECT id FROM articles
-        WHERE canonical_url=%s AND (canonical_id IS NULL OR canonical_id=id)
+        f"""
+        SELECT a.id FROM articles a
+        JOIN sources s ON s.slug = a.source_slug
+        WHERE a.canonical_url = %s AND (a.canonical_id IS NULL OR a.canonical_id = a.id)
+        {visibility_clause}
         LIMIT 1
         """,
-        (canonical_url,),
+        (canonical_url, *visibility_params),
     ).fetchone()
     if row:
         return int(row["id"] if isinstance(row, dict) else row[0])
@@ -340,12 +359,14 @@ def _find_canonical(conn: Any, canonical_url: str, title: str) -> int | None:
     # Fuzzy title match against recent articles (last 7 days) that are canonical
     cutoff = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
     rows = conn.execute(
-        """SELECT id, title FROM articles
-           WHERE canonical_id IS NULL
-             AND discovered_at >= %s
-           ORDER BY discovered_at DESC
+        f"""SELECT a.id, a.title FROM articles a
+           JOIN sources s ON s.slug = a.source_slug
+           WHERE a.canonical_id IS NULL
+             AND a.discovered_at >= %s
+             {visibility_clause}
+           ORDER BY a.discovered_at DESC
            LIMIT 200""",
-        (cutoff,),
+        (cutoff, *visibility_params),
     ).fetchall()
     for r in rows:
         existing_title = str(r["title"] if isinstance(r, dict) else r[1])
@@ -597,7 +618,7 @@ def _ingest_source(
                 )
 
                 # Deduplication: check if this article is a duplicate of an existing canonical
-                canonical_id = _find_canonical(conn, url, translated_title)
+                canonical_id = _find_canonical(conn, url, translated_title, source.owner_user_id)
                 if canonical_id is not None:
                     # Insert as archived duplicate pointing to canonical
                     conn.execute(
@@ -786,7 +807,7 @@ def ingest_all(db_path: Path | str | None = None) -> IngestResult:
         sources_to_ingest: list[SourceDefinition] = [s for s in DEFAULT_SOURCES if s.enabled]
         with connect(db_path) as conn:
             private_rows = conn.execute(
-                "SELECT slug, name, url, category, kind, priority, lang"
+                "SELECT slug, name, url, category, kind, priority, lang, owner_user_id"
                 " FROM sources WHERE owner_user_id IS NOT NULL AND enabled IS TRUE"
             ).fetchall()
         for row in private_rows:
@@ -800,6 +821,7 @@ def ingest_all(db_path: Path | str | None = None) -> IngestResult:
                     kind=r["kind"],
                     priority=int(r["priority"] or 0),
                     lang=r.get("lang") or "en",
+                    owner_user_id=int(r["owner_user_id"]),
                 )
             )
 
@@ -1254,23 +1276,40 @@ def _list_articles_for_user(  # noqa: PLR0913
             d["restored_at"] = d.pop("_uas_restored_at", None)
             _apply_recommendation_fields(d)
             articles.append(d)
-        _attach_also_from(conn, articles)
+        _attach_also_from(conn, articles, user_id=user_id)
         return articles
 
 
-def _attach_also_from(conn: Any, articles: list[dict[str, Any]]) -> None:
-    """Attach duplicate source names to canonical articles (in-place)."""
+def _attach_also_from(
+    conn: Any, articles: list[dict[str, Any]], user_id: int | None = None
+) -> None:
+    """Attach duplicate source names to canonical articles (in-place).
+
+    When user_id is provided, only include duplicate sources visible to that user
+    (global sources or sources owned by that user).
+    """
     article_ids = [a["id"] for a in articles]
     if not article_ids:
         return
     article_placeholders = placeholders(article_ids)
-    dup_rows = conn.execute(
-        f"""
-        SELECT canonical_id, source_name FROM articles
-        WHERE canonical_id IN ({article_placeholders}) AND state='archived'
-        """,
-        article_ids,
-    ).fetchall()
+    if user_id is not None:
+        dup_rows = conn.execute(
+            f"""
+            SELECT a.canonical_id, a.source_name FROM articles a
+            JOIN sources s ON s.slug = a.source_slug
+            WHERE a.canonical_id IN ({article_placeholders}) AND a.state = 'archived'
+              AND (s.owner_user_id IS NULL OR s.owner_user_id = %s)
+            """,
+            [*article_ids, user_id],
+        ).fetchall()
+    else:
+        dup_rows = conn.execute(
+            f"""
+            SELECT canonical_id, source_name FROM articles
+            WHERE canonical_id IN ({article_placeholders}) AND state = 'archived'
+            """,
+            article_ids,
+        ).fetchall()
     dupes_by_canonical: dict[int, list[str]] = defaultdict(list)
     for dr in dup_rows:
         d = row_to_dict(dr)
