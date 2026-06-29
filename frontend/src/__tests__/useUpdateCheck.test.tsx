@@ -71,6 +71,97 @@ describe('useUpdateCheck — web/GitHub flow', () => {
   });
 });
 
+describe('useUpdateCheck — TWA flow', () => {
+  beforeEach(() => {
+    // Simulate TWA platform via sessionStorage
+    sessionStorage.setItem('nd_platform', 'twa');
+  });
+
+  afterEach(() => {
+    sessionStorage.removeItem('nd_platform');
+  });
+
+  it('reports update available when an APK asset exists (regardless of server version)', async () => {
+    vi.stubGlobal(
+      'fetch',
+      mockFetch({
+        '/releases': [
+          {
+            tag_name: 'android-v2.0.0',
+            html_url: 'https://gh/r/android',
+            assets: [{ name: 'app.apk', browser_download_url: 'https://gh/app.apk' }],
+          },
+        ],
+      })
+    );
+    const { result } = renderHook(() => useUpdateCheck());
+    await act(async () => {
+      await result.current.check();
+    });
+    expect(result.current.info?.updateAvailable).toBe(true);
+    expect(result.current.info?.apkUrl).toBe('https://gh/app.apk');
+    expect(result.current.info?.currentVersion).toBeNull();
+    expect(result.current.info?.installedVersionKnown).toBe(false);
+    // The API should NOT have called /api/version for TWA
+    expect(vi.mocked(fetch).mock.calls.filter(([url]) => (url as string).includes('/api/version')))
+      .toHaveLength(0);
+  });
+
+  it('reports no update when no matching Android release exists', async () => {
+    vi.stubGlobal(
+      'fetch',
+      mockFetch({
+        '/releases': [{ tag_name: 'desktop-v9.9.9', html_url: 'https://gh/r/d', assets: [] }],
+      })
+    );
+    const { result } = renderHook(() => useUpdateCheck());
+    await act(async () => {
+      await result.current.check();
+    });
+    expect(result.current.info?.updateAvailable).toBe(false);
+    expect(result.current.info?.apkUrl).toBeNull();
+    expect(result.current.info?.currentVersion).toBeNull();
+    expect(result.current.info?.installedVersionKnown).toBe(false);
+  });
+
+  it('reports no update when Android release has no APK asset', async () => {
+    vi.stubGlobal(
+      'fetch',
+      mockFetch({
+        '/releases': [
+          {
+            tag_name: 'android-v3.0.0',
+            html_url: 'https://gh/r/android',
+            assets: [],
+          },
+        ],
+      })
+    );
+    const { result } = renderHook(() => useUpdateCheck());
+    await act(async () => {
+      await result.current.check();
+    });
+    expect(result.current.info?.updateAvailable).toBe(false);
+    expect(result.current.info?.apkUrl).toBeNull();
+    expect(result.current.info?.currentVersion).toBeNull();
+    expect(result.current.info?.installedVersionKnown).toBe(false);
+  });
+
+  it('never fetches /api/version for TWA', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => Promise.resolve({ ok: true, json: () => Promise.resolve([]) }))
+    );
+    const { result } = renderHook(() => useUpdateCheck());
+    await act(async () => {
+      await result.current.check();
+    });
+    const calls = vi.mocked(fetch).mock.calls as [string][];
+    const versionCalls = calls.filter(([url]) => (url as string).includes('/api/version'));
+    expect(versionCalls).toHaveLength(0);
+  });
+});
+
 describe('useUpdateCheck — Electron IPC flow', () => {
   type Cb<T> = (arg: T) => void;
   let listeners: Record<string, Cb<unknown>>;

@@ -19,13 +19,15 @@ export interface GithubRelease {
 }
 
 export interface UpdateInfo {
-  currentVersion: string;
+  currentVersion: string | null;
   latestVersion: string;
   updateAvailable: boolean;
   releaseUrl: string;
   /** Direct APK download URL — only populated for the twa platform. */
   apkUrl: string | null;
   platform: AppPlatform;
+  /** Whether the currentVersion represents a known installed version (as opposed to TWA unknown). */
+  installedVersionKnown: boolean;
 }
 
 /** Fetch all releases and return the latest one matching the prefix. */
@@ -64,42 +66,49 @@ export function useUpdateCheck() {
   const [downloadPercent, setDownloadPercent] = useState(0);
   const [electronLatestVersion, setElectronLatestVersion] = useState<string | null>(null);
 
-  /** Check for updates (GitHub API + /api/version). */
+  /** Check for updates (GitHub API + optionally /api/version). */
   const check = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
       const prefix = TAG_PREFIX[platform];
-      const [currentVersion, release] = await Promise.all([
-        fetchCurrentVersion(),
-        fetchLatestRelease(prefix),
-      ]);
+      const isTwa = platform === 'twa';
+
+      // For TWA, skip /api/version: it returns the deployed server version,
+      // not the installed APK version on the device.
+      const release = await fetchLatestRelease(prefix);
+      const serverVersion: string | null = isTwa ? null : await fetchCurrentVersion();
 
       if (!release) {
         setInfo({
-          currentVersion,
-          latestVersion: currentVersion,
+          currentVersion: isTwa ? null : serverVersion,
+          latestVersion: isTwa ? '0.0.0' : (serverVersion as string),
           updateAvailable: false,
           releaseUrl: `https://github.com/${GH_REPO}/releases`,
           apkUrl: null,
           platform,
+          installedVersionKnown: !isTwa,
         });
         return;
       }
 
       const latestVersion = tagToVersion(release.tag_name);
-      const updateAvailable = compareVersions(latestVersion, currentVersion) > 0;
+      const apkAsset = release.assets.find((a) => a.name.endsWith('.apk')) ?? null;
 
-      const apkAsset =
-        platform === 'twa' ? (release.assets.find((a) => a.name.endsWith('.apk')) ?? null) : null;
+      // For TWA, since we cannot determine the installed APK version, treat any
+      // Android release with an APK asset as an available update.
+      const updateAvailable = isTwa
+        ? apkAsset !== null
+        : compareVersions(latestVersion, serverVersion as string) > 0;
 
       setInfo({
-        currentVersion,
+        currentVersion: isTwa ? null : serverVersion,
         latestVersion,
         updateAvailable,
         releaseUrl: release.html_url,
         apkUrl: apkAsset?.browser_download_url ?? null,
         platform,
+        installedVersionKnown: !isTwa,
       });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Update check failed');

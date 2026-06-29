@@ -110,6 +110,10 @@ describe('SettingsPage on TWA', () => {
     sessionStorage.setItem('nd_platform', 'twa');
   });
 
+  afterEach(() => {
+    sessionStorage.removeItem('nd_platform');
+  });
+
   it('checks for updates and offers an APK download', async () => {
     vi.stubGlobal(
       'fetch',
@@ -134,5 +138,47 @@ describe('SettingsPage on TWA', () => {
     fireEvent.click(screen.getByText('Check for updates'));
     const apk = await screen.findByText('Download APK');
     expect(apk.getAttribute('href')).toBe('https://gh/app.apk');
+  });
+
+  it('offers APK download even when server version matches the latest Android release', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((url: string) => {
+        if (url.includes('/api/version')) {
+          return Promise.resolve({ ok: true, json: () => Promise.resolve({ version: '2.0.0' }) });
+        }
+        return Promise.resolve({
+          ok: true,
+          json: () =>
+            Promise.resolve([
+              {
+                tag_name: 'android-v2.0.0',
+                html_url: 'https://gh/release',
+                assets: [{ name: 'app.apk', browser_download_url: 'https://gh/app.apk' }],
+              },
+            ]),
+        });
+      })
+    );
+    renderSettings();
+    fireEvent.click(screen.getByText('Check for updates'));
+    const apk = await screen.findByText('Download APK');
+    expect(apk.getAttribute('href')).toBe('https://gh/app.apk');
+    // Should NOT show "up to date" message
+    expect(screen.queryByText(/latest version/i)).toBeNull();
+    // Should show "App version: Unknown" instead of a version number
+    expect(screen.getByText('Unknown')).toBeTruthy();
+  });
+
+  it('shows "App version: Unknown" for TWA', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() =>
+        Promise.resolve({ ok: true, json: () => Promise.resolve([]) })
+      )
+    );
+    renderSettings();
+    fireEvent.click(screen.getByText('Check for updates'));
+    await waitFor(() => expect(screen.getByText('Unknown')).toBeTruthy());
   });
 });
