@@ -214,8 +214,8 @@ def test_start_scheduler_registers_analytics_retention_job(
     assert retention_call.kwargs["minute"] == "0"
 
 
-def test_start_scheduler_briefing_fn_is_run_briefing(monkeypatch: pytest.MonkeyPatch) -> None:
-    from news_dashboard.scheduler import _run_briefing as expected_fn
+def test_start_scheduler_briefing_fn_is_job_briefing(monkeypatch: pytest.MonkeyPatch) -> None:
+    from news_dashboard.scheduler import _job_briefing as expected_fn
 
     mock_sched = _start_with_env(monkeypatch, legacy_briefing=True)
     briefing_call = next(

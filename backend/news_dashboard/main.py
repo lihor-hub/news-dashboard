@@ -1469,6 +1469,13 @@ def ingest_run_sources(run_id: int) -> dict[str, Any]:
     return {"items": run_sources}
 
 
+@api.get("/api/scheduler/job-runs", dependencies=_admin_dep)
+def list_scheduled_job_runs() -> dict[str, Any]:
+    from news_dashboard.scheduled_job_history import list_latest_job_runs
+
+    return {"items": list_latest_job_runs()}
+
+
 @api.get("/api/health/details", dependencies=_admin_dep)
 def health_details() -> dict[str, Any]:
     init_db()

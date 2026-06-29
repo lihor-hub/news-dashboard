@@ -279,6 +279,21 @@ export async function resumeScheduler(): Promise<{ paused: boolean; next_run_at:
   return requestJson('/api/scheduler/resume', { method: 'POST' });
 }
 
+export interface ScheduledJobRun {
+  id: number;
+  job_name: string;
+  started_at: string;
+  finished_at: string | null;
+  duration_ms: number | null;
+  status: 'success' | 'skipped' | 'failure';
+  message: string | null;
+}
+
+export async function fetchLatestJobRuns(): Promise<ScheduledJobRun[]> {
+  const data = await requestJson<{ items: ScheduledJobRun[] }>('/api/scheduler/job-runs');
+  return data.items;
+}
+
 function statsParams(from: string, to: string): string {
   return new URLSearchParams({ from, to }).toString();
 }

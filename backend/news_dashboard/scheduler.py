@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
+from collections.abc import Callable
 from datetime import datetime, timezone
 from typing import Any
 
@@ -64,33 +65,35 @@ def _run_recommendation_recalc() -> None:
         logger.exception("Recommendation recalculation failed")
 
 
-def _run_daily_recommendation_recalc() -> None:
+def _run_daily_recommendation_recalc() -> tuple[str, str | None]:
     from news_dashboard.recommendation_jobs import recalculate_all_recommendations
 
     logger.info("Daily recommendation recalculation starting…")
     try:
         summary = recalculate_all_recommendations()
-        logger.info("Daily recommendation recalculation: %s", summary.as_dict())
-    except Exception:
+        msg = str(summary.as_dict())
+        logger.info("Daily recommendation recalculation: %s", msg)
+        return "success", msg
+    except Exception as exc:
         logger.exception("Daily recommendation recalculation failed")
+        return "failure", str(exc)[:500]
 
 
-def _run_analytics_retention() -> None:
+def _run_analytics_retention() -> tuple[str, str | None]:
     from news_dashboard.analytics import DEFAULT_EVENT_RETENTION_DAYS, prune_old_events
 
     retention_days = int(os.getenv("ANALYTICS_RETENTION_DAYS", str(DEFAULT_EVENT_RETENTION_DAYS)))
     try:
         deleted = prune_old_events(retention_days=retention_days)
-        logger.info(
-            "Analytics retention pruned %d events older than %d days",
-            deleted,
-            retention_days,
-        )
-    except Exception:
+        msg = f"pruned {deleted} events older than {retention_days} days"
+        logger.info("Analytics retention: %s", msg)
+        return "success", msg
+    except Exception as exc:
         logger.exception("Analytics retention failed")
+        return "failure", str(exc)[:500]
 
 
-def _run_briefing() -> None:
+def _run_briefing() -> tuple[str, str | None]:
     from news_dashboard.briefings import (
         BriefingAINotConfiguredError,
         BriefingGenerationError,
@@ -102,27 +105,66 @@ def _run_briefing() -> None:
         result = generate_briefing()
         if result.get("status") == "no_candidates":
             logger.info("Scheduled briefing skipped: no candidate articles found.")
-        else:
-            logger.info("Scheduled briefing complete: id=%s", result.get("id"))
+            return "skipped", "no candidate articles found"
+        logger.info("Scheduled briefing complete: id=%s", result.get("id"))
+        return "success", f"id={result.get('id')}"
     except BriefingAINotConfiguredError:
         logger.warning("Briefing skipped: no AI key set (FREE_LLM_API_KEY / OPENAI_API_KEY).")
-    except BriefingGenerationError:
+        return "skipped", "no AI key configured"
+    except BriefingGenerationError as exc:
         logger.exception("Scheduled briefing failed (generation error)")
-    except Exception:
+        return "failure", str(exc)[:500]
+    except Exception as exc:
         logger.exception("Scheduled briefing failed (unexpected error)")
+        return "failure", str(exc)[:500]
 
 
-def _run_per_user_briefings() -> None:
-    """Generate briefings for users whose local scheduled time matches the current instant."""
-    from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
-
+def _generate_briefing_for_user(user_id: int) -> bool:
+    """Generate and push a briefing for one user. Returns True on success."""
     from news_dashboard.briefings import (
         BriefingAINotConfiguredError,
         BriefingGenerationError,
         generate_briefing,
     )
-    from news_dashboard.db import connect, row_to_dict
     from news_dashboard.push import generate_push_hook, send_push_for_user
+
+    logger.info("Per-user briefing: generating for user_id=%s", user_id)
+    try:
+        result = generate_briefing(user_id=user_id)
+        if result.get("status") == "no_candidates":
+            logger.info("Per-user briefing: skipped for user_id=%s (no candidates)", user_id)
+        else:
+            logger.info(
+                "Per-user briefing: complete for user_id=%s id=%s", user_id, result.get("id")
+            )
+            try:
+                briefing_id = result.get("id")
+                target_url = f"/briefs/{briefing_id}" if briefing_id is not None else None
+                send_push_for_user(user_id, generate_push_hook(result), "", target_url=target_url)
+            except Exception:
+                logger.exception(
+                    "Per-user briefing: push notification failed for user_id=%s", user_id
+                )
+        return True
+    except BriefingAINotConfiguredError:
+        logger.warning("Per-user briefing: skipped for user_id=%s (AI not configured)", user_id)
+        return True
+    except BriefingGenerationError:
+        logger.exception("Per-user briefing: generation error for user_id=%s", user_id)
+        return False
+    except Exception:
+        logger.exception("Per-user briefing: unexpected error for user_id=%s", user_id)
+        return False
+
+
+def _run_per_user_briefings() -> tuple[str, str | None] | None:
+    """Generate briefings for users whose local scheduled time matches the current instant.
+
+    Returns None when no users are scheduled this minute so the run is not recorded.
+    """
+    from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
+    from news_dashboard.db import connect, row_to_dict
 
     now = datetime.now(timezone.utc)
 
@@ -133,9 +175,9 @@ def _run_per_user_briefings() -> None:
                 " WHERE briefing_push_enabled = TRUE OR briefing_time IS NOT NULL",
             ).fetchall()
         user_rows = [row_to_dict(r) for r in rows]
-    except Exception:
+    except Exception as exc:
         logger.exception("Per-user briefing: failed to query users")
-        return
+        return "failure", str(exc)[:500]
 
     user_ids: list[int] = []
     for row in user_rows:
@@ -145,43 +187,23 @@ def _run_per_user_briefings() -> None:
             tz = ZoneInfo(tz_name)
         except (ZoneInfoNotFoundError, KeyError):
             tz = ZoneInfo("UTC")
-        local_hm = now.astimezone(tz).strftime("%H:%M")
-        if local_hm == briefing_time:
+        if now.astimezone(tz).strftime("%H:%M") == briefing_time:
             user_ids.append(int(row["id"]))
 
-    for user_id in user_ids:
-        logger.info("Per-user briefing: generating for user_id=%s", user_id)
-        try:
-            result = generate_briefing(user_id=user_id)
-            if result.get("status") == "no_candidates":
-                logger.info("Per-user briefing: skipped for user_id=%s (no candidates)", user_id)
-            else:
-                logger.info(
-                    "Per-user briefing: complete for user_id=%s id=%s", user_id, result.get("id")
-                )
-                try:
-                    briefing_id = result.get("id")
-                    target_url = f"/briefs/{briefing_id}" if briefing_id is not None else None
-                    push_title = generate_push_hook(result)
-                    send_push_for_user(
-                        user_id,
-                        push_title,
-                        "",
-                        target_url=target_url,
-                    )
-                except Exception:
-                    logger.exception(
-                        "Per-user briefing: push notification failed for user_id=%s", user_id
-                    )
-        except BriefingAINotConfiguredError:
-            logger.warning("Per-user briefing: skipped for user_id=%s (AI not configured)", user_id)
-        except BriefingGenerationError:
-            logger.exception("Per-user briefing: generation error for user_id=%s", user_id)
-        except Exception:
-            logger.exception("Per-user briefing: unexpected error for user_id=%s", user_id)
+    if not user_ids:
+        return None  # nothing scheduled this minute — skip recording
+
+    results = [_generate_briefing_for_user(uid) for uid in user_ids]
+    succeeded = sum(1 for ok in results if ok)
+    failed = len(results) - succeeded
+    total = len(user_ids)
+    noun = "user" if total == 1 else "users"
+    msg = f"{total} {noun} targeted, {succeeded} succeeded, {failed} failed"
+    status = "failure" if failed == total else "success"
+    return status, msg
 
 
-def _run_digest() -> None:
+def _run_digest() -> tuple[str, str | None]:
     from news_dashboard.digest import send_digest
 
     logger.info("Sending daily digest…")
@@ -189,10 +211,64 @@ def _run_digest() -> None:
         sent = send_digest()
         if sent:
             logger.info("Daily digest sent.")
-        else:
-            logger.info("Daily digest skipped (no new articles or DIGEST_TO not set).")
-    except Exception:
+            return "success", None
+        logger.info("Daily digest skipped (no new articles or DIGEST_TO not set).")
+        return "skipped", "no new articles or DIGEST_TO not set"
+    except Exception as exc:
         logger.exception("Daily digest failed")
+        return "failure", str(exc)[:500]
+
+
+def _run_and_record(
+    job_name: str,
+    fn: Callable[[], tuple[str, str | None] | None],
+) -> None:
+    """Call fn(), then persist the outcome to scheduled_job_runs.
+
+    If fn returns None the run is not recorded (used by per_user_briefings
+    when no users are scheduled for this minute).
+    """
+    from news_dashboard.scheduled_job_history import save_job_run
+
+    started_at = datetime.now(timezone.utc)
+    try:
+        result = fn()
+    except Exception as exc:
+        result = ("failure", str(exc)[:500])
+    if result is None:
+        return
+    status, message = result
+    finished_at = datetime.now(timezone.utc)
+    try:
+        save_job_run(
+            job_name=job_name,
+            started_at=started_at,
+            finished_at=finished_at,
+            status=status,
+            message=message,
+        )
+    except Exception:
+        logger.exception("Failed to record outcome for scheduled job %r", job_name)
+
+
+def _job_digest() -> None:
+    _run_and_record("digest", _run_digest)
+
+
+def _job_daily_recommendations() -> None:
+    _run_and_record("recommendations", _run_daily_recommendation_recalc)
+
+
+def _job_analytics_retention() -> None:
+    _run_and_record("analytics_retention", _run_analytics_retention)
+
+
+def _job_briefing() -> None:
+    _run_and_record("briefing", _run_briefing)
+
+
+def _job_per_user_briefings() -> None:
+    _run_and_record("per_user_briefings", _run_per_user_briefings)
 
 
 def _parse_cron_hm(cron: str, default_minute: str, default_hour: str) -> tuple[str, str]:
@@ -252,7 +328,7 @@ def start_scheduler() -> None:
 
     cron_minute, cron_hour = _parse_cron_hm(digest_cron, "0", "8")
     scheduler.add_job(
-        _run_digest,
+        _job_digest,
         trigger="cron",
         hour=cron_hour,
         minute=cron_minute,
@@ -266,7 +342,7 @@ def start_scheduler() -> None:
     b_minute, b_hour = _parse_cron_hm(briefing_cron, "0", "9")
     if legacy_global_briefing_enabled:
         scheduler.add_job(
-            _run_briefing,
+            _job_briefing,
             trigger="cron",
             hour=b_hour,
             minute=b_minute,
@@ -281,7 +357,7 @@ def start_scheduler() -> None:
 
     r_minute, r_hour = _parse_cron_hm(recommendations_cron, "30", "7")
     scheduler.add_job(
-        _run_daily_recommendation_recalc,
+        _job_daily_recommendations,
         trigger="cron",
         hour=r_hour,
         minute=r_minute,
@@ -290,7 +366,7 @@ def start_scheduler() -> None:
     )
 
     scheduler.add_job(
-        _run_analytics_retention,
+        _job_analytics_retention,
         trigger="cron",
         hour="3",
         minute="0",
@@ -299,7 +375,7 @@ def start_scheduler() -> None:
     )
 
     scheduler.add_job(
-        _run_per_user_briefings,
+        _job_per_user_briefings,
         trigger="interval",
         minutes=1,
         id="per_user_briefings",

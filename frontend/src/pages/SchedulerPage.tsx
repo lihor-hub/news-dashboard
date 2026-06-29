@@ -6,13 +6,23 @@ import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
   fetchSchedulerStatus,
+  fetchLatestJobRuns,
   setSchedulerInterval,
   pauseScheduler,
   resumeScheduler,
   ingestNow,
   type SchedulerStatus,
+  type ScheduledJobRun,
 } from '../api';
 import { relativeCountdown } from '../lib/format';
+
+const JOB_LABELS: Record<string, string> = {
+  digest: 'Daily digest',
+  recommendations: 'Recommendations',
+  analytics_retention: 'Analytics retention',
+  per_user_briefings: 'Per-user briefings',
+  briefing: 'Global briefing',
+};
 
 const INTERVAL_PRESETS = [
   { label: '15m', value: 15 },
@@ -29,6 +39,7 @@ export function SchedulerPage() {
   const [actionPending, setActionPending] = useState(false);
   const [ingesting, setIngesting] = useState(false);
   const [countdown, setCountdown] = useState<string>('—');
+  const [jobRuns, setJobRuns] = useState<ScheduledJobRun[]>([]);
 
   async function loadStatus() {
     try {
@@ -41,8 +52,18 @@ export function SchedulerPage() {
     }
   }
 
+  async function loadJobRuns() {
+    try {
+      const runs = await fetchLatestJobRuns();
+      setJobRuns(runs);
+    } catch {
+      // non-critical — silently ignore if not available
+    }
+  }
+
   useEffect(() => {
     void loadStatus();
+    void loadJobRuns();
   }, []);
 
   useEffect(() => {
@@ -255,6 +276,51 @@ export function SchedulerPage() {
           </Button>
         </div>
       </div>
+
+      {jobRuns.length > 0 && (
+        <div className="rounded-lg border border-border p-4">
+          <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">
+            Last Job Outcomes
+          </h3>
+          <div className="space-y-2">
+            {jobRuns.map((run) => (
+              <div key={run.job_name} className="flex items-start gap-3 text-sm">
+                <Badge
+                  variant={
+                    run.status === 'success'
+                      ? 'default'
+                      : run.status === 'skipped'
+                        ? 'secondary'
+                        : 'destructive'
+                  }
+                  className="shrink-0 mt-0.5"
+                >
+                  {run.status}
+                </Badge>
+                <div className="min-w-0">
+                  <span className="font-medium">{JOB_LABELS[run.job_name] ?? run.job_name}</span>
+                  {run.started_at && (
+                    <span className="ml-2 text-muted-foreground">
+                      {new Date(run.started_at).toLocaleString([], {
+                        month: 'short',
+                        day: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                      })}
+                    </span>
+                  )}
+                  {run.duration_ms != null && (
+                    <span className="ml-2 text-muted-foreground">{run.duration_ms}ms</span>
+                  )}
+                  {run.message && (
+                    <p className="text-muted-foreground truncate mt-0.5">{run.message}</p>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

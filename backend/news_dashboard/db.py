@@ -464,6 +464,19 @@ POSTGRES_MULTIUSER_SCHEMA = [
     " ON user_nudge_dismissals(user_id, cooldown_until)",
     "ALTER TABLE user_quizzes ADD COLUMN IF NOT EXISTS submitted_answers JSONB",
     "ALTER TABLE user_quizzes ADD COLUMN IF NOT EXISTS submitted_at TIMESTAMPTZ",
+    """
+    CREATE TABLE IF NOT EXISTS scheduled_job_runs (
+      id           SERIAL PRIMARY KEY,
+      job_name     TEXT NOT NULL,
+      started_at   TIMESTAMPTZ NOT NULL,
+      finished_at  TIMESTAMPTZ,
+      duration_ms  INTEGER,
+      status       TEXT NOT NULL,
+      message      TEXT
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_scheduled_job_runs_job_started"
+    " ON scheduled_job_runs(job_name, started_at DESC)",
 ]
 
 
