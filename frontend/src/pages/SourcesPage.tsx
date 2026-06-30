@@ -29,6 +29,10 @@ import { useAuth } from '@/contexts/auth';
 
 type HealthState = 'ok' | 'stale' | 'error';
 
+function isSourceOn(s: Source): boolean {
+  return s.owner_user_id == null ? (s.subscribed ?? !!s.enabled) : !!s.enabled;
+}
+
 function computeHealth(s: Source): HealthState {
   if (s.last_error) return 'error';
   const ref = s.last_success_at ?? s.last_checked_at;
@@ -219,7 +223,13 @@ export function SourcesPage() {
       await qc.cancelQueries({ queryKey: [SOURCES_KEY] });
       const prev = qc.getQueryData<Source[]>([SOURCES_KEY]);
       qc.setQueryData<Source[]>([SOURCES_KEY], (old = []) =>
-        old.map((s) => (s.slug === slug ? { ...s, enabled: enabled ? 1 : 0 } : s))
+        old.map((s) => {
+          if (s.slug !== slug) return s;
+          const isGlobal = s.owner_user_id == null;
+          return isGlobal
+            ? { ...s, subscribed: enabled, enabled: enabled ? 1 : 0 }
+            : { ...s, enabled: enabled ? 1 : 0 };
+        })
       );
       return { prev };
     },
@@ -400,7 +410,7 @@ export function SourcesPage() {
                   </td>
                   <td className="px-3 py-3 text-right">
                     <Switch
-                      checked={!!s.enabled}
+                      checked={isSourceOn(s)}
                       onCheckedChange={(checked) =>
                         toggleMutation.mutate({ slug: s.slug, enabled: checked })
                       }
@@ -461,7 +471,7 @@ export function SourcesPage() {
                     </Button>
                   )}
                   <Switch
-                    checked={!!s.enabled}
+                    checked={isSourceOn(s)}
                     onCheckedChange={(checked) =>
                       toggleMutation.mutate({ slug: s.slug, enabled: checked })
                     }

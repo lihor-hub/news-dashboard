@@ -249,6 +249,44 @@ describe('SourcesPage', () => {
     expect(screen.queryByRole('button', { name: /delete global news/i })).toBeNull();
   });
 
+  it('renders global source switch as off when subscribed=false even if enabled=1', async () => {
+    apiMock.fetchSources.mockResolvedValue([
+      source({
+        slug: 'global',
+        name: 'Global News',
+        owner_user_id: null,
+        enabled: 1,
+        subscribed: false,
+      }),
+    ]);
+    withProviders(<SourcesPage />);
+    await screen.findAllByText('Global News');
+    const switches = screen.getAllByRole('switch');
+    // Both desktop and mobile switches should be off
+    switches.forEach((sw) => {
+      expect(sw).toHaveAttribute('aria-checked', 'false');
+    });
+  });
+
+  it('optimistically sets subscribed=false for global source toggle off', async () => {
+    apiMock.fetchSources.mockResolvedValue([
+      source({
+        slug: 'global',
+        name: 'Global News',
+        owner_user_id: null,
+        enabled: 1,
+        subscribed: true,
+      }),
+    ]);
+    apiMock.updateSourceEnabled.mockResolvedValue(
+      source({ slug: 'global', owner_user_id: null, enabled: 0, subscribed: false })
+    );
+    withProviders(<SourcesPage />);
+    const switches = await screen.findAllByRole('switch');
+    fireEvent.click(switches[0]);
+    await waitFor(() => expect(apiMock.updateSourceEnabled).toHaveBeenCalledWith('global', false));
+  });
+
   it('calls deleteSource when delete button is clicked', async () => {
     apiMock.fetchSources.mockResolvedValue([
       source({ slug: 'mine', name: 'My Blog', owner_user_id: regularUser.id }),
