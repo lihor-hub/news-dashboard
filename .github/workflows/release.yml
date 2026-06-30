@@ -86,7 +86,7 @@ jobs:
         id: ai
         continue-on-error: true
         env:
-          PI_EXTENSION: "/home/ioachim-minipc/pi/packages/coding-agent/examples/extensions/lihor-provider"
+          PI_EXTENSION: "$HOME/pi/packages/coding-agent/examples/extensions/lihor-provider"
           SYSTEM_PROMPT: |
             You write the "What's new" notes that everyday users of a news
             dashboard app see in an in-app popup after the app updates. Your
