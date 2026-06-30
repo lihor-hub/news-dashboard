@@ -185,22 +185,62 @@ def ensure_article_embedded(article_id: int, db_path: Any = None) -> None:
         )
 
 
-def embed_all_eligible(db_path: Any = None, *, include_all: bool = False) -> int:
+def embed_all_eligible(
+    db_path: Any = None,
+    *,
+    include_all: bool = False,
+    user_id: int | None = None,
+) -> int:
     """Embed eligible articles that don't have an embedding yet.
 
     Called lazily on the first /api/ask request to backfill existing articles.
+    When user_id is provided, only backfills articles visible to that user.
     Returns the number of articles newly embedded.
     """
     from news_dashboard.db import connect, init_db
 
-    status_filter = "status != 'archived'" if include_all else "status IN ('saved', 'read')"
     init_db(db_path)
     with connect(db_path) as conn:
-        query = (
-            "SELECT id, title, summary, reason, tags FROM articles "
-            f"WHERE {status_filter} AND embedding IS NULL"
-        )
-        rows = conn.execute(query).fetchall()
+        if user_id is not None:
+            if include_all:
+                query = """
+                    SELECT a.id, a.title, a.summary, a.reason, a.tags
+                    FROM articles a
+                    LEFT JOIN sources src ON src.slug = a.source_slug
+                    LEFT JOIN user_sources us_src
+                        ON us_src.user_id = %s AND us_src.source_slug = a.source_slug
+                    LEFT JOIN user_article_state uas
+                        ON uas.article_id = a.id AND uas.user_id = %s
+                    WHERE COALESCE(uas.state, 'today') != 'archived'
+                      AND a.embedding IS NULL
+                      AND (
+                        (src.owner_user_id IS NULL AND COALESCE(us_src.enabled, TRUE))
+                        OR src.owner_user_id = %s
+                      )
+                """
+            else:
+                query = """
+                    SELECT a.id, a.title, a.summary, a.reason, a.tags
+                    FROM articles a
+                    LEFT JOIN sources src ON src.slug = a.source_slug
+                    LEFT JOIN user_sources us_src
+                        ON us_src.user_id = %s AND us_src.source_slug = a.source_slug
+                    JOIN user_article_state uas
+                        ON uas.article_id = a.id AND uas.user_id = %s
+                    WHERE (uas.state = 'done' OR uas.starred = TRUE)
+                      AND a.embedding IS NULL
+                      AND (
+                        (src.owner_user_id IS NULL AND COALESCE(us_src.enabled, TRUE))
+                        OR src.owner_user_id = %s
+                      )
+                """
+            rows = conn.execute(query, (user_id, user_id, user_id)).fetchall()
+        else:
+            status_filter = "status != 'archived'" if include_all else "status IN ('saved', 'read')"
+            rows = conn.execute(
+                "SELECT id, title, summary, reason, tags FROM articles "
+                f"WHERE {status_filter} AND embedding IS NULL"
+            ).fetchall()
 
     count = 0
     for row in rows:
@@ -235,7 +275,8 @@ def ask(
     Args:
         include_all: When True, includes all non-archived articles instead of
             only Starred (saved) + Done (read) articles.
-        user_id: Authenticated user, attached to the Langfuse trace.
+        user_id: Authenticated user; scopes retrieval to articles visible to this
+            user via user_article_state and user_sources. Also attached to Langfuse trace.
 
     Returns:
         {
@@ -246,18 +287,51 @@ def ask(
     from news_dashboard.db import connect, init_db
 
     # 1. Backfill embeddings for any eligible articles not yet embedded
-    embed_all_eligible(db_path, include_all=include_all)
+    embed_all_eligible(db_path, include_all=include_all, user_id=user_id)
 
-    status_filter = "status != 'archived'" if include_all else "status IN ('saved', 'read')"
-
-    # 2. Load embedded articles
+    # 2. Load embedded articles scoped to the requesting user
     init_db(db_path)
     with connect(db_path) as conn:
-        sql = (
-            "SELECT id, title, url, summary, embedding FROM articles "
-            f"WHERE {status_filter} AND embedding IS NOT NULL"
-        )
-        rows = conn.execute(sql).fetchall()
+        if user_id is not None:
+            if include_all:
+                sql = """
+                    SELECT a.id, a.title, a.url, a.summary, a.embedding
+                    FROM articles a
+                    LEFT JOIN sources src ON src.slug = a.source_slug
+                    LEFT JOIN user_sources us_src
+                        ON us_src.user_id = %s AND us_src.source_slug = a.source_slug
+                    LEFT JOIN user_article_state uas
+                        ON uas.article_id = a.id AND uas.user_id = %s
+                    WHERE COALESCE(uas.state, 'today') != 'archived'
+                      AND a.embedding IS NOT NULL
+                      AND (
+                        (src.owner_user_id IS NULL AND COALESCE(us_src.enabled, TRUE))
+                        OR src.owner_user_id = %s
+                      )
+                """
+            else:
+                sql = """
+                    SELECT a.id, a.title, a.url, a.summary, a.embedding
+                    FROM articles a
+                    LEFT JOIN sources src ON src.slug = a.source_slug
+                    LEFT JOIN user_sources us_src
+                        ON us_src.user_id = %s AND us_src.source_slug = a.source_slug
+                    JOIN user_article_state uas
+                        ON uas.article_id = a.id AND uas.user_id = %s
+                    WHERE (uas.state = 'done' OR uas.starred = TRUE)
+                      AND a.embedding IS NOT NULL
+                      AND (
+                        (src.owner_user_id IS NULL AND COALESCE(us_src.enabled, TRUE))
+                        OR src.owner_user_id = %s
+                      )
+                """
+            rows = conn.execute(sql, (user_id, user_id, user_id)).fetchall()
+        else:
+            status_filter = "status != 'archived'" if include_all else "status IN ('saved', 'read')"
+            rows = conn.execute(
+                "SELECT id, title, url, summary, embedding FROM articles "
+                f"WHERE {status_filter} AND embedding IS NOT NULL"
+            ).fetchall()
 
     if len(rows) < MIN_ARTICLES:
         return {

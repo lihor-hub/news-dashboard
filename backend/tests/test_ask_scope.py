@@ -240,3 +240,172 @@ def test_ask_include_all_widens_corpus(tmp_path: Path, monkeypatch: pytest.Monke
     # include_all: 6 'new' articles → enough
     all_result = ask("anything?", db_path, include_all=True)
     assert all_result["answer"] == "widened answer"
+
+
+# ─── User-scoped retrieval tests ──────────────────────────────────────────────
+
+
+def _seed_user(db_path: Path, username: str) -> int:
+    """Insert a user and return the generated id."""
+    with connect(db_path) as conn:
+        row = conn.execute(
+            "INSERT INTO users(username, password_hash) VALUES (%s, 'x') RETURNING id",
+            (username,),
+        ).fetchone()
+    return int(row["id"])
+
+
+def _seed_article_with_embedding(
+    db_path: Path,
+    article_id: int,
+    source_slug: str = "test-source",
+    source_name: str = "TestSource",
+    legacy_status: str = "new",
+) -> None:
+    embedding = _pack([0.1] * 10)
+    with connect(db_path) as conn:
+        conn.execute(
+            """
+            INSERT INTO articles(
+                id, url, canonical_url, title, source_slug, source_name,
+                category, kind, status, importance_score, summary, reason,
+                tags, embedding
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            """,
+            (
+                article_id,
+                f"https://example.com/{article_id}",
+                f"https://example.com/{article_id}",
+                f"Article {article_id}",
+                source_slug,
+                source_name,
+                "engineering",
+                "rss",
+                legacy_status,
+                0.5,
+                f"Summary {article_id}",
+                "",
+                "",
+                embedding,
+            ),
+        )
+
+
+def _set_user_article_state(db_path: Path, user_id: int, article_id: int, state: str) -> None:
+    with connect(db_path) as conn:
+        conn.execute(
+            "INSERT INTO user_article_state(user_id, article_id, state) VALUES (%s, %s, %s)"
+            " ON CONFLICT(user_id, article_id) DO UPDATE SET state = EXCLUDED.state",
+            (user_id, article_id, state),
+        )
+
+
+def test_ask_default_scope_uses_user_article_state(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Default scope uses user_article_state (done/starred), not legacy articles.status."""
+    db_path = tmp_path / "ask_uas.db"
+    init_db(db_path)
+    _seed_source(db_path)
+    user_id = _seed_user(db_path, "user1")
+
+    # 5 articles with legacy status 'new' — invisible to legacy scope
+    for i in range(1, 6):
+        _seed_article_with_embedding(db_path, i, legacy_status="new")
+    # Mark all 5 as done for this user
+    for i in range(1, 6):
+        _set_user_article_state(db_path, user_id, i, "done")
+
+    _make_openai_stub(monkeypatch, answer="user scoped answer")
+    from news_dashboard.embeddings import ask
+
+    # Without user_id: legacy path sees 0 eligible (all 'new') → not enough
+    legacy_result = ask("question", db_path)
+    assert "Not enough articles" in legacy_result["answer"]
+
+    # With user_id: user_article_state says done → 5 eligible → answer
+    user_result = ask("question", db_path, user_id=user_id)
+    assert user_result["answer"] == "user scoped answer"
+
+
+def test_ask_does_not_cross_user_boundaries(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """ask() for user1 cannot retrieve articles that only user2 has marked done."""
+    db_path = tmp_path / "ask_cross.db"
+    init_db(db_path)
+    _seed_source(db_path)
+    user1 = _seed_user(db_path, "user1")
+    user2 = _seed_user(db_path, "user2")
+
+    # 5 articles, only user2 marks them done
+    for i in range(1, 6):
+        _seed_article_with_embedding(db_path, i)
+        _set_user_article_state(db_path, user2, i, "done")
+
+    _make_openai_stub(monkeypatch, answer="user2 answer")
+    from news_dashboard.embeddings import ask
+
+    # user1 sees no done/starred articles → not enough
+    result_user1 = ask("question", db_path, user_id=user1)
+    assert "Not enough articles" in result_user1["answer"]
+
+    # user2 sees 5 done articles → answer
+    result_user2 = ask("question", db_path, user_id=user2)
+    assert result_user2["answer"] == "user2 answer"
+
+
+def test_ask_include_all_excludes_user_archived(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """ask(include_all=True) excludes articles archived by the requesting user."""
+    db_path = tmp_path / "ask_arch.db"
+    init_db(db_path)
+    _seed_source(db_path)
+    user_id = _seed_user(db_path, "user1")
+
+    # 6 articles visible in include_all scope; archive the last one for user
+    for i in range(1, 7):
+        _seed_article_with_embedding(db_path, i)
+    _set_user_article_state(db_path, user_id, 6, "archived")
+
+    _make_openai_stub(monkeypatch, answer="include_all answer")
+    from news_dashboard.embeddings import ask
+
+    result = ask("question", db_path, include_all=True, user_id=user_id)
+    assert result["answer"] == "include_all answer"
+    source_ids = {s["id"] for s in result["sources"]}
+    assert 6 not in source_ids
+
+
+def test_ask_respects_disabled_user_sources(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """ask() excludes articles from sources the user has explicitly disabled."""
+    db_path = tmp_path / "ask_srcdis.db"
+    init_db(db_path)
+    _seed_source(db_path, "source-a", "Source A")
+    _seed_source(db_path, "source-b", "Source B")
+    user_id = _seed_user(db_path, "user1")
+
+    # 5 articles from source-a, 1 from source-b; user has done all
+    for i in range(1, 6):
+        _seed_article_with_embedding(db_path, i, source_slug="source-a", source_name="Source A")
+        _set_user_article_state(db_path, user_id, i, "done")
+    _seed_article_with_embedding(db_path, 6, source_slug="source-b", source_name="Source B")
+    _set_user_article_state(db_path, user_id, 6, "done")
+
+    # Disable source-b for user1
+    with connect(db_path) as conn:
+        conn.execute(
+            "INSERT INTO user_sources(user_id, source_slug, enabled) VALUES (%s, %s, %s)",
+            (user_id, "source-b", False),
+        )
+
+    _make_openai_stub(monkeypatch, answer="filtered answer")
+    from news_dashboard.embeddings import ask
+
+    result = ask("question", db_path, user_id=user_id)
+    assert result["answer"] == "filtered answer"
+    source_ids = {s["id"] for s in result["sources"]}
+    assert 6 not in source_ids
