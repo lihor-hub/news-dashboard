@@ -17,7 +17,7 @@ files:
 # need these manifest files generated locally so they can be uploaded.
 publish:
   provider: github
-  owner: ioachim-hub
+  owner: lihor-hub
   repo: news-dashboard
   releaseType: release
 

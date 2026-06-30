@@ -39,6 +39,9 @@ describe('useUpdateCheck — web/GitHub flow', () => {
     expect(result.current.info?.latestVersion).toBe('2.0.0');
     expect(result.current.info?.releaseUrl).toBe('https://gh/r/2');
     expect(result.current.loading).toBe(false);
+    expect(vi.mocked(fetch).mock.calls[0]?.[0]).toBe(
+      'https://api.github.com/repos/lihor-hub/news-dashboard/releases?per_page=30'
+    );
   });
 
   it('reports no update when there is no matching release', async () => {

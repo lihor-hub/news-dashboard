@@ -15,7 +15,7 @@ window always loads the live deployed site, so it stays up-to-date automatically
 
 ## Download
 
-Go to the [Releases page](https://github.com/ioachim-hub/news-dashboard/releases)
+Go to the [Releases page](https://github.com/lihor-hub/news-dashboard/releases)
 and download the latest `News Dashboard-*.dmg` (macOS) or `News Dashboard-*.AppImage`
 (Linux).
 
