@@ -27,3 +27,4 @@ Here's a summary of what was changed:
 - **`test_api_delete_private_source_no_articles_still_soft_deletes`** — Verifies even empty source deletion is a soft-delete (row still exists with `deleted_at` set) and excluded from listing
 
 DONE
+ It seems that the environment is not properly set up. Let me try to install the dependencies using `uv`:

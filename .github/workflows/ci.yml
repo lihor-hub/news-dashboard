@@ -174,11 +174,17 @@ jobs:
       - run: pip install -e '.[dev]'
       - name: Backend tests
         run: >
-          pytest -v --cov --cov-report=term-missing --durations=20
+          pytest -v --cov --cov-report=term-missing --cov-report=xml --durations=20
           -o faulthandler_timeout=120 -o faulthandler_exit_on_timeout=true
         env:
           DATABASE_URL: postgresql://news_dashboard:news_dashboard@127.0.0.1:5432/news_dashboard
           TEST_DATABASE_URL: postgresql://news_dashboard:news_dashboard@127.0.0.1:5432/news_dashboard
+      - name: Save backend coverage report
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: backend-coverage
+          path: coverage.xml
 
   # ── 4. TEST (FRONTEND) ─────────────────────────────────────────────────────
   # On pull requests: runs only when frontend files changed (or forced via dispatch).
@@ -201,7 +207,13 @@ jobs:
           cache: npm
       - run: npm ci
       - name: vitest (frontend tests)
-        run: npm run test:frontend --silent
+        run: npm run test:frontend:coverage --silent
+      - name: Save frontend coverage report
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: frontend-coverage
+          path: coverage/lcov.info
       - name: build (includes tsc)
         run: npm run build
 
@@ -226,6 +238,40 @@ jobs:
             echo "Frontend tests failed or were cancelled ($frontend)" && exit 1
           fi
           echo "All test lanes passed (backend=$backend, frontend=$frontend)"
+
+  # ── 5. COVERAGE UPLOAD ─────────────────────────────────────────────────────
+  # Uploads coverage reports to Codecov for tracking test coverage trends.
+  coverage-upload:
+    needs: [test-backend, test-frontend]
+    runs-on: ubuntu-latest
+    if: always() && (github.event_name == 'push' || github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch')
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download backend coverage
+        if: needs.test-backend.result == 'success' || needs.test-backend.result == 'failure'
+        uses: actions/download-artifact@v3
+        with:
+          name: backend-coverage
+          path: ./coverage-backend
+
+      - name: Download frontend coverage
+        if: needs.test-frontend.result == 'success' || needs.test-frontend.result == 'failure'
+        uses: actions/download-artifact@v3
+        with:
+          name: frontend-coverage
+          path: ./coverage-frontend
+
+      - name: Upload to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          files: ./coverage-backend/*.xml,./coverage-frontend/lcov.info
+          name: codecov-umbrella
+          fail_ci_if_error: false
+          verbose: true
 
   # ── 6. HELM VALIDATE ───────────────────────────────────────────────────────
   # Lints and renders the Helm chart with default and production-like values.

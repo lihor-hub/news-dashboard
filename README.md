@@ -1,5 +1,7 @@
 # News Dashboard
 
+![Coverage Status](https://codecov.io/gh/lihor-hub/news-dashboard/branch/main/graph/badge.svg)
+
 Self-hosted technical news inbox for curated feeds, article triage, source
 health, search, briefings, and saved/read history.
 
