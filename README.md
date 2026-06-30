@@ -153,6 +153,7 @@ make check       # full CI suite
 | `make test-smoke` | Backend `smoke`-marked tests + frontend smoke files | Quick sanity check, ~seconds |
 | `make test-backend` | Full `pytest` suite | Before pushing backend changes |
 | `make test-frontend` | Full Vitest suite | Before pushing frontend changes |
+| `make test-a11y` | Accessibility smoke tests (axe-core serious/critical violations) | Before pushing UI changes; enforced in CI |
 | `make test-e2e` | Playwright end-to-end tests | Before pushing UI/routing changes |
 | `make test-full` | Everything with coverage | Same as nightly CI; use before major releases |
 
