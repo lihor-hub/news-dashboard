@@ -298,9 +298,12 @@ jobs:
         with:
           fetch-depth: 0 # tags + history for version computation
 
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.14'
+      # No actions/setup-python here: this job runs on the self-hosted runner,
+      # which has no prebuilt Python 3.14 in the actions tool-cache for its
+      # OS/arch (setup-python fails with "version '3.14' … was not found").
+      # The changelog step only needs the runner's system python3 to run
+      # scripts/update_changelog.py (pure stdlib), matching release.yml's
+      # self-hosted job, which also runs without setup-python.
 
       # Derive the release version from tags + commits and bake it into the
       # image, so /api/version and /api/changelog match the deployed code.
