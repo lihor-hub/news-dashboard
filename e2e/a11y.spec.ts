@@ -5,8 +5,8 @@
  * WCAG 2 A/AA violations across the core routes. Intentional exclusions are
  * named inline with a comment explaining why they are safe.
  *
- * CI integration: pair with issue #433 to wire `npm run test:a11y` into the
- * nightly smart-CI lane.
+ * CI: wired as a required gate in ci.yml (test-a11y job). Runs on every PR
+ * and push; failures block merging.
  */
 import { test } from '@playwright/test';
 import { mockApi } from './fixtures';

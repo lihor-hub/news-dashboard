@@ -49,6 +49,7 @@ jobs:
     outputs:
       backend: ${{ steps.filter.outputs.backend }}
       frontend: ${{ steps.filter.outputs.frontend }}
+      a11y: ${{ steps.filter.outputs.a11y }}
     steps:
       - uses: actions/checkout@v4
 
@@ -67,6 +68,17 @@ jobs:
               - 'vite.config.ts'
               - 'index.html'
               - 'tsconfig*.json'
+            a11y:
+              - 'frontend/**'
+              - 'e2e/a11y.spec.ts'
+              - 'e2e/a11y-helper.ts'
+              - 'e2e/fixtures.ts'
+              - 'package.json'
+              - 'package-lock.json'
+              - 'playwright.config.ts'
+              - 'vite.config.ts'
+              - 'index.html'
+              - 'public/manifest.webmanifest'
 
   # ── 1. LINT ────────────────────────────────────────────────────────────────
   # Static analysis only — fails fast and in parallel with the test jobs.
@@ -217,13 +229,49 @@ jobs:
       - name: build (includes tsc)
         run: npm run build
 
-  # ── 5. TEST ROLLUP ─────────────────────────────────────────────────────────
+  # ── 5. A11Y ────────────────────────────────────────────────────────────────
+  # Runs the accessibility smoke test suite on PRs and pushes.
+  # Change-aware: skips when no frontend/a11y-related files changed.
+  # On push to main / merge_group: always runs.
+  test-a11y:
+    name: Accessibility tests
+    needs: detect-changes
+    runs-on: ubuntu-latest
+    if: |
+      github.event_name == 'push' ||
+      github.event_name == 'merge_group' ||
+      (github.event_name == 'workflow_dispatch' && inputs.full_suite == 'true') ||
+      (github.event_name == 'pull_request' && needs.detect-changes.outputs.a11y == 'true')
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '26'
+          cache: npm
+      - run: npm ci
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            playwright-${{ runner.os }}-
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: Accessibility smoke tests
+        run: npx playwright test e2e/a11y.spec.ts
+
+  # ── 6. TEST ROLLUP ─────────────────────────────────────────────────────────
   # Satisfies the "Test & build" required status check while the component jobs
-  # use the new change-aware names. Skips if either component job is skipped
-  # (both-skipped = no relevant files changed, so the check still passes).
+  # use the new change-aware names. Skips if any component job is skipped
+  # (all-skipped = no relevant files changed, so the check still passes).
   test:
     name: Test & build
-    needs: [test-backend, test-frontend]
+    needs: [test-backend, test-frontend, test-a11y]
     runs-on: ubuntu-latest
     if: always()
     steps:
@@ -231,15 +279,18 @@ jobs:
         run: |
           backend="${{ needs.test-backend.result }}"
           frontend="${{ needs.test-frontend.result }}"
+          a11y="${{ needs.test-a11y.result }}"
           if [[ "$backend" == "failure" || "$backend" == "cancelled" ]]; then
             echo "Backend tests failed or were cancelled ($backend)" && exit 1
           fi
           if [[ "$frontend" == "failure" || "$frontend" == "cancelled" ]]; then
             echo "Frontend tests failed or were cancelled ($frontend)" && exit 1
           fi
-          echo "All test lanes passed (backend=$backend, frontend=$frontend)"
-
-  # ── 5. COVERAGE UPLOAD ─────────────────────────────────────────────────────
+          if [[ "$a11y" == "failure" || "$a11y" == "cancelled" ]]; then
+            echo "Accessibility tests failed or were cancelled ($a11y)" && exit 1
+          fi
+          echo "All test lanes passed (backend=$backend, frontend=$frontend, a11y=$a11y)"
+  # ── 7. COVERAGE UPLOAD ─────────────────────────────────────────────────────
   # Uploads coverage reports to Codecov for tracking test coverage trends.
   coverage-upload:
     needs: [test-backend, test-frontend]
@@ -273,7 +324,7 @@ jobs:
           fail_ci_if_error: false
           verbose: true
 
-  # ── 6. HELM VALIDATE ───────────────────────────────────────────────────────
+  # ── 8. HELM VALIDATE ───────────────────────────────────────────────────────
   # Lints and renders the Helm chart with default and production-like values.
   # Runs on every push/PR so a broken template fails well before the deploy job.
   # No live cluster is required — this is render/lint only.
@@ -321,7 +372,7 @@ jobs:
             --set "app.databaseUrl.existingSecret=news-dashboard-db" \
             --set-string "app.auth.sessionSecret=dummy-session-secret-for-render-only"
 
-  # ── 7. PUBLISH ─────────────────────────────────────────────────────────────
+  # ── 9. PUBLISH ─────────────────────────────────────────────────────────────
   # Builds one image and pushes two tags:
   #   :<sha>    — immutable, pinned to this exact commit; used by the deploy step
   #   :latest   — floating convenience tag for manual pulls / rollback reference
@@ -440,7 +491,7 @@ jobs:
             ${{ env.IMAGE }}:${{ github.sha }}
             ${{ env.IMAGE }}:latest
 
-  # ── 8. DEPLOY ──────────────────────────────────────────────────────────────
+  # ── 10. DEPLOY ─────────────────────────────────────────────────────────────
   # Runs directly on the self-hosted runner (the mini PC itself) — no SSH hop
   # needed. The runner process on the mini PC picks up the job and executes
   # the deploy commands locally.
