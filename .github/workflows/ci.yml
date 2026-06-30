@@ -287,7 +287,7 @@ jobs:
   publish:
     name: Build & push image
     needs: [lint, test, helm-validate]
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     outputs:
       image_tag: ${{ github.sha }}
@@ -320,12 +320,12 @@ jobs:
             echo "COMMITS_EOF"
           } >> "$GITHUB_OUTPUT"
 
-      - name: Generate changelog entry (GitHub Models)
+      - name: Generate changelog entry (Pi)
         id: ai
-        uses: actions/ai-inference@v1
-        with:
-          model: openai/gpt-4o
-          system-prompt: |
+        continue-on-error: true
+        env:
+          PI_EXTENSION: "$HOME/pi/packages/coding-agent/examples/extensions/lihor-provider"
+          SYSTEM_PROMPT: |
             You write the "What's new" notes that everyday users of a news
             dashboard app see in an in-app popup after the app updates. Your
             readers are NOT developers — write for them, not for engineers.
@@ -346,9 +346,18 @@ jobs:
               work. If a release is entirely internal, summarize it as a single
               bullet like "Stability and performance improvements."
             Output no headings, no version number, and no preamble — bullets only.
-          prompt: |
+          PROMPT: |
             Commits for release ${{ steps.version.outputs.tag }}:
             ${{ steps.log.outputs.commits }}
+        run: |
+          changelog=$(pi -e "$PI_EXTENSION" -p "$SYSTEM_PROMPT
+
+          $PROMPT")
+          {
+            echo "response<<EOF"
+            echo "$changelog"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Bake version + changelog into the build context
         env:
