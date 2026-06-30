@@ -436,4 +436,22 @@ describe('subscriptions & recommendations', () => {
     expect((await api.recalculateMyRecommendations()).scored).toBe(12);
     expect(calls[0].init?.method).toBe('POST');
   });
+
+  it('unsubscribePush sends the current endpoint when provided', async () => {
+    const { calls } = stubFetch(() => jsonOk({ unsubscribed: true }));
+    await api.unsubscribePush('https://push.example.com/current');
+    expect(calls[0].url).toBe('/api/notifications/subscribe');
+    expect(calls[0].init?.method).toBe('DELETE');
+    expect(calls[0].init?.body).toBe(
+      JSON.stringify({ endpoint: 'https://push.example.com/current' })
+    );
+  });
+
+  it('unsubscribePush keeps all-endpoint cleanup available without an endpoint', async () => {
+    const { calls } = stubFetch(() => jsonOk({ unsubscribed: true }));
+    await api.unsubscribePush();
+    expect(calls[0].url).toBe('/api/notifications/subscribe');
+    expect(calls[0].init?.method).toBe('DELETE');
+    expect(calls[0].init?.body).toBeUndefined();
+  });
 });

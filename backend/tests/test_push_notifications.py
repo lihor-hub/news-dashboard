@@ -454,6 +454,20 @@ def test_push_subscribe_endpoint(client: TestClient) -> None:
 
 def test_push_unsubscribe_endpoint(client: TestClient) -> None:
     with patch("news_dashboard.push.delete_push_subscriptions") as mock_del:
+        resp = client.request(
+            "DELETE",
+            "/api/notifications/subscribe",
+            json={"endpoint": "https://ep.example.com"},
+        )
+    assert resp.status_code == 200
+    assert resp.json() == {"unsubscribed": True}
+    mock_del.assert_called_once_with(1, endpoint="https://ep.example.com")
+
+
+def test_push_unsubscribe_without_endpoint_preserves_all_endpoint_cleanup(
+    client: TestClient,
+) -> None:
+    with patch("news_dashboard.push.delete_push_subscriptions") as mock_del:
         resp = client.delete("/api/notifications/subscribe")
     assert resp.status_code == 200
     assert resp.json() == {"unsubscribed": True}

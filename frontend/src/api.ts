@@ -528,8 +528,11 @@ export async function subscribePush(
   });
 }
 
-export async function unsubscribePush(): Promise<{ unsubscribed: boolean }> {
-  return requestJson('/api/notifications/subscribe', { method: 'DELETE' });
+export async function unsubscribePush(endpoint?: string): Promise<{ unsubscribed: boolean }> {
+  return requestJson('/api/notifications/subscribe', {
+    method: 'DELETE',
+    body: endpoint ? JSON.stringify({ endpoint }) : undefined,
+  });
 }
 
 // ─── In-platform sharing ──────────────────────────────────────────────────────

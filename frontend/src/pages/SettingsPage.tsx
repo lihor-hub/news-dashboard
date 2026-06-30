@@ -463,8 +463,14 @@ function DailyBriefSection() {
   };
 
   const disablePush = async () => {
+    let subscription: PushSubscription | null = null;
     try {
-      await unsubscribePush();
+      if (!window.electronAPI && 'serviceWorker' in navigator && 'PushManager' in window) {
+        const reg = await navigator.serviceWorker.ready;
+        subscription = await reg.pushManager.getSubscription();
+      }
+      await unsubscribePush(subscription?.endpoint);
+      await subscription?.unsubscribe();
     } catch {
       // best-effort
     }

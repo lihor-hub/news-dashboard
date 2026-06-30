@@ -117,6 +117,19 @@ describe('DailyBriefSection', () => {
 
   it('calls unsubscribePush and updateNotificationSettings on Disable click', async () => {
     const user = userEvent.setup();
+    const localUnsubscribe = vi.fn().mockResolvedValue(true);
+    const getSubscription = vi.fn().mockResolvedValue({
+      endpoint: 'https://push.example.com/current',
+      unsubscribe: localUnsubscribe,
+    });
+    vi.stubGlobal('navigator', {
+      serviceWorker: {
+        ready: Promise.resolve({
+          pushManager: { getSubscription },
+        }),
+      },
+    });
+    vi.stubGlobal('PushManager', {});
     mockFetchSettings.mockResolvedValue({
       ...defaultSettings,
       push_enabled: true,
@@ -125,7 +138,39 @@ describe('DailyBriefSection', () => {
     renderSettings();
     const disableBtn = await screen.findByRole('button', { name: /disable/i });
     await user.click(disableBtn);
-    await waitFor(() => expect(mockUnsubscribePush).toHaveBeenCalled());
+    await waitFor(() =>
+      expect(mockUnsubscribePush).toHaveBeenCalledWith('https://push.example.com/current')
+    );
+    expect(getSubscription).toHaveBeenCalled();
+    expect(localUnsubscribe).toHaveBeenCalled();
+    await waitFor(() => expect(mockUpdateSettings).toHaveBeenCalledWith({ push_enabled: false }));
+  });
+
+  it('keeps Electron disable working without a browser PushManager subscription', async () => {
+    const user = userEvent.setup();
+    (window as unknown as { electronAPI: unknown }).electronAPI = {
+      platform: 'electron',
+      appVersion: '1.0.0',
+      checkForUpdate: vi.fn(),
+      downloadUpdate: vi.fn(),
+      quitAndInstall: vi.fn(),
+      onUpdateAvailable: vi.fn(),
+      onUpdateNotAvailable: vi.fn(),
+      onUpdateDownloaded: vi.fn(),
+      onUpdateError: vi.fn(),
+      onDownloadProgress: vi.fn(),
+      removeUpdateListeners: vi.fn(),
+      showNotification: vi.fn(),
+    };
+    mockFetchSettings.mockResolvedValue({
+      ...defaultSettings,
+      push_enabled: true,
+      vapid_public_key: null,
+    });
+    renderSettings();
+    const disableBtn = await screen.findByRole('button', { name: /disable/i });
+    await user.click(disableBtn);
+    await waitFor(() => expect(mockUnsubscribePush).toHaveBeenCalledWith(undefined));
     await waitFor(() => expect(mockUpdateSettings).toHaveBeenCalledWith({ push_enabled: false }));
   });
 

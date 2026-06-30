@@ -1775,6 +1775,10 @@ class PushSubscribeRequest(BaseModel):
     auth: str
 
 
+class PushUnsubscribeRequest(BaseModel):
+    endpoint: str | None = None
+
+
 class RecommendationPreferencesUpdate(BaseModel):
     category_weights: dict[str, float] | None = None
     novelty_weight: float | None = None
@@ -1920,10 +1924,14 @@ def push_subscribe(
 @api.delete("/api/notifications/subscribe")
 def push_unsubscribe(
     current_user: Annotated[dict[str, Any], Depends(require_auth)],
+    payload: PushUnsubscribeRequest | None = None,
 ) -> dict[str, Any]:
     from news_dashboard.push import delete_push_subscriptions
 
-    delete_push_subscriptions(current_user["id"])
+    if payload and payload.endpoint is not None:
+        delete_push_subscriptions(current_user["id"], endpoint=payload.endpoint)
+    else:
+        delete_push_subscriptions(current_user["id"])
     return {"unsubscribed": True}
 
 
