@@ -57,6 +57,10 @@ class BriefingGenerationError(RuntimeError):
     """Raised when the AI returns a structurally invalid or unparseable briefing."""
 
 
+class BriefingNotFoundError(KeyError):
+    """Raised when a requested briefing does not exist for the current user."""
+
+
 # ── Type alias for the injectable AI function ─────────────────────────────────
 
 AiFn = Callable[[list[dict[str, Any]], str], dict[str, Any]]
@@ -760,7 +764,7 @@ def chat_with_briefing(
     briefing = get_briefing(briefing_id, database_url=database_url, user_id=user_id)
     if briefing is None:
         msg = f"briefing {briefing_id} not found"
-        raise KeyError(msg)
+        raise BriefingNotFoundError(msg)
 
     briefing_context = f"Title: {briefing.get('title', '')}\nSummary: {briefing.get('summary', '')}"
 
@@ -770,7 +774,7 @@ def chat_with_briefing(
         with connect(database_url=database_url) as conn:
             for a in articles:
                 row = conn.execute("SELECT body FROM articles WHERE id = %s", (a["id"],)).fetchone()
-                body = (row[0] or "") if row else ""
+                body = (row_to_dict(row).get("body") or "") if row else ""
                 article_parts.append(
                     f"[{a['id']}] {a['title']} ({a.get('source_name', '')})\n{body[:3000]}"
                 )

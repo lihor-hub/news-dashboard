@@ -22,7 +22,11 @@ import pytest
 from fastapi.testclient import TestClient
 
 import news_dashboard.main as main_mod
-from news_dashboard.briefings import BriefingAINotConfiguredError, BriefingGenerationError
+from news_dashboard.briefings import (
+    BriefingAINotConfiguredError,
+    BriefingGenerationError,
+    BriefingNotFoundError,
+)
 from news_dashboard.db import POSTGRES_SCHEMA
 from news_dashboard.main import app
 
@@ -416,12 +420,24 @@ def test_chat_passes_history_to_backend(client: TestClient, monkeypatch: Any) ->
 def test_chat_returns_404_when_briefing_missing(client: TestClient, monkeypatch: Any) -> None:
     def _raise(*_: Any, **__: Any) -> str:
         msg = "briefing 99 not found"
-        raise KeyError(msg)
+        raise BriefingNotFoundError(msg)
 
     monkeypatch.setattr(main_mod, "chat_with_briefing", _raise)
     resp = client.post("/api/briefings/99/chat", json={"message": "hello", "history": []})
     assert resp.status_code == 404
     assert resp.json()["detail"] == "briefing not found"
+
+
+def test_chat_does_not_convert_unexpected_key_errors_to_404(
+    client: TestClient, monkeypatch: Any
+) -> None:
+    def _raise(*_: Any, **__: Any) -> str:
+        raise KeyError(0)
+
+    monkeypatch.setattr(main_mod, "chat_with_briefing", _raise)
+
+    with pytest.raises(KeyError, match="0"):
+        client.post("/api/briefings/1/chat", json={"message": "hello", "history": []})
 
 
 def test_chat_returns_503_when_ai_not_configured(client: TestClient, monkeypatch: Any) -> None:
@@ -462,7 +478,7 @@ def test_chat_constructs_prompt_with_article_bodies(monkeypatch: Any) -> None:
         mock_conn = MagicMock()
         mock_conn.__enter__ = MagicMock(return_value=mock_conn)
         mock_conn.__exit__ = MagicMock(return_value=False)
-        mock_conn.execute.return_value.fetchone.return_value = (article_body,)
+        mock_conn.execute.return_value.fetchone.return_value = {"body": article_body}
         mock_connect.return_value = mock_conn
 
         from news_dashboard.briefings import chat_with_briefing
