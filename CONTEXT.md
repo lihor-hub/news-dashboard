@@ -1,6 +1,6 @@
 # News Dashboard
 
-News Dashboard is a private personal news reader that collects curated technical news, supports triage, and generates AI briefings over the user's news corpus.
+News Dashboard is a self-hosted, open-source technical news reader that collects curated news from RSS/Atom feeds and other sources, supports triage, and generates AI briefings over the user's news corpus.
 
 ## Language
 

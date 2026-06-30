@@ -1,7 +1,7 @@
 [project]
 name = "news-dashboard"
-version = "0.1.0"
-description = "Private news inbox, reading tracker, summaries, and source dashboard"
+version = "1.21.0"
+description = "Self-hosted news inbox: curated feeds, triage, search, and AI briefings"
 requires-python = ">=3.14"
 dependencies = [
   "fastapi>=0.115.0",
@@ -145,6 +145,9 @@ ban-relative-imports = "all"
   "PT009",   # plain assert is preferred over self.assertEqual here
 ]
 "scripts/test_agent_skill_sync.py" = [
+  "S101",    # asserts are the point of tests
+]
+"scripts/test_repo_metadata.py" = [
   "S101",    # asserts are the point of tests
 ]
 

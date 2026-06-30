@@ -2,7 +2,7 @@
 
 ## Purpose
 
-A private personal news dashboard for Ioachim. It combines:
+A self-hosted, open-source news dashboard. It combines:
 
 1. **News inbox** — Clau/cron collects useful sources automatically via RSS, GitHub release feeds, trending feeds, and scraped pages.
 2. **Reading tracker** — records what was read, saved, skipped, and archived with timestamps.

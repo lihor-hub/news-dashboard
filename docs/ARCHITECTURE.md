@@ -1,6 +1,6 @@
 # News Dashboard Architecture
 
-This project is a private personal news dashboard for `news.lihor.ro`. It collects curated technical news feeds, stores articles, lets the owner triage them as `new`, `read`, `saved`, `skipped`, or `archived`, tracks source health, and can send a daily digest email.
+This project is a self-hosted, open-source news dashboard. It collects curated technical news feeds, stores articles, lets the owner triage them as `new`, `read`, `saved`, `skipped`, or `archived`, tracks source health, and can send a daily digest email.
 
 The system is not a large microservice platform. It is best understood as a modular monolith with a small number of runtime units:
 
