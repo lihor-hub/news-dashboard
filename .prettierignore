@@ -4,3 +4,4 @@ package-lock.json
 helm/news-dashboard/templates
 design/
 frontend/src/components/ui/
+coverage

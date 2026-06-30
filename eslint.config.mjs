@@ -10,6 +10,7 @@ export default tseslint.config(
       'frontend/dist',
       'node_modules',
       'design/',
+      'coverage',
       'frontend/src/components/ui/**',
       // Stale git worktrees — lint runs on the whole tree so exclude them explicitly
       '.claude/worktrees/**',

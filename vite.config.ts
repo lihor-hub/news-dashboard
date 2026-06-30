@@ -83,7 +83,7 @@ export default defineConfig({
     include: ['frontend/src/**/*.test.{ts,tsx}'],
     coverage: {
       provider: 'v8',
-      reporter: ['text'],
+      reporter: ['text', 'lcov'],
       include: ['frontend/src/**'],
       exclude: ['frontend/src/**/*.test.{ts,tsx}', 'frontend/src/test-setup.ts'],
     },

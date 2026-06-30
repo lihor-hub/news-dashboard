@@ -66,3 +66,12 @@ def test_test_jobs_run_on_merge_group() -> None:
             f"(its `if:` is {condition!r}); the merge queue would report a "
             "hollow green for `Test & build`."
         )
+
+
+def test_vite_config_coverage_reporter() -> None:
+    """vite.config.ts must output lcov format for the CI artifact download to succeed."""
+    config_path = REPO_ROOT / "vite.config.ts"
+    assert config_path.exists(), f"vite.config.ts not found at {config_path}"
+    content = config_path.read_text()
+    assert "reporter:" in content, "reporter not found in vite.config.ts"
+    assert "lcov" in content, "lcov reporter is missing from vite.config.ts coverage settings"
