@@ -18,6 +18,8 @@ def _helm_template(extra_sets: list[str]) -> str:
         str(CHART),
         "--set",
         "app.auth.sessionSecret=dummy-secret-for-test",
+        "--set-string",
+        "postgresql.password=dummy-postgres-password-for-render-only",
         *extra_sets,
     ]
     result = subprocess.run(cmd, capture_output=True, text=True, check=True)  # noqa: S603
