@@ -244,12 +244,14 @@ export function CommandPalette({ open, onOpenChange, onShortcuts }: Props) {
 
             {/* Navigation */}
             <Command.Group heading="Navigation" className={GROUP_CLS}>
-              {commandNavigationItemsFor(Boolean(user?.is_admin)).map(({ icon: Icon, label, to }) => (
-                <Command.Item key={to} onSelect={() => go(to)} className={ITEM_CLS}>
-                  <Icon className="size-4 text-muted-foreground" />
-                  <span className="text-sm">{label}</span>
-                </Command.Item>
-              ))}
+              {commandNavigationItemsFor(Boolean(user?.is_admin)).map(
+                ({ icon: Icon, label, to }) => (
+                  <Command.Item key={to} onSelect={() => go(to)} className={ITEM_CLS}>
+                    <Icon className="size-4 text-muted-foreground" />
+                    <span className="text-sm">{label}</span>
+                  </Command.Item>
+                )
+              )}
             </Command.Group>
 
             {/* App actions */}
