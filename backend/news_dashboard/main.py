@@ -888,6 +888,32 @@ def get_share_endpoint(
     return share
 
 
+@api.get("/api/shares/{share_id}/article")
+def get_shared_article_endpoint(
+    share_id: int,
+    current_user: Annotated[dict[str, Any], Depends(require_auth)],
+) -> dict[str, Any]:
+    from news_dashboard.shares import get_shared_article
+
+    article = get_shared_article(share_id, current_user["id"])
+    if article is None:
+        raise HTTPException(status_code=404, detail="article not found")
+    return article
+
+
+@api.post("/api/shares/{share_id}/article/body")
+def fetch_shared_article_body_endpoint(
+    share_id: int,
+    current_user: Annotated[dict[str, Any], Depends(require_auth)],
+) -> dict[str, Any]:
+    from news_dashboard.shares import fetch_shared_article_body
+
+    article = fetch_shared_article_body(share_id, current_user["id"])
+    if article is None:
+        raise HTTPException(status_code=404, detail="article not found")
+    return article
+
+
 @api.get("/api/shares/{share_id}/annotations")
 def list_share_annotations(
     share_id: int,

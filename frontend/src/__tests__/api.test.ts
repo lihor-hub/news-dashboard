@@ -150,6 +150,20 @@ describe('article list endpoints', () => {
     expect(calls[0].url).toBe('/api/articles/7/body');
   });
 
+  it('fetchSharedArticle hits the share-scoped article path', async () => {
+    const { calls } = stubFetch(() => jsonOk({ id: 7 }));
+    const a = await api.fetchSharedArticle(42);
+    expect(a).toEqual({ id: 7 });
+    expect(calls[0].url).toBe('/api/shares/42/article');
+  });
+
+  it('fetchSharedArticleBody POSTs to the share-scoped body path', async () => {
+    const { calls } = stubFetch(() => jsonOk({ id: 7 }));
+    await api.fetchSharedArticleBody(42);
+    expect(calls[0].init?.method).toBe('POST');
+    expect(calls[0].url).toBe('/api/shares/42/article/body');
+  });
+
   it('fetchArticleInsights unwraps bullets', async () => {
     stubFetch(() => jsonOk({ bullets: ['a', 'b'] }));
     expect(await api.fetchArticleInsights(1)).toEqual(['a', 'b']);

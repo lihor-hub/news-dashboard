@@ -105,7 +105,10 @@ export function SharedDetailPage() {
         <p className="mt-0.5 text-xs text-muted-foreground">{share.article_source_name}</p>
 
         <div className="mt-3 flex items-center gap-4 text-xs">
-          <Link to={`/a/${share.article_id}`} className="text-accent-foreground hover:underline">
+          <Link
+            to={`/shared/${share.id}/article`}
+            className="text-accent-foreground hover:underline"
+          >
             Read article
           </Link>
           <a

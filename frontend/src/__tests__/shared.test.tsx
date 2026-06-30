@@ -117,7 +117,7 @@ describe('SharedDetailPage', () => {
     expect(screen.getByText('This matters because TypeScript ships faster now.')).toBeTruthy();
 
     const readLink = screen.getByRole('link', { name: 'Read article' });
-    expect(readLink.getAttribute('href')).toBe('/a/99');
+    expect(readLink.getAttribute('href')).toBe('/shared/42/article');
 
     const origLink = screen.getByRole('link', { name: /Original/ });
     expect(origLink.getAttribute('href')).toBe('https://example.com/ts');

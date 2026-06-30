@@ -14,6 +14,7 @@ import os
 from typing import Any
 
 from news_dashboard.article_visibility import get_visible_article_row
+from news_dashboard.body_fetch import fetch_and_cache_body
 from news_dashboard.db import connect, row_to_dict
 
 logger = logging.getLogger(__name__)
@@ -120,6 +121,34 @@ def get_share(share_id: int, user_id: int) -> dict[str, Any] | None:
     share["annotations"] = list_annotations(share_id)
     share["messages"] = list_messages(share_id)
     return share
+
+
+def get_shared_article(share_id: int, user_id: int) -> dict[str, Any] | None:
+    """Return a share's article when user_id is the sender or recipient."""
+    with connect() as conn:
+        row = conn.execute(
+            """
+            SELECT a.*
+            FROM article_shares s
+            JOIN articles a ON a.id = s.article_id
+            WHERE s.id = %s AND (s.to_user_id = %s OR s.from_user_id = %s)
+            """,
+            (share_id, user_id, user_id),
+        ).fetchone()
+    if row is None:
+        return None
+    article = row_to_dict(row)
+    article.pop("embedding", None)
+    article.pop("fts_vector", None)
+    return article
+
+
+def fetch_shared_article_body(share_id: int, user_id: int) -> dict[str, Any] | None:
+    """Fetch/cache article body through a visible share, not corpus visibility."""
+    share = get_share(share_id, user_id)
+    if share is None:
+        return None
+    return fetch_and_cache_body(int(share["article_id"]), user_id=None)
 
 
 def mark_share_read(share_id: int, user_id: int) -> bool:

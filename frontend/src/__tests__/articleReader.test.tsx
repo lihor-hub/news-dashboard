@@ -68,6 +68,22 @@ function renderReader(id = '42', cachedArticle?: Article) {
   );
 }
 
+function renderSharedReader(shareId = '42') {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+  });
+  return render(
+    <QueryClientProvider client={queryClient}>
+      <MemoryRouter initialEntries={[`/shared/${shareId}/article`]}>
+        <Routes>
+          <Route path="/shared/:shareId/article" element={<ArticlePage />} />
+          <Route path="/" element={<div>Home</div>} />
+        </Routes>
+      </MemoryRouter>
+    </QueryClientProvider>
+  );
+}
+
 // ─── Rendering ────────────────────────────────────────────────────────────────
 
 describe('ArticlePage — rendering', () => {
@@ -81,6 +97,30 @@ describe('ArticlePage — rendering', () => {
   it('shows article title after load', async () => {
     renderReader();
     await waitFor(() => expect(screen.getByText('Test Article Title')).toBeTruthy());
+  });
+
+  it('uses share-scoped article endpoints for shared reader routes', async () => {
+    const fetchArticleSpy = vi.spyOn(api, 'fetchArticle');
+    const fetchArticleBodySpy = vi.spyOn(api, 'fetchArticleBody');
+    const fetchSharedArticleSpy = vi
+      .spyOn(api, 'fetchSharedArticle')
+      .mockResolvedValue(makeArticle({ id: 99, title: 'Shared private article' }));
+    const fetchSharedArticleBodySpy = vi.spyOn(api, 'fetchSharedArticleBody').mockResolvedValue(
+      makeArticle({
+        id: 99,
+        title: 'Shared private article',
+        body_status: 'ok',
+        body: 'Shared body',
+      })
+    );
+
+    renderSharedReader('123');
+
+    await waitFor(() => expect(screen.getByText('Shared private article')).toBeTruthy());
+    expect(fetchSharedArticleSpy).toHaveBeenCalledWith('123');
+    expect(fetchSharedArticleBodySpy).toHaveBeenCalledWith('123');
+    expect(fetchArticleSpy).not.toHaveBeenCalled();
+    expect(fetchArticleBodySpy).not.toHaveBeenCalled();
   });
 
   it('shows source and reason', async () => {

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -28,6 +28,8 @@ import {
   fetchArticleAudioUrl,
   fetchArticleInsights,
   fetchArticlePerspectives,
+  fetchSharedArticle,
+  fetchSharedArticleBody,
 } from '@/api';
 import { adaptArticle, patchArticleState, patchArticleStar } from '@/api/workflowApi';
 import type { WorkflowState } from '@/lib/workflowTypes';
@@ -178,14 +180,19 @@ function ActionBtn({
 }
 
 export function ArticlePage() {
-  const { id } = useParams<{ id: string }>();
+  const { id, shareId } = useParams<{ id?: string; shareId?: string }>();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const articleKey = shareId ? `share:${shareId}` : id;
+  const articleQueryKey = useMemo(
+    () => (shareId ? ['sharedArticle', shareId] : ['article', id]),
+    [id, shareId]
+  );
 
   const { data: rawArticle, isLoading } = useQuery({
-    queryKey: ['article', id],
-    queryFn: () => fetchArticle(id!),
-    enabled: !!id,
+    queryKey: articleQueryKey,
+    queryFn: () => (shareId ? fetchSharedArticle(shareId) : fetchArticle(id!)),
+    enabled: !!articleKey,
     staleTime: 30_000,
   });
 
@@ -194,26 +201,26 @@ export function ArticlePage() {
 
   useEffect(() => {
     setShowOriginal(false);
-  }, [id]);
+  }, [articleKey]);
 
   // Trigger body fetch in parallel with metadata — fire at mount so we don't
   // wait for the GET /api/articles/:id round-trip before starting the slow scrape.
   const bodyMutation = useMutation({
-    mutationFn: () => fetchArticleBody(id!),
+    mutationFn: () => (shareId ? fetchSharedArticleBody(shareId) : fetchArticleBody(id!)),
     onSuccess: (updated) => {
-      queryClient.setQueryData(['article', id], updated);
+      queryClient.setQueryData(articleQueryKey, updated);
     },
   });
 
   useEffect(() => {
-    if (!id) return;
+    if (!articleKey) return;
     // Skip if the React Query cache already has a fully-fetched body for this article.
-    const cached = queryClient.getQueryData<{ body_status?: string }>(['article', id]);
+    const cached = queryClient.getQueryData<{ body_status?: string }>(articleQueryKey);
     if (cached?.body_status === 'ok') return;
     bodyMutation.mutate();
-    // Run once per article id; bodyMutation is intentionally omitted from deps.
+    // Run once per article id/share id; bodyMutation is intentionally omitted from deps.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id]);
+  }, [articleKey]);
 
   // Per-article dwell telemetry: record an open when the reader mounts (or the
   // user pages to a different article via prev/next, which swaps the id in
@@ -221,24 +228,24 @@ export function ArticlePage() {
   // This feeds the "Most-read articles" analytics panel via article_close
   // events; without it that panel stays empty.
   useEffect(() => {
-    if (!id) return;
-    const articleId = Number(id);
+    if (!rawArticle) return;
+    const articleId = Number(rawArticle.id);
     if (!Number.isFinite(articleId)) return;
     trackArticleOpen(articleId);
     return () => trackArticleClose(articleId);
-  }, [id]);
+  }, [rawArticle]);
 
   const insightsMutation = useMutation({
-    mutationFn: () => fetchArticleInsights(id!),
+    mutationFn: () => fetchArticleInsights(String(article!.id)),
   });
 
   const perspectivesMutation = useMutation({
-    mutationFn: () => fetchArticlePerspectives(id!),
+    mutationFn: () => fetchArticlePerspectives(String(article!.id)),
   });
 
   // Prev/next navigation from sessionStorage list
   const readerList = getReaderList();
-  const idx = readerList ? readerList.ids.indexOf(String(id)) : -1;
+  const idx = readerList && id ? readerList.ids.indexOf(String(id)) : -1;
   const prevId = idx > 0 ? readerList!.ids[idx - 1] : null;
   const nextId =
     idx >= 0 && idx < (readerList?.ids.length ?? 0) - 1 ? readerList!.ids[idx + 1] : null;

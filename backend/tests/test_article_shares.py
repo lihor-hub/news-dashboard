@@ -7,14 +7,17 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from news_dashboard.auth import create_user
+from news_dashboard.body_fetch import get_article
 from news_dashboard.db import connect
 from news_dashboard.ingest import sync_sources
 from news_dashboard.shares import (
     ShareError,
     add_annotation,
     add_message,
+    fetch_shared_article_body,
     generate_share_context,
     get_share,
+    get_shared_article,
     list_annotations,
     list_messages,
     list_received_shares,
@@ -151,6 +154,54 @@ def test_cannot_share_other_users_private_source_article(db: str) -> None:
     assert row["count"] == 0
     share = share_article(article_id=article_id, from_user_id=alice, to_user_id=bob)
     assert share["article_id"] == article_id
+
+
+def test_shared_article_grants_share_scoped_private_source_access(db: str) -> None:
+    alice = _make_user(db, "alice")
+    bob = _make_user(db, "bob")
+    charlie = _make_user(db, "charlie")
+    article_id = _insert_private_article(db, owner_user_id=alice)
+    share = share_article(article_id=article_id, from_user_id=alice, to_user_id=bob)
+    share_id = int(share["id"])
+
+    assert get_article(article_id, user_id=bob) is None
+
+    recipient_article = get_shared_article(share_id, bob)
+    assert recipient_article is not None
+    assert recipient_article["id"] == article_id
+    assert recipient_article["title"] == "Private Share Article"
+
+    sender_article = get_shared_article(share_id, alice)
+    assert sender_article is not None
+    assert sender_article["id"] == article_id
+
+    assert get_shared_article(share_id, charlie) is None
+
+
+def test_shared_article_body_fetch_is_anchored_to_visible_share(db: str) -> None:
+    alice = _make_user(db, "alice")
+    bob = _make_user(db, "bob")
+    charlie = _make_user(db, "charlie")
+    article_id = _insert_private_article(db, owner_user_id=alice)
+    share = share_article(article_id=article_id, from_user_id=alice, to_user_id=bob)
+    share_id = int(share["id"])
+
+    with connect(db) as conn:
+        conn.execute(
+            """
+            UPDATE articles
+            SET body = 'Cached private body', body_status = 'ok'
+            WHERE id = %s
+            """,
+            (article_id,),
+        )
+
+    article = fetch_shared_article_body(share_id, bob)
+    assert article is not None
+    assert article["id"] == article_id
+    assert article["body"] == "Cached private body"
+
+    assert fetch_shared_article_body(share_id, charlie) is None
 
 
 # ── Annotation tests ──────────────────────────────────────────────────────────

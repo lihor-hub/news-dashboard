@@ -115,6 +115,14 @@ export async function fetchArticleBody(id: number | string): Promise<Article> {
   return requestJson<Article>(`/api/articles/${id}/body`, { method: 'POST' });
 }
 
+export async function fetchSharedArticle(shareId: number | string): Promise<Article> {
+  return requestJson<Article>(`/api/shares/${shareId}/article`);
+}
+
+export async function fetchSharedArticleBody(shareId: number | string): Promise<Article> {
+  return requestJson<Article>(`/api/shares/${shareId}/article/body`, { method: 'POST' });
+}
+
 export async function fetchArticleAudioUrl(id: number | string): Promise<string> {
   const response = await fetch(`/api/articles/${id}/audio`, {
     method: 'POST',

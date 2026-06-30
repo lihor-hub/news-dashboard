@@ -120,6 +120,10 @@ export const routes: RouteObject[] = [
     element: <RequireAuth>{withSuspense(ArticlePage)}</RequireAuth>,
   },
   {
+    path: '/shared/:shareId/article',
+    element: <RequireAuth>{withSuspense(ArticlePage)}</RequireAuth>,
+  },
+  {
     path: '/',
     element: (
       <RequireAuth>
