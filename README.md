@@ -209,7 +209,7 @@ Enable auth before exposing an instance outside a trusted network. See
 
 ## Contributing
 
-Issues and PRs are welcome.
+Issues and PRs are welcome. Significant architectural decisions are documented as [Architecture Decision Records (ADRs)](docs/adr/README.md). When introducing major structural changes, new infrastructure dependencies, or shifting runtime contracts, please propose a new ADR using the provided [template](docs/adr/0000-template.md).
 
 ### Dev Container / GitHub Codespaces
 
