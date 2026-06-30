@@ -1,0 +1,40 @@
+{
+  "name": "News Dashboard Dev Environment",
+  "dockerComposeFile": "docker-compose.yml",
+  "service": "app",
+  "workspaceFolder": "/workspace",
+  "features": {
+    "ghcr.io/devcontainers/features/node:1": {
+      "version": "lts"
+    }
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "charliermarsh.ruff",
+        "dbaeumer.vscode-eslint",
+        "esbenp.prettier-vscode"
+      ],
+      "settings": {
+        "python.defaultInterpreterPath": "/workspace/.venv/bin/python",
+        "python.testing.pytestEnabled": true,
+        "python.testing.pytestArgs": ["backend/tests"],
+        "editor.formatOnSave": true,
+        "editor.defaultFormatter": "esbenp.prettier-vscode",
+        "[python]": {
+          "editor.defaultFormatter": "charliermarsh.ruff"
+        }
+      }
+    }
+  },
+  "containerEnv": {
+    "DATABASE_URL": "postgresql://news_dashboard:news-dashboard-local-password@db:5432/news_dashboard",
+    "TEST_DATABASE_URL": "postgresql://news_dashboard:news-dashboard-local-password@db:5432/news_dashboard_test",
+    "SESSION_SECRET": "dev-only-secret-change-before-deploying-00000000000",
+    "BOOTSTRAP_ADMIN_USERNAME": "admin",
+    "BOOTSTRAP_ADMIN_PASSWORD": "change-me"
+  },
+  "postCreateCommand": "python -m venv .venv && .venv/bin/pip install -e '.[dev]' && npm install && .venv/bin/pre-commit install && .venv/bin/news-dashboard init",
+  "forwardPorts": [5173, 8080]
+}

@@ -39,21 +39,21 @@ optional OpenAI features for embeddings, Ask AI, and briefings.
 Runtime storage is PostgreSQL only. Set `DATABASE_URL` or the split
 `POSTGRES_*` variables.
 
-| Variable | Use |
-| --- | --- |
-| `DATABASE_URL` | PostgreSQL DSN. |
-| `POSTGRES_HOST`, `POSTGRES_PORT`, `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD` | PostgreSQL connection parts used when `DATABASE_URL` is unset. |
-| `SESSION_SECRET` | Signed session key. Generate with `python -c "import secrets; print(secrets.token_hex(32))"`. |
-| `BOOTSTRAP_ADMIN_USERNAME`, `BOOTSTRAP_ADMIN_PASSWORD` | First local admin account. Used only when no users exist. |
-| `FREE_LLM_API_KEY`, `FREE_LLM_BASE_URL` | Primary API key and base URL for chat, embeddings, Ask AI, and briefings. Use these to point at a self-hosted OpenAI-compatible gateway. Falls back to `OPENAI_API_KEY` / `OPENAI_BASE_URL` when not set. |
-| `OPENAI_API_KEY`, `OPENAI_BASE_URL` | OpenAI credentials. Required for TTS/audio (not replaceable by the free LLM gateway). Also used as fallback for all other AI features when `FREE_LLM_API_KEY` is absent. |
-| `OPENAI_BRIEFING_MODEL` | Model name for briefing generation (e.g. `auto` for a routing gateway, or a specific model ID). Defaults to `gpt-4o-mini`. |
-| `LANGFUSE_HOST`, `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY` | Traces every OpenAI call (embeddings, Ask AI, briefings, insights, TTS, body fetch) in [Langfuse](https://langfuse.com), each tagged with a descriptive name (`ask-ai`, `briefing-generation`, …). Tracing activates only when both keys are set; otherwise the app uses a plain OpenAI client with no tracing. `LANGFUSE_BASE_URL` is accepted as an alias for `LANGFUSE_HOST`. |
-| `KEYCLOAK_AUTH_ENABLED`, `KEYCLOAK_SERVER_URL`, `KEYCLOAK_REALM`, `KEYCLOAK_CLIENT_ID`, `KEYCLOAK_CLIENT_SECRET` | Enables Keycloak. See [docs/KEYCLOAK_AUTH.md](docs/KEYCLOAK_AUTH.md). |
-| `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` | VAPID public and private keys for Web Push notifications. Generate using `npx web-push generate-vapid-keys`. |
-| `VAPID_EMAIL` | Contact email address used in VAPID claims mailto link. Defaults to `admin@example.com` if unset. |
-| `CORS_ORIGINS` | Comma-separated browser dev origins. |
-| `ANALYTICS_RETENTION_DAYS` | Days to retain `user_events` before the daily cleanup job prunes them. Defaults to `180`. |
+| Variable                                                                                                         | Use                                                                                                                                                                                                                                                                                                                                                                              |
+| ---------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `DATABASE_URL`                                                                                                   | PostgreSQL DSN.                                                                                                                                                                                                                                                                                                                                                                  |
+| `POSTGRES_HOST`, `POSTGRES_PORT`, `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD`                            | PostgreSQL connection parts used when `DATABASE_URL` is unset.                                                                                                                                                                                                                                                                                                                   |
+| `SESSION_SECRET`                                                                                                 | Signed session key. Generate with `python -c "import secrets; print(secrets.token_hex(32))"`.                                                                                                                                                                                                                                                                                    |
+| `BOOTSTRAP_ADMIN_USERNAME`, `BOOTSTRAP_ADMIN_PASSWORD`                                                           | First local admin account. Used only when no users exist.                                                                                                                                                                                                                                                                                                                        |
+| `FREE_LLM_API_KEY`, `FREE_LLM_BASE_URL`                                                                          | Primary API key and base URL for chat, embeddings, Ask AI, and briefings. Use these to point at a self-hosted OpenAI-compatible gateway. Falls back to `OPENAI_API_KEY` / `OPENAI_BASE_URL` when not set.                                                                                                                                                                        |
+| `OPENAI_API_KEY`, `OPENAI_BASE_URL`                                                                              | OpenAI credentials. Required for TTS/audio (not replaceable by the free LLM gateway). Also used as fallback for all other AI features when `FREE_LLM_API_KEY` is absent.                                                                                                                                                                                                         |
+| `OPENAI_BRIEFING_MODEL`                                                                                          | Model name for briefing generation (e.g. `auto` for a routing gateway, or a specific model ID). Defaults to `gpt-4o-mini`.                                                                                                                                                                                                                                                       |
+| `LANGFUSE_HOST`, `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`                                                    | Traces every OpenAI call (embeddings, Ask AI, briefings, insights, TTS, body fetch) in [Langfuse](https://langfuse.com), each tagged with a descriptive name (`ask-ai`, `briefing-generation`, …). Tracing activates only when both keys are set; otherwise the app uses a plain OpenAI client with no tracing. `LANGFUSE_BASE_URL` is accepted as an alias for `LANGFUSE_HOST`. |
+| `KEYCLOAK_AUTH_ENABLED`, `KEYCLOAK_SERVER_URL`, `KEYCLOAK_REALM`, `KEYCLOAK_CLIENT_ID`, `KEYCLOAK_CLIENT_SECRET` | Enables Keycloak. See [docs/KEYCLOAK_AUTH.md](docs/KEYCLOAK_AUTH.md).                                                                                                                                                                                                                                                                                                            |
+| `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`                                                                          | VAPID public and private keys for Web Push notifications. Generate using `npx web-push generate-vapid-keys`.                                                                                                                                                                                                                                                                     |
+| `VAPID_EMAIL`                                                                                                    | Contact email address used in VAPID claims mailto link. Defaults to `admin@example.com` if unset.                                                                                                                                                                                                                                                                                |
+| `CORS_ORIGINS`                                                                                                   | Comma-separated browser dev origins.                                                                                                                                                                                                                                                                                                                                             |
+| `ANALYTICS_RETENTION_DAYS`                                                                                       | Days to retain `user_events` before the daily cleanup job prunes them. Defaults to `180`.                                                                                                                                                                                                                                                                                        |
 
 SQLite is supported only as a legacy import source for
 `news-dashboard-migrate sqlite-to-postgres`.
@@ -70,10 +70,10 @@ Open [http://localhost:8080](http://localhost:8080).
 
 Log in with the default local-development credentials:
 
-| Field | Default value |
-| --- | --- |
-| Username | `admin` |
-| Password | `change-me` |
+| Field    | Default value |
+| -------- | ------------- |
+| Username | `admin`       |
+| Password | `change-me`   |
 
 > **These are local-development defaults only.** Before deploying anywhere
 > outside your own machine, set `SESSION_SECRET`, `BOOTSTRAP_ADMIN_USERNAME`,
@@ -148,20 +148,21 @@ make check       # full CI suite
 
 ### Test lanes
 
-| Command | What it runs | When to use |
-|---|---|---|
-| `make test-smoke` | Backend `smoke`-marked tests + frontend smoke files | Quick sanity check, ~seconds |
-| `make test-backend` | Full `pytest` suite | Before pushing backend changes |
-| `make test-frontend` | Full Vitest suite | Before pushing frontend changes |
-| `make test-a11y` | Accessibility smoke tests (axe-core serious/critical violations) | Before pushing UI changes; enforced in CI |
-| `make test-e2e` | Playwright end-to-end tests | Before pushing UI/routing changes |
-| `make test-full` | Everything with coverage | Same as nightly CI; use before major releases |
+| Command              | What it runs                                                     | When to use                                   |
+| -------------------- | ---------------------------------------------------------------- | --------------------------------------------- |
+| `make test-smoke`    | Backend `smoke`-marked tests + frontend smoke files              | Quick sanity check, ~seconds                  |
+| `make test-backend`  | Full `pytest` suite                                              | Before pushing backend changes                |
+| `make test-frontend` | Full Vitest suite                                                | Before pushing frontend changes               |
+| `make test-a11y`     | Accessibility smoke tests (axe-core serious/critical violations) | Before pushing UI changes; enforced in CI     |
+| `make test-e2e`      | Playwright end-to-end tests                                      | Before pushing UI/routing changes             |
+| `make test-full`     | Everything with coverage                                         | Same as nightly CI; use before major releases |
 
 **Local development loop:** run `make test-smoke` during active development, `make test-backend` or `make test-frontend` depending on what you changed, then `make check` before opening a PR.
 
 **Pre-push / pre-release:** run `make test-full` for comprehensive coverage including slow and DB-heavy tests.
 
 Pytest markers:
+
 - `smoke` — fast tests with no external services
 - `db` — auto-applied to any test using `pg_url` / `pg_clean`; requires PostgreSQL
 - `slow` — expensive tests reserved for the nightly schedule
@@ -208,8 +209,18 @@ Enable auth before exposing an instance outside a trusted network. See
 
 ## Contributing
 
-Issues and PRs are welcome. Run `make check` before opening a PR when local
-Python, Node, PostgreSQL, and browser test dependencies are installed.
+Issues and PRs are welcome.
+
+### Dev Container / GitHub Codespaces
+
+You can start development instantly using a pre-configured Dev Container or GitHub Codespaces:
+
+1. Open the repository in VS Code and run the **Dev Containers: Reopen in Container** command, or launch a new GitHub Codespace.
+2. The environment comes pre-configured with Python 3.14, Node LTS, and PostgreSQL.
+3. Dependencies are installed and the database is initialized automatically.
+4. Run `make test-smoke` inside the container terminal to verify your setup.
+
+Alternatively, for local manual setup, run `make check` before opening a PR when local Python, Node, PostgreSQL, and browser test dependencies are installed.
 
 Keep runtime database code PostgreSQL-specific: psycopg parameters, PostgreSQL
 SQL, and existing database helpers. Do not add SQLite runtime fallbacks or

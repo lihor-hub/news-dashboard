@@ -1,0 +1,30 @@
+version: '3.8'
+
+services:
+  app:
+    image: mcr.microsoft.com/devcontainers/python:3.14-bookworm
+    volumes:
+      - ..:/workspace:cached
+
+    # Overrides default command so container doesn't exit
+    command: sleep infinity
+
+    # Connect to the db service
+    depends_on:
+      - db
+
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: news_dashboard
+      POSTGRES_USER: news_dashboard
+      POSTGRES_PASSWORD: news-dashboard-local-password
+    volumes:
+      - news-dashboard-postgres-dev:/var/lib/postgresql/data
+      - ./postgres-init.sql:/docker-entrypoint-initdb.d/postgres-init.sql
+    ports:
+      - '5432:5432'
+
+volumes:
+  news-dashboard-postgres-dev:
