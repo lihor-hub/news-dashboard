@@ -1,0 +1,36 @@
+# Codecov configuration
+
+comment:
+  layout: "reach, diff, flags, files"
+  behavior: default
+  require_changes: false
+
+coverage:
+  status:
+    project:
+      default:
+        target: auto
+        threshold: 1%
+    patch:
+      default:
+        target: auto
+        threshold: 1%
+
+flag_management:
+  individual_flags:
+    - name: backend
+      paths:
+        - backend/
+      carryforward: true
+      statuses:
+        - type: project
+          target: auto
+          threshold: 1%
+    - name: frontend
+      paths:
+        - frontend/
+      carryforward: true
+      statuses:
+        - type: project
+          target: auto
+          threshold: 1%

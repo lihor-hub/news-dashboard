@@ -316,12 +316,23 @@ jobs:
           name: frontend-coverage
           path: ./coverage-frontend
 
-      - name: Upload to Codecov
+      - name: Upload Backend to Codecov
         uses: codecov/codecov-action@v4
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
-          files: ./coverage-backend/*.xml,./coverage-frontend/lcov.info
-          name: codecov-umbrella
+          files: ./coverage-backend/*.xml
+          flags: backend
+          name: codecov-backend
+          fail_ci_if_error: false
+          verbose: true
+
+      - name: Upload Frontend to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: ./coverage-frontend/lcov.info
+          flags: frontend
+          name: codecov-frontend
           fail_ci_if_error: false
           verbose: true
 
