@@ -221,4 +221,4 @@ keys. Use environment variables or deployment secrets.
 
 ## License
 
-This repository does not include an open-source license.
+This project is licensed under the [MIT License](LICENSE).
