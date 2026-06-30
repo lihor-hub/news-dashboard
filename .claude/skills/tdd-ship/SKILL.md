@@ -105,18 +105,19 @@ pytest hook can connect to PostgreSQL.
 Push only once the relevant tests and type/lint gates pass locally — CI runs the
 same gates, so green-locally is the cheapest way to a green PR.
 
-### 4. Rebase on `origin/main`, open the PR, and enable auto-merge
+### 4. Rebase on `origin/main`, open the PR, and queue it for merge
 
 `main` may have moved while you worked, so re-sync immediately before pushing.
 Rebase (don't merge) so the branch stays linear, re-run the gates if the rebase
-pulled anything in, push, open the PR, then immediately turn on auto-merge:
+pulled anything in, push, open the PR, then immediately hand it to GitHub's merge
+queue:
 
 ```bash
 git fetch origin && git rebase origin/main
 git push -u origin HEAD
 gh pr create --fill --base main \
   --body "Closes #<issue#>\n\n<summary of the change and the test that backs it>"
-gh pr merge --squash --auto --delete-branch
+gh pr merge --squash --auto
 ```
 
 The `Closes #<issue#>` line is required — it links the PR to the issue and
@@ -124,12 +125,18 @@ auto-closes it on merge. End the PR body with the standard trailer:
 `🤖 Generated with [Claude Code](https://claude.com/claude-code)`.
 
 Always open PRs with auto-merge enabled (`--auto`). Branch protection on `main`
-holds the merge until the required checks pass, so enabling it up front lets the
-PR land the moment CI is green without a manual merge step. A repo-level workflow
-(`.github/workflows/auto-merge.yml`) also enables auto-merge on every non-draft
-PR as a backstop, but don't rely on it — set `--auto` yourself.
+requires a merge queue, so `gh pr merge` does not merge directly. If required
+checks are still pending, it enables auto-merge; once the PR is eligible, GitHub
+adds it to the queue and creates a `merge_group` ref. The queue then waits for
+the required checks on that merge group before landing the PR. Do not pass
+`--delete-branch` when merge queue is enabled; `gh` rejects that flag for queued
+merges. A repo-level workflow (`.github/workflows/auto-merge.yml`) also enables
+auto-merge on every non-draft PR as a backstop, but don't rely on it — set
+`--auto` yourself.
 
-### 5. Watch CI; auto-merge lands it when green
+Do not bypass the queue with `gh pr merge --admin` or a direct push to `main`.
+
+### 5. Watch CI and the merge queue
 
 CI (`.github/workflows/ci.yml`) runs on every PR to `main`. Watch it:
 
@@ -138,17 +145,19 @@ gh pr checks --watch
 ```
 
 If a check fails, read the logs (`gh run view <run-id> --log-failed`), fix the
-cause on the branch, push, and let CI re-run. With auto-merge enabled, the PR
-squash-merges and deletes its branch automatically once every required check is
-green — you don't merge by hand.
+cause on the branch, push, and let CI re-run. When the PR reaches the merge
+queue, CI runs again on the `merge_group` event for the temporary queue ref. The
+required checks are `Lint & typecheck` and `Test & build`; both must pass on the
+merge group before GitHub squash-merges the PR.
 
 ### 6. Confirm the merge completed
 
 Once CI is green, confirm auto-merge actually landed the PR (`gh pr view
 <pr#> --json state,mergedAt`). Then confirm the issue closed (the `Closes #`
-link handles it) and report the merged PR and issue numbers back to the user.
-Only step in with a manual `gh pr merge --squash --delete-branch` if auto-merge
-was disabled (e.g. the PR was converted to a draft).
+link handles it), delete the remote branch if GitHub did not delete it
+automatically, and report the merged PR and issue numbers back to the user.
+Only step in with `gh pr merge --squash --auto` if auto-merge was disabled (e.g.
+the PR was converted to a draft); do not use an admin merge to skip the queue.
 
 ## Reporting back
 
