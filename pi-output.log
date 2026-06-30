@@ -27,3 +27,53 @@ Here's a summary of what was changed:
 - **`test_api_delete_private_source_no_articles_still_soft_deletes`** — Verifies even empty source deletion is a soft-delete (row still exists with `deleted_at` set) and excluded from listing
 
 DONE
+I have successfully implemented the changes required by issue #533 to make the Helm chart require an explicit PostgreSQL password for bundled PostgreSQL deployments.
+
+## Changes Made:
+
+1. **Helm Chart Values** (`helm/news-dashboard/values.yaml`):
+   - Removed the default password `news-dashboard-local-password`
+   - Set password to empty string (`""`) with comments explaining it's required when `postgresql.enabled=true`
+
+2. **PostgreSQL Secret Template** (`helm/news-dashboard/templates/postgres-secret.yaml`):
+   - Changed from direct value substitution to using Helm's `required()` function
+   - Now fails template rendering with clear message if `postgresql.password` is empty when `postgresql.enabled=true`
+
+3. **CI Workflow** (`.github/workflows/ci.yml`):
+   - Updated `helm template` commands to include `--set-string postgresql.password=dummy-postgres-password-for-render-only`
+   - Added `POSTGRES_PASSWORD` to the deploy job environment from GitHub Secrets
+   - Added validation to exit with error if `POSTGRES_PASSWORD` secret is missing
+   - Added `POSTGRES_PASSWORD` to the Helm upgrade/install command in the deploy step
+   - Enhanced the secrets documentation section to explain PostgreSQL password requirements and rotation procedure
+
+4. **Documentation** (`README.md`):
+   - Updated Helm installation example to show required password parameter
+   - Added explanation about when the password is required
+   - Added documentation for existing deployments about password rotation requiring `ALTER USER` command
+
+5. **Test Coverage** (`backend/tests/test_chart_render.py`):
+   - Maintained existing test structure by adding the required password to the `_render_chart` helper
+   - Added two new test cases:
+     - `test_helm_template_fails_without_bundled_postgres_password`
+     - `test_helm_template_fails_with_empty_bundled_postgres_password`
+   - Both tests verify that Helm template fails with the expected error message
+
+## Verification:
+
+The changes have been verified to:
+- ✅ Fail helm template rendering when `postgresql.enabled=true` and no password is provided
+- ✅ Fail when password is explicitly set to empty string
+- ✅ Succeed when a password is provided
+- ✅ Still work correctly for external PostgreSQL mode (`postgresql.enabled=false`)
+- ✅ CI validation passes with dummy values
+- ✅ Production deploy will require the `POSTGRES_PASSWORD` GitHub secret
+
+All changes are committed to branch `issue-533-securityrequireexplicithelmpostgresqlpassword` and have been pushed to the repository. The implementation follows the project's constraints:
+- No runtime database sniffing or SQLite fallbacks
+- PostgreSQL-specific with psycopg parameter style maintained
+- No real production passwords committed
+- Existing external PostgreSQL mode remains unaffected
+
+The implementation is ready for CI validation and subsequent PR review.
+
+DONE
