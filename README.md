@@ -60,11 +60,46 @@ SQLite is supported only as a legacy import source for
 
 ## Quick Start
 
-Run the container stack:
+You can run News Dashboard in two ways:
+
+### Option 1: Build from source (recommended for development)
 
 ```bash
 docker compose up --build
 ```
+
+### Option 2: Run the published image (recommended for production)
+
+First, start PostgreSQL:
+```bash
+docker run --rm -d \
+  --name news-dashboard-postgres \
+  -e POSTGRES_DB=news_dashboard \
+  -e POSTGRES_USER=news_dashboard \
+  -e POSTGRES_PASSWORD=news-dashboard-local-password \
+  -v news-dashboard-postgres-data:/var/lib/postgresql/data \
+  -p 5432:5432 \
+  postgres:16-alpine
+```
+
+Then run the application:
+```bash
+docker run -d \
+  --name news-dashboard \
+  -p 8080:8080 \
+  --link news-dashboard-postgres:postgres \
+  -e POSTGRES_HOST=postgres \
+  -e POSTGRES_PORT=5432 \
+  -e POSTGRES_DB=news_dashboard \
+  -e POSTGRES_USER=news_dashboard \
+  -e POSTGRES_PASSWORD=news-dashboard-local-password \
+  -e SESSION_SECRET="$(python -c 'import secrets; print(secrets.token_hex(32))')" \
+  -e BOOTSTRAP_ADMIN_USERNAME=admin \
+  -e BOOTSTRAP_ADMIN_PASSWORD=change-me \
+  --restart unless-stopped \
+  ghcr.io/lihor-hub/news-dashboard:latest
+```
+**Note**: Replace `latest` with a specific version tag (e.g., `v1.21.0`) or commit SHA for pinned deployments. See [Configuration](#configuration) for all required environment variables.
 
 Open [http://localhost:8080](http://localhost:8080).
 
@@ -83,7 +118,7 @@ Log in with the default local-development credentials:
 Run ingestion in the app container:
 
 ```bash
-docker compose exec news-dashboard news-dashboard ingest
+docker exec news-dashboard news-dashboard ingest
 ```
 
 ## Local Development
@@ -202,6 +237,10 @@ password (`news-dashboard-local-password`), changing the Helm value or
 Kubernetes Secret alone does **not** rotate an already-initialized database
 password. You must also run `ALTER USER news_dashboard WITH PASSWORD
 '<new-password>'` inside PostgreSQL after updating the secret.
+
+For simple Docker deployments (single-node setups), see the
+[Self-Hosting guide](docs/SELF_HOSTING.md) for instructions on running
+the published image with persistent storage.
 
 Enable auth before exposing an instance outside a trusted network. See
 [docs/KEYCLOAK_AUTH.md](docs/KEYCLOAK_AUTH.md) and

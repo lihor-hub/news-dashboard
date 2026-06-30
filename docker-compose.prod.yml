@@ -1,0 +1,41 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: news_dashboard
+      POSTGRES_USER: news_dashboard
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-}
+    volumes:
+      - news-dashboard-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U news_dashboard -d news_dashboard"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  news-dashboard:
+    image: ghcr.io/lihor-hub/news-dashboard:latest
+    ports:
+      - "8080:8080"
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      POSTGRES_DB: news_dashboard
+      POSTGRES_USER: news_dashboard
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-}
+      SESSION_SECRET: ${SESSION_SECRET:-}
+      BOOTSTRAP_ADMIN_USERNAME: ${BOOTSTRAP_ADMIN_USERNAME:-}
+      BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD:-}
+      # Add other required environment variables as needed
+      # OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      # FREE_LLM_API_KEY: ${FREE_LLM_API_KEY:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  news-dashboard-postgres:
