@@ -1,6 +1,7 @@
 # News Dashboard
 
 ![Coverage Status](https://codecov.io/gh/lihor-hub/news-dashboard/branch/main/graph/badge.svg)
+[![CodeQL](https://github.com/lihor-hub/news-dashboard/actions/workflows/codeql.yml/badge.svg)](https://github.com/lihor-hub/news-dashboard/actions/workflows/codeql.yml)
 
 Self-hosted technical news inbox for curated feeds, article triage, source
 health, search, briefings, and saved/read history.

@@ -1,0 +1,70 @@
+name: CodeQL analysis
+
+# Runs static application security testing on every PR to main, on every push
+# to main, and weekly on a schedule. Results appear in the Security → Code
+# scanning tab. This is intentionally a separate workflow from ci.yml so it
+# runs independently and doesn't slow the main CI matrix.
+#
+# Languages: JavaScript/TypeScript (frontend/) and Python (backend/).
+# Query suite: security-and-quality (includes both security and
+# maintainability queries from the default + extended suites).
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: '0 2 * * 1'  # Every Monday at 02:00 UTC
+
+permissions:
+  contents: read
+
+jobs:
+  codeql:
+    name: CodeQL (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    permissions:
+      # Required for all CodeQL actions.
+      security-events: write
+      # Required for the actions/checkout step.
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        language:
+          - javascript-typescript
+          - python
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Initializes the CodeQL tooling for the current language.
+      # sets-up the environment, downloads the CodeQL CLI, and extracts
+      # the code database for analysis.
+      - uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+          queries: security-and-quality
+          # Exclude generated / vendored / build output paths.
+          # Android app build artifacts don't contain app source code.
+          # Node modules and frontend build output are generated.
+          # Python __pycache__ is compiled bytecode.
+          paths-ignore: |
+            android/app/
+            frontend/dist/
+            frontend/node_modules/
+            node_modules/
+            **/__pycache__/
+            **/.venv/
+            **/.pytest_cache/
+
+      # Perform CodeQL Analysis.
+      # For compiled languages (C/C++, C#, Go, Java, Swift), autobuild
+      # attempts to build the code. For JavaScript/TypeScript and Python
+      # the database is extracted directly from the source tree.
+      - uses: github/codeql-action/autobuild@v3
+
+      - uses: github/codeql-action/analyze@v3
+        with:
+          category: ${{ matrix.language }}
