@@ -20,6 +20,11 @@ logger = logging.getLogger(__name__)
 _INIT_DB_LOCK = threading.Lock()
 _INITIALIZED_DATABASES: set[tuple[str, str | None, str]] = set()
 
+
+class SchemaInitializationError(RuntimeError):
+    """Raised when PostgreSQL schema initialization cannot complete."""
+
+
 POSTGRES_SCHEMA = [
     """
     CREATE TABLE IF NOT EXISTS users (
@@ -581,16 +586,19 @@ def init_db(db_path: Path | str | None = None, database_url: str | None = None) 
         if cache_key in _INITIALIZED_DATABASES:
             return
 
-    # Each statement runs in its own transaction so a harmless idempotency
-    # failure does not leave later schema statements in an aborted transaction.
+    # Each statement runs in its own transaction so one failed statement does
+    # not leave later attempts in an aborted transaction.
     applied = 0
     for statement in POSTGRES_SCHEMA + POSTGRES_MULTIUSER_SCHEMA:
         try:
             with connect(db_path, database_url=database_url) as conn:
                 conn.execute(statement)
                 applied += 1
-        except Exception:  # idempotent best-effort schema statements
-            logger.debug("Schema statement skipped (already applied): %.80s", statement)
+        except Exception as exc:
+            statement_preview = " ".join(statement.split())[:240]
+            logger.exception("Schema initialization failed on statement: %s", statement_preview)
+            message = f"Schema initialization failed on statement: {statement_preview}"
+            raise SchemaInitializationError(message) from exc
     if applied > 0:
         with _INIT_DB_LOCK:
             _INITIALIZED_DATABASES.add(cache_key)

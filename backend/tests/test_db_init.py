@@ -1,16 +1,18 @@
 """Unit tests for init_db PostgreSQL transaction-safety behaviour.
 
 These tests mock the connect() context manager so they run without Docker.
-The key invariant: each schema statement must execute in its own transaction
-so that a failing statement does not put psycopg3 into ABORTED state and
-prevent every subsequent statement — and the final commit() — from running.
+The key invariant: schema failures must surface while successful runs remain
+cached on the hot path.
 """
 
 from __future__ import annotations
 
+import logging
 from contextlib import contextmanager
 from typing import Any
 from unittest.mock import patch
+
+import pytest
 
 _SIMULATED_FAILURE = "simulated: column already exists"
 
@@ -41,13 +43,11 @@ def test_init_db_postgres_applies_all_statements(tmp_path: Any) -> None:
     assert applied == fake_schema
 
 
-def test_init_db_postgres_continues_after_statement_failure(tmp_path: Any) -> None:
-    """A failing schema statement must not prevent subsequent ones from running.
-
-    Before the fix, all 47 statements shared one psycopg3 transaction: a single
-    failure left the transaction in ABORTED state, causing every later execute()
-    and the final commit() to raise InFailedSqlTransaction.
-    """
+def test_init_db_postgres_failure_surfaces_and_is_not_cached(
+    tmp_path: Any,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """A failing schema statement must raise and retry on the next init_db()."""
     applied: list[str] = []
 
     @contextmanager
@@ -63,17 +63,24 @@ def test_init_db_postgres_continues_after_statement_failure(tmp_path: Any) -> No
     fake_schema = ["stmt_ok_1", "WILL_FAIL", "stmt_ok_2"]
 
     with (
+        caplog.at_level(logging.ERROR, logger="news_dashboard.db"),
         patch("news_dashboard.db.connect", fake_connect),
         patch("news_dashboard.db.POSTGRES_SCHEMA", fake_schema),
         patch("news_dashboard.db.POSTGRES_MULTIUSER_SCHEMA", []),
     ):
-        from news_dashboard.db import init_db
+        from news_dashboard.db import SchemaInitializationError, init_db
 
-        init_db()  # must not raise
+        token = tmp_path / "partial-schema.db"
+        with pytest.raises(SchemaInitializationError, match="WILL_FAIL"):
+            init_db(token)
 
-    assert "stmt_ok_1" in applied
-    assert "stmt_ok_2" in applied
+        with pytest.raises(SchemaInitializationError, match="WILL_FAIL"):
+            init_db(token)
+
+    assert applied == ["stmt_ok_1", "stmt_ok_1"]
     assert "WILL_FAIL" not in applied
+    assert "stmt_ok_2" not in applied
+    assert "Schema initialization failed on statement: WILL_FAIL" in caplog.text
 
 
 def test_init_db_postgres_each_statement_uses_own_connection(tmp_path: Any) -> None:
