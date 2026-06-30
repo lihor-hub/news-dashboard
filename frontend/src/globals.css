@@ -73,7 +73,7 @@
   --secondary-foreground: oklch(0.25 0.012 70);
   --muted: oklch(0.94 0.006 80);
   --muted-foreground: oklch(0.5 0.012 70);
-  --subtle: oklch(0.62 0.012 70);
+  --subtle: oklch(0.53 0.012 70);
   --accent: oklch(0.55 0.13 45);
   --accent-foreground: oklch(0.98 0.005 80);
   --destructive: oklch(0.5 0.18 28);
@@ -86,9 +86,9 @@
   --signal-mid: oklch(0.55 0.1 70);
   --signal-low: oklch(0.6 0.005 70);
   --star: oklch(0.7 0.15 75);
-  --ok: oklch(0.55 0.13 150);
-  --warn: oklch(0.65 0.15 70);
-  --err: oklch(0.55 0.18 28);
+  --ok: oklch(0.5 0.13 150);
+  --warn: oklch(0.52 0.13 70);
+  --err: oklch(0.5 0.18 28);
   --chart-1: oklch(0.55 0.13 45);
   --chart-2: oklch(0.55 0.13 150);
   --chart-3: oklch(0.55 0.13 240);
@@ -228,11 +228,11 @@
 }
 
 /* Neutralise global a { color: ... } from legacy styles.css inside new shell */
-.app-shell a {
+.app-shell a:not([class*='text-']) {
   color: inherit;
   text-decoration: none;
 }
-.app-shell a:hover {
+.app-shell a:not([class*='text-']):hover {
   color: inherit;
   text-decoration: none;
 }

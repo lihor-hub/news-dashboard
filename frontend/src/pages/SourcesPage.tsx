@@ -414,6 +414,7 @@ export function SourcesPage() {
                       onCheckedChange={(checked) =>
                         toggleMutation.mutate({ slug: s.slug, enabled: checked })
                       }
+                      aria-label={`Toggle ${s.name}`}
                     />
                   </td>
                   <td className="px-3 py-3 text-right">
@@ -475,6 +476,7 @@ export function SourcesPage() {
                     onCheckedChange={(checked) =>
                       toggleMutation.mutate({ slug: s.slug, enabled: checked })
                     }
+                    aria-label={`Toggle ${s.name}`}
                   />
                 </div>
               </div>
