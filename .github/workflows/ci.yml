@@ -181,7 +181,7 @@ jobs:
           TEST_DATABASE_URL: postgresql://news_dashboard:news_dashboard@127.0.0.1:5432/news_dashboard
       - name: Save backend coverage report
         if: always()
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: backend-coverage
           path: coverage.xml
@@ -210,7 +210,7 @@ jobs:
         run: npm run test:frontend:coverage --silent
       - name: Save frontend coverage report
         if: always()
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: frontend-coverage
           path: coverage/lcov.info
@@ -253,14 +253,14 @@ jobs:
 
       - name: Download backend coverage
         if: needs.test-backend.result == 'success' || needs.test-backend.result == 'failure'
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: backend-coverage
           path: ./coverage-backend
 
       - name: Download frontend coverage
         if: needs.test-frontend.result == 'success' || needs.test-frontend.result == 'failure'
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: frontend-coverage
           path: ./coverage-frontend
