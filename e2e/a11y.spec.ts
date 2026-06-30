@@ -8,8 +8,8 @@
  * CI: wired as a required gate in ci.yml (test-a11y job). Runs on every PR
  * and push; failures block merging.
  */
-import { test } from '@playwright/test';
-import { mockApi } from './fixtures';
+import { expect, test } from '@playwright/test';
+import { mockApi, SAMPLE_ARTICLE } from './fixtures';
 import { checkA11y } from './a11y-helper';
 
 test.beforeEach(async ({ page }) => {
@@ -57,9 +57,10 @@ test.describe('a11y — desktop routes', () => {
     await checkA11y(page);
   });
 
-  test('Article reader /articles/1 — no serious/critical violations', async ({ page }) => {
-    await page.goto('/articles/1');
+  test('Article reader /a/1 — no serious/critical violations', async ({ page }) => {
+    await page.goto('/a/1');
     await page.waitForLoadState('networkidle');
+    await expect(page.getByRole('heading', { name: SAMPLE_ARTICLE.title })).toBeVisible();
     await checkA11y(page);
   });
 });

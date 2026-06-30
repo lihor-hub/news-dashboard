@@ -1,14 +1,12 @@
 /**
  * Accessibility smoke-test helper.
  *
- * Injects axe-core via CDN (tests mock only /api/** routes so the CDN
- * request passes through) and runs an audit limited to serious/critical
- * violations so tests stay focused on high-signal issues.
+ * Injects the repo-pinned axe-core package and runs an audit limited to
+ * serious/critical violations so tests stay focused on high-signal issues.
  */
 import type { Page } from '@playwright/test';
 import { expect } from '@playwright/test';
-
-const AXE_CDN = 'https://cdn.jsdelivr.net/npm/axe-core@4.10.3/axe.min.js';
+import { source as axeSource } from 'axe-core';
 
 export interface A11yCheckOptions {
   /**
@@ -23,7 +21,7 @@ export interface A11yCheckOptions {
  * page. Throws an Playwright assertion error listing every violation found.
  */
 export async function checkA11y(page: Page, options: A11yCheckOptions = {}): Promise<void> {
-  await page.addScriptTag({ url: AXE_CDN });
+  await page.addScriptTag({ content: axeSource });
 
   const violations = await page.evaluate(
     async ({ excludeRules }: { excludeRules: string[] }) => {
