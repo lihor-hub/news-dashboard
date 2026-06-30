@@ -24,6 +24,7 @@ export interface NavigationItem {
   icon: LucideIcon;
   commandLabel?: string;
   shortcut?: string;
+  adminOnly?: boolean;
 }
 
 export const primaryNavigationItems: NavigationItem[] = [
@@ -40,7 +41,6 @@ export const secondaryNavigationItems: NavigationItem[] = [
   { to: '/briefs', label: 'Briefing History', icon: History, shortcut: 'h' },
   { to: '/topic-map', label: 'Topic Map', icon: Network },
   { to: '/feeds', label: 'Feeds', icon: Radio, shortcut: 'f' },
-  { to: '/stats', label: 'Stats', icon: BarChart3 },
   { to: '/reading-dna', label: 'Reading DNA', icon: SlidersHorizontal },
   { to: '/archive', label: 'Archive', icon: Archive },
   { to: '/settings', label: 'Settings', icon: Settings },
@@ -48,6 +48,7 @@ export const secondaryNavigationItems: NavigationItem[] = [
 
 // Shown in the secondary nav only for admin users.
 export const adminNavigationItems: NavigationItem[] = [
+  { to: '/stats', label: 'Stats', icon: BarChart3 },
   { to: '/analytics', label: 'Analytics', icon: Activity },
   { to: '/admin', label: 'Users', icon: Users },
 ];
@@ -82,6 +83,20 @@ export const commandNavigationItems = [...primaryNavigationItems, ...secondaryNa
     label: item.commandLabel ?? item.label,
   })
 );
+
+export function commandNavigationItemsFor(isAdmin: boolean): NavigationItem[] {
+  const baseItems = [...primaryNavigationItems, ...secondaryNavigationItems];
+  if (isAdmin) {
+    return [...baseItems, ...adminNavigationItems].map((item) => ({
+      ...item,
+      label: item.commandLabel ?? item.label,
+    }));
+  }
+  return baseItems.map((item) => ({
+    ...item,
+    label: item.commandLabel ?? item.label,
+  }));
+}
 
 export const navigationShortcutRows: [string, string][] = [
   ['j / k', 'Move down / up in list'],

@@ -22,7 +22,7 @@ import { useTriageMutations } from '@/hooks/useTriageMutations';
 import { useFocusedArticle } from '@/contexts/focusedArticle';
 import { useAuth } from '@/contexts/auth';
 import type { WorkflowArticle } from '@/lib/workflowTypes';
-import { commandNavigationItems } from '@/lib/navigation';
+import { commandNavigationItemsFor } from '@/lib/navigation';
 import { trackFeature } from '@/lib/analytics';
 
 interface Props {
@@ -244,12 +244,14 @@ export function CommandPalette({ open, onOpenChange, onShortcuts }: Props) {
 
             {/* Navigation */}
             <Command.Group heading="Navigation" className={GROUP_CLS}>
-              {commandNavigationItems.map(({ icon: Icon, label, to }) => (
-                <Command.Item key={to} onSelect={() => go(to)} className={ITEM_CLS}>
-                  <Icon className="size-4 text-muted-foreground" />
-                  <span className="text-sm">{label}</span>
-                </Command.Item>
-              ))}
+              {commandNavigationItemsFor(Boolean(user?.is_admin)).map(
+                ({ icon: Icon, label, to }) => (
+                  <Command.Item key={to} onSelect={() => go(to)} className={ITEM_CLS}>
+                    <Icon className="size-4 text-muted-foreground" />
+                    <span className="text-sm">{label}</span>
+                  </Command.Item>
+                )
+              )}
             </Command.Group>
 
             {/* App actions */}

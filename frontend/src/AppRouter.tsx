@@ -15,6 +15,8 @@ import { StarredPage } from './pages/StarredPage';
 import { FeedsPage } from './pages/FeedsPage';
 import { SourcesPage } from './pages/SourcesPage';
 import { ArchivePage } from './pages/ArchivePage';
+import { useAuth } from './contexts/auth';
+import { ShieldAlert } from 'lucide-react';
 
 const SearchPage = lazy(() =>
   import('./pages/SearchPage').then((m) => ({ default: m.SearchPage }))
@@ -67,6 +69,22 @@ function withSuspense(Component: React.ComponentType) {
       <Component />
     </Suspense>
   );
+}
+
+function AdminOnlyGuard({ children }: { children: React.ReactNode }) {
+  const { user } = useAuth();
+  if (!user?.is_admin) {
+    return (
+      <div className="mx-auto flex min-h-[50vh] max-w-md flex-col items-center justify-center gap-3 text-center">
+        <ShieldAlert className="size-8 text-muted-foreground" />
+        <h1 className="text-lg font-semibold text-foreground">Admins only</h1>
+        <p className="text-sm text-muted-foreground">
+          You need an administrator account to access this page.
+        </p>
+      </div>
+    );
+  }
+  return <>{children}</>;
 }
 
 export function NotFound() {
@@ -130,12 +148,30 @@ export const routes: RouteObject[] = [
       { path: 'briefs', element: withSuspense(BriefingsHistoryPage) },
       { path: 'briefs/:id', element: withSuspense(BriefingDetailPage) },
       { path: 'topic-map', element: withSuspense(TopicMapPage) },
-      { path: 'stats', element: withSuspense(StatsPage) },
+      {
+        path: 'stats',
+        element: (
+          <AdminOnlyGuard>
+            <Suspense fallback={<PageLoader />}>
+              <StatsPage />
+            </Suspense>
+          </AdminOnlyGuard>
+        ),
+      },
       { path: 'reading-dna', element: withSuspense(ReadingDnaPage) },
       { path: 'archive', element: <ArchivePage /> },
       { path: 'settings', element: withSuspense(SettingsPage) },
       { path: 'admin', element: withSuspense(AdminPage) },
-      { path: 'analytics', element: withSuspense(AnalyticsPage) },
+      {
+        path: 'analytics',
+        element: (
+          <AdminOnlyGuard>
+            <Suspense fallback={<PageLoader />}>
+              <AnalyticsPage />
+            </Suspense>
+          </AdminOnlyGuard>
+        ),
+      },
 
       /* Legacy route redirects — remove when each migration slice lands */
       { path: 'inbox', element: <Navigate to="/today" replace /> },
