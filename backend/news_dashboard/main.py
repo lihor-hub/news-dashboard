@@ -1243,7 +1243,8 @@ def sources(
                    ELSE (s.enabled IS TRUE) END AS user_enabled
             FROM sources s
             LEFT JOIN user_sources us ON us.source_slug = s.slug AND us.user_id = %s
-            WHERE s.owner_user_id IS NULL OR s.owner_user_id = %s
+            WHERE (s.owner_user_id IS NULL OR s.owner_user_id = %s)
+              AND s.deleted_at IS NULL
             ORDER BY s.category, s.priority DESC, s.name
             """,
             (uid, uid),
@@ -1305,7 +1306,13 @@ def delete_source(
         src = row_to_dict(row)
         if src.get("owner_user_id") != uid:
             raise HTTPException(status_code=403, detail="cannot delete a source you don't own")
-        conn.execute("DELETE FROM sources WHERE slug = %s", (slug,))
+        if src.get("deleted_at") is not None:
+            raise HTTPException(status_code=404, detail="source not found")
+        conn.execute(
+            "UPDATE sources SET deleted_at = NOW(), enabled = FALSE "
+            "WHERE slug = %s AND owner_user_id = %s",
+            (slug, uid),
+        )
     return {"status": "deleted"}
 
 
@@ -1341,6 +1348,7 @@ def source_cleanup(
             FROM sources
             WHERE slug = ANY(%s)
               AND (owner_user_id IS NULL OR owner_user_id = %s)
+              AND deleted_at IS NULL
             """,
             (requested_slugs, uid),
         ).fetchall()
@@ -1432,6 +1440,8 @@ def set_source_enabled(
         if not row:
             raise HTTPException(status_code=404, detail="source not found")
         src = row_to_dict(row)
+        if src.get("deleted_at") is not None:
+            raise HTTPException(status_code=404, detail="source not found")
         if src.get("owner_user_id") is None:
             # Global source — write to user_sources subscription table
             conn.execute(

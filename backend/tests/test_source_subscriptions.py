@@ -301,6 +301,77 @@ def test_api_delete_own_private_source(pg_clean: str, monkeypatch: pytest.Monkey
         assert resp.json()["status"] == "deleted"
 
 
+def test_api_delete_private_source_with_articles(
+    pg_clean: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Deleting a private source that already has articles must not FK-error."""
+    monkeypatch.setenv("DATABASE_URL", str(pg_clean))
+    sync_sources(pg_clean)
+    uid = _make_user(pg_clean)
+
+    _add_private_source(pg_clean, slug="my-blog", owner_user_id=uid)
+    aid = _insert_article(pg_clean, source_slug="my-blog", url_suffix="keep-this")
+
+    with _api_client(pg_clean, uid) as client:
+        # Delete the source
+        resp = client.delete("/api/sources/my-blog")
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "deleted"
+
+        # Source no longer in listing
+        resp2 = client.get("/api/sources")
+        slugs = [i["slug"] for i in resp2.json()["items"]]
+        assert "my-blog" not in slugs
+
+        # Article remains accessible to owner
+        articles = list_articles(state="today", db_path=pg_clean, user_id=uid)
+        assert any(a["id"] == aid for a in articles)
+
+        # Toggling the deleted source returns 404
+        resp3 = client.patch("/api/sources/my-blog/enabled", json={"enabled": True})
+        assert resp3.status_code == 404
+
+        # Deleting again returns 404
+        resp4 = client.delete("/api/sources/my-blog")
+        assert resp4.status_code == 404
+
+
+def test_api_delete_private_source_no_articles_still_soft_deletes(
+    pg_clean: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Even an empty private source is soft-deleted, not hard-deleted."""
+    monkeypatch.setenv("DATABASE_URL", str(pg_clean))
+    sync_sources(pg_clean)
+    uid = _make_user(pg_clean)
+
+    with _api_client(pg_clean, uid) as client:
+        client.post(
+            "/api/sources",
+            json={
+                "url": "https://example.com/empty-feed.xml",
+                "name": "Empty Source",
+                "slug": "empty-src",
+            },
+        )
+        resp = client.delete("/api/sources/empty-src")
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "deleted"
+
+        # Verify the row still exists with deleted_at set
+        with connect(pg_clean) as conn:
+            row = conn.execute(
+                "SELECT slug, deleted_at IS NOT NULL as is_deleted FROM sources WHERE slug = %s",
+                ("empty-src",),
+            ).fetchone()
+            assert row is not None
+            assert row["is_deleted"] is True
+
+        # Source not in listing
+        resp2 = client.get("/api/sources")
+        slugs = [i["slug"] for i in resp2.json()["items"]]
+        assert "empty-src" not in slugs
+
+
 def test_api_cannot_delete_others_source(pg_clean: str, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("DATABASE_URL", str(pg_clean))
     sync_sources(pg_clean)

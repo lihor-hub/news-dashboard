@@ -815,6 +815,7 @@ def ingest_all(db_path: Path | str | None = None) -> IngestResult:
             private_rows = conn.execute(
                 "SELECT slug, name, url, category, kind, priority, lang, owner_user_id"
                 " FROM sources WHERE owner_user_id IS NOT NULL AND enabled IS TRUE"
+                " AND deleted_at IS NULL"
             ).fetchall()
         for row in private_rows:
             r = row_to_dict(row)

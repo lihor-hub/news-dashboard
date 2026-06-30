@@ -1,0 +1,29 @@
+All 35 tests pass across the three affected test files.
+
+Here's a summary of what was changed:
+
+## Changes made
+
+### `backend/news_dashboard/db.py`
+- Added `ALTER TABLE sources ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ` to the schema migration list (idempotent, safe for existing deployments)
+
+### `backend/news_dashboard/main.py`
+- **`sources()`** — Added `AND s.deleted_at IS NULL` to the source listing query so retired sources don't appear in the UI
+- **`delete_source()`** — Changed from `DELETE FROM sources WHERE slug = %s` to `UPDATE sources SET deleted_at = NOW(), enabled = FALSE WHERE slug = %s AND owner_user_id = %s`. Added guard to return 404 if the source is already deleted
+- **`set_source_enabled()`** — Added check for `deleted_at`; returns 404 if the source is retired
+- **`source_cleanup()`** — Added `AND deleted_at IS NULL` to the source lookup query
+
+### `backend/news_dashboard/ingest.py`
+- Added `AND deleted_at IS NULL` to the private source selection query so retired sources are excluded from future ingest runs
+
+### `backend/news_dashboard/source_health.py`
+- Added `AND deleted_at IS NULL` to both `list_source_health()` and `generate_subscription_cleanup_suggestions()` queries
+
+### `backend/news_dashboard/personalization_nudges.py`
+- Added `AND s.deleted_at IS NULL` to the `generate_nudges()` source visibility CTE
+
+### `backend/tests/test_source_subscriptions.py`
+- **`test_api_delete_private_source_with_articles`** — Regression test: creates a private source, inserts an article, deletes source, verifies 200 response, source removed from listing, article still readable, toggle returns 404, re-delete returns 404
+- **`test_api_delete_private_source_no_articles_still_soft_deletes`** — Verifies even empty source deletion is a soft-delete (row still exists with `deleted_at` set) and excluded from listing
+
+DONE

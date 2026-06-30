@@ -56,6 +56,7 @@ def generate_nudges(
               LEFT JOIN user_sources us
                 ON us.source_slug = s.slug AND us.user_id = %(uid)s
               WHERE (s.owner_user_id IS NULL OR s.owner_user_id = %(uid)s)
+                AND s.deleted_at IS NULL
                 AND CASE WHEN s.owner_user_id IS NULL THEN COALESCE(us.enabled, TRUE)
                          ELSE s.enabled IS TRUE END
             ),

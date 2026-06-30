@@ -428,6 +428,7 @@ POSTGRES_MULTIUSER_SCHEMA = [
     """,
     "CREATE INDEX IF NOT EXISTS idx_user_quizzes_user ON user_quizzes(user_id, created_at DESC)",
     "ALTER TABLE article_shares ADD COLUMN IF NOT EXISTS context_summary TEXT",
+    "ALTER TABLE sources ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ",
     """
     CREATE TABLE IF NOT EXISTS share_annotations (
       id              BIGSERIAL PRIMARY KEY,

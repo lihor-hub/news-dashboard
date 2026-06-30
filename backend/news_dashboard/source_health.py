@@ -66,8 +66,9 @@ def list_source_health(
         source_rows = conn.execute(
             """
             SELECT * FROM sources
-            WHERE owner_user_id IS NULL
-               OR (%s::integer IS NULL OR owner_user_id = %s)
+            WHERE (owner_user_id IS NULL
+               OR (%s::integer IS NULL OR owner_user_id = %s))
+              AND deleted_at IS NULL
             ORDER BY category, priority DESC, name
             """,
             (user_id, user_id),
@@ -179,6 +180,7 @@ def generate_subscription_cleanup_suggestions(
               LEFT JOIN user_sources us
                 ON us.source_slug = s.slug AND us.user_id = %s
               WHERE (s.owner_user_id IS NULL OR s.owner_user_id = %s)
+                AND s.deleted_at IS NULL
                 AND CASE WHEN s.owner_user_id IS NULL THEN COALESCE(us.enabled, TRUE)
                          ELSE s.enabled IS TRUE END
             ),
