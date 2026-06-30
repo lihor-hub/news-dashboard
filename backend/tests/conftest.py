@@ -88,35 +88,79 @@ def pg_url() -> Generator[str]:
     avoiding Docker-in-pytest startup hangs. Locally, skip automatically if
     testcontainers is not installed or if the Docker daemon is unreachable.
     """
+    import psycopg
+
     service_url = os.environ.get("TEST_DATABASE_URL")
-    if service_url:
-        init_db(database_url=service_url)
-        yield service_url
-        return
+    container = None
 
-    try:
-        from testcontainers.postgres import PostgresContainer
-    except ImportError:
-        pytest.skip("testcontainers package not installed (pip install testcontainers[postgres])")
+    if not service_url:
+        try:
+            from testcontainers.postgres import PostgresContainer
+        except ImportError:
+            pytest.skip(
+                "testcontainers package not installed (pip install testcontainers[postgres])"
+            )
 
-    try:
-        container = PostgresContainer("postgres:16")
-        container.start()
-    except Exception as exc:
-        pytest.skip(f"PostgreSQL container could not start (Docker unavailable?): {exc}")
+        try:
+            container = PostgresContainer("postgres:16")
+            container.start()
+        except Exception as exc:
+            pytest.skip(f"PostgreSQL container could not start (Docker unavailable?): {exc}")
 
-    # Build a plain postgresql:// URL compatible with psycopg3.
-    # get_connection_url() returns a SQLAlchemy-style URL with driver prefix;
-    # strip the driver component so psycopg3 recognises the scheme.
-    raw = container.get_connection_url()
-    url = raw.replace("postgresql+psycopg2://", "postgresql://").replace(
-        "postgresql+psycopg://", "postgresql://"
-    )
-    init_db(database_url=url)
+        # Build a plain postgresql:// URL compatible with psycopg3.
+        raw = container.get_connection_url()
+        service_url = raw.replace("postgresql+psycopg2://", "postgresql://").replace(
+            "postgresql+psycopg://", "postgresql://"
+        )
 
-    yield url
+    # If running with pytest-xdist, isolate each worker with its own schema.
+    worker_id = os.environ.get("PYTEST_XDIST_WORKER")
+    worker_schema = None
+    original_url = service_url
 
-    container.stop()
+    if worker_id and worker_id != "master":
+        worker_schema = f"test_{worker_id}"
+
+        # Create/recreate the schema using the base DSN
+        from psycopg import sql
+
+        with psycopg.connect(original_url, autocommit=True) as conn:
+            conn.execute(
+                sql.SQL("DROP SCHEMA IF EXISTS {} CASCADE").format(sql.Identifier(worker_schema))
+            )
+            conn.execute(sql.SQL("CREATE SCHEMA {}").format(sql.Identifier(worker_schema)))
+
+        # Append connection options to set search_path
+        separator = "&" if "?" in original_url else "?"
+        service_url = f"{original_url}{separator}options=-csearch_path%3D{worker_schema}"
+
+    orig_db_url = os.environ.get("DATABASE_URL")
+    os.environ["DATABASE_URL"] = service_url
+
+    init_db(database_url=service_url)
+
+    yield service_url
+
+    if orig_db_url is None:
+        os.environ.pop("DATABASE_URL", None)
+    else:
+        os.environ["DATABASE_URL"] = orig_db_url
+
+    if worker_schema:
+        try:
+            from psycopg import sql
+
+            with psycopg.connect(original_url, autocommit=True) as conn:
+                conn.execute(
+                    sql.SQL("DROP SCHEMA IF EXISTS {} CASCADE").format(
+                        sql.Identifier(worker_schema)
+                    )
+                )
+        except Exception:  # noqa: S110
+            pass
+
+    if container:
+        container.stop()
 
 
 @pytest.fixture
@@ -129,10 +173,6 @@ def pg_clean(pg_url: str) -> str:
     """
     import psycopg
 
-    from news_dashboard import db as db_mod
-
-    db_mod._INITIALIZED_DATABASES.clear()
-    init_db(database_url=pg_url)
     with psycopg.connect(pg_url, autocommit=True) as conn:
         conn.execute(
             "TRUNCATE user_article_recommendations, user_article_state, user_sources,"

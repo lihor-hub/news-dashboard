@@ -53,7 +53,7 @@ packages = ["backend/news_dashboard"]
 [tool.pytest.ini_options]
 pythonpath = ["backend"]
 testpaths = ["backend/tests", "scripts"]
-addopts = "-ra --strict-markers --strict-config"
+addopts = "-ra --strict-markers --strict-config -n auto"
 filterwarnings = ["error::DeprecationWarning:news_dashboard.*"]
 markers = [
   "smoke: fast, high-signal tests covering app boot, health, and core API paths (no external services required)",

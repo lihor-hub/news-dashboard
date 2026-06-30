@@ -249,15 +249,21 @@ def test_migration_dry_run_does_not_write(pg_clean: str, monkeypatch: pytest.Mon
 def test_migration_aborts_on_missing_schema(pg_clean: str, monkeypatch: pytest.MonkeyPatch) -> None:
     db = pg_clean
     init_db(db)
-    with connect(db) as conn:
-        conn.execute("DROP TABLE IF EXISTS user_article_state")
-    monkeypatch.setenv("DATABASE_URL", db)
-    monkeypatch.setenv("SEED_USER", "alice")
-    monkeypatch.setenv("SEED_PASSWORD", "password123")
+    try:
+        with connect(db) as conn:
+            conn.execute("DROP TABLE IF EXISTS user_article_state")
+        monkeypatch.setenv("DATABASE_URL", db)
+        monkeypatch.setenv("SEED_USER", "alice")
+        monkeypatch.setenv("SEED_PASSWORD", "password123")
 
-    result = runner.invoke(app, ["migrate-multi-user"])
-    assert result.exit_code != 0
-    assert "prerequisite schema missing" in result.output.lower() or "ERROR" in result.output
+        result = runner.invoke(app, ["migrate-multi-user"])
+        assert result.exit_code != 0
+        assert "prerequisite schema missing" in result.output.lower() or "ERROR" in result.output
+    finally:
+        from news_dashboard import db as db_mod
+
+        db_mod._INITIALIZED_DATABASES.clear()
+        init_db(db)
 
 
 def test_migration_skips_user_creation_if_exists(
