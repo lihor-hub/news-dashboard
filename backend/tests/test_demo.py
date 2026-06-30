@@ -10,8 +10,6 @@ These tests verify:
 
 from __future__ import annotations
 
-from typing import Any
-
 import pytest
 from fastapi.testclient import TestClient
 from psycopg import connect as psycopg_connect
@@ -66,47 +64,51 @@ def admin_client() -> TestClient:
 
 def test_seed_creates_guest_user(demo_db: str) -> None:
     """seed_demo() creates a guest user with is_guest=True and is_admin=False."""
-    with psycopg_connect(demo_db) as conn:
+    with psycopg_connect(demo_db, row_factory=None) as conn:
         row = conn.execute(
             "SELECT id, username, is_admin, is_guest FROM users WHERE username='guest'",
         ).fetchone()
     assert row is not None, "guest user not found"
-    assert row["is_guest"] is True, "guest user should have is_guest=True"
-    assert row["is_admin"] is False, "guest user should not be admin"
+    assert row[3] is True, "guest user should have is_guest=True"
+    assert row[2] is False, "guest user should not be admin"
 
 
 def test_seed_creates_articles(demo_db: str) -> None:
     """seed_demo() creates sample articles."""
-    with psycopg_connect(demo_db) as conn:
-        count = conn.execute("SELECT COUNT(*) AS n FROM articles").fetchone()
-    assert count["n"] > 0, "no articles were seeded"
+    with psycopg_connect(demo_db, row_factory=None) as conn:
+        row = conn.execute("SELECT COUNT(*) AS n FROM articles").fetchone()
+    assert row is not None, "no articles were seeded"
+    assert row[0] > 0, "no articles were seeded"
 
 
 def test_seed_creates_article_states(demo_db: str) -> None:
     """seed_demo() creates user_article_state entries for the guest user."""
-    with psycopg_connect(demo_db) as conn:
+    with psycopg_connect(demo_db, row_factory=None) as conn:
         guest = conn.execute(
             "SELECT id FROM users WHERE username='guest'",
         ).fetchone()
-        assert guest is not None
+        assert guest is not None, "guest user not found"
         state_count = conn.execute(
             "SELECT COUNT(*) AS n FROM user_article_state WHERE user_id=%s",
-            (guest["id"],),
+            (guest[0],),
         ).fetchone()
-    assert state_count["n"] > 0, "no article state entries for guest"
+    assert state_count is not None, "no state_count returned"
+    assert state_count[0] > 0, "no article state entries for guest"
 
 
 def test_seed_spans_multiple_workflow_states(demo_db: str) -> None:
     """Seeded articles span multiple workflow states (today, done, saved)."""
-    with psycopg_connect(demo_db) as conn:
+    with psycopg_connect(demo_db, row_factory=None) as conn:
         guest = conn.execute(
             "SELECT id FROM users WHERE username='guest'",
         ).fetchone()
+        assert guest is not None, "guest user not found"
         rows = conn.execute(
             "SELECT DISTINCT state FROM user_article_state WHERE user_id=%s",
-            (guest["id"],),
+            (guest[0],),
         ).fetchall()
-    states = {r["state"] for r in rows}
+    assert rows, "no article states found for guest"
+    states = {r[0] for r in rows}
     assert "today" in states, "should have 'today' articles"
     assert "done" in states, "should have 'done' articles"
 
@@ -115,20 +117,21 @@ def test_seed_is_offline(demo_db: str) -> None:
     """seed_demo() does not perform network/LLM calls (offline deterministic)."""
     # If it completes without network access, this passes.
     # The test already ran seed_demo in the fixture without mocking network.
-    pass
 
 
 def test_seed_is_idempotent(demo_db: str) -> None:
     """Calling seed_demo() twice does not duplicate data."""
     result2 = seed_demo()
     assert result2.get("skipped") is True
-    with psycopg_connect(demo_db) as conn:
-        guest_count = conn.execute(
+    with psycopg_connect(demo_db, row_factory=None) as conn:
+        guest_row = conn.execute(
             "SELECT COUNT(*) AS n FROM users WHERE username='guest'",
         ).fetchone()
-        assert guest_count["n"] == 1, "guest user should exist only once"
-        art_count = conn.execute("SELECT COUNT(*) AS n FROM articles").fetchone()
-    assert art_count["n"] > 0
+        assert guest_row is not None
+        assert guest_row[0] == 1, "guest user should exist only once"
+        art_row = conn.execute("SELECT COUNT(*) AS n FROM articles").fetchone()
+        assert art_row is not None
+    assert art_row[0] > 0
 
 
 def test_seed_requires_env_var(pg_clean: str, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -137,22 +140,24 @@ def test_seed_requires_env_var(pg_clean: str, monkeypatch: pytest.MonkeyPatch) -
     monkeypatch.delenv("DEMO_MODE", raising=False)
     result = seed_demo()
     assert result.get("skipped") is True
-    with psycopg_connect(pg_clean) as conn:
-        count = conn.execute(
+    with psycopg_connect(pg_clean, row_factory=None) as conn:
+        row = conn.execute(
             "SELECT COUNT(*) AS n FROM users WHERE username='guest'",
         ).fetchone()
-        assert count["n"] == 0, "guest should not exist"
+        assert row is not None
+        assert row[0] == 0, "guest should not exist"
 
 
-# ── guest access control ────────────────────────────────────────────────────
+# ── guest access control ───────────────────────────────────────────────────
 
 
 def _article_id(demo_db: str) -> int:
-    with psycopg_connect(demo_db) as conn:
+    with psycopg_connect(demo_db, row_factory=None) as conn:
         row = conn.execute(
             "SELECT id FROM articles ORDER BY id LIMIT 1",
         ).fetchone()
-    return row["id"]
+    assert row is not None
+    return row[0]
 
 
 def test_guest_can_read_articles(guest_client: TestClient, demo_db: str) -> None:

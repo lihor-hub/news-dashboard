@@ -22,8 +22,7 @@ from news_dashboard.db import connect
 logger = logging.getLogger(__name__)
 
 _DEMO_GUEST_USERNAME = "guest"
-# S105: Intentional hardcoded password for demo account
-_DEMO_GUEST_PASSWORD = "demo"
+_DEMO_GUEST_PASSWORD = "demo"  # noqa: S105 — intentional hardcoded password for demo
 
 # ---------------------------------------------------------------------------
 # Sample article data — fully offline, no external fetches needed.
@@ -69,22 +68,154 @@ _DEMO_SOURCES: list[dict[str, Any]] = [
 
 _DEMO_ARTICLES: list[dict[str, Any]] = [
     # -- python --
-    {"url": "https://example.com/demo/python-313", "title": "Python 3.13 Released: Free-Threaded CPython and Improved Error Messages", "summary": "Python 3.13 introduces experimental free-threaded CPython, removing the GIL for true parallelism, plus much-improved error messages and interactive debugger.", "source_slug": "demo-python", "category": "python", "importance_score": 90, "tags": "python,release,performance"},
-    {"url": "https://example.com/demo/uv-0.5", "title": "uv 0.5: 10x Faster pip install", "summary": "Astral's uv package manager reaches 0.5 with 10x faster installs, workspace support, and improved lockfile compatibility.", "source_slug": "demo-python", "category": "python", "importance_score": 85, "tags": "python,uv,tools"},
-    {"url": "https://example.com/demo/ruff-0.8", "title": "Ruff 0.8: New Formatter and 30% Faster Linting", "summary": "The Ruff Python linter/formatter gains a new Markdown formatter, 30% faster linting, and dozens of new rules from popular plugins.", "source_slug": "demo-python", "category": "python", "importance_score": 80, "tags": "python,ruff,linter"},
+    {
+        "url": "https://example.com/demo/python-313",
+        "title": "Python 3.13 Released: Free-Threaded CPython and Improved Error Messages",
+        "summary": (
+            "Python 3.13 introduces experimental free-threaded CPython, removing the GIL "
+            "for true parallelism, plus much-improved error messages and interactive debugger."
+        ),
+        "source_slug": "demo-python",
+        "category": "python",
+        "importance_score": 90,
+        "tags": "python,release,performance",
+    },
+    {
+        "url": "https://example.com/demo/uv-0.5",
+        "title": "uv 0.5: 10x Faster pip install",
+        "summary": (
+            "Astral's uv package manager reaches 0.5 with 10x faster installs, "
+            "workspace support, and improved lockfile compatibility."
+        ),
+        "source_slug": "demo-python",
+        "category": "python",
+        "importance_score": 85,
+        "tags": "python,uv,tools",
+    },
+    {
+        "url": "https://example.com/demo/ruff-0.8",
+        "title": "Ruff 0.8: New Formatter and 30% Faster Linting",
+        "summary": (
+            "The Ruff Python linter/formatter gains a new Markdown formatter, 30% faster "
+            "linting, and dozens of new rules from popular plugins."
+        ),
+        "source_slug": "demo-python",
+        "category": "python",
+        "importance_score": 80,
+        "tags": "python,ruff,linter",
+    },
     # -- ai-llm --
-    {"url": "https://example.com/demo/claude-4", "title": "Claude 4: Agentic Coding and Multi-Step Reasoning", "summary": "Anthropic announces Claude 4 with state-of-the-art coding benchmarks, native tool use, and a new extended-thinking mode for complex multi-step reasoning tasks.", "source_slug": "demo-ai", "category": "ai-llm", "importance_score": 95, "tags": "ai,agents,llm"},
-    {"url": "https://example.com/demo/gpt-5", "title": "GPT-5: OpenAI's Next Frontier Model", "summary": "OpenAI unveils GPT-5 with dramatic reasoning improvements, native multimodal capabilities, and a new API for structured outputs.", "source_slug": "demo-ai", "category": "ai-llm", "importance_score": 90, "tags": "ai,llm,openai"},
-    {"url": "https://example.com/demo/llama-4", "title": "Llama 4: Meta's Open-Source Multi-Modal Model", "summary": "Meta releases Llama 4, an open-weight multi-modal model that matches proprietary alternatives on vision and language benchmarks.", "source_slug": "demo-ai", "category": "ai-llm", "importance_score": 85, "tags": "ai,open-source,llama"},
-    {"url": "https://example.com/demo/mcp-explained", "title": "Model Context Protocol: A Deep Dive", "summary": "A comprehensive guide to MCP, the new standard for connecting AI assistants to external data sources and tools.", "source_slug": "demo-ai", "category": "ai-llm", "importance_score": 75, "tags": "ai,mcp,agents"},
+    {
+        "url": "https://example.com/demo/claude-4",
+        "title": "Claude 4: Agentic Coding and Multi-Step Reasoning",
+        "summary": (
+            "Anthropic announces Claude 4 with state-of-the-art coding benchmarks, native "
+            "tool use, and a new extended-thinking mode for complex multi-step reasoning tasks."
+        ),
+        "source_slug": "demo-ai",
+        "category": "ai-llm",
+        "importance_score": 95,
+        "tags": "ai,agents,llm",
+    },
+    {
+        "url": "https://example.com/demo/gpt-5",
+        "title": "GPT-5: OpenAI's Next Frontier Model",
+        "summary": (
+            "OpenAI unveils GPT-5 with dramatic reasoning improvements, native multimodal "
+            "capabilities, and a new API for structured outputs."
+        ),
+        "source_slug": "demo-ai",
+        "category": "ai-llm",
+        "importance_score": 90,
+        "tags": "ai,llm,openai",
+    },
+    {
+        "url": "https://example.com/demo/llama-4",
+        "title": "Llama 4: Meta's Open-Source Multi-Modal Model",
+        "summary": (
+            "Meta releases Llama 4, an open-weight multi-modal model that matches "
+            "proprietary alternatives on vision and language benchmarks."
+        ),
+        "source_slug": "demo-ai",
+        "category": "ai-llm",
+        "importance_score": 85,
+        "tags": "ai,open-source,llama",
+    },
+    {
+        "url": "https://example.com/demo/mcp-explained",
+        "title": "Model Context Protocol: A Deep Dive",
+        "summary": (
+            "A comprehensive guide to MCP, the new standard for connecting AI assistants "
+            "to external data sources and tools."
+        ),
+        "source_slug": "demo-ai",
+        "category": "ai-llm",
+        "importance_score": 75,
+        "tags": "ai,mcp,agents",
+    },
     # -- rust --
-    {"url": "https://example.com/demo/rust-2025", "title": "Rust 2025 Edition: Async Closures and Stabilized Features", "summary": "The Rust 2025 edition brings async closures, stabilized async traits, and improved error handling patterns.", "source_slug": "demo-rust", "category": "rust", "importance_score": 85, "tags": "rust,release,systems"},
+    {
+        "url": "https://example.com/demo/rust-2025",
+        "title": "Rust 2025 Edition: Async Closures and Stabilized Features",
+        "summary": (
+            "The Rust 2025 edition brings async closures, stabilized async traits, "
+            "and improved error handling patterns."
+        ),
+        "source_slug": "demo-rust",
+        "category": "rust",
+        "importance_score": 85,
+        "tags": "rust,release,systems",
+    },
     # -- cloud-infra --
-    {"url": "https://example.com/demo/k8s-1.32", "title": "Kubernetes 1.32: Structured Logging and New Auth APIs", "summary": "Kubernetes 1.32 introduces structured logging, a new authentication API, and improved multi-cluster management.", "source_slug": "demo-k8s", "category": "cloud-infra", "importance_score": 70, "tags": "kubernetes,cloud,infra"},
-    {"url": "https://example.com/demo/docker-buildkit", "title": "BuildKit 0.15: Up to 50% Faster Builds", "summary": "Docker's BuildKit 0.15 brings up to 50% faster cold builds through parallel stage execution and enhanced caching.", "source_slug": "demo-k8s", "category": "cloud-infra", "importance_score": 70, "tags": "docker,containers,infra"},
+    {
+        "url": "https://example.com/demo/k8s-1.32",
+        "title": "Kubernetes 1.32: Structured Logging and New Auth APIs",
+        "summary": (
+            "Kubernetes 1.32 introduces structured logging, a new authentication API, "
+            "and improved multi-cluster management."
+        ),
+        "source_slug": "demo-k8s",
+        "category": "cloud-infra",
+        "importance_score": 70,
+        "tags": "kubernetes,cloud,infra",
+    },
+    {
+        "url": "https://example.com/demo/docker-buildkit",
+        "title": "BuildKit 0.15: Up to 50% Faster Builds",
+        "summary": (
+            "Docker's BuildKit 0.15 brings up to 50% faster cold builds through "
+            "parallel stage execution and enhanced caching."
+        ),
+        "source_slug": "demo-k8s",
+        "category": "cloud-infra",
+        "importance_score": 70,
+        "tags": "docker,containers,infra",
+    },
     # -- engineering --
-    {"url": "https://example.com/demo/staff-engineer", "title": "The Staff Engineer's Playbook", "summary": "Practical advice for senior engineers navigating tech lead, architect, and manager-without-authority roles.", "source_slug": "demo-eng", "category": "engineering", "importance_score": 65, "tags": "engineering,career,leadership"},
-    {"url": "https://example.com/demo/postmortem", "title": "How We Reduced P99 Latency by 80%", "summary": "A detailed postmortem on diagnosing and fixing a latency bottleneck caused by database connection pool exhaustion.", "source_slug": "demo-eng", "category": "engineering", "importance_score": 75, "tags": "engineering,performance,database"},
+    {
+        "url": "https://example.com/demo/staff-engineer",
+        "title": "The Staff Engineer's Playbook",
+        "summary": (
+            "Practical advice for senior engineers navigating tech lead, architect, "
+            "and manager-without-authority roles."
+        ),
+        "source_slug": "demo-eng",
+        "category": "engineering",
+        "importance_score": 65,
+        "tags": "engineering,career,leadership",
+    },
+    {
+        "url": "https://example.com/demo/postmortem",
+        "title": "How We Reduced P99 Latency by 80%",
+        "summary": (
+            "A detailed postmortem on diagnosing and fixing a latency bottleneck "
+            "caused by database connection pool exhaustion."
+        ),
+        "source_slug": "demo-eng",
+        "category": "engineering",
+        "importance_score": 75,
+        "tags": "engineering,performance,database",
+    },
 ]
 
 # Assign workflow states to articles for the demo user.
@@ -176,10 +307,13 @@ def _seed_demo_sources() -> None:
 
 
 def _get_demo_source_slugs() -> list[str]:
+    from news_dashboard.db import placeholders
+
+    slugs = [s["slug"] for s in _DEMO_SOURCES]
     with connect() as conn:
         rows = conn.execute(
-            "SELECT slug FROM sources WHERE slug IN %s ORDER BY slug",
-            (tuple(s["slug"] for s in _DEMO_SOURCES),),
+            f"SELECT slug FROM sources WHERE slug IN ({placeholders(slugs)}) ORDER BY slug",
+            slugs,
         ).fetchall()
     return [r["slug"] for r in rows]
 
