@@ -30,7 +30,7 @@ def _env_flag_enabled(name: str, *, default: bool) -> bool:
     return value.strip().lower() not in {"0", "false", "no", "off"}
 
 
-def run_scheduled_ingest() -> dict[str, int]:
+def run_scheduled_ingest(raise_on_failure: bool = False) -> dict[str, int]:
     from news_dashboard.body_fetch import prefetch_article_bodies
     from news_dashboard.ingest import ingest_all
 
@@ -45,6 +45,8 @@ def run_scheduled_ingest() -> dict[str, int]:
             prefetch_article_bodies()
     except Exception:
         logger.exception("Scheduled ingest failed")
+        if raise_on_failure:
+            raise
     # Repair stale/missing scores out-of-band.  Guarded separately so a
     # recalculation or scoring failure never fails the ingest run itself.
     _run_recommendation_recalc()
@@ -52,7 +54,7 @@ def run_scheduled_ingest() -> dict[str, int]:
 
 
 def _run_ingest() -> None:
-    run_scheduled_ingest()
+    run_scheduled_ingest(raise_on_failure=False)
 
 
 def _run_recommendation_recalc() -> None:

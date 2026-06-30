@@ -43,9 +43,19 @@ def test_scheduled_ingest_uses_scheduler_runner() -> None:
     ) as run:
         result = runner.invoke(app, ["scheduled-ingest"])
     assert result.exit_code == 0
-    run.assert_called_once_with()
+    run.assert_called_once_with(raise_on_failure=True)
     assert "a: 2" in result.stdout
     assert "inserted: 2" in result.stdout
+
+
+def test_scheduled_ingest_exits_nonzero_when_scheduler_runner_fails() -> None:
+    with patch(
+        "news_dashboard.scheduler.run_scheduled_ingest",
+        side_effect=RuntimeError("boom"),
+    ) as run:
+        result = runner.invoke(app, ["scheduled-ingest"])
+    assert result.exit_code == 1
+    run.assert_called_once_with(raise_on_failure=True)
 
 
 def test_articles_lists_rows() -> None:

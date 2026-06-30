@@ -1,8 +1,12 @@
 from __future__ import annotations
 
+import logging
+
 import typer
 
 from news_dashboard.ingest import ingest_all, list_articles, sync_sources
+
+logger = logging.getLogger(__name__)
 
 app = typer.Typer(help="News dashboard maintenance CLI")
 
@@ -29,7 +33,11 @@ def ingest() -> None:
 def scheduled_ingest() -> None:
     from news_dashboard.scheduler import run_scheduled_ingest
 
-    results = run_scheduled_ingest()
+    try:
+        results = run_scheduled_ingest(raise_on_failure=True)
+    except Exception as e:
+        logger.exception("Scheduled ingest failed")
+        raise typer.Exit(code=1) from e
     for source, count in results.items():
         typer.echo(f"{source}: {count}")
     typer.echo(f"inserted: {sum(value for value in results.values() if value > 0)}")
