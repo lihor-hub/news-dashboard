@@ -14,20 +14,23 @@ fully under your control.
 
 ## How to build
 
-The GitHub Actions workflow `.github/workflows/android.yml` builds and signs the
-APK on every push to `android/` or on a manual `workflow_dispatch` trigger.
+The GitHub Actions workflow `.github/workflows/android.yml` is for manual test builds only (triggered via `workflow_dispatch`). It builds and signs the APK but does **not** bump the version or publish a release.
 
-To trigger manually:
+To trigger a manual test build:
 
 ```
 gh workflow run android.yml
 ```
 
-The signed APK is uploaded as a workflow artifact. Download it with:
+The signed APK is uploaded as a workflow artifact named `news-dashboard-apk-manual`. Download it with:
 
 ```
-gh run download <run-id> --name news-dashboard-apk
+gh run download <run-id> --name news-dashboard-apk-manual
 ```
+
+For automatic releases, the workflow `.github/workflows/release.yml` builds and signs the APK when a release tag is created on `main` (via a git tag push or manual workflow dispatch). It injects the version from `scripts/next_version.sh` and publishes the APK as part of a GitHub Release.
+
+To avoid duplication, the manual workflow does not modify the version in the repository.
 
 ## Project structure
 
