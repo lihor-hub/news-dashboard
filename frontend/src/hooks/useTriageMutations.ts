@@ -1,4 +1,9 @@
-import { useQueryClient, useMutation, type QueryKey } from '@tanstack/react-query';
+import {
+  useQueryClient,
+  useMutation,
+  type QueryKey,
+  type InfiniteData,
+} from '@tanstack/react-query';
 import { toast } from 'sonner';
 
 // Single shared ID so every triage toast replaces the previous one rather than
@@ -11,15 +16,21 @@ import {
   patchArticleStar,
   patchArticleLater,
   snapshot,
+  type TriageArticlePage,
 } from '../api/workflowApi';
 
 // ─── Query key helpers ───────────────────────────────────────────────────────
 
 export const ARTICLES_KEY = 'articles';
 
+// Article lists are loaded with `useInfiniteQuery`, so the cached value is an
+// `InfiniteData` page envelope — not a flat `WorkflowArticle[]`. All cache reads
+// and optimistic writes below operate through the `pages` structure.
+type ArticleListCache = InfiniteData<TriageArticlePage>;
+
 interface ArticleQuerySnapshot {
   queryKey: QueryKey;
-  articles: WorkflowArticle[];
+  data: ArticleListCache;
 }
 
 function articleMatchesQuery(queryKey: QueryKey, article: WorkflowArticle) {
@@ -38,15 +49,19 @@ function articleMatchesQuery(queryKey: QueryKey, article: WorkflowArticle) {
   return true;
 }
 
+function cacheContainsArticle(data: ArticleListCache | undefined, id: string): boolean {
+  return Boolean(data?.pages.some((page) => page.items.some((article) => article.id === id)));
+}
+
 function snapshotArticleQueries(
   queryClient: ReturnType<typeof useQueryClient>,
   id: string
 ): ArticleQuerySnapshot[] {
   return queryClient
-    .getQueriesData<WorkflowArticle[]>({ queryKey: [ARTICLES_KEY] })
-    .flatMap(([queryKey, articles]) => {
-      if (!articles?.some((article) => article.id === id)) return [];
-      return [{ queryKey, articles: [...articles] }];
+    .getQueriesData<ArticleListCache>({ queryKey: [ARTICLES_KEY] })
+    .flatMap(([queryKey, data]) => {
+      if (!data || !cacheContainsArticle(data, id)) return [];
+      return [{ queryKey, data }];
     });
 }
 
@@ -54,8 +69,8 @@ function restoreQuerySnapshots(
   queryClient: ReturnType<typeof useQueryClient>,
   snapshots: ArticleQuerySnapshot[]
 ) {
-  snapshots.forEach(({ queryKey, articles }) => {
-    queryClient.setQueryData(queryKey, articles);
+  snapshots.forEach(({ queryKey, data }) => {
+    queryClient.setQueryData(queryKey, data);
   });
 }
 
@@ -65,25 +80,37 @@ function applyPatchToCache(
   patch: Partial<WorkflowArticle>
 ) {
   queryClient
-    .getQueriesData<WorkflowArticle[]>({ queryKey: [ARTICLES_KEY] })
+    .getQueriesData<ArticleListCache>({ queryKey: [ARTICLES_KEY] })
     .forEach(([queryKey, old]) => {
       if (!old) return;
       let changed = false;
-      const next = old.flatMap((article) => {
-        if (article.id !== id) return [article];
-        changed = true;
-        const patched = { ...article, ...patch };
-        return articleMatchesQuery(queryKey, patched) ? [patched] : [];
+      const pages = old.pages.map((page) => {
+        const items = page.items.flatMap((article) => {
+          if (article.id !== id) return [article];
+          changed = true;
+          const patched = { ...article, ...patch };
+          return articleMatchesQuery(queryKey, patched) ? [patched] : [];
+        });
+        return { ...page, items };
       });
-      if (changed) queryClient.setQueryData(queryKey, next);
+      if (changed) queryClient.setQueryData<ArticleListCache>(queryKey, { ...old, pages });
     });
 }
 
 function restoreToCache(queryClient: ReturnType<typeof useQueryClient>, article: WorkflowArticle) {
-  queryClient.setQueriesData({ queryKey: [ARTICLES_KEY] }, (old: WorkflowArticle[] | undefined) => {
-    if (!old) return old;
-    return old.map((a) => (a.id === article.id ? article : a));
-  });
+  queryClient.setQueriesData<ArticleListCache>(
+    { queryKey: [ARTICLES_KEY] },
+    (old: ArticleListCache | undefined) => {
+      if (!old) return old;
+      return {
+        ...old,
+        pages: old.pages.map((page) => ({
+          ...page,
+          items: page.items.map((a) => (a.id === article.id ? article : a)),
+        })),
+      };
+    }
+  );
 }
 
 /**
