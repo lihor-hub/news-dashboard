@@ -27,6 +27,7 @@ vi.mock('@/api', () => ({
 }));
 
 import { SettingsPage } from '../pages/SettingsPage';
+import type { PushSubscribeRequest } from '../types';
 
 function renderSettings() {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -216,6 +217,41 @@ describe('DailyBriefSection', () => {
     await user.click(enableBtn);
     await waitFor(() => expect(mockUpdateSettings).toHaveBeenCalledWith({ push_enabled: true }));
     await waitFor(() => expect(screen.getByText('Enabled')).toBeInTheDocument());
+  });
+
+  it('serializes browser push subscription keys as URL-safe base64', async () => {
+    const user = userEvent.setup();
+    const keyBytes = new Uint8Array([251, 255, 190, 239]);
+    const authBytes = new Uint8Array([255, 239, 190, 251]);
+    const getKey = vi.fn((name: string) =>
+      name === 'p256dh' ? keyBytes.buffer : authBytes.buffer
+    );
+    const subscribe = vi.fn().mockResolvedValue({
+      endpoint: 'https://push.example.com/new',
+      getKey,
+    });
+    vi.stubGlobal('navigator', {
+      serviceWorker: {
+        ready: Promise.resolve({ pushManager: { subscribe } }),
+      },
+    });
+    vi.stubGlobal('PushManager', {});
+    vi.stubGlobal('Notification', { requestPermission: vi.fn().mockResolvedValue('granted') });
+    mockFetchSettings.mockResolvedValue({
+      ...defaultSettings,
+      vapid_public_key: 'BFakeKey',
+    });
+    renderSettings();
+    const enableBtn = await screen.findByRole('button', { name: /enable push notifications/i });
+    await user.click(enableBtn);
+
+    await waitFor(() => expect(mockSubscribePush).toHaveBeenCalled());
+    const payload = mockSubscribePush.mock.calls[0][0] as PushSubscribeRequest;
+    expect(payload.endpoint).toBe('https://push.example.com/new');
+    expect(payload.p256dh).not.toMatch(/[+/]/);
+    expect(payload.auth).not.toMatch(/[+/]/);
+    expect(payload.p256dh).toBe('-_--7w');
+    expect(payload.auth).toBe('_----w');
   });
 
   it('hides Enable button and shows server-configuration warning when PushManager is present but VAPID key is missing', async () => {

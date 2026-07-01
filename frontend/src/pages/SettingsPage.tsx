@@ -354,6 +354,12 @@ function urlBase64ToUint8Array(base64String: string): Uint8Array<ArrayBuffer> {
   return new Uint8Array([...raw].map((c) => c.charCodeAt(0)));
 }
 
+function arrayBufferToBase64Url(buffer: ArrayBuffer): string {
+  const bytes = new Uint8Array(buffer);
+  const standard = btoa(String.fromCharCode(...bytes));
+  return standard.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
 type PushState = 'idle' | 'requesting' | 'subscribed' | 'denied' | 'unavailable' | 'error';
 type TimezoneSaveState = 'idle' | 'saving' | 'saved' | 'error';
 
@@ -489,8 +495,8 @@ function DailyBriefSection() {
 
       await subscribePush({
         endpoint: sub.endpoint,
-        p256dh: btoa(String.fromCharCode(...new Uint8Array(rawKey))),
-        auth: btoa(String.fromCharCode(...new Uint8Array(rawAuth))),
+        p256dh: arrayBufferToBase64Url(rawKey),
+        auth: arrayBufferToBase64Url(rawAuth),
       });
       await updateNotificationSettings({ push_enabled: true });
       setPushEnabled(true);
