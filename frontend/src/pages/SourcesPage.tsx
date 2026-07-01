@@ -8,6 +8,8 @@ import {
   Trash2,
   Wand2,
   Plus,
+  Download,
+  Upload,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
@@ -18,12 +20,14 @@ import {
   applySourceCleanup,
   createSource,
   deleteSource,
+  exportOpml,
   fetchSourceCleanupSuggestions,
   fetchSources,
+  importOpml,
   updateSourceEnabled,
 } from '@/api';
 import { relativeTime } from '@/lib/format';
-import type { Source, SourceCleanupSuggestion } from '@/types';
+import type { Source, SourceCleanupSuggestion, OpmlImportResult } from '@/types';
 import { OnboardingWizard } from '@/components/OnboardingWizard';
 import { useAuth } from '@/contexts/auth';
 
@@ -235,6 +239,9 @@ function AddSourceDialog({
 export function SourcesPage() {
   const [wizardOpen, setWizardOpen] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
+  const [importResult, setImportResult] = useState<OpmlImportResult | null>(null);
+  const [importError, setImportError] = useState<string | null>(null);
+  const [isImporting, setIsImporting] = useState(false);
   const qc = useQueryClient();
   const { user } = useAuth();
   const { data: sources = [], isLoading } = useQuery({
@@ -328,6 +335,46 @@ export function SourcesPage() {
       <section className="border-b border-border px-4 py-3 md:px-5 flex items-center justify-between gap-2">
         <span className="text-sm text-muted-foreground">Manage your feed subscriptions</span>
         <div className="flex items-center gap-2">
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => {
+              setImportResult(null);
+              setImportError(null);
+              document.getElementById('opml-file-input')?.click();
+            }}
+            disabled={isImporting}
+          >
+            <Upload className="size-4" />
+            {isImporting ? 'Importing…' : 'Import OPML'}
+          </Button>
+          <input
+            id="opml-file-input"
+            type="file"
+            accept=".opml,.xml"
+            className="hidden"
+            onChange={async (e) => {
+              const file = e.target.files?.[0];
+              if (!file) return;
+              setIsImporting(true);
+              setImportResult(null);
+              setImportError(null);
+              try {
+                const result = await importOpml(file);
+                setImportResult(result);
+                void qc.invalidateQueries({ queryKey: [SOURCES_KEY] });
+              } catch (err) {
+                setImportError(err instanceof Error ? err.message : 'Import failed');
+              } finally {
+                setIsImporting(false);
+                e.target.value = '';
+              }
+            }}
+          />
+          <Button size="sm" variant="outline" onClick={() => void exportOpml()}>
+            <Download className="size-4" />
+            Export OPML
+          </Button>
           <Button size="sm" variant="outline" onClick={() => setAddOpen(true)}>
             <Plus className="size-4" />
             Add source
@@ -350,6 +397,64 @@ export function SourcesPage() {
           void qc.invalidateQueries({ queryKey: [SOURCES_KEY] });
         }}
       />
+      {(importResult || importError) && (
+        <section className="border-b border-border bg-muted/25 px-4 py-4 md:px-5">
+          <div className="flex flex-col gap-2">
+            <div className="flex items-center gap-2 text-sm font-semibold">
+              <Upload className="size-4 text-primary" />
+              <span>OPML Import Result</span>
+            </div>
+            {importError && (
+              <p className="text-xs text-[color:var(--err)]">{importError}</p>
+            )}
+            {importResult && (
+              <div className="text-xs text-muted-foreground space-y-1">
+                <p>
+                  <span className="text-[color:var(--ok)] font-medium">{importResult.added.length}</span> added
+                  {' · '}
+                  <span className="font-medium">{importResult.skipped.length}</span> skipped
+                  {' · '}
+                  <span className={importResult.failed.length ? 'text-[color:var(--err)] font-medium' : 'font-medium'}>
+                    {importResult.failed.length}
+                  </span> failed
+                </p>
+                {importResult.failed.length > 0 && (
+                  <ul className="list-disc pl-4 space-y-0.5">
+                    {importResult.failed.map((f, i) => (
+                      <li key={i} className="truncate">
+                        {f.url}: {f.error}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                {importResult.skipped.length > 0 && (
+                  <details className="cursor-pointer">
+                    <summary>Skipped ({importResult.skipped.length})</summary>
+                    <ul className="list-disc pl-4 mt-1 space-y-0.5">
+                      {importResult.skipped.map((s, i) => (
+                        <li key={i} className="truncate">
+                          {s.url}: {s.reason}
+                        </li>
+                      ))}
+                    </ul>
+                  </details>
+                )}
+              </div>
+            )}
+            <Button
+              size="sm"
+              variant="ghost"
+              className="self-start text-xs"
+              onClick={() => {
+                setImportResult(null);
+                setImportError(null);
+              }}
+            >
+              Dismiss
+            </Button>
+          </div>
+        </section>
+      )}
       {cleanupSuggestions.length > 0 && (
         <section className="border-b border-border bg-muted/25 px-4 py-4 md:px-5">
           <div className="flex flex-col gap-3">

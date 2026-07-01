@@ -5,6 +5,7 @@ import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useEffect, type ReactElement, type ReactNode } from 'react';
 import type { Source, User } from '../types';
+import type { OpmlImportResult } from '../types';
 import { AuthProvider, useAuth } from '../contexts/auth';
 
 // ── Shared API mock ──────────────────────────────────────────────────────────
@@ -26,6 +27,12 @@ const apiMock = vi.hoisted(() => ({
   fetchOnboardingSourceRecommendations: vi.fn().mockResolvedValue([]),
   fetchOnboardingStatus: vi.fn().mockResolvedValue({ completed: true }),
   saveOnboardingInterests: vi.fn().mockResolvedValue(undefined),
+  exportOpml: vi.fn().mockResolvedValue(undefined),
+  importOpml: vi.fn().mockResolvedValue({
+    added: [],
+    skipped: [],
+    failed: [],
+  } as OpmlImportResult),
 }));
 vi.mock('@/api', () => apiMock);
 vi.mock('../api', () => apiMock);
@@ -310,6 +317,89 @@ describe('SourcesPage', () => {
     fireEvent.click(deleteBtn);
 
     await waitFor(() => expect(apiMock.deleteSource).toHaveBeenCalledWith('mine'));
+  });
+
+  it('calls exportOpml when "Export OPML" button is clicked', async () => {
+    apiMock.fetchSources.mockResolvedValue([source()]);
+    withProviders(<SourcesPage />);
+    await screen.findAllByText('Acme News');
+
+    const exportButton = screen.getByRole('button', { name: /export opml/i });
+    fireEvent.click(exportButton);
+    await waitFor(() => expect(apiMock.exportOpml).toHaveBeenCalled());
+  });
+
+  it('calls importOpml when a file is selected for import', async () => {
+    apiMock.fetchSources.mockResolvedValue([source()]);
+    const newSource = source({
+      slug: 'imported-feed',
+      name: 'Imported Feed',
+      url: 'https://imported.com/feed.xml',
+      owner_user_id: regularUser.id,
+    });
+    apiMock.importOpml.mockResolvedValue({
+      added: [newSource],
+      skipped: [],
+      failed: [],
+    });
+
+    withProviders(<SourcesPage />, '/', regularUser);
+    await screen.findAllByText('Acme News');
+
+    const importButton = screen.getByRole('button', { name: /import opml/i });
+    const fileInput = screen.getByLabelText(/import opml/i).closest('input[type="file"]');
+    expect(fileInput).toBeTruthy();
+
+    const file = new File(['<opml></opml>'], 'test.opml', { type: 'application/xml' });
+    fireEvent.change(fileInput!, { target: { files: [file] } });
+
+    await waitFor(() => expect(apiMock.importOpml).toHaveBeenCalledWith(file));
+    await waitFor(() =>
+      expect(screen.getByText(/1 added/)).toBeTruthy()
+    );
+  });
+
+  it('shows error message if importOpml fails', async () => {
+    apiMock.fetchSources.mockResolvedValue([source()]);
+    apiMock.importOpml.mockRejectedValue(new Error('Invalid OPML file'));
+
+    withProviders(<SourcesPage />, '/', regularUser);
+    await screen.findAllByText('Acme News');
+
+    const importButton = screen.getByRole('button', { name: /import opml/i });
+    const fileInput = screen.getByLabelText(/import opml/i).closest('input[type="file"]');
+    const file = new File(['<opml></opml>'], 'test.opml', { type: 'application/xml' });
+    fireEvent.change(fileInput!, { target: { files: [file] } });
+
+    await waitFor(() =>
+      expect(screen.getByText(/Import failed/)).toBeTruthy()
+    );
+    expect(screen.getByText('Invalid OPML file')).toBeTruthy();
+  });
+
+  it('shows import summary and allows dismissal', async () => {
+    apiMock.fetchSources.mockResolvedValue([source()]);
+    apiMock.importOpml.mockResolvedValue({
+      added: [source({ slug: 'new1' })],
+      skipped: [ { url: 'https://skipped.com', reason: 'duplicate' } ],
+      failed: [ { url: 'https://failed.com', error: 'bad url' } ],
+    });
+
+    withProviders(<SourcesPage />, '/', regularUser);
+    await screen.findAllByText('Acme News');
+
+    const fileInput = screen.getByLabelText(/import opml/i).closest('input[type="file"]');
+    const file = new File(['<opml></opml>'], 'test.opml', { type: 'application/xml' });
+    fireEvent.change(fileInput!, { target: { files: [file] } });
+
+    await waitFor(() => screen.getByText(/1 added/));
+    expect(screen.getByText(/1 skipped/)).toBeTruthy();
+    expect(screen.getByText(/1 failed/)).toBeTruthy();
+    expect(screen.getByText(/bad url/)).toBeTruthy();
+    expect(screen.getByText(/duplicate/)).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: /dismiss/i }));
+    expect(screen.queryByText(/import result/i)).toBeNull();
   });
 });
 
