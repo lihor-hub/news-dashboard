@@ -18,7 +18,16 @@ core concepts and features so you can get the most out of your reading workflow.
 
 ## Before you start
 
-If you haven't set up News Dashboard yet, follow the instructions in the
-[Quick Start](../../README.md#quick-start) section of the README. For
-self-hosted production deployments, see the
+If you haven't set up News Dashboard yet, start with the
+[Getting Started guide](../../website/docs/getting-started/index.md).
+It covers the three ways to begin:
+
+- [Install the Android APK](../../website/docs/getting-started/install-android-apk.md)
+  — native app for Android phones and tablets
+- [Create a web account](../../website/docs/getting-started/create-web-account.md)
+  — sign in from any browser
+- [Self-host your own instance](../../README.md#quick-start)
+  — run News Dashboard on your own infrastructure
+
+For detailed self-hosting instructions, see the
 [Self-Hosting guide](../SELF_HOSTING.md).

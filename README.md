@@ -216,6 +216,18 @@ deploy/                   Deployment files
 scripts/                  Maintenance scripts
 ```
 
+## Getting Started
+
+To begin using News Dashboard as a reader, see the
+[Getting Started guide](website/docs/getting-started/index.md) which covers:
+
+- [Install the Android APK](website/docs/getting-started/install-android-apk.md)
+  — native Android app wrapping the PWA
+- [Create a web account](website/docs/getting-started/create-web-account.md)
+  — sign in from any browser
+- [Self-host your own instance](#quick-start)
+  — run News Dashboard on your own infrastructure
+
 ## Documentation
 
 For end-user documentation, see the [User Guide](docs/user-guide/README.md) which covers:
