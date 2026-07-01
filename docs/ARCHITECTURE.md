@@ -198,7 +198,7 @@ flowchart LR
   BuildFrontend --> Publish
 
   Publish --> Image["Docker build<br/>React build stage + Python runtime"]
-  Image --> GHCR["Push ghcr.io/ioachim-hub/news-dashboard:<sha>"]
+  Image --> GHCR["Push ghcr.io/lihor-hub/news-dashboard:<sha>"]
 
   GHCR --> Runner["Self-hosted runner<br/>mini PC"]
   Runner --> Pull["docker pull image"]
