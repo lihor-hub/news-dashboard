@@ -16,9 +16,7 @@ function renderWithI18n(ui: React.ReactNode) {
   return render(
     <I18nextProvider i18n={i18n}>
       <AuthProvider>
-        <MemoryRouter initialEntries={['/login']}>
-          {ui}
-        </MemoryRouter>
+        <MemoryRouter initialEntries={['/login']}>{ui}</MemoryRouter>
       </AuthProvider>
     </I18nextProvider>
   );
@@ -34,18 +32,14 @@ describe('i18n integration', () => {
 
     // Check that the app name and tagline are rendered
     expect(await screen.findByText('News Dashboard')).toBeInTheDocument();
-    expect(
-      await screen.findByText('Your private news platform')
-    ).toBeInTheDocument();
+    expect(await screen.findByText('Your private news platform')).toBeInTheDocument();
 
     // Check form labels
     expect(await screen.findByLabelText('Username')).toBeInTheDocument();
     expect(await screen.findByLabelText('Password')).toBeInTheDocument();
 
     // Check buttons
-    expect(
-      await screen.findByRole('button', { name: /sign in/i })
-    ).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: /sign in/i })).toBeInTheDocument();
 
     // Check alternative login option
     expect(
@@ -55,29 +49,17 @@ describe('i18n integration', () => {
 
   it('displays translated error messages', async () => {
     // Mock the loginUser function to return an error
-    vi.spyOn(api, 'loginUser').mockRejectedValue(
-      new Error('401 Unauthorized')
-    );
+    vi.spyOn(api, 'loginUser').mockRejectedValue(new Error('401 Unauthorized'));
 
     renderWithI18n(<LoginPage />);
 
     // Fill in the form and submit
-    await userEvent.type(
-      screen.getByLabelText('Username'),
-      'testuser'
-    );
-    await userEvent.type(
-      screen.getByLabelText('Password'),
-      'wrongpass'
-    );
-    await userEvent.click(
-      screen.getByRole('button', { name: /sign in/i })
-    );
+    await userEvent.type(screen.getByLabelText('Username'), 'testuser');
+    await userEvent.type(screen.getByLabelText('Password'), 'wrongpass');
+    await userEvent.click(screen.getByRole('button', { name: /sign in/i }));
 
     // Wait for and check the error message
     const alertElement = await screen.findByRole('alert');
-    expect(alertElement).toHaveTextContent(
-      'Invalid username or password.'
-    );
+    expect(alertElement).toHaveTextContent('Invalid username or password.');
   });
 });

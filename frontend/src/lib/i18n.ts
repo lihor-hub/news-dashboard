@@ -14,7 +14,7 @@ const resources = {
   },
 };
 
-i18n
+void i18n
   // Detect user language
   .use(LanguageDetector)
   // Pass the i18n instance to react-i18next.

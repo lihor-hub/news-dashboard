@@ -235,7 +235,7 @@ export function LoginPage() {
         ) : (
           <div className="space-y-4">
             <p className="text-sm text-muted-foreground text-center">
-              {t('auth.a_6_digit_code_was_sent_to')} {' '}
+              {t('auth.a_6_digit_code_was_sent_to')}{' '}
               <span className="font-medium text-foreground">{otpEmail}</span>.
             </p>
 
