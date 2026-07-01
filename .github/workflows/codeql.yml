@@ -37,7 +37,7 @@ jobs:
           - python
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # Initializes the CodeQL tooling for the current language.
       # sets-up the environment, downloads the CodeQL CLI, and extracts
