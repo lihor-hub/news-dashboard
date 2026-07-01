@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Ask a question
+    url: https://github.com/lihor-hub/news-dashboard/blob/main/SUPPORT.md
+    about: See SUPPORT.md for how to get help and ask questions.
