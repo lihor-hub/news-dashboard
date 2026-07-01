@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { fetchAuthConfig, loginUser, requestOtp, loginWithOtp, type AuthConfig } from '@/api';
 import { useAuth } from '@/contexts/auth';
 import { AppLogo } from '@/components/AppLogo';
@@ -8,6 +9,7 @@ type OtpStep = 'email' | 'code';
 type LoginMode = 'password' | 'otp';
 
 export function LoginPage() {
+  const { t } = useTranslation();
   const { setUser } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
@@ -46,7 +48,7 @@ export function LoginPage() {
       setUser(user);
       navigate(from, { replace: true });
     } catch {
-      setError('Invalid username or password.');
+      setError(t('auth.invalid_username_or_password'));
     } finally {
       setLoading(false);
     }
@@ -60,7 +62,7 @@ export function LoginPage() {
       await requestOtp(otpEmail);
       setOtpStep('code');
     } catch {
-      setError('Failed to send code. Please try again.');
+      setError(t('auth.failed_to_send_code'));
     } finally {
       setLoading(false);
     }
@@ -75,7 +77,7 @@ export function LoginPage() {
       setUser(user);
       navigate(from, { replace: true });
     } catch {
-      setError('Invalid or expired code. Please try again.');
+      setError(t('auth.invalid_or_expired_code'));
     } finally {
       setLoading(false);
     }
@@ -90,8 +92,8 @@ export function LoginPage() {
         <div className="mb-6 text-center space-y-2">
           <AppLogo className="mx-auto size-10 rounded-xl" />
           <div>
-            <h1 className="text-xl font-semibold text-foreground">Sign in</h1>
-            <p className="mt-1 text-sm text-muted-foreground">Your private news platform</p>
+            <h1 className="text-xl font-semibold text-foreground">{t('app.name')}</h1>
+            <p className="mt-1 text-sm text-muted-foreground">{t('app.tagline')}</p>
           </div>
         </div>
 
@@ -101,7 +103,7 @@ export function LoginPage() {
               href={keycloakLoginUrl}
               className="flex w-full items-center justify-center rounded-md bg-foreground px-4 py-2.5 text-sm font-medium text-background transition-opacity hover:opacity-90"
             >
-              Sign in with Keycloak
+              {t('auth.sign_in_with_keycloak')}
             </a>
             {authConfig?.registration_url && (
               <div className="text-center">
@@ -109,7 +111,7 @@ export function LoginPage() {
                   href={authConfig.registration_url}
                   className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors underline underline-offset-4"
                 >
-                  Create Account
+                  {t('auth.create_account')}
                 </a>
               </div>
             )}
@@ -122,7 +124,7 @@ export function LoginPage() {
                   htmlFor="username"
                   className="block text-xs font-medium text-muted-foreground"
                 >
-                  Username
+                  {t('auth.username')}
                 </label>
                 <input
                   id="username"
@@ -140,7 +142,7 @@ export function LoginPage() {
                   htmlFor="password"
                   className="block text-xs font-medium text-muted-foreground"
                 >
-                  Password
+                  {t('auth.password')}
                 </label>
                 <input
                   id="password"
@@ -164,7 +166,7 @@ export function LoginPage() {
                 disabled={loading}
                 className="w-full rounded-md bg-foreground px-4 py-2 text-sm font-medium text-background transition-opacity disabled:opacity-50"
               >
-                {loading ? 'Signing in…' : 'Sign in'}
+                {loading ? t('auth.signing_in') : t('auth.sign_in')}
               </button>
             </form>
 
@@ -177,7 +179,7 @@ export function LoginPage() {
                 }}
                 className="text-sm text-muted-foreground hover:text-foreground transition-colors underline underline-offset-4"
               >
-                Use email code instead
+                {t('auth.use_email_code')}
               </button>
             </div>
           </div>
@@ -189,7 +191,7 @@ export function LoginPage() {
                   htmlFor="otp-email"
                   className="block text-xs font-medium text-muted-foreground"
                 >
-                  Email address
+                  {t('auth.email_address')}
                 </label>
                 <input
                   id="otp-email"
@@ -213,7 +215,7 @@ export function LoginPage() {
                 disabled={loading}
                 className="w-full rounded-md bg-foreground px-4 py-2 text-sm font-medium text-background transition-opacity disabled:opacity-50"
               >
-                {loading ? 'Sending…' : 'Send code'}
+                {loading ? t('auth.sending') : t('auth.send_code')}
               </button>
             </form>
 
@@ -226,14 +228,14 @@ export function LoginPage() {
                 }}
                 className="text-sm text-muted-foreground hover:text-foreground transition-colors underline underline-offset-4"
               >
-                Back to password sign in
+                {t('auth.back_to_password')}
               </button>
             </div>
           </div>
         ) : (
           <div className="space-y-4">
             <p className="text-sm text-muted-foreground text-center">
-              A 6-digit code was sent to{' '}
+              {t('auth.a_6_digit_code_was_sent_to')} {' '}
               <span className="font-medium text-foreground">{otpEmail}</span>.
             </p>
 
@@ -243,7 +245,7 @@ export function LoginPage() {
                   htmlFor="otp-code"
                   className="block text-xs font-medium text-muted-foreground"
                 >
-                  6-digit code
+                  {t('auth.6_digit_code')}
                 </label>
                 <input
                   id="otp-code"
@@ -271,7 +273,7 @@ export function LoginPage() {
                 disabled={loading}
                 className="w-full rounded-md bg-foreground px-4 py-2 text-sm font-medium text-background transition-opacity disabled:opacity-50"
               >
-                {loading ? 'Verifying…' : 'Verify code'}
+                {loading ? t('auth.verifying') : t('auth.verify_code')}
               </button>
             </form>
 
@@ -285,7 +287,7 @@ export function LoginPage() {
                 }}
                 className="text-sm text-muted-foreground hover:text-foreground transition-colors underline underline-offset-4"
               >
-                Resend code
+                {t('auth.resend_code')}
               </button>
             </div>
           </div>

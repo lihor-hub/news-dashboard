@@ -1,0 +1,27 @@
+{
+  "app": {
+    "name": "News Dashboard",
+    "tagline": "Your private news platform"
+  },
+  "auth": {
+    "sign_in": "Sign in",
+    "username": "Username",
+    "password": "Password",
+    "email_address": "Email address",
+    "use_email_code": "Use email code instead",
+    "back_to_password": "Back to password sign in",
+    "6_digit_code": "6-digit code",
+    "resend_code": "Resend code",
+    "a_6_digit_code_was_sent_to": "A 6-digit code was sent to",
+    "invalid_username_or_password": "Invalid username or password.",
+    "failed_to_send_code": "Failed to send code. Please try again.",
+    "invalid_or_expired_code": "Invalid or expired code. Please try again.",
+    "sending": "Sending…",
+    "send_code": "Send code",
+    "verifying": "Verifying…",
+    "verify_code": "Verify code",
+    "signing_in": "Signing in…",
+    "sign_in_with_keycloak": "Sign in with Keycloak",
+    "create_account": "Create Account"
+  }
+}

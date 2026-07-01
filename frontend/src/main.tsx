@@ -6,6 +6,7 @@ import './globals.css';
 import { initTheme } from './lib/theme';
 import { queryClient } from './lib/queryClient';
 import { AppRouter } from './AppRouter';
+import '@/lib/i18n'; // Initialize i18n
 
 initTheme();
 
