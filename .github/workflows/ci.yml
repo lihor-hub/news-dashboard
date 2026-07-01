@@ -304,14 +304,14 @@ jobs:
 
       - name: Download backend coverage
         if: needs.test-backend.result == 'success' || needs.test-backend.result == 'failure'
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: backend-coverage
           path: ./coverage-backend
 
       - name: Download frontend coverage
         if: needs.test-frontend.result == 'success' || needs.test-frontend.result == 'failure'
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: frontend-coverage
           path: ./coverage-frontend
