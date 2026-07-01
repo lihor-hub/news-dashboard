@@ -2,6 +2,9 @@
 
 Thanks for your interest! This guide covers how to set up, make changes, and land your first PR.
 
+By participating in this project, you agree to abide by our
+[Code of Conduct](CODE_OF_CONDUCT.md).
+
 ## Quick links
 
 - **[Good first issues](https://github.com/lihor-hub/news-dashboard/issues?q=is%3Aopen+label%3A%22good+first+issue%22)** — beginner-friendly tasks you can pick up cold.
@@ -91,7 +94,7 @@ This project uses `react-i18next` for internationalization. All user-facing stri
 2. Use the `useTranslation` hook in your component:
    ```tsx
    import { useTranslation } from 'react-i18next';
-   
+
    function MyComponent() {
      const { t } = useTranslation();
      return <button>{t('button.save')}</button>;
