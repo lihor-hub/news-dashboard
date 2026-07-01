@@ -2,7 +2,7 @@ import { useState, useCallback } from 'react';
 import { compareVersions, tagToVersion } from '../lib/version';
 import { detectPlatform, type AppPlatform } from '../lib/platform';
 
-const GH_REPO = 'ioachim-hub/news-dashboard';
+const GH_REPO = 'lihor-hub/news-dashboard';
 const GH_RELEASES = `https://api.github.com/repos/${GH_REPO}/releases`;
 
 /** Tag prefix per platform. */

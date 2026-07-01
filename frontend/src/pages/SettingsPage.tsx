@@ -265,7 +265,7 @@ function UpdatesSection() {
               The web app is always current — the live site updates automatically on each release.
             </p>
             <a
-              href={`https://github.com/${info.releaseUrl.split('github.com/')[1]?.split('/releases')[0] ?? 'ioachim-hub/news-dashboard'}/releases`}
+              href={`https://github.com/${info.releaseUrl.split('github.com/')[1]?.split('/releases')[0] ?? 'lihor-hub/news-dashboard'}/releases`}
               target="_blank"
               rel="noopener noreferrer"
               className="flex items-center gap-1.5 text-xs text-primary hover:underline w-fit"
