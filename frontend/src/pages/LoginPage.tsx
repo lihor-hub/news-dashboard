@@ -91,9 +91,7 @@ export function LoginPage() {
           <AppLogo className="mx-auto size-10 rounded-xl" />
           <div>
             <h1 className="text-xl font-semibold text-foreground">Sign in</h1>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Your private news platform
-            </p>
+            <p className="mt-1 text-sm text-muted-foreground">Your private news platform</p>
           </div>
         </div>
 
