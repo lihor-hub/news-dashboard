@@ -35,7 +35,7 @@ dev = [
   "ty>=0.0.55",
   "pyrefly>=1.1.0",
   "pre-commit>=4.0.0",
-  "testcontainers[postgres]>=4.8.0",
+  "testcontainers[postgres]>=4.14.2",
   "pytest-xdist>=3.0.0",
 ]
 
