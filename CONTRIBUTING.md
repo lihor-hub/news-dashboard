@@ -77,6 +77,44 @@ SQLite may appear only in legacy import/migration tooling that reads an old SQLi
 4. Open a PR with a Conventional Commit title and a clear description.
 5. Link any related issue (`Closes #123`).
 
+## Internationalization (i18n)
+
+This project uses `react-i18next` for internationalization. All user-facing strings should be externalized for translation.
+
+### Adding new translatable strings
+
+1. Add a new key-value pair to `frontend/src/locales/en/translation.json`
+   - Use descriptive, nested keys (e.g., `feature.action.label`)
+   - Keep values concise and avoid concatenation
+   - Use printf-style placeholders for dynamic values: `Hello {{name}}, you have {{count}} messages`
+
+2. Use the `useTranslation` hook in your component:
+   ```tsx
+   import { useTranslation } from 'react-i18next';
+   
+   function MyComponent() {
+     const { t } = useTranslation();
+     return <button>{t('button.save')}</button>;
+   }
+   ```
+
+3. For components without hooks, use the `Trans` component or `withTranslation` HOC
+
+### Development
+
+- The default language is English (`en`)
+- To test other languages, you can temporarily change the lng in `src/lib/i18n.ts`
+- Run `npm run test:frontend` to ensure translations work correctly
+
+### Key organization
+
+- Group related keys under common namespaces
+- Use consistent naming: `feature.action.state`
+- Keep keys short but descriptive
+- Avoid duplicating similar strings
+
+Good first issues often include adding new UI strings following this pattern.
+
 ## Good first issues
 
 New to the project? Browse issues labeled [`good first issue`](https://github.com/lihor-hub/news-dashboard/issues?q=is%3Aopen+label%3A%22good+first+issue%22) — these are small, well-scoped tasks that don't require deep codebase context. Each one has clear acceptance criteria so you can start immediately.

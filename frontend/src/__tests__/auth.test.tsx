@@ -12,6 +12,40 @@ import { RequireAuth } from '../components/RequireAuth';
 import { LoginPage } from '../pages/LoginPage';
 import * as api from '../api';
 
+vi.mock('react-i18next', () => ({
+  useTranslation: () => ({
+    t: (key: string) => {
+      const translations: Record<string, string> = {
+        'auth.username': 'Username',
+        'auth.password': 'Password',
+        'auth.sign_in': 'Sign in',
+        'auth.use_email_code': 'Use email code instead',
+        'auth.back_to_password': 'Back to password sign in',
+        'auth.email_address': 'Email address',
+        'auth.send_code': 'Send code',
+        'auth.sending': 'Sending…',
+        'auth.6_digit_code': '6-digit code',
+        'auth.verify_code': 'Verify code',
+        'auth.verifying': 'Verifying…',
+        'auth.resend_code': 'Resend code',
+        'auth.a_6_digit_code_was_sent_to': 'A 6-digit code was sent to',
+        'auth.invalid_username_or_password': 'Invalid username or password.',
+        'auth.failed_to_send_code': 'Failed to send code. Please try again.',
+        'auth.invalid_or_expired_code': 'Invalid or expired code. Please try again.',
+        'auth.signing_in': 'Signing in…',
+        'auth.sign_in_with_keycloak': 'Sign in with Keycloak',
+        'auth.create_account': 'Create Account',
+        'app.name': 'News Dashboard',
+        'app.tagline': 'Your private news platform',
+      };
+      return translations[key] ?? key;
+    },
+    i18n: {
+      changeLanguage: () => Promise.resolve(),
+    },
+  }),
+}));
+
 vi.spyOn(console, 'error').mockImplementation(() => undefined);
 
 function makeQc() {
