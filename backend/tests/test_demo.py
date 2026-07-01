@@ -35,7 +35,9 @@ def demo_db(pg_clean: str, monkeypatch: pytest.MonkeyPatch) -> str:
 @pytest.fixture
 def guest_client(demo_db: str) -> TestClient:
     """Return a TestClient logged in as the demo guest user."""
-    client = TestClient(app)
+    # The login cookie is `secure`, so the client must talk "https" for the
+    # cookie jar to replay it on subsequent requests.
+    client = TestClient(app, base_url="https://testserver")
     resp = client.post(
         "/api/auth/login",
         json={"username": "guest", "password": "demo"},
@@ -50,7 +52,7 @@ def admin_client() -> TestClient:
     from news_dashboard.auth import create_user
 
     create_user("testadmin", "adminpass", is_admin=True)
-    client = TestClient(app)
+    client = TestClient(app, base_url="https://testserver")
     resp = client.post(
         "/api/auth/login",
         json={"username": "testadmin", "password": "adminpass"},
@@ -157,7 +159,7 @@ def _article_id(demo_db: str) -> int:
             "SELECT id FROM articles ORDER BY id LIMIT 1",
         ).fetchone()
     assert row is not None
-    return row[0]
+    return int(row[0])
 
 
 def test_guest_can_read_articles(guest_client: TestClient, demo_db: str) -> None:

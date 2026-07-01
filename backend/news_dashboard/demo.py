@@ -221,17 +221,17 @@ _DEMO_ARTICLES: list[dict[str, Any]] = [
 # Assign workflow states to articles for the demo user.
 # Order maps to _DEMO_ARTICLES by index.
 _DEMO_ARTICLE_STATES: list[str] = [
-    "done",   # Python 3.13 — read
+    "done",  # Python 3.13 — read
     "today",  # uv 0.5 — in inbox
     "today",  # Ruff 0.8 — in inbox
-    "done",   # Claude 4 — read
+    "done",  # Claude 4 — read
     "today",  # GPT-5 — in inbox
-    "done",   # Llama 4 — read
+    "done",  # Llama 4 — read
     "today",  # MCP — in inbox
-    "done",   # Rust 2025 — read
+    "done",  # Rust 2025 — read
     "today",  # K8s 1.32 — in inbox
     "today",  # BuildKit — in inbox
-    "done",   # Staff Engineer — read
+    "done",  # Staff Engineer — read
     "today",  # Postmortem — in inbox
 ]
 

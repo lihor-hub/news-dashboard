@@ -135,6 +135,7 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     # Seed demo data when DEMO_MODE is enabled.
     if os.getenv("DEMO_MODE", "").strip().lower() in ("1", "true", "yes", "on"):
         from news_dashboard.demo import seed_demo
+
         seed_demo()
     start_scheduler()
     yield
@@ -202,6 +203,7 @@ async def reject_guest_writes(request: Request, call_next: Any) -> Any:
         )
 
     return await call_next(request)
+
 
 # ── Pydantic models ──────────────────────────────────────────────────────────
 
