@@ -496,3 +496,9 @@ export interface SaveOnboardingProfileRequest {
   interest_ids: string[];
   enabled_slugs: string[];
 }
+
+export interface OpmlImportResult {
+  added: Source[];
+  skipped: { url: string; reason: string }[];
+  failed: { url: string; error: string }[];
+}

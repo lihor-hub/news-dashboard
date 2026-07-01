@@ -15,6 +15,7 @@ import type {
   OnboardingInterest,
   OnboardingSourceRecommendation,
   OnboardingStatus,
+  OpmlImportResult,
   PersonalizationNudge,
   PushSubscribeRequest,
   Quiz,
@@ -723,4 +724,30 @@ export async function downloadUserExport(): Promise<void> {
   a.download = `reading-archive-${new Date().toISOString().slice(0, 10)}.json`;
   a.click();
   URL.revokeObjectURL(url);
+}
+
+// ── OPML import / export ──────────────────────────────────────────────────────
+
+export async function exportOpml(): Promise<void> {
+  const response = await fetch('/api/sources/export.opml', { credentials: 'same-origin' });
+  if (!response.ok) throw new Error(await readErrorMessage(response));
+  const blob = await response.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'subscriptions.opml';
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+export async function importOpml(file: File): Promise<OpmlImportResult> {
+  const form = new FormData();
+  form.append('file', file);
+  const response = await fetch('/api/sources/import', {
+    method: 'POST',
+    credentials: 'same-origin',
+    body: form,
+  });
+  if (!response.ok) throw new HttpError(response.status, await readErrorMessage(response));
+  return response.json() as Promise<OpmlImportResult>;
 }
