@@ -85,7 +85,7 @@ export function CommandPalette({ open, onOpenChange, onShortcuts }: Props) {
 
   function go(to: string) {
     close();
-    navigate(to);
+    void navigate(to);
   }
 
   async function handleIngest() {
@@ -109,7 +109,7 @@ export function CommandPalette({ open, onOpenChange, onShortcuts }: Props) {
 
   function openArticle(a: WorkflowArticle) {
     close();
-    navigate(`/a/${a.id}`);
+    void navigate(`/a/${a.id}`);
   }
 
   return (

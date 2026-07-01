@@ -44,7 +44,7 @@ export function LoginPage() {
     try {
       const user = await loginUser(username, password);
       setUser(user);
-      navigate(from, { replace: true });
+      void navigate(from, { replace: true });
     } catch {
       setError('Invalid username or password.');
     } finally {
@@ -73,7 +73,7 @@ export function LoginPage() {
     try {
       const user = await loginWithOtp(otpEmail, otpCode);
       setUser(user);
-      navigate(from, { replace: true });
+      void navigate(from, { replace: true });
     } catch {
       setError('Invalid or expired code. Please try again.');
     } finally {

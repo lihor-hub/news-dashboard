@@ -25,7 +25,7 @@ export function RequireAuth({ children }: Props) {
           window.location.assign(config.login_url ?? '/auth/login');
           return;
         }
-        navigate('/login', { state: { from: location.pathname }, replace: true });
+        void navigate('/login', { state: { from: location.pathname }, replace: true });
       });
     // Run once on mount only
     // eslint-disable-next-line react-hooks/exhaustive-deps

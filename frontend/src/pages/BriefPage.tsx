@@ -94,7 +94,7 @@ export function BriefPage() {
               {isGenerating ? 'Retrying…' : 'Retry'}
             </Button>
           )}
-          <Button size="sm" variant="outline" onClick={() => navigate('/today')}>
+          <Button size="sm" variant="outline" onClick={() => void navigate('/today')}>
             <Inbox />
             Review Today feed
           </Button>
@@ -116,7 +116,7 @@ export function BriefPage() {
           </div>
         </div>
         <div className="flex justify-center">
-          <Button size="sm" variant="outline" onClick={() => navigate('/today')}>
+          <Button size="sm" variant="outline" onClick={() => void navigate('/today')}>
             <Inbox />
             Review Today feed
           </Button>
@@ -141,7 +141,7 @@ export function BriefPage() {
             <RefreshCw className={isGenerating ? 'animate-spin' : ''} />
             {isGenerating ? 'Generating…' : 'Generate briefing'}
           </Button>
-          <Button size="sm" variant="outline" onClick={() => navigate('/today')}>
+          <Button size="sm" variant="outline" onClick={() => void navigate('/today')}>
             <Inbox />
             Review Today feed
           </Button>
@@ -168,7 +168,7 @@ export function BriefPage() {
             <RefreshCw className={isGenerating ? 'animate-spin' : ''} />
             {isGenerating ? 'Retrying…' : 'Retry'}
           </Button>
-          <Button size="sm" variant="outline" onClick={() => navigate('/today')}>
+          <Button size="sm" variant="outline" onClick={() => void navigate('/today')}>
             <Inbox />
             Review Today feed
           </Button>

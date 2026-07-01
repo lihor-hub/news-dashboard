@@ -164,7 +164,7 @@ export function SearchPage() {
   }, [results]);
 
   const mutations = useTriageMutations();
-  const { focused } = useArticleListNav(results, (a) => navigate(`/a/${a.id}`), mutations);
+  const { focused } = useArticleListNav(results, (a) => void navigate(`/a/${a.id}`), mutations);
   const { set: setFocused } = useFocusedArticle();
   useEffect(() => {
     setFocused(results[focused] ?? null);

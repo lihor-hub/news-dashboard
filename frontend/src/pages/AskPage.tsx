@@ -93,7 +93,7 @@ function CitationCard({ citation, index }: { citation: Citation; index: number }
   const navigate = useNavigate();
   return (
     <button
-      onClick={() => navigate(`/a/${citation.id}`)}
+      onClick={() => void navigate(`/a/${citation.id}`)}
       className={cn(
         'w-full text-left rounded-md border border-border bg-card p-3',
         'hover:bg-surface transition-colors'

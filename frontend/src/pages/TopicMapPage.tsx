@@ -145,7 +145,7 @@ export function TopicMapPage() {
   }, []);
 
   const handleArticleClick = useCallback(
-    (articleId: number) => navigate(`/a/${articleId}`),
+    (articleId: number) => void navigate(`/a/${articleId}`),
     [navigate]
   );
 

@@ -61,7 +61,7 @@ function DesktopRail({ pathname }: { pathname: string }) {
   async function handleLogout() {
     await logoutUser();
     setUser(null);
-    navigate('/login', { replace: true });
+    void navigate('/login', { replace: true });
   }
 
   return (
@@ -140,12 +140,12 @@ export function AppShell() {
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const whatsNew = useWhatsNew();
   const onboarding = useOnboardingWizard();
-  useElectronBriefNotifier(navigate);
+  useElectronBriefNotifier((path) => void navigate(path));
 
   async function handleLogout() {
     await logoutUser();
     setUser(null);
-    navigate('/login', { replace: true });
+    void navigate('/login', { replace: true });
   }
 
   useEffect(() => {
@@ -177,7 +177,7 @@ export function AppShell() {
       } else if (e.key === 'g') {
         const handler2 = (e2: KeyboardEvent) => {
           const target = getShortcutTarget(e2.key);
-          if (target) navigate(target);
+          if (target) void navigate(target);
           window.removeEventListener('keydown', handler2);
         };
         window.addEventListener('keydown', handler2, { once: true });

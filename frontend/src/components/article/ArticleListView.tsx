@@ -67,7 +67,11 @@ export function ArticleListView({
   }, [list]);
 
   const mutations = useTriageMutations();
-  const { focused } = useArticleListNav(list, (article) => navigate(`/a/${article.id}`), mutations);
+  const { focused } = useArticleListNav(
+    list,
+    (article) => void navigate(`/a/${article.id}`),
+    mutations
+  );
   const { set: setFocused } = useFocusedArticle();
 
   useEffect(() => {

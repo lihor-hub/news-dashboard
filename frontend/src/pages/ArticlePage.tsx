@@ -251,9 +251,13 @@ export function ArticlePage() {
   const nextId =
     idx >= 0 && idx < (readerList?.ids.length ?? 0) - 1 ? readerList!.ids[idx + 1] : null;
 
-  const goBack = () => navigate(-1);
-  const goPrev = () => prevId && navigate(`/a/${prevId}`, { replace: true });
-  const goNext = () => nextId && navigate(`/a/${nextId}`, { replace: true });
+  const goBack = () => void navigate(-1);
+  const goPrev = () => {
+    if (prevId) void navigate(`/a/${prevId}`, { replace: true });
+  };
+  const goNext = () => {
+    if (nextId) void navigate(`/a/${nextId}`, { replace: true });
+  };
 
   // Triage mutations — inline (no extra hook so we stay self-contained)
   async function doAction(state: WorkflowState, label: string) {

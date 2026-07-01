@@ -61,7 +61,7 @@ export function BriefingDetailPage() {
             </div>
           </div>
         </div>
-        <Button size="sm" variant="outline" onClick={() => navigate('/briefs')}>
+        <Button size="sm" variant="outline" onClick={() => void navigate('/briefs')}>
           <Newspaper />
           View all briefings
         </Button>
@@ -82,7 +82,7 @@ export function BriefingDetailPage() {
             )}
           </div>
         </div>
-        <Button size="sm" variant="outline" onClick={() => navigate('/briefs')}>
+        <Button size="sm" variant="outline" onClick={() => void navigate('/briefs')}>
           <Newspaper />
           View all briefings
         </Button>
