@@ -18,9 +18,7 @@ from news_dashboard.db import init_db
 
 logger = logging.getLogger(__name__)
 
-# Secret used to sign one-click mark-read tokens.
-# Override with TOKEN_SECRET env var in production.
-_TOKEN_SECRET = os.getenv("TOKEN_SECRET", "news-dashboard-default-secret-change-me")
+_TOKEN_SECRET_ENV_VARS = ("TOKEN_SECRET", "SESSION_SECRET", "TEST_SESSION_SECRET")
 
 
 # ---------------------------------------------------------------------------
@@ -28,14 +26,31 @@ _TOKEN_SECRET = os.getenv("TOKEN_SECRET", "news-dashboard-default-secret-change-
 # ---------------------------------------------------------------------------
 
 
-def _token_signature(user_id: int, article_id: int) -> str:
+def _token_signing_secret() -> str | None:
+    for env_var in _TOKEN_SECRET_ENV_VARS:
+        secret = os.getenv(env_var)
+        if secret:
+            return secret
+    return None
+
+
+def _require_token_signing_secret() -> str:
+    secret = _token_signing_secret()
+    if secret is not None:
+        return secret
+    msg = "TOKEN_SECRET or SESSION_SECRET env var is required to sign digest mark-read tokens."
+    raise RuntimeError(msg)
+
+
+def _token_signature(user_id: int, article_id: int, secret: str) -> str:
     msg = f"read:{user_id}:{article_id}".encode()
-    return hmac.new(_TOKEN_SECRET.encode(), msg, hashlib.sha256).hexdigest()[:32]
+    return hmac.new(secret.encode(), msg, hashlib.sha256).hexdigest()[:32]
 
 
 def _make_token(user_id: int, article_id: int) -> str:
     """Return a signed token binding the article to the digest recipient."""
-    return f"{user_id}.{_token_signature(user_id, article_id)}"
+    signature = _token_signature(user_id, article_id, _require_token_signing_secret())
+    return f"{user_id}.{signature}"
 
 
 def verify_read_token(article_id: int, token: str) -> int | None:
@@ -44,7 +59,10 @@ def verify_read_token(article_id: int, token: str) -> int | None:
         user_id = int(user_id_text)
     except ValueError:
         return None
-    expected = _token_signature(user_id, article_id)
+    secret = _token_signing_secret()
+    if secret is None:
+        return None
+    expected = _token_signature(user_id, article_id, secret)
     if not hmac.compare_digest(expected, signature):
         return None
     return user_id

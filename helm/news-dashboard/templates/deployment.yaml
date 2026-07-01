@@ -132,6 +132,11 @@ spec:
                 secretKeyRef:
                   name: {{ include "news-dashboard.fullname" . }}-auth
                   key: SESSION_SECRET
+            - name: TOKEN_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "news-dashboard.fullname" . }}-auth
+                  key: TOKEN_SECRET
 {{- end }}
           ports:
             - containerPort: 8080

@@ -67,6 +67,8 @@ app:
     adminClientSecret: ""
     # Override in CI/local deploy with a long random string.
     sessionSecret: ""
+    # Optional. Overrides digest mark-read token signing separately from sessionSecret.
+    tokenSecret: ""
   ai:
     # Optional: pre-existing Secret with OPENAI_API_KEY and FREE_LLM_API_KEY.
     existingSecret: ""

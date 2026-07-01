@@ -47,6 +47,42 @@ def test_token_roundtrip_verifies() -> None:
     assert digest.verify_read_token(42, token) == 7
 
 
+def test_token_secret_takes_precedence(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("TOKEN_SECRET", "token-secret")
+    monkeypatch.setenv("SESSION_SECRET", "session-secret")
+    token = digest._make_token(7, 42)
+
+    monkeypatch.setenv("TOKEN_SECRET", "different-token-secret")
+    assert digest.verify_read_token(42, token) is None
+
+    monkeypatch.setenv("TOKEN_SECRET", "token-secret")
+    assert digest.verify_read_token(42, token) == 7
+
+
+def test_session_secret_is_token_secret_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("TOKEN_SECRET", raising=False)
+    monkeypatch.setenv("SESSION_SECRET", "session-secret")
+    token = digest._make_token(7, 42)
+
+    monkeypatch.setenv("SESSION_SECRET", "different-session-secret")
+    assert digest.verify_read_token(42, token) is None
+
+    monkeypatch.setenv("SESSION_SECRET", "session-secret")
+    assert digest.verify_read_token(42, token) == 7
+
+
+def test_missing_token_secret_fails_closed(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("TOKEN_SECRET", raising=False)
+    monkeypatch.delenv("SESSION_SECRET", raising=False)
+    monkeypatch.delenv("TEST_SESSION_SECRET", raising=False)
+
+    with pytest.raises(RuntimeError, match="TOKEN_SECRET or SESSION_SECRET"):
+        digest._make_token(7, 42)
+
+    known_default_token = "7.68a42c06e2fd04b2cb418bddc1614281"  # noqa: S105
+    assert digest.verify_read_token(42, known_default_token) is None
+
+
 def test_token_is_rejected_for_wrong_article() -> None:
     token = digest._make_token(7, 42)
     assert digest.verify_read_token(43, token) is None

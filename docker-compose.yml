@@ -27,6 +27,8 @@ services:
       POSTGRES_PASSWORD: news-dashboard-local-password
       # Local-development-only auth defaults. Override all three for any non-local deployment.
       SESSION_SECRET: ${SESSION_SECRET:-dev-only-secret-change-before-deploying-00000000000}
+      # Optional: override digest mark-read token signing separately from SESSION_SECRET.
+      TOKEN_SECRET: ${TOKEN_SECRET:-}
       BOOTSTRAP_ADMIN_USERNAME: ${BOOTSTRAP_ADMIN_USERNAME:-admin}
       BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD:-change-me}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
