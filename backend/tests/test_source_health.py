@@ -6,6 +6,8 @@ import contextlib
 from pathlib import Path
 from typing import Any
 
+import pytest
+
 from news_dashboard.auth import create_user
 from news_dashboard.db import connect
 from news_dashboard.ingest import (
@@ -413,24 +415,18 @@ def test_generic_reason_not_tracked_under() -> None:
 # ──────────────────────────────────────────────
 
 
-def test_infer_tags_python() -> None:
-    tags = infer_tags("New Python 3.14 typing improvements with mypy support")
-    assert "python" in tags
-
-
-def test_infer_tags_release() -> None:
-    tags = infer_tags("Release v2.1.0 of some library with changelog")
-    assert "release" in tags
-
-
-def test_infer_tags_security() -> None:
-    tags = infer_tags("Critical CVE found in popular package")
-    assert "security" in tags
-
-
-def test_infer_tags_agents() -> None:
-    tags = infer_tags("LangGraph adds new multi-agent orchestration workflow")
-    assert "agents" in tags
+@pytest.mark.parametrize(
+    ("title", "expected_tag"),
+    [
+        ("New Python 3.14 typing improvements with mypy support", "python"),
+        ("Release v2.1.0 of some library with changelog", "release"),
+        ("Critical CVE found in popular package", "security"),
+        ("LangGraph adds new multi-agent orchestration workflow", "agents"),
+    ],
+)
+def test_infer_tags(title: str, expected_tag: str) -> None:
+    tags = infer_tags(title)
+    assert expected_tag in tags
 
 
 # ──────────────────────────────────────────────

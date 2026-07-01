@@ -491,64 +491,42 @@ def test_validate_push_subscription_accepts_valid() -> None:
     )
 
 
-def test_validate_push_subscription_rejects_http_scheme() -> None:
-    with pytest.raises(ValueError, match="https"):
-        validate_push_subscription("http://ep.example.com/push", "key", "auth")
-
-
-def test_validate_push_subscription_rejects_relative_url() -> None:
-    with pytest.raises(ValueError, match="https"):
-        validate_push_subscription("/push/v1/endpoint", "key", "auth")
-
-
-def test_validate_push_subscription_rejects_empty_endpoint() -> None:
-    with pytest.raises(ValueError, match="https"):
-        validate_push_subscription("", "key", "auth")
-
-
-def test_validate_push_subscription_rejects_localhost() -> None:
-    with pytest.raises(ValueError, match="non-public"):
-        validate_push_subscription("https://127.0.0.1/push", "key", "auth")
-
-
-def test_validate_push_subscription_rejects_loopback_ipv6() -> None:
-    with pytest.raises(ValueError, match="non-public"):
-        validate_push_subscription("https://[::1]/push", "key", "auth")
-
-
-def test_validate_push_subscription_rejects_private_ip() -> None:
-    with pytest.raises(ValueError, match="non-public"):
-        validate_push_subscription("https://192.168.1.1/push", "key", "auth")
-
-
-def test_validate_push_subscription_rejects_link_local() -> None:
-    with pytest.raises(ValueError, match="non-public"):
-        validate_push_subscription("https://169.254.1.1/push", "key", "auth")
-
-
-def test_validate_push_subscription_rejects_empty_p256dh() -> None:
-    with pytest.raises(ValueError, match="p256dh"):
-        validate_push_subscription("https://ep.example.com/push", "", "auth")
-
-
-def test_validate_push_subscription_rejects_empty_auth() -> None:
-    with pytest.raises(ValueError, match="auth"):
-        validate_push_subscription("https://ep.example.com/push", "key", "")
-
-
-def test_validate_push_subscription_rejects_oversized_endpoint() -> None:
-    with pytest.raises(ValueError, match="too long"):
-        validate_push_subscription("https://ep.example.com/" + "a" * 2100, "key", "auth")
-
-
-def test_validate_push_subscription_rejects_non_base64url_p256dh() -> None:
-    with pytest.raises(ValueError, match="base64url"):
-        validate_push_subscription("https://ep.example.com/push", "key with spaces!", "auth")
-
-
-def test_validate_push_subscription_rejects_non_base64url_auth() -> None:
-    with pytest.raises(ValueError, match="base64url"):
-        validate_push_subscription("https://ep.example.com/push", "validkey", "auth with spaces!")
+@pytest.mark.parametrize(
+    ("endpoint", "p256dh", "auth", "match"),
+    [
+        ("http://ep.example.com/push", "key", "auth", "https"),
+        ("/push/v1/endpoint", "key", "auth", "https"),
+        ("", "key", "auth", "https"),
+        ("https://127.0.0.1/push", "key", "auth", "non-public"),
+        ("https://[::1]/push", "key", "auth", "non-public"),
+        ("https://192.168.1.1/push", "key", "auth", "non-public"),
+        ("https://169.254.1.1/push", "key", "auth", "non-public"),
+        ("https://ep.example.com/push", "", "auth", "p256dh"),
+        ("https://ep.example.com/push", "key", "", "auth"),
+        ("https://ep.example.com/" + "a" * 2100, "key", "auth", "too long"),
+        ("https://ep.example.com/push", "key with spaces!", "auth", "base64url"),
+        ("https://ep.example.com/push", "validkey", "auth with spaces!", "base64url"),
+    ],
+    ids=[
+        "http-scheme",
+        "relative-url",
+        "empty-endpoint",
+        "localhost",
+        "loopback-ipv6",
+        "private-ip",
+        "link-local",
+        "empty-p256dh",
+        "empty-auth",
+        "oversized-endpoint",
+        "non-base64url-p256dh",
+        "non-base64url-auth",
+    ],
+)
+def test_validate_push_subscription_rejects_invalid_input(
+    endpoint: str, p256dh: str, auth: str, match: str
+) -> None:
+    with pytest.raises(ValueError, match=match):
+        validate_push_subscription(endpoint, p256dh, auth)
 
 
 # ── Subscribe endpoint validation integration ──────────────────────────────────

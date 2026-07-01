@@ -194,24 +194,22 @@ def test_postgres_schema_has_briefing_articles_table(pg_url: str) -> None:
     assert row is not None, "briefing_articles table missing after init_db"
 
 
-def test_postgres_briefings_content_column_is_jsonb(pg_url: str) -> None:
+@pytest.mark.parametrize(
+    ("column_name", "expected_type"),
+    [
+        ("content", "jsonb"),
+        ("created_at", "timestamp with time zone"),
+    ],
+)
+def test_postgres_briefings_column_types(pg_url: str, column_name: str, expected_type: str) -> None:
     with psycopg.connect(pg_url) as conn:
         row = conn.execute(
             "SELECT data_type FROM information_schema.columns"
-            " WHERE table_name = 'briefings' AND column_name = 'content'"
+            " WHERE table_name = 'briefings' AND column_name = %s",
+            (column_name,),
         ).fetchone()
     assert row is not None
-    assert row[0] == "jsonb"
-
-
-def test_postgres_briefings_created_at_is_timestamptz(pg_url: str) -> None:
-    with psycopg.connect(pg_url) as conn:
-        row = conn.execute(
-            "SELECT data_type FROM information_schema.columns"
-            " WHERE table_name = 'briefings' AND column_name = 'created_at'"
-        ).fetchone()
-    assert row is not None
-    assert row[0] == "timestamp with time zone"
+    assert row[0] == expected_type
 
 
 # ── get_latest_briefing ───────────────────────────────────────────────────────

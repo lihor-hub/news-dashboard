@@ -286,39 +286,30 @@ def client(api_db: str) -> TestClient:
     return TestClient(app)
 
 
-def test_search_endpoint_defaults(client: TestClient) -> None:
-    resp = client.get("/api/search")
-    assert resp.status_code == 200
-    assert "items" in resp.json()
-
-
-def test_search_endpoint_with_q(client: TestClient) -> None:
-    resp = client.get("/api/search?q=python")
-    assert resp.status_code == 200
-    data = resp.json()
-    assert "items" in data
-
-
-def test_search_endpoint_state_filter(client: TestClient) -> None:
-    resp = client.get("/api/search?states=today&states=done")
-    assert resp.status_code == 200
-    assert "items" in resp.json()
-
-
-def test_search_endpoint_category_filter(client: TestClient) -> None:
-    resp = client.get("/api/search?categories=python&categories=ai-llm")
-    assert resp.status_code == 200
-    assert "items" in resp.json()
-
-
-def test_search_endpoint_starred_only(client: TestClient) -> None:
-    resp = client.get("/api/search?starred_only=true")
-    assert resp.status_code == 200
-    assert "items" in resp.json()
-
-
-def test_search_endpoint_include_archived(client: TestClient) -> None:
-    resp = client.get("/api/search?include_archived=true")
+@pytest.mark.parametrize(
+    "query_string",
+    [
+        "",
+        "?q=python",
+        "?states=today&states=done",
+        "?categories=python&categories=ai-llm",
+        "?starred_only=true",
+        "?include_archived=true",
+        "?q=python&states=today&categories=python"
+        "&starred_only=false&include_archived=false&date_range=week",
+    ],
+    ids=[
+        "defaults",
+        "with_q",
+        "state_filter",
+        "category_filter",
+        "starred_only",
+        "include_archived",
+        "all_filters",
+    ],
+)
+def test_search_endpoint_accepts_filter_combinations(client: TestClient, query_string: str) -> None:
+    resp = client.get(f"/api/search{query_string}")
     assert resp.status_code == 200
     assert "items" in resp.json()
 
@@ -328,15 +319,6 @@ def test_search_endpoint_date_range(client: TestClient, api_db: Path) -> None:
     for dr in ["today", "week", "month"]:
         resp = client.get(f"/api/search?date_range={dr}")
         assert resp.status_code == 200, f"Failed for date_range={dr}"
-
-
-def test_search_endpoint_all_filters(client: TestClient) -> None:
-    resp = client.get(
-        "/api/search?q=python&states=today&categories=python"
-        "&starred_only=false&include_archived=false&date_range=week"
-    )
-    assert resp.status_code == 200
-    assert "items" in resp.json()
 
 
 def test_search_endpoint_returns_matching_articles(client: TestClient, api_db: Path) -> None:

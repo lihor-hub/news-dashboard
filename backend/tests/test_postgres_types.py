@@ -472,46 +472,23 @@ def test_pg_private_source_visibility(pg_env: str) -> None:
 # ── schema correctness ────────────────────────────────────────────────────────
 
 
-def test_pg_user_article_state_starred_is_boolean(pg_clean: str) -> None:
-    """user_article_state.starred must be a boolean column in PostgreSQL."""
+@pytest.mark.parametrize(
+    ("table_name", "column_name"),
+    [
+        ("user_article_state", "starred"),
+        ("user_sources", "enabled"),
+        ("articles", "starred"),
+    ],
+)
+def test_pg_boolean_column_is_boolean(pg_clean: str, table_name: str, column_name: str) -> None:
+    """Boolean-typed columns must remain boolean in PostgreSQL."""
     import psycopg
 
     with psycopg.connect(pg_clean) as conn:
         row = conn.execute(
-            """
-            SELECT data_type FROM information_schema.columns
-            WHERE table_name = 'user_article_state' AND column_name = 'starred'
-            """,
-        ).fetchone()
-    assert row is not None
-    assert row[0] == "boolean"
-
-
-def test_pg_user_sources_enabled_is_boolean(pg_clean: str) -> None:
-    """user_sources.enabled must be a boolean column in PostgreSQL."""
-    import psycopg
-
-    with psycopg.connect(pg_clean) as conn:
-        row = conn.execute(
-            """
-            SELECT data_type FROM information_schema.columns
-            WHERE table_name = 'user_sources' AND column_name = 'enabled'
-            """,
-        ).fetchone()
-    assert row is not None
-    assert row[0] == "boolean"
-
-
-def test_pg_articles_starred_is_boolean(pg_clean: str) -> None:
-    """articles.starred must be a boolean column in PostgreSQL."""
-    import psycopg
-
-    with psycopg.connect(pg_clean) as conn:
-        row = conn.execute(
-            """
-            SELECT data_type FROM information_schema.columns
-            WHERE table_name = 'articles' AND column_name = 'starred'
-            """,
+            "SELECT data_type FROM information_schema.columns"
+            " WHERE table_name = %s AND column_name = %s",
+            (table_name, column_name),
         ).fetchone()
     assert row is not None
     assert row[0] == "boolean"
