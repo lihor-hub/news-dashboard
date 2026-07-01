@@ -9,7 +9,7 @@ from contextlib import contextmanager
 from hashlib import sha256
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlsplit, urlunsplit
+from urllib.parse import quote, urlsplit, urlunsplit
 
 import psycopg
 from psycopg import sql
@@ -520,7 +520,10 @@ def active_database_url(database_url: str | None = None) -> str:
     password = os.getenv("POSTGRES_PASSWORD", "")
     database = os.getenv("POSTGRES_DB", "news_dashboard")
     port = os.getenv("POSTGRES_PORT", "5432")
-    return f"postgresql://{user}:{password}@{host}:{port}/{database}"
+    encoded_user = quote(user, safe="")
+    encoded_password = quote(password, safe="")
+    encoded_database = quote(database, safe="")
+    return f"postgresql://{encoded_user}:{encoded_password}@{host}:{port}/{encoded_database}"
 
 
 def describe_database(database_url: str | None = None) -> str:
