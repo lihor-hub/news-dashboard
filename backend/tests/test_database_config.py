@@ -1,3 +1,5 @@
+from urllib.parse import quote, urlsplit
+
 import pytest
 
 from news_dashboard.db import (
@@ -66,6 +68,24 @@ def test_active_database_url_builds_from_postgres_parts(monkeypatch: pytest.Monk
     monkeypatch.setenv("POSTGRES_PORT", "6543")
 
     assert active_database_url() == "postgresql://alice:pw@db.internal:6543/mydb"
+
+
+def test_active_database_url_encodes_postgres_parts(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    monkeypatch.setenv("POSTGRES_HOST", "db.internal")
+    monkeypatch.setenv("POSTGRES_USER", "ali/ce@example")
+    monkeypatch.setenv("POSTGRES_PASSWORD", "p/w#x:@ space")
+    monkeypatch.setenv("POSTGRES_DB", "my/db #1")
+    monkeypatch.setenv("POSTGRES_PORT", "6543")
+
+    parts = urlsplit(active_database_url())
+
+    assert parts.scheme == "postgresql"
+    assert parts.username == "ali%2Fce%40example"
+    assert parts.password == quote("p/w#x:@ space", safe="")
+    assert parts.hostname == "db.internal"
+    assert parts.port == 6543
+    assert parts.path == "/my%2Fdb%20%231"
 
 
 def test_describe_database_passes_through_url_without_password() -> None:
