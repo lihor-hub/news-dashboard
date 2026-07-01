@@ -355,17 +355,42 @@ function urlBase64ToUint8Array(base64String: string): Uint8Array<ArrayBuffer> {
 }
 
 type PushState = 'idle' | 'requesting' | 'subscribed' | 'denied' | 'unavailable' | 'error';
+type TimezoneSaveState = 'idle' | 'saving' | 'saved' | 'error';
+
+const FALLBACK_TIMEZONES = [
+  'UTC',
+  'America/New_York',
+  'America/Chicago',
+  'America/Denver',
+  'America/Los_Angeles',
+  'Europe/London',
+  'Europe/Berlin',
+  'Europe/Bucharest',
+  'Asia/Tokyo',
+  'Australia/Sydney',
+];
+
+function getSupportedTimezones(): string[] {
+  const intlWithSupportedValues = Intl as typeof Intl & {
+    supportedValuesOf?: (key: 'timeZone') => string[];
+  };
+  return intlWithSupportedValues.supportedValuesOf?.('timeZone') ?? FALLBACK_TIMEZONES;
+}
 
 function DailyBriefSection() {
   const [briefingTime, setBriefingTime] = useState('09:00');
   const [briefingTimezone, setBriefingTimezone] = useState(
     () => Intl.DateTimeFormat().resolvedOptions().timeZone
   );
+  const [savedBriefingTimezone, setSavedBriefingTimezone] = useState(briefingTimezone);
+  const [timezoneSaveState, setTimezoneSaveState] = useState<TimezoneSaveState>('idle');
+  const [timezoneError, setTimezoneError] = useState<string | null>(null);
   const [pushEnabled, setPushEnabled] = useState(false);
   const [vapidKey, setVapidKey] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [timeSaving, setTimeSaving] = useState(false);
   const [pushState, setPushState] = useState<PushState>('idle');
+  const [supportedTimezones] = useState(getSupportedTimezones);
 
   useEffect(() => {
     let cancelled = false;
@@ -374,9 +399,10 @@ function DailyBriefSection() {
         const s = await fetchNotificationSettings();
         if (!cancelled) {
           setBriefingTime(s.briefing_time);
-          setBriefingTimezone(
-            s.briefing_timezone || Intl.DateTimeFormat().resolvedOptions().timeZone
-          );
+          const loadedTimezone =
+            s.briefing_timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+          setBriefingTimezone(loadedTimezone);
+          setSavedBriefingTimezone(loadedTimezone);
           setPushEnabled(s.push_enabled);
           setVapidKey(s.vapid_public_key);
           if (s.push_enabled) setPushState('subscribed');
@@ -406,11 +432,23 @@ function DailyBriefSection() {
   };
 
   const handleTimezoneBlur = async (tz: string) => {
-    if (!tz) return;
+    const normalizedTimezone = tz.trim();
+    if (!normalizedTimezone) return;
+    if (normalizedTimezone === savedBriefingTimezone) {
+      setTimezoneSaveState('idle');
+      setTimezoneError(null);
+      return;
+    }
+    setBriefingTimezone(normalizedTimezone);
+    setTimezoneSaveState('saving');
+    setTimezoneError(null);
     try {
-      await updateNotificationSettings({ briefing_timezone: tz });
+      await updateNotificationSettings({ briefing_timezone: normalizedTimezone });
+      setSavedBriefingTimezone(normalizedTimezone);
+      setTimezoneSaveState('saved');
     } catch {
-      // non-critical
+      setTimezoneSaveState('error');
+      setTimezoneError('Unknown timezone. Choose a valid IANA timezone.');
     }
   };
 
@@ -487,6 +525,10 @@ function DailyBriefSection() {
     !pushEnabled &&
     (!!window.electronAPI ||
       (!!vapidKey && 'serviceWorker' in navigator && 'PushManager' in window));
+  const timezoneDescriptionIds =
+    timezoneSaveState === 'saved' || timezoneError
+      ? 'briefing-timezone-help briefing-timezone-status'
+      : 'briefing-timezone-help';
 
   if (!loaded) return null;
 
@@ -520,18 +562,51 @@ function DailyBriefSection() {
           <label className="text-xs font-medium text-foreground" htmlFor="briefing-timezone">
             Timezone
           </label>
-          <input
-            id="briefing-timezone"
-            type="text"
-            value={briefingTimezone}
-            onChange={(e) => setBriefingTimezone(e.target.value)}
-            onBlur={(e) => void handleTimezoneBlur(e.target.value)}
-            placeholder="e.g. Europe/Bucharest"
-            className="w-full rounded-md border border-border bg-surface px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
-          />
-          <p className="text-[11px] text-muted-foreground">
+          <div className="flex items-center gap-2">
+            <input
+              id="briefing-timezone"
+              type="text"
+              list="briefing-timezone-options"
+              value={briefingTimezone}
+              onChange={(e) => {
+                setBriefingTimezone(e.target.value);
+                setTimezoneSaveState('idle');
+                setTimezoneError(null);
+              }}
+              onBlur={(e) => void handleTimezoneBlur(e.target.value)}
+              placeholder="e.g. Europe/Bucharest"
+              aria-describedby={timezoneDescriptionIds}
+              aria-invalid={timezoneSaveState === 'error'}
+              className={cn(
+                'w-full rounded-md border bg-surface px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-ring',
+                timezoneSaveState === 'error' ? 'border-destructive' : 'border-border'
+              )}
+            />
+            {timezoneSaveState === 'saving' && (
+              <RefreshCw className="size-3 shrink-0 animate-spin text-muted-foreground" />
+            )}
+            {timezoneSaveState === 'saved' && (
+              <span
+                id="briefing-timezone-status"
+                className="text-xs text-green-600 dark:text-green-400"
+              >
+                Saved
+              </span>
+            )}
+          </div>
+          <datalist id="briefing-timezone-options">
+            {supportedTimezones.map((timezone) => (
+              <option key={timezone} value={timezone} />
+            ))}
+          </datalist>
+          <p id="briefing-timezone-help" className="text-[11px] text-muted-foreground">
             IANA timezone name (e.g. America/New_York). DST is applied automatically.
           </p>
+          {timezoneError && (
+            <p id="briefing-timezone-status" className="text-xs text-destructive" role="alert">
+              {timezoneError}
+            </p>
+          )}
         </div>
 
         <div className="space-y-2">

@@ -268,6 +268,39 @@ describe('DailyBriefSection — timezone', () => {
     });
   });
 
+  it('shows rejection feedback when the backend rejects an invalid timezone', async () => {
+    const user = userEvent.setup();
+    mockFetchSettings.mockResolvedValue({ ...defaultSettings, briefing_timezone: 'UTC' });
+    mockUpdateSettings.mockRejectedValueOnce(new Error('unknown timezone'));
+    renderSettings();
+
+    const input = await screen.findByLabelText('Timezone');
+    await user.clear(input);
+    await user.type(input, 'Mars/Olympus');
+    await user.tab();
+
+    expect(
+      await screen.findByText('Unknown timezone. Choose a valid IANA timezone.')
+    ).toBeVisible();
+    expect(input).toHaveAttribute('aria-invalid', 'true');
+    expect(input).toHaveValue('Mars/Olympus');
+    expect(screen.queryByText('Saved')).not.toBeInTheDocument();
+  });
+
+  it('shows saved feedback after a successful timezone save', async () => {
+    const user = userEvent.setup();
+    mockFetchSettings.mockResolvedValue({ ...defaultSettings, briefing_timezone: 'UTC' });
+    renderSettings();
+
+    const input = await screen.findByLabelText('Timezone');
+    await user.clear(input);
+    await user.type(input, 'Europe/Bucharest');
+    await user.tab();
+
+    expect(await screen.findByText('Saved')).toBeVisible();
+    expect(input).toHaveAttribute('aria-invalid', 'false');
+  });
+
   it('shows local-time wording without UTC suffix in label', async () => {
     renderSettings();
     await waitFor(() => expect(screen.getByLabelText('Generation time')).toBeInTheDocument());
