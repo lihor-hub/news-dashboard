@@ -382,3 +382,105 @@ def test_generate_share_context_stores_summary(db: str, monkeypatch: pytest.Monk
     detail = get_share(share_id, bob)
     assert detail is not None
     assert detail["context_summary"] == result
+
+
+# ── Payload bounds (#602) ─────────────────────────────────────────────────────
+
+
+def _authed_client(user_id: int) -> TestClient:
+    client = TestClient(app, raise_server_exceptions=True)
+    app.dependency_overrides[require_auth] = lambda: {
+        "id": user_id,
+        "username": f"user-{user_id}",
+        "email": None,
+        "is_admin": False,
+    }
+    return client
+
+
+def test_share_endpoint_rejects_oversized_note(db: str) -> None:
+    from news_dashboard.main import MAX_SHARE_NOTE_LENGTH
+
+    alice = _make_user(db, "alice")
+    bob = _make_user(db, "bob")
+    article_id = _insert_article(db)
+    client = _authed_client(alice)
+
+    response = client.post(
+        f"/api/articles/{article_id}/share",
+        json={"to_user_id": bob, "note": "x" * (MAX_SHARE_NOTE_LENGTH + 1)},
+    )
+    assert response.status_code == 422
+
+
+def test_annotation_endpoint_rejects_blank_highlighted_text(db: str) -> None:
+    alice = _make_user(db, "alice")
+    bob = _make_user(db, "bob")
+    article_id = _insert_article(db)
+    share = share_article(article_id=article_id, from_user_id=alice, to_user_id=bob)
+    client = _authed_client(bob)
+
+    response = client.post(
+        f"/api/shares/{share['id']}/annotations",
+        json={"highlighted_text": "   "},
+    )
+    assert response.status_code == 422
+
+
+def test_annotation_endpoint_rejects_oversized_highlighted_text(db: str) -> None:
+    from news_dashboard.main import MAX_ANNOTATION_HIGHLIGHT_LENGTH
+
+    alice = _make_user(db, "alice")
+    bob = _make_user(db, "bob")
+    article_id = _insert_article(db)
+    share = share_article(article_id=article_id, from_user_id=alice, to_user_id=bob)
+    client = _authed_client(bob)
+
+    response = client.post(
+        f"/api/shares/{share['id']}/annotations",
+        json={"highlighted_text": "x" * (MAX_ANNOTATION_HIGHLIGHT_LENGTH + 1)},
+    )
+    assert response.status_code == 422
+
+
+def test_message_endpoint_rejects_blank_message(db: str) -> None:
+    alice = _make_user(db, "alice")
+    bob = _make_user(db, "bob")
+    article_id = _insert_article(db)
+    share = share_article(article_id=article_id, from_user_id=alice, to_user_id=bob)
+    client = _authed_client(bob)
+
+    response = client.post(f"/api/shares/{share['id']}/messages", json={"message": "   "})
+    assert response.status_code == 422
+
+
+def test_message_endpoint_rejects_oversized_message(db: str) -> None:
+    from news_dashboard.main import MAX_SHARE_MESSAGE_LENGTH
+
+    alice = _make_user(db, "alice")
+    bob = _make_user(db, "bob")
+    article_id = _insert_article(db)
+    share = share_article(article_id=article_id, from_user_id=alice, to_user_id=bob)
+    client = _authed_client(bob)
+
+    response = client.post(
+        f"/api/shares/{share['id']}/messages",
+        json={"message": "x" * (MAX_SHARE_MESSAGE_LENGTH + 1)},
+    )
+    assert response.status_code == 422
+
+
+def test_message_endpoint_accepts_message_at_length_boundary(db: str) -> None:
+    from news_dashboard.main import MAX_SHARE_MESSAGE_LENGTH
+
+    alice = _make_user(db, "alice")
+    bob = _make_user(db, "bob")
+    article_id = _insert_article(db)
+    share = share_article(article_id=article_id, from_user_id=alice, to_user_id=bob)
+    client = _authed_client(bob)
+
+    response = client.post(
+        f"/api/shares/{share['id']}/messages",
+        json={"message": "x" * MAX_SHARE_MESSAGE_LENGTH},
+    )
+    assert response.status_code == 200

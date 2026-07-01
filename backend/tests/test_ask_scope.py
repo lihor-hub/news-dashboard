@@ -9,6 +9,7 @@ from types import SimpleNamespace
 from typing import Any
 
 import pytest
+from fastapi.testclient import TestClient
 
 from news_dashboard.db import connect, init_db
 
@@ -409,3 +410,28 @@ def test_ask_respects_disabled_user_sources(
     assert result["answer"] == "filtered answer"
     source_ids = {s["id"] for s in result["sources"]}
     assert 6 not in source_ids
+
+
+# ── POST /api/ask — payload bounds (#602) ────────────────────────────────────
+
+
+@pytest.fixture
+def api_client() -> TestClient:
+    from news_dashboard.main import app
+
+    return TestClient(app, raise_server_exceptions=True)
+
+
+def test_ask_endpoint_rejects_oversized_query(api_client: TestClient) -> None:
+    from news_dashboard.main import MAX_ASK_QUERY_LENGTH
+
+    resp = api_client.post(
+        "/api/ask",
+        json={"query": "x" * (MAX_ASK_QUERY_LENGTH + 1)},
+    )
+    assert resp.status_code == 422
+
+
+def test_ask_endpoint_rejects_blank_query(api_client: TestClient) -> None:
+    resp = api_client.post("/api/ask", json={"query": "   "})
+    assert resp.status_code == 400

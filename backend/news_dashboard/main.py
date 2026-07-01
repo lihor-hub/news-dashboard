@@ -28,7 +28,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from psycopg.types.json import Jsonb
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.responses import Response as StarletteResponse
 
@@ -210,6 +210,20 @@ async def reject_guest_writes(request: Request, call_next: Any) -> Any:
     return await call_next(request)
 
 
+# ── AI-facing payload limits ─────────────────────────────────────────────────
+# Bounds for user-supplied text that reaches retrieval, prompt construction, or
+# storage, so a malformed client can't send oversized LLM requests or noisy
+# Langfuse traces.
+MAX_ASK_QUERY_LENGTH = 2_000
+MAX_BRIEFING_FOCUS_PROMPT_LENGTH = 2_000
+MAX_BRIEFING_CHAT_MESSAGE_LENGTH = 4_000
+MAX_BRIEFING_CHAT_HISTORY_ITEMS = 50
+MAX_SHARE_NOTE_LENGTH = 2_000
+MAX_ANNOTATION_HIGHLIGHT_LENGTH = 4_000
+MAX_ANNOTATION_NOTE_LENGTH = 2_000
+MAX_SHARE_MESSAGE_LENGTH = 4_000
+
+
 # ── Pydantic models ──────────────────────────────────────────────────────────
 
 
@@ -231,17 +245,49 @@ class LaterUpdate(BaseModel):
 
 class ShareArticleRequest(BaseModel):
     to_user_id: int
-    note: str | None = None
+    note: str | None = Field(default=None, max_length=MAX_SHARE_NOTE_LENGTH)
+
+    @field_validator("note")
+    @classmethod
+    def _note_blank_to_none(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        stripped = value.strip()
+        return stripped or None
 
 
 class AddAnnotationRequest(BaseModel):
-    highlighted_text: str
+    highlighted_text: str = Field(min_length=1, max_length=MAX_ANNOTATION_HIGHLIGHT_LENGTH)
     offset_chars: int = 0
-    note: str | None = None
+    note: str | None = Field(default=None, max_length=MAX_ANNOTATION_NOTE_LENGTH)
+
+    @field_validator("highlighted_text")
+    @classmethod
+    def _highlighted_text_not_blank(cls, value: str) -> str:
+        if not value.strip():
+            msg = "highlighted_text must not be blank"
+            raise ValueError(msg)
+        return value
+
+    @field_validator("note")
+    @classmethod
+    def _note_blank_to_none(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        stripped = value.strip()
+        return stripped or None
 
 
 class AddMessageRequest(BaseModel):
-    message: str
+    message: str = Field(min_length=1, max_length=MAX_SHARE_MESSAGE_LENGTH)
+
+    @field_validator("message")
+    @classmethod
+    def _message_not_blank(cls, value: str) -> str:
+        if not value.strip():
+            msg = "message must not be blank"
+            raise ValueError(msg)
+        return value
 
 
 class EnabledUpdate(BaseModel):
@@ -1970,7 +2016,15 @@ def get_podcast_audio_endpoint(
 
 
 class BriefingCreateRequest(BaseModel):
-    focus_prompt: str | None = None
+    focus_prompt: str | None = Field(default=None, max_length=MAX_BRIEFING_FOCUS_PROMPT_LENGTH)
+
+    @field_validator("focus_prompt")
+    @classmethod
+    def _blank_to_none(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        stripped = value.strip()
+        return stripped or None
 
 
 @api.post("/api/briefings")
@@ -1989,12 +2043,23 @@ def briefings_create(
 
 class BriefingChatMessage(BaseModel):
     role: str
-    content: str
+    content: str = Field(min_length=1, max_length=MAX_BRIEFING_CHAT_MESSAGE_LENGTH)
 
 
 class BriefingChatRequest(BaseModel):
-    message: str
-    history: list[BriefingChatMessage] = []
+    message: str = Field(min_length=1, max_length=MAX_BRIEFING_CHAT_MESSAGE_LENGTH)
+    history: list[BriefingChatMessage] = Field(
+        default_factory=list, max_length=MAX_BRIEFING_CHAT_HISTORY_ITEMS
+    )
+
+    @field_validator("message")
+    @classmethod
+    def _not_blank(cls, value: str) -> str:
+        stripped = value.strip()
+        if not stripped:
+            msg = "message must not be blank"
+            raise ValueError(msg)
+        return value
 
 
 @api.post("/api/briefings/{briefing_id}/chat")
@@ -2196,7 +2261,7 @@ def push_unsubscribe(
 
 
 class AskRequest(BaseModel):
-    query: str
+    query: str = Field(max_length=MAX_ASK_QUERY_LENGTH)
     include_all: bool = False
 
 

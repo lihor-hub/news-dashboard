@@ -145,6 +145,7 @@ export function BriefingChat({ briefingId }: { briefingId: number }) {
             onKeyDown={handleKeyDown}
             placeholder="Ask a question…"
             disabled={loading || briefingUnavailable}
+            maxLength={4000}
             className="flex-1"
             aria-label="Chat input"
           />

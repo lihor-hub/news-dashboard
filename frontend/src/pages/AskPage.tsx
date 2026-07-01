@@ -157,6 +157,7 @@ export function AskPage() {
           onChange={(e) => setQ(e.target.value)}
           placeholder="What did I read about Postgres LISTEN/NOTIFY?"
           rows={3}
+          maxLength={2000}
           className={cn(
             'w-full p-3 rounded-md border border-border bg-surface text-sm outline-none',
             'focus:border-border-strong focus:bg-background resize-none'

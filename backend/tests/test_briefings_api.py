@@ -451,6 +451,66 @@ def test_chat_returns_503_when_ai_not_configured(client: TestClient, monkeypatch
     assert "OPENAI_API_KEY" in resp.json()["detail"]
 
 
+# ── Payload bounds (#602) ─────────────────────────────────────────────────────
+
+
+def test_chat_rejects_blank_message(client: TestClient) -> None:
+    resp = client.post("/api/briefings/1/chat", json={"message": "   ", "history": []})
+    assert resp.status_code == 422
+
+
+def test_chat_rejects_oversized_message(client: TestClient) -> None:
+    from news_dashboard.main import MAX_BRIEFING_CHAT_MESSAGE_LENGTH
+
+    resp = client.post(
+        "/api/briefings/1/chat",
+        json={"message": "x" * (MAX_BRIEFING_CHAT_MESSAGE_LENGTH + 1), "history": []},
+    )
+    assert resp.status_code == 422
+
+
+def test_chat_rejects_oversized_history(client: TestClient) -> None:
+    from news_dashboard.main import MAX_BRIEFING_CHAT_HISTORY_ITEMS
+
+    history = [{"role": "user", "content": "hi"}] * (MAX_BRIEFING_CHAT_HISTORY_ITEMS + 1)
+    resp = client.post("/api/briefings/1/chat", json={"message": "hello", "history": history})
+    assert resp.status_code == 422
+
+
+def test_chat_accepts_message_at_length_boundary(client: TestClient, monkeypatch: Any) -> None:
+    from news_dashboard.main import MAX_BRIEFING_CHAT_MESSAGE_LENGTH
+
+    monkeypatch.setattr(main_mod, "chat_with_briefing", lambda *_args, **_kwargs: "ok")
+    resp = client.post(
+        "/api/briefings/1/chat",
+        json={"message": "x" * MAX_BRIEFING_CHAT_MESSAGE_LENGTH, "history": []},
+    )
+    assert resp.status_code == 200
+
+
+def test_create_rejects_oversized_focus_prompt(client: TestClient) -> None:
+    from news_dashboard.main import MAX_BRIEFING_FOCUS_PROMPT_LENGTH
+
+    resp = client.post(
+        "/api/briefings",
+        json={"focus_prompt": "x" * (MAX_BRIEFING_FOCUS_PROMPT_LENGTH + 1)},
+    )
+    assert resp.status_code == 422
+
+
+def test_create_normalizes_blank_focus_prompt_to_none(client: TestClient, monkeypatch: Any) -> None:
+    captured: dict[str, Any] = {}
+
+    def _fake(**kwargs: Any) -> dict[str, Any]:
+        captured.update(kwargs)
+        return dict(_SAMPLE_BRIEFING)
+
+    monkeypatch.setattr(main_mod, "generate_briefing", _fake)
+    resp = client.post("/api/briefings", json={"focus_prompt": "   "})
+    assert resp.status_code == 200
+    assert captured["focus_prompt"] is None
+
+
 def test_chat_constructs_prompt_with_article_bodies(monkeypatch: Any) -> None:
     """Verify the system prompt includes briefing summary and article body text."""
     from unittest.mock import MagicMock, patch

@@ -202,6 +202,7 @@ export function SharedDetailPage() {
             onChange={(e) => setDraft(e.target.value)}
             placeholder="Add a message…"
             rows={2}
+            maxLength={4000}
             className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground resize-none focus:outline-none focus:ring-1 focus:ring-ring"
             onKeyDown={(e) => {
               if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
