@@ -466,6 +466,11 @@ def logout(response: Response) -> dict[str, str]:
 def otp_request(payload: OTPRequestPayload, background_tasks: BackgroundTasks) -> dict[str, str]:
     from news_dashboard.email import send_otp_email
 
+    request_key = f"otp-request:{payload.email.strip().lower()}"
+    if is_throttled(request_key):
+        raise HTTPException(status_code=429, detail="Too many code requests; try again later")
+    record_failure(request_key)
+
     user = get_user_by_email(payload.email)
     if user:
         otp = create_otp_for_user(int(user["id"]))
@@ -476,9 +481,15 @@ def otp_request(payload: OTPRequestPayload, background_tasks: BackgroundTasks) -
 
 @public_router.post("/api/auth/otp/login")
 def otp_login(payload: OTPLoginPayload, response: Response) -> dict[str, Any]:
+    login_key = f"otp-login:{payload.email.strip().lower()}"
+    if is_throttled(login_key):
+        raise HTTPException(status_code=429, detail="Too many code attempts; try again later")
+
     user = consume_otp(payload.email, payload.otp)
     if not user:
+        record_failure(login_key)
         raise HTTPException(status_code=401, detail="Invalid or expired code")
+    clear_failures(login_key)
     token = create_session_token(int(user["id"]), bool(user["is_admin"]))
     response.set_cookie(
         key=_SESSION_COOKIE,

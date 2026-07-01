@@ -483,7 +483,9 @@ def test_otp_expired_rejected(tmp_db: str) -> None:
     assert consume_otp("exp@example.com", "000000") is None
 
 
-def test_otp_request_endpoint_returns_sent_for_unknown_email(tmp_db: str) -> None:
+def test_otp_request_endpoint_returns_sent_for_unknown_email(
+    tmp_db: str, clean_throttle: None
+) -> None:
     client = _fresh_client()
     resp = client.post("/api/auth/otp/request", json={"email": "ghost@example.com"})
     assert resp.status_code == 200
@@ -514,7 +516,7 @@ def test_otp_login_endpoint_full_flow(tmp_db: str, monkeypatch: pytest.MonkeyPat
     assert "nd_session" in resp.cookies
 
 
-def test_otp_login_endpoint_bad_code(tmp_db: str) -> None:
+def test_otp_login_endpoint_bad_code(tmp_db: str, clean_throttle: None) -> None:
     create_user("bad_otp", "pw", email="bad@example.com")
     client = _fresh_client()
     resp = client.post("/api/auth/otp/login", json={"email": "bad@example.com", "otp": "000000"})
@@ -682,3 +684,64 @@ def test_throttle_does_not_affect_keycloak_mode(
     # Keycloak mode should still return 409, not 429
     resp = client.post("/api/auth/login", json={"username": "anyuser", "password": "pw"})
     assert resp.status_code == 409
+
+
+# ── OTP throttle ───────────────────────────────────────────────────────────────
+
+
+def test_otp_request_throttles_known_email(
+    tmp_db: str, clean_throttle: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import news_dashboard.email as email_mod
+
+    monkeypatch.setattr(email_mod, "send_otp_email", lambda *_args: None)
+    create_user("otp_req_known", "pw", email="reqknown@example.com")
+    client = _fresh_client()
+    for _ in range(5):
+        resp = client.post("/api/auth/otp/request", json={"email": "reqknown@example.com"})
+        assert resp.status_code == 200
+    resp = client.post("/api/auth/otp/request", json={"email": "reqknown@example.com"})
+    assert resp.status_code == 429
+
+
+def test_otp_request_throttles_unknown_email_at_same_threshold(
+    tmp_db: str, clean_throttle: None
+) -> None:
+    client = _fresh_client()
+    for _ in range(5):
+        resp = client.post("/api/auth/otp/request", json={"email": "ghost2@example.com"})
+        assert resp.status_code == 200
+    resp = client.post("/api/auth/otp/request", json={"email": "ghost2@example.com"})
+    assert resp.status_code == 429
+
+
+def test_otp_login_throttles_after_repeated_bad_codes(tmp_db: str, clean_throttle: None) -> None:
+    create_user("otp_login_throttled", "pw", email="throttled@example.com")
+    client = _fresh_client()
+    for _ in range(5):
+        resp = client.post(
+            "/api/auth/otp/login", json={"email": "throttled@example.com", "otp": "000000"}
+        )
+        assert resp.status_code == 401
+    resp = client.post(
+        "/api/auth/otp/login", json={"email": "throttled@example.com", "otp": "000000"}
+    )
+    assert resp.status_code == 429
+
+
+def test_otp_login_success_clears_throttle(tmp_db: str, clean_throttle: None) -> None:
+    user = create_user("otp_login_clear", "pw", email="clear@example.com")
+    client = _fresh_client()
+    for _ in range(4):
+        resp = client.post(
+            "/api/auth/otp/login", json={"email": "clear@example.com", "otp": "000000"}
+        )
+        assert resp.status_code == 401
+
+    otp = create_otp_for_user(user["id"])
+    resp = client.post("/api/auth/otp/login", json={"email": "clear@example.com", "otp": otp})
+    assert resp.status_code == 200
+
+    # Failure counter was cleared, so more wrong attempts still return 401, not 429
+    resp = client.post("/api/auth/otp/login", json={"email": "clear@example.com", "otp": "000000"})
+    assert resp.status_code == 401
