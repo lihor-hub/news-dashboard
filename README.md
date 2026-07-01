@@ -277,6 +277,7 @@ Enable auth before exposing an instance outside a trusted network. See
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for setup, conventions, and how to land your first PR.
+Participation is governed by our [Code of Conduct](CODE_OF_CONDUCT.md).
 
 New to the project? Browse [good first issues](https://github.com/lihor-hub/news-dashboard/issues?q=is%3Aopen+label%3A%22good+first+issue%22) — beginner-friendly tasks with clear scope.
 
