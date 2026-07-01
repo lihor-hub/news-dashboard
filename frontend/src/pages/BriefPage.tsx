@@ -8,13 +8,14 @@ import { fetchLatestBriefing, createBriefing } from '@/api';
 import { BriefingView, BriefSkeleton } from '@/components/BriefingView';
 import { BriefingChat } from '@/components/BriefingChat';
 import { trackFeature } from '@/lib/analytics';
+import {
+  classifyGenerationError,
+  presentFailedBriefing,
+  type FriendlyError,
+} from '@/lib/errorPresentation';
 
 // ── Main page ─────────────────────────────────────────────────────────────────
 
-interface GenerateError {
-  kind: 'no_ai' | 'failed';
-  message: string;
-}
 interface NoCandidates {
   shown: boolean;
 }
@@ -22,7 +23,7 @@ interface NoCandidates {
 export function BriefPage() {
   const navigate = useNavigate();
   const [isGenerating, setIsGenerating] = useState(false);
-  const [generateError, setGenerateError] = useState<GenerateError | null>(null);
+  const [generateError, setGenerateError] = useState<FriendlyError | null>(null);
   const [noCandidates, setNoCandidates] = useState<NoCandidates>({ shown: false });
   const [focusInput, setFocusInput] = useState('');
 
@@ -52,15 +53,7 @@ export function BriefPage() {
         await refetch();
       }
     } catch (err: unknown) {
-      if (err instanceof Error) {
-        if (err.message.startsWith('503')) {
-          setGenerateError({ kind: 'no_ai', message: err.message });
-        } else {
-          setGenerateError({ kind: 'failed', message: err.message });
-        }
-      } else {
-        setGenerateError({ kind: 'failed', message: 'Unexpected error' });
-      }
+      setGenerateError(classifyGenerationError(err));
     } finally {
       setIsGenerating(false);
     }
@@ -77,14 +70,13 @@ export function BriefPage() {
         <div className="flex items-start gap-3 p-4 rounded-lg border border-destructive/30 bg-destructive/5 mb-4">
           <AlertCircle className="size-4 text-destructive mt-0.5 shrink-0" />
           <div>
-            <div className="text-sm font-medium text-foreground">
-              {generateError.kind === 'no_ai' ? 'AI not configured' : 'Generation failed'}
-            </div>
-            <div className="text-xs text-muted-foreground mt-1">
-              {generateError.kind === 'no_ai'
-                ? 'FREE_LLM_API_KEY (or OPENAI_API_KEY) is not set. Configure it in the app environment to enable briefings.'
-                : 'The AI returned an unexpected response. Try again or review the raw feed.'}
-            </div>
+            <div className="text-sm font-medium text-foreground">{generateError.title}</div>
+            <div className="text-xs text-muted-foreground mt-1">{generateError.message}</div>
+            {generateError.detail && (
+              <div className="text-[11px] text-muted-foreground/70 mt-1 font-mono">
+                {generateError.detail}
+              </div>
+            )}
           </div>
         </div>
         <div className="flex gap-2 flex-wrap">
@@ -152,14 +144,18 @@ export function BriefPage() {
 
   // Failed briefing state (last briefing itself failed)
   if (data.status === 'failed') {
+    const failedBriefing = presentFailedBriefing(data.error);
     return (
       <div className="px-4 md:px-5 pt-4 pb-6">
         <div className="flex items-start gap-3 p-4 rounded-lg border border-destructive/30 bg-destructive/5 mb-4">
           <AlertCircle className="size-4 text-destructive mt-0.5 shrink-0" />
           <div>
-            <div className="text-sm font-medium text-foreground">Last briefing failed</div>
-            {data.error && (
-              <div className="text-xs text-muted-foreground mt-1 font-mono">{data.error}</div>
+            <div className="text-sm font-medium text-foreground">{failedBriefing.title}</div>
+            <div className="text-xs text-muted-foreground mt-1">{failedBriefing.message}</div>
+            {failedBriefing.detail && (
+              <div className="text-[11px] text-muted-foreground/70 mt-1 font-mono">
+                {failedBriefing.detail}
+              </div>
             )}
           </div>
         </div>

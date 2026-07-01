@@ -6,6 +6,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { BriefPage } from '../pages/BriefPage';
 import * as api from '../api';
+import { HttpError } from '../api';
 
 vi.spyOn(console, 'error').mockImplementation(() => undefined);
 
@@ -245,7 +246,7 @@ describe('BriefPage — generating state', () => {
 describe('BriefPage — AI not configured error', () => {
   beforeEach(() => {
     vi.spyOn(api, 'fetchLatestBriefing').mockResolvedValue({ status: 'empty' });
-    vi.spyOn(api, 'createBriefing').mockRejectedValue(new Error('503 Service Unavailable'));
+    vi.spyOn(api, 'createBriefing').mockRejectedValue(new HttpError(503, 'Service Unavailable'));
   });
 
   it('shows AI not configured message', async () => {
@@ -255,6 +256,17 @@ describe('BriefPage — AI not configured error', () => {
     );
     await userEvent.click(screen.getByRole('button', { name: /generate briefing/i }));
     await waitFor(() => expect(screen.getByText('AI not configured')).toBeTruthy());
+  });
+
+  it('shows friendly copy without naming environment variables', async () => {
+    renderBriefPage();
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /generate briefing/i })).toBeTruthy()
+    );
+    await userEvent.click(screen.getByRole('button', { name: /generate briefing/i }));
+    await waitFor(() => expect(screen.getByText(/administrator needs to configure/i)).toBeTruthy());
+    expect(screen.queryByText(/FREE_LLM_API_KEY/)).toBeNull();
+    expect(screen.queryByText(/OPENAI_API_KEY/)).toBeNull();
   });
 
   it('shows the Today feed path', async () => {
@@ -272,7 +284,7 @@ describe('BriefPage — AI not configured error', () => {
 describe('BriefPage — generation failed error', () => {
   beforeEach(() => {
     vi.spyOn(api, 'fetchLatestBriefing').mockResolvedValue({ status: 'empty' });
-    vi.spyOn(api, 'createBriefing').mockRejectedValue(new Error('500 Internal Server Error'));
+    vi.spyOn(api, 'createBriefing').mockRejectedValue(new HttpError(500, 'Internal Server Error'));
   });
 
   it('shows generation failed message', async () => {
@@ -282,6 +294,17 @@ describe('BriefPage — generation failed error', () => {
     );
     await userEvent.click(screen.getByRole('button', { name: /generate briefing/i }));
     await waitFor(() => expect(screen.getByText('Generation failed')).toBeTruthy());
+  });
+
+  it('shows retry-oriented copy as the primary message, not the raw error', async () => {
+    renderBriefPage();
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /generate briefing/i })).toBeTruthy()
+    );
+    await userEvent.click(screen.getByRole('button', { name: /generate briefing/i }));
+    await waitFor(() => expect(screen.getByText('Generation failed')).toBeTruthy());
+    expect(screen.getByText(/try again shortly/i)).toBeTruthy();
+    expect(screen.queryByText('500 Internal Server Error')).toBeNull();
   });
 
   it('shows Retry button', async () => {
@@ -304,14 +327,70 @@ describe('BriefPage — failed briefing state (last save failed)', () => {
     await waitFor(() => expect(screen.getByText('Last briefing failed')).toBeTruthy());
   });
 
-  it('shows the error detail', async () => {
+  it('shows friendly copy as the primary body', async () => {
     renderBriefPage();
-    await waitFor(() => expect(screen.getByText('AI returned invalid JSON')).toBeTruthy());
+    await waitFor(() =>
+      expect(screen.getByText(/previous briefing could not be generated/i)).toBeTruthy()
+    );
+  });
+
+  it('shows the raw error only as secondary technical detail', async () => {
+    renderBriefPage();
+    await waitFor(() => expect(screen.getByText('Last briefing failed')).toBeTruthy());
+    expect(screen.getByText('AI returned invalid JSON')).toBeTruthy();
   });
 
   it('shows Retry and Review Today feed buttons', async () => {
     renderBriefPage();
     await waitFor(() => expect(screen.getByRole('button', { name: /retry/i })).toBeTruthy());
     expect(screen.getByRole('button', { name: /review today feed/i })).toBeTruthy();
+  });
+});
+
+describe('BriefPage — podcast generation AI not configured error', () => {
+  beforeEach(() => {
+    vi.spyOn(api, 'fetchLatestBriefing').mockResolvedValue(COMPLETE_BRIEFING);
+    vi.spyOn(api, 'generateBriefingPodcast').mockRejectedValue(
+      new HttpError(503, 'Service Unavailable')
+    );
+  });
+
+  it('shows friendly AI-not-configured copy instead of the raw error', async () => {
+    renderBriefPage();
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /create podcast/i })).toBeTruthy()
+    );
+    await userEvent.click(screen.getByRole('button', { name: /create podcast/i }));
+    await waitFor(() => expect(screen.getByText(/administrator needs to configure/i)).toBeTruthy());
+    expect(screen.queryByText(/FREE_LLM_API_KEY/)).toBeNull();
+    expect(screen.queryByText('Service Unavailable')).toBeNull();
+  });
+});
+
+describe('BriefPage — podcast generation generic failure', () => {
+  beforeEach(() => {
+    vi.spyOn(api, 'fetchLatestBriefing').mockResolvedValue(COMPLETE_BRIEFING);
+    vi.spyOn(api, 'generateBriefingPodcast').mockRejectedValue(
+      new HttpError(500, 'boom from provider')
+    );
+  });
+
+  it('shows retry-oriented friendly copy as the primary message', async () => {
+    renderBriefPage();
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /create podcast/i })).toBeTruthy()
+    );
+    await userEvent.click(screen.getByRole('button', { name: /create podcast/i }));
+    await waitFor(() => expect(screen.getByText(/podcast generation failed/i)).toBeTruthy());
+    expect(screen.getByText(/try again shortly/i)).toBeTruthy();
+  });
+
+  it('keeps the raw error available as secondary technical detail', async () => {
+    renderBriefPage();
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /create podcast/i })).toBeTruthy()
+    );
+    await userEvent.click(screen.getByRole('button', { name: /create podcast/i }));
+    await waitFor(() => expect(screen.getByText('boom from provider')).toBeTruthy());
   });
 });

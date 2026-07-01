@@ -4,7 +4,11 @@
 // and on page hide via sendBeacon so events survive tab close.
 
 export type AnalyticsEventType =
-  'heartbeat' | 'route' | 'article_open' | 'article_close' | 'feature';
+  | 'heartbeat'
+  | 'route'
+  | 'article_open'
+  | 'article_close'
+  | 'feature';
 
 export interface AnalyticsEvent {
   type: AnalyticsEventType;

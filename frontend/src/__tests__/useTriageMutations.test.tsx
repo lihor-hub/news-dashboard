@@ -229,7 +229,8 @@ describe('useTriageMutations — undo calls the API to revert server state', () 
       result.current.sendLater(article, 1);
     });
     const afterLater = vi.mocked(toast).mock.lastCall as unknown as
-      [string, ToastOpts?] | undefined;
+      | [string, ToastOpts?]
+      | undefined;
     expect(afterLater?.[1]?.id).toBe('triage');
   });
 

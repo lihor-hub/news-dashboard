@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { formatDate, formatWindow } from '@/lib/briefingUtils';
 import { generateBriefingPodcast } from '@/api';
+import { classifyGenerationError, type FriendlyError } from '@/lib/errorPresentation';
 import type { Briefing, BriefingArticle, BriefingSection } from '@/types';
 
 // ── Sub-components ────────────────────────────────────────────────────────────
@@ -111,7 +112,7 @@ export function BriefingView({
   onRefreshBriefing?: () => void;
 }) {
   const [isGeneratingPodcast, setIsGeneratingPodcast] = useState(false);
-  const [podcastError, setPodcastError] = useState<string | null>(null);
+  const [podcastError, setPodcastError] = useState<FriendlyError | null>(null);
   const [showTranscript, setShowTranscript] = useState(false);
 
   async function handleGeneratePodcast() {
@@ -123,11 +124,7 @@ export function BriefingView({
         onRefreshBriefing();
       }
     } catch (err: unknown) {
-      if (err instanceof Error) {
-        setPodcastError(err.message);
-      } else {
-        setPodcastError('An unexpected error occurred during podcast generation');
-      }
+      setPodcastError(classifyGenerationError(err));
     } finally {
       setIsGeneratingPodcast(false);
     }
@@ -295,7 +292,15 @@ export function BriefingView({
               <div className="mt-3 flex items-start gap-2 p-3 rounded-lg border border-destructive/20 bg-destructive/5 text-xs text-destructive">
                 <AlertCircle className="size-4 shrink-0 mt-0.5" />
                 <div>
-                  <span className="font-semibold">Podcast generation failed:</span> {podcastError}
+                  <div className="font-semibold">
+                    {podcastError.kind === 'no_ai'
+                      ? podcastError.title
+                      : 'Podcast generation failed'}
+                  </div>
+                  <div className="mt-0.5">{podcastError.message}</div>
+                  {podcastError.detail && (
+                    <div className="mt-1 font-mono text-destructive/70">{podcastError.detail}</div>
+                  )}
                 </div>
               </div>
             )}
