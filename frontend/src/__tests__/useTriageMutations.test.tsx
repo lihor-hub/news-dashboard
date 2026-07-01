@@ -1,11 +1,12 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook, act, waitFor } from '@testing-library/react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClient, QueryClientProvider, type InfiniteData } from '@tanstack/react-query';
 import { createElement } from 'react';
 import { toast } from 'sonner';
 import type { WorkflowArticle } from '../lib/workflowTypes';
 import * as workflowApi from '../api/workflowApi';
+import type { TriageArticlePage } from '../api/workflowApi';
 import { useTriageMutations, ARTICLES_KEY } from '../hooks/useTriageMutations';
 import { trackFeature } from '../lib/analytics';
 
@@ -59,12 +60,25 @@ function makeArticle(overrides: Partial<WorkflowArticle> = {}): WorkflowArticle 
   };
 }
 
+// Article lists are loaded with `useInfiniteQuery`, so the cache holds an
+// `InfiniteData` page envelope — not a flat array. Seed and read it that way.
+type ListCache = InfiniteData<TriageArticlePage>;
+
+function infiniteList(articles: WorkflowArticle[]): ListCache {
+  return { pages: [{ items: articles, limit: 100, offset: 0, hasMore: false }], pageParams: [0] };
+}
+
+function cachedItems(queryClient: QueryClient, queryKey: unknown[]): WorkflowArticle[] {
+  const data = queryClient.getQueryData<ListCache>(queryKey);
+  return data?.pages.flatMap((page) => page.items) ?? [];
+}
+
 function makeWrapper() {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
   const article = makeArticle();
-  queryClient.setQueryData([ARTICLES_KEY, { state: 'today' }], [article]);
+  queryClient.setQueryData([ARTICLES_KEY, { state: 'today' }], infiniteList([article]));
   const Wrapper = ({ children }: { children: React.ReactNode }) =>
     createElement(QueryClientProvider, { client: queryClient }, children);
   return { wrapper: Wrapper, queryClient };
@@ -242,13 +256,13 @@ describe('useTriageMutations — undo calls the API to revert server state', () 
     const { wrapper, queryClient } = makeWrapper();
     const { result } = renderHook(() => useTriageMutations(), { wrapper });
     const article = makeArticle({ state: 'today' });
-    queryClient.setQueryData([ARTICLES_KEY, 'today'], [article]);
+    queryClient.setQueryData([ARTICLES_KEY, 'today'], infiniteList([article]));
 
     act(() => {
       result.current.setState(article, 'done', 'Marked as read');
     });
 
-    expect(queryClient.getQueryData([ARTICLES_KEY, 'today'])).toEqual([]);
+    expect(cachedItems(queryClient, [ARTICLES_KEY, 'today'])).toEqual([]);
   });
 });
 
@@ -302,7 +316,7 @@ describe('useTriageMutations — surfaces backend error details in error toast',
     const { wrapper, queryClient } = makeWrapper();
     const { result } = renderHook(() => useTriageMutations(), { wrapper });
     const article = makeArticle({ state: 'today' });
-    queryClient.setQueryData([ARTICLES_KEY, 'today'], [article]);
+    queryClient.setQueryData([ARTICLES_KEY, 'today'], infiniteList([article]));
 
     await act(async () => {
       result.current.setState(article, 'done', 'Marked as read');
@@ -310,8 +324,8 @@ describe('useTriageMutations — surfaces backend error details in error toast',
     });
 
     await waitFor(() => {
-      const cached = queryClient.getQueryData<WorkflowArticle[]>([ARTICLES_KEY, 'today']);
-      expect(cached?.some((a) => a.id === article.id)).toBe(true);
+      const cached = cachedItems(queryClient, [ARTICLES_KEY, 'today']);
+      expect(cached.some((a) => a.id === article.id)).toBe(true);
     });
   });
 
@@ -355,6 +369,62 @@ describe('useTriageMutations — surfaces backend error details in error toast',
         { id: 'triage' }
       );
     });
+  });
+});
+
+// Regression: article feeds load via `useInfiniteQuery`, so the cache is an
+// `InfiniteData` envelope. The optimistic-update helpers must patch through
+// `pages` rather than assuming a flat array — otherwise every triage action
+// (keyboard shortcut or row button) throws "articles.some is not a function"
+// and silently does nothing.
+describe('useTriageMutations — patches infinite-query caches (article feeds)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    patchArticleStatePromise = Promise.resolve({});
+  });
+
+  function seedAndRender(article: WorkflowArticle) {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    });
+    const key = [ARTICLES_KEY, 'today', undefined];
+    queryClient.setQueryData(key, infiniteList([article]));
+    const wrapper = ({ children }: { children: React.ReactNode }) =>
+      createElement(QueryClientProvider, { client: queryClient }, children);
+    const { result } = renderHook(() => useTriageMutations(), { wrapper });
+    return { queryClient, key, result };
+  }
+
+  it('setState removes a moved article from an infinite cache without throwing', async () => {
+    const article = makeArticle({ id: '42', state: 'today' });
+    const { queryClient, key, result } = seedAndRender(article);
+
+    act(() => result.current.setState(article, 'done', 'Done'));
+
+    await waitFor(() =>
+      expect(workflowApi.patchArticleState).toHaveBeenCalledWith('42', 'done', false)
+    );
+    expect(cachedItems(queryClient, key)).toEqual([]);
+  });
+
+  it('toggleStar patches an article in place in an infinite cache without throwing', async () => {
+    const article = makeArticle({ id: '7', starred: false });
+    const { queryClient, key, result } = seedAndRender(article);
+
+    act(() => result.current.toggleStar(article));
+
+    await waitFor(() => expect(workflowApi.patchArticleStar).toHaveBeenCalledWith('7', true));
+    expect(cachedItems(queryClient, key)[0]?.starred).toBe(true);
+  });
+
+  it('sendLater moves an article out of the today infinite cache without throwing', async () => {
+    const article = makeArticle({ id: '9', state: 'today' });
+    const { queryClient, key, result } = seedAndRender(article);
+
+    act(() => result.current.sendLater(article, 1));
+
+    await waitFor(() => expect(workflowApi.patchArticleLater).toHaveBeenCalledWith('9', 1));
+    expect(cachedItems(queryClient, key)).toEqual([]);
   });
 });
 
