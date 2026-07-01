@@ -1590,9 +1590,10 @@ def import_opml(
                 failed.append({"url": xml_url, "error": "could not derive a valid slug"})
                 continue
 
-            # Skip duplicates (by slug or URL owned by this user)
+            # Skip duplicates: slug is globally unique (primary key), so a slug collision
+            # with anyone's source would fail the insert; URL is only checked per-owner.
             existing = conn.execute(
-                "SELECT 1 FROM sources WHERE (slug = %s OR url = %s) AND owner_user_id = %s",
+                "SELECT 1 FROM sources WHERE slug = %s OR (url = %s AND owner_user_id = %s)",
                 (slug, xml_url, uid),
             ).fetchone()
             if existing:
@@ -1600,15 +1601,19 @@ def import_opml(
                 continue
 
             try:
-                conn.execute(
-                    """
-                    INSERT INTO sources(
-                        slug, name, url, category, kind, priority, enabled, owner_user_id
+                # A savepoint keeps a constraint violation here (e.g. a slug that slipped
+                # past the duplicate check via a race) from aborting the whole request's
+                # transaction and breaking the remaining outlines in this loop.
+                with conn.transaction():
+                    conn.execute(
+                        """
+                        INSERT INTO sources(
+                            slug, name, url, category, kind, priority, enabled, owner_user_id
+                        )
+                        VALUES (%s, %s, %s, %s, %s, 0, TRUE, %s)
+                        """,
+                        (slug, name, xml_url, category, "rss_feed", uid),
                     )
-                    VALUES (%s, %s, %s, %s, %s, 0, TRUE, %s)
-                    """,
-                    (slug, name, xml_url, category, "rss_feed", uid),
-                )
                 row = conn.execute("SELECT * FROM sources WHERE slug = %s", (slug,)).fetchone()
                 added.append(row_to_dict(row))
             except Exception as exc:
