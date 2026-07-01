@@ -31,7 +31,7 @@ helm version
 
 ## Step 1 — Register the runner
 
-1. Go to **https://github.com/ioachim-hub/news-dashboard/settings/actions/runners**
+1. Go to **https://github.com/lihor-hub/news-dashboard/settings/actions/runners**
 2. Click **New self-hosted runner**
 3. Select **Linux / x64**
 4. Follow the on-screen download and configuration steps:
@@ -43,7 +43,7 @@ curl -o actions-runner-linux-x64.tar.gz -L <URL_FROM_GITHUB_UI>
 tar xzf actions-runner-linux-x64.tar.gz
 
 # Register — use the token shown on the GitHub UI; it expires in 1 hour
-./config.sh --url https://github.com/ioachim-hub/news-dashboard \
+./config.sh --url https://github.com/lihor-hub/news-dashboard \
             --token <REGISTRATION_TOKEN_FROM_GITHUB_UI> \
             --name ioachim-minipc \
             --labels self-hosted
@@ -64,7 +64,7 @@ sudo systemctl status "actions.runner.*"
 ```
 
 Check that the runner appears as **Idle** in the GitHub UI at
-`https://github.com/ioachim-hub/news-dashboard/settings/actions/runners`.
+`https://github.com/lihor-hub/news-dashboard/settings/actions/runners`.
 
 To manage the service later:
 
@@ -77,7 +77,7 @@ sudo systemctl restart "actions.runner.*"
 ## Step 3 — Environment variables and secrets
 
 The deploy workflow reads one GitHub Actions secret. Add it at
-**https://github.com/ioachim-hub/news-dashboard/settings/secrets/actions**:
+**https://github.com/lihor-hub/news-dashboard/settings/secrets/actions**:
 
 | Secret name  | Description |
 |--------------|-------------|

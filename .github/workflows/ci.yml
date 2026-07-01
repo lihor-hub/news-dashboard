@@ -362,7 +362,7 @@ jobs:
       - name: helm template (production-like overrides)
         run: |
           helm template news-dashboard ./helm/news-dashboard \
-            --set "image.repository=ghcr.io/ioachim-hub/news-dashboard" \
+            --set "image.repository=ghcr.io/lihor-hub/news-dashboard" \
             --set "image.tag=abc1234" \
             --set "image.pullSecretName=ghcr-pull-secret" \
             --set "service.type=NodePort" \

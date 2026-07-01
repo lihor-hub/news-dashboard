@@ -145,8 +145,8 @@ Privacy/security:
 Built via `Dockerfile` at repo root. Published to GHCR via GitHub Actions on every push to `main`.
 
 ```
-ghcr.io/ioachim-hub/news-dashboard:latest
-ghcr.io/ioachim-hub/news-dashboard:<sha>
+ghcr.io/lihor-hub/news-dashboard:latest
+ghcr.io/lihor-hub/news-dashboard:<sha>
 ```
 
 ### Kubernetes (Helm)
