@@ -37,12 +37,12 @@ jobs:
           - python
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # Initializes the CodeQL tooling for the current language.
       # sets-up the environment, downloads the CodeQL CLI, and extracts
       # the code database for analysis.
-      - uses: github/codeql-action/init@v3
+      - uses: github/codeql-action/init@v4
         with:
           languages: ${{ matrix.language }}
           queries: security-and-quality
@@ -63,8 +63,8 @@ jobs:
       # For compiled languages (C/C++, C#, Go, Java, Swift), autobuild
       # attempts to build the code. For JavaScript/TypeScript and Python
       # the database is extracted directly from the source tree.
-      - uses: github/codeql-action/autobuild@v3
+      - uses: github/codeql-action/autobuild@v4
 
-      - uses: github/codeql-action/analyze@v3
+      - uses: github/codeql-action/analyze@v4
         with:
           category: ${{ matrix.language }}
