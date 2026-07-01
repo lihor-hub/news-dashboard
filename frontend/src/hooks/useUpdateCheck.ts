@@ -47,13 +47,7 @@ async function fetchCurrentVersion(): Promise<string> {
 }
 
 export type ElectronUpdateStage =
-  | 'idle'
-  | 'checking'
-  | 'up-to-date'
-  | 'available'
-  | 'downloading'
-  | 'ready'
-  | 'error';
+  'idle' | 'checking' | 'up-to-date' | 'available' | 'downloading' | 'ready' | 'error';
 
 export function useUpdateCheck() {
   const platform = detectPlatform();
