@@ -5,8 +5,7 @@ from __future__ import annotations
 import pytest
 
 from news_dashboard.ingest import sync_sources
-from news_dashboard.sources import DEFAULT_SOURCES, SourceDefinition
-
+from news_dashboard.sources import DEFAULT_SOURCES
 
 # ── Unit tests (no DB) ───────────────────────────────────────────────────
 
@@ -14,9 +13,7 @@ from news_dashboard.sources import DEFAULT_SOURCES, SourceDefinition
 def test_deepmind_blog_in_default_sources() -> None:
     """deepmind-blog SourceDefinition exists in DEFAULT_SOURCES."""
     by_slug = {s.slug: s for s in DEFAULT_SOURCES}
-    assert "deepmind-blog" in by_slug, (
-        f"deepmind-blog not found; slugs: {sorted(by_slug)[:10]}..."
-    )
+    assert "deepmind-blog" in by_slug, f"deepmind-blog not found; slugs: {sorted(by_slug)[:10]}..."
 
 
 def test_deepmind_blog_metadata() -> None:
@@ -49,9 +46,7 @@ def test_deepmind_blog_routes_to_scraped_page() -> None:
 # ── Integration tests (PostgreSQL) ────────────────────────────────────────
 
 
-def test_deepmind_blog_sync_persists_row(
-    pg_clean: str, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_deepmind_blog_sync_persists_row(pg_clean: str, monkeypatch: pytest.MonkeyPatch) -> None:
     """sync_sources() creates a sources row for deepmind-blog."""
     monkeypatch.setenv("DATABASE_URL", pg_clean)
     sync_sources(pg_clean)
@@ -74,9 +69,7 @@ def test_deepmind_blog_sync_persists_row(
     assert row["enabled"] is True
 
 
-def test_deepmind_blog_sync_idempotent(
-    pg_clean: str, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_deepmind_blog_sync_idempotent(pg_clean: str, monkeypatch: pytest.MonkeyPatch) -> None:
     """Running sync_sources twice does not duplicate deepmind-blog."""
     monkeypatch.setenv("DATABASE_URL", pg_clean)
     sync_sources(pg_clean)
