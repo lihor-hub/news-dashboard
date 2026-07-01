@@ -183,6 +183,7 @@ export interface CreateSourcePayload {
   name: string;
   category?: string;
   slug?: string;
+  kind?: string;
 }
 
 export async function createSource(payload: CreateSourcePayload): Promise<Source> {

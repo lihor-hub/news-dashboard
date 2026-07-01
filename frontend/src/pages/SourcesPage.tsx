@@ -51,6 +51,12 @@ function kindLabel(kind: string): string {
       return 'Trending';
     case 'scraped_page':
       return 'Scraped';
+    case 'reddit_feed':
+      return 'Reddit';
+    case 'lobsters_feed':
+      return 'Lobsters';
+    case 'mastodon_feed':
+      return 'Mastodon';
     default:
       return kind;
   }
@@ -84,9 +90,16 @@ interface AddSourceFormState {
   url: string;
   category: string;
   slug: string;
+  kind: string;
 }
 
-const EMPTY_FORM: AddSourceFormState = { name: '', url: '', category: 'tech', slug: '' };
+const EMPTY_FORM: AddSourceFormState = {
+  name: '',
+  url: '',
+  category: 'tech',
+  slug: '',
+  kind: 'rss_feed',
+};
 
 function AddSourceDialog({
   open,
@@ -107,6 +120,7 @@ function AddSourceDialog({
         url: form.url,
         category: form.category || 'tech',
         slug: form.slug || undefined,
+        kind: form.kind,
       }),
     onSuccess: () => {
       setForm(EMPTY_FORM);
@@ -135,9 +149,25 @@ function AddSourceDialog({
     <Dialog open={open} onOpenChange={(v) => !v && handleClose()}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Add private RSS source</DialogTitle>
+          <DialogTitle>Add private source</DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="flex flex-col gap-3 pt-1">
+          <div className="flex flex-col gap-1">
+            <label className="text-xs font-medium text-muted-foreground" htmlFor="src-kind">
+              Kind
+            </label>
+            <select
+              id="src-kind"
+              value={form.kind}
+              onChange={(e) => setForm((f) => ({ ...f, kind: e.target.value }))}
+              className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-base shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 md:text-sm"
+            >
+              <option value="rss_feed">RSS Feed</option>
+              <option value="reddit_feed">Reddit</option>
+              <option value="lobsters_feed">Lobsters</option>
+              <option value="mastodon_feed">Mastodon</option>
+            </select>
+          </div>
           <div className="flex flex-col gap-1">
             <label className="text-xs font-medium text-muted-foreground" htmlFor="src-name">
               Name

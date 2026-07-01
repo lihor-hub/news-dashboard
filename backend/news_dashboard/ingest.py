@@ -485,22 +485,21 @@ def _fetch_nitter_feed(source: SourceDefinition) -> list[dict[str, Any]]:
 
 def _fetch_reddit_feed(source: SourceDefinition) -> list[dict[str, Any]]:
     """Fetch a Reddit subreddit RSS feed."""
-    # Convert reddit.com URL to RSS format
-    url = source.url.rstrip("/")
-    if not url.endswith(".rss"):
-        if url.endswith("/"):
-            url = url + ".rss"
-        else:
-            url = url + "/.rss"
+    url = source.url
+    if not url.endswith(".rss") and not url.endswith(".rss/"):
+        url = url.rstrip("/") + "/.rss"
     return _parse_feed_url(url)
+
 
 def _fetch_lobsters_feed(source: SourceDefinition) -> list[dict[str, Any]]:
     """Fetch a Lobsters RSS feed."""
     return _parse_feed_url(source.url)
 
+
 def _fetch_mastodon_feed(source: SourceDefinition) -> list[dict[str, Any]]:
     """Fetch a Mastodon user or hashtag RSS feed."""
     return _parse_feed_url(source.url)
+
 
 def detect_and_translate_article(
     title: str,
@@ -578,30 +577,34 @@ def detect_and_translate_article(
     return title, summary, source_lang, None
 
 
+def _fetch_entries_by_kind(source: SourceDefinition) -> list[dict[str, Any]]:
+    """Fetch entries based on the source kind."""
+    from news_dashboard.scraper import scrape_source
+
+    if source.kind == "scraped_page":
+        return scrape_source(source)
+    if source.kind == "nitter_feed":
+        return _fetch_nitter_feed(source)
+    if source.kind == "reddit_feed":
+        return _fetch_reddit_feed(source)
+    if source.kind == "lobsters_feed":
+        return _fetch_lobsters_feed(source)
+    if source.kind == "mastodon_feed":
+        return _fetch_mastodon_feed(source)
+    return _fetch_feed_entries(source)
+
+
 def _ingest_source(
     source: SourceDefinition, db_path: Path | str | None = None
 ) -> SourceIngestOutcome:
     """Fetch and insert articles for a single source. Returns count inserted."""
-    from news_dashboard.scraper import scrape_source
-
     checked_at = now_iso()
     inserted = 0
     fetched = 0
     started = time.perf_counter()
 
     try:
-        if source.kind == "scraped_page":
-            entries = scrape_source(source)
-        elif source.kind == "nitter_feed":
-            entries = _fetch_nitter_feed(source)
-        elif source.kind == "reddit_feed":
-            entries = _fetch_reddit_feed(source)
-        elif source.kind == "lobsters_feed":
-            entries = _fetch_lobsters_feed(source)
-        elif source.kind == "mastodon_feed":
-            entries = _fetch_mastodon_feed(source)
-        else:
-            entries = _fetch_feed_entries(source)
+        entries = _fetch_entries_by_kind(source)
         # Apply per-source item limit; tweets are short/frequent so cap lower by default
         noise_rule = NOISE_FILTERS.get(source.slug, {})
         default_max = 15 if source.kind == "nitter_feed" else 50

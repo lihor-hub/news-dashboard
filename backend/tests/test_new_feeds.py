@@ -28,7 +28,7 @@ def _make_source(kind: str, url: str, slug: str = "test") -> SourceDefinition:
     )
 
 
-def test_fetch_reddit_feed_converts_url():
+def test_fetch_reddit_feed_converts_url() -> None:
     """Test that Reddit URL is converted to RSS format."""
     # Test URL without trailing slash
     source = _make_source("reddit_feed", "https://www.reddit.com/r/python")
@@ -45,7 +45,7 @@ def test_fetch_reddit_feed_converts_url():
         mock_parse.assert_called_once_with("https://www.reddit.com/r/python/.rss")
 
 
-def test_fetch_lobsters_feed_passthrough():
+def test_fetch_lobsters_feed_passthrough() -> None:
     """Test that Lobsters URL is passed through unchanged."""
     source = _make_source("lobsters_feed", "https://lobste.rs/rss")
     with patch("news_dashboard.ingest._parse_feed_url") as mock_parse:
@@ -54,7 +54,7 @@ def test_fetch_lobsters_feed_passthrough():
         mock_parse.assert_called_once_with("https://lobste.rs/rss")
 
 
-def test_fetch_mastodon_feed_passthrough():
+def test_fetch_mastodon_feed_passthrough() -> None:
     """Test that Mastodon URL is passed through unchanged."""
     source = _make_source("mastodon_feed", "https://mastodon.social/tags/tech.rss")
     with patch("news_dashboard.ingest._parse_feed_url") as mock_parse:
@@ -63,7 +63,7 @@ def test_fetch_mastodon_feed_passthrough():
         mock_parse.assert_called_once_with("https://mastodon.social/tags/tech.rss")
 
 
-def test_ingest_source_routes_to_correct_function():
+def test_ingest_source_routes_to_correct_function() -> None:
     """Test that _ingest_source routes to the correct fetch function based on kind."""
     # Test reddit_feed routing
     reddit_source = _make_source("reddit_feed", "https://www.reddit.com/r/test")
@@ -90,7 +90,7 @@ def test_ingest_source_routes_to_correct_function():
         mock_mastodon.assert_called_once()
 
 
-def test_ingest_source_handles_fetch_errors():
+def test_ingest_source_handles_fetch_errors() -> None:
     """Test that feed fetch errors are handled properly."""
     source = _make_source("reddit_feed", "https://www.reddit.com/r/nonexistent")
     with patch("news_dashboard.ingest._fetch_reddit_feed") as mock_fetch:

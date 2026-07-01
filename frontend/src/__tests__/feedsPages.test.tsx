@@ -193,7 +193,12 @@ describe('SourcesPage', () => {
   });
 
   it('calls createSource with form data and closes dialog on success', async () => {
-    const newSource = source({ slug: 'my-blog', name: 'My Blog', owner_user_id: 2 });
+    const newSource = source({
+      slug: 'my-blog',
+      name: 'My Blog',
+      owner_user_id: 2,
+      kind: 'reddit_feed',
+    });
     apiMock.fetchSources.mockResolvedValue([source()]);
     apiMock.createSource.mockResolvedValue(newSource);
     withProviders(<SourcesPage />, '/', regularUser);
@@ -202,6 +207,8 @@ describe('SourcesPage', () => {
     fireEvent.click(screen.getByRole('button', { name: /add source/i }));
     await screen.findByRole('dialog');
 
+    expect(screen.getByLabelText(/kind/i)).toBeTruthy();
+    fireEvent.change(screen.getByLabelText(/kind/i), { target: { value: 'reddit_feed' } });
     fireEvent.change(screen.getByLabelText(/^name$/i), { target: { value: 'My Blog' } });
     fireEvent.change(screen.getByLabelText(/feed url/i), {
       target: { value: 'https://myblog.com/feed' },
@@ -213,7 +220,11 @@ describe('SourcesPage', () => {
 
     await waitFor(() =>
       expect(apiMock.createSource).toHaveBeenCalledWith(
-        expect.objectContaining({ name: 'My Blog', url: 'https://myblog.com/feed' })
+        expect.objectContaining({
+          name: 'My Blog',
+          url: 'https://myblog.com/feed',
+          kind: 'reddit_feed',
+        })
       )
     );
   });
