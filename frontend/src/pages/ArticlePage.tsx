@@ -21,6 +21,7 @@ import {
   Sparkles,
   Lightbulb,
   Scale,
+  Download,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import {
@@ -39,6 +40,7 @@ import { adaptArticle, patchArticleState, patchArticleStar } from '@/api/workflo
 import type { WorkflowState } from '@/lib/workflowTypes';
 import { formatDate, readingTime, signalLabel } from '@/lib/format';
 import { getReaderList } from '@/lib/readerList';
+import { cacheArticleBody, isOfflineCacheSupported } from '@/lib/offline';
 import { recommendationExplanation } from '@/lib/recommendation';
 import { trackArticleOpen, trackArticleClose } from '@/lib/analytics';
 import { cn } from '@/lib/utils';
@@ -296,6 +298,16 @@ export function ArticlePage() {
     }
   }
 
+  async function saveCurrentArticleOffline() {
+    if (!article) return;
+    try {
+      await cacheArticleBody(article.id);
+      toast('Saved for offline');
+    } catch {
+      toast.error('Could not save offline');
+    }
+  }
+
   // TTS audio player
   type AudioState = 'idle' | 'loading' | 'playing' | 'paused';
   const [audioState, setAudioState] = useState<AudioState>('idle');
@@ -520,6 +532,15 @@ export function ArticlePage() {
               >
                 <ExternalLink className="size-4" />
               </a>
+              {isOfflineCacheSupported() && !shareId && (
+                <button
+                  onClick={() => void saveCurrentArticleOffline()}
+                  className="inline-flex size-8 items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-surface"
+                  aria-label="Save for offline"
+                >
+                  <Download className="size-4" />
+                </button>
+              )}
             </div>
           </div>
         </header>

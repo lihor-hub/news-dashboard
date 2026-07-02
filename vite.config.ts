@@ -57,6 +57,33 @@ export default defineConfig({
               expiration: { maxEntries: 20, maxAgeSeconds: 60 * 60 * 24 * 30 },
             },
           },
+          {
+            // Article metadata/list JSON: prefer fresh network data, keep a bounded offline copy.
+            urlPattern: ({ url }) =>
+              url.origin === self.location.origin &&
+              url.pathname === '/api/articles' &&
+              !url.searchParams.has('include_archived'),
+            handler: 'NetworkFirst',
+            options: {
+              cacheName: 'pwa-article-lists',
+              networkTimeoutSeconds: 3,
+              expiration: { maxEntries: 24, maxAgeSeconds: 60 * 60 * 24 * 7 },
+              cacheableResponse: { statuses: [200] },
+            },
+          },
+          {
+            // Article bodies are explicit GETs so Workbox can serve opened/offline-saved reads.
+            urlPattern: ({ url }) =>
+              url.origin === self.location.origin &&
+              /^\/api\/articles\/\d+\/body$/.test(url.pathname),
+            handler: 'NetworkFirst',
+            options: {
+              cacheName: 'offline-articles-v1',
+              networkTimeoutSeconds: 3,
+              expiration: { maxEntries: 100, maxAgeSeconds: 60 * 60 * 24 * 30 },
+              cacheableResponse: { statuses: [200] },
+            },
+          },
         ],
       },
     }),

@@ -7,6 +7,15 @@
   "background_color": "#faf8f5",
   "theme_color": "#221f1a",
   "lang": "en",
+  "share_target": {
+    "action": "/share-target",
+    "method": "GET",
+    "params": {
+      "title": "title",
+      "text": "text",
+      "url": "url"
+    }
+  },
   "icons": [
     {
       "src": "/favicon.svg",

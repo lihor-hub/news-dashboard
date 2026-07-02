@@ -117,7 +117,18 @@ export async function fetchArticle(id: number | string): Promise<Article> {
 }
 
 export async function fetchArticleBody(id: number | string): Promise<Article> {
-  return requestJson<Article>(`/api/articles/${id}/body`, { method: 'POST' });
+  return requestJson<Article>(`/api/articles/${id}/body`);
+}
+
+export async function saveSharedUrl(payload: {
+  url: string;
+  title?: string | null;
+  text?: string | null;
+}): Promise<Article> {
+  return requestJson<Article>('/api/articles/save-url', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
 }
 
 export async function fetchArticleHighlights(id: number | string): Promise<ArticleHighlight[]> {

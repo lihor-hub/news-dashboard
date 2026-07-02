@@ -22,6 +22,11 @@ const MANIFEST = JSON.parse(
   background_color: string;
   theme_color: string;
   icons: { src: string; sizes: string; type: string; purpose: string }[];
+  share_target?: {
+    action: string;
+    method: string;
+    params: { title: string; text: string; url: string };
+  };
 };
 
 describe('PWA manifest — identity', () => {
@@ -93,5 +98,15 @@ describe('PWA manifest — branding', () => {
 
   it('background_color is light (warm off-white #faf8f5)', () => {
     expect(MANIFEST.background_color).toBe('#faf8f5');
+  });
+});
+
+describe('PWA manifest — share target', () => {
+  it('accepts shared URLs through the app route', () => {
+    expect(MANIFEST.share_target).toEqual({
+      action: '/share-target',
+      method: 'GET',
+      params: { title: 'title', text: 'text', url: 'url' },
+    });
   });
 });

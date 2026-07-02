@@ -146,8 +146,28 @@ describe('article list endpoints', () => {
   it('fetchArticleBody POSTs', async () => {
     const { calls } = stubFetch(() => jsonOk({ id: 7 }));
     await api.fetchArticleBody(7);
-    expect(calls[0].init?.method).toBe('POST');
+    expect(calls[0].init?.method).toBeUndefined();
     expect(calls[0].url).toBe('/api/articles/7/body');
+  });
+
+  it('saveSharedUrl posts the shared URL payload', async () => {
+    const { calls } = stubFetch(() => jsonOk({ id: 8 }));
+    const article = await api.saveSharedUrl({
+      url: 'https://example.com/post',
+      title: 'Shared title',
+      text: 'Shared note',
+    });
+
+    expect(article).toEqual({ id: 8 });
+    expect(calls[0].url).toBe('/api/articles/save-url');
+    expect(calls[0].init?.method).toBe('POST');
+    expect(calls[0].init?.body).toBe(
+      JSON.stringify({
+        url: 'https://example.com/post',
+        title: 'Shared title',
+        text: 'Shared note',
+      })
+    );
   });
 
   it('creates and deletes article highlights through article-scoped paths', async () => {

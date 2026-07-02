@@ -80,6 +80,7 @@ from news_dashboard.ingest import (
     get_user_summary,
     ingest_all,
     list_articles,
+    now_iso,
     search_articles_page,
     send_article_later,
     set_article_starred,
@@ -304,6 +305,29 @@ class StarUpdate(BaseModel):
 
 class LaterUpdate(BaseModel):
     days: int = 1
+
+
+class SaveSharedUrlRequest(BaseModel):
+    url: str = Field(min_length=1, max_length=2_000)
+    title: str | None = Field(default=None, max_length=500)
+    text: str | None = Field(default=None, max_length=4_000)
+
+    @field_validator("url")
+    @classmethod
+    def _url_not_blank(cls, value: str) -> str:
+        stripped = value.strip()
+        if not stripped:
+            message = "url must not be blank"
+            raise ValueError(message)
+        return stripped
+
+    @field_validator("title", "text")
+    @classmethod
+    def _blank_to_none(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        stripped = value.strip()
+        return stripped or None
 
 
 class ShareArticleRequest(BaseModel):
@@ -853,6 +877,74 @@ def get_article_by_id(
     return article
 
 
+@api.post("/api/articles/save-url")
+def save_shared_url(
+    payload: SaveSharedUrlRequest,
+    current_user: Annotated[dict[str, Any], Depends(require_auth)],
+) -> dict[str, Any]:
+    try:
+        validate_server_fetch_url(payload.url)
+    except UnsafeUrlError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    from urllib.parse import urlparse
+
+    init_db()
+    parsed = urlparse(payload.url)
+    source_name = parsed.netloc or "Shared link"
+    source_slug = "share-target"
+    title = payload.title or payload.text or payload.url
+    summary = payload.text if payload.text and payload.text != title else ""
+    ts = now_iso()
+    with connect() as conn:
+        conn.execute(
+            """
+            INSERT INTO sources(slug, name, url, category, kind, enabled, priority)
+            VALUES (%s, 'Shared Links', 'https://example.invalid/share-target', 'shared',
+                    'share_target', true, 50)
+            ON CONFLICT (slug) DO NOTHING
+            """,
+            (source_slug,),
+        )
+        row = conn.execute("SELECT * FROM articles WHERE url = %s", (payload.url,)).fetchone()
+        if row is None:
+            row = conn.execute(
+                """
+                INSERT INTO articles(
+                  url, canonical_url, title, source_slug, source_name, category, kind,
+                  published_at, summary, reason, importance_score, tags, discovered_at, updated_at
+                ) VALUES (
+                  %s, %s, %s, %s, %s, 'shared', 'share_target',
+                  %s, %s, 'Saved from the operating system share sheet', 50, '', %s, %s
+                )
+                RETURNING *
+                """,
+                (payload.url, payload.url, title, source_slug, source_name, ts, summary, ts, ts),
+            ).fetchone()
+        article = row_to_dict(row)
+        conn.execute(
+            """
+            INSERT INTO user_article_state(user_id, article_id, state, updated_at)
+            VALUES (%s, %s, 'today', %s)
+            ON CONFLICT (user_id, article_id) DO UPDATE
+               SET state = CASE
+                     WHEN user_article_state.state IN ('archived', 'skipped') THEN 'today'
+                     ELSE user_article_state.state
+                   END,
+                   restored_at = CASE
+                     WHEN user_article_state.state IN ('archived', 'skipped')
+                     THEN EXCLUDED.updated_at
+                     ELSE user_article_state.restored_at
+                   END,
+                   updated_at = EXCLUDED.updated_at
+            """,
+            (current_user["id"], article["id"], ts),
+        )
+
+    return get_article(int(article["id"]), user_id=current_user["id"]) or article
+
+
+@api.get("/api/articles/{article_id}/body")
 @api.post("/api/articles/{article_id}/body")
 def fetch_article_body(
     article_id: int,

@@ -18,6 +18,7 @@ import { SourcesPage } from './pages/SourcesPage';
 import { ArchivePage } from './pages/ArchivePage';
 import { CollectionsPage } from './pages/CollectionsPage';
 import { CollectionDetailPage } from './pages/CollectionDetailPage';
+import { ShareTargetPage } from './pages/ShareTargetPage';
 import { useAuth } from './contexts/auth';
 import { ShieldAlert } from 'lucide-react';
 
@@ -174,6 +175,7 @@ export const routes: RouteObject[] = [
       { path: 'collections', element: <CollectionsPage /> },
       { path: 'collections/:tagId', element: <CollectionDetailPage /> },
       { path: 'settings', element: withSuspense(SettingsPage) },
+      { path: 'share-target', element: <ShareTargetPage /> },
       { path: 'admin', element: withSuspense(AdminPage) },
       {
         path: 'analytics',

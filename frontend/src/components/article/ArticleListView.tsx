@@ -34,6 +34,7 @@ interface ArticleListViewProps {
   showLaterUntil?: boolean;
   sortArticles?: (articles: WorkflowArticle[]) => WorkflowArticle[];
   banner?: React.ReactNode;
+  action?: (state: { articles: WorkflowArticle[] }) => React.ReactNode;
 }
 
 export function ArticleListView({
@@ -46,6 +47,7 @@ export function ArticleListView({
   showLaterUntil,
   sortArticles,
   banner,
+  action,
 }: ArticleListViewProps) {
   const navigate = useNavigate();
   const { data, fetchNextPage, hasNextPage, isFetchingNextPage, isLoading } = useInfiniteQuery({
@@ -96,14 +98,17 @@ export function ArticleListView({
           </p>
         </div>
         {list.length > 0 && (
-          <button
-            type="button"
-            onClick={() => startListenQueue(list)}
-            className="flex shrink-0 items-center gap-1.5 rounded-md border border-border bg-background px-3 py-1.5 text-xs font-medium text-foreground hover:bg-muted"
-          >
-            <Headphones className="size-3.5" />
-            Listen
-          </button>
+          <div className="flex shrink-0 items-center gap-2">
+            {action?.({ articles: list })}
+            <button
+              type="button"
+              onClick={() => startListenQueue(list)}
+              className="flex shrink-0 items-center gap-1.5 rounded-md border border-border bg-background px-3 py-1.5 text-xs font-medium text-foreground hover:bg-muted"
+            >
+              <Headphones className="size-3.5" />
+              Listen
+            </button>
+          </div>
         )}
       </div>
       {showCategoryFilter && <CategoryFilter />}

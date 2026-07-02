@@ -1,7 +1,7 @@
 import { useLocation, useNavigate, Outlet, Link } from 'react-router-dom';
 import { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { LogOut, MoreHorizontal, Search } from 'lucide-react';
+import { LogOut, MoreHorizontal, Search, WifiOff } from 'lucide-react';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
 import { AppLogo } from './AppLogo';
 import { CommandPalette } from './CommandPalette';
@@ -44,6 +44,22 @@ function useNavCounts() {
     starred: data?.byStatus?.saved ?? null,
     shared: sharesUnread ?? null,
   };
+}
+
+function useOnlineStatus() {
+  const [online, setOnline] = useState(() =>
+    typeof navigator === 'undefined' ? true : navigator.onLine
+  );
+  useEffect(() => {
+    const update = () => setOnline(navigator.onLine);
+    window.addEventListener('online', update);
+    window.addEventListener('offline', update);
+    return () => {
+      window.removeEventListener('online', update);
+      window.removeEventListener('offline', update);
+    };
+  }, []);
+  return online;
 }
 
 function DesktopRail({ pathname }: { pathname: string }) {
@@ -141,6 +157,7 @@ export function AppShell() {
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const whatsNew = useWhatsNew();
   const onboarding = useOnboardingWizard();
+  const online = useOnlineStatus();
   useElectronBriefNotifier((path) => void navigate(path));
 
   async function handleLogout() {
@@ -218,6 +235,12 @@ export function AppShell() {
             <h1 className="text-[13px] font-semibold tracking-tight truncate">{title}</h1>
           </div>
           <div className="flex items-center gap-1">
+            {!online && (
+              <div className="inline-flex items-center gap-1 rounded-md border border-border bg-surface px-2 py-1 text-xs font-medium text-muted-foreground">
+                <WifiOff className="size-3.5" />
+                Offline
+              </div>
+            )}
             <button
               onClick={() => setPaletteOpen(true)}
               className="hidden md:inline-flex items-center gap-2 rounded-md border border-border bg-surface px-2.5 py-1 text-xs text-muted-foreground hover:text-foreground hover:border-border-strong transition-colors"
