@@ -21,11 +21,3 @@ instructions after you have completed the quick start in the README.
 Once you have an account and are signed in, see the [User Guide](/docs/user-guide)
 to learn about the Today Feed, sources and subscriptions, search, daily
 briefings, recommendations, reading history, and sharing.
-
-:::info Content migration in progress
-The detailed User Guide topics (Today Feed, sources, search, briefings,
-sharing) currently live in
-[`docs/user-guide/`](https://github.com/lihor-hub/news-dashboard/tree/main/docs/user-guide)
-and will be migrated into this site as part of the docs content-migration
-issue.
-:::
