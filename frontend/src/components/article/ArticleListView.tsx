@@ -1,11 +1,12 @@
 import { useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useInfiniteQuery, type QueryKey } from '@tanstack/react-query';
-import type { LucideIcon } from 'lucide-react';
+import { Headphones, type LucideIcon } from 'lucide-react';
 import { ArticleRow } from '@/components/article/ArticleRow';
 import { CategoryFilter } from '@/components/CategoryFilter';
 import { EmptyState } from '@/components/EmptyState';
 import { useFocusedArticle } from '@/contexts/focusedArticle';
+import { useListenQueue } from '@/contexts/listenQueue';
 import { useArticleListNav } from '@/hooks/useArticleListNav';
 import { useTriageMutations } from '@/hooks/useTriageMutations';
 import { setReaderList } from '@/lib/readerList';
@@ -66,6 +67,7 @@ export function ArticleListView({
     setReaderList(list.map((article) => article.id));
   }, [list]);
 
+  const { start: startListenQueue } = useListenQueue();
   const mutations = useTriageMutations();
   const { focused } = useArticleListNav(
     list,
@@ -81,16 +83,28 @@ export function ArticleListView({
 
   return (
     <div>
-      <div className="px-4 md:px-5 pt-4 pb-3">
-        <h2 className="text-[22px] font-semibold tracking-tight">{title}</h2>
-        <p className="text-xs text-muted-foreground mt-0.5">
-          {description({
-            count: list.length,
-            loadedCount: list.length,
-            hasMore,
-            isLoading,
-          })}
-        </p>
+      <div className="flex items-start justify-between gap-3 px-4 md:px-5 pt-4 pb-3">
+        <div>
+          <h2 className="text-[22px] font-semibold tracking-tight">{title}</h2>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            {description({
+              count: list.length,
+              loadedCount: list.length,
+              hasMore,
+              isLoading,
+            })}
+          </p>
+        </div>
+        {list.length > 0 && (
+          <button
+            type="button"
+            onClick={() => startListenQueue(list)}
+            className="flex shrink-0 items-center gap-1.5 rounded-md border border-border bg-background px-3 py-1.5 text-xs font-medium text-foreground hover:bg-muted"
+          >
+            <Headphones className="size-3.5" />
+            Listen
+          </button>
+        )}
       </div>
       {showCategoryFilter && <CategoryFilter />}
       {banner}

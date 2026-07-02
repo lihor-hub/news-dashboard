@@ -12,6 +12,7 @@ import { AppShell } from '../components/AppShell';
 import { CommandPalette } from '../components/CommandPalette';
 import { ShortcutOverlay } from '../components/ShortcutOverlay';
 import { FocusedArticleProvider } from '../contexts/focusedArticle';
+import { ListenQueueProvider } from '../contexts/listenQueue';
 import { AuthProvider } from '../contexts/auth';
 import * as api from '../api';
 
@@ -60,7 +61,9 @@ function renderShell(initialPath = '/') {
       <AuthProvider>
         <MemoryRouter initialEntries={[initialPath]}>
           <FocusedArticleProvider>
-            <AppShell />
+            <ListenQueueProvider>
+              <AppShell />
+            </ListenQueueProvider>
           </FocusedArticleProvider>
         </MemoryRouter>
       </AuthProvider>
@@ -274,7 +277,9 @@ describe('#105 — g-key shortcuts via AppShell', () => {
         <AuthProvider>
           <MemoryRouter initialEntries={['/today']}>
             <FocusedArticleProvider>
-              <AppShell />
+              <ListenQueueProvider>
+                <AppShell />
+              </ListenQueueProvider>
             </FocusedArticleProvider>
           </MemoryRouter>
         </AuthProvider>
@@ -291,7 +296,9 @@ describe('#105 — g-key shortcuts via AppShell', () => {
         <AuthProvider>
           <MemoryRouter initialEntries={['/']}>
             <FocusedArticleProvider>
-              <AppShell />
+              <ListenQueueProvider>
+                <AppShell />
+              </ListenQueueProvider>
             </FocusedArticleProvider>
           </MemoryRouter>
         </AuthProvider>

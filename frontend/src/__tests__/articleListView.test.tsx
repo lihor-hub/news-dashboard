@@ -4,15 +4,32 @@ import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { FocusedArticleProvider } from '../contexts/focusedArticle';
+import { ListenQueueProvider } from '../contexts/listenQueue';
+import { ListenQueuePlayer } from '../components/ListenQueuePlayer';
 import { ArticleListView } from '../components/article/ArticleListView';
 import type { WorkflowArticle } from '../lib/workflowTypes';
 import type { TriageArticlePage } from '../api/workflowApi';
 import { Inbox } from 'lucide-react';
+import * as api from '../api';
 
 vi.mock('../hooks/useTriageMutations', () => ({
   useTriageMutations: () => ({ setState: vi.fn(), toggleStar: vi.fn(), sendLater: vi.fn() }),
   ARTICLES_KEY: 'articles',
 }));
+
+vi.spyOn(api, 'fetchArticleAudioUrl').mockResolvedValue('blob:fake');
+vi.stubGlobal(
+  'Audio',
+  vi.fn().mockImplementation(function AudioMock() {
+    return {
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      play: vi.fn().mockResolvedValue(undefined),
+      pause: vi.fn(),
+      removeAttribute: vi.fn(),
+    };
+  })
+);
 
 function makeArticle(overrides: Partial<WorkflowArticle> = {}): WorkflowArticle {
   return {
@@ -58,24 +75,27 @@ function renderArticleList(
   return render(
     <QueryClientProvider client={queryClient}>
       <FocusedArticleProvider>
-        <MemoryRouter initialEntries={['/today']}>
-          <Routes>
-            <Route
-              path="/today"
-              element={
-                <ArticleListView
-                  title="Today"
-                  description={({ count }) => `${count} unhandled`}
-                  queryKey={['articles', 'today']}
-                  queryFn={queryFn}
-                  empty={{ icon: Inbox, title: 'Queue clear' }}
-                  showCategoryFilter
-                />
-              }
-            />
-            <Route path="/a/:id" element={<div data-testid="reader">Reader</div>} />
-          </Routes>
-        </MemoryRouter>
+        <ListenQueueProvider>
+          <MemoryRouter initialEntries={['/today']}>
+            <Routes>
+              <Route
+                path="/today"
+                element={
+                  <ArticleListView
+                    title="Today"
+                    description={({ count }) => `${count} unhandled`}
+                    queryKey={['articles', 'today']}
+                    queryFn={queryFn}
+                    empty={{ icon: Inbox, title: 'Queue clear' }}
+                    showCategoryFilter
+                  />
+                }
+              />
+              <Route path="/a/:id" element={<div data-testid="reader">Reader</div>} />
+            </Routes>
+            <ListenQueuePlayer />
+          </MemoryRouter>
+        </ListenQueueProvider>
       </FocusedArticleProvider>
     </QueryClientProvider>
   );
@@ -134,6 +154,28 @@ describe('ArticleListView', () => {
     expect(queryFn).toHaveBeenNthCalledWith(1, { limit: 100, offset: 0 });
     expect(queryFn).toHaveBeenNthCalledWith(2, { limit: 100, offset: 1 });
     expect(screen.getByText('2 unhandled')).toBeTruthy();
+  });
+});
+
+describe('ArticleListView — listen queue', () => {
+  it('starting the queue from the feed sets the first article as current', async () => {
+    renderArticleList(() =>
+      Promise.resolve(
+        page([makeArticle({ id: '1', title: 'First' }), makeArticle({ id: '2', title: 'Second' })])
+      )
+    );
+    await waitFor(() => expect(screen.getByText('First')).toBeTruthy());
+
+    fireEvent.click(screen.getByRole('button', { name: /listen/i }));
+
+    expect(screen.getByRole('region', { name: /listen queue player/i })).toBeTruthy();
+  });
+
+  it('does not render a Listen button when the feed is empty', async () => {
+    renderArticleList(() => Promise.resolve(page([])));
+    await waitFor(() => expect(screen.getByText('Queue clear')).toBeTruthy());
+
+    expect(screen.queryByRole('button', { name: /listen/i })).toBeNull();
   });
 });
 

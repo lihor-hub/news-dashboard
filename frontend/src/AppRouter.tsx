@@ -3,6 +3,7 @@ import { createBrowserRouter, RouterProvider, Navigate, type RouteObject } from 
 import { Loader2 } from 'lucide-react';
 import { FocusedArticleProvider } from './contexts/focusedArticle';
 import { AuthProvider } from './contexts/auth';
+import { ListenQueueProvider } from './contexts/listenQueue';
 import { RequireAuth } from './components/RequireAuth';
 import { AppShell } from './components/AppShell';
 import { LoginPage } from './pages/LoginPage';
@@ -201,7 +202,9 @@ export function AppRouter() {
   return (
     <AuthProvider>
       <FocusedArticleProvider>
-        <RouterProvider router={router} />
+        <ListenQueueProvider>
+          <RouterProvider router={router} />
+        </ListenQueueProvider>
       </FocusedArticleProvider>
     </AuthProvider>
   );

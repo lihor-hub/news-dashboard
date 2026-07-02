@@ -8,6 +8,7 @@ import { CommandPalette } from './CommandPalette';
 import { ShortcutOverlay } from './ShortcutOverlay';
 import { WhatsNewDialog } from './WhatsNewDialog';
 import { OnboardingWizard } from './OnboardingWizard';
+import { ListenQueuePlayer } from './ListenQueuePlayer';
 import { useWhatsNew } from '@/hooks/useWhatsNew';
 import { useOnboardingWizard } from '@/hooks/useOnboardingWizard';
 import { useElectronBriefNotifier } from '@/hooks/useElectronBriefNotifier';
@@ -343,6 +344,7 @@ export function AppShell() {
       <ShortcutOverlay open={shortcutsOpen} onOpenChange={setShortcutsOpen} />
       <WhatsNewDialog state={whatsNew} />
       <OnboardingWizard open={onboarding.open} onClose={onboarding.skip} />
+      <ListenQueuePlayer />
     </div>
   );
 }
