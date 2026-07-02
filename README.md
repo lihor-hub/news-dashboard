@@ -255,7 +255,8 @@ For end-user documentation, see the [User Guide](docs/user-guide/README.md) whic
 - Saved and read history
 - Sharing articles with other users
 
-For technical documentation (architecture, deployment, authentication), see the files in the `docs/` directory.
+For technical documentation (architecture, deployment, authentication), see the
+[docs index](docs/README.md).
 
 ## Deployment
 
