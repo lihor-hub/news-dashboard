@@ -198,6 +198,15 @@ DEFAULT_SOURCES: list[SourceDefinition] = [
         80,
         interest_tags=("agents", "model-releases", "product-news"),
     ),
+    SourceDefinition(
+        "meta-ai-blog",
+        "Meta AI Blog",
+        "https://ai.meta.com/blog/",
+        "ai-llm",
+        "scraped_page",
+        80,
+        interest_tags=("model-releases", "evals", "infra", "product-news"),
+    ),
     # ── AI research ──────────────────────────────────────────────────────────
     SourceDefinition(
         "arxiv-ai-ml",
