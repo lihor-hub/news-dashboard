@@ -44,6 +44,7 @@ from news_dashboard.auth import (
     _session_days,
     authenticate,
     consume_otp,
+    count_admins,
     create_otp_for_user,
     create_session_token,
     create_user,
@@ -2437,6 +2438,29 @@ def export_user_data(
     from news_dashboard.export import assemble_user_export
 
     return assemble_user_export(current_user["id"])
+
+
+class DeleteAccountRequest(BaseModel):
+    confirmation: str
+
+
+@api.delete("/api/users/me")
+def delete_own_account(
+    payload: DeleteAccountRequest,
+    current_user: Annotated[dict[str, Any], Depends(require_auth)],
+    response: Response,
+) -> dict[str, str]:
+    if payload.confirmation != current_user["username"]:
+        raise HTTPException(
+            status_code=400, detail="Confirmation text does not match your username"
+        )
+    if current_user.get("is_admin") and count_admins() <= 1:
+        raise HTTPException(
+            status_code=400, detail="Cannot delete the last remaining admin account"
+        )
+    delete_user(current_user["id"])
+    response.delete_cookie(key=_SESSION_COOKIE, path="/")
+    return {"status": "deleted"}
 
 
 @api.get("/api/users/me/recommendation-preferences")

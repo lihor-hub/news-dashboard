@@ -787,6 +787,13 @@ export async function downloadUserExport(): Promise<void> {
   URL.revokeObjectURL(url);
 }
 
+export async function deleteOwnAccount(confirmation: string): Promise<void> {
+  await requestJson<{ status: string }>('/api/users/me', {
+    method: 'DELETE',
+    body: JSON.stringify({ confirmation }),
+  });
+}
+
 // ── OPML import / export ──────────────────────────────────────────────────────
 
 export async function exportOpml(): Promise<void> {

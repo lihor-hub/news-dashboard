@@ -422,6 +422,58 @@ def test_admin_cannot_delete_self(tmp_db: str) -> None:
     assert resp.status_code == 400
 
 
+# ── Self-serve account deletion ───────────────────────────────────────────────
+
+
+def test_delete_own_account(tmp_db: str) -> None:
+    create_user("someadmin", "pw", is_admin=True)  # keep an admin around
+    user = create_user("regular", "pw2", is_admin=False)
+    token = create_session_token(user["id"], is_admin=False)
+    client = _fresh_client()
+    client.cookies.set("nd_session", token)
+    resp = client.request("DELETE", "/api/users/me", json={"confirmation": "regular"})
+    assert resp.status_code == 200
+    assert get_user_by_id(user["id"]) is None
+    assert resp.cookies.get("nd_session") is None
+
+
+def test_delete_own_account_wrong_confirmation(tmp_db: str) -> None:
+    user = create_user("regular2", "pw", is_admin=False)
+    token = create_session_token(user["id"], is_admin=False)
+    client = _fresh_client()
+    client.cookies.set("nd_session", token)
+    resp = client.request("DELETE", "/api/users/me", json={"confirmation": "not-my-username"})
+    assert resp.status_code == 400
+    assert get_user_by_id(user["id"]) is not None
+
+
+def test_delete_own_account_blocks_last_admin(tmp_db: str) -> None:
+    admin = create_user("lastadmin", "pw", is_admin=True)
+    token = create_session_token(admin["id"], is_admin=True)
+    client = _fresh_client()
+    client.cookies.set("nd_session", token)
+    resp = client.request("DELETE", "/api/users/me", json={"confirmation": "lastadmin"})
+    assert resp.status_code == 400
+    assert get_user_by_id(admin["id"]) is not None
+
+
+def test_delete_own_account_allows_admin_when_others_remain(tmp_db: str) -> None:
+    admin = create_user("admin-one", "pw", is_admin=True)
+    create_user("admin-two", "pw2", is_admin=True)
+    token = create_session_token(admin["id"], is_admin=True)
+    client = _fresh_client()
+    client.cookies.set("nd_session", token)
+    resp = client.request("DELETE", "/api/users/me", json={"confirmation": "admin-one"})
+    assert resp.status_code == 200
+    assert get_user_by_id(admin["id"]) is None
+
+
+def test_delete_own_account_requires_auth(tmp_db: str) -> None:
+    client = _fresh_client()
+    resp = client.request("DELETE", "/api/users/me", json={"confirmation": "whoever"})
+    assert resp.status_code == 401
+
+
 # ── Health endpoint is public ─────────────────────────────────────────────────
 
 

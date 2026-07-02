@@ -2,6 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { ReactElement } from 'react';
+import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 // ── Shared API mock ──────────────────────────────────────────────────────────
@@ -16,9 +17,18 @@ const apiMock = vi.hoisted(() => ({
   fetchIngestRunSources: vi.fn(),
   recalculateMyRecommendations: vi.fn(),
   downloadUserExport: vi.fn(),
+  deleteOwnAccount: vi.fn(),
 }));
 vi.mock('../api', () => apiMock);
 vi.mock('@/api', () => apiMock);
+
+const authMock = vi.hoisted(() => ({
+  user: { id: 1, username: 'testuser', is_admin: false },
+  setUser: vi.fn(),
+}));
+vi.mock('@/contexts/auth', () => ({
+  useAuth: () => authMock,
+}));
 
 // recharts renders nothing measurable under happy-dom; stub it to plain divs so
 // StatsPage's data rows/tables still mount and assert cleanly.
@@ -62,7 +72,11 @@ afterEach(() => {
 
 function renderPage(ui: ReactElement) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return render(<QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>);
+  return render(
+    <MemoryRouter>
+      <QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>
+    </MemoryRouter>
+  );
 }
 
 // ── StatsPage ────────────────────────────────────────────────────────────────
@@ -167,9 +181,11 @@ describe('SettingsPage', () => {
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     const invalidate = vi.spyOn(queryClient, 'invalidateQueries');
     render(
-      <QueryClientProvider client={queryClient}>
-        <SettingsPage />
-      </QueryClientProvider>
+      <MemoryRouter>
+        <QueryClientProvider client={queryClient}>
+          <SettingsPage />
+        </QueryClientProvider>
+      </MemoryRouter>
     );
     fireEvent.click(screen.getByText('Refresh recommendations'));
     await waitFor(() => expect(screen.getByText(/Personalized 2 articles/)).toBeTruthy());
@@ -214,6 +230,47 @@ describe('SettingsPage', () => {
     renderPage(<SettingsPage />);
     fireEvent.click(screen.getByText('Download archive'));
     await waitFor(() => expect(screen.getByText('network error')).toBeTruthy());
+  });
+
+  it('requires typing the exact username before deletion is enabled', () => {
+    renderPage(<SettingsPage />);
+    fireEvent.click(screen.getByText('Delete my account'));
+    const button = screen.getByRole<HTMLButtonElement>('button', {
+      name: /Permanently delete account/,
+    });
+    expect(button.disabled).toBe(true);
+    fireEvent.change(screen.getByLabelText(/Type/), { target: { value: 'wrong' } });
+    expect(button.disabled).toBe(true);
+    fireEvent.change(screen.getByLabelText(/Type/), { target: { value: 'testuser' } });
+    expect(button.disabled).toBe(false);
+  });
+
+  it('deletes the account and clears the session on confirmation', async () => {
+    apiMock.deleteOwnAccount.mockResolvedValue(undefined);
+    renderPage(<SettingsPage />);
+    fireEvent.click(screen.getByText('Delete my account'));
+    fireEvent.change(screen.getByLabelText(/Type/), { target: { value: 'testuser' } });
+    fireEvent.click(screen.getByText('Permanently delete account'));
+    await waitFor(() => expect(apiMock.deleteOwnAccount).toHaveBeenCalledWith('testuser'));
+    expect(authMock.setUser).toHaveBeenCalledWith(null);
+  });
+
+  it('shows an error message when account deletion fails', async () => {
+    apiMock.deleteOwnAccount.mockRejectedValue(new Error('cannot delete last admin'));
+    renderPage(<SettingsPage />);
+    fireEvent.click(screen.getByText('Delete my account'));
+    fireEvent.change(screen.getByLabelText(/Type/), { target: { value: 'testuser' } });
+    fireEvent.click(screen.getByText('Permanently delete account'));
+    await waitFor(() => expect(screen.getByText('cannot delete last admin')).toBeTruthy());
+  });
+
+  it('cancels the delete confirmation flow', () => {
+    renderPage(<SettingsPage />);
+    fireEvent.click(screen.getByText('Delete my account'));
+    fireEvent.change(screen.getByLabelText(/Type/), { target: { value: 'testuser' } });
+    fireEvent.click(screen.getByText('Cancel'));
+    expect(screen.queryByLabelText(/Type/)).toBeNull();
+    expect(screen.getByText('Delete my account')).toBeTruthy();
   });
 });
 

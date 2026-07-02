@@ -1,7 +1,9 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { AuthProvider } from '@/contexts/auth';
 
 vi.mock('@/api', () => ({
   recalculateMyRecommendations: vi.fn(),
@@ -22,9 +24,13 @@ import { SettingsPage } from '../pages/SettingsPage';
 function renderSettings() {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
-    <QueryClientProvider client={queryClient}>
-      <SettingsPage />
-    </QueryClientProvider>
+    <MemoryRouter>
+      <QueryClientProvider client={queryClient}>
+        <AuthProvider>
+          <SettingsPage />
+        </AuthProvider>
+      </QueryClientProvider>
+    </MemoryRouter>
   );
 }
 

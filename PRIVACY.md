@@ -66,6 +66,18 @@ in-app stats/analytics views. This data:
 - Is pruned automatically by a daily cleanup job after
   `ANALYTICS_RETENTION_DAYS` days (default `180`).
 
+## Your data: export and deletion
+
+- **Download your data**: Settings → Data Export → "Download archive" (or
+  `GET /api/users/me/export`) returns a JSON file with your reading
+  history, starred articles, highlights, shares, and daily briefings.
+- **Delete your account**: Settings → Danger Zone → "Delete my account"
+  (or `DELETE /api/users/me`) permanently removes your user row and all
+  associated per-user data (articles state, highlights, shares, push
+  subscriptions, OTPs, tags, goals, quizzes, etc.) via cascading deletes.
+  You must type your username to confirm. Deleting the last remaining
+  admin account is blocked — promote another user to admin first.
+
 ## See also
 
 - [Configuration](README.md#configuration) — full environment variable

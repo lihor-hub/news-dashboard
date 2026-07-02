@@ -253,6 +253,12 @@ def delete_user(user_id: int) -> bool:
         return bool(cursor.rowcount > 0)
 
 
+def count_admins() -> int:
+    with connect() as conn:
+        row = conn.execute("SELECT COUNT(*) AS n FROM users WHERE is_admin").fetchone()
+        return user_count_from_row(row)
+
+
 def _touch_last_login(user_id: int) -> None:
     with connect() as conn:
         conn.execute("UPDATE users SET last_login_at=CURRENT_TIMESTAMP WHERE id=%s", (user_id,))
