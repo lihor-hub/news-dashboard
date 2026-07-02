@@ -797,3 +797,94 @@ def test_otp_login_success_clears_throttle(tmp_db: str, clean_throttle: None) ->
     # Failure counter was cleared, so more wrong attempts still return 401, not 429
     resp = client.post("/api/auth/otp/login", json={"email": "clear@example.com", "otp": "000000"})
     assert resp.status_code == 401
+
+
+# ── CSRF/origin guard for cookie-authenticated mutations ─────────────────────
+
+
+def test_csrf_guard_rejects_cross_origin_mutation(tmp_db: str) -> None:
+    admin = create_user("csrf_admin_victim", "pw", is_admin=True)
+    token = create_session_token(admin["id"], is_admin=True)
+    client = _fresh_client()
+    client.cookies.set("nd_session", token)
+    resp = client.post(
+        "/api/admin/users",
+        json={"username": "csrf_should_not_exist", "password": "pw2", "is_admin": False},
+        headers={"origin": "http://attacker.example"},
+    )
+    assert resp.status_code == 403
+    assert authenticate("csrf_should_not_exist", "pw2") is None
+
+
+def test_csrf_guard_allows_same_origin_mutation(tmp_db: str) -> None:
+    admin = create_user("csrf_same_origin", "pw", is_admin=True)
+    token = create_session_token(admin["id"], is_admin=True)
+    client = _fresh_client()
+    client.cookies.set("nd_session", token)
+    resp = client.post(
+        "/api/admin/users",
+        json={"username": "csrf_same_origin_new", "password": "pw2", "is_admin": False},
+        headers={"origin": str(client.base_url).rstrip("/")},
+    )
+    assert resp.status_code == 200
+
+
+def test_csrf_guard_allows_configured_dev_origin(tmp_db: str) -> None:
+    admin = create_user("csrf_dev_origin", "pw", is_admin=True)
+    token = create_session_token(admin["id"], is_admin=True)
+    client = _fresh_client()
+    client.cookies.set("nd_session", token)
+    resp = client.post(
+        "/api/admin/users",
+        json={"username": "csrf_dev_origin_new", "password": "pw2", "is_admin": False},
+        headers={"origin": "http://localhost:5173"},
+    )
+    assert resp.status_code == 200
+
+
+def test_csrf_guard_allows_missing_origin_header(tmp_db: str) -> None:
+    """Non-browser clients (curl, mobile apps) don't send Origin/Referer."""
+    admin = create_user("csrf_no_origin", "pw", is_admin=True)
+    token = create_session_token(admin["id"], is_admin=True)
+    client = _fresh_client()
+    client.cookies.set("nd_session", token)
+    resp = client.post(
+        "/api/admin/users",
+        json={"username": "csrf_no_origin_new", "password": "pw2", "is_admin": False},
+    )
+    assert resp.status_code == 200
+
+
+def test_csrf_guard_falls_back_to_referer(tmp_db: str) -> None:
+    user = create_user("csrf_referer", "pw")
+    token = create_session_token(user["id"], is_admin=False)
+    client = _fresh_client()
+    client.cookies.set("nd_session", token)
+    resp = client.request(
+        "DELETE",
+        "/api/users/me",
+        json={"confirmation": "csrf_referer"},
+        headers={"referer": "http://attacker.example/evil-page"},
+    )
+    assert resp.status_code == 403
+    assert get_user_by_id(user["id"]) is not None
+
+
+def test_csrf_guard_does_not_block_safe_methods(tmp_db: str) -> None:
+    user = create_user("csrf_safe_method", "pw")
+    token = create_session_token(user["id"], is_admin=False)
+    client = _fresh_client()
+    client.cookies.set("nd_session", token)
+    resp = client.get("/api/articles", headers={"origin": "http://attacker.example"})
+    assert resp.status_code == 200
+
+
+def test_csrf_guard_does_not_block_login(tmp_db: str) -> None:
+    create_user("csrf_login_user", "pw")
+    client = _fresh_client()
+    resp = client.post(
+        "/api/auth/login",
+        json={"username": "csrf_login_user", "password": "pw"},
+        headers={"origin": "http://attacker.example"},
+    )
+    assert resp.status_code == 200

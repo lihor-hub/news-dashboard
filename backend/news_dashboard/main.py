@@ -10,6 +10,7 @@ from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
 from typing import Annotated, Any
+from urllib.parse import urlsplit
 
 from defusedxml.common import DefusedXmlException
 from defusedxml.ElementTree import fromstring as safe_fromstring
@@ -271,6 +272,58 @@ async def reject_guest_writes(request: Request, call_next: Any) -> Any:
             status_code=403,
             content={"detail": "Guest accounts cannot modify data"},
         )
+
+    return await call_next(request)
+
+
+# ── CSRF/origin guard for cookie-authenticated mutations ────────────────────
+
+
+def _request_origin(request: Request) -> str | None:
+    """Return the request's Origin, falling back to the Referer's origin."""
+    origin = request.headers.get("origin")
+    if origin:
+        return origin
+    referer = request.headers.get("referer")
+    if referer:
+        parts = urlsplit(referer)
+        if parts.scheme and parts.netloc:
+            return f"{parts.scheme}://{parts.netloc}"
+    return None
+
+
+@app.middleware("http")
+async def enforce_csrf_origin(request: Request, call_next: Any) -> Any:
+    """Reject cross-origin unsafe requests carrying the session cookie.
+
+    ``nd_session`` is already ``SameSite=Strict``, which blocks most
+    cross-site delivery, but that's a browser-side guarantee. This fails
+    closed at the server boundary too, in case a same-site sibling origin,
+    reverse-proxy change, or future cookie setting loosens it. The guard
+    only fires for unsafe methods on requests that already carry the
+    session cookie, so unauthenticated flows (login, OTP, Keycloak
+    callback) and safe methods are unaffected. It's a no-op when neither
+    ``Origin`` nor ``Referer`` is present, since non-browser clients
+    (curl, mobile apps) don't send them.
+    """
+    if request.method not in _UNSAFE_METHODS:
+        return await call_next(request)
+
+    path = request.url.path
+    if any(path.startswith(prefix) for prefix in _PUBLIC_UNSAFE_PREFIXES):
+        return await call_next(request)
+
+    if not request.cookies.get(_SESSION_COOKIE):
+        return await call_next(request)
+
+    origin = _request_origin(request)
+    if origin is not None:
+        allowed_origins = {*_cors_origins, f"{request.url.scheme}://{request.url.netloc}"}
+        if origin not in allowed_origins:
+            return JSONResponse(
+                status_code=403,
+                content={"detail": "Cross-origin request rejected"},
+            )
 
     return await call_next(request)
 
