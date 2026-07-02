@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" role="img" aria-label="Self-hosted server stack">
+  <rect width="96" height="96" rx="21" fill="#221f1a"/>
+  <!-- Server units -->
+  <rect x="18" y="18" width="60" height="16" rx="4" fill="none" stroke="#f0ede8" stroke-width="3"/>
+  <rect x="18" y="40" width="60" height="16" rx="4" fill="none" stroke="#f0ede8" stroke-width="3" opacity="0.65"/>
+  <rect x="18" y="62" width="60" height="16" rx="4" fill="none" stroke="#f0ede8" stroke-width="3" opacity="0.4"/>
+  <!-- Drive slots -->
+  <rect x="25" y="24" width="20" height="4" rx="2" fill="#f0ede8" opacity="0.8"/>
+  <rect x="25" y="46" width="20" height="4" rx="2" fill="#f0ede8" opacity="0.55"/>
+  <rect x="25" y="68" width="20" height="4" rx="2" fill="#f0ede8" opacity="0.35"/>
+  <!-- Status lights -->
+  <circle cx="68" cy="26" r="3.5" fill="#c8a45e"/>
+  <circle cx="68" cy="48" r="3.5" fill="#c8a45e" opacity="0.65"/>
+  <circle cx="68" cy="70" r="3.5" fill="#c8a45e" opacity="0.4"/>
+</svg>

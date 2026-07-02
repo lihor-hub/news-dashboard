@@ -1,12 +1,12 @@
-import {themes as prismThemes} from 'prism-react-renderer';
-import type {Config} from '@docusaurus/types';
+import { themes as prismThemes } from 'prism-react-renderer';
+import type { Config } from '@docusaurus/types';
 import type * as Preset from '@docusaurus/preset-classic';
 
 // This runs in Node.js - Don't use client-side code here (browser APIs, JSX...)
 
 const config: Config = {
   title: 'News Dashboard',
-  tagline: 'Your private news platform',
+  tagline: 'Your private, self-hosted news platform',
   favicon: 'img/favicon.ico',
 
   // Future flags, see https://docusaurus.io/docs/api/docusaurus-config#future
@@ -51,8 +51,13 @@ const config: Config = {
   themes: ['@easyops-cn/docusaurus-search-local'],
 
   themeConfig: {
-    // Replace with your project's social card
-    image: 'img/docusaurus-social-card.jpg',
+    image: 'img/social-card.png',
+    metadata: [
+      {
+        name: 'description',
+        content: 'Documentation for News Dashboard — your private, self-hosted news platform.',
+      },
+    ],
     colorMode: {
       respectPrefersColorScheme: true,
     },
@@ -124,7 +129,7 @@ const config: Config = {
           ],
         },
       ],
-      copyright: `Copyright © ${new Date().getFullYear()} News Dashboard. Built with Docusaurus.`,
+      copyright: `Copyright © ${new Date().getFullYear()} Ioachim Lihor · News Dashboard`,
     },
     prism: {
       theme: prismThemes.github,

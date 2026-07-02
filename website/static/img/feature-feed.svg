@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" role="img" aria-label="Curated feed with a triaged article">
+  <rect width="96" height="96" rx="21" fill="#221f1a"/>
+  <!-- Headline bar -->
+  <rect x="16" y="17" width="64" height="10" rx="4" fill="#f0ede8"/>
+  <!-- Article rows with triage state -->
+  <rect x="16" y="35" width="46" height="7" rx="3" fill="#f0ede8" opacity="0.75"/>
+  <circle cx="73" cy="38.5" r="4.5" fill="#c8a45e"/>
+  <rect x="16" y="49" width="46" height="7" rx="3" fill="#f0ede8" opacity="0.5"/>
+  <circle cx="73" cy="52.5" r="4.5" fill="none" stroke="#f0ede8" stroke-width="2.5" opacity="0.55"/>
+  <rect x="16" y="63" width="46" height="7" rx="3" fill="#f0ede8" opacity="0.3"/>
+  <circle cx="73" cy="66.5" r="4.5" fill="none" stroke="#f0ede8" stroke-width="2.5" opacity="0.3"/>
+  <!-- Check on the triaged row -->
+  <path d="M70.6 38.4l1.8 1.8 3-3.4" fill="none" stroke="#221f1a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

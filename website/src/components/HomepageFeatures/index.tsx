@@ -1,4 +1,4 @@
-import type {ReactNode} from 'react';
+import type { ReactNode } from 'react';
 import clsx from 'clsx';
 import Heading from '@theme/Heading';
 import styles from './styles.module.css';
@@ -11,38 +11,38 @@ type FeatureItem = {
 
 const FeatureList: FeatureItem[] = [
   {
-    title: 'Getting Started',
-    Svg: require('@site/static/img/undraw_docusaurus_mountain.svg').default,
+    title: 'Read Anywhere',
+    Svg: require('@site/static/img/feature-getting-started.svg').default,
     description: (
       <>
-        Install the Android app, create a web account, or self-host your own
-        instance in a few minutes.
+        Install the Android app or sign in from any browser. Your feed, saved articles, and
+        briefings stay in sync.
       </>
     ),
   },
   {
     title: 'Your Own Feed',
-    Svg: require('@site/static/img/undraw_docusaurus_tree.svg').default,
+    Svg: require('@site/static/img/feature-feed.svg').default,
     description: (
       <>
-        Curate sources, triage the Today Feed, and search across everything
-        you have read.
+        Curate sources, triage the Today Feed, and search across everything you have read — no
+        algorithm deciding for you.
       </>
     ),
   },
   {
     title: 'Self-Hostable',
-    Svg: require('@site/static/img/undraw_docusaurus_react.svg').default,
+    Svg: require('@site/static/img/feature-self-host.svg').default,
     description: (
       <>
-        Run News Dashboard on your own infrastructure with Docker Compose or
-        Helm, with full control over your data.
+        Run News Dashboard on your own infrastructure with Docker Compose or Helm, with full control
+        over your data.
       </>
     ),
   },
 ];
 
-function Feature({title, Svg, description}: FeatureItem) {
+function Feature({ title, Svg, description }: FeatureItem) {
   return (
     <div className={clsx('col col--4')}>
       <div className="text--center">
