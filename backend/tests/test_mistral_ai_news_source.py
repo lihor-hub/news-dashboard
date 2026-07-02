@@ -47,9 +47,7 @@ def test_mistral_ai_news_routes_to_scraped_page() -> None:
 # ── Integration tests (PostgreSQL) ────────────────────────────────────────
 
 
-def test_mistral_ai_news_sync_persists_row(
-    pg_clean: str, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_mistral_ai_news_sync_persists_row(pg_clean: str, monkeypatch: pytest.MonkeyPatch) -> None:
     """sync_sources() creates a sources row for mistral-ai-news."""
     monkeypatch.setenv("DATABASE_URL", pg_clean)
     sync_sources(pg_clean)
@@ -72,9 +70,7 @@ def test_mistral_ai_news_sync_persists_row(
     assert row["enabled"] is True
 
 
-def test_mistral_ai_news_sync_idempotent(
-    pg_clean: str, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_mistral_ai_news_sync_idempotent(pg_clean: str, monkeypatch: pytest.MonkeyPatch) -> None:
     """Running sync_sources twice does not duplicate mistral-ai-news."""
     monkeypatch.setenv("DATABASE_URL", pg_clean)
     sync_sources(pg_clean)
