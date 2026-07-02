@@ -339,6 +339,24 @@ export interface ReadingDna {
   average_dwell_seconds: number;
 }
 
+export interface ReadingStreak {
+  current_streak_days: number;
+  longest_streak_days: number;
+  last_active_date: string | null;
+  active_days: string[];
+  qualifying_activity: string;
+}
+
+export interface Achievement {
+  key: string;
+  title: string;
+  description: string;
+  unlocked: boolean;
+  unlocked_at: string | null;
+  progress: number;
+  target: number;
+}
+
 export interface RecommendationPreferences {
   category_weights: Record<string, number>;
   novelty_weight: number;

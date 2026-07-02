@@ -2894,9 +2894,11 @@ def admin_delete_user(
 # gate. Add each new domain's router here as it is extracted from main.py.
 from news_dashboard.ai_stats.router import router as ai_stats_router  # noqa: E402
 from news_dashboard.quizzes.router import router as quizzes_router  # noqa: E402
+from news_dashboard.reading_progress.router import router as reading_progress_router  # noqa: E402
 
 api.include_router(ai_stats_router)
 api.include_router(quizzes_router)
+api.include_router(reading_progress_router)
 
 app.include_router(api)
 app.include_router(admin)

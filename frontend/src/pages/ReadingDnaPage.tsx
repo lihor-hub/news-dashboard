@@ -1,14 +1,25 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
-import { CheckCircle, Loader2, Plus, RefreshCw, Trash2, XCircle } from 'lucide-react';
+import {
+  CheckCircle,
+  Flame,
+  Loader2,
+  Plus,
+  RefreshCw,
+  Trash2,
+  Trophy,
+  XCircle,
+} from 'lucide-react';
 import {
   createGoal,
   deleteGoal,
+  fetchAchievements,
   fetchGoals,
   fetchLatestQuiz,
   fetchQuizCandidates,
   fetchQuizHistory,
   fetchReadingDna,
+  fetchReadingStreak,
   fetchRecommendationPreferences,
   generateQuiz,
   saveRecommendationPreferences,
@@ -20,9 +31,11 @@ import type {
   QuizHistoryItem,
   QuizQuestion,
   QuizResult,
+  Achievement,
   ReadingDna,
   ReadingDnaBucket,
   ReadingGoal,
+  ReadingStreak,
   RecommendationPreferences,
 } from '../types';
 
@@ -32,6 +45,8 @@ type Tab = 'dna' | 'learning';
 
 interface PageState {
   dna: ReadingDna | null;
+  streak: ReadingStreak | null;
+  achievements: Achievement[];
   preferences: RecommendationPreferences | null;
   loading: boolean;
   saving: boolean;
@@ -42,6 +57,8 @@ export function ReadingDnaPage() {
   const [tab, setTab] = useState<Tab>('dna');
   const [state, setState] = useState<PageState>({
     dna: null,
+    streak: null,
+    achievements: [],
     preferences: null,
     loading: true,
     saving: false,
@@ -50,10 +67,23 @@ export function ReadingDnaPage() {
 
   useEffect(() => {
     let cancelled = false;
-    Promise.all([fetchReadingDna(), fetchRecommendationPreferences()])
-      .then(([dna, preferences]) => {
+    Promise.all([
+      fetchReadingDna(),
+      fetchRecommendationPreferences(),
+      fetchReadingStreak().catch(() => null),
+      fetchAchievements().catch(() => []),
+    ])
+      .then(([dna, preferences, streak, achievements]) => {
         if (!cancelled) {
-          setState({ dna, preferences, loading: false, saving: false, error: null });
+          setState({
+            dna,
+            preferences,
+            streak,
+            achievements,
+            loading: false,
+            saving: false,
+            error: null,
+          });
         }
       })
       .catch((err) => {
@@ -96,7 +126,7 @@ export function ReadingDnaPage() {
     }
   }
 
-  const { dna, preferences, loading, saving, error } = state;
+  const { dna, streak, achievements, preferences, loading, saving, error } = state;
 
   if (loading) {
     return (
@@ -132,9 +162,10 @@ export function ReadingDnaPage() {
 
       {tab === 'dna' && (
         <>
-          <section className="grid grid-cols-2 gap-2 md:grid-cols-4">
+          <section className="grid grid-cols-2 gap-2 md:grid-cols-5">
             <Metric label="Window" value={`${dna?.range_days ?? 30}d`} />
             <Metric label="Avg dwell" value={`${dna?.average_dwell_seconds ?? 0}s`} />
+            <Metric label="Streak" value={`${streak?.current_streak_days ?? 0}d`} />
             <Metric
               label="Read"
               value={String(dna?.categories.reduce((sum, item) => sum + item.done, 0) ?? 0)}
@@ -143,6 +174,42 @@ export function ReadingDnaPage() {
               label="Skipped"
               value={String(dna?.categories.reduce((sum, item) => sum + item.skipped, 0) ?? 0)}
             />
+          </section>
+
+          <section className="grid grid-cols-1 gap-4 lg:grid-cols-[0.8fr_1.2fr]">
+            <Panel title="Reading streak">
+              <div className="flex items-start gap-3">
+                <div className="flex size-10 shrink-0 items-center justify-center rounded bg-primary/10 text-primary">
+                  <Flame className="size-5" />
+                </div>
+                <div className="min-w-0 space-y-1">
+                  <div className="text-2xl font-semibold">
+                    {streak?.current_streak_days ?? 0}
+                    <span className="ml-1 text-sm font-normal text-muted-foreground">days</span>
+                  </div>
+                  <p className="text-sm text-muted-foreground">
+                    Longest streak: {streak?.longest_streak_days ?? 0} days
+                  </p>
+                  {streak?.last_active_date && (
+                    <p className="text-xs text-muted-foreground">
+                      Last active {new Date(streak.last_active_date).toLocaleDateString()}
+                    </p>
+                  )}
+                </div>
+              </div>
+            </Panel>
+
+            <Panel title="Achievements">
+              {achievements.length === 0 ? (
+                <EmptyLine />
+              ) : (
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {achievements.map((achievement) => (
+                    <AchievementBadge key={achievement.key} achievement={achievement} />
+                  ))}
+                </div>
+              )}
+            </Panel>
           </section>
 
           <section className="grid grid-cols-1 gap-4 lg:grid-cols-2">
@@ -215,6 +282,29 @@ export function ReadingDnaPage() {
       )}
 
       {tab === 'learning' && <LearningCenter />}
+    </div>
+  );
+}
+
+function AchievementBadge({ achievement }: { achievement: Achievement }) {
+  return (
+    <div
+      className={`flex min-h-20 items-start gap-2 rounded border px-3 py-2 ${
+        achievement.unlocked
+          ? 'border-primary/30 bg-primary/5'
+          : 'border-border bg-muted/20 text-muted-foreground'
+      }`}
+    >
+      <Trophy className={`mt-0.5 size-4 shrink-0 ${achievement.unlocked ? 'text-primary' : ''}`} />
+      <div className="min-w-0">
+        <div className="text-sm font-medium text-foreground">{achievement.title}</div>
+        <p className="mt-0.5 text-xs">{achievement.description}</p>
+        <div className="mt-1 text-[11px]">
+          {achievement.unlocked
+            ? 'Unlocked'
+            : `${achievement.progress}/${achievement.target} progress`}
+        </div>
+      </div>
     </div>
   );
 }
