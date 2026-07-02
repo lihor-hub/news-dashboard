@@ -87,6 +87,53 @@ def test_helm_template_default() -> None:
 
 
 @pytest.mark.skipif(HELM_BIN is None, reason="helm binary not found on path")
+def test_helm_template_app_mounts_writable_data_dir() -> None:
+    output = _render_chart()
+    deployment = _manifest_for_kind(output, "Deployment")
+    deployment_env = _env_block(deployment)
+
+    assert _env_entry(deployment_env, "DATA_DIR") == '- name: DATA_DIR\n  value: "/data"'
+    assert "readOnlyRootFilesystem: true" in deployment
+    assert "name: app-data" in deployment
+    assert 'mountPath: "/data"' in deployment
+    assert "emptyDir: {}" in deployment
+
+
+@pytest.mark.skipif(HELM_BIN is None, reason="helm binary not found on path")
+def test_helm_template_app_data_dir_can_use_persistent_volume_claim() -> None:
+    output = _render_chart(
+        "app.data.dir=/var/lib/news-dashboard",
+        "app.data.persistence.enabled=true",
+        "app.data.persistence.size=5Gi",
+        "app.data.persistence.storageClassName=fast-storage",
+    )
+    deployment = _manifest_for_kind(output, "Deployment")
+    pvc = _manifest_for_kind(output, "PersistentVolumeClaim")
+    deployment_env = _env_block(deployment)
+
+    assert _env_entry(deployment_env, "DATA_DIR") == (
+        '- name: DATA_DIR\n  value: "/var/lib/news-dashboard"'
+    )
+    assert 'mountPath: "/var/lib/news-dashboard"' in deployment
+    assert 'claimName: "news-dashboard-news-dashboard-data"' in deployment
+    assert "name: news-dashboard-news-dashboard-data" in pvc
+    assert "storage: 5Gi" in pvc
+    assert 'storageClassName: "fast-storage"' in pvc
+
+
+@pytest.mark.skipif(HELM_BIN is None, reason="helm binary not found on path")
+def test_helm_template_app_data_dir_can_use_existing_claim() -> None:
+    output = _render_chart(
+        "app.data.persistence.enabled=true",
+        "app.data.persistence.existingClaim=audio-cache",
+    )
+    deployment = _manifest_for_kind(output, "Deployment")
+
+    assert 'claimName: "audio-cache"' in deployment
+    assert "name: news-dashboard-news-dashboard-data" not in output
+
+
+@pytest.mark.skipif(HELM_BIN is None, reason="helm binary not found on path")
 def test_helm_template_ingest_cronjob_operational_overrides() -> None:
     output = _render_chart(
         "ingestCronJob.concurrencyPolicy=Replace",

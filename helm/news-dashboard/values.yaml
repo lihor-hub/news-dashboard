@@ -47,6 +47,20 @@ app:
     # Alternatively, specify a pre-existing Secret containing a full DATABASE_URL.
     existingSecret: ""
     key: "DATABASE_URL"
+  data:
+    # Writable app data directory used for generated audio caches such as
+    # article TTS and briefing podcast MP3 files. The app container keeps a
+    # read-only root filesystem, so this path is always backed by a volume.
+    dir: /data
+    persistence:
+      # Default false uses an emptyDir cache that is regenerated after pod
+      # replacement. Set enabled=true to create or attach a PVC for durable audio.
+      enabled: false
+      # Optional pre-existing PVC name. When empty and enabled=true, the chart
+      # creates a ReadWriteOnce PVC named <release>-news-dashboard-data.
+      existingClaim: ""
+      size: 1Gi
+      storageClassName: ""
   auth:
     enabled: true
     publicBaseUrl: https://news.lihor.ro

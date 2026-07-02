@@ -1,0 +1,15 @@
+{{- if and .Values.app.data.persistence.enabled (not .Values.app.data.persistence.existingClaim) }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "news-dashboard.fullname" . }}-data
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: {{ .Values.app.data.persistence.size }}
+{{- if .Values.app.data.persistence.storageClassName }}
+  storageClassName: {{ .Values.app.data.persistence.storageClassName | quote }}
+{{- end }}
+{{- end }}

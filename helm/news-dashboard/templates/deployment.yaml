@@ -32,6 +32,8 @@ spec:
           env:
             - name: INGEST_INTERVAL_SCHEDULER_ENABLED
               value: {{ ternary "false" "true" .Values.ingestCronJob.enabled | quote }}
+            - name: DATA_DIR
+              value: {{ .Values.app.data.dir | quote }}
 {{- if .Values.postgresql.enabled }}
             - name: POSTGRES_HOST
               value: {{ printf "%s-postgres" (include "news-dashboard.fullname" .) | quote }}
@@ -159,6 +161,15 @@ spec:
           volumeMounts:
             - name: tmp
               mountPath: /tmp
+            - name: app-data
+              mountPath: {{ .Values.app.data.dir | quote }}
       volumes:
         - name: tmp
           emptyDir: {}
+        - name: app-data
+{{- if .Values.app.data.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ default (printf "%s-data" (include "news-dashboard.fullname" .)) .Values.app.data.persistence.existingClaim | quote }}
+{{- else }}
+          emptyDir: {}
+{{- end }}

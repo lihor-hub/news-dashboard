@@ -34,6 +34,9 @@ services:
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       FREE_LLM_API_KEY: ${FREE_LLM_API_KEY:-}
       FREE_LLM_BASE_URL: ${FREE_LLM_BASE_URL:-}
+      DATA_DIR: /data
+    volumes:
+      - news-dashboard-data:/data
     depends_on:
       postgres:
         condition: service_healthy
@@ -41,3 +44,4 @@ services:
 
 volumes:
   news-dashboard-postgres:
+  news-dashboard-data:
