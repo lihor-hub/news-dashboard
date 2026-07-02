@@ -298,6 +298,10 @@ Enable auth before exposing an instance outside a trusted network. See
 See [CONTRIBUTING.md](CONTRIBUTING.md) for setup, conventions, and how to land your first PR.
 Participation is governed by our [Code of Conduct](CODE_OF_CONDUCT.md).
 
+The project is maintainer-led — see [MAINTAINERS.md](MAINTAINERS.md) for who's
+involved, [GOVERNANCE.md](GOVERNANCE.md) for how decisions get made, and
+[ROADMAP.md](ROADMAP.md) for near-term direction.
+
 New to the project? Browse [good first issues](https://github.com/lihor-hub/news-dashboard/issues?q=is%3Aopen+label%3A%22good+first+issue%22) — beginner-friendly tasks with clear scope.
 
 Have a question or an open-ended feature idea? Use
