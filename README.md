@@ -47,6 +47,10 @@ optional OpenAI features for embeddings, Ask AI, and briefings.
 
 ## Configuration
 
+Copy [`.env.example`](.env.example) to `.env` and fill in real values to get
+started; it enumerates every variable below plus a few advanced/internal
+knobs.
+
 Runtime storage is PostgreSQL only. Set `DATABASE_URL` or the split
 `POSTGRES_*` variables.
 
@@ -157,7 +161,7 @@ docker run --rm -d \
   postgres:16-alpine
 ```
 
-Set backend env:
+Set backend env (or copy `.env.example` to `.env` and adjust values):
 
 ```bash
 export DATABASE_URL=postgresql://news_dashboard:news-dashboard-local-password@localhost:5432/news_dashboard
