@@ -49,6 +49,7 @@ import type {
   EmbeddingMapResponse,
   KnowledgeGraphResponse,
   User,
+  WeeklyRecap,
 } from './types';
 
 async function readErrorMessage(response: Response): Promise<string> {
@@ -254,6 +255,20 @@ export async function fetchReadingStreak(): Promise<ReadingStreak> {
 export async function fetchAchievements(): Promise<Achievement[]> {
   const data = await requestJson<{ items: Achievement[] }>('/api/users/me/achievements');
   return data.items;
+}
+
+export async function fetchRecaps(): Promise<WeeklyRecap[]> {
+  const data = await requestJson<{ items: WeeklyRecap[] }>('/api/recaps');
+  return data.items;
+}
+
+export async function fetchLatestRecap(): Promise<WeeklyRecap | null> {
+  try {
+    return await requestJson<WeeklyRecap>('/api/recaps/latest');
+  } catch (err) {
+    if (err instanceof HttpError && err.status === 404) return null;
+    throw err;
+  }
 }
 
 export async function fetchRecommendationPreferences(): Promise<RecommendationPreferences> {

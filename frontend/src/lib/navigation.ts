@@ -4,6 +4,7 @@ import {
   BarChart3,
   BrainCircuit,
   Clock,
+  Flame,
   History,
   Inbox,
   Network,
@@ -45,6 +46,7 @@ export const secondaryNavigationItems: NavigationItem[] = [
   { to: '/ai-stats', label: 'AI Stats', icon: BrainCircuit },
   { to: '/feeds', label: 'Feeds', icon: Radio, shortcut: 'f' },
   { to: '/reading-dna', label: 'Reading DNA', icon: SlidersHorizontal },
+  { to: '/recap', label: 'Weekly Recap', icon: Flame },
   { to: '/archive', label: 'Archive', icon: Archive },
   { to: '/collections', label: 'Collections', icon: Tag },
   { to: '/settings', label: 'Settings', icon: Settings },
@@ -140,6 +142,7 @@ export function getPageTitle(pathname: string): string {
   if (pathname.startsWith('/feeds')) return 'Feeds';
   if (pathname.startsWith('/stats')) return 'Stats';
   if (pathname.startsWith('/reading-dna')) return 'Reading DNA';
+  if (pathname.startsWith('/recap')) return 'Weekly Recap';
   if (pathname.startsWith('/archive')) return 'Archive';
   if (pathname.startsWith('/collections')) return 'Collections';
   if (pathname.startsWith('/settings')) return 'Settings';

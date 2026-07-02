@@ -2392,13 +2392,18 @@ def briefings_chat(
 # ── Notification settings & push subscriptions ───────────────────────────────
 
 _BRIEFING_TIME_RE = __import__("re").compile(r"^([01]\d|2[0-3]):[0-5]\d$")
-_NOTIFICATION_COLS = "briefing_time, briefing_push_enabled, briefing_timezone"
+_NOTIFICATION_COLS = (
+    "briefing_time, briefing_push_enabled, briefing_timezone, recap_enabled, recap_day"
+)
+_RECAP_DAYS = frozenset({"mon", "tue", "wed", "thu", "fri", "sat", "sun"})
 
 
 class NotificationSettingsUpdate(BaseModel):
     briefing_time: str | None = None
     push_enabled: bool | None = None
     briefing_timezone: str | None = None
+    recap_enabled: bool | None = None
+    recap_day: str | None = None
 
 
 class PushSubscribeRequest(BaseModel):
@@ -2509,6 +2514,8 @@ def get_notification_settings(
         "briefing_time": row["briefing_time"] or "09:00",
         "briefing_timezone": row["briefing_timezone"] or "UTC",
         "push_enabled": bool(row["briefing_push_enabled"]),
+        "recap_enabled": bool(row["recap_enabled"]),
+        "recap_day": row["recap_day"] or "mon",
         "vapid_public_key": get_vapid_public_key(),
     }
 
@@ -2534,6 +2541,13 @@ def update_notification_settings(
         except (ZoneInfoNotFoundError, KeyError):
             raise HTTPException(status_code=422, detail="unknown timezone") from None
         updates["briefing_timezone"] = payload.briefing_timezone
+    if payload.recap_enabled is not None:
+        updates["recap_enabled"] = payload.recap_enabled
+    if payload.recap_day is not None:
+        if payload.recap_day not in _RECAP_DAYS:
+            detail = "recap_day must be one of: " + ", ".join(sorted(_RECAP_DAYS))
+            raise HTTPException(status_code=422, detail=detail)
+        updates["recap_day"] = payload.recap_day
     if updates:
         set_clauses = ", ".join(f"{k} = %s" for k in updates)
         with connect() as conn:
@@ -2552,6 +2566,8 @@ def update_notification_settings(
         "briefing_time": row["briefing_time"] or "09:00",
         "briefing_timezone": row["briefing_timezone"] or "UTC",
         "push_enabled": bool(row["briefing_push_enabled"]),
+        "recap_enabled": bool(row["recap_enabled"]),
+        "recap_day": row["recap_day"] or "mon",
     }
 
 
@@ -2895,10 +2911,12 @@ def admin_delete_user(
 from news_dashboard.ai_stats.router import router as ai_stats_router  # noqa: E402
 from news_dashboard.quizzes.router import router as quizzes_router  # noqa: E402
 from news_dashboard.reading_progress.router import router as reading_progress_router  # noqa: E402
+from news_dashboard.recaps.router import router as recaps_router  # noqa: E402
 
 api.include_router(ai_stats_router)
 api.include_router(quizzes_router)
 api.include_router(reading_progress_router)
+api.include_router(recaps_router)
 
 app.include_router(api)
 app.include_router(admin)

@@ -14,7 +14,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from news_dashboard.briefings import BriefingAINotConfiguredError, BriefingGenerationError
-from news_dashboard.scheduler import _run_briefing, _run_per_user_briefings
+from news_dashboard.scheduler import _run_briefing, _run_per_user_briefings, _run_weekly_recaps
 
 # ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -173,6 +173,105 @@ def test_run_per_user_briefings_generates_but_skips_push_when_disabled() -> None
     generate.assert_called_once_with(user_id=42)
     hook.assert_not_called()
     send_push.assert_not_called()
+
+
+# ── _run_weekly_recaps ────────────────────────────────────────────────────────
+
+
+def test_run_weekly_recaps_sends_push_when_enabled() -> None:
+    fake_conn = _FakeRowsConn(
+        [
+            {
+                "id": 42,
+                "recap_day": "mon",
+                "briefing_time": "09:00",
+                "briefing_timezone": "UTC",
+                "briefing_push_enabled": True,
+            }
+        ]
+    )
+    now = datetime(2026, 6, 29, 9, 0, 0, tzinfo=timezone.utc)
+    recap = {"articles_read": 5, "categories": [{"category": "science", "count": 3}]}
+
+    with (
+        patch("news_dashboard.scheduler.datetime") as mock_dt,
+        patch("news_dashboard.db.connect", return_value=fake_conn),
+        patch(
+            "news_dashboard.recaps.service.assemble_weekly_recap", return_value=recap
+        ) as assemble,
+        patch(
+            "news_dashboard.recaps.service.save_weekly_recap",
+            return_value={"id": 1, **recap},
+        ) as save,
+        patch("news_dashboard.push.generate_recap_push_hook", return_value="Nice week!") as hook,
+        patch("news_dashboard.push.send_push_for_user") as send_push,
+    ):
+        mock_dt.now.return_value = now
+        _run_weekly_recaps()
+
+    assert "recap_enabled" in fake_conn.sql
+    assemble.assert_called_once_with(42)
+    hook.assert_called_once_with(recap)
+    save.assert_called_once_with(42, recap, "Nice week!")
+    send_push.assert_called_once_with(42, "Nice week!", "", target_url="/recap")
+
+
+def test_run_weekly_recaps_generates_but_skips_push_when_disabled() -> None:
+    fake_conn = _FakeRowsConn(
+        [
+            {
+                "id": 42,
+                "recap_day": "mon",
+                "briefing_time": "09:00",
+                "briefing_timezone": "UTC",
+                "briefing_push_enabled": False,
+            }
+        ]
+    )
+    now = datetime(2026, 6, 29, 9, 0, 0, tzinfo=timezone.utc)
+    recap = {"articles_read": 5, "categories": []}
+
+    with (
+        patch("news_dashboard.scheduler.datetime") as mock_dt,
+        patch("news_dashboard.db.connect", return_value=fake_conn),
+        patch("news_dashboard.recaps.service.assemble_weekly_recap", return_value=recap),
+        patch(
+            "news_dashboard.recaps.service.save_weekly_recap",
+            return_value={"id": 1, **recap},
+        ) as save,
+        patch("news_dashboard.push.generate_recap_push_hook") as hook,
+        patch("news_dashboard.push.send_push_for_user") as send_push,
+    ):
+        mock_dt.now.return_value = now
+        _run_weekly_recaps()
+
+    save.assert_called_once_with(42, recap, None)
+    hook.assert_not_called()
+    send_push.assert_not_called()
+
+
+def test_run_weekly_recaps_returns_none_when_no_users_scheduled() -> None:
+    fake_conn = _FakeRowsConn(
+        [
+            {
+                "id": 42,
+                "recap_day": "tue",
+                "briefing_time": "09:00",
+                "briefing_timezone": "UTC",
+                "briefing_push_enabled": True,
+            }
+        ]
+    )
+    now = datetime(2026, 6, 29, 9, 0, 0, tzinfo=timezone.utc)  # a Monday
+
+    with (
+        patch("news_dashboard.scheduler.datetime") as mock_dt,
+        patch("news_dashboard.db.connect", return_value=fake_conn),
+    ):
+        mock_dt.now.return_value = now
+        result = _run_weekly_recaps()
+
+    assert result is None
 
 
 # ── start_scheduler — BRIEFING_CRON wiring ───────────────────────────────────
