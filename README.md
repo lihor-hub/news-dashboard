@@ -319,7 +319,8 @@ Do not commit secrets, API keys, database credentials, or production session
 keys. Use environment variables or deployment secrets.
 
 See [SECURITY.md](SECURITY.md) for the vulnerability-disclosure policy and
-supported versions.
+supported versions, and [PRIVACY.md](PRIVACY.md) for what data leaves your
+instance and how to run fully self-contained.
 
 ## License
 

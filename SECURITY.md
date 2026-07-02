@@ -54,3 +54,7 @@ See the [Configuration](README.md#configuration) table in the README for the
 full list of environment variables. Never commit secrets, API keys, database
 credentials, or production session values to the repository — use
 environment variables or your deployment platform's secret store.
+
+See [PRIVACY.md](PRIVACY.md) for a full accounting of what data leaves your
+instance and when, including AI features, Langfuse tracing, Web Push, and
+error tracking.
