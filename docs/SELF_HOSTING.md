@@ -116,6 +116,12 @@ See the [README Configuration section](../README.md#configuration) for the compl
 | `FREE_LLM_API_KEY` | Alternative LLM API key |
 | `FREE_LLM_BASE_URL` | Custom LLM endpoint |
 
+### Optional Observability
+
+| Variable | Description |
+|----------|-------------|
+| `METRICS_ENABLED` | Set to `true` to expose the Prometheus `/metrics` endpoint. Off by default. |
+
 > **Important**: Never commit secrets to version control. Use environment variables or a `.env` file (not committed to Git) to manage sensitive values.
 
 ## Healthchecks
@@ -132,6 +138,7 @@ News Dashboard exposes several health and readiness endpoints for monitoring and
 | `GET /api/health/details` | Admin-only | Detailed diagnostics — returns `status`, `database` info, and `next_ingest_at`. Requires admin authentication. |
 | `GET /api/sources/health` | Authenticated | Per-source health status for the current user — shows last-checked time, last error, and fetch counts for each source. |
 | `GET /api/scheduler/status` | Admin-only | Scheduler state — whether the in-process scheduler is running, its interval, and configured jobs. |
+| `GET /metrics` | Public (opt-in) | Prometheus exposition format. Only served when `METRICS_ENABLED=true`; returns 404 otherwise. See [Prometheus Metrics](#prometheus-metrics). |
 
 ### Docker Probe Configuration
 
@@ -193,6 +200,35 @@ For production monitoring:
 - **Readiness**: use `GET /api/ready` — a failure means the database is unreachable or the connection pool is exhausted.
 - **Details**: admin users can check `GET /api/health/details` for an overview of database stats and the next scheduled ingest.
 - **Source health**: check `GET /api/sources/health` after an ingest run to see which sources failed.
+
+### Prometheus Metrics
+
+Set `METRICS_ENABLED=true` to expose a `GET /metrics` endpoint in Prometheus
+exposition format. It's off by default and unauthenticated when on — treat it
+like any other internal-only endpoint and don't expose it directly to the
+public internet (put it behind your reverse proxy/network policy, or scrape
+it from inside your cluster/VPC).
+
+Metrics exposed:
+
+- `news_dashboard_http_requests_total{method,path,status}` / `news_dashboard_http_request_duration_seconds_sum{method,path}` — request counts and cumulative latency, labeled by route template (e.g. `/api/articles/{article_id}`), never the raw URL.
+- `news_dashboard_ingest_runs_total{status}` — ingest run outcomes (`success`/`failure`).
+- `news_dashboard_ingest_articles_new_total` — new articles discovered across all ingest runs.
+- `news_dashboard_source_health_checks_total{status}` — per-source fetch outcomes (`ok`/`error`) during ingest. No source identity is included in labels, since private-feed names/slugs are user-defined.
+- `news_dashboard_scheduler_job_runs_total{job_name,status}` — background job outcomes (`digest`, `briefing`, `recommendations`, `analytics_retention`, `per_user_briefings`).
+
+No article content, URLs, emails, or other PII ever appear in metric labels.
+
+Example scrape config:
+
+```yaml
+# prometheus.yml
+scrape_configs:
+  - job_name: news-dashboard
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["news-dashboard:8080"]
+```
 
 ## Upgrading
 

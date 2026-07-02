@@ -859,6 +859,12 @@ def ingest_all(db_path: Path | str | None = None) -> IngestResult:
                 )
             )
 
+        from news_dashboard.metrics import (
+            ingest_articles_new_total,
+            ingest_runs_total,
+            source_health_checks_total,
+        )
+
         results: dict[str, int] = {}
         total_new = 0
         total_errors = 0
@@ -870,13 +876,17 @@ def ingest_all(db_path: Path | str | None = None) -> IngestResult:
                 if outcome.error_message is not None:
                     results[source.slug] = -1
                     total_errors += 1
+                    source_health_checks_total.labels(status="error").inc()
                 else:
                     results[source.slug] = outcome.articles_new
                     total_new += outcome.articles_new
+                    source_health_checks_total.labels(status="ok").inc()
         finally:
             duration_seconds = time.perf_counter() - run_started
             duration_ms = int(duration_seconds * 1000)
             _finish_ingest_run(run_id, db_path, now_iso(), duration_ms, total_new, total_errors)
+            ingest_runs_total.labels(status="failure" if total_errors else "success").inc()
+            ingest_articles_new_total.inc(total_new)
             article_word = "article" if total_new == 1 else "articles"
             error_text = (
                 f", {total_errors} error{'s' if total_errors != 1 else ''}" if total_errors else ""

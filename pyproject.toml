@@ -25,6 +25,7 @@ dependencies = [
   "webdriver-manager>=4.0.0",
   "python-multipart>=0.0.20",
   "defusedxml>=0.7.1",
+  "prometheus-client>=0.21.0",
 ]
 
 [project.optional-dependencies]

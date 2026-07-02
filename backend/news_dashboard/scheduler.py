@@ -239,6 +239,7 @@ def _run_and_record(
     If fn returns None the run is not recorded (used by per_user_briefings
     when no users are scheduled for this minute).
     """
+    from news_dashboard.metrics import scheduler_job_runs_total
     from news_dashboard.scheduled_job_history import save_job_run
 
     started_at = datetime.now(timezone.utc)
@@ -249,6 +250,7 @@ def _run_and_record(
     if result is None:
         return
     status, message = result
+    scheduler_job_runs_total.labels(job_name=job_name, status=status).inc()
     finished_at = datetime.now(timezone.utc)
     try:
         save_job_run(

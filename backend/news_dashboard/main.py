@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import os
 import secrets
+import time
 import xml.etree.ElementTree as ET
 from collections.abc import AsyncIterator, MutableMapping
 from contextlib import asynccontextmanager
@@ -171,6 +172,38 @@ app.add_middleware(
     allow_headers=["*"],
     allow_credentials=True,
 )
+
+# ── Optional Prometheus metrics ─────────────────────────────────────────────
+
+
+@app.middleware("http")
+async def record_request_metrics(request: Request, call_next: Any) -> Any:
+    """Record request count/latency, labeled by method and route template.
+
+    Uses the matched route's path template (e.g. ``/api/articles/{id}``)
+    rather than the raw URL so dynamic path segments never appear in labels.
+    A no-op unless METRICS_ENABLED is set, to avoid the timing/label overhead
+    for self-hosters who don't scrape metrics.
+    """
+    from news_dashboard.metrics import (
+        http_request_duration_seconds,
+        http_requests_total,
+        metrics_enabled,
+    )
+
+    if not metrics_enabled():
+        return await call_next(request)
+
+    started = time.perf_counter()
+    response = await call_next(request)
+    duration = time.perf_counter() - started
+    route = request.scope.get("route")
+    path = route.path if route is not None else request.url.path
+    labels = {"method": request.method, "path": path}
+    http_requests_total.labels(status=str(response.status_code), **labels).inc()
+    http_request_duration_seconds.labels(**labels).inc(duration)
+    return response
+
 
 # ── Demo mode: reject guest writes ──────────────────────────────────────────
 
@@ -431,6 +464,15 @@ def readiness() -> dict[str, Any]:
     except Exception as exc:
         raise HTTPException(status_code=503, detail="database unavailable") from exc
     return {"status": "ok"}
+
+
+@public_router.get("/metrics")
+def prometheus_metrics() -> Response:
+    from news_dashboard.metrics import CONTENT_TYPE_LATEST, metrics_enabled, render_metrics
+
+    if not metrics_enabled():
+        raise HTTPException(status_code=404, detail="not found")
+    return Response(content=render_metrics(), media_type=CONTENT_TYPE_LATEST)
 
 
 @public_router.get("/api/auth/config")
