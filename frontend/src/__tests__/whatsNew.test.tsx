@@ -108,11 +108,20 @@ describe('WhatsNewDialog', () => {
     };
   }
 
-  it('renders version and items when open', () => {
+  it('renders a friendly heading, version, and items when open', () => {
     render(<WhatsNewDialog state={makeState()} />);
-    expect(screen.getByText("What's new in v1.15.3")).toBeTruthy();
+    expect(screen.getByText(/What's new/)).toBeTruthy();
+    expect(screen.getByText('Version 1.15.3')).toBeTruthy();
     expect(screen.getByText('Show relevance score')).toBeTruthy();
     expect(screen.getByText('Invalidate cache')).toBeTruthy();
+  });
+
+  it('shows a graceful message when a release has no user-facing items', () => {
+    render(<WhatsNewDialog state={makeState({ items: [] })} />);
+    expect(screen.getByText(/What's new/)).toBeTruthy();
+    expect(screen.getByText(/behind-the-scenes improvements/i)).toBeTruthy();
+    // No empty bullet list is rendered.
+    expect(screen.queryByRole('list')).toBeNull();
   });
 
   it('calls dismiss when Got it is clicked', () => {
@@ -124,6 +133,6 @@ describe('WhatsNewDialog', () => {
 
   it('renders nothing when open is false', () => {
     render(<WhatsNewDialog state={makeState({ open: false })} />);
-    expect(screen.queryByText("What's new in v1.15.3")).toBeNull();
+    expect(screen.queryByText(/What's new/)).toBeNull();
   });
 });

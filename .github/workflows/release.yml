@@ -86,7 +86,6 @@ jobs:
         id: ai
         continue-on-error: true
         env:
-          PI_EXTENSION: "$HOME/pi/packages/coding-agent/examples/extensions/lihor-provider"
           SYSTEM_PROMPT: |
             You write the "What's new" notes that everyday users of a news
             dashboard app see in an in-app popup after the app updates. Your
@@ -111,10 +110,19 @@ jobs:
           PROMPT: |
             Commits for release ${{ steps.version.outputs.tag }}:
             ${{ steps.log.outputs.commits }}
+          COMMITS: ${{ steps.log.outputs.commits }}
         run: |
+          # Define the extension path here so $HOME expands — a "$HOME/…" value
+          # set in a YAML env: block is passed to pi as a literal, unexpanded.
+          PI_EXTENSION="$HOME/pi/packages/coding-agent/examples/extensions/lihor-provider"
           changelog=$(pi -e "$PI_EXTENSION" -p "$SYSTEM_PROMPT
 
-          $PROMPT")
+          $PROMPT" || true)
+          # If inference returned nothing, fall back to a user-facing summary of
+          # the commits — never the raw "chore:/ci:" subjects a customer can't read.
+          if [ -z "$(printf '%s' "$changelog" | tr -d '[:space:]')" ]; then
+            changelog=$(printf '%s\n' "$COMMITS" | python3 scripts/humanize_commits.py)
+          fi
           {
             echo "response<<EOF"
             echo "$changelog"

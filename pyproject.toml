@@ -152,6 +152,13 @@ ban-relative-imports = "all"
   "S603",    # subprocess calls git with trusted CI-controlled arguments
   "T201",    # print is the intended CLI output for shell consumption
 ]
+"scripts/humanize_commits.py" = [
+  "T201",    # print is the intended CLI output for shell consumption
+]
+"scripts/test_humanize_commits.py" = [
+  "S101",    # asserts are the point of tests
+  "PT009",   # plain assert is preferred over self.assertEqual here
+]
 "scripts/test_bump_version.py" = [
   "S101",    # asserts are the point of tests
   "PT009",   # plain assert is preferred over self.assertEqual here

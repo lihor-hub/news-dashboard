@@ -443,7 +443,6 @@ jobs:
         id: ai
         continue-on-error: true
         env:
-          PI_EXTENSION: "$HOME/pi/packages/coding-agent/examples/extensions/lihor-provider"
           SYSTEM_PROMPT: |
             You write the "What's new" notes that everyday users of a news
             dashboard app see in an in-app popup after the app updates. Your
@@ -469,6 +468,9 @@ jobs:
             Commits for release ${{ steps.version.outputs.tag }}:
             ${{ steps.log.outputs.commits }}
         run: |
+          # Define the extension path here so $HOME expands — a "$HOME/…" value
+          # set in a YAML env: block is passed to pi as a literal, unexpanded.
+          PI_EXTENSION="$HOME/pi/packages/coding-agent/examples/extensions/lihor-provider"
           changelog=$(pi -e "$PI_EXTENSION" -p "$SYSTEM_PROMPT
 
           $PROMPT")
@@ -485,9 +487,12 @@ jobs:
           COMMITS: ${{ steps.log.outputs.commits }}
         run: |
           echo "$V" > VERSION
-          # Fall back to raw commit subjects if inference returned nothing.
+          # If inference returned nothing, fall back to a user-facing summary of
+          # the commits — never the raw "chore:/ci:" subjects a customer can't read.
           BODY="$NOTES"
-          [ -z "$(printf '%s' "$BODY" | tr -d '[:space:]')" ] && BODY="$COMMITS"
+          if [ -z "$(printf '%s' "$BODY" | tr -d '[:space:]')" ]; then
+            BODY=$(printf '%s\n' "$COMMITS" | python3 scripts/humanize_commits.py)
+          fi
           printf '%s\n' "$BODY" | python3 scripts/update_changelog.py --version "$V"
 
       - uses: docker/login-action@v3
