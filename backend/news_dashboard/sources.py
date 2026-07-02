@@ -277,6 +277,14 @@ DEFAULT_SOURCES: list[SourceDefinition] = [
         priority=60,
         interest_tags=("cloud", "infra", "model-releases"),
     ),
+    SourceDefinition(
+        "chrome-developers-blog",
+        "Chrome Developers Blog",
+        "https://developer.chrome.com/static/blog/feed.xml",
+        "web",
+        priority=70,
+        interest_tags=("web", "frontend", "product-news"),
+    ),
     # ── Engineering ──────────────────────────────────────────────────────────
     SourceDefinition(
         "pragmatic-engineer",

@@ -31,7 +31,7 @@ format:
 ## typecheck: run static type checkers
 typecheck:
 	mypy backend
-	ty check backend
+	PYTHONPATH=.:backend ty check backend
 	pyrefly check backend
 	npm run typecheck --silent
 

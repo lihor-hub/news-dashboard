@@ -198,7 +198,7 @@ python-version = "3.14"
 extra-paths = ["backend"]
 
 [tool.ty.src]
-include = ["backend"]
+include = ["backend", "backend/tests"]
 
 # ── pyrefly (Meta type checker) ──────────────────────────────────────────────
 [tool.pyrefly]
