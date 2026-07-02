@@ -13,6 +13,8 @@ from unittest.mock import patch
 import pytest
 
 from news_dashboard.body_fetch import (
+    _crawl4ai_extract_body,
+    _normalize_crawl4ai_result,
     extract_body,
     fetch_and_cache_body,
     get_article,
@@ -763,3 +765,206 @@ def test_selenium_extract_body_returns_error_on_empty_rendered_page() -> None:
 
     assert status == "error"
     assert body == ""
+
+
+# ── _crawl4ai_extract_body ────────────────────────────────────────────────────
+
+
+class _FakeMarkdown:
+    """Mimics Crawl4AI's MarkdownGenerationResult with markdown attributes."""
+
+    def __init__(self, raw_markdown: str = "", fit_markdown: str = "") -> None:
+        self.raw_markdown = raw_markdown
+        self.fit_markdown = fit_markdown
+
+
+class _FakeCrawlResult:
+    """Minimal stand-in for a Crawl4AI CrawlResult."""
+
+    def __init__(
+        self,
+        markdown: object = None,
+        cleaned_html: str = "",
+        extracted_content: str = "",
+    ) -> None:
+        self.markdown = markdown
+        self.cleaned_html = cleaned_html
+        self.extracted_content = extracted_content
+
+
+def test_normalize_crawl4ai_result_prefers_fit_markdown() -> None:
+    result = _FakeCrawlResult(
+        markdown=_FakeMarkdown(
+            raw_markdown="Raw markdown that is long enough to be meaningful text.",
+            fit_markdown="Fit markdown is the cleaned article body worth caching here.",
+        )
+    )
+    assert _normalize_crawl4ai_result(result) == (
+        "Fit markdown is the cleaned article body worth caching here."
+    )
+
+
+def test_normalize_crawl4ai_result_falls_back_to_raw_markdown() -> None:
+    result = _FakeCrawlResult(
+        markdown=_FakeMarkdown(
+            raw_markdown="Raw markdown is the only field with meaningful content here."
+        )
+    )
+    assert _normalize_crawl4ai_result(result) == (
+        "Raw markdown is the only field with meaningful content here."
+    )
+
+
+def test_normalize_crawl4ai_result_accepts_plain_string_markdown() -> None:
+    result = _FakeCrawlResult(markdown="Plain string markdown body that is long enough.")
+    assert _normalize_crawl4ai_result(result) == "Plain string markdown body that is long enough."
+
+
+def test_normalize_crawl4ai_result_falls_back_to_extracted_content() -> None:
+    result = _FakeCrawlResult(
+        extracted_content="Extracted content is the last usable candidate field here."
+    )
+    assert _normalize_crawl4ai_result(result) == (
+        "Extracted content is the last usable candidate field here."
+    )
+
+
+def test_normalize_crawl4ai_result_collapses_blank_lines() -> None:
+    result = _FakeCrawlResult(
+        markdown=_FakeMarkdown(
+            fit_markdown="First paragraph line.\n\n\n\nSecond paragraph line.   \n"
+        )
+    )
+    assert _normalize_crawl4ai_result(result) == ("First paragraph line.\n\nSecond paragraph line.")
+
+
+def test_crawl4ai_extract_body_success() -> None:
+    text = "Crawl4AI produced this clean article body that is definitely long enough."
+    result = _FakeCrawlResult(markdown=_FakeMarkdown(fit_markdown=text))
+    with patch("news_dashboard.body_fetch._run_crawl4ai", return_value=result):
+        body, status = _crawl4ai_extract_body("https://example.com/article")
+    assert status == "ok"
+    assert body == text
+
+
+def test_crawl4ai_extract_body_returns_error_on_short_output() -> None:
+    result = _FakeCrawlResult(markdown=_FakeMarkdown(fit_markdown="too short"))
+    with patch("news_dashboard.body_fetch._run_crawl4ai", return_value=result):
+        body, status = _crawl4ai_extract_body("https://example.com/article")
+    assert status == "error"
+    assert body == ""
+
+
+def test_crawl4ai_extract_body_returns_error_when_not_installed() -> None:
+    with patch("news_dashboard.body_fetch._run_crawl4ai", side_effect=ImportError):
+        body, status = _crawl4ai_extract_body("https://example.com/article")
+    assert status == "error"
+    assert body == ""
+
+
+def test_crawl4ai_extract_body_returns_error_on_crawl_failure() -> None:
+    with patch(
+        "news_dashboard.body_fetch._run_crawl4ai",
+        side_effect=RuntimeError("browser boom"),
+    ):
+        body, status = _crawl4ai_extract_body("https://example.com/article")
+    assert status == "error"
+    assert body == ""
+
+
+def test_crawl4ai_extract_body_rejects_unsafe_url_before_crawling() -> None:
+    with patch("news_dashboard.body_fetch._run_crawl4ai") as mock_run:
+        body, status = _crawl4ai_extract_body("file:///etc/passwd")
+    mock_run.assert_not_called()
+    assert status == "error"
+    assert body == ""
+
+
+# ── fetch_and_cache_body with Crawl4AI fallback ──────────────────────────────
+
+
+def test_fetch_and_cache_body_uses_crawl4ai_when_scraper_fails(tmp_path: Path) -> None:
+    db_path = _db(tmp_path)
+    article_id = _seed_article(db_path)
+    ai_calls: list[str] = []
+
+    def fake_ai(url: str, *, user_id: int | None = None) -> tuple[str, str]:
+        ai_calls.append(url)
+        return "AI text", "ok"
+
+    with (
+        patch("news_dashboard.body_fetch.extract_body", return_value=("", "error")),
+        patch(
+            "news_dashboard.body_fetch._crawl4ai_extract_body",
+            return_value=("Crawl4AI extracted text", "ok"),
+        ),
+        patch("news_dashboard.body_fetch._ai_extract_body", side_effect=fake_ai),
+    ):
+        result = fetch_and_cache_body(article_id, db_path=db_path)
+
+    assert result is not None
+    assert result["body_status"] == "ok"
+    assert result["body"] == "Crawl4AI extracted text"
+    assert ai_calls == [], "AI fallback must not run when Crawl4AI succeeds"
+
+
+def test_fetch_and_cache_body_crawl4ai_not_called_when_scraper_ok(tmp_path: Path) -> None:
+    db_path = _db(tmp_path)
+    article_id = _seed_article(db_path)
+    crawl_calls: list[str] = []
+
+    def fake_crawl(url: str) -> tuple[str, str]:
+        crawl_calls.append(url)
+        return "crawl text", "ok"
+
+    with (
+        patch("news_dashboard.body_fetch.extract_body", return_value=("scraper text", "ok")),
+        patch("news_dashboard.body_fetch._crawl4ai_extract_body", side_effect=fake_crawl),
+    ):
+        result = fetch_and_cache_body(article_id, db_path=db_path)
+
+    assert result is not None
+    assert result["body"] == "scraper text"
+    assert crawl_calls == [], "Crawl4AI must not run when the deterministic scraper succeeds"
+
+
+def test_fetch_and_cache_body_ai_fallback_after_crawl4ai_fails(tmp_path: Path) -> None:
+    db_path = _db(tmp_path)
+    article_id = _seed_article(db_path)
+
+    with (
+        patch("news_dashboard.body_fetch.extract_body", return_value=("", "error")),
+        patch("news_dashboard.body_fetch._crawl4ai_extract_body", return_value=("", "error")),
+        patch(
+            "news_dashboard.body_fetch._ai_extract_body",
+            return_value=("AI extracted text", "ok"),
+        ),
+    ):
+        result = fetch_and_cache_body(article_id, db_path=db_path)
+
+    assert result is not None
+    assert result["body_status"] == "ok"
+    assert result["body"] == "AI extracted text"
+
+
+def test_fetch_and_cache_body_cache_hit_skips_all_extractors(tmp_path: Path) -> None:
+    db_path = _db(tmp_path)
+    article_id = _seed_article(db_path)
+    with connect(db_path) as conn:
+        conn.execute(
+            "UPDATE articles SET body = %s, body_status = 'ok' WHERE id = %s",
+            ("cached body text", article_id),
+        )
+
+    with (
+        patch("news_dashboard.body_fetch.extract_body") as mock_extract,
+        patch("news_dashboard.body_fetch._crawl4ai_extract_body") as mock_crawl,
+        patch("news_dashboard.body_fetch._ai_extract_body") as mock_ai,
+    ):
+        result = fetch_and_cache_body(article_id, db_path=db_path)
+
+    assert result is not None
+    assert result["body"] == "cached body text"
+    mock_extract.assert_not_called()
+    mock_crawl.assert_not_called()
+    mock_ai.assert_not_called()

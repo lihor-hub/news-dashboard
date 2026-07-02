@@ -89,6 +89,99 @@ def _ai_extract_body(url: str, *, user_id: int | None = None) -> tuple[str, str]
         return "", "error"
 
 
+# Minimum length (chars) of normalized Crawl4AI output to treat as a real body.
+_CRAWL4AI_MIN_LEN = 40
+
+
+def _normalize_crawl4ai_result(result: Any) -> str:
+    """Pick the best text field from a Crawl4AI result and normalize it.
+
+    Crawl4AI exposes several candidate fields; prefer cleaned article Markdown
+    (``markdown.fit_markdown``), then raw Markdown, then a plain-string
+    ``markdown``, then ``extracted_content``, then ``cleaned_html``. Returns an
+    empty string when none carry usable text.
+    """
+    candidate = ""
+    markdown = getattr(result, "markdown", None)
+    if markdown is not None:
+        for attr in ("fit_markdown", "raw_markdown"):
+            value = getattr(markdown, attr, None)
+            if isinstance(value, str) and value.strip():
+                candidate = value
+                break
+        else:
+            if isinstance(markdown, str):
+                candidate = markdown
+    for attr in ("extracted_content", "cleaned_html"):
+        if candidate.strip():
+            break
+        value = getattr(result, attr, None)
+        if isinstance(value, str):
+            candidate = value
+    return _normalize_body_text(candidate)
+
+
+def _normalize_body_text(text: str) -> str:
+    """Trim trailing whitespace and collapse blank-line runs, preserving paragraphs."""
+    if not text:
+        return ""
+    lines = [line.rstrip() for line in text.replace("\r\n", "\n").split("\n")]
+    return re.sub(r"\n{3,}", "\n\n", "\n".join(lines)).strip()
+
+
+def _run_crawl4ai(url: str) -> Any:
+    """Run Crawl4AI against ``url`` and return its CrawlResult.
+
+    Kept separate so tests can patch it without importing the optional
+    dependency. Raises ImportError when Crawl4AI is not installed.
+    """
+    import asyncio
+    import importlib
+
+    # Dynamic import keeps the optional dependency out of static type resolution;
+    # ModuleNotFoundError (an ImportError) is raised and handled when it's absent.
+    crawler_cls = importlib.import_module("crawl4ai").AsyncWebCrawler
+
+    async def _crawl() -> Any:
+        async with crawler_cls() as crawler:
+            return await crawler.arun(url=url)
+
+    return asyncio.run(_crawl())
+
+
+def _crawl4ai_extract_body(url: str) -> tuple[str, str]:
+    """Deterministic Crawl4AI-backed extraction, tried before the LLM fallback.
+
+    Enforces the same SSRF/scheme boundary as the other fetchers via
+    ``validate_server_fetch_url`` before launching a browser. Returns
+    ``(text, 'ok')`` when Crawl4AI yields meaningful article text/Markdown, or
+    ``('', 'error')`` for unsafe URLs, a missing dependency, or any
+    fetch/parse failure.
+    """
+    try:
+        validate_server_fetch_url(url)
+    except UnsafeUrlError as exc:
+        logger.warning("crawl4ai_body_fetch: unsafe URL %r: %s", url, exc)
+        return "", "error"
+
+    try:
+        result = _run_crawl4ai(url)
+    except ImportError:
+        logger.info("crawl4ai_body_fetch: crawl4ai not installed; skipping")
+        return "", "error"
+    except Exception as exc:
+        logger.warning("crawl4ai_body_fetch: crawl failed for %r: %s", url, exc)
+        return "", "error"
+
+    text = _normalize_crawl4ai_result(result)
+    if len(text) < _CRAWL4AI_MIN_LEN:
+        logger.info("crawl4ai_body_fetch: output too short for %r", url)
+        return "", "error"
+
+    logger.info("crawl4ai_body_fetch: extraction succeeded for %r", url)
+    return text, "ok"
+
+
 # Tags whose entire subtree we skip
 _SKIP_TAGS = frozenset(
     {
@@ -394,6 +487,8 @@ def fetch_and_cache_body(
 
     url = row_d["url"]
     body, status = extract_body(url)
+    if status == "error":
+        body, status = _crawl4ai_extract_body(url)
     if status == "error":
         body, status = _ai_extract_body(url, user_id=user_id)
 

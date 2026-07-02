@@ -118,6 +118,45 @@ See the [README Configuration section](../README.md#configuration) for the compl
 
 > **Important**: Never commit secrets to version control. Use environment variables or a `.env` file (not committed to Git) to manage sensitive values.
 
+### Optional article body extraction (Crawl4AI)
+
+When a reader opens an article, the app fetches and caches the full body text.
+The fallback chain is: the built-in static/Selenium extractor first, then
+[Crawl4AI](https://github.com/unclecode/crawl4ai) (a deterministic
+browser-based Markdown extractor), and finally the token-expensive LLM
+extractor as a last resort.
+
+Crawl4AI is an **optional** extra — it pulls in a browser and a large
+dependency tree, so it is not installed by default and is intentionally kept
+out of the committed `uv.lock` baseline; its dependencies are resolved when you
+opt in. When it is absent, the app simply skips that layer and falls back to the
+LLM extractor as before.
+
+> **Security note:** Crawl4AI currently pins an older `lxml` that carries a
+> known XXE advisory ([GHSA-vfmq-68hx-4jfw](https://github.com/advisories/GHSA-vfmq-68hx-4jfw),
+> patched in lxml 6.1.0). Only enable this extra in environments where you are
+> comfortable with that transitive dependency, and prefer running it against
+> trusted article sources.
+
+To enable it in a dev or self-hosted environment:
+
+```bash
+# 1. Install the extra
+pip install -e '.[crawl4ai]'      # or: pip install '.[crawl4ai]'
+
+# 2. Install the browser it drives (run once)
+crawl4ai-setup                    # or: playwright install --with-deps chromium
+```
+
+In containerized/Kubernetes deployments, run the same two commands in the image
+build (`RUN pip install '.[crawl4ai]' && crawl4ai-setup`) so the Chromium
+browser is baked into the image; the extractor launches a headless browser at
+runtime and does not download anything on demand.
+
+Article URLs are still validated by the app's SSRF/scheme safety checks before
+Crawl4AI is invoked, so `file://`, loopback, and private-network URLs never
+reach the browser.
+
 ## Healthchecks
 
 News Dashboard exposes several health and readiness endpoints for monitoring and container orchestration.
