@@ -22,9 +22,9 @@ def test_production_caddyfile_contains_keycloak_and_hardening() -> None:
 
 def test_docs_point_to_single_production_caddyfile() -> None:
     docs = [
-        ROOT / "docs" / "CADDY_HTTPS_SETUP.md",
-        ROOT / "docs" / "RUNNER_SETUP.md",
-        ROOT / "docs" / "ARCHITECTURE.md",
+        ROOT / "website" / "docs" / "configuration" / "https-caddy.md",
+        ROOT / "website" / "docs" / "self-hosting" / "ci-runner-setup.md",
+        ROOT / "website" / "docs" / "architecture" / "index.md",
     ]
 
     for doc in docs:
