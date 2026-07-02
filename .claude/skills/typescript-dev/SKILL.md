@@ -1,29 +1,19 @@
 ---
 name: typescript-dev
 description: >-
-  Standards and verification gate for writing TypeScript/React in this
-  repository. Use this skill ANY time you create or edit a .ts/.tsx file, touch
-  vite/eslint/tsconfig, add an npm dependency, write or fix a vitest or
-  Playwright test, or are about to commit/push frontend changes — even for a
-  "small" edit. It tells you how to write code that passes this project's
-  eslint(--max-warnings 0) + prettier + tsc(strict) + vitest gates the first
-  time, when to write unit vs e2e tests, how to keep package.json/lockfile
-  clean, and which React/PWA gotchas will otherwise bite you. Triggers on:
-  TypeScript, React, .tsx, frontend, vite, eslint, prettier, tsc, vitest,
-  playwright, "run the frontend tests", "why does the build fail".
+  TypeScript/React standards and verification gate for this repo. Use when
+  editing .ts/.tsx files, Vite/ESLint/tsconfig, npm dependencies, frontend tests,
+  or investigating eslint, prettier, tsc, vitest, Playwright, or build failures.
 ---
 
 # TypeScript development in this repo
 
-The frontend is React + Vite + Tailwind in `frontend/src/`, with Radix UI,
-TanStack Query, Zustand, and React Router. Unit tests use **vitest** +
-Testing Library; end-to-end tests use **Playwright** in `e2e/`. The toolchain is
-already configured and strict — write code that clears it on the first try.
+The frontend is React + Vite + Tailwind in `frontend/src/`. Unit tests use
+vitest + Testing Library; end-to-end tests use Playwright in `e2e/`.
 
 ## 0. Detect before you act
 
-Prefer the canonical entry points. `npm` scripts (`package.json`) and `make`
-targets are what CI runs. Confirm what exists:
+Prefer `npm` scripts and `make` targets; they are what CI runs. Confirm what exists:
 
 ```bash
 cat package.json | sed -n '/"scripts"/,/}/p'
@@ -40,9 +30,8 @@ with no frontend tooling at all, read
 
 ## 1. While writing code — clear the gates by construction
 
-ESLint runs flat-config with `typescript-eslint`, `react-hooks`, and
-`react-refresh`, and the lint script uses **`--max-warnings 0`** — a warning is a
-failure. `tsc` builds with project references and strict typing. Common traps:
+ESLint uses `--max-warnings 0`; a warning is a failure. `tsc` is strict. Common
+traps:
 
 - **No `any`.** Type props, hooks, and API payloads. Prefer `unknown` + a
   narrowing check over `any`; derive types from Zod/response shapes where they
@@ -57,9 +46,9 @@ failure. `tsc` builds with project references and strict typing. Common traps:
   lint rules). Don't hand-format — run `npm run format`.
 - Honor `.prettierrc.json` / `.editorconfig`; don't override style inline.
 
-When a rule genuinely doesn't apply, use a scoped
-`// eslint-disable-next-line <rule> -- reason`, never a file-wide disable, and
-never edit `eslint.config.mjs`/`tsconfig.json` just to make your code pass.
+When a rule genuinely doesn't apply, use
+`// eslint-disable-next-line <rule> -- reason`. Never file-disable or loosen
+`eslint.config.mjs`/`tsconfig.json` to pass.
 
 ## 2. Project guardrails (don't regress these)
 

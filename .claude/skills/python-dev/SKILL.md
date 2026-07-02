@@ -1,28 +1,19 @@
 ---
 name: python-dev
 description: >-
-  Standards and verification gate for writing Python in this repository. Use
-  this skill ANY time you create or edit a .py file, add or change a Python
-  dependency, write or fix a pytest test, or are about to commit/push Python
-  changes — even for a "small" edit. It tells you how to write code that passes
-  this project's ruff + mypy(strict) + ty + pyrefly + pytest gates the first
-  time, how to keep dependencies and lockfiles clean, what test patterns to
-  follow, and which project-specific gotchas (PostgreSQL-only, tz-aware
-  datetimes, no print) will otherwise bite you. Triggers on: Python, .py,
-  FastAPI, pytest, ruff, mypy, ty, pyrefly, type checker, backend changes,
-  "run the backend tests", "why does the type check fail".
+  Python standards and verification gate for this repo. Use when editing .py
+  files, Python dependencies, pytest tests, backend behavior, or investigating
+  ruff, mypy, ty, pyrefly, or pytest failures.
 ---
 
 # Python development in this repo
 
-The backend lives in `backend/news_dashboard/`, tests in `backend/tests/`. The
-toolchain is already configured and strict — your job is to write code that
-clears it on the first try, not to reinvent or relax it.
+The backend lives in `backend/news_dashboard/`, tests in `backend/tests/`.
+Write code that clears the configured gates without loosening them.
 
 ## 0. Detect before you act
 
-Never assume commands. This repo standardizes entry points in the `Makefile` —
-**prefer those**, they're what CI runs (`make check`). Confirm what exists:
+Prefer `Makefile` targets; they are what CI runs. Confirm what exists:
 
 ```bash
 ls Makefile pyproject.toml uv.lock 2>/dev/null   # what governs the project
@@ -40,13 +31,9 @@ Run `pip install -e '.[dev]'` (or `make install`) once if the tools aren't impor
 
 ## 1. While writing code — clear the gates by construction
 
-The ruff rule set here is large (see `[tool.ruff.lint]` in `pyproject.toml`) and
-**three** type checkers must all pass: `mypy` (strict, `warn_unreachable`), `ty`
-(Astral), and `pyrefly` (Meta) — configured under `[tool.mypy]`, `[tool.ty]`,
-and `[tool.pyrefly]`. They overlap but each catches things the others miss (e.g.
-pyrefly flags possibly-unbound locals, ty flags LSP-violating overrides), so
-write code that satisfies all three rather than the most lenient. The patterns
-that trip agents most often, and how to avoid them:
+The ruff rule set is large and **three** type checkers must pass: `mypy`
+(strict, `warn_unreachable`), `ty`, and `pyrefly`. Write to satisfy all three.
+Common traps:
 
 - **Type everything.** Strict mypy means every function needs annotated params
   and return type; no implicit `Any`. Public modules ship types (`py.typed`).
@@ -65,16 +52,13 @@ that trip agents most often, and how to avoid them:
 - **Comprehensions/simplify (`C4`/`SIM`/`RET`/`PERF`):** prefer the idiom ruff
   wants; when it flags, take the suggestion rather than `# noqa`.
 
-When you genuinely must suppress a finding, scope it to the one tool and one
-rule, with a reason: ruff → `# noqa: <CODE>`, mypy → `# type: ignore[<code>]`,
-ty → `# ty: ignore[<rule>]`, pyrefly → `# pyrefly: ignore[<rule>]`. Prefer
-fixing the code over suppressing; reserve ignores for genuine third-party or
-tool limitations (e.g. ty mis-resolving psycopg's overloaded `connect`). Never a
-blanket ignore, and never edit `pyproject.toml` to disable a rule to pass.
+Suppressions need one tool, one rule, and a reason: ruff `# noqa: <CODE>`,
+mypy `# type: ignore[<code>]`, ty `# ty: ignore[<rule>]`, pyrefly
+`# pyrefly: ignore[<rule>]`. Never blanket-ignore or loosen `pyproject.toml` to pass.
 
 ## 2. Project guardrails (don't regress these)
 
-These are decisions encoded in config/`AGENTS.md` that an unaware edit will undo:
+Preserve these repo decisions:
 
 - **PostgreSQL only.** Runtime code uses PostgreSQL SQL + psycopg param style.
   Do **not** add SQLite fallbacks, db-type sniffing, or placeholder-translation
@@ -83,26 +67,22 @@ These are decisions encoded in config/`AGENTS.md` that an unaware edit will undo
   intentional (avoids PEP 758 rewrites mypy can't parse). Leave it.
 - **Lazy imports are deliberate** (`PLC0415` ignored) for optional deps / startup
   cost / cycles — keep them where they are.
-- Config files (`pyproject.toml`, `.pre-commit-config.yaml`) are not yours to
-  loosen to pass checks. If a rule seems wrong, raise it; don't silently flip it.
+- Do not loosen `pyproject.toml` or `.pre-commit-config.yaml` to pass checks.
 
 ## 3. Tests — author them to this project's style
 
 - Framework is **pytest** with `flake8-pytest-style` (`PT`) enforced. Use
   `pytest.raises`, parametrize with `@pytest.mark.parametrize`, name fixtures
   clearly. `assert` is allowed in tests (per-file ignore), not in app code.
-- **Postgres in tests:** the suite uses `testcontainers[postgres]` but can also
-  hit a local Docker Postgres directly. Credentials live in `.env` at the project
-  root — **load it before running tests**:
+- **Postgres in tests:** credentials live in `.env` at the project root. Load it
+  before running tests:
   ```bash
   source .env && make test
   # or, if dotenv-cli is installed:
   dotenv make test
   ```
-  `.env` sets `TEST_DATABASE_URL` (and `DATABASE_URL`) to the local Docker
-  Postgres (`postgresql://news_dashboard:…@localhost:55432/news_dashboard_test`).
   When `TEST_DATABASE_URL` is present, `conftest.py` uses it directly instead of
-  spinning a container — so tests run faster and never skip on Docker availability.
+  spinning a container.
   Don't mock the DB into a fake; use the `pg_clean` fixture from `conftest.py`
   (gives a fresh-truncated Postgres URL per test). Read a neighbour test before
   writing a new one.

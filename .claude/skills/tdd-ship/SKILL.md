@@ -1,47 +1,36 @@
 ---
 name: tdd-ship
 description: >-
-  The default end-to-end delivery workflow for this repo. Use this skill
-  WHENEVER a request will change a tracked file in the repository — fixing a
-  bug, adding a feature, refactoring, editing config, docs, or tests — even for
-  a one-line change. It drives the full pipeline: open a GitHub issue, branch,
-  write the failing test first (TDD), implement until green, open a PR that
-  closes the issue, wait for CI, and auto-merge once CI is green. Do NOT use it
-  for pure questions, explanations, research, or read-only investigation that
-  touch no files. Triggers on: "fix", "add", "implement", "change", "update",
-  "refactor", "rename", "bump", "tweak", or any phrasing that ends in a code or
-  file change.
+  Default delivery workflow for tracked repo changes. Use when the user asks to
+  fix, add, implement, update, refactor, rename, bump, tweak, or otherwise end
+  in a file change. Do not use for read-only questions or investigation.
 ---
 
 # TDD → Issue → PR → CI → Merge
 
-This is how work ships in this repo. Any request that ends in a changed file
-goes through the same pipeline, so changes are traceable (an issue), reviewable
-(a PR), test-backed (TDD), and verified (CI) before they reach `main`. The goal
-isn't ceremony — it's that nothing lands on `main` without a test proving it
-works and CI confirming it.
+This is how tracked changes ship in this repo: issue -> branch -> red/green
+TDD -> PR -> CI -> auto-merge.
 
 ## When this applies
 
-Apply the full pipeline when the request will modify a tracked file: code, a new
-feature, a bug fix, a refactor, config, Helm/deploy, docs, or tests.
+Apply the full pipeline when the request modifies a tracked file: code, config,
+docs, tests, or deploy files.
 
 Skip it for pure questions, explanations, research, or read-only investigation
 ("how does X work?", "where is Y defined?", "explain this") — answer those
 directly. If a question turns into "…so fix it," the pipeline kicks in at that
 point.
 
-If you're unsure whether a request is big enough to warrant the pipeline, it is.
-A one-line fix still gets an issue, a test, and a PR — that's the point.
+If the user explicitly asks to edit locally without a PR, honor that scope but
+keep the branch, tests, and reporting discipline.
 
 ## The pipeline
 
-Run these in order. Don't skip steps, and don't merge anything by hand outside
-this flow.
+Run these in order.
 
 ### 1. Open a GitHub issue
 
-Capture the intent before writing code, so the change has a tracked rationale.
+Capture the intent before writing code.
 
 ```bash
 gh issue create --title "<concise imperative title>" \
@@ -49,14 +38,9 @@ gh issue create --title "<concise imperative title>" \
   --label "ready-for-agent"
 ```
 
-Keep the title in the repo's voice (e.g. `fix:`/`feat:` style matches commits).
-Note the issue number — you'll reference it in the branch and the PR.
-
-**Always apply the `ready-for-agent` label** to every issue you open. The body
-must be fully specified — context, file references, and acceptance criteria as a
-checklist — so an agent can pick it up with no further human context. If you add
-the label to an existing issue, use `gh issue edit <issue#> --add-label
-"ready-for-agent"`.
+Keep the title in the repo's voice (`fix:`/`feat:` style matches commits).
+Always apply `ready-for-agent`; the issue body needs context, file references,
+scope, acceptance criteria, and test expectations.
 
 ### 2. Branch off an up-to-date `main`
 
@@ -76,11 +60,6 @@ Starting from an up-to-date `main` keeps the diff clean and avoids merge
 conflicts when you push.
 
 ### 3. TDD — write the failing test first
-
-This is the heart of the workflow. Write the test that describes the desired
-behavior **before** the implementation, watch it fail for the right reason, then
-make it pass. A test written after the code tends to assert what the code does,
-not what it should do — writing it first is what makes it a spec.
 
 - **Red**: add/modify a test that encodes the new behavior. Run it; confirm it
   fails because the behavior is missing (not because of a typo or import error).
@@ -102,15 +81,12 @@ into the worktree. Do not print secret values. It is enough to verify that
 `DATABASE_URL` and `TEST_DATABASE_URL` are present so the pre-push backend
 pytest hook can connect to PostgreSQL.
 
-Push only once the relevant tests and type/lint gates pass locally — CI runs the
-same gates, so green-locally is the cheapest way to a green PR.
+Push only after the relevant tests and type/lint gates pass locally.
 
 ### 4. Rebase on `origin/main`, open the PR, and queue it for merge
 
-`main` may have moved while you worked, so re-sync immediately before pushing.
-Rebase (don't merge) so the branch stays linear, re-run the gates if the rebase
-pulled anything in, push, open the PR, then immediately hand it to GitHub's merge
-queue:
+Rebase immediately before pushing, re-run gates if the rebase changes the base,
+push, open the PR, then queue auto-merge:
 
 ```bash
 git fetch origin && git rebase origin/main
@@ -120,19 +96,11 @@ gh pr create --fill --base main \
 gh pr merge --squash --auto
 ```
 
-The `Closes #<issue#>` line is required — it links the PR to the issue and
-auto-closes it on merge. End the PR body with the standard trailer:
+The `Closes #<issue#>` line is required. End the PR body with the standard trailer:
 `🤖 Generated with [Claude Code](https://claude.com/claude-code)`.
 
-Always open PRs with auto-merge enabled (`--auto`). Branch protection on `main`
-requires a merge queue, so `gh pr merge` does not merge directly. If required
-checks are still pending, it enables auto-merge; once the PR is eligible, GitHub
-adds it to the queue and creates a `merge_group` ref. The queue then waits for
-the required checks on that merge group before landing the PR. Do not pass
-`--delete-branch` when merge queue is enabled; `gh` rejects that flag for queued
-merges. A repo-level workflow (`.github/workflows/auto-merge.yml`) also enables
-auto-merge on every non-draft PR as a backstop, but don't rely on it — set
-`--auto` yourself.
+Always open PRs with auto-merge enabled (`--auto`). Branch protection uses a
+merge queue; do not pass `--delete-branch` with queued merges.
 
 Do not bypass the queue with `gh pr merge --admin` or a direct push to `main`.
 
@@ -145,19 +113,14 @@ gh pr checks --watch
 ```
 
 If a check fails, read the logs (`gh run view <run-id> --log-failed`), fix the
-cause on the branch, push, and let CI re-run. When the PR reaches the merge
-queue, CI runs again on the `merge_group` event for the temporary queue ref. The
-required checks are `Lint & typecheck` and `Test & build`; both must pass on the
-merge group before GitHub squash-merges the PR.
+cause on the branch, push, and let CI re-run. Required checks are `Lint &
+typecheck` and `Test & build`; both must pass on the PR and merge queue.
 
 ### 6. Confirm the merge completed
 
-Once CI is green, confirm auto-merge actually landed the PR (`gh pr view
-<pr#> --json state,mergedAt`). Then confirm the issue closed (the `Closes #`
-link handles it), delete the remote branch if GitHub did not delete it
-automatically, and report the merged PR and issue numbers back to the user.
-Only step in with `gh pr merge --squash --auto` if auto-merge was disabled (e.g.
-the PR was converted to a draft); do not use an admin merge to skip the queue.
+Once CI is green, confirm auto-merge landed (`gh pr view <pr#> --json
+state,mergedAt`), confirm the issue closed, delete the remote branch if GitHub
+did not, and report the PR/issue numbers.
 
 ## Reporting back
 
