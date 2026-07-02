@@ -43,6 +43,8 @@ import type {
   IngestRunPage,
   IngestRunSource,
   TopicMapResponse,
+  WordCloudResponse,
+  EmbeddingMapResponse,
   User,
 } from './types';
 
@@ -705,6 +707,14 @@ export async function postShareMessage(shareId: number, message: string): Promis
 
 export async function fetchTopicMap(): Promise<TopicMapResponse> {
   return requestJson<TopicMapResponse>('/api/articles/topic-map');
+}
+
+export async function fetchAiWordCloud(days = 7): Promise<WordCloudResponse> {
+  return requestJson<WordCloudResponse>(`/api/ai-stats/word-cloud?days=${days}`);
+}
+
+export async function fetchAiEmbeddingMap(days = 7): Promise<EmbeddingMapResponse> {
+  return requestJson<EmbeddingMapResponse>(`/api/ai-stats/embedding-map?days=${days}`);
 }
 
 export async function fetchOnboardingStatus(): Promise<OnboardingStatus> {

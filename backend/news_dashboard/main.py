@@ -2776,8 +2776,10 @@ def admin_delete_user(
 
 # Feature-module routers mount onto ``api`` so they inherit its ``require_auth``
 # gate. Add each new domain's router here as it is extracted from main.py.
+from news_dashboard.ai_stats.router import router as ai_stats_router  # noqa: E402
 from news_dashboard.quizzes.router import router as quizzes_router  # noqa: E402
 
+api.include_router(ai_stats_router)
 api.include_router(quizzes_router)
 
 app.include_router(api)

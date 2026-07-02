@@ -62,3 +62,14 @@ describe('navigation metadata', () => {
     expect(isNavigationItemActive('/feeds', '/stats')).toBe(false);
   });
 });
+
+describe('AI Stats navigation', () => {
+  it('lists /ai-stats in the secondary navigation', () => {
+    const targets = secondaryNavigationItems.map((item) => item.to);
+    expect(targets).toContain('/ai-stats');
+  });
+
+  it('titles the AI Stats page', () => {
+    expect(getPageTitle('/ai-stats')).toBe('AI Stats');
+  });
+});

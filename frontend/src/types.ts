@@ -463,6 +463,9 @@ export interface TopicMapArticle {
   title: string;
   url: string;
   summary: string;
+  category: string;
+  x: number;
+  y: number;
 }
 
 export interface TopicCluster {
@@ -477,6 +480,41 @@ export interface TopicCluster {
 
 export interface TopicMapResponse {
   clusters: TopicCluster[];
+}
+
+export interface WordCloudTerm {
+  term: string;
+  count: number;
+  weight: number;
+}
+
+export interface WordCloudResponse {
+  terms: WordCloudTerm[];
+  article_count: number;
+  days: number;
+}
+
+export interface EmbeddingMapPoint {
+  id: number;
+  title: string;
+  category: string;
+  x: number;
+  y: number;
+  cluster: number;
+}
+
+export interface EmbeddingMapCluster {
+  id: number;
+  label: string;
+  size: number;
+}
+
+export interface EmbeddingMapResponse {
+  points: EmbeddingMapPoint[];
+  clusters: EmbeddingMapCluster[];
+  embedded_count: number;
+  total_count: number;
+  days: number;
 }
 
 export interface OnboardingInterest {

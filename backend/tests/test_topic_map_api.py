@@ -29,7 +29,16 @@ def test_topic_map_static_route_is_not_parsed_as_article_id(monkeypatch: Any) ->
                 "x": 0.0,
                 "y": 0.0,
                 "article_ids": [7],
-                "articles": [{"id": 7, "title": "Article 7", "source": "Example"}],
+                "articles": [
+                    {
+                        "id": 7,
+                        "title": "Article 7",
+                        "source": "Example",
+                        "x": 0.25,
+                        "y": -0.5,
+                        "category": "tech",
+                    }
+                ],
             }
         ]
 
@@ -41,7 +50,12 @@ def test_topic_map_static_route_is_not_parsed_as_article_id(monkeypatch: Any) ->
     response = _client().get("/api/articles/topic-map")
 
     assert response.status_code == 200
-    assert response.json()["clusters"][0]["headline"] == "Topic arc"
+    payload = response.json()
+    assert payload["clusters"][0]["headline"] == "Topic arc"
+    article = payload["clusters"][0]["articles"][0]
+    assert article["x"] == 0.25
+    assert article["y"] == -0.5
+    assert article["category"] == "tech"
 
 
 def test_numeric_article_detail_route_still_resolves(monkeypatch: Any) -> None:

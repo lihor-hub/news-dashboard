@@ -311,6 +311,14 @@ def _greedy_cluster(normalized_vecs: list[list[float]], threshold: float) -> lis
     return assignments
 
 
+# Public aliases for reuse by other feature modules (e.g. ai_stats); the
+# underscore-prefixed names stay for existing imports and tests.
+pca_2d = _pca_2d
+greedy_cluster = _greedy_cluster
+normalize_vector = _normalize
+unpack_embedding = _unpack_embedding
+
+
 def _generate_cluster_label(
     articles: list[dict[str, Any]],
     user_id: int | None = None,
@@ -358,19 +366,15 @@ def _generate_cluster_label(
     return headline, trend_summary
 
 
-def cluster_recent_articles(
+def load_recent_embedded_articles(
     user_id: int | None = None,
+    days: int = 7,
+    limit: int = _MAX_ARTICLES,
     database_url: str | None = None,
 ) -> list[dict[str, Any]]:
-    """Cluster articles from the last 7 days by embedding similarity.
+    """Load recent articles that have an embedding, scoped to the user's visible sources.
 
-    Returns a list of story cluster dicts:
-      - id: int
-      - headline: str
-      - trend_summary: str
-      - x, y: float (2D coordinates in [-1, 1])
-      - article_ids: list[int]
-      - articles: list[{id, title, url, summary}]
+    Returns dicts with keys: id, title, url, summary, category, embedding.
     """
     init_db(database_url=database_url)
 
@@ -380,12 +384,12 @@ def cluster_recent_articles(
                 """
                 SELECT id, title, url, summary, category, embedding
                 FROM articles
-                WHERE discovered_at::timestamptz >= NOW() - INTERVAL '7 days'
+                WHERE discovered_at::timestamptz >= NOW() - INTERVAL '1 day' * %s
                   AND embedding IS NOT NULL
                 ORDER BY discovered_at DESC
                 LIMIT %s
                 """,
-                (_MAX_ARTICLES,),
+                (days, limit),
             ).fetchall()
         else:
             rows = conn.execute(
@@ -397,7 +401,7 @@ def cluster_recent_articles(
                   ON us.source_slug = src.slug AND us.user_id = %s
                 LEFT JOIN user_article_state uas
                   ON uas.article_id = a.id AND uas.user_id = %s
-                WHERE a.discovered_at::timestamptz >= NOW() - INTERVAL '7 days'
+                WHERE a.discovered_at::timestamptz >= NOW() - INTERVAL '1 day' * %s
                   AND a.embedding IS NOT NULL
                   AND COALESCE(uas.state, 'today') != 'archived'
                   AND (
@@ -413,8 +417,27 @@ def cluster_recent_articles(
                 ORDER BY a.discovered_at DESC
                 LIMIT %s
                 """,
-                (user_id, user_id, user_id, _MAX_ARTICLES),
+                (user_id, user_id, days, user_id, limit),
             ).fetchall()
+
+    return [dict(row) for row in rows]
+
+
+def cluster_recent_articles(
+    user_id: int | None = None,
+    database_url: str | None = None,
+) -> list[dict[str, Any]]:
+    """Cluster articles from the last 7 days by embedding similarity.
+
+    Returns a list of story cluster dicts:
+      - id: int
+      - headline: str
+      - trend_summary: str
+      - x, y: float (2D coordinates in [-1, 1], mean of member positions)
+      - article_ids: list[int]
+      - articles: list[{id, title, url, summary, category, x, y}]
+    """
+    rows = load_recent_embedded_articles(user_id=user_id, database_url=database_url)
 
     if not rows:
         return []
@@ -448,16 +471,12 @@ def cluster_recent_articles(
     if not valid_clusters:
         return []
 
-    centroids = [
-        _normalize(_vec_mean([norm_vecs[i] for i in indices])) for _, indices in valid_clusters
-    ]
-    coords_2d = _pca_2d(centroids)
+    article_coords = _pca_2d(norm_vecs)
 
     result: list[dict[str, Any]] = []
-    for cluster_seq, ((cid, indices), (cx, cy)) in enumerate(
-        zip(valid_clusters, coords_2d, strict=False)
-    ):
+    for cluster_seq, (cid, indices) in enumerate(valid_clusters):
         cluster_articles = [article_data[i] for i in indices]
+        member_coords = [article_coords[i] for i in indices]
         try:
             headline, trend_summary = _generate_cluster_label(cluster_articles, user_id=user_id)
         except Exception:
@@ -470,8 +489,8 @@ def cluster_recent_articles(
                 "id": cluster_seq,
                 "headline": headline,
                 "trend_summary": trend_summary,
-                "x": cx,
-                "y": cy,
+                "x": sum(x for x, _ in member_coords) / len(member_coords),
+                "y": sum(y for _, y in member_coords) / len(member_coords),
                 "article_ids": [a["id"] for a in cluster_articles],
                 "articles": [
                     {
@@ -479,8 +498,11 @@ def cluster_recent_articles(
                         "title": a["title"],
                         "url": a["url"],
                         "summary": a["summary"],
+                        "category": a["category"],
+                        "x": ax,
+                        "y": ay,
                     }
-                    for a in cluster_articles
+                    for a, (ax, ay) in zip(cluster_articles, member_coords, strict=True)
                 ],
             }
         )

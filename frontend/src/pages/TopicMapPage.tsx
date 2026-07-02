@@ -1,91 +1,21 @@
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { Loader2, AlertCircle, Network, RefreshCw } from 'lucide-react';
 import { fetchTopicMap } from '@/api';
-import type { TopicCluster, TopicMapArticle } from '@/types';
+import type { TopicMapArticle } from '@/types';
 import { cn } from '@/lib/utils';
+import { categoryColorMap, colorForCategory } from '@/lib/categoryColor';
+import { convexHull, hullPath, padHull } from '@/lib/convexHull';
 
 const CANVAS_W = 800;
 const CANVAS_H = 560;
-const CLUSTER_R = 32;
-const ARTICLE_R = 10;
-const ORBIT_R = 90;
+const ARTICLE_R = 7;
+const HULL_PAD = 20;
 
 function toCanvas(normalized: number, size: number): number {
-  const padding = 120;
+  const padding = 60;
   return padding + ((normalized + 1) / 2) * (size - padding * 2);
-}
-
-interface ArticleNodeProps {
-  article: TopicMapArticle;
-  cx: number;
-  cy: number;
-  onHover: (a: TopicMapArticle | null, x: number, y: number) => void;
-  onClick: (id: number) => void;
-}
-
-function ArticleNode({ article, cx, cy, onHover, onClick }: ArticleNodeProps) {
-  return (
-    <circle
-      cx={cx}
-      cy={cy}
-      r={ARTICLE_R}
-      className="cursor-pointer fill-primary/30 stroke-primary stroke-[1.5] transition-all hover:fill-primary/70"
-      onMouseEnter={(e) => onHover(article, e.clientX, e.clientY)}
-      onMouseLeave={() => onHover(null, 0, 0)}
-      onClick={() => onClick(article.id)}
-    />
-  );
-}
-
-interface ClusterNodeProps {
-  cluster: TopicCluster;
-  cx: number;
-  cy: number;
-  isSelected: boolean;
-  onHover: (c: TopicCluster | null, x: number, y: number) => void;
-  onClick: (id: number) => void;
-}
-
-function ClusterNode({ cluster, cx, cy, isSelected, onHover, onClick }: ClusterNodeProps) {
-  return (
-    <g>
-      <circle
-        cx={cx}
-        cy={cy}
-        r={CLUSTER_R + 8}
-        className={cn(
-          'transition-all',
-          isSelected
-            ? 'fill-primary/20 stroke-primary/60 stroke-[2]'
-            : 'fill-primary/5 stroke-primary/20 stroke-[1]'
-        )}
-      />
-      <circle
-        cx={cx}
-        cy={cy}
-        r={CLUSTER_R}
-        className={cn(
-          'cursor-pointer transition-all',
-          isSelected
-            ? 'fill-primary/40 stroke-primary stroke-[2.5]'
-            : 'fill-surface-2 stroke-primary/50 stroke-[1.5] hover:fill-primary/20 hover:stroke-primary'
-        )}
-        onMouseEnter={(e) => onHover(cluster, e.clientX, e.clientY)}
-        onMouseLeave={() => onHover(null, 0, 0)}
-        onClick={() => onClick(cluster.id)}
-      />
-      <text
-        x={cx}
-        y={cy + 4}
-        textAnchor="middle"
-        className="pointer-events-none select-none fill-foreground text-[11px] font-semibold"
-      >
-        {cluster.articles.length}
-      </text>
-    </g>
-  );
 }
 
 interface TooltipState {
@@ -113,6 +43,28 @@ export function TopicMapPage() {
     retry: 1,
   });
 
+  const clusters = useMemo(() => data?.clusters ?? [], [data]);
+
+  const colors = useMemo(
+    () => categoryColorMap(clusters.flatMap((c) => c.articles.map((a) => a.category))),
+    [clusters]
+  );
+
+  const hulls = useMemo(
+    () =>
+      clusters
+        .filter((c) => c.articles.length >= 3)
+        .map((cluster) => {
+          const canvasPoints = cluster.articles.map((a) => ({
+            x: toCanvas(a.x, CANVAS_W),
+            y: toCanvas(a.y, CANVAS_H),
+          }));
+          const hull = padHull(convexHull(canvasPoints), HULL_PAD);
+          return { cluster, path: hullPath(hull), topY: Math.min(...hull.map((h) => h.y)) };
+        }),
+    [clusters]
+  );
+
   const showTooltip = useCallback(
     (title: string, subtitle: string | undefined, x: number, y: number) => {
       setTooltip({ visible: true, x, y, content: { title, subtitle } });
@@ -123,14 +75,6 @@ export function TopicMapPage() {
   const hideTooltip = useCallback(() => {
     setTooltip((t) => ({ ...t, visible: false }));
   }, []);
-
-  const handleClusterHover = useCallback(
-    (cluster: TopicCluster | null, x: number, y: number) => {
-      if (cluster) showTooltip(cluster.headline, cluster.trend_summary, x, y);
-      else hideTooltip();
-    },
-    [showTooltip, hideTooltip]
-  );
 
   const handleArticleHover = useCallback(
     (article: TopicMapArticle | null, x: number, y: number) => {
@@ -173,8 +117,6 @@ export function TopicMapPage() {
     );
   }
 
-  const clusters = data?.clusters ?? [];
-
   if (clusters.length === 0) {
     return (
       <div className="flex min-h-[50vh] flex-1 flex-col items-center justify-center gap-3 text-muted-foreground">
@@ -188,28 +130,6 @@ export function TopicMapPage() {
     );
   }
 
-  const clusterPositions = clusters.map((c) => ({
-    cx: toCanvas(c.x, CANVAS_W),
-    cy: toCanvas(c.y, CANVAS_H),
-  }));
-
-  const articleNodes: { article: TopicMapArticle; cx: number; cy: number; clusterId: number }[] =
-    [];
-  for (let ci = 0; ci < clusters.length; ci++) {
-    const cluster = clusters[ci];
-    if (selectedClusterId !== null && selectedClusterId !== cluster.id) continue;
-    const { cx, cy } = clusterPositions[ci];
-    cluster.articles.forEach((article, ai) => {
-      const angle = (2 * Math.PI * ai) / cluster.articles.length - Math.PI / 2;
-      articleNodes.push({
-        article,
-        cx: cx + ORBIT_R * Math.cos(angle),
-        cy: cy + ORBIT_R * Math.sin(angle),
-        clusterId: cluster.id,
-      });
-    });
-  }
-
   const selectedCluster =
     selectedClusterId !== null ? clusters.find((c) => c.id === selectedClusterId) : null;
 
@@ -219,7 +139,8 @@ export function TopicMapPage() {
         <div>
           <h1 className="text-lg font-semibold">Topic Map</h1>
           <p className="text-xs text-muted-foreground">
-            {clusters.length} story cluster{clusters.length !== 1 ? 's' : ''} from the last 7 days
+            {clusters.length} story cluster{clusters.length !== 1 ? 's' : ''} from the last 7 days —
+            articles positioned by embedding similarity
           </p>
         </div>
         <button
@@ -240,71 +161,55 @@ export function TopicMapPage() {
           className="h-auto w-full"
           style={{ maxHeight: '560px' }}
         >
-          {articleNodes.map(({ article, cx, cy, clusterId }) => {
-            const ci = clusters.findIndex((c) => c.id === clusterId);
-            const { cx: pcx, cy: pcy } = clusterPositions[ci];
-            return (
-              <line
-                key={`edge-${article.id}`}
-                x1={pcx}
-                y1={pcy}
-                x2={cx}
-                y2={cy}
-                className="stroke-primary/20 stroke-[1]"
+          {hulls.map(({ cluster, path }) => (
+            <path
+              key={`hull-${cluster.id}`}
+              data-testid="cluster-hull"
+              d={path}
+              className={cn(
+                'cursor-pointer transition-all',
+                selectedClusterId === cluster.id
+                  ? 'fill-primary/15 stroke-primary/60 stroke-[2]'
+                  : 'fill-primary/5 stroke-primary/20 stroke-[1] hover:fill-primary/10'
+              )}
+              onClick={() => handleClusterClick(cluster.id)}
+            />
+          ))}
+
+          {clusters.map((cluster) =>
+            cluster.articles.map((article) => (
+              <circle
+                key={article.id}
+                data-testid="article-point"
+                cx={toCanvas(article.x, CANVAS_W)}
+                cy={toCanvas(article.y, CANVAS_H)}
+                r={ARTICLE_R}
+                fill={colorForCategory(colors, article.category)}
+                fillOpacity={
+                  selectedClusterId === null || selectedClusterId === cluster.id ? 0.8 : 0.25
+                }
+                className="cursor-pointer stroke-background stroke-[1.5] transition-all"
+                onMouseEnter={(e) => handleArticleHover(article, e.clientX, e.clientY)}
+                onMouseLeave={() => handleArticleHover(null, 0, 0)}
+                onClick={() => handleArticleClick(article.id)}
               />
-            );
-          })}
+            ))
+          )}
 
-          {clusters.map((cluster, ci) => (
-            <ClusterNode
-              key={cluster.id}
-              cluster={cluster}
-              cx={clusterPositions[ci].cx}
-              cy={clusterPositions[ci].cy}
-              isSelected={selectedClusterId === cluster.id}
-              onHover={handleClusterHover}
-              onClick={handleClusterClick}
-            />
-          ))}
-
-          {articleNodes.map(({ article, cx, cy }) => (
-            <ArticleNode
-              key={article.id}
-              article={article}
-              cx={cx}
-              cy={cy}
-              onHover={handleArticleHover}
-              onClick={handleArticleClick}
-            />
-          ))}
-
-          {clusters.map((cluster, ci) => {
-            const { cx, cy } = clusterPositions[ci];
-            const words = cluster.headline.split(' ');
-            const mid = Math.ceil(words.length / 2);
-            const line1 = words.slice(0, mid).join(' ');
-            const line2 = words.slice(mid).join(' ');
+          {hulls.map(({ cluster, topY }) => {
+            const cx =
+              cluster.articles.reduce((sum, a) => sum + toCanvas(a.x, CANVAS_W), 0) /
+              cluster.articles.length;
             return (
-              <g key={`label-${cluster.id}`} className="pointer-events-none">
-                <text
-                  x={cx}
-                  y={cy + CLUSTER_R + 16}
-                  textAnchor="middle"
-                  className="select-none fill-foreground text-[10px] font-medium"
-                >
-                  {line1}
-                </text>
-                {line2 && (
-                  <text
-                    x={cx}
-                    y={cy + CLUSTER_R + 28}
-                    textAnchor="middle"
-                    className="select-none fill-foreground text-[10px] font-medium"
-                  >
-                    {line2}
-                  </text>
-                )}
-              </g>
+              <text
+                key={`label-${cluster.id}`}
+                x={cx}
+                y={topY - 8}
+                textAnchor="middle"
+                className="pointer-events-none select-none fill-foreground text-[11px] font-semibold"
+              >
+                {cluster.headline}
+              </text>
             );
           })}
         </svg>
@@ -322,6 +227,18 @@ export function TopicMapPage() {
             )}
           </div>
         )}
+      </div>
+
+      <div className="flex flex-wrap gap-x-4 gap-y-1">
+        {[...colors.entries()].map(([category, color]) => (
+          <span
+            key={category}
+            className="flex items-center gap-1.5 text-[11px] text-muted-foreground"
+          >
+            <span className="size-2.5 rounded-full" style={{ backgroundColor: color }} />
+            {category}
+          </span>
+        ))}
       </div>
 
       {selectedCluster && (
@@ -353,7 +270,7 @@ export function TopicMapPage() {
       )}
 
       <p className="text-center text-[11px] text-muted-foreground">
-        Click a cluster node to expand its articles · Click an article node to open it
+        Click a cluster outline to inspect its articles · Click a point to open the article
       </p>
     </div>
   );

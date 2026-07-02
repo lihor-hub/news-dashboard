@@ -28,6 +28,7 @@ from news_dashboard.insights import (
     cluster_recent_articles,
     generate_insights,
     get_or_generate_insights,
+    load_recent_embedded_articles,
 )
 
 # ── shared test data ──────────────────────────────────────────────────────────
@@ -820,3 +821,51 @@ def test_cluster_recent_articles_returns_empty_below_min_size(pg_clean: str) -> 
 
     result = cluster_recent_articles(database_url=pg_clean)
     assert result == []
+
+
+def test_cluster_recent_articles_returns_per_article_coordinates(pg_clean: str) -> None:
+    """Every clustered article carries its own 2D position and category."""
+    dim = 16
+    group_a = [
+        _normalize([1.0 if j == 0 else 0.01 * j for j in range(dim)]),
+        _normalize([1.0 if j == 0 else 0.011 * j for j in range(dim)]),
+        _normalize([1.0 if j == 0 else 0.012 * j for j in range(dim)]),
+    ]
+    group_b = [
+        _normalize([1.0 if j == dim - 1 else 0.01 * j for j in range(dim)]),
+        _normalize([1.0 if j == dim - 1 else 0.011 * j for j in range(dim)]),
+        _normalize([1.0 if j == dim - 1 else 0.012 * j for j in range(dim)]),
+    ]
+
+    _seed_articles_with_embeddings(pg_clean, [group_a, group_b])
+
+    with patch(
+        "news_dashboard.insights._generate_cluster_label",
+        return_value=("Cluster", "Summary."),
+    ):
+        clusters = cluster_recent_articles(database_url=pg_clean)
+
+    assert clusters
+    for cluster in clusters:
+        for article in cluster["articles"]:
+            assert -1.01 <= article["x"] <= 1.01
+            assert -1.01 <= article["y"] <= 1.01
+            assert article["category"] == "tech"
+        # The cluster position is the mean of its members' positions.
+        mean_x = sum(a["x"] for a in cluster["articles"]) / len(cluster["articles"])
+        mean_y = sum(a["y"] for a in cluster["articles"]) / len(cluster["articles"])
+        assert abs(cluster["x"] - mean_x) < 1e-6
+        assert abs(cluster["y"] - mean_y) < 1e-6
+
+
+def test_load_recent_embedded_articles_returns_only_embedded_rows(pg_clean: str) -> None:
+    vec = _normalize([1.0, 0.02, 0.03, 0.04])
+    _seed_articles_with_embeddings(pg_clean, [[vec, vec]])
+    _seed_article(pg_clean)  # no embedding
+
+    rows = load_recent_embedded_articles(user_id=None, database_url=pg_clean)
+
+    assert len(rows) == 2
+    for row in rows:
+        assert set(row) >= {"id", "title", "url", "summary", "category", "embedding"}
+        assert row["embedding"] is not None

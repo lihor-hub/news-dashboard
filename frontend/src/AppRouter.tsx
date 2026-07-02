@@ -57,6 +57,9 @@ const BriefingDetailPage = lazy(() =>
 const TopicMapPage = lazy(() =>
   import('./pages/TopicMapPage').then((m) => ({ default: m.TopicMapPage }))
 );
+const AiStatsPage = lazy(() =>
+  import('./pages/AiStatsPage').then((m) => ({ default: m.AiStatsPage }))
+);
 
 function PageLoader() {
   return (
@@ -155,6 +158,7 @@ export const routes: RouteObject[] = [
       { path: 'briefs', element: withSuspense(BriefingsHistoryPage) },
       { path: 'briefs/:id', element: withSuspense(BriefingDetailPage) },
       { path: 'topic-map', element: withSuspense(TopicMapPage) },
+      { path: 'ai-stats', element: withSuspense(AiStatsPage) },
       {
         path: 'stats',
         element: (
