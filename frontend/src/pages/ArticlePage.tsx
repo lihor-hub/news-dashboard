@@ -43,6 +43,7 @@ import { recommendationExplanation } from '@/lib/recommendation';
 import { trackArticleOpen, trackArticleClose } from '@/lib/analytics';
 import { cn } from '@/lib/utils';
 import { ShareDialog } from '@/components/ShareDialog';
+import { ArticleTags } from '@/components/article/ArticleTags';
 
 const LANGUAGE_NAMES: Record<string, string> = {
   en: 'English',
@@ -592,6 +593,9 @@ export function ArticlePage() {
             <h1 className="mt-3 text-[26px] md:text-[30px] font-semibold tracking-tight leading-tight">
               {showOriginal && article.originalTitle ? article.originalTitle : article.title}
             </h1>
+
+            {/* User-defined tags — independent of workflow state */}
+            {!shareId && <ArticleTags articleId={article.id} />}
 
             {/* Reading time — only shown once body is available */}
             {article.bodyStatus === 'ok' && article.body && (

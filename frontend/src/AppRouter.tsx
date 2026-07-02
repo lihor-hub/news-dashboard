@@ -15,6 +15,8 @@ import { StarredPage } from './pages/StarredPage';
 import { FeedsPage } from './pages/FeedsPage';
 import { SourcesPage } from './pages/SourcesPage';
 import { ArchivePage } from './pages/ArchivePage';
+import { CollectionsPage } from './pages/CollectionsPage';
+import { CollectionDetailPage } from './pages/CollectionDetailPage';
 import { useAuth } from './contexts/auth';
 import { ShieldAlert } from 'lucide-react';
 
@@ -164,6 +166,8 @@ export const routes: RouteObject[] = [
       },
       { path: 'reading-dna', element: withSuspense(ReadingDnaPage) },
       { path: 'archive', element: <ArchivePage /> },
+      { path: 'collections', element: <CollectionsPage /> },
+      { path: 'collections/:tagId', element: <CollectionDetailPage /> },
       { path: 'settings', element: withSuspense(SettingsPage) },
       { path: 'admin', element: withSuspense(AdminPage) },
       {

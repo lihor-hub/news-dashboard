@@ -508,6 +508,27 @@ POSTGRES_MULTIUSER_SCHEMA = [
     """,
     "CREATE INDEX IF NOT EXISTS idx_user_otps_user ON user_otps(user_id, expires_at DESC)",
     "ALTER TABLE users ADD COLUMN IF NOT EXISTS is_guest BOOLEAN NOT NULL DEFAULT FALSE",
+    """
+    CREATE TABLE IF NOT EXISTS user_tags (
+      id         SERIAL PRIMARY KEY,
+      user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      name       TEXT NOT NULL,
+      color      TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE (user_id, name)
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS article_tags (
+      user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      article_id BIGINT  NOT NULL REFERENCES articles(id) ON DELETE CASCADE,
+      tag_id     INTEGER NOT NULL REFERENCES user_tags(id) ON DELETE CASCADE,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      PRIMARY KEY (user_id, article_id, tag_id)
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_article_tags_user_tag ON article_tags(user_id, tag_id)",
+    "CREATE INDEX IF NOT EXISTS idx_article_tags_article ON article_tags(article_id)",
 ]
 
 

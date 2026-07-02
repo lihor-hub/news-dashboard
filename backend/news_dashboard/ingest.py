@@ -1137,6 +1137,7 @@ def list_articles(  # noqa: PLR0913
     offset: int = 0,
     db_path: Path | str | None = None,
     user_id: int | None = None,
+    tag_id: int | None = None,
 ) -> list[dict[str, Any]]:
     init_db(db_path)
     now = now_iso()
@@ -1152,6 +1153,7 @@ def list_articles(  # noqa: PLR0913
             offset=offset,
             db_path=db_path,
             now=now,
+            tag_id=tag_id,
         )
 
     # ── Legacy path (no user context) ─────────────────────────────────────────
@@ -1218,6 +1220,7 @@ def _list_articles_for_user(  # noqa: PLR0913
     offset: int,
     db_path: Path | str | None,
     now: str,
+    tag_id: int | None = None,
 ) -> list[dict[str, Any]]:
     """Article listing scoped to a specific user via user_article_state."""
     # Map legacy status → state
@@ -1262,6 +1265,12 @@ def _list_articles_for_user(  # noqa: PLR0913
     if category:
         art_clauses.append("a.category = %s")
         where_params.append(category)
+    if tag_id is not None:
+        art_clauses.append(
+            "EXISTS (SELECT 1 FROM article_tags at"
+            " WHERE at.article_id = a.id AND at.user_id = %s AND at.tag_id = %s)"
+        )
+        where_params.extend([user_id, tag_id])
 
     where = f"WHERE {' AND '.join(art_clauses)}"
 
@@ -1374,6 +1383,7 @@ def search_articles(  # noqa: PLR0912, PLR0913
     include_archived: bool = False,
     date_range: str = "all",
     user_id: int | None = None,
+    tag_id: int | None = None,
 ) -> list[dict[str, Any]]:
     init_db(db_path)
     tsquery = _search_tsquery(q)
@@ -1393,6 +1403,7 @@ def search_articles(  # noqa: PLR0912, PLR0913
             include_archived=include_archived,
             date_range=date_range,
             now_ts=now_ts,
+            tag_id=tag_id,
         )
 
     clauses: list[str] = []
@@ -1481,6 +1492,7 @@ def search_articles_page(  # noqa: PLR0913
     include_archived: bool = False,
     date_range: str = "all",
     user_id: int | None = None,
+    tag_id: int | None = None,
 ) -> dict[str, Any]:
     items = search_articles(
         q=q,
@@ -1494,6 +1506,7 @@ def search_articles_page(  # noqa: PLR0913
         include_archived=include_archived,
         date_range=date_range,
         user_id=user_id,
+        tag_id=tag_id,
     )
     total = count_search_articles(
         q=q,
@@ -1505,6 +1518,7 @@ def search_articles_page(  # noqa: PLR0913
         include_archived=include_archived,
         date_range=date_range,
         user_id=user_id,
+        tag_id=tag_id,
     )
     return {
         "items": items,
@@ -1525,6 +1539,7 @@ def count_search_articles(  # noqa: PLR0913
     include_archived: bool = False,
     date_range: str = "all",
     user_id: int | None = None,
+    tag_id: int | None = None,
 ) -> int:
     init_db(db_path)
     tsquery = _search_tsquery(q)
@@ -1542,6 +1557,7 @@ def count_search_articles(  # noqa: PLR0913
             include_archived=include_archived,
             date_range=date_range,
             now_ts=now_ts,
+            tag_id=tag_id,
         )
 
     clauses: list[str] = []
@@ -1605,6 +1621,7 @@ def _search_articles_for_user(  # noqa: PLR0912, PLR0913, PLR0915
     include_archived: bool,
     date_range: str,
     now_ts: str,
+    tag_id: int | None = None,
 ) -> list[dict[str, Any]]:
     tsquery = _search_tsquery(q)
     clauses: list[str] = []
@@ -1646,6 +1663,13 @@ def _search_articles_for_user(  # noqa: PLR0912, PLR0913, PLR0915
     elif date_range == "month":
         clauses.append("a.discovered_at::timestamptz >= %s::timestamptz - interval '30 days'")
         where_params.append(now_ts)
+
+    if tag_id is not None:
+        clauses.append(
+            "EXISTS (SELECT 1 FROM article_tags at"
+            " WHERE at.article_id = a.id AND at.user_id = %s AND at.tag_id = %s)"
+        )
+        where_params.extend([user_id, tag_id])
 
     # Source subscription filter appended to WHERE
     src_filter = (
@@ -1725,6 +1749,7 @@ def _count_search_articles_for_user(  # noqa: PLR0913
     include_archived: bool,
     date_range: str,
     now_ts: str,
+    tag_id: int | None = None,
 ) -> int:
     tsquery = _search_tsquery(q)
     clauses: list[str] = []
@@ -1766,6 +1791,13 @@ def _count_search_articles_for_user(  # noqa: PLR0913
     elif date_range == "month":
         clauses.append("a.discovered_at::timestamptz >= %s::timestamptz - interval '30 days'")
         where_params.append(now_ts)
+
+    if tag_id is not None:
+        clauses.append(
+            "EXISTS (SELECT 1 FROM article_tags at"
+            " WHERE at.article_id = a.id AND at.user_id = %s AND at.tag_id = %s)"
+        )
+        where_params.extend([user_id, tag_id])
 
     src_filter = (
         "(src.owner_user_id IS NULL AND COALESCE(us_src.enabled, true)) OR src.owner_user_id = %s"

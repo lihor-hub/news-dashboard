@@ -171,6 +171,7 @@ export interface SearchFilters {
   starredOnly?: boolean;
   includeArchived?: boolean;
   dateRange?: 'all' | 'today' | 'week' | 'month';
+  tagId?: number;
   limit?: number;
   offset?: number;
 }
@@ -199,6 +200,7 @@ export async function searchArticlesFiltered(filters: SearchFilters): Promise<Se
   if (filters.starredOnly) params.set('starred_only', 'true');
   if (filters.includeArchived) params.set('include_archived', 'true');
   if (filters.dateRange && filters.dateRange !== 'all') params.set('date_range', filters.dateRange);
+  if (filters.tagId != null) params.set('tag_id', String(filters.tagId));
   filters.states?.forEach((s) => params.append('states', s));
   filters.categories?.forEach((c) => params.append('categories', c));
   filters.sources?.forEach((s) => params.append('sources', s));

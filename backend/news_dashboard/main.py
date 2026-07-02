@@ -28,6 +28,7 @@ from fastapi import (
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
+from psycopg.errors import UniqueViolation
 from psycopg.types.json import Jsonb
 from pydantic import BaseModel, Field, field_validator
 from starlette.exceptions import HTTPException as StarletteHTTPException
@@ -770,12 +771,13 @@ def ingest_stream() -> StreamingResponse:
 
 
 @api.get("/api/articles")
-def articles(
+def articles(  # noqa: PLR0913
     current_user: Annotated[dict[str, Any], Depends(require_auth)],
     status: Annotated[str | None, Query()] = None,
     state: Annotated[str | None, Query()] = None,
     starred: Annotated[bool | None, Query()] = None,
     category: Annotated[str | None, Query()] = None,
+    tag_id: Annotated[int | None, Query()] = None,
     limit: Annotated[int, Query(ge=1, le=500)] = 100,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> dict[str, Any]:
@@ -784,6 +786,7 @@ def articles(
         state=state,
         starred=starred,
         category=category,
+        tag_id=tag_id,
         limit=limit + 1,
         offset=offset,
         user_id=current_user["id"],
@@ -808,6 +811,7 @@ def search(  # noqa: PLR0913
     starred_only: Annotated[bool, Query()] = False,
     include_archived: Annotated[bool, Query()] = False,
     date_range: Annotated[str, Query()] = "all",
+    tag_id: Annotated[int | None, Query()] = None,
 ) -> dict[str, Any]:
     return search_articles_page(
         q=q.strip(),
@@ -820,6 +824,7 @@ def search(  # noqa: PLR0913
         include_archived=include_archived,
         date_range=date_range,
         user_id=current_user["id"],
+        tag_id=tag_id,
     )
 
 
@@ -2436,6 +2441,138 @@ def summary(
     current_user: Annotated[dict[str, Any], Depends(require_auth)],
 ) -> dict[str, Any]:
     return get_user_summary(user_id=current_user["id"])
+
+
+# ── Tags & Collections ────────────────────────────────────────────────────────
+
+
+class TagCreateRequest(BaseModel):
+    name: str
+    color: str | None = None
+
+
+class TagRenameRequest(BaseModel):
+    name: str
+
+
+class ArticleTagRequest(BaseModel):
+    tag_id: int
+
+
+@api.post("/api/tags")
+def create_tag_endpoint(
+    payload: TagCreateRequest,
+    current_user: Annotated[dict[str, Any], Depends(require_auth)],
+) -> dict[str, Any]:
+    from news_dashboard.tags import create_tag
+
+    name = payload.name.strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="name must not be empty")
+    try:
+        return create_tag(current_user["id"], name, payload.color)
+    except UniqueViolation as exc:
+        raise HTTPException(status_code=409, detail="tag already exists") from exc
+
+
+@api.get("/api/tags")
+def list_tags_endpoint(
+    current_user: Annotated[dict[str, Any], Depends(require_auth)],
+) -> dict[str, Any]:
+    from news_dashboard.tags import list_tags
+
+    return {"items": list_tags(current_user["id"])}
+
+
+@api.patch("/api/tags/{tag_id}")
+def rename_tag_endpoint(
+    tag_id: int,
+    payload: TagRenameRequest,
+    current_user: Annotated[dict[str, Any], Depends(require_auth)],
+) -> dict[str, Any]:
+    from news_dashboard.tags import rename_tag
+
+    name = payload.name.strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="name must not be empty")
+    try:
+        tag = rename_tag(tag_id, current_user["id"], name)
+    except UniqueViolation as exc:
+        raise HTTPException(status_code=409, detail="tag already exists") from exc
+    if not tag:
+        raise HTTPException(status_code=404, detail="tag not found")
+    return tag
+
+
+@api.delete("/api/tags/{tag_id}")
+def delete_tag_endpoint(
+    tag_id: int,
+    current_user: Annotated[dict[str, Any], Depends(require_auth)],
+) -> dict[str, Any]:
+    from news_dashboard.tags import delete_tag
+
+    if not delete_tag(tag_id, current_user["id"]):
+        raise HTTPException(status_code=404, detail="tag not found")
+    return {"deleted": True}
+
+
+@api.get("/api/tags/{tag_id}/articles")
+def list_articles_by_tag_endpoint(
+    tag_id: int,
+    current_user: Annotated[dict[str, Any], Depends(require_auth)],
+    limit: Annotated[int, Query(ge=1, le=500)] = 100,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> dict[str, Any]:
+    items = list_articles(
+        tag_id=tag_id,
+        limit=limit + 1,
+        offset=offset,
+        user_id=current_user["id"],
+    )
+    return {
+        "items": items[:limit],
+        "limit": limit,
+        "offset": offset,
+        "has_more": len(items) > limit,
+    }
+
+
+@api.get("/api/articles/{article_id}/tags")
+def list_article_tags_endpoint(
+    article_id: int,
+    current_user: Annotated[dict[str, Any], Depends(require_auth)],
+) -> dict[str, Any]:
+    from news_dashboard.tags import list_tags_for_article
+
+    return {"items": list_tags_for_article(current_user["id"], article_id)}
+
+
+@api.post("/api/articles/{article_id}/tags")
+def add_article_tag_endpoint(
+    article_id: int,
+    payload: ArticleTagRequest,
+    current_user: Annotated[dict[str, Any], Depends(require_auth)],
+) -> dict[str, Any]:
+    from news_dashboard.tags import add_tag_to_article
+
+    if not get_article(article_id, user_id=current_user["id"]):
+        raise HTTPException(status_code=404, detail="article not found")
+    if not add_tag_to_article(current_user["id"], article_id, payload.tag_id):
+        raise HTTPException(status_code=404, detail="tag not found")
+    return {"added": True}
+
+
+@api.delete("/api/articles/{article_id}/tags/{tag_id}")
+def remove_article_tag_endpoint(
+    article_id: int,
+    tag_id: int,
+    current_user: Annotated[dict[str, Any], Depends(require_auth)],
+) -> dict[str, Any]:
+    from news_dashboard.tags import remove_tag_from_article
+
+    if not remove_tag_from_article(current_user["id"], article_id, tag_id):
+        raise HTTPException(status_code=404, detail="article tag not found")
+    return {"removed": True}
 
 
 # ── Reading Goals & Quizzes ───────────────────────────────────────────────────

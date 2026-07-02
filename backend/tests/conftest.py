@@ -180,7 +180,8 @@ def pg_clean(pg_url: str) -> str:
             "TRUNCATE user_article_recommendations, user_article_state, user_sources,"
             " user_interest_profiles, user_settings, user_push_subscriptions,"
             " article_highlights, article_shares, user_events, briefing_articles, briefings,"
-            " ingest_run_sources, ingest_runs, scheduled_job_runs, articles, sources, users"
+            " ingest_run_sources, ingest_runs, scheduled_job_runs, article_tags, user_tags,"
+            " articles, sources, users"
             " RESTART IDENTITY CASCADE"
         )
     return pg_url

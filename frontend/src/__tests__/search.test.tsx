@@ -7,6 +7,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { SearchPage } from '../pages/SearchPage';
 import * as workflowApi from '../api/workflowApi';
 import * as api from '../api';
+import * as tagsApi from '../api/tagsApi';
 import type { WorkflowArticle } from '../lib/workflowTypes';
 import type { Source } from '../types';
 import { FocusedArticleProvider } from '../contexts/focusedArticle';
@@ -30,6 +31,7 @@ function makeSource(overrides: Partial<Source> = {}): Source {
 beforeEach(() => {
   vi.clearAllMocks();
   vi.spyOn(api, 'fetchSources').mockResolvedValue([]);
+  vi.spyOn(tagsApi, 'fetchTags').mockResolvedValue([]);
 });
 
 function makeArticle(overrides: Partial<WorkflowArticle> = {}): WorkflowArticle {
@@ -322,6 +324,51 @@ describe('SearchPage — source filter', () => {
 
     await waitFor(() => {
       expect(screen.getByRole('button', { name: /Source · 1/i })).toBeTruthy();
+    });
+  });
+});
+
+describe('SearchPage — tag filter', () => {
+  it('renders Tag filter group when tags are available', async () => {
+    vi.spyOn(tagsApi, 'fetchTags').mockResolvedValue([
+      { id: 1, user_id: 1, name: 'rust', color: null, created_at: '2026-01-01T00:00:00Z' },
+    ]);
+
+    renderSearch();
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /^Tag/i })).toBeTruthy();
+    });
+  });
+
+  it('selecting a tag filters results by tag_id', async () => {
+    const spy = vi.spyOn(workflowApi, 'searchArticlesFiltered').mockResolvedValue(makePage([]));
+    vi.spyOn(tagsApi, 'fetchTags').mockResolvedValue([
+      { id: 3, user_id: 1, name: 'rust', color: null, created_at: '2026-01-01T00:00:00Z' },
+    ]);
+
+    renderSearch('?q=test');
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /^Tag/i })).toBeTruthy();
+    });
+    await userEvent.click(screen.getByRole('button', { name: /^Tag/i }));
+    await userEvent.click(screen.getByText('rust'));
+
+    await waitFor(() => {
+      expect(spy).toHaveBeenCalledWith(expect.objectContaining({ tagId: 3 }));
+    });
+  });
+
+  it('preselects a tag from URL params', async () => {
+    vi.spyOn(tagsApi, 'fetchTags').mockResolvedValue([
+      { id: 3, user_id: 1, name: 'rust', color: null, created_at: '2026-01-01T00:00:00Z' },
+    ]);
+
+    renderSearch('?q=test&tag=3');
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /Tag · rust/i })).toBeTruthy();
     });
   });
 });

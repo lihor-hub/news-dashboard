@@ -10,6 +10,7 @@ import { useFocusedArticle } from '@/contexts/focusedArticle';
 import { setReaderList } from '@/lib/readerList';
 import { searchArticlesFiltered } from '@/api/workflowApi';
 import { fetchSources } from '@/api';
+import { fetchTags } from '@/api/tagsApi';
 import type { WorkflowState } from '@/lib/workflowTypes';
 import { cn } from '@/lib/utils';
 
@@ -55,7 +56,8 @@ function encodedFilters(
   sources: string[],
   starredOnly: boolean,
   includeArchived: boolean,
-  dateRange: string
+  dateRange: string,
+  tagId: string
 ): URLSearchParams {
   const p = new URLSearchParams();
   if (q) p.set('q', q);
@@ -65,6 +67,7 @@ function encodedFilters(
   if (starredOnly) p.set('starred_only', '1');
   if (includeArchived) p.set('include_archived', '1');
   if (dateRange !== 'all') p.set('date_range', dateRange);
+  if (tagId) p.set('tag', tagId);
   return p;
 }
 
@@ -81,6 +84,7 @@ export function SearchPage() {
   const starredOnly = searchParams.get('starred_only') === '1';
   const includeArchived = searchParams.get('include_archived') === '1';
   const dateRange = searchParams.get('date_range') ?? 'all';
+  const tagId = searchParams.get('tag') ?? '';
 
   const [inputValue, setInputValue] = useState(q);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -103,6 +107,7 @@ export function SearchPage() {
     starredOnly?: boolean;
     includeArchived?: boolean;
     dateRange?: string;
+    tagId?: string;
   }) {
     setSearchParams(
       encodedFilters(
@@ -112,7 +117,8 @@ export function SearchPage() {
         overrides.sources ?? sources,
         overrides.starredOnly ?? starredOnly,
         overrides.includeArchived ?? includeArchived,
-        overrides.dateRange ?? dateRange
+        overrides.dateRange ?? dateRange,
+        overrides.tagId ?? tagId
       ),
       { replace: true }
     );
@@ -125,7 +131,8 @@ export function SearchPage() {
     sources.length ||
     starredOnly ||
     includeArchived ||
-    dateRange !== 'all';
+    dateRange !== 'all' ||
+    tagId;
 
   const { data: availableSources = [] } = useQuery({
     queryKey: ['sources'],
@@ -133,8 +140,24 @@ export function SearchPage() {
     staleTime: 5 * 60_000,
   });
 
+  const { data: availableTags = [] } = useQuery({
+    queryKey: ['tags'],
+    queryFn: fetchTags,
+    staleTime: 60_000,
+  });
+
   const { data, isLoading, fetchNextPage, hasNextPage, isFetchingNextPage } = useInfiniteQuery({
-    queryKey: ['search', q, states, categories, sources, starredOnly, includeArchived, dateRange],
+    queryKey: [
+      'search',
+      q,
+      states,
+      categories,
+      sources,
+      starredOnly,
+      includeArchived,
+      dateRange,
+      tagId,
+    ],
     queryFn: ({ pageParam }) =>
       searchArticlesFiltered({
         q,
@@ -144,6 +167,7 @@ export function SearchPage() {
         starredOnly,
         includeArchived,
         dateRange: (dateRange || 'all') as 'all' | 'today' | 'week' | 'month',
+        tagId: tagId ? Number(tagId) : undefined,
         limit: SEARCH_PAGE_SIZE,
         offset: pageParam,
       }),
@@ -249,6 +273,18 @@ export function SearchPage() {
               selected={sources}
               onChange={(next) => updateParams({ sources: next })}
               render={(slug) => availableSources.find((s) => s.slug === slug)?.name ?? slug}
+            />
+          )}
+
+          {/* Tag group */}
+          {availableTags.length > 0 && (
+            <FilterGroup
+              label="Tag"
+              all={availableTags.map((t) => String(t.id))}
+              selected={tagId ? [tagId] : []}
+              onChange={(next) => updateParams({ tagId: next[next.length - 1] ?? '' })}
+              render={(id) => availableTags.find((t) => String(t.id) === id)?.name ?? id}
+              single
             />
           )}
         </div>

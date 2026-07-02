@@ -14,6 +14,7 @@ import {
   Sparkles,
   Star,
   SlidersHorizontal,
+  Tag,
   Users,
   type LucideIcon,
 } from 'lucide-react';
@@ -43,6 +44,7 @@ export const secondaryNavigationItems: NavigationItem[] = [
   { to: '/feeds', label: 'Feeds', icon: Radio, shortcut: 'f' },
   { to: '/reading-dna', label: 'Reading DNA', icon: SlidersHorizontal },
   { to: '/archive', label: 'Archive', icon: Archive },
+  { to: '/collections', label: 'Collections', icon: Tag },
   { to: '/settings', label: 'Settings', icon: Settings },
 ];
 
@@ -136,6 +138,7 @@ export function getPageTitle(pathname: string): string {
   if (pathname.startsWith('/stats')) return 'Stats';
   if (pathname.startsWith('/reading-dna')) return 'Reading DNA';
   if (pathname.startsWith('/archive')) return 'Archive';
+  if (pathname.startsWith('/collections')) return 'Collections';
   if (pathname.startsWith('/settings')) return 'Settings';
   if (pathname.startsWith('/analytics')) return 'Analytics';
   if (pathname.startsWith('/admin')) return 'Users';
