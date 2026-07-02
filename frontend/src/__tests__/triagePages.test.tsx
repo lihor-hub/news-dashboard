@@ -4,6 +4,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { FocusedArticleProvider } from '../contexts/focusedArticle';
+import { ListenQueueProvider } from '../contexts/listenQueue';
 import type { WorkflowArticle } from '../lib/workflowTypes';
 import { InboxPage } from '../pages/InboxPage';
 import { LaterPage } from '../pages/LaterPage';
@@ -54,7 +55,9 @@ function renderPage(ui: React.ReactElement, route = '/') {
   return render(
     <QueryClientProvider client={queryClient}>
       <FocusedArticleProvider>
-        <MemoryRouter initialEntries={[route]}>{ui}</MemoryRouter>
+        <ListenQueueProvider>
+          <MemoryRouter initialEntries={[route]}>{ui}</MemoryRouter>
+        </ListenQueueProvider>
       </FocusedArticleProvider>
     </QueryClientProvider>
   );
