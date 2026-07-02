@@ -23,8 +23,10 @@ import type {
   QuizCandidate,
   QuizHistoryItem,
   QuizResult,
+  Achievement,
   ReadingDna,
   ReadingGoal,
+  ReadingStreak,
   RecommendationPreferences,
   ReceivedShare,
   ShareDetail,
@@ -243,6 +245,15 @@ export async function fetchSummary(): Promise<Summary> {
 
 export async function fetchReadingDna(): Promise<ReadingDna> {
   return requestJson<ReadingDna>('/api/users/me/reading-dna');
+}
+
+export async function fetchReadingStreak(): Promise<ReadingStreak> {
+  return requestJson<ReadingStreak>('/api/users/me/streak');
+}
+
+export async function fetchAchievements(): Promise<Achievement[]> {
+  const data = await requestJson<{ items: Achievement[] }>('/api/users/me/achievements');
+  return data.items;
 }
 
 export async function fetchRecommendationPreferences(): Promise<RecommendationPreferences> {

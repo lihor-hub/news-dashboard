@@ -11,6 +11,8 @@ vi.mock('../api', () => ({
   fetchQuizCandidates: vi.fn(),
   fetchQuizHistory: vi.fn(),
   fetchReadingDna: vi.fn(),
+  fetchReadingStreak: vi.fn(),
+  fetchAchievements: vi.fn(),
   fetchRecommendationPreferences: vi.fn(),
   createGoal: vi.fn(),
   deleteGoal: vi.fn(),
@@ -51,6 +53,14 @@ beforeEach(() => {
     category_weights: {},
     novelty_weight: 0.5,
   });
+  mockedApi.fetchReadingStreak.mockResolvedValue({
+    current_streak_days: 0,
+    longest_streak_days: 0,
+    last_active_date: null,
+    active_days: [],
+    qualifying_activity: 'days with reading',
+  });
+  mockedApi.fetchAchievements.mockResolvedValue([]);
 });
 
 describe('quiz candidate preview', () => {

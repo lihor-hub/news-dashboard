@@ -486,6 +486,16 @@ POSTGRES_MULTIUSER_SCHEMA = [
     "ALTER TABLE user_quizzes ADD COLUMN IF NOT EXISTS submitted_answers JSONB",
     "ALTER TABLE user_quizzes ADD COLUMN IF NOT EXISTS submitted_at TIMESTAMPTZ",
     """
+    CREATE TABLE IF NOT EXISTS user_achievements (
+      id               BIGSERIAL PRIMARY KEY,
+      user_id          INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      achievement_key  TEXT NOT NULL,
+      unlocked_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      metadata         JSONB NOT NULL DEFAULT '{}'::jsonb,
+      UNIQUE(user_id, achievement_key)
+    )
+    """,
+    """
     CREATE TABLE IF NOT EXISTS scheduled_job_runs (
       id           SERIAL PRIMARY KEY,
       job_name     TEXT NOT NULL,

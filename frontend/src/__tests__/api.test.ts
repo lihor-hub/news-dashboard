@@ -470,6 +470,38 @@ describe('ingest runs & briefings', () => {
   });
 });
 
+describe('reading progress endpoints', () => {
+  it('fetchReadingStreak returns the result', async () => {
+    const payload = {
+      current_streak_days: 3,
+      longest_streak_days: 5,
+      last_active_date: '2026-07-01',
+      active_days: ['2026-07-01'],
+      qualifying_activity: 'days with reading',
+    };
+    const { calls } = stubFetch(() => jsonOk(payload));
+
+    expect(await api.fetchReadingStreak()).toEqual(payload);
+    expect(calls[0].url).toBe('/api/users/me/streak');
+  });
+
+  it('fetchAchievements unwraps items', async () => {
+    const item = {
+      key: 'seven_day_streak',
+      title: '7-day streak',
+      description: 'Read on seven consecutive active days.',
+      unlocked: true,
+      unlocked_at: '2026-07-01T10:00:00Z',
+      progress: 7,
+      target: 7,
+    };
+    const { calls } = stubFetch(() => jsonOk({ items: [item] }));
+
+    expect(await api.fetchAchievements()).toEqual([item]);
+    expect(calls[0].url).toBe('/api/users/me/achievements');
+  });
+});
+
 describe('auth endpoints', () => {
   it('fetchAuthConfig returns config', async () => {
     stubFetch(() => jsonOk({ provider: 'password' }));
