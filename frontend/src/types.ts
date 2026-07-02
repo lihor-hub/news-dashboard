@@ -301,6 +301,8 @@ export interface NotificationSettings {
   briefing_time: string;
   briefing_timezone: string;
   push_enabled: boolean;
+  recap_enabled: boolean;
+  recap_day: string;
   vapid_public_key: string | null;
 }
 
@@ -308,6 +310,8 @@ export interface NotificationSettingsUpdate {
   briefing_time?: string;
   briefing_timezone?: string;
   push_enabled?: boolean;
+  recap_enabled?: boolean;
+  recap_day?: string;
 }
 
 export interface PushSubscribeRequest {
@@ -345,6 +349,32 @@ export interface ReadingStreak {
   last_active_date: string | null;
   active_days: string[];
   qualifying_activity: string;
+}
+
+export interface WeeklyRecapField {
+  category?: string;
+  source?: string;
+  count: number;
+}
+
+export interface WeeklyRecapData {
+  week_start: string;
+  week_end: string;
+  generated_at: string;
+  articles_read: number;
+  categories: WeeklyRecapField[];
+  sources: WeeklyRecapField[];
+  minutes_read: number;
+  current_streak_days: number;
+}
+
+export interface WeeklyRecap {
+  id: number;
+  user_id: number;
+  week_start: string;
+  created_at: string;
+  data: WeeklyRecapData;
+  narrative: string | null;
 }
 
 export interface Achievement {

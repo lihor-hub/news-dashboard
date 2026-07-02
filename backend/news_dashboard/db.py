@@ -542,6 +542,21 @@ POSTGRES_MULTIUSER_SCHEMA = [
     """,
     "CREATE INDEX IF NOT EXISTS idx_article_tags_user_tag ON article_tags(user_id, tag_id)",
     "CREATE INDEX IF NOT EXISTS idx_article_tags_article ON article_tags(article_id)",
+    "ALTER TABLE users ADD COLUMN IF NOT EXISTS recap_enabled BOOLEAN NOT NULL DEFAULT TRUE",
+    "ALTER TABLE users ADD COLUMN IF NOT EXISTS recap_day TEXT NOT NULL DEFAULT 'mon'",
+    """
+    CREATE TABLE IF NOT EXISTS user_weekly_recaps (
+      id          SERIAL PRIMARY KEY,
+      user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      week_start  DATE NOT NULL,
+      created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      data        JSONB NOT NULL DEFAULT '{}'::jsonb,
+      narrative   TEXT,
+      UNIQUE (user_id, week_start)
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_user_weekly_recaps_user"
+    " ON user_weekly_recaps(user_id, week_start DESC)",
 ]
 
 

@@ -351,6 +351,8 @@ def test_get_notification_settings_returns_defaults(
         "briefing_time": "09:00",
         "briefing_push_enabled": False,
         "briefing_timezone": "UTC",
+        "recap_enabled": True,
+        "recap_day": "mon",
     }
 
     with patch("news_dashboard.main.connect") as mock_connect:
@@ -364,6 +366,8 @@ def test_get_notification_settings_returns_defaults(
     assert data["briefing_time"] == "09:00"
     assert data["briefing_timezone"] == "UTC"
     assert data["push_enabled"] is False
+    assert data["recap_enabled"] is True
+    assert data["recap_day"] == "mon"
     assert data["vapid_public_key"] == "BExampleKey=="
 
 
@@ -377,6 +381,8 @@ def test_get_notification_settings_utc_fallback(
         "briefing_time": "09:00",
         "briefing_push_enabled": False,
         "briefing_timezone": None,
+        "recap_enabled": True,
+        "recap_day": "mon",
     }
 
     with patch("news_dashboard.main.connect") as mock_connect:
@@ -394,6 +400,8 @@ def test_put_notification_settings_valid_time(client: TestClient) -> None:
         "briefing_time": "08:30",
         "briefing_push_enabled": True,
         "briefing_timezone": "UTC",
+        "recap_enabled": True,
+        "recap_day": "mon",
     }
 
     with patch("news_dashboard.main.connect") as mock_connect:
@@ -416,6 +424,8 @@ def test_put_notification_settings_valid_timezone(client: TestClient) -> None:
         "briefing_time": "09:00",
         "briefing_push_enabled": False,
         "briefing_timezone": "Europe/Bucharest",
+        "recap_enabled": True,
+        "recap_day": "mon",
     }
 
     with patch("news_dashboard.main.connect") as mock_connect:

@@ -214,6 +214,86 @@ def _run_per_user_briefings() -> tuple[str, str | None] | None:
     return status, msg
 
 
+def _generate_recap_for_user(user_id: int, *, push_enabled: bool = True) -> bool:
+    """Assemble, persist, and (optionally) push a weekly recap for one user."""
+    from news_dashboard.push import generate_recap_push_hook, send_push_for_user
+    from news_dashboard.recaps.service import assemble_weekly_recap, save_weekly_recap
+
+    logger.info("Weekly recap: generating for user_id=%s", user_id)
+    try:
+        recap = assemble_weekly_recap(user_id)
+        narrative = generate_recap_push_hook(recap) if push_enabled else None
+        saved = save_weekly_recap(user_id, recap, narrative)
+        logger.info("Weekly recap: complete for user_id=%s id=%s", user_id, saved.get("id"))
+        if push_enabled:
+            try:
+                send_push_for_user(
+                    user_id,
+                    narrative or "Your weekly reading recap is ready.",
+                    "",
+                    target_url="/recap",
+                )
+            except Exception:
+                logger.exception("Weekly recap: push notification failed for user_id=%s", user_id)
+        return True
+    except Exception:
+        logger.exception("Weekly recap: unexpected error for user_id=%s", user_id)
+        return False
+
+
+def _run_weekly_recaps() -> tuple[str, str | None] | None:
+    """Generate weekly recaps for users whose local scheduled day/time matches now.
+
+    Returns None when no users are scheduled this minute so the run is not recorded.
+    """
+    from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
+    from news_dashboard.db import connect, row_to_dict
+
+    now = datetime.now(timezone.utc)
+
+    try:
+        with connect() as conn:
+            rows = conn.execute(
+                "SELECT id, recap_day, briefing_time, briefing_timezone, briefing_push_enabled"
+                " FROM users WHERE recap_enabled = TRUE",
+            ).fetchall()
+        user_rows = [row_to_dict(r) for r in rows]
+    except Exception as exc:
+        logger.exception("Weekly recap: failed to query users")
+        return "failure", str(exc)[:500]
+
+    scheduled_users: list[tuple[int, bool]] = []
+    for row in user_rows:
+        tz_name: str = row.get("briefing_timezone") or "UTC"
+        recap_time: str = row.get("briefing_time") or "09:00"
+        recap_day: str = row.get("recap_day") or "mon"
+        try:
+            tz = ZoneInfo(tz_name)
+        except (ZoneInfoNotFoundError, KeyError):
+            tz = ZoneInfo("UTC")
+        local_now = now.astimezone(tz)
+        day_matches = local_now.strftime("%a").lower() == recap_day
+        time_matches = local_now.strftime("%H:%M") == recap_time
+        if day_matches and time_matches:
+            scheduled_users.append((int(row["id"]), bool(row.get("briefing_push_enabled"))))
+
+    if not scheduled_users:
+        return None  # nothing scheduled this minute — skip recording
+
+    results = [
+        _generate_recap_for_user(uid, push_enabled=push_enabled)
+        for uid, push_enabled in scheduled_users
+    ]
+    succeeded = sum(1 for ok in results if ok)
+    failed = len(results) - succeeded
+    total = len(scheduled_users)
+    noun = "user" if total == 1 else "users"
+    msg = f"{total} {noun} targeted, {succeeded} succeeded, {failed} failed"
+    status = "failure" if failed == total else "success"
+    return status, msg
+
+
 def _run_digest() -> tuple[str, str | None]:
     from news_dashboard.digest import send_digest
 
@@ -302,6 +382,10 @@ def _job_per_user_briefings() -> None:
 
 def _job_entity_extraction() -> None:
     _run_and_record("entity_extraction", _run_entity_extraction)
+
+
+def _job_weekly_recaps() -> None:
+    _run_and_record("weekly_recaps", _run_weekly_recaps)
 
 
 def _parse_cron_hm(cron: str, default_minute: str, default_hour: str) -> tuple[str, str]:
@@ -420,6 +504,14 @@ def start_scheduler() -> None:
         trigger="interval",
         minutes=int(os.getenv("ENTITY_EXTRACTION_INTERVAL_MINUTES", "30")),
         id="entity_extraction",
+        replace_existing=True,
+    )
+
+    scheduler.add_job(
+        _job_weekly_recaps,
+        trigger="interval",
+        minutes=1,
+        id="weekly_recaps",
         replace_existing=True,
     )
 

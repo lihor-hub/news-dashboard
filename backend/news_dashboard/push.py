@@ -128,6 +128,62 @@ def generate_push_hook(briefing: dict[str, Any]) -> str:
     return fallback
 
 
+_DEFAULT_RECAP_TITLE = "Your weekly reading recap is ready"
+
+
+def generate_recap_push_hook(recap: dict[str, Any]) -> str:
+    """Generate an AI narrative hook for a weekly recap push notification.
+
+    Takes the recap dict from ``recaps.service.assemble_weekly_recap()``
+    (keys: ``articles_read``, ``categories``, ``sources``, ``minutes_read``,
+    ``current_streak_days``). Falls back to a plain summary sentence if the
+    LLM is not configured or the call fails, matching ``generate_push_hook``.
+    """
+    articles_read = int(recap.get("articles_read") or 0)
+    categories: list[dict[str, Any]] = recap.get("categories") or []
+    top_category = categories[0].get("category") if categories else None
+
+    if articles_read <= 0:
+        fallback = _DEFAULT_RECAP_TITLE
+    elif top_category:
+        fallback = f"You read {articles_read} articles this week, mostly on {top_category}."
+    else:
+        fallback = f"You read {articles_read} articles this week."
+
+    try:
+        from news_dashboard.ai_client import free_llm_config, get_chat_client
+
+        api_key, base_url = free_llm_config()
+        if not api_key:
+            return fallback
+
+        client = get_chat_client(api_key=api_key, base_url=base_url)
+        model = os.getenv("OPENAI_BRIEFING_MODEL", "gpt-4o-mini")
+
+        prompt = (
+            "Write a single encouraging mobile push notification hook (max 20 words) "
+            "summarizing this user's weekly reading recap. "
+            f"Articles read: {articles_read}. "
+            f"Top category: {top_category or 'n/a'}. "
+            f"Current streak: {recap.get('current_streak_days', 0)} day(s).\n\n"
+            "Reply with only the hook text, no quotes or punctuation at the end."
+        )
+
+        response = client.chat.completions.create(
+            model=model,
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=40,
+            temperature=0.7,
+        )
+        hook = (response.choices[0].message.content or "").strip()
+        if hook:
+            return hook
+    except Exception:
+        logger.warning("Recap push hook LLM generation failed; using default message")
+
+    return fallback
+
+
 PushDeliveryResult = Literal["sent", "skipped_not_configured", "temporary_failure", "gone"]
 
 

@@ -39,6 +39,9 @@ const StatsPage = lazy(() => import('./pages/StatsPage').then((m) => ({ default:
 const ReadingDnaPage = lazy(() =>
   import('./pages/ReadingDnaPage').then((m) => ({ default: m.ReadingDnaPage }))
 );
+const WeeklyRecapPage = lazy(() =>
+  import('./pages/WeeklyRecapPage').then((m) => ({ default: m.WeeklyRecapPage }))
+);
 const SettingsPage = lazy(() =>
   import('./pages/SettingsPage').then((m) => ({ default: m.SettingsPage }))
 );
@@ -171,6 +174,7 @@ export const routes: RouteObject[] = [
         ),
       },
       { path: 'reading-dna', element: withSuspense(ReadingDnaPage) },
+      { path: 'recap', element: withSuspense(WeeklyRecapPage) },
       { path: 'archive', element: <ArchivePage /> },
       { path: 'collections', element: <CollectionsPage /> },
       { path: 'collections/:tagId', element: <CollectionDetailPage /> },
