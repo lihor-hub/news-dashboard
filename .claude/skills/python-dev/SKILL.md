@@ -67,6 +67,20 @@ Preserve these repo decisions:
   intentional (avoids PEP 758 rewrites mypy can't parse). Leave it.
 - **Lazy imports are deliberate** (`PLC0415` ignored) for optional deps / startup
   cost / cycles — keep them where they are.
+- **Feature-module packages for HTTP domains.** New or refactored API domains
+  live in a package `news_dashboard/<module>/` with `router.py` (FastAPI
+  `APIRouter` + handlers), `service.py` (business logic / DB access), and
+  `models.py` (Pydantic request/response models). `main.py` only imports the
+  router and calls `include_router(...)`; do **not** add new route handlers or
+  request models directly to `main.py`. Mount the module router on the existing
+  authenticated `api` router (`api.include_router(...)`) so it inherits
+  `require_auth` — don't give the module router its own blanket auth dependency.
+  Import the router from its submodule (`from news_dashboard.<module>.router
+  import router`); don't re-export it in `__init__.py` (that shadows the
+  submodule). `quizzes/` is the reference implementation; see
+  [ADR 0003](../../../docs/adr/0003-feature-module-packages.md) and the tracking
+  issue for the remaining domains. Assert routes via `app.openapi()["paths"]`,
+  not `app.routes` (routers mount lazily as `_IncludedRouter`).
 - Do not loosen `pyproject.toml` or `.pre-commit-config.yaml` to pass checks.
 
 ## 3. Tests — author them to this project's style

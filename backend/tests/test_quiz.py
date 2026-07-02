@@ -14,7 +14,7 @@ from fastapi.testclient import TestClient
 from news_dashboard.auth import require_auth
 from news_dashboard.db import connect, init_db
 from news_dashboard.main import app
-from news_dashboard.quiz import (
+from news_dashboard.quizzes.service import (
     create_goal,
     delete_goal,
     generate_weekly_quiz,
@@ -125,7 +125,7 @@ def test_delete_goal_wrong_user(tmp_path: Path) -> None:
 
 
 def test_parse_questions_valid_json() -> None:
-    from news_dashboard.quiz import _parse_questions
+    from news_dashboard.quizzes.service import _parse_questions
 
     raw = """[
       {
@@ -144,7 +144,7 @@ def test_parse_questions_valid_json() -> None:
 
 
 def test_parse_questions_markdown_fence() -> None:
-    from news_dashboard.quiz import _parse_questions
+    from news_dashboard.quizzes.service import _parse_questions
 
     raw = """```json
 [{"question":"Q?","options":["A","B","C","D"],"correct_index":0,"explanation":"E","article_id":1}]
@@ -155,13 +155,13 @@ def test_parse_questions_markdown_fence() -> None:
 
 
 def test_parse_questions_invalid_json_returns_empty() -> None:
-    from news_dashboard.quiz import _parse_questions
+    from news_dashboard.quizzes.service import _parse_questions
 
     assert _parse_questions("not json at all") == []
 
 
 def test_parse_questions_missing_required_fields() -> None:
-    from news_dashboard.quiz import _parse_questions
+    from news_dashboard.quizzes.service import _parse_questions
 
     raw = '[{"question": "Q?"}]'
     assert _parse_questions(raw) == []

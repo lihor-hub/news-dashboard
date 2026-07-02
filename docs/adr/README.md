@@ -19,5 +19,6 @@ An Architecture Decision Record (ADR) is a document that captures a point-in-tim
 | --------------------------------------- | ------------------------------------------- | -------- | ---------- |
 | [0001](0001-postgresql-only-runtime.md) | PostgreSQL-Only Runtime Database            | Accepted | 2026-06-30 |
 | [0002](0002-llm-gateway-fallback.md)    | Free-LLM Gateway first with OpenAI Fallback | Accepted | 2026-06-30 |
+| [0003](0003-feature-module-packages.md) | Feature-Module Packages (router/service/models) | Accepted | 2026-07-02 |
 
 _Template: [0000-template.md](0000-template.md)_

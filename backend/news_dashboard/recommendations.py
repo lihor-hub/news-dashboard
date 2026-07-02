@@ -621,7 +621,7 @@ def recompute_user_recommendations(
         ).fetchall()
         goals = [dict(r) for r in goal_rows]
 
-    from news_dashboard.quiz import goal_alignment_adjustment
+    from news_dashboard.quizzes.service import goal_alignment_adjustment
 
     # Novelty needs an embedded taste vector to measure surprise against; without
     # one it degrades to a no-op, so the version only advertises novelty when the
