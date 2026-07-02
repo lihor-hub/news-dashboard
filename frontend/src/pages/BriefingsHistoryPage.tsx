@@ -1,8 +1,11 @@
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
-import { Newspaper, AlertCircle, ChevronRight } from 'lucide-react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Newspaper, AlertCircle, ChevronRight, Check, Copy, RefreshCw, Rss } from 'lucide-react';
+import { toast } from 'sonner';
 import { Skeleton } from '@/components/ui/skeleton';
-import { fetchBriefings } from '@/api';
+import { Button } from '@/components/ui/button';
+import { fetchBriefings, fetchPodcastFeedToken, regeneratePodcastFeedToken } from '@/api';
 import { formatDate, formatWindow } from '@/lib/briefingUtils';
 import type { Briefing } from '@/types';
 
@@ -55,6 +58,67 @@ function BriefingRow({ briefing }: { briefing: Briefing }) {
   );
 }
 
+function PodcastFeedCard() {
+  const queryClient = useQueryClient();
+  const [copied, setCopied] = useState(false);
+  const { data, isLoading } = useQuery({
+    queryKey: ['briefings', 'podcast-feed-token'],
+    queryFn: fetchPodcastFeedToken,
+  });
+
+  const regenerate = useMutation({
+    mutationFn: regeneratePodcastFeedToken,
+    onSuccess: (token) => {
+      queryClient.setQueryData(['briefings', 'podcast-feed-token'], token);
+      toast('Podcast feed URL regenerated — the old link no longer works');
+    },
+    onError: () => toast('Failed to regenerate podcast feed URL'),
+  });
+
+  const copyUrl = () => {
+    if (!data) return;
+    void navigator.clipboard.writeText(data.url).then(() => {
+      setCopied(true);
+      toast('Podcast feed URL copied');
+      setTimeout(() => setCopied(false), 1500);
+    });
+  };
+
+  return (
+    <div className="mx-4 md:mx-5 mb-3 rounded-lg border border-border bg-surface px-4 py-3 flex items-center gap-3">
+      <Rss className="size-4 text-accent shrink-0" />
+      <div className="min-w-0 flex-1">
+        <div className="text-sm font-medium text-foreground">Subscribe as a podcast</div>
+        <div className="text-xs text-muted-foreground mt-0.5">
+          Listen to your daily brief in any podcast app using your personal feed link.
+        </div>
+      </div>
+      <div className="flex items-center gap-2 shrink-0">
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={copyUrl}
+          disabled={isLoading || !data}
+        >
+          {copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
+          {copied ? 'Copied' : 'Copy feed URL'}
+        </Button>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          aria-label="Regenerate podcast feed URL (revokes the old one)"
+          onClick={() => regenerate.mutate()}
+          disabled={regenerate.isPending}
+        >
+          <RefreshCw className={`size-3.5 ${regenerate.isPending ? 'animate-spin' : ''}`} />
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 function HistorySkeleton() {
   return (
     <div className="divide-y divide-border">
@@ -85,6 +149,8 @@ export function BriefingsHistoryPage() {
         <h2 className="text-[22px] font-semibold tracking-tight">Briefing History</h2>
         <p className="text-xs text-muted-foreground mt-0.5">All generated daily briefs</p>
       </div>
+
+      <PodcastFeedCard />
 
       {isLoading ? (
         <HistorySkeleton />

@@ -735,6 +735,35 @@ def update_briefing_script(
         )
 
 
+def list_briefings_with_script(
+    user_id: int,
+    limit: int = 50,
+    db_path: Path | str | None = None,
+    database_url: str | None = None,
+) -> list[dict[str, Any]]:
+    """Return the user's most recent briefings that already have a podcast script.
+
+    Used by the podcast RSS feed: only briefings a user has already generated a
+    script for are eligible episodes, so serving the feed never triggers new
+    (costly) AI script generation.
+    """
+    with connect(db_path, database_url) as conn:
+        rows = conn.execute(
+            """
+            SELECT id, created_at, title, summary, script
+            FROM briefings
+            WHERE user_id = %s AND script IS NOT NULL
+            ORDER BY created_at DESC
+            LIMIT %s
+            """,
+            (user_id, limit),
+        ).fetchall()
+        briefings = [row_to_dict(r) for r in rows]
+        for briefing in briefings:
+            briefing["script"] = _coerce_content(briefing.get("script"))
+        return briefings
+
+
 _CHAT_SYSTEM_PROMPT = """\
 You are the Briefing Q&A Assistant. Your job is to answer follow-up questions \
 about the daily briefing provided below. Ground every answer in the briefing \

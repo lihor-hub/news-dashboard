@@ -376,6 +376,143 @@ def test_get_podcast_audio_endpoint_not_found(client: TestClient, monkeypatch: A
     assert resp.json()["detail"] == "podcast audio file not found"
 
 
+# ── Podcast RSS feed (#654) ────────────────────────────────────────────────────
+
+
+def test_get_podcast_feed_token_endpoint_returns_token_and_url(
+    client: TestClient, monkeypatch: Any
+) -> None:
+    monkeypatch.setattr("news_dashboard.auth.get_podcast_feed_token_version", lambda _uid: 1)
+    resp = client.get("/api/briefings/podcast-feed-token")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["token"].startswith("1.1.")
+    assert data["url"].endswith(f"/api/briefings/podcast.rss?token={data['token']}")
+
+
+def test_regenerate_podcast_feed_token_endpoint_issues_new_token(
+    client: TestClient, monkeypatch: Any
+) -> None:
+    monkeypatch.setattr("news_dashboard.auth.bump_podcast_feed_token_version", lambda _uid: 2)
+    resp = client.post("/api/briefings/podcast-feed-token/regenerate")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["token"].startswith("1.2.")
+
+
+def test_podcast_rss_feed_valid_token_returns_episode(
+    client: TestClient, monkeypatch: Any, tmp_path: Path
+) -> None:
+    from news_dashboard.podcast_feed import make_feed_token
+
+    monkeypatch.setattr("news_dashboard.auth.get_podcast_feed_token_version", lambda _uid: 1)
+    token = make_feed_token(1, 1)
+
+    briefing = {
+        "id": 7,
+        "created_at": "2026-06-13T12:00:00+00:00",
+        "title": "AI Frameworks",
+        "summary": "New agent frameworks.",
+        "script": [{"speaker": "Alex", "voice": "onyx", "text": "hi"}],
+    }
+    monkeypatch.setattr(
+        "news_dashboard.briefings.list_briefings_with_script", lambda **_: [briefing]
+    )
+
+    audio_file = tmp_path / "podcast-7.mp3"
+    audio_file.write_bytes(b"audio-bytes")
+    monkeypatch.setattr("news_dashboard.tts._podcast_audio_path", lambda *_a, **_k: audio_file)
+
+    resp = client.get(f"/api/briefings/podcast.rss?token={token}")
+    assert resp.status_code == 200
+    assert resp.headers["content-type"].startswith("application/rss+xml")
+    body = resp.text
+    assert "<title>AI Frameworks</title>" in body
+    assert f"/api/briefings/7/podcast-audio?token={token}" in body
+    assert 'length="11"' in body
+
+
+def test_podcast_rss_feed_skips_episode_missing_audio_and_tts_unconfigured(
+    client: TestClient, monkeypatch: Any
+) -> None:
+    from news_dashboard.podcast_feed import make_feed_token
+    from news_dashboard.tts import TTSNotConfiguredError
+
+    monkeypatch.setattr("news_dashboard.auth.get_podcast_feed_token_version", lambda _uid: 1)
+    token = make_feed_token(1, 1)
+
+    briefing = {
+        "id": 8,
+        "created_at": "2026-06-13T12:00:00+00:00",
+        "title": "Untranscribed",
+        "summary": "",
+        "script": [{"speaker": "Alex", "voice": "onyx", "text": "hi"}],
+    }
+    monkeypatch.setattr(
+        "news_dashboard.briefings.list_briefings_with_script", lambda **_: [briefing]
+    )
+
+    from pathlib import Path as PathType
+
+    mock_path = MagicMock(spec=PathType)
+    mock_path.exists.return_value = False
+    monkeypatch.setattr("news_dashboard.tts._podcast_audio_path", lambda *_a, **_k: mock_path)
+
+    def _raise(*_a: Any, **_k: Any) -> None:
+        msg = "OPENAI_API_KEY is not configured"
+        raise TTSNotConfiguredError(msg)
+
+    monkeypatch.setattr("news_dashboard.tts.generate_podcast_audio", _raise)
+
+    resp = client.get(f"/api/briefings/podcast.rss?token={token}")
+    assert resp.status_code == 200
+    assert "Untranscribed" not in resp.text
+
+
+def test_podcast_rss_feed_invalid_token_returns_403(client: TestClient) -> None:
+    resp = client.get("/api/briefings/podcast.rss?token=bogus")
+    assert resp.status_code == 403
+
+
+def test_podcast_rss_feed_revoked_token_returns_403(client: TestClient, monkeypatch: Any) -> None:
+    from news_dashboard.podcast_feed import make_feed_token
+
+    monkeypatch.setattr("news_dashboard.auth.get_podcast_feed_token_version", lambda _uid: 1)
+    token = make_feed_token(1, 1)
+
+    monkeypatch.setattr("news_dashboard.auth.get_podcast_feed_token_version", lambda _uid: 2)
+    resp = client.get(f"/api/briefings/podcast.rss?token={token}")
+    assert resp.status_code == 403
+
+
+def test_get_podcast_audio_by_token_endpoint_success(
+    client: TestClient, monkeypatch: Any, tmp_path: Path
+) -> None:
+    from news_dashboard.podcast_feed import make_feed_token
+
+    monkeypatch.setattr("news_dashboard.auth.get_podcast_feed_token_version", lambda _uid: 1)
+    token = make_feed_token(1, 1)
+
+    briefing = dict(_SAMPLE_BRIEFING)
+    monkeypatch.setattr(main_mod, "get_briefing", lambda _, **__: briefing)
+
+    audio_file = tmp_path / "podcast-1.mp3"
+    audio_file.write_bytes(b"podcast-data")
+    monkeypatch.setattr("news_dashboard.tts._podcast_audio_path", lambda *_a, **_k: audio_file)
+
+    resp = client.get(f"/api/briefings/1/podcast-audio?token={token}")
+    assert resp.status_code == 200
+    assert resp.headers["content-type"] == "audio/mpeg"
+    assert resp.read() == b"podcast-data"
+
+
+def test_get_podcast_audio_by_token_endpoint_invalid_token_returns_403(
+    client: TestClient,
+) -> None:
+    resp = client.get("/api/briefings/1/podcast-audio?token=bogus")
+    assert resp.status_code == 403
+
+
 # ── POST /api/briefings/{id}/chat ─────────────────────────────────────────────
 
 

@@ -414,6 +414,21 @@ export async function generateBriefingPodcast(id: number): Promise<{ url: string
   return requestJson<{ url: string }>(`/api/briefings/${id}/podcast`, { method: 'POST' });
 }
 
+export interface PodcastFeedToken {
+  token: string;
+  url: string;
+}
+
+export async function fetchPodcastFeedToken(): Promise<PodcastFeedToken> {
+  return requestJson<PodcastFeedToken>('/api/briefings/podcast-feed-token');
+}
+
+export async function regeneratePodcastFeedToken(): Promise<PodcastFeedToken> {
+  return requestJson<PodcastFeedToken>('/api/briefings/podcast-feed-token/regenerate', {
+    method: 'POST',
+  });
+}
+
 export interface ChatMessage {
   role: 'user' | 'assistant';
   content: string;

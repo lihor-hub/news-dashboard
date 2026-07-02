@@ -258,6 +258,28 @@ def _touch_last_login(user_id: int) -> None:
         conn.execute("UPDATE users SET last_login_at=CURRENT_TIMESTAMP WHERE id=%s", (user_id,))
 
 
+def get_podcast_feed_token_version(user_id: int) -> int | None:
+    with connect() as conn:
+        row = conn.execute(
+            "SELECT podcast_feed_token_version FROM users WHERE id=%s", (user_id,)
+        ).fetchone()
+        return int(row["podcast_feed_token_version"]) if row else None
+
+
+def bump_podcast_feed_token_version(user_id: int) -> int:
+    """Invalidate the user's current podcast feed token and return the new version."""
+    with connect() as conn:
+        row = conn.execute(
+            "UPDATE users SET podcast_feed_token_version = podcast_feed_token_version + 1"
+            " WHERE id=%s RETURNING podcast_feed_token_version",
+            (user_id,),
+        ).fetchone()
+        if row is None:
+            msg = f"user {user_id} not found"
+            raise ValueError(msg)
+        return int(row["podcast_feed_token_version"])
+
+
 # --------------------------------------------------------------------------- #
 # Bootstrap: create first admin from env vars on startup                       #
 # --------------------------------------------------------------------------- #

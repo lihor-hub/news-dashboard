@@ -508,6 +508,8 @@ POSTGRES_MULTIUSER_SCHEMA = [
     """,
     "CREATE INDEX IF NOT EXISTS idx_user_otps_user ON user_otps(user_id, expires_at DESC)",
     "ALTER TABLE users ADD COLUMN IF NOT EXISTS is_guest BOOLEAN NOT NULL DEFAULT FALSE",
+    "ALTER TABLE users ADD COLUMN IF NOT EXISTS podcast_feed_token_version"
+    " INTEGER NOT NULL DEFAULT 1",
     """
     CREATE TABLE IF NOT EXISTS user_tags (
       id         SERIAL PRIMARY KEY,

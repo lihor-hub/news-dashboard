@@ -2139,6 +2139,96 @@ def get_podcast_audio_endpoint(
     return FileResponse(audio_path, media_type="audio/mpeg", filename=f"podcast-{briefing_id}.mp3")
 
 
+@api.get("/api/briefings/podcast-feed-token")
+def get_podcast_feed_token_endpoint(
+    current_user: Annotated[dict[str, Any], Depends(require_auth)],
+) -> dict[str, str]:
+    """Return the user's current (revocable) podcast feed token and subscribe URL."""
+    from news_dashboard.auth import get_podcast_feed_token_version
+    from news_dashboard.podcast_feed import feed_url, make_feed_token
+
+    version = get_podcast_feed_token_version(current_user["id"])
+    if version is None:
+        raise HTTPException(status_code=404, detail="user not found")
+    token = make_feed_token(current_user["id"], version)
+    return {"token": token, "url": feed_url(token)}
+
+
+@api.post("/api/briefings/podcast-feed-token/regenerate")
+def regenerate_podcast_feed_token_endpoint(
+    current_user: Annotated[dict[str, Any], Depends(require_auth)],
+) -> dict[str, str]:
+    """Revoke the user's current podcast feed token and issue a new one."""
+    from news_dashboard.auth import bump_podcast_feed_token_version
+    from news_dashboard.podcast_feed import feed_url, make_feed_token
+
+    version = bump_podcast_feed_token_version(current_user["id"])
+    token = make_feed_token(current_user["id"], version)
+    return {"token": token, "url": feed_url(token)}
+
+
+@api.get("/api/briefings/podcast.rss")
+def podcast_rss_feed_endpoint(token: Annotated[str, Query()]) -> Response:
+    """Serve the authenticated user's podcast feed of previously-generated briefs.
+
+    Authenticated via a revocable per-user token (not the session cookie), since
+    podcast clients cannot perform an interactive login.
+    """
+    from news_dashboard.briefings import list_briefings_with_script
+    from news_dashboard.podcast_feed import build_feed_xml, verify_feed_token
+    from news_dashboard.tts import (
+        TTSNotConfiguredError,
+        _podcast_audio_path,
+        generate_podcast_audio,
+    )
+
+    user_id = verify_feed_token(token)
+    if user_id is None:
+        raise HTTPException(status_code=403, detail="invalid or revoked podcast feed token")
+
+    briefings = list_briefings_with_script(user_id=user_id)
+    episodes = []
+    for briefing in briefings:
+        audio_path = _podcast_audio_path(briefing["id"])
+        if not audio_path.exists():
+            try:
+                generate_podcast_audio(briefing["id"], briefing["script"])
+            except (TTSNotConfiguredError, ValueError) as exc:
+                logger.warning(
+                    "Skipping podcast feed episode for briefing %d: %s", briefing["id"], exc
+                )
+                continue
+        briefing["audio_bytes"] = audio_path.stat().st_size
+        episodes.append(briefing)
+
+    xml = build_feed_xml(token=token, briefings=episodes)
+    return Response(content=xml, media_type="application/rss+xml")
+
+
+@api.get("/api/briefings/{briefing_id}/podcast-audio")
+def get_podcast_audio_by_token_endpoint(
+    briefing_id: int,
+    token: Annotated[str, Query()],
+) -> FileResponse:
+    """Serve podcast episode audio for a podcast-client feed subscription (token auth)."""
+    from news_dashboard.podcast_feed import verify_feed_token
+    from news_dashboard.tts import _podcast_audio_path
+
+    user_id = verify_feed_token(token)
+    if user_id is None:
+        raise HTTPException(status_code=403, detail="invalid or revoked podcast feed token")
+
+    briefing = get_briefing(briefing_id, user_id=user_id)
+    if not briefing:
+        raise HTTPException(status_code=404, detail="briefing not found")
+
+    audio_path = _podcast_audio_path(briefing_id)
+    if not audio_path.exists():
+        raise HTTPException(status_code=404, detail="podcast audio file not found")
+
+    return FileResponse(audio_path, media_type="audio/mpeg", filename=f"podcast-{briefing_id}.mp3")
+
+
 class BriefingCreateRequest(BaseModel):
     focus_prompt: str | None = Field(default=None, max_length=MAX_BRIEFING_FOCUS_PROMPT_LENGTH)
 
