@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import re
 import threading
 import time
@@ -196,6 +197,7 @@ NOISE_FILTERS: dict[str, dict[str, Any]] = {
 # Sources whose RSS feeds carry no description/content — fetch a snippet from
 # the article page for each new entry so summaries are non-empty from day one.
 _SNIPPET_FETCH_SOURCES: frozenset[str] = frozenset({"huggingface-blog"})
+_MEDIA_SOURCE_KINDS: frozenset[str] = frozenset({"youtube_channel", "podcast_feed"})
 
 # Cap the number of page fetches per ingest run to keep ingest fast.
 _MAX_SNIPPET_FETCHES_PER_RUN: int = 10
@@ -459,6 +461,53 @@ def _parse_feed_url(url: str) -> list[dict[str, Any]]:
     ]
 
 
+def _entry_media_url(entry: Any) -> str:
+    """Return the first enclosure/media URL from a feedparser entry."""
+    enclosures = entry.get("enclosures") or entry.get("links") or []
+    for enclosure in enclosures:
+        href = enclosure.get("href") if hasattr(enclosure, "get") else None
+        rel = enclosure.get("rel") if hasattr(enclosure, "get") else None
+        if href and (rel in (None, "enclosure") or enclosure.get("type", "").startswith("audio/")):
+            return str(href)
+    return ""
+
+
+def _entry_transcript(entry: Any) -> str:
+    """Extract transcript-like text already present in the feed entry."""
+    for key in ("transcript", "content", "summary", "description"):
+        value = entry.get(key)
+        if isinstance(value, list):
+            text = " ".join(
+                clean_html(item.get("value", "")) for item in value if hasattr(item, "get")
+            )
+        else:
+            text = clean_html(str(value or ""))
+        if text:
+            return text
+    return ""
+
+
+def _parse_media_feed_url(url: str) -> list[dict[str, Any]]:
+    """Fetch and normalize a media feed, preserving media links and feed transcripts."""
+    content = _fetch_feed_content(url)
+    parsed = feedparser.parse(content)
+    if parsed.bozo and not parsed.entries:
+        exc = getattr(parsed, "bozo_exception", None)
+        msg = f"Feed parse failed: {exc or 'no entries, bozo=True'}"
+        raise FeedFetchError(msg)
+    return [
+        {
+            "url": e.get("link") or e.get("id") or "",
+            "title": e.get("title") or "Untitled",
+            "description": e.get("summary") or e.get("description") or "",
+            "date": parse_date(e),
+            "media_url": _entry_media_url(e),
+            "transcript": _entry_transcript(e),
+        }
+        for e in parsed.entries
+    ]
+
+
 def _fetch_feed_entries(source: SourceDefinition) -> list[dict[str, Any]]:
     """Fetch and normalize feed entries, surfacing fetch failures as FeedFetchError."""
     return _parse_feed_url(source.url)
@@ -499,6 +548,70 @@ def _fetch_lobsters_feed(source: SourceDefinition) -> list[dict[str, Any]]:
 def _fetch_mastodon_feed(source: SourceDefinition) -> list[dict[str, Any]]:
     """Fetch a Mastodon user or hashtag RSS feed."""
     return _parse_feed_url(source.url)
+
+
+def _fetch_media_feed(source: SourceDefinition) -> list[dict[str, Any]]:
+    """Fetch podcast and YouTube feed entries as media article candidates."""
+    return _parse_media_feed_url(source.url)
+
+
+def _media_tags(source: SourceDefinition) -> str:
+    if source.kind == "youtube_channel":
+        return "media,video"
+    return "media,podcast"
+
+
+def _media_reason(source: SourceDefinition) -> str:
+    return f"Media episode from {source.name}."
+
+
+def _media_summary(title: str, description: str, entry: dict[str, Any]) -> str:
+    """Summarize media transcript text when configured, else use public metadata."""
+    transcript = clean_html(str(entry.get("transcript") or ""))
+    fallback = clean_html(description) or transcript or title
+    summary = fallback
+
+    from news_dashboard.ai_client import free_llm_config
+
+    api_key, base_url = free_llm_config()
+    if api_key and transcript:
+        try:
+            from news_dashboard.ai_client import chat_create, get_chat_client
+
+            client = get_chat_client(api_key=api_key, base_url=base_url)
+            response = chat_create(
+                client,
+                name="summarize-media-article",
+                tags=["ingest", "media"],
+                model=os.getenv("OPENAI_BRIEFING_MODEL", "gpt-4o-mini"),
+                messages=[
+                    {
+                        "role": "system",
+                        "content": (
+                            "Summarize this podcast or video transcript as a concise readable "
+                            "article summary for a news reader."
+                        ),
+                    },
+                    {
+                        "role": "user",
+                        "content": (
+                            f"Title: {title}\nDescription: {description}\nTranscript:\n{transcript}"
+                        ),
+                    },
+                ],
+                max_tokens=500,
+                temperature=0.2,
+            )
+            generated = clean_html(response.choices[0].message.content or "")
+            if generated:
+                summary = generated
+        except Exception:
+            logger.warning("Media summary generation failed for %r", title, exc_info=True)
+
+    media_url = clean_html(str(entry.get("media_url") or entry.get("url") or ""))
+    if media_url:
+        summary = f"{summary}\n\nSource media: {media_url}"
+    return summary
 
 
 def detect_and_translate_article(
@@ -583,14 +696,16 @@ def _fetch_entries_by_kind(source: SourceDefinition) -> list[dict[str, Any]]:
 
     if source.kind == "scraped_page":
         return scrape_source(source)
-    if source.kind == "nitter_feed":
-        return _fetch_nitter_feed(source)
-    if source.kind == "reddit_feed":
-        return _fetch_reddit_feed(source)
-    if source.kind == "lobsters_feed":
-        return _fetch_lobsters_feed(source)
-    if source.kind == "mastodon_feed":
-        return _fetch_mastodon_feed(source)
+    fetchers = {
+        "nitter_feed": _fetch_nitter_feed,
+        "reddit_feed": _fetch_reddit_feed,
+        "lobsters_feed": _fetch_lobsters_feed,
+        "mastodon_feed": _fetch_mastodon_feed,
+        "youtube_channel": _fetch_media_feed,
+        "podcast_feed": _fetch_media_feed,
+    }
+    if source.kind in fetchers:
+        return fetchers[source.kind](source)
     return _fetch_feed_entries(source)
 
 
@@ -646,9 +761,15 @@ def _ingest_source(
                 if not _should_include(translated_title, translated_desc, source.slug):
                     continue
 
-                summary, reason, score, tags = make_summary(
-                    translated_title, translated_desc, source
-                )
+                if source.kind in _MEDIA_SOURCE_KINDS:
+                    summary = _media_summary(translated_title, translated_desc, entry)
+                    reason = _media_reason(source)
+                    score = min(100, source.priority + 10)
+                    tags = _media_tags(source)
+                else:
+                    summary, reason, score, tags = make_summary(
+                        translated_title, translated_desc, source
+                    )
 
                 # Deduplication: check if this article is a duplicate of an existing canonical
                 canonical_id = _find_canonical(conn, url, translated_title, source.owner_user_id)
