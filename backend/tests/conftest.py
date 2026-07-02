@@ -53,6 +53,57 @@ def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
             item.add_marker(db_mark, append=True)
 
 
+_SCHEMA_SWEEP_LOCK_KEY = 727271
+
+
+def sweep_stale_test_schemas(dsn: str) -> None:
+    """Drop leaked ``test_%`` schemas from crashed pytest-xdist runs.
+
+    Guarded by a Postgres advisory lock. This must only be called before any
+    xdist worker has created its own ``test_{worker_id}`` schema (i.e. from
+    ``pytest_configure`` in the xdist *master* process, never from a worker's
+    ``pg_url`` fixture) — otherwise the sweep can race with, and drop, a
+    schema another already-running worker is actively using.
+    """
+    import psycopg
+    from psycopg import sql
+
+    with psycopg.connect(dsn, autocommit=True) as conn:
+        lock_row = conn.execute(
+            "SELECT pg_try_advisory_lock(%s)", (_SCHEMA_SWEEP_LOCK_KEY,)
+        ).fetchone()
+        got_lock = lock_row is not None and lock_row[0]
+        if not got_lock:
+            return
+        try:
+            rows = conn.execute(
+                r"SELECT schema_name FROM information_schema.schemata "
+                r"WHERE schema_name LIKE 'test\_%' ESCAPE '\'"
+            ).fetchall()
+            for (schema_name,) in rows:
+                conn.execute(
+                    sql.SQL("DROP SCHEMA IF EXISTS {} CASCADE").format(sql.Identifier(schema_name))
+                )
+        finally:
+            conn.execute("SELECT pg_advisory_unlock(%s)", (_SCHEMA_SWEEP_LOCK_KEY,))
+
+
+def pytest_configure(config: pytest.Config) -> None:
+    """Sweep leaked test_% schemas once, before any xdist worker spawns.
+
+    Runs only in the xdist *master* process (or a plain non-xdist run), never
+    in a worker, so it always executes before any worker creates its own
+    schema — avoiding a race where the sweep drops a schema another worker
+    is actively using.
+    """
+    del config
+    if os.environ.get("PYTEST_XDIST_WORKER"):
+        return
+    service_url = os.environ.get("TEST_DATABASE_URL")
+    if service_url:
+        sweep_stale_test_schemas(service_url)
+
+
 _FAKE_ADMIN = {
     "id": 1,
     "username": "testadmin",

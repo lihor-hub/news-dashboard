@@ -208,8 +208,11 @@ disallow_untyped_decorators = false
 # Resolve the `news_dashboard` package from backend/, mirroring mypy's
 # files=["backend"] and pytest's pythonpath=["backend"]. Without this, ty falls
 # back to whatever editable install is on sys.path (possibly a stale worktree).
+# backend/tests is included too: pytest has no backend/tests/__init__.py, so it
+# inserts that directory onto sys.path at collection time, letting test modules
+# do `from conftest import ...` as a bare top-level import.
 python-version = "3.14"
-extra-paths = ["backend"]
+extra-paths = ["backend", "backend/tests"]
 
 [tool.ty.src]
 include = ["backend", "backend/tests"]
@@ -218,4 +221,4 @@ include = ["backend", "backend/tests"]
 [tool.pyrefly]
 python-version = "3.14"
 project-includes = ["backend"]
-search-path = ["backend"]
+search-path = ["backend", "backend/tests"]
