@@ -23,13 +23,6 @@ optional OpenAI features for embeddings, Ask AI, and briefings.
 - Optional OpenAI embeddings, Ask AI, and generated briefings.
 - Docker, Helm, and GitHub Actions deployment support.
 
-## Screenshots
-
-> TODO: these are placeholders generated without a running instance. Replace
-> with real captures of the Today feed and the Ask AI / briefing view.
-
-![Today feed placeholder](docs/assets/screenshot-dashboard.svg)
-
 ## Stack
 
 - Backend: Python 3.14, FastAPI, Typer, psycopg, APScheduler.
