@@ -57,6 +57,12 @@
       name: {{ .Values.app.sentry.existingSecret | quote }}
       key: {{ .Values.app.sentry.dsnKey | default "SENTRY_DSN" | quote }}
       optional: true
+- name: SENTRY_DSN_FRONTEND
+  valueFrom:
+    secretKeyRef:
+      name: {{ .Values.app.sentry.existingSecret | quote }}
+      key: {{ .Values.app.sentry.frontendDsnKey | default "SENTRY_DSN_FRONTEND" | quote }}
+      optional: true
 {{- end }}
 {{- if .Values.app.sentry.environment }}
 - name: SENTRY_ENVIRONMENT

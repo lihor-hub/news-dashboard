@@ -14,7 +14,7 @@ export async function initErrorTracking(): Promise<void> {
     if (!config.sentry_dsn) return;
 
     const Sentry = await import('@sentry/react');
-    Sentry.init({ dsn: config.sentry_dsn, sendDefaultPii: false });
+    Sentry.init({ dsn: config.sentry_dsn, sendDefaultPii: true });
   } catch {
     // Network/parse failures must never block app startup.
   }

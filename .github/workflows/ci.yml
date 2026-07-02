@@ -569,6 +569,10 @@ jobs:
   # │                   tracking. Stored as a secret and exposed to pods as │
   # │                   SENTRY_DSN.                                        │
   # │                                                                      │
+  # │  SENTRY_DSN_      Optional Sentry project DSN for frontend/UI error   │
+  # │  FRONTEND         tracking. Stored as a secret and exposed publicly   │
+  # │                   through GET /api/config as SENTRY_DSN_FRONTEND.     │
+  # │                                                                      │
   # │                   SHORTCUT: if you make the GHCR package public      │
   # │                   (repo Settings → Packages → Change visibility),    │
   # │                   you can skip GHCR_TOKEN entirely and remove the    │
@@ -603,6 +607,7 @@ jobs:
           VAPID_PRIVATE_KEY: ${{ secrets.VAPID_PRIVATE_KEY }}
           VAPID_EMAIL: ${{ vars.VAPID_EMAIL }}
           SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
+          SENTRY_DSN_FRONTEND: ${{ secrets.SENTRY_DSN_FRONTEND }}
         run: |
           set -euo pipefail
 
@@ -683,9 +688,16 @@ jobs:
           fi
 
           sentry_helm_args=()
+          sentry_secret_args=()
           if [ -n "$SENTRY_DSN" ]; then
+            sentry_secret_args+=(--from-literal=SENTRY_DSN="$SENTRY_DSN")
+          fi
+          if [ -n "$SENTRY_DSN_FRONTEND" ]; then
+            sentry_secret_args+=(--from-literal=SENTRY_DSN_FRONTEND="$SENTRY_DSN_FRONTEND")
+          fi
+          if [ ${#sentry_secret_args[@]} -gt 0 ]; then
             kubectl -n news-dashboard create secret generic news-dashboard-sentry \
-              --from-literal=SENTRY_DSN="$SENTRY_DSN" \
+              "${sentry_secret_args[@]}" \
               --dry-run=client -o yaml | kubectl apply -f -
             sentry_helm_args+=(--set app.sentry.existingSecret=news-dashboard-sentry)
             sentry_helm_args+=(--set-string app.sentry.environment=production)

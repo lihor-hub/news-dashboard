@@ -135,6 +135,7 @@ def test_helm_template_app_and_ingest_receive_sentry_env() -> None:
     output = _render_chart(
         "app.sentry.existingSecret=sentry-credentials",
         "app.sentry.dsnKey=CUSTOM_SENTRY_DSN",
+        "app.sentry.frontendDsnKey=CUSTOM_SENTRY_DSN_FRONTEND",
         "app.sentry.environment=production",
         "app.sentry.release=news-dashboard@abc123",
     )
@@ -147,6 +148,9 @@ def test_helm_template_app_and_ingest_receive_sentry_env() -> None:
     sentry_dsn = _env_entry(deployment_env, "SENTRY_DSN")
     assert 'name: "sentry-credentials"' in sentry_dsn
     assert 'key: "CUSTOM_SENTRY_DSN"' in sentry_dsn
+    frontend_sentry_dsn = _env_entry(deployment_env, "SENTRY_DSN_FRONTEND")
+    assert 'name: "sentry-credentials"' in frontend_sentry_dsn
+    assert 'key: "CUSTOM_SENTRY_DSN_FRONTEND"' in frontend_sentry_dsn
     assert _env_entry(deployment_env, "SENTRY_ENVIRONMENT") == (
         '- name: SENTRY_ENVIRONMENT\n  value: "production"'
     )

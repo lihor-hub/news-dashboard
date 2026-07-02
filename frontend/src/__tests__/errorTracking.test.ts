@@ -36,7 +36,7 @@ describe('initErrorTracking', () => {
     const { initErrorTracking } = await import('../lib/errorTracking');
     await initErrorTracking();
 
-    expect(sentryInit).toHaveBeenCalledWith({ dsn, sendDefaultPii: false });
+    expect(sentryInit).toHaveBeenCalledWith({ dsn, sendDefaultPii: true });
   });
 
   it('does not throw when the config fetch fails', async () => {

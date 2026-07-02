@@ -97,9 +97,10 @@ app:
     # VAPID claims email address. Omit or leave empty to default safely.
     email: ""
   sentry:
-    # Optional: pre-existing Secret with SENTRY_DSN.
+    # Optional: pre-existing Secret with SENTRY_DSN and/or SENTRY_DSN_FRONTEND.
     existingSecret: ""
     dsnKey: SENTRY_DSN
+    frontendDsnKey: SENTRY_DSN_FRONTEND
     # Sentry environment tag. Leave empty to let the SDK default to production.
     environment: ""
     # Optional release identifier, usually set by CI to the deployed commit SHA.
