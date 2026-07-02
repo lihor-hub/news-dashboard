@@ -160,6 +160,56 @@ def test_source_error_tracked(tmp_path: Path) -> None:
         assert row["last_checked_at"] is not None, "last_checked_at should be set even on failure"
 
 
+def test_oversized_feed_tracked_as_source_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An oversized feed response should fail like any other feed error."""
+    from news_dashboard.ingest import FEED_FETCH_MAX_BYTES, _ingest_source
+
+    big = SourceDefinition("big-feed", "Big Feed", "https://example.com/big.xml", "python")
+    db = tmp_path / "big.db"
+    sync_sources(db)
+    with connect(db) as conn:
+        conn.execute(
+            "INSERT INTO sources(slug, name, url, category, kind, priority, enabled) "
+            "VALUES (%s, %s, %s, %s, %s, 50, TRUE) ON CONFLICT(slug) DO NOTHING",
+            (big.slug, big.name, big.url, big.category, big.kind),
+        )
+
+    class _OversizedResp:
+        def __init__(self) -> None:
+            self.headers: dict[str, str] = {}
+
+        def read(self, n: int = -1) -> bytes:
+            body = b"<rss>" + b"x" * (FEED_FETCH_MAX_BYTES + 10) + b"</rss>"
+            return body if n < 0 else body[:n]
+
+        def __enter__(self) -> _OversizedResp:
+            return self
+
+        def __exit__(self, *_: object) -> None:
+            pass
+
+    monkeypatch.setattr(
+        "news_dashboard.ingest.open_server_fetch_url", lambda *_a, **_k: _OversizedResp()
+    )
+
+    outcome = _ingest_source(big, db)
+    assert outcome.error_message is not None
+    assert "exceeded" in outcome.error_message or "too large" in outcome.error_message
+
+    with connect(db) as conn:
+        row = conn.execute(
+            "SELECT last_error, last_checked_at, last_fetched_count, last_inserted_count"
+            " FROM sources WHERE slug=%s",
+            (big.slug,),
+        ).fetchone()
+        assert row["last_error"] is not None
+        assert row["last_checked_at"] is not None
+        assert row["last_fetched_count"] == 0
+        assert row["last_inserted_count"] == 0
+
+
 def test_source_health_error_streak_resets_after_success(tmp_path: Path) -> None:
     db = tmp_path / "streak.db"
     sync_sources(db)

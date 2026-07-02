@@ -422,10 +422,16 @@ _NITTER_INSTANCES: tuple[str, ...] = (
 
 _FEED_AGENT = "news-dashboard/0.1 (personal; contact@lihor.ro)"
 FEED_FETCH_TIMEOUT_SECS = 15
+# RSS/Atom feeds are rarely more than a few hundred KB; 2 MiB leaves headroom
+# for verbose feeds while bounding memory use and parse time for bad actors.
+FEED_FETCH_MAX_BYTES = 2 * 1024 * 1024
 
 
 def _fetch_feed_content(url: str) -> bytes:
-    """Fetch raw feed bytes with an explicit timeout. Raises FeedFetchError on failure."""
+    """Fetch raw feed bytes with an explicit timeout and size cap.
+
+    Raises FeedFetchError on failure.
+    """
     try:
         validate_server_fetch_url(url)
     except UnsafeUrlError as exc:
@@ -433,13 +439,28 @@ def _fetch_feed_content(url: str) -> bytes:
     req = urllib.request.Request(url, headers={"User-Agent": _FEED_AGENT})  # noqa: S310
     try:
         with open_server_fetch_url(req, timeout=FEED_FETCH_TIMEOUT_SECS) as resp:
-            return resp.read()  # type: ignore[no-any-return]
+            content_length = resp.headers.get("Content-Length")
+            if content_length is not None:
+                try:
+                    if int(content_length) > FEED_FETCH_MAX_BYTES:
+                        msg = (
+                            f"Feed response too large ({content_length} bytes, "
+                            f"max {FEED_FETCH_MAX_BYTES}): {url}"
+                        )
+                        raise FeedFetchError(msg)
+                except ValueError:
+                    pass
+            content: bytes = resp.read(FEED_FETCH_MAX_BYTES + 1)
     except TimeoutError as exc:
         msg = f"Feed fetch timed out after {FEED_FETCH_TIMEOUT_SECS}s: {url}"
         raise FeedFetchError(msg) from exc
     except urllib.error.URLError as exc:
         msg = f"Feed fetch network error: {exc.reason}"
         raise FeedFetchError(msg) from exc
+    if len(content) > FEED_FETCH_MAX_BYTES:
+        msg = f"Feed response exceeded {FEED_FETCH_MAX_BYTES} byte limit: {url}"
+        raise FeedFetchError(msg)
+    return content
 
 
 def _parse_feed_url(url: str) -> list[dict[str, Any]]:
