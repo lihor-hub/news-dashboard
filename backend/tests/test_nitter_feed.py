@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import urllib.error
+from typing import ClassVar
 
 import pytest
 
 from news_dashboard.ingest import (
     _FEED_AGENT,
     _NITTER_INSTANCES,
+    FEED_FETCH_MAX_BYTES,
     FEED_FETCH_TIMEOUT_SECS,
     FeedFetchError,
     _fetch_feed_content,
@@ -96,7 +98,9 @@ def test_fetch_feed_content_sends_user_agent(monkeypatch: pytest.MonkeyPatch) ->
     captured: list[str | None] = []
 
     class _FakeResp:
-        def read(self) -> bytes:
+        headers: ClassVar[dict[str, str]] = {}
+
+        def read(self, _n: int = -1) -> bytes:
             return b"<rss/>"
 
         def __enter__(self) -> _FakeResp:
@@ -136,6 +140,74 @@ def test_fetch_feed_content_converts_url_error(monkeypatch: pytest.MonkeyPatch) 
     monkeypatch.setattr("news_dashboard.ingest.open_server_fetch_url", fake_open)
     with pytest.raises(FeedFetchError, match="network error"):
         _fetch_feed_content("https://example.com/feed.xml")
+
+
+# ── size cap ──────────────────────────────────────────────────────────────────
+
+
+class _SizedFakeResp:
+    def __init__(self, body: bytes, *, content_length: str | None = None) -> None:
+        self._body = body
+        self.headers = {"Content-Length": content_length} if content_length else {}
+
+    def read(self, n: int = -1) -> bytes:
+        if n < 0:
+            return self._body
+        return self._body[:n]
+
+    def __enter__(self) -> _SizedFakeResp:
+        return self
+
+    def __exit__(self, *_: object) -> None:
+        pass
+
+
+def test_fetch_feed_content_under_limit_parses_normally(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    body = b"<rss>" + b"x" * 100 + b"</rss>"
+    monkeypatch.setattr(
+        "news_dashboard.ingest.open_server_fetch_url",
+        lambda *_a, **_k: _SizedFakeResp(body),
+    )
+    assert _fetch_feed_content("https://example.com/feed.xml") == body
+
+
+def test_fetch_feed_content_rejects_oversized_body(monkeypatch: pytest.MonkeyPatch) -> None:
+    body = b"x" * (FEED_FETCH_MAX_BYTES + 1)
+    monkeypatch.setattr(
+        "news_dashboard.ingest.open_server_fetch_url",
+        lambda *_a, **_k: _SizedFakeResp(body),
+    )
+    with pytest.raises(FeedFetchError, match="exceeded"):
+        _fetch_feed_content("https://example.com/feed.xml")
+
+
+def test_fetch_feed_content_rejects_oversized_content_length_header(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    called = False
+
+    class _NeverReadResp(_SizedFakeResp):
+        def read(self, n: int = -1) -> bytes:
+            nonlocal called
+            called = True
+            return super().read(n)
+
+    resp = _NeverReadResp(b"short body", content_length=str(FEED_FETCH_MAX_BYTES + 1))
+    monkeypatch.setattr("news_dashboard.ingest.open_server_fetch_url", lambda *_a, **_k: resp)
+    with pytest.raises(FeedFetchError, match="too large"):
+        _fetch_feed_content("https://example.com/feed.xml")
+    assert called is False
+
+
+def test_fetch_feed_content_ignores_invalid_content_length_header(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    body = b"<rss/>"
+    resp = _SizedFakeResp(body, content_length="not-a-number")
+    monkeypatch.setattr("news_dashboard.ingest.open_server_fetch_url", lambda *_a, **_k: resp)
+    assert _fetch_feed_content("https://example.com/feed.xml") == body
 
 
 # ── successful fetch ──────────────────────────────────────────────────────────
