@@ -189,6 +189,15 @@ DEFAULT_SOURCES: list[SourceDefinition] = [
         priority=60,
         interest_tags=("infra", "cloud", "model-releases"),
     ),
+    SourceDefinition(
+        "mistral-ai-news",
+        "Mistral AI News",
+        "https://mistral.ai/news/",
+        "ai-llm",
+        "scraped_page",
+        80,
+        interest_tags=("agents", "model-releases", "product-news"),
+    ),
     # ── AI research ──────────────────────────────────────────────────────────
     SourceDefinition(
         "arxiv-ai-ml",
