@@ -5,6 +5,8 @@
 [![CodeQL](https://github.com/lihor-hub/news-dashboard/actions/workflows/codeql.yml/badge.svg)](https://github.com/lihor-hub/news-dashboard/actions/workflows/codeql.yml)
 [![Version](https://img.shields.io/github/v/tag/lihor-hub/news-dashboard?filter=v*&sort=semver&label=version&color=blue)](https://github.com/lihor-hub/news-dashboard/releases/latest)
 [![License: MIT](https://img.shields.io/github/license/lihor-hub/news-dashboard)](LICENSE)
+[![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/lihor-hub/news-dashboard)
+[![Open in Dev Containers](https://img.shields.io/static/v1?label=Dev%20Containers&message=Open&color=blue&logo=visualstudiocode)](https://vscode.dev/redirect?url=vscode://ms-vscode-remote.remote-containers/cloneInVolume?url=https://github.com/lihor-hub/news-dashboard)
 
 Self-hosted technical news inbox for curated feeds, article triage, source
 health, search, briefings, and saved/read history.
@@ -134,6 +136,8 @@ docker exec news-dashboard news-dashboard ingest
 ## Local Development
 
 Install backend and frontend dependencies:
+
+> **Zero-setup alternative:** Click [Open in GitHub Codespaces](https://codespaces.new/lihor-hub/news-dashboard) or use the [Dev Container](https://code.visualstudio.com/docs/devcontainers/containers) in VS Code to skip all local installation. The devcontainer pre-installs Python, Node.js, and PostgreSQL automatically.
 
 ```bash
 python -m venv .venv
