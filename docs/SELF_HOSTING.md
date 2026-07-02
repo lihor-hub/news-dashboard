@@ -95,6 +95,28 @@ docker compose -f docker-compose.prod.yml pull
 docker compose -f docker-compose.prod.yml up -d
 ```
 
+### Verifying Image Provenance and SBOM
+
+Every image pushed to GHCR from a push to `main` is attested with a
+[SLSA build provenance](https://slsa.dev/) statement and a signed SBOM
+(SPDX), generated in `.github/workflows/ci.yml` and verifiable with the
+[GitHub CLI](https://cli.github.com/):
+
+```bash
+# Verify the image was built by this repo's CI (build provenance).
+gh attestation verify oci://ghcr.io/lihor-hub/news-dashboard:v1.21.0 \
+  --owner lihor-hub
+
+# Verify and inspect the SBOM attestation for the same image.
+gh attestation verify oci://ghcr.io/lihor-hub/news-dashboard:v1.21.0 \
+  --owner lihor-hub --predicate-type https://spdx.dev/Document
+```
+
+Both commands exit non-zero if the image digest doesn't match a
+signed attestation from this repository, or if the signature can't be
+verified against GitHub's Sigstore-backed OIDC identity. Substitute
+the tag with a specific commit SHA to verify an exact build.
+
 ## Environment Variables
 
 See the [README Configuration section](../README.md#configuration) for the complete list of environment variables.

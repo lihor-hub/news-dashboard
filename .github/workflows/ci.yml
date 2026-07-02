@@ -400,6 +400,11 @@ jobs:
     needs: [lint, test, helm-validate]
     runs-on: [self-hosted]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
     outputs:
       image_tag: ${{ github.sha }}
     steps:
@@ -494,6 +499,7 @@ jobs:
       - uses: docker/setup-buildx-action@v4
 
       - uses: docker/build-push-action@v6
+        id: build
         with:
           context: .
           push: true
@@ -502,6 +508,34 @@ jobs:
           tags: |
             ${{ env.IMAGE }}:${{ github.sha }}
             ${{ env.IMAGE }}:latest
+
+      # SBOM (SPDX) for the exact image digest just pushed. Kept as a build
+      # artifact and attested below so consumers can verify contents.
+      - name: Generate SBOM
+        uses: anchore/sbom-action@v0
+        with:
+          image: ${{ env.IMAGE }}@${{ steps.build.outputs.digest }}
+          format: spdx-json
+          output-file: sbom.spdx.json
+          upload-artifact: true
+          upload-release-assets: false
+
+      # Cryptographically ties the SBOM and the build to this repo's CI run.
+      # Verify with: gh attestation verify --repo <owner>/<repo> --owner <owner> <image>
+      - name: Attest SBOM
+        uses: actions/attest-sbom@v3
+        with:
+          subject-name: ${{ env.IMAGE }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+          sbom-path: sbom.spdx.json
+          push-to-registry: true
+
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@v3
+        with:
+          subject-name: ${{ env.IMAGE }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true
 
   # ── 10. DEPLOY ─────────────────────────────────────────────────────────────
   # Runs directly on the self-hosted runner (the mini PC itself) — no SSH hop
