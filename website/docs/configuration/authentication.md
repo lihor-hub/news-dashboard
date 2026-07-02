@@ -1,3 +1,8 @@
+---
+title: Authentication (Keycloak)
+sidebar_position: 2
+---
+
 # Keycloak authentication
 
 `news-dashboard` can use the existing minipc Keycloak instance as the public login provider while keeping the app's local `users` table as the per-user authorization/data boundary.

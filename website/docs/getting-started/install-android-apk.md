@@ -85,4 +85,5 @@ session.
 ## Building the APK yourself
 
 Developers and self-hosters can build the APK from source. See the
-[Android build guide](../../android/README.md) for instructions.
+[Android build guide](https://github.com/lihor-hub/news-dashboard/blob/main/android/README.md)
+for instructions.

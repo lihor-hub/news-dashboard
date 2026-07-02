@@ -1,5 +1,8 @@
 blank_issues_enabled: false
 contact_links:
   - name: Ask a question
-    url: https://github.com/lihor-hub/news-dashboard/blob/main/SUPPORT.md
-    about: See SUPPORT.md for how to get help and ask questions.
+    url: https://github.com/lihor-hub/news-dashboard/discussions/categories/q-a
+    about: Ask usage or setup questions in the Q&A discussion category.
+  - name: Share a feature idea
+    url: https://github.com/lihor-hub/news-dashboard/discussions/categories/ideas
+    about: Open-ended feature ideas go in the Ideas discussion category. Use the Feature request template instead if the request is fully specified.

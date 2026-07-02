@@ -1,3 +1,8 @@
+---
+title: HTTPS with Caddy
+sidebar_position: 3
+---
+
 # Caddy HTTPS setup for news.lihor.ro
 
 This document covers everything needed to put `news.lihor.ro` behind Caddy on

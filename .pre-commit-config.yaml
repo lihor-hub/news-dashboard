@@ -12,6 +12,7 @@ repos:
       - id: check-toml
       - id: check-json
       - id: check-added-large-files
+        args: [--maxkb=1000] # website/package-lock.json (Docusaurus) exceeds the 500KB default
       - id: check-merge-conflict
       - id: detect-private-key
 

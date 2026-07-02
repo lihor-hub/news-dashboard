@@ -47,6 +47,10 @@ optional OpenAI features for embeddings, Ask AI, and briefings.
 
 ## Configuration
 
+Copy [`.env.example`](.env.example) to `.env` and fill in real values to get
+started; it enumerates every variable below plus a few advanced/internal
+knobs.
+
 Runtime storage is PostgreSQL only. Set `DATABASE_URL` or the split
 `POSTGRES_*` variables.
 
@@ -61,7 +65,7 @@ Runtime storage is PostgreSQL only. Set `DATABASE_URL` or the split
 | `OPENAI_API_KEY`, `OPENAI_BASE_URL`                                                                              | OpenAI credentials. Required for TTS/audio (not replaceable by the free LLM gateway). Also used as fallback for all other AI features when `FREE_LLM_API_KEY` is absent.                                                                                                                                                                                                         |
 | `OPENAI_BRIEFING_MODEL`                                                                                          | Model name for briefing generation (e.g. `auto` for a routing gateway, or a specific model ID). Defaults to `gpt-4o-mini`.                                                                                                                                                                                                                                                       |
 | `LANGFUSE_HOST`, `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`                                                    | Traces every OpenAI call (embeddings, Ask AI, briefings, insights, TTS, body fetch) in [Langfuse](https://langfuse.com), each tagged with a descriptive name (`ask-ai`, `briefing-generation`, …). Tracing activates only when both keys are set; otherwise the app uses a plain OpenAI client with no tracing. `LANGFUSE_BASE_URL` is accepted as an alias for `LANGFUSE_HOST`. |
-| `KEYCLOAK_AUTH_ENABLED`, `KEYCLOAK_SERVER_URL`, `KEYCLOAK_REALM`, `KEYCLOAK_CLIENT_ID`, `KEYCLOAK_CLIENT_SECRET` | Enables Keycloak. See [docs/KEYCLOAK_AUTH.md](docs/KEYCLOAK_AUTH.md).                                                                                                                                                                                                                                                                                                            |
+| `KEYCLOAK_AUTH_ENABLED`, `KEYCLOAK_SERVER_URL`, `KEYCLOAK_REALM`, `KEYCLOAK_CLIENT_ID`, `KEYCLOAK_CLIENT_SECRET` | Enables Keycloak. See [Authentication (Keycloak)](https://docs.lihor.ro/docs/configuration/authentication).                                                                                                                                                                                                                                                                                                            |
 | `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`                                                                          | VAPID public and private keys for Web Push notifications. Generate using `npx web-push generate-vapid-keys`.                                                                                                                                                                                                                                                                     |
 | `VAPID_EMAIL`                                                                                                    | Contact email address used in VAPID claims mailto link. Defaults to `admin@example.com` if unset.                                                                                                                                                                                                                                                                                |
 | `CORS_ORIGINS`                                                                                                   | Comma-separated browser dev origins.                                                                                                                                                                                                                                                                                                                                             |
@@ -157,7 +161,7 @@ docker run --rm -d \
   postgres:16-alpine
 ```
 
-Set backend env:
+Set backend env (or copy `.env.example` to `.env` and adjust values):
 
 ```bash
 export DATABASE_URL=postgresql://news_dashboard:news-dashboard-local-password@localhost:5432/news_dashboard
@@ -243,6 +247,8 @@ To begin using News Dashboard as a reader, see the
 
 ## Documentation
 
+The full documentation site is published at **[docs.lihor.ro](https://docs.lihor.ro)**.
+
 For end-user documentation, see the [User Guide](docs/user-guide/README.md) which covers:
 - Concepts and terminology
 - The Today Feed and triage workflow
@@ -251,7 +257,10 @@ For end-user documentation, see the [User Guide](docs/user-guide/README.md) whic
 - Saved and read history
 - Sharing articles with other users
 
-For technical documentation (architecture, deployment, authentication), see the files in the `docs/` directory.
+For technical documentation (architecture, deployment, authentication), see the
+[docs index](docs/README.md).
+
+To preview the docs site locally: `cd website && npm install && npm run start`.
 
 ## Deployment
 
@@ -281,15 +290,24 @@ For simple Docker deployments (single-node setups), see the
 the published image with persistent storage.
 
 Enable auth before exposing an instance outside a trusted network. See
-[docs/KEYCLOAK_AUTH.md](docs/KEYCLOAK_AUTH.md) and
-[docs/CADDY_HTTPS_SETUP.md](docs/CADDY_HTTPS_SETUP.md).
+[Authentication (Keycloak)](https://docs.lihor.ro/docs/configuration/authentication) and
+[HTTPS with Caddy](https://docs.lihor.ro/docs/configuration/https-caddy).
 
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for setup, conventions, and how to land your first PR.
 Participation is governed by our [Code of Conduct](CODE_OF_CONDUCT.md).
 
+The project is maintainer-led — see [MAINTAINERS.md](MAINTAINERS.md) for who's
+involved, [GOVERNANCE.md](GOVERNANCE.md) for how decisions get made, and
+[ROADMAP.md](ROADMAP.md) for near-term direction.
+
 New to the project? Browse [good first issues](https://github.com/lihor-hub/news-dashboard/issues?q=is%3Aopen+label%3A%22good+first+issue%22) — beginner-friendly tasks with clear scope.
+
+Have a question or an open-ended feature idea? Use
+[GitHub Discussions](https://github.com/lihor-hub/news-dashboard/discussions) instead of
+opening an issue — see [SUPPORT.md](SUPPORT.md) for details. Issues are reserved for
+actionable, specified bugs and feature requests.
 
 Keep runtime database code PostgreSQL-specific: psycopg parameters, PostgreSQL
 SQL, and existing database helpers. Do not add SQLite runtime fallbacks or

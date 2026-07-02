@@ -1,3 +1,8 @@
+---
+title: PostgreSQL Backup and Restore
+sidebar_position: 4
+---
+
 # PostgreSQL Backup and Restore
 
 The Helm chart ships an optional scheduled backup CronJob that creates timestamped

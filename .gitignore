@@ -23,3 +23,7 @@ android/*.p12
 desktop/node_modules/
 desktop/dist/
 pi-output.log
+
+# Docusaurus docs site build outputs
+website/build/
+website/.docusaurus/

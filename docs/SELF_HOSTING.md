@@ -201,7 +201,7 @@ Upgrade safely by following these steps in order.
 ### Pre-Upgrade Checklist
 
 1. **Read the release notes** — check the [CHANGELOG](../CHANGELOG.md) for any breaking changes, config deprecations, or manual steps.
-2. **Back up your database** — a backup is your safety net for rollback. See [POSTGRES_BACKUP.md](./POSTGRES_BACKUP.md) for backup strategies.
+2. **Back up your database** — a backup is your safety net for rollback. See [PostgreSQL Backup and Restore](https://docs.lihor.ro/docs/configuration/postgres-backup) for backup strategies.
 3. **Check the new image tag** — browse available tags on [GHCR](https://ghcr.io/lihor-hub/news-dashboard) or the [releases page](https://github.com/lihor-hub/news-dashboard/releases).
 
 ### Docker Compose (Production)
@@ -259,7 +259,7 @@ previous image tag:
 docker compose -f docker-compose.prod.yml down
 
 # 2. Restore the database from your pre-upgrade backup
-#    (see POSTGRES_BACKUP.md for restore instructions)
+#    (see https://docs.lihor.ro/docs/configuration/postgres-backup for restore instructions)
 
 # 3. Revert the image tag in docker-compose.prod.yml to the previous version
 
@@ -356,7 +356,7 @@ failing if you push too fast.
 
 ## Backups
 
-Regularly back up your PostgreSQL database. See [POSTGRES_BACKUP.md](./POSTGRES_BACKUP.md) for:
+Regularly back up your PostgreSQL database. See [PostgreSQL Backup and Restore](https://docs.lihor.ro/docs/configuration/postgres-backup) for:
 
 - Enabling the Helm CronJob backup
 - Manual backup and restore procedures
@@ -367,6 +367,6 @@ Regularly back up your PostgreSQL database. See [POSTGRES_BACKUP.md](./POSTGRES_
 
 ## Next Steps
 
-- **Set up HTTPS** with a reverse proxy (see [CADDY_HTTPS_SETUP.md](./CADDY_HTTPS_SETUP.md))
+- **Set up HTTPS** with a reverse proxy (see [HTTPS with Caddy](https://docs.lihor.ro/docs/configuration/https-caddy))
 - Configure optional features like AI capabilities, Keycloak SSO, or Web Push notifications
 - Set up regular backups of your PostgreSQL data

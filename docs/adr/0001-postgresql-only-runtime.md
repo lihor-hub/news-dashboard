@@ -4,7 +4,7 @@
 - Deciders: ioachim-hub, Antigravity
 - Date: 2026-06-30
 
-Technical Story: [Issue #633](https://github.com/lihor-hub/news-dashboard/issues/633), [docs/ARCHITECTURE.md](../ARCHITECTURE.md)
+Technical Story: [Issue #633](https://github.com/lihor-hub/news-dashboard/issues/633), [Architecture](https://docs.lihor.ro/docs/architecture)
 
 ## Context and Problem Statement
 

@@ -48,7 +48,7 @@ This app has real security surface worth getting right when self-hosting:
   for AI features. Treat as secrets; do not commit them.
 - **`VAPID_PRIVATE_KEY`** — private key for Web Push notifications.
 - **Keycloak (`KEYCLOAK_*`)** — optional external auth; when enabled, review
-  [docs/KEYCLOAK_AUTH.md](docs/KEYCLOAK_AUTH.md) for the trust model.
+  [Authentication (Keycloak)](https://docs.lihor.ro/docs/configuration/authentication) for the trust model.
 
 See the [Configuration](README.md#configuration) table in the README for the
 full list of environment variables. Never commit secrets, API keys, database

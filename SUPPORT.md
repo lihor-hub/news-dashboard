@@ -4,10 +4,18 @@ Looking for help with News Dashboard? Here's where to go.
 
 ## Ask a question
 
-Open a [new issue](https://github.com/lihor-hub/news-dashboard/issues/new/choose)
-using the "Ask a question" link, or apply the `question` label to a
-[Feature request](https://github.com/lihor-hub/news-dashboard/issues/new?template=feature_request.yml)
-if the request doesn't fit a bug report.
+Use [GitHub Discussions](https://github.com/lihor-hub/news-dashboard/discussions):
+
+- [Q&A](https://github.com/lihor-hub/news-dashboard/discussions/categories/q-a) for usage
+  and setup questions.
+- [Ideas](https://github.com/lihor-hub/news-dashboard/discussions/categories/ideas) for
+  open-ended feature ideas that aren't fully specified yet.
+- [Show and tell](https://github.com/lihor-hub/news-dashboard/discussions/categories/show-and-tell)
+  to share what you've built.
+- [Announcements](https://github.com/lihor-hub/news-dashboard/discussions/categories/announcements)
+  for project news.
+
+Issues are reserved for actionable, specified bugs and feature requests — see below.
 
 ## Report a bug
 
@@ -17,7 +25,8 @@ template.
 ## Request a feature
 
 Use the [Feature request](https://github.com/lihor-hub/news-dashboard/issues/new?template=feature_request.yml)
-template.
+template if the request is fully specified. For open-ended ideas, start a
+[Discussion](https://github.com/lihor-hub/news-dashboard/discussions/categories/ideas) instead.
 
 ## Report a security vulnerability
 

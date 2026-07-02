@@ -80,8 +80,7 @@ To create a new account through Keycloak:
 ## After signing in
 
 Once you are signed in, you land on your **Today Feed** — the main triage
-view. See the [User Guide](../../docs/user-guide/README.md) to learn how to
-use it.
+view. See the [User Guide](/docs/user-guide) to learn how to use it.
 
 If this is your first time using News Dashboard, the app will have already
 seeded a set of default news sources. Articles will start appearing after the

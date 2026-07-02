@@ -242,11 +242,11 @@ During ingestion, each source is fetched through either `feedparser` for RSS/Ato
 
 The React UI reads articles by status and category, displays summary counts, shows source health, and lets the user update article status. Status changes are persisted through `PATCH /api/articles/{article_id}/status`, and the UI reloads articles and counts afterward. Search calls `/api/search` and returns matching articles across statuses.
 
-For production, GitHub Actions tests the Python backend, builds the frontend, builds a Docker image, pushes it to GHCR, and deploys it on a self-hosted runner with Helm. The host-level Caddy route in `deploy/Caddyfile` exposes the Kubernetes NodePort at `news.lihor.ro` and proxies `/keycloak` to the colocated identity provider. Authentication is enforced by the FastAPI app through local password sessions or optional Keycloak SSO; see `docs/KEYCLOAK_AUTH.md`.
+For production, GitHub Actions tests the Python backend, builds the frontend, builds a Docker image, pushes it to GHCR, and deploys it on a self-hosted runner with Helm. The host-level Caddy route in `deploy/Caddyfile` exposes the Kubernetes NodePort at `news.lihor.ro` and proxies `/keycloak` to the colocated identity provider. Authentication is enforced by the FastAPI app through local password sessions or optional Keycloak SSO; see [Authentication (Keycloak)](/docs/configuration/authentication).
 
 ## Operational Notes
 
 - PostgreSQL is required in every runtime environment. SQLite is only a legacy migration input for importing old local data into PostgreSQL.
 - The React app is served separately only in local development. In the production image, the built frontend is served by FastAPI.
 - There are two scheduling mechanisms: in-process APScheduler and the Kubernetes CronJob. If duplicate ingestion is undesirable, configure one of them as the authoritative scheduler.
-- Authentication is handled by the app. Local password login is always part of the app model, and production can enable Keycloak SSO with `KEYCLOAK_AUTH_ENABLED=1` plus the related `KEYCLOAK_*` settings documented in `README.md` and `docs/KEYCLOAK_AUTH.md`.
+- Authentication is handled by the app. Local password login is always part of the app model, and production can enable Keycloak SSO with `KEYCLOAK_AUTH_ENABLED=1` plus the related `KEYCLOAK_*` settings documented in `README.md` and [Authentication (Keycloak)](/docs/configuration/authentication).
