@@ -252,6 +252,15 @@ DEFAULT_SOURCES: list[SourceDefinition] = [
         80,
         interest_tags=("agents", "infra", "model-releases"),
     ),
+    # ── Security ────────────────────────────────────────────────────────────
+    SourceDefinition(
+        "trail-of-bits-blog",
+        "Trail of Bits Blog",
+        "https://blog.trailofbits.com/feed/",
+        "security",
+        priority=76,
+        interest_tags=("security", "infra", "software-development"),
+    ),
     # ── Cloud / infra ────────────────────────────────────────────────────────
     SourceDefinition(
         "kubernetes-blog",
