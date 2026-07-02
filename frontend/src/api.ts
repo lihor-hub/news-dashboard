@@ -2,6 +2,7 @@ import type {
   AdminAnalytics,
   Article,
   ArticleCountsResult,
+  ArticleHighlight,
   ArticleStatus,
   ArticlesOverTimePoint,
   AskResponse,
@@ -115,6 +116,30 @@ export async function fetchArticle(id: number | string): Promise<Article> {
 
 export async function fetchArticleBody(id: number | string): Promise<Article> {
   return requestJson<Article>(`/api/articles/${id}/body`, { method: 'POST' });
+}
+
+export async function fetchArticleHighlights(id: number | string): Promise<ArticleHighlight[]> {
+  const data = await requestJson<{ items: ArticleHighlight[] }>(`/api/articles/${id}/highlights`);
+  return data.items;
+}
+
+export async function createArticleHighlight(
+  id: number | string,
+  payload: { highlighted_text: string; offset_chars?: number; note?: string | null }
+): Promise<ArticleHighlight> {
+  return requestJson<ArticleHighlight>(`/api/articles/${id}/highlights`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function deleteArticleHighlight(
+  articleId: number | string,
+  highlightId: number | string
+): Promise<{ ok: boolean }> {
+  return requestJson<{ ok: boolean }>(`/api/articles/${articleId}/highlights/${highlightId}`, {
+    method: 'DELETE',
+  });
 }
 
 export async function fetchSharedArticle(shareId: number | string): Promise<Article> {

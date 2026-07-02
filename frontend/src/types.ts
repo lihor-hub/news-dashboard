@@ -79,6 +79,16 @@ export interface ShareAnnotation {
   created_at: string;
 }
 
+export interface ArticleHighlight {
+  id: number;
+  user_id: number;
+  article_id: number;
+  highlighted_text: string;
+  offset_chars: number;
+  note?: string | null;
+  created_at: string;
+}
+
 export interface ShareMessage {
   id: number;
   share_id: number;

@@ -22,6 +22,7 @@ vi.spyOn(console, 'error').mockImplementation(() => undefined);
 
 beforeEach(() => {
   vi.clearAllMocks();
+  vi.spyOn(api, 'fetchArticleHighlights').mockResolvedValue([]);
 });
 
 function makeArticle(overrides: Partial<Article> = {}): Article {
@@ -121,6 +122,54 @@ describe('ArticlePage — rendering', () => {
     expect(fetchSharedArticleBodySpy).toHaveBeenCalledWith('123');
     expect(fetchArticleSpy).not.toHaveBeenCalled();
     expect(fetchArticleBodySpy).not.toHaveBeenCalled();
+  });
+
+  it('creates a private highlight from selected article text', async () => {
+    const article = makeArticle({
+      body_status: 'ok',
+      body: 'Full article text here.',
+    });
+    vi.spyOn(api, 'fetchArticle').mockResolvedValue(article);
+    vi.spyOn(api, 'fetchArticleBody').mockResolvedValue(article);
+    const createHighlight = vi.spyOn(api, 'createArticleHighlight').mockResolvedValue({
+      id: 5,
+      user_id: 1,
+      article_id: 42,
+      highlighted_text: 'article text',
+      offset_chars: 5,
+      note: 'use this later',
+      created_at: '2026-07-02T12:00:00Z',
+    });
+    vi.stubGlobal(
+      'prompt',
+      vi.fn(() => 'use this later')
+    );
+
+    renderReader('42', article);
+    await screen.findByText('Test Article Title');
+
+    const reader = document.querySelector('.reader-prose');
+    expect(reader).not.toBeNull();
+    const range = document.createRange();
+    range.selectNodeContents(reader!);
+    vi.spyOn(range, 'commonAncestorContainer', 'get').mockReturnValue(reader!);
+    vi.spyOn(window, 'getSelection').mockReturnValue({
+      rangeCount: 1,
+      toString: () => 'article text',
+      getRangeAt: () => range,
+      removeAllRanges: vi.fn(),
+    } as unknown as Selection);
+
+    fireEvent.mouseUp(reader!);
+    await userEvent.click(screen.getByRole('button', { name: 'Highlight' }));
+
+    await waitFor(() =>
+      expect(createHighlight).toHaveBeenCalledWith('42', {
+        highlighted_text: 'article text',
+        offset_chars: 5,
+        note: 'use this later',
+      })
+    );
   });
 
   it('shows source and reason', async () => {

@@ -26,7 +26,10 @@ import { toast } from 'sonner';
 import {
   fetchArticle,
   fetchArticleBody,
+  createArticleHighlight,
+  deleteArticleHighlight,
   fetchArticleAudioUrl,
+  fetchArticleHighlights,
   fetchArticleInsights,
   fetchArticlePerspectives,
   fetchSharedArticle,
@@ -350,6 +353,36 @@ export function ArticlePage() {
   const [shareOpen, setShareOpen] = useState(false);
   const [selectedShareText, setSelectedShareText] = useState('');
   const [pendingShareHighlight, setPendingShareHighlight] = useState<{ text: string } | null>(null);
+  const highlightsQuery = useQuery({
+    queryKey: ['article-highlights', id],
+    queryFn: () => fetchArticleHighlights(id!),
+    enabled: Boolean(id) && !shareId,
+  });
+
+  const createHighlightMutation = useMutation({
+    mutationFn: ({ text, note }: { text: string; note: string | null }) =>
+      createArticleHighlight(id!, {
+        highlighted_text: text,
+        offset_chars: article?.body?.indexOf(text) ?? 0,
+        note,
+      }),
+    onSuccess: () => {
+      setSelectedShareText('');
+      window.getSelection()?.removeAllRanges();
+      void queryClient.invalidateQueries({ queryKey: ['article-highlights', id] });
+      toast('Highlight saved');
+    },
+    onError: () => toast.error('Could not save highlight'),
+  });
+
+  const deleteHighlightMutation = useMutation({
+    mutationFn: (highlightId: number) => deleteArticleHighlight(id!, highlightId),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['article-highlights', id] });
+      toast('Highlight deleted');
+    },
+    onError: () => toast.error('Could not delete highlight'),
+  });
 
   function handleShare() {
     if (!article) return;
@@ -375,6 +408,12 @@ export function ArticlePage() {
     if (!article || !selectedShareText) return;
     setPendingShareHighlight({ text: selectedShareText });
     setShareOpen(true);
+  }
+
+  function handleHighlightSelected() {
+    if (!article || !selectedShareText || shareId) return;
+    const note = window.prompt('Add a private note to this highlight?')?.trim() ?? null;
+    createHighlightMutation.mutate({ text: selectedShareText, note });
   }
 
   // On-demand recommendation explanation — kept collapsed by default so the
@@ -778,6 +817,42 @@ export function ArticlePage() {
                 />
               )}
             </div>
+
+            {!shareId && highlightsQuery.data && highlightsQuery.data.length > 0 ? (
+              <section
+                className="mt-8 rounded-lg border border-border bg-surface/40 px-4 py-4"
+                aria-label="Personal highlights"
+              >
+                <div className="mb-3 flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wider text-subtle">
+                  <Highlighter className="size-3" strokeWidth={2} />
+                  Highlights
+                </div>
+                <ul className="space-y-3">
+                  {highlightsQuery.data.map((highlight) => (
+                    <li key={highlight.id} className="border-l-2 border-accent pl-3">
+                      <div className="flex items-start justify-between gap-3">
+                        <p className="text-[13px] leading-snug text-foreground">
+                          {highlight.highlighted_text}
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => deleteHighlightMutation.mutate(highlight.id)}
+                          className="inline-flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-surface hover:text-foreground"
+                          aria-label="Delete highlight"
+                        >
+                          <XIcon className="size-3.5" />
+                        </button>
+                      </div>
+                      {highlight.note ? (
+                        <p className="mt-1 text-[12px] leading-snug text-muted-foreground">
+                          {highlight.note}
+                        </p>
+                      ) : null}
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            ) : null}
           </article>
         </div>
       </div>
@@ -836,14 +911,27 @@ export function ArticlePage() {
         document.body
       )}
       {selectedShareText ? (
-        <button
-          type="button"
-          onClick={handleShareSelected}
-          className="fixed bottom-20 left-1/2 z-30 inline-flex -translate-x-1/2 items-center gap-2 rounded-md border border-border bg-background px-3 py-2 text-sm font-medium text-foreground shadow-lg hover:bg-surface"
-        >
-          <Highlighter className="size-4" strokeWidth={1.75} />
-          Share selected text
-        </button>
+        <div className="fixed bottom-20 left-1/2 z-30 flex -translate-x-1/2 items-center gap-2 rounded-md border border-border bg-background p-1 shadow-lg">
+          {!shareId ? (
+            <button
+              type="button"
+              onClick={handleHighlightSelected}
+              className="inline-flex items-center gap-2 rounded px-3 py-2 text-sm font-medium text-foreground hover:bg-surface"
+            >
+              <Highlighter className="size-4" strokeWidth={1.75} />
+              Highlight
+            </button>
+          ) : null}
+          <button
+            type="button"
+            onClick={handleShareSelected}
+            aria-label="Share selected text"
+            className="inline-flex items-center gap-2 rounded px-3 py-2 text-sm font-medium text-foreground hover:bg-surface"
+          >
+            <Share2 className="size-4" strokeWidth={1.75} />
+            Share
+          </button>
+        </div>
       ) : null}
       <ShareDialog
         open={shareOpen}

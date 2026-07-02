@@ -443,6 +443,19 @@ POSTGRES_MULTIUSER_SCHEMA = [
     "CREATE INDEX IF NOT EXISTS idx_share_annotations_share"
     " ON share_annotations(share_id, created_at)",
     """
+    CREATE TABLE IF NOT EXISTS article_highlights (
+      id               BIGSERIAL PRIMARY KEY,
+      user_id          INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      article_id       BIGINT NOT NULL REFERENCES articles(id) ON DELETE CASCADE,
+      highlighted_text TEXT NOT NULL,
+      offset_chars     INTEGER NOT NULL DEFAULT 0,
+      note             TEXT,
+      created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_article_highlights_user_article"
+    " ON article_highlights(user_id, article_id, created_at)",
+    """
     CREATE TABLE IF NOT EXISTS share_messages (
       id          BIGSERIAL PRIMARY KEY,
       share_id    BIGINT NOT NULL REFERENCES article_shares(id) ON DELETE CASCADE,

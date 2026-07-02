@@ -150,6 +150,28 @@ describe('article list endpoints', () => {
     expect(calls[0].url).toBe('/api/articles/7/body');
   });
 
+  it('creates and deletes article highlights through article-scoped paths', async () => {
+    const { calls } = stubFetch(() => jsonOk({ id: 3 }));
+    await api.createArticleHighlight(7, {
+      highlighted_text: 'Important passage',
+      offset_chars: 12,
+      note: 'Remember this',
+    });
+    await api.deleteArticleHighlight(7, 3);
+
+    expect(calls[0].url).toBe('/api/articles/7/highlights');
+    expect(calls[0].init?.method).toBe('POST');
+    expect(calls[0].init?.body).toBe(
+      JSON.stringify({
+        highlighted_text: 'Important passage',
+        offset_chars: 12,
+        note: 'Remember this',
+      })
+    );
+    expect(calls[1].url).toBe('/api/articles/7/highlights/3');
+    expect(calls[1].init?.method).toBe('DELETE');
+  });
+
   it('fetchSharedArticle hits the share-scoped article path', async () => {
     const { calls } = stubFetch(() => jsonOk({ id: 7 }));
     const a = await api.fetchSharedArticle(42);

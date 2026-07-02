@@ -878,6 +878,53 @@ def article_audio(
     return FileResponse(path, media_type="audio/mpeg", filename=f"article-{article_id}.mp3")
 
 
+@api.get("/api/articles/{article_id}/highlights")
+def list_article_highlights(
+    article_id: int,
+    current_user: Annotated[dict[str, Any], Depends(require_auth)],
+) -> dict[str, Any]:
+    from news_dashboard.personal_highlights import list_highlights
+
+    highlights = list_highlights(article_id, current_user["id"])
+    if highlights is None:
+        raise HTTPException(status_code=404, detail="article not found")
+    return {"items": highlights}
+
+
+@api.post("/api/articles/{article_id}/highlights")
+def add_article_highlight(
+    article_id: int,
+    payload: AddAnnotationRequest,
+    current_user: Annotated[dict[str, Any], Depends(require_auth)],
+) -> dict[str, Any]:
+    from news_dashboard.personal_highlights import add_highlight
+
+    highlight = add_highlight(
+        article_id,
+        current_user["id"],
+        highlighted_text=payload.highlighted_text,
+        offset_chars=payload.offset_chars,
+        note=payload.note,
+    )
+    if highlight is None:
+        raise HTTPException(status_code=404, detail="article not found")
+    return highlight
+
+
+@api.delete("/api/articles/{article_id}/highlights/{highlight_id}")
+def delete_article_highlight(
+    article_id: int,
+    highlight_id: int,
+    current_user: Annotated[dict[str, Any], Depends(require_auth)],
+) -> dict[str, bool]:
+    from news_dashboard.personal_highlights import delete_highlight
+
+    deleted = delete_highlight(article_id, current_user["id"], highlight_id)
+    if deleted is None:
+        raise HTTPException(status_code=404, detail="article not found")
+    return {"ok": deleted}
+
+
 @api.get("/api/articles/{article_id}/insights")
 def article_insights(
     article_id: int,
