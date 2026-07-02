@@ -22,6 +22,32 @@ class TestVersionConsistency(unittest.TestCase):
         )
 
 
+class TestReadmeVersionBadge(unittest.TestCase):
+    """The version lives in git tags, never committed (see scripts/next_version.sh).
+
+    A hardcoded ``version-X.Y.Z`` shields badge in the README therefore goes stale
+    on the next push to main. Require the badge to be the dynamic tag-based image
+    so it can never drift from the actual released version.
+    """
+
+    def test_readme_has_no_hardcoded_version_badge(self) -> None:
+        readme = (ROOT / "README.md").read_text()
+        m = re.search(r"img\.shields\.io/badge/version-\d+\.\d+\.\d+", readme)
+        assert m is None, (
+            "README.md pins a hardcoded version badge "
+            f"({m.group(0) if m else ''}); use the dynamic github/v/tag badge instead"
+        )
+
+    def test_readme_uses_dynamic_tag_badge(self) -> None:
+        readme = (ROOT / "README.md").read_text()
+        assert "img.shields.io/github/v/tag/lihor-hub/news-dashboard" in readme, (
+            "README.md should use the dynamic github/v/tag version badge"
+        )
+        assert "filter=v*" in readme, (
+            "README version badge must filter to v* tags (exclude android-/desktop- tags)"
+        )
+
+
 class TestNoPrivatePersonalPhrases(unittest.TestCase):
     _FORBIDDEN: ClassVar[list[str]] = ["private personal", "for Ioachim"]
     _EXTENSIONS: ClassVar[set[str]] = {".py", ".md", ".toml", ".ts", ".tsx", ".txt", ".rst"}

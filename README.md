@@ -3,7 +3,7 @@
 [![CI](https://github.com/lihor-hub/news-dashboard/actions/workflows/ci.yml/badge.svg)](https://github.com/lihor-hub/news-dashboard/actions/workflows/ci.yml)
 [![Coverage Status](https://codecov.io/gh/lihor-hub/news-dashboard/branch/main/graph/badge.svg)](https://app.codecov.io/gh/lihor-hub/news-dashboard)
 [![CodeQL](https://github.com/lihor-hub/news-dashboard/actions/workflows/codeql.yml/badge.svg)](https://github.com/lihor-hub/news-dashboard/actions/workflows/codeql.yml)
-[![Version](https://img.shields.io/badge/version-1.21.0-blue)](CHANGELOG.md)
+[![Version](https://img.shields.io/github/v/tag/lihor-hub/news-dashboard?filter=v*&sort=semver&label=version&color=blue)](https://github.com/lihor-hub/news-dashboard/releases/latest)
 [![License: MIT](https://img.shields.io/github/license/lihor-hub/news-dashboard)](LICENSE)
 
 Self-hosted technical news inbox for curated feeds, article triage, source
