@@ -1,12 +1,14 @@
 import type {
   AdminAnalytics,
   AdminAiQuality,
-  AiMemory,
   AgentActionPlanResponse,
   AgentActionRun,
+  AiMemory,
   AiWatchlist,
   AiWatchlistMatch,
   AiWatchlistNudge,
+  AnalyticsSettings,
+  AnalyticsSettingsUpdate,
   Article,
   ArticleCountsResult,
   ArticleHighlight,
@@ -703,6 +705,21 @@ export async function unsubscribePush(endpoint?: string): Promise<{ unsubscribed
   return requestJson('/api/notifications/subscribe', {
     method: 'DELETE',
     body: endpoint ? JSON.stringify({ endpoint }) : undefined,
+  });
+}
+
+// ── Analytics (privacy) settings ───────────────────────────────────────────────
+
+export async function fetchAnalyticsSettings(): Promise<AnalyticsSettings> {
+  return requestJson<AnalyticsSettings>('/api/settings/analytics');
+}
+
+export async function updateAnalyticsSettings(
+  update: AnalyticsSettingsUpdate
+): Promise<AnalyticsSettings> {
+  return requestJson('/api/settings/analytics', {
+    method: 'PUT',
+    body: JSON.stringify(update),
   });
 }
 

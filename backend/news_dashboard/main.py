@@ -39,6 +39,7 @@ from starlette.responses import Response as StarletteResponse
 from news_dashboard.analytics import (
     MAX_EVENTS_PER_BATCH,
     admin_analytics,
+    analytics_globally_enabled,
     reading_dna,
     record_events,
 )
@@ -2796,6 +2797,38 @@ def update_notification_settings(
         "recap_enabled": bool(row["recap_enabled"]),
         "recap_day": row["recap_day"] or "mon",
     }
+
+
+class AnalyticsSettingsUpdate(BaseModel):
+    enabled: bool
+
+
+@api.get("/api/settings/analytics")
+def get_analytics_settings(
+    current_user: Annotated[dict[str, Any], Depends(require_auth)],
+) -> dict[str, Any]:
+    with connect() as conn:
+        row = conn.execute(
+            "SELECT analytics_enabled FROM users WHERE id = %s",
+            (current_user["id"],),
+        ).fetchone()
+    return {
+        "enabled": bool(row["analytics_enabled"]) if row else True,
+        "global_enabled": analytics_globally_enabled(),
+    }
+
+
+@api.put("/api/settings/analytics")
+def update_analytics_settings(
+    current_user: Annotated[dict[str, Any], Depends(require_auth)],
+    payload: AnalyticsSettingsUpdate,
+) -> dict[str, Any]:
+    with connect() as conn:
+        conn.execute(
+            "UPDATE users SET analytics_enabled = %s WHERE id = %s",
+            (payload.enabled, current_user["id"]),
+        )
+    return {"enabled": payload.enabled, "global_enabled": analytics_globally_enabled()}
 
 
 @api.post("/api/notifications/subscribe")

@@ -175,7 +175,8 @@ def verify_session_token(token: str) -> dict[str, Any] | None:
 def get_user_by_id(user_id: int) -> dict[str, Any] | None:
     with connect() as conn:
         row = conn.execute(
-            "SELECT id, username, email, is_admin, is_guest, created_at, last_login_at "
+            "SELECT id, username, email, is_admin, is_guest, created_at, last_login_at, "
+            "analytics_enabled "
             "FROM users WHERE id=%s",
             (user_id,),
         ).fetchone()

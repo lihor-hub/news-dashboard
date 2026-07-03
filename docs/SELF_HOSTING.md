@@ -151,6 +151,12 @@ See the [README Configuration section](../README.md#configuration) for the compl
 | `SENTRY_ENVIRONMENT` | Environment tag attached to backend events (e.g. `staging`, `production`). Defaults to `production` when `SENTRY_DSN` is set. |
 | `SENTRY_DSN_FRONTEND` | Frontend error tracking. Served to the SPA via `GET /api/config`; safe to expose since Sentry DSNs are send-only. Off by default. |
 
+### Privacy
+
+| Variable | Description |
+|----------|-------------|
+| `ANALYTICS_ENABLED` | Instance-wide analytics kill switch. Set to `false` to stop ingesting `user_events` (route views, time-on-app, article dwell, feature usage) for every user regardless of their individual preference. Defaults to `true`. Users can additionally opt out for themselves from Settings → Privacy, enforced server-side in `POST /api/events`. |
+
 ### Optional Security
 
 | Variable | Description |

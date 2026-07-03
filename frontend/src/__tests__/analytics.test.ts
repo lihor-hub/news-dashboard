@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   flush,
+  setAnalyticsAllowed,
   startAnalytics,
   stopAnalytics,
   trackArticleClose,
@@ -16,6 +17,7 @@ describe('analytics tracker', () => {
   beforeEach(() => {
     fetchMock = vi.fn().mockResolvedValue({ ok: true });
     vi.stubGlobal('fetch', fetchMock);
+    setAnalyticsAllowed(true);
   });
 
   afterEach(() => {
@@ -75,6 +77,63 @@ describe('analytics tracker', () => {
   });
 });
 
+describe('analytics opt-out gating', () => {
+  let fetchMock: ReturnType<typeof vi.fn>;
+
+  beforeEach(() => {
+    fetchMock = vi.fn().mockResolvedValue({ ok: true });
+    vi.stubGlobal('fetch', fetchMock);
+  });
+
+  afterEach(() => {
+    setAnalyticsAllowed(true);
+    flush();
+    vi.unstubAllGlobals();
+  });
+
+  it('drops route/feature/article events when disallowed', () => {
+    setAnalyticsAllowed(false);
+    trackRoute('/today');
+    trackFeature('ask');
+    trackArticleOpen(1);
+    trackArticleClose(1);
+    flush();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('resumes sending events once re-allowed', () => {
+    setAnalyticsAllowed(false);
+    trackRoute('/today');
+    setAnalyticsAllowed(true);
+    trackRoute('/settings');
+    flush();
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const init = fetchMock.mock.calls[0][1] as RequestInit;
+    const { events } = JSON.parse(init.body as string) as { events: { route?: string }[] };
+    expect(events).toEqual([{ type: 'route', route: '/settings' }]);
+  });
+
+  it('drops any queued events when turned off', () => {
+    setAnalyticsAllowed(true);
+    trackRoute('/today');
+    setAnalyticsAllowed(false);
+    flush();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('does not start timers when disallowed', () => {
+    vi.stubEnv('MODE', 'production');
+    setAnalyticsAllowed(false);
+    startAnalytics();
+    trackRoute('/today');
+    flush();
+    expect(fetchMock).not.toHaveBeenCalled();
+    stopAnalytics();
+    vi.unstubAllEnvs();
+  });
+});
+
 describe('analytics pagehide lifecycle', () => {
   let fetchMock: ReturnType<typeof vi.fn>;
   const registered: EventListener[] = [];
@@ -86,6 +145,7 @@ describe('analytics pagehide lifecycle', () => {
     fetchMock = vi.fn().mockResolvedValue({ ok: true });
     vi.stubGlobal('fetch', fetchMock);
     vi.stubEnv('MODE', 'production');
+    setAnalyticsAllowed(true);
     registered.length = 0;
     unregistered.length = 0;
     origAdd = window.addEventListener.bind(window);
