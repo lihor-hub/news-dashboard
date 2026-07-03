@@ -216,25 +216,38 @@ def pg_url() -> Generator[str]:
         container.stop()
 
 
-@pytest.fixture
-def pg_clean(pg_url: str) -> str:
-    """Truncate all test-managed tables and return the DB URL.
+def truncate_all_tables(database_url: str) -> None:
+    """Truncate every table in the ``public`` schema and reset identities.
 
+    Tables are discovered dynamically rather than hardcoded: a hand-maintained
+    list silently drifts out of sync as the schema grows, leaking rows between
+    tests (this happened — see the ``fix/pg-clean-dynamic-truncate`` fix).
     ``RESTART IDENTITY CASCADE`` resets serial sequences and propagates
-    truncation to child tables via FK constraints, giving each test a
-    fully clean slate without needing a separate container per test.
+    truncation to child tables via FK constraints, giving each test a fully
+    clean slate without needing a separate container per test.
     """
     import psycopg
+    from psycopg import sql
 
-    init_db(database_url=pg_url)
-    with psycopg.connect(pg_url, autocommit=True) as conn:
+    with psycopg.connect(database_url, autocommit=True) as conn:
+        tables = [
+            row[0]
+            for row in conn.execute(
+                "SELECT tablename FROM pg_tables WHERE schemaname = 'public'"
+            ).fetchall()
+        ]
+        if not tables:
+            return
         conn.execute(
-            "TRUNCATE user_article_recommendations, user_article_state, user_sources,"
-            " user_interest_profiles, user_settings, user_push_subscriptions,"
-            " article_highlights, article_shares, user_events, user_achievements,"
-            " briefing_articles, briefings, ingest_run_sources, ingest_runs,"
-            " scheduled_job_runs, article_tags, user_tags,"
-            " articles, sources, users"
-            " RESTART IDENTITY CASCADE"
+            sql.SQL("TRUNCATE {} RESTART IDENTITY CASCADE").format(
+                sql.SQL(", ").join(sql.Identifier(t) for t in tables)
+            )
         )
+
+
+@pytest.fixture
+def pg_clean(pg_url: str) -> str:
+    """Truncate every table in the schema and return the DB URL."""
+    init_db(database_url=pg_url)
+    truncate_all_tables(pg_url)
     return pg_url
