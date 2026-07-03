@@ -1,7 +1,14 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import type { EntityType, KnowledgeGraphEdge, KnowledgeGraphResponse } from '@/types';
+import type {
+  EntityType,
+  KnowledgeGraphEdge,
+  KnowledgeGraphNode,
+  KnowledgeGraphResponse,
+} from '@/types';
 import { forceLayout } from '@/lib/forceLayout';
+import type { ForcePoint } from '@/lib/forceLayout';
+import { useInteractiveViewport } from '@/lib/useInteractiveViewport';
 import { cn } from '@/lib/utils';
 
 const CANVAS_W = 800;
@@ -18,6 +25,9 @@ function nodeRadius(count: number): number {
   return 6 + 3 * Math.sqrt(count);
 }
 
+/** Generous upper bound for margin so nodes never clip at the SVG boundary */
+const MAX_RADIUS = nodeRadius(50);
+
 function isIncident(edge: KnowledgeGraphEdge, nodeId: string): boolean {
   return edge.source === nodeId || edge.target === nodeId;
 }
@@ -29,13 +39,105 @@ interface KnowledgeGraphProps {
 export function KnowledgeGraph({ graph }: KnowledgeGraphProps) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
-  const layout = useMemo(
-    () => forceLayout(graph.nodes, graph.edges, CANVAS_W, CANVAS_H),
-    [graph.nodes, graph.edges]
+  // Mutable positions map (starts from forceLayout, updated by drag)
+  const [positions, setPositions] = useState<Map<string, ForcePoint>>(() =>
+    forceLayout(graph.nodes, graph.edges, CANVAS_W, CANVAS_H, MAX_RADIUS)
   );
 
+  // Re-run layout when graph data identity changes
+  useEffect(() => {
+    setPositions(forceLayout(graph.nodes, graph.edges, CANVAS_W, CANVAS_H, MAX_RADIUS));
+  }, [graph.nodes, graph.edges]);
+
+  const { viewport, svgRef, svgProps, isPanning, resetViewport } = useInteractiveViewport({
+    width: CANVAS_W,
+    height: CANVAS_H,
+  });
+
+  // Track which node is being dragged (null = none) — kept in state so cursor updates
+  const [draggingNodeId, setDraggingNodeId] = useState<string | null>(null);
+
+  // Mutable drag-start data (not state — no re-render needed on update)
+  const dragData = useRef<{
+    startClientX: number;
+    startClientY: number;
+    startX: number;
+    startY: number;
+  } | null>(null);
+
+  const handleNodeMouseDown = useCallback(
+    (e: React.MouseEvent<SVGCircleElement>, nodeId: string) => {
+      e.stopPropagation();
+      const p = positions.get(nodeId);
+      if (!p) return;
+      dragData.current = {
+        startClientX: e.clientX,
+        startClientY: e.clientY,
+        startX: p.x,
+        startY: p.y,
+      };
+      setDraggingNodeId(nodeId);
+    },
+    [positions]
+  );
+
+  const handleSvgMouseMove = useCallback(
+    (e: React.MouseEvent<SVGSVGElement>) => {
+      if (dragData.current && draggingNodeId !== null) {
+        e.stopPropagation();
+        const svg = svgRef.current;
+        if (!svg) return;
+        const rect = svg.getBoundingClientRect();
+        const scaleX = CANVAS_W / rect.width;
+        const scaleY = CANVAS_H / rect.height;
+        const dx = ((e.clientX - dragData.current.startClientX) * scaleX) / viewport.scale;
+        const dy = ((e.clientY - dragData.current.startClientY) * scaleY) / viewport.scale;
+        const newX = Math.max(
+          MAX_RADIUS,
+          Math.min(CANVAS_W - MAX_RADIUS, dragData.current.startX + dx)
+        );
+        const newY = Math.max(
+          MAX_RADIUS,
+          Math.min(CANVAS_H - MAX_RADIUS, dragData.current.startY + dy)
+        );
+        setPositions((prev) => {
+          const next = new Map(prev);
+          next.set(draggingNodeId, { x: newX, y: newY });
+          return next;
+        });
+      } else {
+        svgProps.onMouseMove(e);
+      }
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [draggingNodeId, svgProps, viewport.scale]
+  );
+
+  const handleSvgMouseUp = useCallback(() => {
+    if (draggingNodeId !== null) {
+      dragData.current = null;
+      setDraggingNodeId(null);
+    } else {
+      svgProps.onMouseUp();
+    }
+  }, [draggingNodeId, svgProps]);
+
+  const handleSvgMouseLeave = useCallback(() => {
+    if (draggingNodeId !== null) {
+      dragData.current = null;
+      setDraggingNodeId(null);
+    } else {
+      svgProps.onMouseLeave();
+    }
+  }, [draggingNodeId, svgProps]);
+
+  const handleNodeClick = useCallback((e: React.MouseEvent, nodeId: string) => {
+    e.stopPropagation();
+    setSelectedId((prev) => (prev === nodeId ? null : nodeId));
+  }, []);
+
   const selected = useMemo(
-    () => graph.nodes.find((n) => n.id === selectedId) ?? null,
+    () => graph.nodes.find((n: KnowledgeGraphNode) => n.id === selectedId) ?? null,
     [graph.nodes, selectedId]
   );
 
@@ -57,63 +159,109 @@ export function KnowledgeGraph({ graph }: KnowledgeGraphProps) {
     );
   }
 
+  const isDraggingNode = draggingNodeId !== null;
+  const cursorClass = isDraggingNode || isPanning ? 'cursor-grabbing' : 'cursor-grab';
+  const transform = `translate(${viewport.tx} ${viewport.ty}) scale(${viewport.scale})`;
+
   return (
     <div className="flex flex-col gap-3">
-      <svg viewBox={`0 0 ${CANVAS_W} ${CANVAS_H}`} className="h-auto w-full" role="img">
-        <title>Knowledge graph of entities in recent news</title>
-        {graph.edges.map((edge) => {
-          const a = layout.get(edge.source);
-          const b = layout.get(edge.target);
-          if (!a || !b) return null;
-          const dimmed = selectedId !== null && !isIncident(edge, selectedId);
-          return (
-            <line
-              key={`${edge.source}--${edge.target}`}
-              data-testid="kg-edge"
-              x1={a.x}
-              y1={a.y}
-              x2={b.x}
-              y2={b.y}
-              strokeWidth={Math.min(1 + edge.weight, 6)}
-              className={cn('stroke-primary/30', dimmed && 'stroke-primary/10')}
-            />
-          );
-        })}
-        {graph.nodes.map((node) => {
-          const p = layout.get(node.id);
-          if (!p) return null;
-          const dimmed = selectedId !== null && selectedId !== node.id;
-          return (
-            <g key={node.id}>
-              <circle
-                data-testid="kg-node"
-                data-entity={node.id}
-                cx={p.x}
-                cy={p.y}
-                r={nodeRadius(node.count)}
-                fill={TYPE_COLORS[node.type]}
-                fillOpacity={dimmed ? 0.3 : 0.85}
-                className="cursor-pointer stroke-background stroke-[1.5] transition-all"
-                onClick={() => setSelectedId((prev) => (prev === node.id ? null : node.id))}
-              >
-                <title>{`${node.name} — ${node.count} article${node.count !== 1 ? 's' : ''}`}</title>
-              </circle>
-              <text
-                x={p.x}
-                y={p.y - nodeRadius(node.count) - 4}
-                textAnchor="middle"
-                className={cn(
-                  'pointer-events-none select-none fill-foreground text-[11px] font-medium',
-                  dimmed && 'opacity-30'
-                )}
-              >
-                {node.name}
-              </text>
-            </g>
-          );
-        })}
-      </svg>
+      {/* Graph canvas */}
+      <div className="relative overflow-hidden rounded-lg border border-border bg-surface-2">
+        <svg
+          ref={svgRef}
+          viewBox={`0 0 ${CANVAS_W} ${CANVAS_H}`}
+          className={cn('h-auto w-full', cursorClass)}
+          role="img"
+          onMouseDown={svgProps.onMouseDown}
+          onMouseMove={handleSvgMouseMove}
+          onMouseUp={handleSvgMouseUp}
+          onMouseLeave={handleSvgMouseLeave}
+          onWheel={svgProps.onWheel}
+        >
+          <title>Knowledge graph of entities in recent news</title>
+          {/* Transparent backdrop to capture pan clicks */}
+          <rect x={0} y={0} width={CANVAS_W} height={CANVAS_H} fill="transparent" />
 
+          <g transform={transform}>
+            {graph.edges.map((edge) => {
+              const a = positions.get(edge.source);
+              const b = positions.get(edge.target);
+              if (!a || !b) return null;
+              const dimmed = selectedId !== null && !isIncident(edge, selectedId);
+              return (
+                <line
+                  key={`${edge.source}--${edge.target}`}
+                  data-testid="kg-edge"
+                  x1={a.x}
+                  y1={a.y}
+                  x2={b.x}
+                  y2={b.y}
+                  strokeWidth={Math.min(1 + edge.weight, 6)}
+                  className={cn('stroke-primary/30', dimmed && 'stroke-primary/10')}
+                />
+              );
+            })}
+            {graph.nodes.map((node: KnowledgeGraphNode) => {
+              const p = positions.get(node.id);
+              if (!p) return null;
+              const dimmed = selectedId !== null && selectedId !== node.id;
+              const r = nodeRadius(node.count);
+              const isThisNodeDragging = draggingNodeId === node.id;
+              return (
+                <g key={node.id}>
+                  <circle
+                    data-testid="kg-node"
+                    data-entity={node.id}
+                    cx={p.x}
+                    cy={p.y}
+                    r={r}
+                    fill={TYPE_COLORS[node.type]}
+                    fillOpacity={dimmed ? 0.3 : 0.85}
+                    className={cn(
+                      'stroke-background stroke-[1.5] transition-opacity',
+                      isThisNodeDragging ? 'cursor-grabbing' : 'cursor-pointer hover:stroke-[2.5]'
+                    )}
+                    onMouseDown={(e) => handleNodeMouseDown(e, node.id)}
+                    onClick={(e) => handleNodeClick(e, node.id)}
+                  >
+                    <title>{`${node.name} — ${node.count} article${node.count !== 1 ? 's' : ''}`}</title>
+                  </circle>
+                  <text
+                    x={p.x}
+                    y={p.y - r - 4}
+                    textAnchor="middle"
+                    className={cn(
+                      'pointer-events-none select-none fill-foreground text-[11px] font-medium',
+                      dimmed && 'opacity-30'
+                    )}
+                  >
+                    {node.name}
+                  </text>
+                </g>
+              );
+            })}
+          </g>
+        </svg>
+
+        {/* Controls overlay */}
+        <div className="absolute bottom-2 right-2 flex gap-1">
+          <button
+            type="button"
+            title="Reset view"
+            onClick={resetViewport}
+            className="rounded-md bg-background/80 px-2 py-1 text-[11px] font-medium text-muted-foreground shadow-sm backdrop-blur hover:text-foreground"
+          >
+            Reset
+          </button>
+        </div>
+
+        {/* Hint */}
+        <p className="absolute bottom-2 left-2 select-none text-[10px] text-muted-foreground/50">
+          Scroll to zoom · Drag background to pan · Drag node to move
+        </p>
+      </div>
+
+      {/* Legend */}
       <div className="flex flex-wrap gap-x-4 gap-y-1">
         {(Object.keys(TYPE_COLORS) as EntityType[]).map((type) => (
           <span key={type} className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
@@ -126,6 +274,7 @@ export function KnowledgeGraph({ graph }: KnowledgeGraphProps) {
         ))}
       </div>
 
+      {/* Selected node detail */}
       {selected && (
         <div className="rounded-xl border border-border bg-surface-2 p-4">
           <h3 className="text-sm font-semibold">
