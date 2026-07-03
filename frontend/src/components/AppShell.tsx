@@ -13,8 +13,8 @@ import { useWhatsNew } from '@/hooks/useWhatsNew';
 import { useOnboardingWizard } from '@/hooks/useOnboardingWizard';
 import { useElectronBriefNotifier } from '@/hooks/useElectronBriefNotifier';
 import { cn } from '@/lib/utils';
-import { fetchSummary, fetchSharesUnreadCount, logoutUser } from '@/api';
-import { startAnalytics, stopAnalytics, trackRoute } from '@/lib/analytics';
+import { fetchSummary, fetchSharesUnreadCount, fetchAnalyticsSettings, logoutUser } from '@/api';
+import { startAnalytics, stopAnalytics, trackRoute, setAnalyticsAllowed } from '@/lib/analytics';
 import { useAuth } from '@/contexts/auth';
 import {
   getPageTitle,
@@ -167,8 +167,21 @@ export function AppShell() {
   }
 
   useEffect(() => {
-    startAnalytics();
-    return () => stopAnalytics();
+    let cancelled = false;
+    void (async () => {
+      try {
+        const settings = await fetchAnalyticsSettings();
+        if (!cancelled) setAnalyticsAllowed(settings.enabled && settings.global_enabled);
+      } catch {
+        // Analytics preference unknown — stay disabled rather than send by default.
+        return;
+      }
+      if (!cancelled) startAnalytics();
+    })();
+    return () => {
+      cancelled = true;
+      stopAnalytics();
+    };
   }, []);
 
   useEffect(() => {

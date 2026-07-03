@@ -354,6 +354,15 @@ export interface NotificationSettingsUpdate {
   recap_day?: string;
 }
 
+export interface AnalyticsSettings {
+  enabled: boolean;
+  global_enabled: boolean;
+}
+
+export interface AnalyticsSettingsUpdate {
+  enabled: boolean;
+}
+
 export interface PushSubscribeRequest {
   endpoint: string;
   p256dh: string;

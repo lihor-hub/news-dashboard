@@ -24,10 +24,29 @@ let flushTimer: ReturnType<typeof setInterval> | null = null;
 let lastBeatAt = Date.now();
 let started = false;
 
+// Gate on the user's analytics preference (and any instance-wide kill switch), fetched
+// from GET /api/settings/analytics. Defaults to disallowed so nothing is sent before the
+// preference is known.
+let allowed = false;
+
 // Open articles mapped to the timestamp they were opened, for dwell on close.
 const openArticles = new Map<number, number>();
 
+/**
+ * Enable or disable telemetry collection. Disabling drops any queued, unsent events and
+ * stops active timers — the caller (AppShell) re-derives this from the user's saved
+ * preference and the instance-wide `ANALYTICS_ENABLED` flag.
+ */
+export function setAnalyticsAllowed(next: boolean): void {
+  allowed = next;
+  if (!allowed) {
+    queue = [];
+    stopAnalytics();
+  }
+}
+
 function enqueue(event: AnalyticsEvent): void {
+  if (!allowed) return;
   queue.push(event);
   if (queue.length >= 50) flush();
 }
@@ -106,7 +125,9 @@ function handlePageHide(): void {
 export function startAnalytics(): void {
   // Never emit telemetry under the test runner — it would issue real network
   // calls from any component test that mounts the app shell.
-  if (started || typeof window === 'undefined' || import.meta.env.MODE === 'test') return;
+  if (started || !allowed || typeof window === 'undefined' || import.meta.env.MODE === 'test') {
+    return;
+  }
   started = true;
   lastBeatAt = Date.now();
   heartbeatTimer = setInterval(beat, HEARTBEAT_MS);

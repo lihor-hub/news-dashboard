@@ -9,6 +9,7 @@ previous heartbeat; sessions are derived from gaps between heartbeats at query t
 from __future__ import annotations
 
 import logging
+import os
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
@@ -28,14 +29,43 @@ MAX_HEARTBEAT_MS = 5 * 60 * 1000
 SESSION_GAP_SECONDS = 30 * 60
 
 
+def analytics_globally_enabled() -> bool:
+    """Instance-wide analytics kill switch; defaults to enabled when unset."""
+    value = os.environ.get("ANALYTICS_ENABLED")
+    if value is None:
+        return True
+    return value.strip().lower() not in {"0", "false", "no", "off"}
+
+
+def _user_analytics_enabled(
+    user_id: int,
+    db_path: Path | str | None,
+    database_url: str | None,
+) -> bool:
+    with connect(db_path, database_url=database_url) as conn:
+        row = conn.execute(
+            "SELECT analytics_enabled FROM users WHERE id = %s", (user_id,)
+        ).fetchone()
+    return bool(row["analytics_enabled"]) if row else True
+
+
 def record_events(
     user_id: int,
     events: list[dict[str, Any]],
     db_path: Path | str | None = None,
     database_url: str | None = None,
 ) -> int:
-    """Bulk-insert validated telemetry events for ``user_id``; return the count stored."""
+    """Bulk-insert validated telemetry events for ``user_id``; return the count stored.
+
+    Stores nothing when analytics are disabled globally or for this user — this is the
+    authoritative enforcement point, so a modified client cannot bypass the opt-out.
+    """
     init_db(db_path, database_url=database_url)
+    if not analytics_globally_enabled():
+        return 0
+    if not _user_analytics_enabled(user_id, db_path, database_url):
+        return 0
+
     rows: list[tuple[int, str, str | None, int | None, str | None, int | None]] = []
     for event in events[:MAX_EVENTS_PER_BATCH]:
         event_type = str(event.get("type") or "")

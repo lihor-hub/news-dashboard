@@ -9,6 +9,7 @@ from fastapi.testclient import TestClient
 from news_dashboard.analytics import (
     MAX_EVENTS_PER_BATCH,
     admin_analytics,
+    analytics_globally_enabled,
     prune_old_events,
     record_events,
 )
@@ -179,3 +180,92 @@ def test_admin_analytics_empty_db(pg_clean: str) -> None:
     assert result["summary"]["mau"] == 0
     assert result["summary"]["stickiness"] == 0.0
     assert result["users"] == []
+
+
+def test_analytics_globally_enabled_defaults_true(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("ANALYTICS_ENABLED", raising=False)
+    assert analytics_globally_enabled() is True
+
+
+@pytest.mark.parametrize("value", ["false", "0", "no", "off", "False", " FALSE "])
+def test_analytics_globally_enabled_recognizes_falsy_values(
+    value: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("ANALYTICS_ENABLED", value)
+    assert analytics_globally_enabled() is False
+
+
+def test_record_events_dropped_when_globally_disabled(
+    pg_clean: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _seed(pg_clean)
+    monkeypatch.setenv("ANALYTICS_ENABLED", "false")
+
+    stored = record_events(1, [{"type": "route", "route": "/today"}], database_url=pg_clean)
+
+    assert stored == 0
+    with connect(database_url=pg_clean) as conn:
+        total = conn.execute("SELECT COUNT(*) AS n FROM user_events").fetchone()["n"]
+    assert total == 0
+
+
+def test_record_events_dropped_when_user_opted_out(pg_clean: str) -> None:
+    _seed(pg_clean)
+    with connect(database_url=pg_clean) as conn:
+        conn.execute("UPDATE users SET analytics_enabled = FALSE WHERE id = 1")
+
+    stored = record_events(1, [{"type": "route", "route": "/today"}], database_url=pg_clean)
+
+    assert stored == 0
+    with connect(database_url=pg_clean) as conn:
+        total = conn.execute("SELECT COUNT(*) AS n FROM user_events").fetchone()["n"]
+    assert total == 0
+
+
+def test_record_events_stored_when_enabled(pg_clean: str) -> None:
+    _seed(pg_clean)
+
+    stored = record_events(1, [{"type": "route", "route": "/today"}], database_url=pg_clean)
+
+    assert stored == 1
+
+
+def test_get_analytics_settings_defaults_enabled(client: TestClient, pg_clean: str) -> None:
+    _seed(pg_clean)
+
+    response = client.get("/api/settings/analytics")
+
+    assert response.status_code == 200
+    assert response.json() == {"enabled": True, "global_enabled": True}
+
+
+def test_put_analytics_settings_persists_opt_out(client: TestClient, pg_clean: str) -> None:
+    _seed(pg_clean)
+
+    response = client.put("/api/settings/analytics", json={"enabled": False})
+
+    assert response.status_code == 200
+    assert response.json() == {"enabled": False, "global_enabled": True}
+
+    with connect(database_url=pg_clean) as conn:
+        row = conn.execute("SELECT analytics_enabled FROM users WHERE id = 1").fetchone()
+    assert row["analytics_enabled"] is False
+
+    # A subsequent GET reflects the persisted opt-out.
+    follow_up = client.get("/api/settings/analytics")
+    assert follow_up.json() == {"enabled": False, "global_enabled": True}
+
+
+def test_put_analytics_settings_then_events_endpoint_drops_rows(
+    client: TestClient, pg_clean: str
+) -> None:
+    _seed(pg_clean)
+    client.put("/api/settings/analytics", json={"enabled": False})
+
+    response = client.post("/api/events", json={"events": [{"type": "route", "route": "/today"}]})
+
+    assert response.status_code == 200
+    assert response.json() == {"stored": 0}
+    with connect(database_url=pg_clean) as conn:
+        total = conn.execute("SELECT COUNT(*) AS n FROM user_events").fetchone()["n"]
+    assert total == 0
