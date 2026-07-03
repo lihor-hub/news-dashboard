@@ -335,6 +335,14 @@ DEFAULT_SOURCES: list[SourceDefinition] = [
         priority=70,
         interest_tags=("cloud", "infra", "security"),
     ),
+    SourceDefinition(
+        "web-dev-blog",
+        "web.dev Blog",
+        "https://web.dev/feed.xml",
+        "web",
+        priority=70,
+        interest_tags=("web", "frontend", "performance"),
+    ),
     # ── Engineering ──────────────────────────────────────────────────────────
     SourceDefinition(
         "pragmatic-engineer",
