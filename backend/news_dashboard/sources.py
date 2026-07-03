@@ -368,6 +368,15 @@ DEFAULT_SOURCES: list[SourceDefinition] = [
         priority=65,
         interest_tags=("infra", "software-development", "architecture"),
     ),
+    # ── Developer tools ──────────────────────────────────────────────────────
+    SourceDefinition(
+        "typescript-blog",
+        "TypeScript Blog",
+        "https://devblogs.microsoft.com/typescript/feed/",
+        "developer-tools",
+        priority=78,
+        interest_tags=("programming", "frontend", "software-development"),
+    ),
     # ── Trending / repositories ───────────────────────────────────────────────
     SourceDefinition(
         "hacker-news-best",
