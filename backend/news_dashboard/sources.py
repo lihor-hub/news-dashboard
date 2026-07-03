@@ -243,6 +243,14 @@ DEFAULT_SOURCES: list[SourceDefinition] = [
         interest_tags=("evals", "model-releases", "research", "security"),
     ),
     SourceDefinition(
+        "berkeley-bair-blog",
+        "Berkeley BAIR Blog",
+        "https://bair.berkeley.edu/blog/feed.xml",
+        "ai-research",
+        priority=74,
+        interest_tags=("evals", "model-releases", "research"),
+    ),
+    SourceDefinition(
         "langchain-releases",
         "LangChain releases",
         "https://github.com/langchain-ai/langchain/releases.atom",
