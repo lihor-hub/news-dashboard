@@ -185,6 +185,9 @@ export function sourceActionErrorMessage(err: unknown, action: SourceActionKind)
   if (err instanceof HttpError && err.status === 409) {
     return 'That slug is already in use — choose a different slug or source.';
   }
+  if (action === 'add' && err instanceof HttpError && (err.status === 400 || err.status === 422)) {
+    return err.message;
+  }
   switch (action) {
     case 'add':
       return 'Could not add source. Check the feed URL and try again.';

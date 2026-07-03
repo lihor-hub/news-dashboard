@@ -283,6 +283,32 @@ describe('SourcesPage', () => {
     expect(screen.queryByText('slug already exists')).toBeNull();
   });
 
+  it('shows backend validation details when createSource rejects source kind', async () => {
+    apiMock.fetchSources.mockResolvedValue([source()]);
+    apiMock.createSource.mockRejectedValue(
+      new apiMock.HttpError(
+        400,
+        "unsupported source kind 'scraped_page'. Supported kinds: lobsters_feed, mastodon_feed, reddit_feed, rss_feed"
+      )
+    );
+    withProviders(<SourcesPage />, '/', regularUser);
+    await screen.findAllByText('Acme News');
+
+    fireEvent.click(screen.getByRole('button', { name: /add source/i }));
+    await screen.findByRole('dialog');
+
+    fireEvent.change(screen.getByLabelText(/^name$/i), { target: { value: 'My Blog' } });
+    fireEvent.change(screen.getByLabelText(/feed url/i), {
+      target: { value: 'https://myblog.com/feed' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /^add source$/i }));
+
+    expect(await screen.findByText(/unsupported source kind 'scraped_page'/i)).toBeTruthy();
+    expect(
+      screen.queryByText('Could not add source. Check the feed URL and try again.')
+    ).toBeNull();
+  });
+
   it('shows friendly copy rather than a raw server string for generic createSource failures', async () => {
     apiMock.fetchSources.mockResolvedValue([source()]);
     apiMock.createSource.mockRejectedValue(new Error('500 Internal Server Error'));

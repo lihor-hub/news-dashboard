@@ -464,12 +464,24 @@ class EnabledUpdate(BaseModel):
     enabled: bool
 
 
+USER_CREATED_SOURCE_KINDS = frozenset({"rss_feed", "reddit_feed", "lobsters_feed", "mastodon_feed"})
+
+
 class CreateSourceRequest(BaseModel):
     url: str
     name: str
     category: str = "tech"
     slug: str | None = None
     kind: str = "rss_feed"
+
+    def validate_kind(self) -> None:
+        if self.kind in USER_CREATED_SOURCE_KINDS:
+            return
+        allowed = ", ".join(sorted(USER_CREATED_SOURCE_KINDS))
+        raise HTTPException(
+            status_code=400,
+            detail=f"unsupported source kind '{self.kind}'. Supported kinds: {allowed}",
+        )
 
     def validated_slug(self, name: str) -> str:
         """Return a non-empty slug, normalised from name if not provided."""
@@ -1732,6 +1744,8 @@ def create_source(
 
     if not payload.name.strip():
         raise HTTPException(status_code=400, detail="name must not be empty")
+
+    payload.validate_kind()
 
     try:
         validate_server_fetch_url(payload.url)

@@ -233,6 +233,67 @@ def test_api_create_private_source(pg_clean: str, monkeypatch: pytest.MonkeyPatc
         assert "my-blog" in slugs
 
 
+@pytest.mark.parametrize(
+    "kind",
+    ["rss_feed", "reddit_feed", "lobsters_feed", "mastodon_feed"],
+)
+def test_api_create_private_source_accepts_supported_kinds(
+    pg_clean: str, monkeypatch: pytest.MonkeyPatch, kind: str
+) -> None:
+    monkeypatch.setenv("DATABASE_URL", str(pg_clean))
+    sync_sources(pg_clean)
+    uid = _make_user(pg_clean)
+    slug = f"my-{kind.replace('_', '-')}"
+
+    with _api_client(pg_clean, uid) as client:
+        resp = client.post(
+            "/api/sources",
+            json={
+                "url": f"https://example.com/{kind}.xml",
+                "name": f"My {kind}",
+                "category": "tech",
+                "slug": slug,
+                "kind": kind,
+            },
+        )
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["slug"] == slug
+    assert data["kind"] == kind
+    assert data["owner_user_id"] == uid
+
+
+def test_api_create_private_source_rejects_unsupported_kind_without_insert(
+    pg_clean: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("DATABASE_URL", str(pg_clean))
+    sync_sources(pg_clean)
+    uid = _make_user(pg_clean)
+
+    with _api_client(pg_clean, uid) as client:
+        resp = client.post(
+            "/api/sources",
+            json={
+                "url": "https://example.com/scraped",
+                "name": "Scraped Custom Source",
+                "category": "tech",
+                "slug": "scraped-custom-source",
+                "kind": "scraped_page",
+            },
+        )
+
+    assert resp.status_code == 400
+    assert "unsupported source kind 'scraped_page'" in resp.json()["detail"]
+
+    with connect(pg_clean) as conn:
+        row = conn.execute(
+            "SELECT 1 FROM sources WHERE slug = %s",
+            ("scraped-custom-source",),
+        ).fetchone()
+    assert row is None
+
+
 def test_api_create_private_source_rejects_unsafe_url(
     pg_clean: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
