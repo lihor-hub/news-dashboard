@@ -11,6 +11,7 @@ import {
   RotateCcw,
   Trash2,
   TriangleAlert,
+  Upload,
   Users,
 } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -18,13 +19,22 @@ import {
   addReadingListItem,
   deleteReadingListItem,
   fetchReadingList,
+  importReadingList,
   reorderReadingList,
   updateReadingListItem,
+  type ReadingListImportResult,
+  type ReadingListImportSource,
   type ReadingListItem,
   type ReadingListKind,
   type ReadingListStatus,
 } from '@/api/readingListApi';
 import { EmptyState } from '@/components/EmptyState';
+
+const IMPORT_SOURCES: { value: ReadingListImportSource; label: string }[] = [
+  { value: 'pocket', label: 'Pocket (CSV)' },
+  { value: 'instapaper', label: 'Instapaper (CSV)' },
+  { value: 'omnivore', label: 'Omnivore (JSON)' },
+];
 
 const KIND_META: Record<ReadingListKind, { label: string; Icon: typeof Newspaper }> = {
   article: { label: 'Article', Icon: Newspaper },
@@ -152,6 +162,9 @@ export function ReadingListPage() {
   const queryClient = useQueryClient();
   const [newUrl, setNewUrl] = useState('');
   const [filter, setFilter] = useState<ReadingListStatus>('unread');
+  const [importSource, setImportSource] = useState<ReadingListImportSource>('pocket');
+  const [importResult, setImportResult] = useState<ReadingListImportResult | null>(null);
+  const [importError, setImportError] = useState<string | null>(null);
 
   const { data: items = [], isLoading } = useQuery({
     queryKey: ['reading-list', filter],
@@ -184,6 +197,20 @@ export function ReadingListPage() {
   const deleteMutation = useMutation({
     mutationFn: (id: number) => deleteReadingListItem(id),
     onSuccess: invalidate,
+  });
+
+  const importMutation = useMutation({
+    mutationFn: ({ file, source }: { file: File; source: ReadingListImportSource }) =>
+      importReadingList(file, source),
+    onSuccess: (result) => {
+      setImportResult(result);
+      setImportError(null);
+      invalidate();
+    },
+    onError: (err) => {
+      setImportResult(null);
+      setImportError(err instanceof Error ? err.message : 'Import failed');
+    },
   });
 
   function handleAdd() {
@@ -241,6 +268,60 @@ export function ReadingListPage() {
           Could not save that link — check that it is a valid http(s) URL.
         </p>
       ) : null}
+
+      <div className="px-4 md:px-5 pb-3 flex items-center gap-2">
+        <select
+          value={importSource}
+          onChange={(e) => setImportSource(e.target.value as ReadingListImportSource)}
+          className="h-9 rounded-md border border-border bg-surface px-2 text-sm outline-none focus:border-border-strong"
+        >
+          {IMPORT_SOURCES.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+        <button
+          type="button"
+          onClick={() => document.getElementById('reading-list-import-input')?.click()}
+          disabled={importMutation.isPending}
+          className="h-9 px-3 rounded-md border border-border text-sm font-medium hover:bg-surface disabled:opacity-50 inline-flex items-center gap-1.5"
+        >
+          <Upload className="size-4" />
+          {importMutation.isPending ? 'Importing…' : 'Import export file'}
+        </button>
+        <input
+          id="reading-list-import-input"
+          aria-label="Import reading list export"
+          type="file"
+          accept=".csv,.json"
+          className="hidden"
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            if (!file) return;
+            const input = e.target;
+            importMutation.mutate(
+              { file, source: importSource },
+              { onSettled: () => (input.value = '') }
+            );
+          }}
+        />
+      </div>
+      {(importResult ?? importError) && (
+        <div className="px-4 md:px-5 pb-3 text-xs">
+          {importError ? (
+            <p className="text-destructive">Import failed: {importError}</p>
+          ) : (
+            importResult && (
+              <p className="text-muted-foreground">
+                <span className="text-foreground font-medium">{importResult.added} added</span>
+                {' · '}
+                {importResult.skipped} skipped · {importResult.failed} failed
+              </p>
+            )
+          )}
+        </div>
+      )}
 
       <div className="px-4 md:px-5 pb-3 flex items-center gap-1">
         {(['unread', 'done'] as const).map((status) => (

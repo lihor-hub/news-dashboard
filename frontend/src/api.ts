@@ -52,7 +52,7 @@ import type {
   WeeklyRecap,
 } from './types';
 
-async function readErrorMessage(response: Response): Promise<string> {
+export async function readErrorMessage(response: Response): Promise<string> {
   try {
     const body: unknown = await (response.json() as Promise<unknown>);
     if (body && typeof body === 'object') {

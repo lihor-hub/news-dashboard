@@ -136,4 +136,35 @@ describe('ReadingListPage', () => {
       expect(deleteSpy).toHaveBeenCalledWith(1);
     });
   });
+
+  it('imports a Pocket export and shows the added/skipped/failed summary', async () => {
+    vi.spyOn(readingListApi, 'fetchReadingList').mockResolvedValue([]);
+    const importSpy = vi
+      .spyOn(readingListApi, 'importReadingList')
+      .mockResolvedValue({ added: 2, skipped: 1, failed: 0 });
+
+    renderPage();
+    const file = new File(['title,url\nA,https://example.com/a\n'], 'pocket.csv', {
+      type: 'text/csv',
+    });
+    const input = screen.getByLabelText(/import reading list export/i);
+    await userEvent.upload(input, file);
+
+    await waitFor(() => {
+      expect(importSpy).toHaveBeenCalledWith(file, 'pocket');
+    });
+    expect(await screen.findByText(/2 added/)).toBeTruthy();
+  });
+
+  it('shows an error message when import fails', async () => {
+    vi.spyOn(readingListApi, 'fetchReadingList').mockResolvedValue([]);
+    vi.spyOn(readingListApi, 'importReadingList').mockRejectedValue(new Error('bad file'));
+
+    renderPage();
+    const file = new File(['not json'], 'omnivore.json', { type: 'application/json' });
+    const input = screen.getByLabelText(/import reading list export/i);
+    await userEvent.upload(input, file);
+
+    expect(await screen.findByText(/import failed: bad file/i)).toBeTruthy();
+  });
 });

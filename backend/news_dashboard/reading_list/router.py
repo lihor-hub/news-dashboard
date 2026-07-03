@@ -9,10 +9,21 @@ from __future__ import annotations
 
 from typing import Annotated, Any
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Response
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    File,
+    Form,
+    HTTPException,
+    Query,
+    Response,
+    UploadFile,
+)
 
 from news_dashboard.auth import require_auth
 from news_dashboard.reading_list import service
+from news_dashboard.reading_list.importers import MAX_IMPORT_ITEMS, PARSERS, ImportParseError
 from news_dashboard.reading_list.models import (
     ReadingListAddRequest,
     ReadingListReorderRequest,
@@ -38,6 +49,32 @@ def add_reading_list_item_endpoint(
     else:
         response.status_code = 200
     return item
+
+
+@router.post("/api/reading-list/import")
+async def import_reading_list_endpoint(
+    current_user: Annotated[dict[str, Any], Depends(require_auth)],
+    file: Annotated[UploadFile, File()],
+    source: Annotated[str, Form()],
+) -> dict[str, Any]:
+    """Import saved articles from a Pocket, Instapaper, or Omnivore export."""
+    parser = PARSERS.get(source.strip().lower())
+    if parser is None:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported import source {source!r}; expected one of {sorted(PARSERS)}",
+        )
+    contents = await file.read()
+    try:
+        items = parser(contents)
+    except ImportParseError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    try:
+        result = service.import_items(current_user["id"], items, max_items=MAX_IMPORT_ITEMS)
+    except service.ImportTooLargeError as exc:
+        raise HTTPException(status_code=413, detail=str(exc)) from exc
+    return result
 
 
 @router.get("/api/reading-list")

@@ -7,6 +7,7 @@ from typing import Any
 from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
 from news_dashboard.db import connect, init_db
+from news_dashboard.reading_list.importers import ImportedItem
 from news_dashboard.reading_list.metadata import detect_kind, fetch_url_metadata
 
 logger = logging.getLogger(__name__)
@@ -237,3 +238,80 @@ def process_pending_items(*, limit: int = 20, database_url: str | None = None) -
     for row in rows:
         fetch_metadata_for_item(row["id"], database_url=database_url)
     return len(rows)
+
+
+class ImportTooLargeError(ValueError):
+    """Raised when an import file has more items than the batch cap allows."""
+
+
+def import_items(
+    user_id: int,
+    items: list[ImportedItem],
+    *,
+    max_items: int,
+    database_url: str | None = None,
+) -> dict[str, int]:
+    """Bulk-insert reading list items from a third-party export.
+
+    Titles carried over from the export are trusted as-is (fetch_status is
+    marked ``ok`` so the background sweep never overwrites them); items
+    without a title are left ``pending`` for the usual metadata fetch.
+    Duplicates (by normalized URL, per user) are skipped rather than
+    failed. Tags have no home on reading list items yet, so they are
+    folded into the item's note as a readable summary.
+    """
+    if len(items) > max_items:
+        message = f"Import contains {len(items)} items; the limit is {max_items}"
+        raise ImportTooLargeError(message)
+
+    init_db(database_url=database_url)
+    added = 0
+    skipped = 0
+    failed = 0
+    with connect(database_url=database_url) as conn:
+        for item in items:
+            try:
+                _require_http_url(item.url)
+            except InvalidReadingListUrlError:
+                failed += 1
+                continue
+            normalized = normalize_url(item.url)
+            kind = detect_kind(item.url)
+            note = f"Tags: {', '.join(item.tags)}" if item.tags else None
+            fetch_status = "ok" if item.title else "pending"
+            row = conn.execute(
+                """
+                INSERT INTO reading_list_items(
+                    user_id, url, normalized_url, title, kind, fetch_status,
+                    status, note, priority, created_at, done_at
+                )
+                VALUES (
+                  %s, %s, %s, %s, %s, %s, %s, %s,
+                  (SELECT COALESCE(MAX(priority), 0) + 1
+                     FROM reading_list_items WHERE user_id = %s),
+                  COALESCE(%s, NOW()),
+                  CASE WHEN %s = 'archived' THEN COALESCE(%s, NOW()) END
+                )
+                ON CONFLICT (user_id, normalized_url) DO NOTHING
+                RETURNING id
+                """,
+                (
+                    user_id,
+                    item.url,
+                    normalized,
+                    item.title,
+                    kind,
+                    fetch_status,
+                    item.status,
+                    note,
+                    user_id,
+                    item.created_at,
+                    item.status,
+                    item.created_at,
+                ),
+            ).fetchone()
+            if row is not None:
+                added += 1
+            else:
+                skipped += 1
+    return {"added": added, "skipped": skipped, "failed": failed}
