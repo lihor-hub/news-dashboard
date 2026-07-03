@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { LogOut, MoreHorizontal, Search, WifiOff } from 'lucide-react';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
 import { AppLogo } from './AppLogo';
+import { ErrorBoundary } from './ErrorBoundary';
 import { CommandPalette } from './CommandPalette';
 import { ShortcutOverlay } from './ShortcutOverlay';
 import { WhatsNewDialog } from './WhatsNewDialog';
@@ -222,7 +223,9 @@ export function AppShell() {
   if (isReader) {
     return (
       <>
-        <Outlet />
+        <ErrorBoundary>
+          <Outlet />
+        </ErrorBoundary>
         <CommandPalette
           open={paletteOpen}
           onOpenChange={setPaletteOpen}
@@ -341,7 +344,9 @@ export function AppShell() {
         <div className="md:flex md:max-w-6xl md:mx-auto md:gap-0">
           <DesktopRail pathname={pathname} />
           <div className="flex-1 min-w-0">
-            <Outlet />
+            <ErrorBoundary>
+              <Outlet />
+            </ErrorBoundary>
           </div>
         </div>
       </main>
