@@ -52,7 +52,7 @@ from news_dashboard.auth import (
     create_user,
     delete_user,
     exchange_keycloak_code,
-    get_user_by_email,
+    get_or_create_otp_user,
     get_user_by_id,
     init_auth,
     keycloak_auth_metadata,
@@ -764,7 +764,7 @@ def otp_request(payload: OTPRequestPayload, background_tasks: BackgroundTasks) -
         raise HTTPException(status_code=429, detail="Too many code requests; try again later")
     record_failure(request_key)
 
-    user = get_user_by_email(payload.email)
+    user = get_or_create_otp_user(payload.email)
     if user:
         otp = create_otp_for_user(int(user["id"]))
         background_tasks.add_task(send_otp_email, payload.email, otp)
