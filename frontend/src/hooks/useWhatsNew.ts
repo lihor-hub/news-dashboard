@@ -5,6 +5,7 @@ const STORAGE_KEY = 'lastSeenVersion';
 
 interface ChangelogEntry {
   version: string;
+  date: string | null;
   items: string[];
 }
 

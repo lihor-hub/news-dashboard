@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import secrets
 import time
 import xml.etree.ElementTree as ET
@@ -810,6 +811,11 @@ def _embed_article_background(article_id: int) -> None:
 
 _CHANGELOG_FILE = Path(__file__).resolve().parents[2] / "CHANGELOG.md"
 
+# "## 1.2.3" or Keep a Changelog style "## [1.2.3] — 2026-07-03" (em dash or
+# hyphen). The version must come out bare: the frontend What's New popup
+# matches entry.version against the app version exactly.
+_CHANGELOG_HEADING = re.compile(r"^##\s+\[?(?P<version>[^\]\s]+)\]?(?:\s*[—-]\s*(?P<date>\S+))?")
+
 
 def _parse_changelog() -> list[dict[str, object]]:
     try:
@@ -817,18 +823,20 @@ def _parse_changelog() -> list[dict[str, object]]:
     except OSError:
         return []
     entries: list[dict[str, object]] = []
-    current_version: str | None = None
     current_items: list[str] = []
     for line in text.splitlines():
         if line.startswith("## "):
-            if current_version is not None:
-                entries.append({"version": current_version, "items": current_items})
-            current_version = line[3:].strip()
+            m = _CHANGELOG_HEADING.match(line)
             current_items = []
-        elif line.startswith("- ") and current_version is not None:
+            entries.append(
+                {
+                    "version": m.group("version") if m else line[3:].strip(),
+                    "date": m.group("date") if m else None,
+                    "items": current_items,
+                }
+            )
+        elif line.startswith("- ") and entries:
             current_items.append(line[2:].strip())
-    if current_version is not None:
-        entries.append({"version": current_version, "items": current_items})
     return entries
 
 

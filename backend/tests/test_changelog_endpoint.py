@@ -33,8 +33,29 @@ def test_parse_changelog_returns_entries() -> None:
         cf.read_text.return_value = md
         entries = _parse_changelog()
     assert len(entries) == 2
-    assert entries[0] == {"version": "1.2.0", "items": ["Feature A", "Feature B"]}
-    assert entries[1] == {"version": "1.1.0", "items": ["Bug fix C"]}
+    assert entries[0] == {"version": "1.2.0", "date": None, "items": ["Feature A", "Feature B"]}
+    assert entries[1] == {"version": "1.1.0", "date": None, "items": ["Bug fix C"]}
+
+
+def test_parse_changelog_normalizes_keep_a_changelog_headings() -> None:
+    md = dedent("""\
+        # Changelog
+
+        ## [1.22.0] — 2026-07-03
+        - New feature
+
+        ## [1.21.0] - 2026-06-26
+
+        ### Added
+        - Share articles
+    """)
+    with patch("news_dashboard.main._CHANGELOG_FILE") as cf:
+        cf.read_text.return_value = md
+        entries = _parse_changelog()
+    assert entries == [
+        {"version": "1.22.0", "date": "2026-07-03", "items": ["New feature"]},
+        {"version": "1.21.0", "date": "2026-06-26", "items": ["Share articles"]},
+    ]
 
 
 def test_parse_changelog_returns_empty_on_oserror() -> None:
@@ -53,7 +74,7 @@ def test_parse_changelog_ignores_non_bullet_lines() -> None:
     with patch("news_dashboard.main._CHANGELOG_FILE") as cf:
         cf.read_text.return_value = md
         entries = _parse_changelog()
-    assert entries == [{"version": "2.0.0", "items": ["Real item"]}]
+    assert entries == [{"version": "2.0.0", "date": None, "items": ["Real item"]}]
 
 
 # ── /api/changelog endpoint ───────────────────────────────────────────────────
@@ -70,7 +91,7 @@ def test_changelog_endpoint_returns_version_and_entries() -> None:
     assert resp.status_code == 200
     body = resp.json()
     assert body["version"] == app.version
-    assert body["entries"] == [{"version": "9.9.9", "items": ["New thing"]}]
+    assert body["entries"] == [{"version": "9.9.9", "date": None, "items": ["New thing"]}]
 
 
 def test_changelog_endpoint_version_matches_app_version() -> None:

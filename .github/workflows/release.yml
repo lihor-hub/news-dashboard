@@ -12,9 +12,13 @@ name: Release
 # so it can't hit branch-protection (GH006).
 #
 # Job graph (push to main):
-#   release  →  android   (ubuntu)
-#            ↘  desktop   (macos)
-# android / desktop run only when a new tag was created.
+#   release  →  android            (ubuntu)
+#            ↘  desktop            (macos)
+#            ↘  sync-version-files (self-hosted)
+# android / desktop / sync-version-files run only when a new tag was created.
+# sync-version-files opens a rolling PR so the committed VERSION,
+# pyproject.toml, and CHANGELOG.md catch up with the tag through the normal
+# merge queue — it never pushes main and never queues its own merge.
 
 on:
   push:
@@ -24,6 +28,7 @@ on:
 permissions:
   contents: write
   models: read # GitHub Models inference for the changelog entry
+  pull-requests: write # sync-version-files opens the version catch-up PR
 
 jobs:
   # ── 1. Compute version, create the tag, summarize the changelog ──────────────
@@ -281,3 +286,89 @@ jobs:
             --title "Desktop App v$V" \
             --notes "$NOTES" \
             --latest
+
+  # ── 2c. Catch the committed version files up with the new tag ────────────────
+  #
+  # The deployed version is tag-derived and baked into the image at build time,
+  # so the committed VERSION / pyproject.toml / CHANGELOG.md would otherwise
+  # drift a little further behind on every release. This job proposes the
+  # catch-up as a rolling PR (branch bot/sync-versioning, force-pushed each
+  # release). It must go through the merge queue like any other change: no push
+  # to main, and it never queues its own merge (a repo test enforces this).
+  #
+  # PRs created with the default GITHUB_TOKEN do not trigger CI runs, so the
+  # required checks stay "Expected" until a human closes/reopens the PR or
+  # pushes to it. To make the checks start automatically, add a fine-grained
+  # PAT secret named VERSIONING_SYNC_TOKEN (contents + pull requests: write).
+
+  sync-version-files:
+    name: Sync committed version files
+    needs: release
+    if: needs.release.outputs.released == 'true'
+    runs-on: [self-hosted]
+    # Serialize concurrent releases: two runs force-pushing the same rolling
+    # branch would otherwise race and leave it pointing at the older catch-up.
+    concurrency:
+      group: sync-version-files
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.VERSIONING_SYNC_TOKEN || github.token }}
+
+      - name: Configure git identity
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Update VERSION, pyproject.toml, and CHANGELOG.md
+        env:
+          V: ${{ needs.release.outputs.version }}
+          NOTES: ${{ needs.release.outputs.notes }}
+        run: |
+          echo "$V" > VERSION
+          python3 - <<'PY'
+          import os, pathlib, re
+          path = pathlib.Path("pyproject.toml")
+          text = re.sub(
+              r'^version = ".*"$',
+              f'version = "{os.environ["V"]}"',
+              path.read_text(),
+              count=1,
+              flags=re.MULTILINE,
+          )
+          path.write_text(text)
+          PY
+          BODY="$NOTES"
+          if [ -z "$(printf '%s' "$BODY" | tr -d '[:space:]')" ]; then
+            BODY="- Stability and performance improvements."
+          fi
+          # Date the entry from the released commit, not from when this job
+          # happens to run — a re-run or an over-midnight queue must not shift
+          # the recorded release date.
+          DATE="$(git log -1 --format=%cs HEAD)"
+          printf '%s\n' "$BODY" | python3 scripts/update_changelog.py --version "$V" --date "$DATE"
+
+      - name: Push rolling sync branch and open PR
+        env:
+          GH_TOKEN: ${{ secrets.VERSIONING_SYNC_TOKEN || github.token }}
+          V: ${{ needs.release.outputs.version }}
+        run: |
+          BRANCH="bot/sync-versioning"
+          if git diff --quiet; then
+            echo "Version files already in sync — nothing to propose."
+            exit 0
+          fi
+          git switch -c "$BRANCH"
+          git add VERSION pyproject.toml CHANGELOG.md
+          git commit -m "chore: sync VERSION and CHANGELOG for v$V"
+          git push -f origin "HEAD:refs/heads/$BRANCH"
+          OPEN_PRS="$(gh pr list --head "$BRANCH" --state open --json number --jq length)"
+          if [ "$OPEN_PRS" = "0" ]; then
+            gh pr create --base main --head "$BRANCH" \
+              --title "chore: sync VERSION and CHANGELOG for v$V" \
+              --body "$(printf 'Automated catch-up of the committed VERSION, pyproject.toml, and CHANGELOG.md to match the released tag v%s.\n\nIf the required checks never start, close and reopen this PR (or configure a VERSIONING_SYNC_TOKEN secret so they start automatically).' "$V")"
+          else
+            gh pr edit "$BRANCH" --title "chore: sync VERSION and CHANGELOG for v$V"
+            echo "Sync PR already open — branch force-pushed with the latest catch-up."
+          fi
