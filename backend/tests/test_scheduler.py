@@ -1129,3 +1129,27 @@ def test_run_entity_extraction_reports_failure() -> None:
 
     assert status == "failure"
     assert "boom" in (message or "")
+
+
+def test_start_scheduler_registers_reading_list_fetch_job(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    mock_sched = _start_with_env(monkeypatch)
+    jobs = {c.kwargs.get("id"): c.kwargs for c in mock_sched.add_job.call_args_list}
+    assert "reading_list_fetch" in jobs
+    assert jobs["reading_list_fetch"]["trigger"] == "interval"
+
+
+def test_run_reading_list_fetch_reports_count() -> None:
+    from news_dashboard.scheduler import _run_reading_list_fetch
+
+    with patch(
+        "news_dashboard.reading_list.service.process_pending_items", return_value=2
+    ) as mock_process:
+        result = _run_reading_list_fetch()
+
+    mock_process.assert_called_once()
+    assert result is not None
+    status, message = result
+    assert status == "success"
+    assert "2" in (message or "")

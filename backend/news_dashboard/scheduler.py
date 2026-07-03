@@ -326,6 +326,22 @@ def _run_entity_extraction() -> tuple[str, str | None]:
     return "success", f"extracted {extracted} article(s)"
 
 
+def _run_reading_list_fetch() -> tuple[str, str | None] | None:
+    from news_dashboard.reading_list import service
+
+    try:
+        processed = service.process_pending_items()
+    except Exception as exc:
+        logger.exception("Reading list metadata fetch failed")
+        return "failure", str(exc)[:500]
+    if processed == 0:
+        # Nothing pending most of the time; skip recording to keep
+        # scheduled_job_runs from filling with no-op entries.
+        return None
+    logger.info("Reading list metadata fetch done: %d item(s).", processed)
+    return "success", f"fetched {processed} item(s)"
+
+
 def _run_and_record(
     job_name: str,
     fn: Callable[[], tuple[str, str | None] | None],
@@ -386,6 +402,10 @@ def _job_entity_extraction() -> None:
 
 def _job_weekly_recaps() -> None:
     _run_and_record("weekly_recaps", _run_weekly_recaps)
+
+
+def _job_reading_list_fetch() -> None:
+    _run_and_record("reading_list_fetch", _run_reading_list_fetch)
 
 
 def _parse_cron_hm(cron: str, default_minute: str, default_hour: str) -> tuple[str, str]:
@@ -512,6 +532,14 @@ def start_scheduler() -> None:
         trigger="interval",
         minutes=1,
         id="weekly_recaps",
+        replace_existing=True,
+    )
+
+    scheduler.add_job(
+        _job_reading_list_fetch,
+        trigger="interval",
+        minutes=int(os.getenv("READING_LIST_FETCH_INTERVAL_MINUTES", "5")),
+        id="reading_list_fetch",
         replace_existing=True,
     )
 
