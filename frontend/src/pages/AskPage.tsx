@@ -1,9 +1,141 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Sparkles, Loader2, AlertCircle, BookOpen, ThumbsUp, ThumbsDown } from 'lucide-react';
-import { askAI, submitFeedback } from '@/api';
-import type { AskResponse } from '@/types';
+import {
+  Sparkles,
+  Loader2,
+  AlertCircle,
+  BookOpen,
+  ThumbsUp,
+  ThumbsDown,
+  Check,
+  X,
+} from 'lucide-react';
+import {
+  askAI,
+  approveAgentActionRun,
+  cancelAgentActionRun,
+  planAgentActions,
+  submitFeedback,
+} from '@/api';
+import type {
+  AgentActionPlanResponse,
+  AgentActionRun,
+  AgentActionTool,
+  AskResponse,
+} from '@/types';
 import { cn } from '@/lib/utils';
+
+const TOOL_LABELS: Record<AgentActionTool, string> = {
+  mark_done: 'Mark done',
+  star_article: 'Star',
+  unstar_article: 'Unstar',
+  send_later: 'Send to later',
+  skip_article: 'Skip',
+  archive_article: 'Archive',
+  refresh_feeds: 'Refresh feeds',
+};
+
+function AgentActionPlanPanel({
+  plan,
+  onApproved,
+  onCancelled,
+}: {
+  plan: AgentActionPlanResponse;
+  onApproved: (run: AgentActionRun) => void;
+  onCancelled: (run: AgentActionRun) => void;
+}) {
+  const [busy, setBusy] = useState(false);
+
+  async function approve() {
+    if (busy || plan.run_id === undefined) return;
+    setBusy(true);
+    try {
+      onApproved(await approveAgentActionRun(plan.run_id));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function cancel() {
+    if (busy || plan.run_id === undefined) return;
+    setBusy(true);
+    try {
+      onCancelled(await cancelAgentActionRun(plan.run_id));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="mt-6 space-y-3 rounded-md border border-border bg-card p-4">
+      <p className="text-sm font-medium text-foreground">Proposed actions</p>
+      <ul className="space-y-1.5">
+        {(plan.steps ?? []).map((step) => (
+          <li key={step.id} className="text-sm text-foreground">
+            <span className="font-medium">{TOOL_LABELS[step.tool]}</span>
+            {step.article_title && (
+              <span className="text-muted-foreground"> &mdash; {step.article_title}</span>
+            )}
+          </li>
+        ))}
+      </ul>
+      <div className="flex items-center gap-2 pt-1">
+        <button
+          type="button"
+          onClick={() => void approve()}
+          disabled={busy}
+          className="inline-flex items-center gap-1.5 rounded-md bg-foreground text-background px-3 py-1.5 text-sm font-medium disabled:opacity-50"
+        >
+          {busy && <Loader2 className="size-3.5 animate-spin" />}
+          <Check className="size-3.5" />
+          Approve
+        </button>
+        <button
+          type="button"
+          onClick={() => void cancel()}
+          disabled={busy}
+          className="inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-sm font-medium disabled:opacity-50"
+        >
+          <X className="size-3.5" />
+          Cancel
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function AgentActionRunResult({ run }: { run: AgentActionRun }) {
+  if (run.status === 'cancelled') {
+    return <p className="mt-6 text-sm text-muted-foreground">Plan cancelled. No changes made.</p>;
+  }
+  return (
+    <div className="mt-6 space-y-2 rounded-md border border-border bg-card p-4">
+      <p className="text-sm font-medium text-foreground">
+        {run.status === 'executed' ? 'Actions completed' : 'Some actions failed'}
+      </p>
+      <ul className="space-y-1.5">
+        {run.steps.map((step) => (
+          <li key={step.id} className="flex items-start gap-1.5 text-sm">
+            {step.status === 'executed' ? (
+              <Check className="mt-0.5 size-3.5 shrink-0 text-green-600" />
+            ) : (
+              <X className="mt-0.5 size-3.5 shrink-0 text-red-600" />
+            )}
+            <span>
+              <span className="font-medium">{TOOL_LABELS[step.tool]}</span>
+              {step.article_title && (
+                <span className="text-muted-foreground"> &mdash; {step.article_title}</span>
+              )}
+              {step.status === 'failed' && step.result_summary && (
+                <span className="block text-[11px] text-red-600">{step.result_summary}</span>
+              )}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
 
 function AnswerFeedback({ traceId }: { traceId: string }) {
   const [sent, setSent] = useState<boolean | null>(null);
@@ -115,6 +247,8 @@ export function AskPage() {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<AskResponse | null>(null);
   const [error, setError] = useState<AskError | null>(null);
+  const [plan, setPlan] = useState<AgentActionPlanResponse | null>(null);
+  const [planRun, setPlanRun] = useState<AgentActionRun | null>(null);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -123,7 +257,14 @@ export function AskPage() {
     setLoading(true);
     setResult(null);
     setError(null);
+    setPlan(null);
+    setPlanRun(null);
     try {
+      const planned = await planAgentActions(query);
+      if (planned.actionable) {
+        setPlan(planned);
+        return;
+      }
       const res = await askAI(query, includeAll);
       if (res.answer.startsWith('Not enough articles')) {
         setError({ kind: 'not_enough', message: res.answer });
@@ -188,6 +329,16 @@ export function AskPage() {
       </form>
 
       {error && <ErrorBanner error={error} />}
+
+      {plan && !planRun && (
+        <AgentActionPlanPanel
+          plan={plan}
+          onApproved={(run) => setPlanRun(run)}
+          onCancelled={(run) => setPlanRun(run)}
+        />
+      )}
+
+      {planRun && <AgentActionRunResult run={planRun} />}
 
       {result && (
         <div className="mt-6 space-y-4">
