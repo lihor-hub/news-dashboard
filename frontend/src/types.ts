@@ -52,7 +52,6 @@ export interface User {
 export interface ShareableUser {
   id: number;
   username: string;
-  email?: string | null;
 }
 
 export interface ReceivedShare {

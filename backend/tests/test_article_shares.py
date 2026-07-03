@@ -38,8 +38,8 @@ def db(pg_clean: str, monkeypatch: pytest.MonkeyPatch) -> str:
     return pg_clean
 
 
-def _make_user(db_path: str, username: str) -> int:
-    return int(create_user(username, "password123", db_path=db_path)["id"])
+def _make_user(db_path: str, username: str, email: str | None = None) -> int:
+    return int(create_user(username, "password123", email=email, db_path=db_path)["id"])
 
 
 def _insert_article(db_path: str, suffix: str = "1") -> int:
@@ -123,10 +123,26 @@ def test_mark_read(db: str) -> None:
 
 
 def test_shareable_users_excludes_self(db: str) -> None:
-    alice = _make_user(db, "alice")
-    _make_user(db, "bob")
-    usernames = {u["username"] for u in shareable_users(alice)}
-    assert usernames == {"bob"}
+    alice = _make_user(db, "alice", email="alice@example.test")
+    bob = _make_user(db, "bob", email="bob@example.test")
+
+    users = shareable_users(alice)
+
+    assert users == [{"id": bob, "username": "bob"}]
+
+
+def test_shareable_users_endpoint_omits_other_users_email(db: str) -> None:
+    alice = _make_user(db, "alice", email="alice@example.test")
+    bob = _make_user(db, "bob", email="bob@example.test")
+    client = _authed_client(alice)
+
+    try:
+        response = client.get("/api/users")
+
+        assert response.status_code == 200
+        assert response.json() == {"items": [{"id": bob, "username": "bob"}]}
+    finally:
+        app.dependency_overrides.pop(require_auth, None)
 
 
 def test_cannot_share_with_self(db: str) -> None:
