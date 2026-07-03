@@ -4,6 +4,7 @@
 [![Release](https://github.com/lihor-hub/news-dashboard/actions/workflows/release.yml/badge.svg)](https://github.com/lihor-hub/news-dashboard/actions/workflows/release.yml)
 [![Coverage Status](https://codecov.io/gh/lihor-hub/news-dashboard/branch/main/graph/badge.svg)](https://app.codecov.io/gh/lihor-hub/news-dashboard)
 [![CodeQL](https://github.com/lihor-hub/news-dashboard/actions/workflows/codeql.yml/badge.svg)](https://github.com/lihor-hub/news-dashboard/actions/workflows/codeql.yml)
+[![Trivy](https://github.com/lihor-hub/news-dashboard/actions/workflows/trivy-scan.yml/badge.svg)](https://github.com/lihor-hub/news-dashboard/actions/workflows/trivy-scan.yml)
 [![Version](https://img.shields.io/github/v/tag/lihor-hub/news-dashboard?filter=v*&sort=semver&label=version&color=blue)](https://github.com/lihor-hub/news-dashboard/releases/latest)
 [![License: MIT](https://img.shields.io/github/license/lihor-hub/news-dashboard)](LICENSE)
 [![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/lihor-hub/news-dashboard)
