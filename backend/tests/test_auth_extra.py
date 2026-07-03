@@ -14,6 +14,7 @@ from news_dashboard import auth as auth_mod
 from news_dashboard.auth import (
     create_user,
     exchange_keycloak_code,
+    get_user_by_id,
     keycloak_authorization_url,
     keycloak_config,
     keycloak_logout_url,
@@ -226,6 +227,19 @@ def test_admin_update_password_found_and_missing(tmp_db: str) -> None:
         assert missing.status_code == 404
 
 
+def test_admin_update_password_rejects_keycloak_mode(
+    tmp_db: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _enable_keycloak(monkeypatch)
+    created = create_user("keycloak-password", "pw123456")
+    with TestClient(app) as client:
+        resp = client.patch(
+            f"/api/admin/users/{created['id']}/password", json={"password": "newpass123"}
+        )
+    assert resp.status_code == 409
+    assert "Keycloak owns user passwords" in resp.json()["detail"]
+
+
 def test_admin_create_user_conflict_on_duplicate(tmp_db: str) -> None:
     with TestClient(app) as client:
         first = client.post("/api/admin/users", json={"username": "frank", "password": "pw123456"})
@@ -288,3 +302,15 @@ def test_admin_generate_user_uses_keycloak_when_enabled(
     assert body["temporary"] is True
     assert body["password"] == captured["password"]
     assert captured["username"] == "ivan"
+
+
+def test_admin_delete_user_rejects_keycloak_mode(
+    tmp_db: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _enable_keycloak(monkeypatch)
+    target = create_user("keycloak-delete", "pw123456")
+    with TestClient(app) as client:
+        resp = client.delete(f"/api/admin/users/{target['id']}")
+    assert resp.status_code == 409
+    assert "Keycloak users must be deprovisioned" in resp.json()["detail"]
+    assert get_user_by_id(target["id"]) is not None

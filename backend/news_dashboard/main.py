@@ -2942,6 +2942,8 @@ def admin_get_user(user_id: int) -> dict[str, Any]:
 
 @admin.patch("/users/{user_id}/password")
 def admin_update_password(user_id: int, payload: UpdatePasswordRequest) -> dict[str, Any]:
+    if keycloak_config().enabled:
+        raise HTTPException(status_code=409, detail="Keycloak owns user passwords")
     if not update_password(user_id, payload.password):
         raise HTTPException(status_code=404, detail="user not found")
     return {"status": "updated"}
@@ -2952,6 +2954,11 @@ def admin_delete_user(
     user_id: int,
     current_user: Annotated[dict[str, Any], Depends(require_auth)],
 ) -> dict[str, Any]:
+    if keycloak_config().enabled:
+        raise HTTPException(
+            status_code=409,
+            detail="Keycloak users must be deprovisioned outside the local app table",
+        )
     if user_id == current_user["id"]:
         raise HTTPException(status_code=400, detail="cannot delete your own account")
     if not delete_user(user_id):
