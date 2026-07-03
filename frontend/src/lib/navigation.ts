@@ -2,6 +2,7 @@ import {
   Activity,
   Archive,
   BarChart3,
+  Bookmark,
   BrainCircuit,
   Clock,
   Flame,
@@ -41,6 +42,7 @@ export const primaryNavigationItems: NavigationItem[] = [
 ];
 
 export const secondaryNavigationItems: NavigationItem[] = [
+  { to: '/reading-list', label: 'Reading List', icon: Bookmark, shortcut: 'r' },
   { to: '/briefs', label: 'Briefing History', icon: History, shortcut: 'h' },
   { to: '/topic-map', label: 'Topic Map', icon: Network },
   { to: '/ai-stats', label: 'AI Stats', icon: BrainCircuit },
@@ -142,6 +144,7 @@ export function getPageTitle(pathname: string): string {
   if (pathname.startsWith('/feeds')) return 'Feeds';
   if (pathname.startsWith('/stats')) return 'Stats';
   if (pathname.startsWith('/reading-dna')) return 'Reading DNA';
+  if (pathname.startsWith('/reading-list')) return 'Reading List';
   if (pathname.startsWith('/recap')) return 'Weekly Recap';
   if (pathname.startsWith('/archive')) return 'Archive';
   if (pathname.startsWith('/collections')) return 'Collections';

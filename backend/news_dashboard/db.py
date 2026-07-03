@@ -557,6 +557,35 @@ POSTGRES_MULTIUSER_SCHEMA = [
     """,
     "CREATE INDEX IF NOT EXISTS idx_user_weekly_recaps_user"
     " ON user_weekly_recaps(user_id, week_start DESC)",
+    """
+    CREATE TABLE IF NOT EXISTS reading_list_items (
+      id             BIGSERIAL PRIMARY KEY,
+      user_id        INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      url            TEXT NOT NULL,
+      normalized_url TEXT NOT NULL,
+      title          TEXT,
+      description    TEXT,
+      image_url      TEXT,
+      site_name      TEXT,
+      kind           TEXT NOT NULL DEFAULT 'link'
+        CHECK(kind IN ('article','video','channel','link')),
+      fetch_status   TEXT NOT NULL DEFAULT 'pending'
+        CHECK(fetch_status IN ('pending','ok','error')),
+      fetch_error    TEXT,
+      fetched_at     TIMESTAMPTZ,
+      status         TEXT NOT NULL DEFAULT 'unread'
+        CHECK(status IN ('unread','done','archived')),
+      priority       INTEGER NOT NULL DEFAULT 0,
+      note           TEXT,
+      created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      done_at        TIMESTAMPTZ,
+      UNIQUE (user_id, normalized_url)
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_reading_list_items_user_status"
+    " ON reading_list_items(user_id, status, priority)",
+    "CREATE INDEX IF NOT EXISTS idx_reading_list_items_fetch_status"
+    " ON reading_list_items(fetch_status)",
 ]
 
 
