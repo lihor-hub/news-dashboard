@@ -52,6 +52,8 @@ export interface WorkflowArticle {
   starred_at?: string;
   later_until?: string;
   restored_at?: string;
+  /** Names of other sources also carrying this canonical story; undefined/empty when there are no known duplicates. */
+  alsoFrom?: string[];
 }
 
 export interface UndoSnapshot {
