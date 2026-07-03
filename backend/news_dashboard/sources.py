@@ -235,6 +235,14 @@ DEFAULT_SOURCES: list[SourceDefinition] = [
         interest_tags=("evals", "model-releases", "research"),
     ),
     SourceDefinition(
+        "google-research-blog",
+        "Google Research Blog",
+        "https://research.google/blog/rss/",
+        "ai-research",
+        priority=78,
+        interest_tags=("evals", "model-releases", "research", "security"),
+    ),
+    SourceDefinition(
         "langchain-releases",
         "LangChain releases",
         "https://github.com/langchain-ai/langchain/releases.atom",
