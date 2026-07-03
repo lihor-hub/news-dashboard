@@ -710,6 +710,50 @@ POSTGRES_MULTIUSER_SCHEMA = [
     "CREATE INDEX IF NOT EXISTS idx_user_ai_memory_events_user"
     " ON user_ai_memory_events(user_id, created_at DESC)",
     """
+    CREATE TABLE IF NOT EXISTS ai_eval_examples (
+      id                  BIGSERIAL PRIMARY KEY,
+      feature             TEXT NOT NULL,
+      prompt_version      TEXT NOT NULL DEFAULT 'local',
+      model_version       TEXT NOT NULL DEFAULT 'local',
+      input               JSONB NOT NULL DEFAULT '{}'::jsonb,
+      expected_properties JSONB NOT NULL DEFAULT '{}'::jsonb,
+      source_trace_id     TEXT,
+      feedback_helpful    BOOLEAN,
+      created_by_user_id  INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_ai_eval_examples_feature ON ai_eval_examples(feature)",
+    """
+    CREATE TABLE IF NOT EXISTS ai_eval_runs (
+      id             BIGSERIAL PRIMARY KEY,
+      feature        TEXT,
+      prompt_version TEXT NOT NULL DEFAULT 'local',
+      model_version  TEXT NOT NULL DEFAULT 'local',
+      status         TEXT NOT NULL DEFAULT 'running'
+                       CHECK(status IN ('running','passed','failed')),
+      total          INTEGER NOT NULL DEFAULT 0,
+      passed         INTEGER NOT NULL DEFAULT 0,
+      failed         INTEGER NOT NULL DEFAULT 0,
+      started_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      finished_at    TIMESTAMPTZ
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_ai_eval_runs_started ON ai_eval_runs(started_at DESC)",
+    """
+    CREATE TABLE IF NOT EXISTS ai_eval_results (
+      id              BIGSERIAL PRIMARY KEY,
+      run_id          BIGINT NOT NULL REFERENCES ai_eval_runs(id) ON DELETE CASCADE,
+      example_id      BIGINT NOT NULL REFERENCES ai_eval_examples(id) ON DELETE CASCADE,
+      output          JSONB NOT NULL DEFAULT '{}'::jsonb,
+      score           DOUBLE PRECISION NOT NULL DEFAULT 0,
+      passed          BOOLEAN NOT NULL DEFAULT FALSE,
+      failure_reason  TEXT,
+      created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_ai_eval_results_run ON ai_eval_results(run_id)",
+    """
     CREATE TABLE IF NOT EXISTS mcp_tokens (
       id            BIGSERIAL PRIMARY KEY,
       user_id       INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,

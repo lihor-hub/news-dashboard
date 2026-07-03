@@ -1,5 +1,6 @@
 import type {
   AdminAnalytics,
+  AdminAiQuality,
   AiMemory,
   AgentActionPlanResponse,
   AgentActionRun,
@@ -581,6 +582,10 @@ export async function fetchMe(): Promise<User> {
 
 export async function fetchAdminAnalytics(days = 30): Promise<AdminAnalytics> {
   return requestJson<AdminAnalytics>(`/api/admin/analytics?days=${days}`);
+}
+
+export async function fetchAdminAiQuality(days = 30): Promise<AdminAiQuality> {
+  return requestJson<AdminAiQuality>(`/api/admin/ai/quality?days=${days}`);
 }
 
 export async function loginUser(username: string, password: string): Promise<User> {

@@ -542,6 +542,25 @@ export interface AdminAnalytics {
   recommendation_funnel: { recommended: number; read: number; skipped: number };
 }
 
+export interface AdminAiQuality {
+  range_days: number;
+  feedback: { feature: string; total: number; positive: number; negative: number }[];
+  evals: {
+    feature: string;
+    runs: number;
+    total: number;
+    passed: number;
+    failed: number;
+    pass_rate: number;
+  }[];
+  recent_failures: {
+    feature: string | null;
+    example_id: number;
+    failure_reason: string | null;
+    created_at: string;
+  }[];
+}
+
 export interface ReadingGoal {
   id: number;
   user_id: number;

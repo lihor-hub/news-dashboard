@@ -121,3 +121,17 @@ def test_feedback_persists_local_memory_event(
     assert row["source"] == "ask_feedback"
     assert row["content"] == "missed my goal"
     assert row["metadata"]["trace_id"] == "trace-local"
+
+    with connect(database_url=pg_clean) as conn:
+        eval_row = conn.execute(
+            """
+            SELECT feature, source_trace_id, feedback_helpful, expected_properties
+            FROM ai_eval_examples
+            WHERE created_by_user_id = %s
+            """,
+            (7,),
+        ).fetchone()
+    assert eval_row["feature"] == "ask-ai"
+    assert eval_row["source_trace_id"] == "trace-local"
+    assert eval_row["feedback_helpful"] is False
+    assert eval_row["expected_properties"]["comment"] == "missed my goal"
