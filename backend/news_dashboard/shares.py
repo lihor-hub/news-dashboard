@@ -30,7 +30,7 @@ def shareable_users(current_user_id: int) -> list[dict[str, Any]]:
     """Return platform users the current user can share with (everyone else)."""
     with connect() as conn:
         rows = conn.execute(
-            "SELECT id, username, email FROM users WHERE id <> %s ORDER BY username",
+            "SELECT id, username FROM users WHERE id <> %s ORDER BY username",
             (current_user_id,),
         ).fetchall()
         return [row_to_dict(r) for r in rows]

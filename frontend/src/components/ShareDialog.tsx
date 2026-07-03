@@ -203,11 +203,6 @@ export function ShareDialog({ article, open, onOpenChange, pendingHighlight }: S
                       >
                         <span className="flex min-w-0 flex-col">
                           <span className="truncate font-medium">{u.username}</span>
-                          {u.email ? (
-                            <span className="truncate text-xs text-muted-foreground">
-                              {u.email}
-                            </span>
-                          ) : null}
                         </span>
                         {sendingTo === u.id ? (
                           <Loader2 className="h-4 w-4 shrink-0 animate-spin" />

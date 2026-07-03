@@ -37,14 +37,15 @@ describe('ShareDialog', () => {
 
   it('lists users and shares to the chosen recipient', async () => {
     vi.spyOn(api, 'fetchShareableUsers').mockResolvedValue([
-      { id: 2, username: 'alice', email: 'alice@example.com' },
-      { id: 3, username: 'bob', email: null },
+      { id: 2, username: 'alice' },
+      { id: 3, username: 'bob' },
     ]);
     const shareSpy = vi.spyOn(api, 'shareArticle').mockResolvedValue({ id: 42 } as never);
     const { onOpenChange } = renderDialog();
 
     await userEvent.click(screen.getByText('Send inside the platform'));
     await waitFor(() => expect(screen.getByText('alice')).toBeTruthy());
+    expect(screen.queryByText('alice@example.com')).toBeNull();
 
     await userEvent.click(screen.getByText('alice'));
     await waitFor(() => expect(shareSpy).toHaveBeenCalledWith(7, 2, ''));
@@ -52,9 +53,7 @@ describe('ShareDialog', () => {
   });
 
   it('attaches selected passage as an annotation after creating the share', async () => {
-    vi.spyOn(api, 'fetchShareableUsers').mockResolvedValue([
-      { id: 2, username: 'alice', email: null },
-    ]);
+    vi.spyOn(api, 'fetchShareableUsers').mockResolvedValue([{ id: 2, username: 'alice' }]);
     vi.spyOn(api, 'shareArticle').mockResolvedValue({ id: 42 } as never);
     const annotationSpy = vi.spyOn(api, 'createShareAnnotation').mockResolvedValue({} as never);
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
