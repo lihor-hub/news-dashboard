@@ -7,6 +7,9 @@
 [![Trivy](https://github.com/lihor-hub/news-dashboard/actions/workflows/trivy-scan.yml/badge.svg)](https://github.com/lihor-hub/news-dashboard/actions/workflows/trivy-scan.yml)
 [![Version](https://img.shields.io/github/v/tag/lihor-hub/news-dashboard?filter=v*&sort=semver&label=version&color=blue)](https://github.com/lihor-hub/news-dashboard/releases/latest)
 [![License: MIT](https://img.shields.io/github/license/lihor-hub/news-dashboard)](LICENSE)
+![Python 3.14+](https://img.shields.io/badge/python-3.14%2B-blue)
+![Node 26](https://img.shields.io/badge/node-26-339933)
+![PostgreSQL 16+](https://img.shields.io/badge/postgresql-16%2B-4169E1)
 [![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/lihor-hub/news-dashboard)
 [![Open in Dev Containers](https://img.shields.io/static/v1?label=Dev%20Containers&message=Open&color=blue&logo=visualstudiocode)](https://vscode.dev/redirect?url=vscode://ms-vscode-remote.remote-containers/cloneInVolume?url=https://github.com/lihor-hub/news-dashboard)
 
