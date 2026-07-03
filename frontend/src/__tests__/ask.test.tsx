@@ -9,6 +9,12 @@ import * as api from '../api';
 // Suppress console.error noise from async state updates in tests
 vi.spyOn(console, 'error').mockImplementation(() => undefined);
 
+// Every request is planned first; default to non-actionable so existing
+// tests exercise the plain-answer fallback path unless a test overrides this.
+beforeEach(() => {
+  vi.spyOn(api, 'planAgentActions').mockResolvedValue({ actionable: false });
+});
+
 function Wrapper({ children }: { children: React.ReactNode }) {
   return <MemoryRouter>{children}</MemoryRouter>;
 }

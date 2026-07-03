@@ -586,6 +586,37 @@ POSTGRES_MULTIUSER_SCHEMA = [
     " ON reading_list_items(user_id, status, priority)",
     "CREATE INDEX IF NOT EXISTS idx_reading_list_items_fetch_status"
     " ON reading_list_items(fetch_status)",
+    """
+    CREATE TABLE IF NOT EXISTS agent_action_runs (
+      id          BIGSERIAL PRIMARY KEY,
+      user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      query       TEXT NOT NULL,
+      plan        JSONB NOT NULL DEFAULT '{}'::jsonb,
+      status      TEXT NOT NULL DEFAULT 'proposed'
+        CHECK(status IN ('proposed','approved','executed','cancelled','failed')),
+      created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_agent_action_runs_user"
+    " ON agent_action_runs(user_id, created_at DESC)",
+    """
+    CREATE TABLE IF NOT EXISTS agent_action_steps (
+      id             BIGSERIAL PRIMARY KEY,
+      run_id         BIGINT NOT NULL REFERENCES agent_action_runs(id) ON DELETE CASCADE,
+      ordinal        INTEGER NOT NULL,
+      tool           TEXT NOT NULL,
+      article_id     INTEGER REFERENCES articles(id) ON DELETE SET NULL,
+      args           JSONB NOT NULL DEFAULT '{}'::jsonb,
+      status         TEXT NOT NULL DEFAULT 'pending'
+        CHECK(status IN ('pending','executed','failed','skipped')),
+      result_summary TEXT,
+      created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE (run_id, ordinal)
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_agent_action_steps_run ON agent_action_steps(run_id, ordinal)",
 ]
 
 

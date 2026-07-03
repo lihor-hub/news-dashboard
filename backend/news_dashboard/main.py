@@ -2723,6 +2723,78 @@ def ask_ai(
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
+class AgentActionPlanRequest(BaseModel):
+    query: str = Field(max_length=MAX_ASK_QUERY_LENGTH)
+
+
+@api.post("/api/agent/actions/plan")
+def plan_agent_actions(
+    payload: AgentActionPlanRequest,
+    current_user: Annotated[dict[str, Any], Depends(require_auth)],
+) -> dict[str, Any]:
+    from news_dashboard.agent_actions import AgentActionError, plan_actions
+
+    try:
+        return plan_actions(
+            payload.query, user_id=current_user["id"], is_admin=bool(current_user["is_admin"])
+        )
+    except AgentActionError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@api.post("/api/agent/actions/{run_id}/approve")
+def approve_agent_action_run(
+    run_id: int,
+    current_user: Annotated[dict[str, Any], Depends(require_auth)],
+) -> dict[str, Any]:
+    from news_dashboard.agent_actions import (
+        AgentActionError,
+        AgentActionNotFoundError,
+        approve_run,
+    )
+
+    try:
+        return approve_run(
+            run_id, user_id=current_user["id"], is_admin=bool(current_user["is_admin"])
+        )
+    except AgentActionNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except AgentActionError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@api.post("/api/agent/actions/{run_id}/cancel")
+def cancel_agent_action_run(
+    run_id: int,
+    current_user: Annotated[dict[str, Any], Depends(require_auth)],
+) -> dict[str, Any]:
+    from news_dashboard.agent_actions import (
+        AgentActionError,
+        AgentActionNotFoundError,
+        cancel_run,
+    )
+
+    try:
+        return cancel_run(run_id, user_id=current_user["id"])
+    except AgentActionNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except AgentActionError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@api.get("/api/agent/actions/{run_id}")
+def get_agent_action_run(
+    run_id: int,
+    current_user: Annotated[dict[str, Any], Depends(require_auth)],
+) -> dict[str, Any]:
+    from news_dashboard.agent_actions import AgentActionNotFoundError, get_run
+
+    try:
+        return get_run(run_id, user_id=current_user["id"])
+    except AgentActionNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
 class FeedbackRequest(BaseModel):
     trace_id: str
     helpful: bool

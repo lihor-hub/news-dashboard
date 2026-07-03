@@ -114,7 +114,7 @@ export const SAMPLE_BRIEFING = {
   status: 'complete',
   title: 'AI Safety Takes Center Stage',
   summary:
-    'New safety frameworks and model releases dominated today\'s AI news, signaling a maturing field.',
+    "New safety frameworks and model releases dominated today's AI news, signaling a maturing field.",
   content: {
     sections: [
       {
@@ -155,7 +155,7 @@ export const SAMPLE_USER = {
 
 // ── Mock setup helpers ────────────────────────────────────────────────────────
 
-function json(data: unknown, status = 200) {
+export function json(data: unknown, status = 200) {
   return { status, contentType: 'application/json', body: JSON.stringify(data) };
 }
 
@@ -302,10 +302,19 @@ export async function mockApi(page: Page) {
     r.fulfill(
       json({
         answer: 'Based on the articles, AI safety research is progressing rapidly [1].',
-        sources: [{ id: 1, title: 'AI Safety Researchers Publish New Framework', url: 'https://example.com/article-1' }],
+        sources: [
+          {
+            id: 1,
+            title: 'AI Safety Researchers Publish New Framework',
+            url: 'https://example.com/article-1',
+          },
+        ],
       })
     )
   );
+
+  // Agent action plans — default to non-actionable so Ask AI falls back to /api/ask
+  await page.route('/api/agent/actions/plan', (r) => r.fulfill(json({ actionable: false })));
 
   // Stats
   await page.route('/api/stats/**', (r) =>

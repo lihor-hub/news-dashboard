@@ -218,6 +218,47 @@ export interface AskResponse {
   trace_id: string | null;
 }
 
+export type AgentActionTool =
+  | 'mark_done'
+  | 'star_article'
+  | 'unstar_article'
+  | 'send_later'
+  | 'skip_article'
+  | 'archive_article'
+  | 'refresh_feeds';
+
+export type AgentActionRunStatus = 'proposed' | 'approved' | 'executed' | 'cancelled' | 'failed';
+export type AgentActionStepStatus = 'pending' | 'executed' | 'failed' | 'skipped';
+
+export interface AgentActionStep {
+  id: number;
+  run_id: number;
+  ordinal: number;
+  tool: AgentActionTool;
+  article_id: number | null;
+  article_title?: string | null;
+  status: AgentActionStepStatus;
+  result_summary: string | null;
+}
+
+export interface AgentActionPlanResponse {
+  actionable: boolean;
+  run_id?: number;
+  status?: AgentActionRunStatus;
+  query?: string;
+  steps?: AgentActionStep[];
+}
+
+export interface AgentActionRun {
+  id: number;
+  user_id: number;
+  query: string;
+  status: AgentActionRunStatus;
+  created_at: string;
+  updated_at: string;
+  steps: AgentActionStep[];
+}
+
 export interface IngestRun {
   id: number;
   started_at: string;

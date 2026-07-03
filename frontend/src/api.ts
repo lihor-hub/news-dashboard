@@ -1,5 +1,7 @@
 import type {
   AdminAnalytics,
+  AgentActionPlanResponse,
+  AgentActionRun,
   Article,
   ArticleCountsResult,
   ArticleHighlight,
@@ -306,6 +308,21 @@ export async function askAI(query: string, includeAll = false): Promise<AskRespo
     method: 'POST',
     body: JSON.stringify({ query, include_all: includeAll }),
   });
+}
+
+export async function planAgentActions(query: string): Promise<AgentActionPlanResponse> {
+  return requestJson<AgentActionPlanResponse>('/api/agent/actions/plan', {
+    method: 'POST',
+    body: JSON.stringify({ query }),
+  });
+}
+
+export async function approveAgentActionRun(runId: number): Promise<AgentActionRun> {
+  return requestJson<AgentActionRun>(`/api/agent/actions/${runId}/approve`, { method: 'POST' });
+}
+
+export async function cancelAgentActionRun(runId: number): Promise<AgentActionRun> {
+  return requestJson<AgentActionRun>(`/api/agent/actions/${runId}/cancel`, { method: 'POST' });
 }
 
 export async function submitFeedback(
