@@ -1153,3 +1153,67 @@ def test_run_reading_list_fetch_reports_count() -> None:
     status, message = result
     assert status == "success"
     assert "2" in (message or "")
+
+
+def test_start_scheduler_registers_watchlist_evaluation_job(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("WATCHLIST_EVALUATION_INTERVAL_MINUTES", "10")
+    mock_sched = _start_with_env(monkeypatch)
+    jobs = {c.kwargs.get("id"): c.kwargs for c in mock_sched.add_job.call_args_list}
+    assert "watchlist_evaluation" in jobs
+    assert jobs["watchlist_evaluation"]["trigger"] == "interval"
+    assert jobs["watchlist_evaluation"]["minutes"] == 10
+
+
+def test_run_watchlist_evaluation_reports_summary() -> None:
+    from news_dashboard.scheduler import _run_watchlist_evaluation
+
+    with patch(
+        "news_dashboard.watchlist_agent.evaluate_watchlists",
+        return_value={"watchlists_evaluated": 3, "nudges_created": 2},
+    ) as mock_eval:
+        status, message = _run_watchlist_evaluation()
+
+    mock_eval.assert_called_once()
+    assert status == "success"
+    assert "3" in (message or "")
+    assert "2" in (message or "")
+
+
+def test_run_watchlist_evaluation_reports_failure() -> None:
+    from news_dashboard.scheduler import _run_watchlist_evaluation
+
+    with patch(
+        "news_dashboard.watchlist_agent.evaluate_watchlists",
+        side_effect=RuntimeError("boom"),
+    ):
+        status, message = _run_watchlist_evaluation()
+
+    assert status == "failure"
+    assert "boom" in (message or "")
+
+
+def test_watchlist_evaluation_failure_does_not_abort_other_jobs(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A failing watchlist_evaluation job must not prevent other scheduled jobs.
+
+    _run_and_record swallows exceptions from fn() itself, but this test
+    verifies the wiring: a failing evaluate_watchlists still yields a
+    recorded ("failure", ...) outcome rather than propagating.
+    """
+    from news_dashboard.scheduler import _job_watchlist_evaluation
+
+    with (
+        patch(
+            "news_dashboard.watchlist_agent.evaluate_watchlists",
+            side_effect=RuntimeError("boom"),
+        ),
+        patch("news_dashboard.scheduled_job_history.save_job_run") as mock_save,
+        patch("news_dashboard.metrics.scheduler_job_runs_total"),
+    ):
+        _job_watchlist_evaluation()  # must not raise
+
+    mock_save.assert_called_once()
+    assert mock_save.call_args.kwargs["status"] == "failure"

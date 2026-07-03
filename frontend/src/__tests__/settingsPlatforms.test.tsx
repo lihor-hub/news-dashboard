@@ -17,6 +17,7 @@ vi.mock('@/api', () => ({
     .mockResolvedValue({ briefing_time: '09:00', push_enabled: false }),
   subscribePush: vi.fn().mockResolvedValue({ subscribed: true }),
   unsubscribePush: vi.fn().mockResolvedValue({ unsubscribed: true }),
+  fetchWatchlists: vi.fn().mockResolvedValue([]),
 }));
 
 import { SettingsPage } from '../pages/SettingsPage';

@@ -446,6 +446,35 @@ export interface PersonalizationNudge {
   target_label: string;
 }
 
+export interface AiWatchlist {
+  id: number;
+  user_id: number;
+  label: string;
+  query: string;
+  threshold: number;
+  enabled: boolean;
+  notify_push: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AiWatchlistMatch {
+  article: Article;
+  score: number;
+  explanation: string;
+}
+
+export interface AiWatchlistNudge {
+  id: number;
+  watchlist_id: number;
+  article_id: number;
+  score: number;
+  explanation: string;
+  created_at: string;
+  watchlist_label: string;
+  article_title: string;
+}
+
 export interface AnalyticsSummary {
   dau: number;
   wau: number;

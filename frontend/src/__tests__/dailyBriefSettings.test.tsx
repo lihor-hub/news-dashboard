@@ -26,6 +26,7 @@ vi.mock('@/api', () => ({
   subscribePush: mockSubscribePush,
   unsubscribePush: mockUnsubscribePush,
   recalculateMyRecommendations: mockRecalculate,
+  fetchWatchlists: vi.fn().mockResolvedValue([]),
 }));
 
 import { SettingsPage } from '../pages/SettingsPage';
