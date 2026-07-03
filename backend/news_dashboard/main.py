@@ -292,6 +292,37 @@ def _request_origin(request: Request) -> str | None:
     return None
 
 
+def _origin_from_url(value: str | None) -> str | None:
+    """Return scheme://host[:port] for an absolute URL config value."""
+    if not value:
+        return None
+    parts = urlsplit(value.strip())
+    if parts.scheme and parts.netloc:
+        return f"{parts.scheme}://{parts.netloc}"
+    return None
+
+
+def _request_base_origin(request: Request) -> str:
+    """Return the externally visible request origin when proxy headers exist."""
+    forwarded_host = request.headers.get("x-forwarded-host")
+    forwarded_proto = request.headers.get("x-forwarded-proto")
+    if forwarded_host and forwarded_proto:
+        host = forwarded_host.split(",", maxsplit=1)[0].strip()
+        proto = forwarded_proto.split(",", maxsplit=1)[0].strip()
+        if host and proto:
+            return f"{proto}://{host}"
+    return f"{request.url.scheme}://{request.url.netloc}"
+
+
+def _allowed_csrf_origins(request: Request) -> set[str]:
+    """Return origins allowed to perform cookie-authenticated mutations."""
+    origins = {*_cors_origins, _request_base_origin(request)}
+    public_base_origin = _origin_from_url(os.getenv("NEWS_DASHBOARD_BASE_URL"))
+    if public_base_origin is not None:
+        origins.add(public_base_origin)
+    return origins
+
+
 @app.middleware("http")
 async def enforce_csrf_origin(request: Request, call_next: Any) -> Any:
     """Reject cross-origin unsafe requests carrying the session cookie.
@@ -317,13 +348,11 @@ async def enforce_csrf_origin(request: Request, call_next: Any) -> Any:
         return await call_next(request)
 
     origin = _request_origin(request)
-    if origin is not None:
-        allowed_origins = {*_cors_origins, f"{request.url.scheme}://{request.url.netloc}"}
-        if origin not in allowed_origins:
-            return JSONResponse(
-                status_code=403,
-                content={"detail": "Cross-origin request rejected"},
-            )
+    if origin is not None and origin not in _allowed_csrf_origins(request):
+        return JSONResponse(
+            status_code=403,
+            content={"detail": "Cross-origin request rejected"},
+        )
 
     return await call_next(request)
 

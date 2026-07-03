@@ -829,6 +829,39 @@ def test_csrf_guard_allows_same_origin_mutation(tmp_db: str) -> None:
     assert resp.status_code == 200
 
 
+def test_csrf_guard_allows_public_base_url_origin(
+    tmp_db: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("NEWS_DASHBOARD_BASE_URL", "https://news.example.test")
+    admin = create_user("csrf_public_base_origin", "pw", is_admin=True)
+    token = create_session_token(admin["id"], is_admin=True)
+    client = _fresh_client()
+    client.cookies.set("nd_session", token)
+    resp = client.post(
+        "/api/admin/users",
+        json={"username": "csrf_public_base_origin_new", "password": "pw2", "is_admin": False},
+        headers={"origin": "https://news.example.test"},
+    )
+    assert resp.status_code == 200
+
+
+def test_csrf_guard_allows_forwarded_same_origin_mutation(tmp_db: str) -> None:
+    admin = create_user("csrf_forwarded_origin", "pw", is_admin=True)
+    token = create_session_token(admin["id"], is_admin=True)
+    client = _fresh_client()
+    client.cookies.set("nd_session", token)
+    resp = client.post(
+        "/api/admin/users",
+        json={"username": "csrf_forwarded_origin_new", "password": "pw2", "is_admin": False},
+        headers={
+            "origin": "https://news.example.test",
+            "x-forwarded-proto": "https",
+            "x-forwarded-host": "news.example.test",
+        },
+    )
+    assert resp.status_code == 200
+
+
 def test_csrf_guard_allows_configured_dev_origin(tmp_db: str) -> None:
     admin = create_user("csrf_dev_origin", "pw", is_admin=True)
     token = create_session_token(admin["id"], is_admin=True)
