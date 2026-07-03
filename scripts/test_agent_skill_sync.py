@@ -23,3 +23,20 @@ def test_agent_notes_document_skill_sync_contract() -> None:
 
     assert "Keep Claude and Codex skill access synchronized at all times." in agent_notes
     assert "`.agents/skills` must point at `.claude/skills`" in agent_notes
+
+
+def test_claude_md_links_to_agents_md() -> None:
+    claude_md = ROOT / "CLAUDE.md"
+
+    assert claude_md.is_symlink()
+    assert claude_md.readlink() == Path("AGENTS.md")
+
+    agent_notes = (ROOT / "AGENTS.md").read_text()
+    assert "`CLAUDE.md` must be a symlink to `AGENTS.md`" in agent_notes
+
+
+def test_worktree_bootstrap_script_is_executable() -> None:
+    bootstrap = ROOT / "scripts" / "bootstrap-worktree.sh"
+
+    assert bootstrap.is_file()
+    assert bootstrap.stat().st_mode & 0o111, "bootstrap-worktree.sh must be executable"
