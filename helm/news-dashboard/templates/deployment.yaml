@@ -103,6 +103,22 @@ spec:
               value: {{ .Values.app.push.email | quote }}
 {{- end }}
 {{- end }}
+{{- if .Values.app.email }}
+{{- if .Values.app.email.existingSecret }}
+            - name: SMTP_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.app.email.existingSecret | quote }}
+                  key: {{ .Values.app.email.smtpUsernameKey | default "SMTP_USERNAME" | quote }}
+                  optional: true
+            - name: SMTP_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.app.email.existingSecret | quote }}
+                  key: {{ .Values.app.email.smtpPasswordKey | default "SMTP_PASSWORD" | quote }}
+                  optional: true
+{{- end }}
+{{- end }}
 {{- if .Values.app.auth.enabled }}
             - name: KEYCLOAK_AUTH_ENABLED
               value: "1"

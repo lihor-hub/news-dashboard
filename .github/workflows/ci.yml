@@ -394,6 +394,7 @@ jobs:
             --set-string "postgresql.password=dummy-postgres-password-for-render-only" \
             --set "app.ai.existingSecret=news-dashboard-ai" \
             --set "app.push.existingSecret=news-dashboard-push" \
+            --set "app.email.existingSecret=news-dashboard-email" \
             --set-string "app.ai.freeLlmBaseUrl=http://192.168.0.75:9130/v1" \
             --set-string "app.ai.briefingModel=gpt-4o" \
             --set-string "app.ai.langfuse.host=http://langfuse.local" \
@@ -601,6 +602,10 @@ jobs:
   # │  SENTRY_DSN_      Optional Sentry project DSN for frontend/UI error   │
   # │  FRONTEND         tracking. Stored as a secret and exposed publicly   │
   # │                   through GET /api/config as SENTRY_DSN_FRONTEND.     │
+  # │                                                                      │
+  # │  SMTP_USERNAME    Optional Gmail SMTP creds used to send OTP sign-in  │
+  # │  SMTP_PASSWORD    emails (send_otp_email). SMTP_PASSWORD must be a    │
+  # │                   Gmail App Password, not the account password.      │
   # └──────────────────────────────────────────────────────────────────────┘
   deploy:
     name: Deploy to mini PC
@@ -632,6 +637,8 @@ jobs:
           VAPID_EMAIL: ${{ vars.VAPID_EMAIL }}
           SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
           SENTRY_DSN_FRONTEND: ${{ secrets.SENTRY_DSN_FRONTEND }}
+          SMTP_USERNAME: ${{ secrets.SMTP_USERNAME }}
+          SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
         run: |
           set -euo pipefail
 
@@ -716,6 +723,22 @@ jobs:
             push_helm_args+=(--set-string "app.push.email=$VAPID_EMAIL")
           fi
 
+          email_secret_args=()
+          if [ -n "$SMTP_USERNAME" ]; then
+            email_secret_args+=(--from-literal=SMTP_USERNAME="$SMTP_USERNAME")
+          fi
+          if [ -n "$SMTP_PASSWORD" ]; then
+            email_secret_args+=(--from-literal=SMTP_PASSWORD="$SMTP_PASSWORD")
+          fi
+
+          email_helm_args=()
+          if [ ${#email_secret_args[@]} -gt 0 ]; then
+            kubectl -n news-dashboard create secret generic news-dashboard-email \
+              "${email_secret_args[@]}" \
+              --dry-run=client -o yaml | kubectl apply -f -
+            email_helm_args+=(--set app.email.existingSecret=news-dashboard-email)
+          fi
+
           sentry_helm_args=()
           sentry_secret_args=()
           if [ -n "$SENTRY_DSN" ]; then
@@ -756,6 +779,7 @@ jobs:
             --set-string postgresql.password="$POSTGRES_PASSWORD"
             "${ai_helm_args[@]}"
             "${push_helm_args[@]}"
+            "${email_helm_args[@]}"
             "${sentry_helm_args[@]}"
           )
           helm "${helm_args[@]}"
