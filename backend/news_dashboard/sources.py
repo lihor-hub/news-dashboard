@@ -189,6 +189,15 @@ DEFAULT_SOURCES: list[SourceDefinition] = [
         priority=60,
         interest_tags=("infra", "cloud", "model-releases"),
     ),
+    SourceDefinition(
+        "cohere-blog",
+        "Cohere Blog",
+        "https://cohere.com/blog",
+        "ai-llm",
+        "scraped_page",
+        75,
+        interest_tags=("agents", "model-releases", "infra", "product-news"),
+    ),
     # ── AI research ──────────────────────────────────────────────────────────
     SourceDefinition(
         "arxiv-ai-ml",
