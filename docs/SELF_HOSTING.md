@@ -234,27 +234,38 @@ News Dashboard exposes several health and readiness endpoints for monitoring and
 
 ### Docker Probe Configuration
 
-Add health checks to your `docker-compose.prod.yml` or `docker run`:
+The production image is based on `python:3.14-slim` and does not install `curl`
+or `wget`, so `docker-compose.yml` and `docker-compose.prod.yml` ship a
+healthcheck that calls `/api/ready` with the Python standard library instead:
 
 ```yaml
 # docker-compose.prod.yml snippet for the news-dashboard service
 healthcheck:
-  test: ["CMD", "curl", "-f", "http://localhost:8080/api/health"]
+  test:
+    [
+      "CMD",
+      "python",
+      "-c",
+      "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/api/ready', timeout=5).read()",
+    ]
   interval: 30s
-  timeout: 5s
+  timeout: 10s
   retries: 3
   start_period: 30s
 ```
 
-If `curl` is not available in the container, use `wget` or the `/api/live` endpoint
-which has no dependencies:
+`/api/ready` was chosen over `/api/live` so `docker compose ps` reflects
+database connectivity, not just process liveness. If you only want process
+liveness, swap the path for `/api/live` in the snippet above.
+
+For `docker run`, use the same Python-based probe:
 
 ```bash
 docker run -d \
   --name news-dashboard \
-  --health-cmd "wget -qO- http://localhost:8080/api/live" \
+  --health-cmd "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/api/ready', timeout=5).read()\"" \
   --health-interval 30s \
-  --health-timeout 5s \
+  --health-timeout 10s \
   --health-retries 3 \
   --health-start-period 30s \
   # ... other options ...
