@@ -22,6 +22,18 @@ jobs:
 
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Compute version
+        id: version
+        run: bash scripts/next_version.sh >> "$GITHUB_OUTPUT"
+
+      - name: Inject version (not committed — only for this build)
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          CODE: ${{ steps.version.outputs.code }}
+        run: bash scripts/inject_app_version.sh android
 
       - uses: actions/setup-java@v4
         with:
@@ -47,7 +59,7 @@ jobs:
         id: apk
         run: |
           APK=$(find android/app/build/outputs/apk/release -name "*.apk" | head -1)
-          VERSION=$(cat VERSION)
+          VERSION="${{ steps.version.outputs.version }}"
           DEST="news-dashboard-android-v${VERSION}-manual-${{ github.run_number }}.apk"
           cp "$APK" "$DEST"
           echo "path=$DEST" >> "$GITHUB_OUTPUT"
@@ -55,6 +67,6 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: news-dashboard-apk-manual
+          name: news-dashboard-apk-v${{ steps.version.outputs.version }}-manual
           path: ${{ steps.apk.outputs.path }}
           retention-days: 7
