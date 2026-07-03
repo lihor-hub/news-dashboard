@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { LogOut, MoreHorizontal, Search } from 'lucide-react';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
 import { AppLogo } from './AppLogo';
+import { OfflineIndicator } from './OfflineIndicator';
 import { CommandPalette } from './CommandPalette';
 import { ShortcutOverlay } from './ShortcutOverlay';
 import { WhatsNewDialog } from './WhatsNewDialog';
@@ -209,6 +210,7 @@ export function AppShell() {
 
   return (
     <div className="app-shell min-h-screen flex flex-col bg-background text-foreground">
+      <OfflineIndicator />
       {/* Header */}
       <header className="sticky top-0 z-30 border-b border-border bg-background/85 backdrop-blur">
         <div className="mx-auto max-w-6xl flex h-12 items-center justify-between px-4">

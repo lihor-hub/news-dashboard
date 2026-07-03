@@ -57,6 +57,42 @@ export default defineConfig({
               expiration: { maxEntries: 20, maxAgeSeconds: 60 * 60 * 24 * 30 },
             },
           },
+          {
+            // Article list/search responses: serve stale copy instantly while
+            // revalidating, and fall back to it entirely when offline.
+            urlPattern: /^\/api\/(articles|search)(\?.*)?$/,
+            handler: 'StaleWhileRevalidate',
+            options: {
+              cacheName: 'api-article-lists',
+              expiration: { maxEntries: 30, maxAgeSeconds: 60 * 60 * 24 },
+              cacheableResponse: { statuses: [0, 200] },
+            },
+          },
+          {
+            // Single article metadata: prefer the network, fall back to the
+            // last-seen copy so a previously opened article still renders.
+            urlPattern: /^\/api\/articles\/\d+$/,
+            handler: 'NetworkFirst',
+            options: {
+              cacheName: 'api-article-detail',
+              networkTimeoutSeconds: 3,
+              expiration: { maxEntries: 200, maxAgeSeconds: 60 * 60 * 24 * 14 },
+              cacheableResponse: { statuses: [0, 200] },
+            },
+          },
+          {
+            // Article body fetch is a POST; cache it too so a previously read
+            // article's body is available with no network.
+            urlPattern: /^\/api\/articles\/\d+\/body$/,
+            method: 'POST',
+            handler: 'NetworkFirst',
+            options: {
+              cacheName: 'api-article-body',
+              networkTimeoutSeconds: 3,
+              expiration: { maxEntries: 200, maxAgeSeconds: 60 * 60 * 24 * 14 },
+              cacheableResponse: { statuses: [0, 200] },
+            },
+          },
         ],
       },
     }),

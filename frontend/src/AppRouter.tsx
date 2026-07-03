@@ -56,6 +56,9 @@ const BriefingDetailPage = lazy(() =>
 const TopicMapPage = lazy(() =>
   import('./pages/TopicMapPage').then((m) => ({ default: m.TopicMapPage }))
 );
+const ShareTargetPage = lazy(() =>
+  import('./pages/ShareTargetPage').then((m) => ({ default: m.ShareTargetPage }))
+);
 
 function PageLoader() {
   return (
@@ -124,6 +127,10 @@ export const routes: RouteObject[] = [
   {
     path: '/shared/:shareId/article',
     element: <RequireAuth>{withSuspense(ArticlePage)}</RequireAuth>,
+  },
+  {
+    path: '/share-target',
+    element: <RequireAuth>{withSuspense(ShareTargetPage)}</RequireAuth>,
   },
   {
     path: '/',

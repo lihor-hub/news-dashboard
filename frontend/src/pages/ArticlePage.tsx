@@ -44,6 +44,7 @@ import { trackArticleOpen, trackArticleClose } from '@/lib/analytics';
 import { cn } from '@/lib/utils';
 import { ShareDialog } from '@/components/ShareDialog';
 import { ArticleTags } from '@/components/article/ArticleTags';
+import { OfflineIndicator } from '@/components/OfflineIndicator';
 
 const LANGUAGE_NAMES: Record<string, string> = {
   en: 'English',
@@ -455,6 +456,7 @@ export function ArticlePage() {
   if (isLoading || !article) {
     return (
       <div className="min-h-screen bg-background flex flex-col">
+        <OfflineIndicator />
         <header className="sticky top-0 z-20 border-b border-border bg-background/90 backdrop-blur">
           <div className="mx-auto max-w-2xl flex h-12 items-center px-3">
             <button
@@ -481,6 +483,7 @@ export function ArticlePage() {
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
+      <OfflineIndicator />
       {/* Header + scrollable content slide in together.  The action bar is a
           sibling outside this wrapper so its position:fixed always resolves
           against the viewport, even while the entry transform is active. */}

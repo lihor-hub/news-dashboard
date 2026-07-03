@@ -114,7 +114,7 @@ export const SAMPLE_BRIEFING = {
   status: 'complete',
   title: 'AI Safety Takes Center Stage',
   summary:
-    'New safety frameworks and model releases dominated today\'s AI news, signaling a maturing field.',
+    "New safety frameworks and model releases dominated today's AI news, signaling a maturing field.",
   content: {
     sections: [
       {
@@ -232,6 +232,9 @@ export async function mockApi(page: Page) {
   await page.route('/api/articles/*/later', (r) =>
     r.fulfill(json({ ...SAMPLE_ARTICLE, state: 'later' }))
   );
+  await page.route('/api/articles/from-url', (r) =>
+    r.fulfill(json({ ...SAMPLE_ARTICLE, id: 1, state: 'later' }))
+  );
 
   // Search
   await page.route('/api/search**', (r) =>
@@ -302,7 +305,13 @@ export async function mockApi(page: Page) {
     r.fulfill(
       json({
         answer: 'Based on the articles, AI safety research is progressing rapidly [1].',
-        sources: [{ id: 1, title: 'AI Safety Researchers Publish New Framework', url: 'https://example.com/article-1' }],
+        sources: [
+          {
+            id: 1,
+            title: 'AI Safety Researchers Publish New Framework',
+            url: 'https://example.com/article-1',
+          },
+        ],
       })
     )
   );

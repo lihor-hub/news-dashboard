@@ -118,6 +118,21 @@ const KNOWN_ROUTES = [
   '/archive',
 ];
 
+test.describe('PWA — share target', () => {
+  test('manifest declares a share_target pointing at /share-target', async ({ page }) => {
+    const response = await page.request.get('/manifest.webmanifest');
+    const manifest = await response.json();
+    expect(manifest.share_target).toBeTruthy();
+    expect(manifest.share_target.action).toBe('/share-target');
+    expect(manifest.share_target.method).toBe('GET');
+    expect(manifest.share_target.params).toMatchObject({
+      title: 'title',
+      text: 'text',
+      url: 'url',
+    });
+  });
+});
+
 test.describe('PWA — shortcuts', () => {
   test('manifest exposes a shortcuts array', async ({ page }) => {
     const response = await page.request.get('/manifest.webmanifest');

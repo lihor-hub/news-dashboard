@@ -74,7 +74,7 @@ from news_dashboard.briefings import (
     get_latest_briefing,
     list_briefings,
 )
-from news_dashboard.db import connect, describe_database, init_db, row_to_dict
+from news_dashboard.db import connect, describe_database, init_db, insert_article_sql, row_to_dict
 from news_dashboard.error_tracking import frontend_error_tracking_dsn, init_error_tracking
 from news_dashboard.ingest import (
     get_user_summary,
@@ -378,6 +378,11 @@ class CreateSourceRequest(BaseModel):
                 detail="slug must contain only lowercase letters, digits, and hyphens",
             )
         return slug
+
+
+class SaveSharedUrlRequest(BaseModel):
+    url: str
+    title: str | None = None
 
 
 class SourceCleanupRequest(BaseModel):
@@ -1579,6 +1584,84 @@ def create_source(
         )
         row = conn.execute("SELECT * FROM sources WHERE slug = %s", (slug,)).fetchone()
     return row_to_dict(row)
+
+
+def _get_or_create_shared_links_source(conn: Any, user_id: int) -> str:
+    """Return the slug of the per-user 'Shared Links' source, creating it if needed."""
+    slug = f"shared-links-{user_id}"
+    conn.execute(
+        """
+        INSERT INTO sources(slug, name, url, category, kind, priority, enabled, owner_user_id)
+        VALUES (%s, %s, %s, %s, %s, 0, TRUE, %s)
+        ON CONFLICT (slug) DO NOTHING
+        """,
+        (slug, "Shared Links", "about:blank", "shared", "manual", user_id),
+    )
+    return slug
+
+
+@api.post("/api/articles/from-url")
+def save_shared_url(
+    payload: SaveSharedUrlRequest,
+    current_user: Annotated[dict[str, Any], Depends(require_auth)],
+) -> dict[str, Any]:
+    """Save a URL (e.g. from the PWA share target) as a personal article in Later."""
+    url = payload.url.strip()
+    if not url:
+        raise HTTPException(status_code=400, detail="url must not be empty")
+    try:
+        validate_server_fetch_url(url)
+    except UnsafeUrlError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    uid = current_user["id"]
+    title = (payload.title or "").strip() or url
+
+    init_db()
+    with connect() as conn:
+        slug = _get_or_create_shared_links_source(conn, uid)
+        existing = conn.execute("SELECT id FROM articles WHERE url = %s", (url,)).fetchone()
+        if existing:
+            article_id = int(row_to_dict(existing)["id"])
+        else:
+            conn.execute(
+                insert_article_sql(),
+                (
+                    url,
+                    url,
+                    title,
+                    slug,
+                    "Shared Links",
+                    "shared",
+                    "manual",
+                    None,
+                    "",
+                    "saved via share target",
+                    50,
+                    "",
+                    None,
+                    None,
+                    "en",
+                ),
+            )
+            row = conn.execute("SELECT id FROM articles WHERE url = %s", (url,)).fetchone()
+            article_id = int(row_to_dict(row)["id"])
+
+    try:
+        article = transition_article_state(article_id, "later", user_id=uid)
+    except ValueError:
+        article = get_article(article_id, user_id=uid)
+    if not article:
+        raise HTTPException(status_code=404, detail="article not found")
+
+    try:
+        fetched = fetch_and_cache_body(article_id, user_id=uid)
+        if fetched:
+            article = fetched
+    except Exception:
+        logger.exception("failed to prefetch body for shared url %s", url)
+
+    return article
 
 
 @api.delete("/api/sources/{slug}")

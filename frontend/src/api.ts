@@ -118,6 +118,13 @@ export async function fetchArticleBody(id: number | string): Promise<Article> {
   return requestJson<Article>(`/api/articles/${id}/body`, { method: 'POST' });
 }
 
+export async function saveSharedUrl(url: string, title?: string): Promise<Article> {
+  return requestJson<Article>('/api/articles/from-url', {
+    method: 'POST',
+    body: JSON.stringify({ url, title }),
+  });
+}
+
 export async function fetchArticleHighlights(id: number | string): Promise<ArticleHighlight[]> {
   const data = await requestJson<{ items: ArticleHighlight[] }>(`/api/articles/${id}/highlights`);
   return data.items;
