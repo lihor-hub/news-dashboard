@@ -117,6 +117,20 @@ def improve_prompt(
     flush()
 
 
+@app.command(name="eval-ai")
+def eval_ai(feature: str | None = None) -> None:
+    """Run deterministic local AI eval examples."""
+    from news_dashboard.ai_evals import run_local_evals
+
+    result = run_local_evals(feature=feature)
+    typer.echo(
+        f"eval run {result['run_id']}: "
+        f"{result['passed']}/{result['total']} passed, {result['failed']} failed"
+    )
+    if int(result["failed"]) > 0:
+        raise typer.Exit(code=1)
+
+
 @app.command(name="seed-demo")
 def seed_demo_cmd() -> None:
     """Seed demo data: guest user + sample articles (requires DEMO_MODE=true)."""

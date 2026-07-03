@@ -2945,9 +2945,16 @@ def submit_feedback(
     disabled, so feedback never errors for the user.
     """
     from news_dashboard.ai_client import create_score
+    from news_dashboard.ai_evals import record_feedback_example
     from news_dashboard.ai_memory.service import record_memory_event
 
     comment = (payload.comment or "").strip() or None
+    record_feedback_example(
+        user_id=int(current_user["id"]),
+        trace_id=payload.trace_id,
+        helpful=payload.helpful,
+        comment=comment,
+    )
     record_memory_event(
         int(current_user["id"]),
         event_type="feedback",
@@ -3131,6 +3138,13 @@ def admin_ai_metrics(days: Annotated[int, Query(ge=1, le=365)] = 30) -> dict[str
     from news_dashboard.ai_client import fetch_metrics
 
     return fetch_metrics(days=days)
+
+
+@admin.get("/ai/quality")
+def admin_ai_quality(days: Annotated[int, Query(ge=1, le=365)] = 30) -> dict[str, Any]:
+    from news_dashboard.ai_evals import admin_quality_summary
+
+    return admin_quality_summary(days=days)
 
 
 @admin.get("/users")

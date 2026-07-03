@@ -10,8 +10,8 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
-import { fetchAdminAnalytics } from '../api';
-import type { AdminAnalytics } from '../types';
+import { fetchAdminAiQuality, fetchAdminAnalytics } from '../api';
+import type { AdminAiQuality, AdminAnalytics } from '../types';
 
 const CHART_COLORS = [
   'var(--color-chart-1)',
@@ -35,6 +35,7 @@ const DOW = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 export function AnalyticsPage() {
   const [days, setDays] = useState(30);
   const [data, setData] = useState<AdminAnalytics | null>(null);
+  const [quality, setQuality] = useState<AdminAiQuality | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -42,10 +43,11 @@ export function AnalyticsPage() {
     let cancelled = false;
     setLoading(true);
     setError(null);
-    fetchAdminAnalytics(days)
-      .then((result) => {
+    Promise.all([fetchAdminAnalytics(days), fetchAdminAiQuality(days)])
+      .then(([result, qualityResult]) => {
         if (!cancelled) {
           setData(result);
+          setQuality(qualityResult);
           setLoading(false);
         }
       })
@@ -113,6 +115,8 @@ export function AnalyticsPage() {
         <Stat label="Avg session" value={loading || !s ? '…' : `${s.avg_session_minutes}m`} />
         <Stat label="Articles read" value={fmt(s?.total_reads, loading)} />
       </section>
+
+      <AiQualityPanel data={quality} loading={loading} />
 
       <ChartSection title="Active users & time" sub="Daily active users and minutes spent">
         <div className="h-56 -mx-2">
@@ -370,6 +374,64 @@ function heatIntensity(value: number): number {
   if (value <= 0) return 0;
   const scaled = Math.log1p(value) / Math.log1p(HEAT_SATURATION);
   return Math.min(100, Math.round(scaled * 90) + 10);
+}
+
+function AiQualityPanel({ data, loading }: { data: AdminAiQuality | null; loading: boolean }) {
+  const totals = data?.feedback.reduce(
+    (acc, row) => ({
+      total: acc.total + row.total,
+      positive: acc.positive + row.positive,
+      negative: acc.negative + row.negative,
+    }),
+    { total: 0, positive: 0, negative: 0 }
+  );
+  const passRate = data?.evals[0]?.pass_rate;
+  return (
+    <ChartSection title="AI quality" sub="Local feedback and deterministic eval trends">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+        <Stat label="Feedback" value={fmt(totals?.total, loading)} />
+        <Stat label="Positive" value={fmt(totals?.positive, loading)} />
+        <Stat label="Negative" value={fmt(totals?.negative, loading)} />
+        <Stat
+          label="Eval pass rate"
+          value={loading || passRate === undefined ? '…' : `${Math.round(passRate * 100)}%`}
+          accent
+        />
+      </div>
+      <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <h4 className="text-xs font-semibold uppercase text-subtle mb-2">Feedback by feature</h4>
+          <div className="space-y-2">
+            {(data?.feedback ?? []).slice(0, 5).map((row) => (
+              <div key={row.feature} className="flex items-center justify-between text-sm">
+                <span className="font-medium">{row.feature}</span>
+                <span className="text-muted-foreground">
+                  {row.positive} up / {row.negative} down
+                </span>
+              </div>
+            ))}
+            {!loading && !data?.feedback.length && (
+              <p className="text-sm text-muted-foreground">No local AI feedback yet.</p>
+            )}
+          </div>
+        </div>
+        <div>
+          <h4 className="text-xs font-semibold uppercase text-subtle mb-2">Recent failures</h4>
+          <div className="space-y-2">
+            {(data?.recent_failures ?? []).slice(0, 3).map((row) => (
+              <div key={`${row.example_id}-${row.created_at}`} className="text-sm">
+                <div className="font-medium">{row.feature ?? 'all'}</div>
+                <div className="text-muted-foreground">{row.failure_reason ?? 'failed check'}</div>
+              </div>
+            ))}
+            {!loading && !data?.recent_failures.length && (
+              <p className="text-sm text-muted-foreground">No recent eval failures.</p>
+            )}
+          </div>
+        </div>
+      </div>
+    </ChartSection>
+  );
 }
 
 function Stat({
