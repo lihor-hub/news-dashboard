@@ -212,9 +212,13 @@ def _call_openai(
     from openai import OpenAIError  # lazy import — optional dep at import time
 
     from news_dashboard.ai_client import chat_create, get_chat_client, get_prompt
+    from news_dashboard.ai_memory.service import format_memories_for_prompt
 
     prompt = get_prompt("briefing-system", fallback=_BRIEFING_SYSTEM_PROMPT)
     system = prompt.text
+    memory_text = format_memories_for_prompt(user_id)
+    if memory_text:
+        system += f"\n\n{memory_text}"
     if focus_prompt:
         system += (
             f"\n\nFocus the briefing on the following user-directed topic/style: {focus_prompt}"

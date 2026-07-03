@@ -1,5 +1,6 @@
 import type {
   AdminAnalytics,
+  AiMemory,
   AgentActionPlanResponse,
   AgentActionRun,
   AiWatchlist,
@@ -287,6 +288,42 @@ export async function saveRecommendationPreferences(
     method: 'PATCH',
     body: JSON.stringify(preferences),
   });
+}
+
+export async function fetchAiMemories(): Promise<AiMemory[]> {
+  const data = await requestJson<{ items: AiMemory[] }>('/api/users/me/ai-memories');
+  return data.items;
+}
+
+export async function createAiMemory(content: string): Promise<AiMemory> {
+  return requestJson<AiMemory>('/api/users/me/ai-memories', {
+    method: 'POST',
+    body: JSON.stringify({ content }),
+  });
+}
+
+export async function updateAiMemory(
+  memoryId: number,
+  payload: Partial<Pick<AiMemory, 'content' | 'memory_type' | 'confidence' | 'active'>>
+): Promise<AiMemory> {
+  return requestJson<AiMemory>(`/api/users/me/ai-memories/${memoryId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function deactivateAiMemory(memoryId: number): Promise<AiMemory> {
+  return requestJson<AiMemory>(`/api/users/me/ai-memories/${memoryId}`, {
+    method: 'DELETE',
+  });
+}
+
+export async function learnAiMemoriesFromReading(): Promise<AiMemory[]> {
+  const data = await requestJson<{ items: AiMemory[] }>(
+    '/api/users/me/ai-memories/learn-from-reading',
+    { method: 'POST' }
+  );
+  return data.items;
 }
 
 export async function ingestNow(): Promise<{

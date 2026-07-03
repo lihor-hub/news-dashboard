@@ -433,6 +433,17 @@ export interface RecommendationPreferences {
   recomputed?: number;
 }
 
+export interface AiMemory {
+  id: number;
+  memory_type: string;
+  content: string;
+  source: string;
+  confidence: number;
+  active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface PersonalizationNudge {
   id: string;
   kind: 'source' | 'topic';

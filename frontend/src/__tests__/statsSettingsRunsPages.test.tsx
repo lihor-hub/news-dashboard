@@ -16,6 +16,11 @@ const apiMock = vi.hoisted(() => ({
   fetchIngestRuns: vi.fn(),
   fetchIngestRunSources: vi.fn(),
   recalculateMyRecommendations: vi.fn(),
+  fetchAiMemories: vi.fn(),
+  createAiMemory: vi.fn(),
+  updateAiMemory: vi.fn(),
+  deactivateAiMemory: vi.fn(),
+  learnAiMemoriesFromReading: vi.fn(),
   downloadUserExport: vi.fn(),
   deleteOwnAccount: vi.fn(),
 }));
@@ -68,6 +73,10 @@ beforeEach(() => {
 afterEach(() => {
   vi.clearAllMocks();
   vi.unstubAllGlobals();
+});
+
+beforeEach(() => {
+  apiMock.fetchAiMemories.mockResolvedValue([]);
 });
 
 function renderPage(ui: ReactElement) {
@@ -210,6 +219,94 @@ describe('SettingsPage', () => {
     renderPage(<SettingsPage />);
     fireEvent.click(screen.getByText('Refresh recommendations'));
     await waitFor(() => expect(screen.getByText(/Couldn't refresh recommendations/)).toBeTruthy());
+  });
+
+  it('lets users create, edit, learn, and deactivate AI memories', async () => {
+    apiMock.fetchAiMemories.mockResolvedValue([
+      {
+        id: 1,
+        memory_type: 'preference',
+        content: 'prioritize agent infrastructure',
+        source: 'explicit',
+        confidence: 1,
+        active: true,
+        created_at: '2026-01-01T00:00:00Z',
+        updated_at: '2026-01-01T00:00:00Z',
+      },
+    ]);
+    apiMock.createAiMemory.mockResolvedValue({
+      id: 2,
+      memory_type: 'preference',
+      content: 'avoid model-release marketing',
+      source: 'explicit',
+      confidence: 1,
+      active: true,
+      created_at: '2026-01-02T00:00:00Z',
+      updated_at: '2026-01-02T00:00:00Z',
+    });
+    apiMock.updateAiMemory.mockResolvedValue({
+      id: 1,
+      memory_type: 'preference',
+      content: 'prioritize agent infrastructure and evals',
+      source: 'explicit',
+      confidence: 1,
+      active: true,
+      created_at: '2026-01-01T00:00:00Z',
+      updated_at: '2026-01-03T00:00:00Z',
+    });
+    apiMock.learnAiMemoriesFromReading.mockResolvedValue([
+      {
+        id: 3,
+        memory_type: 'interest',
+        content: 'Recent reading suggests sustained interest in ai coverage.',
+        source: 'reading_dna',
+        confidence: 0.65,
+        active: true,
+        created_at: '2026-01-04T00:00:00Z',
+        updated_at: '2026-01-04T00:00:00Z',
+      },
+    ]);
+    apiMock.deactivateAiMemory.mockResolvedValue({
+      id: 2,
+      memory_type: 'preference',
+      content: 'avoid model-release marketing',
+      source: 'explicit',
+      confidence: 1,
+      active: false,
+      created_at: '2026-01-02T00:00:00Z',
+      updated_at: '2026-01-05T00:00:00Z',
+    });
+
+    renderPage(<SettingsPage />);
+    await waitFor(() => expect(screen.getByText('prioritize agent infrastructure')).toBeTruthy());
+
+    fireEvent.change(screen.getByLabelText('New AI memory'), {
+      target: { value: 'avoid model-release marketing' },
+    });
+    fireEvent.click(screen.getByText('Add'));
+    await waitFor(() =>
+      expect(apiMock.createAiMemory).toHaveBeenCalledWith('avoid model-release marketing')
+    );
+    expect(screen.getByText('avoid model-release marketing')).toBeTruthy();
+
+    fireEvent.click(screen.getAllByLabelText('Edit AI memory')[0]);
+    fireEvent.change(screen.getByLabelText('AI memory content'), {
+      target: { value: 'prioritize agent infrastructure and evals' },
+    });
+    fireEvent.click(screen.getByText('Save'));
+    await waitFor(() =>
+      expect(screen.getByText('prioritize agent infrastructure and evals')).toBeTruthy()
+    );
+
+    fireEvent.click(screen.getByText('Learn from recent reading'));
+    await waitFor(() =>
+      expect(
+        screen.getByText('Recent reading suggests sustained interest in ai coverage.')
+      ).toBeTruthy()
+    );
+
+    fireEvent.click(screen.getAllByLabelText('Deactivate AI memory')[1]);
+    await waitFor(() => expect(screen.queryByText('avoid model-release marketing')).toBeNull());
   });
 
   it('shows the export download button', () => {
