@@ -21,3 +21,36 @@ def test_deploy_creates_namespace_before_secrets() -> None:
 
     assert namespace_index < pull_index  # noqa: S101
     assert namespace_index < ai_index  # noqa: S101
+
+
+def test_deploy_supports_public_ghcr_without_token() -> None:
+    workflow = WORKFLOW.read_text()
+    public_image_message = (
+        'echo "GHCR_TOKEN is empty; treating ${IMG}:${SHA} as a public GHCR image."'
+    )
+    empty_image_pull_arg = "pull_secret_helm_args=(--set-string image.pullSecretName=)"
+
+    assert 'if [ -n "$GHCR_TOKEN" ]; then' in workflow  # noqa: S101
+    assert public_image_message in workflow  # noqa: S101
+    assert empty_image_pull_arg in workflow  # noqa: S101
+    assert '"${pull_secret_helm_args[@]}"' in workflow  # noqa: S101
+
+
+def test_deploy_keeps_private_ghcr_pull_secret_when_token_is_set() -> None:
+    workflow = WORKFLOW.read_text()
+
+    token_branch_index = workflow.index('if [ -n "$GHCR_TOKEN" ]; then')
+    docker_login_index = workflow.index(
+        'echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_ACTOR" --password-stdin'
+    )
+    secret_index = workflow.index(
+        "kubectl -n news-dashboard create secret docker-registry ghcr-pull-secret"
+    )
+    helm_arg_index = workflow.index(
+        "pull_secret_helm_args=(--set-string image.pullSecretName=ghcr-pull-secret)"
+    )
+    no_token_index = workflow.index("else", token_branch_index)
+
+    assert token_branch_index < docker_login_index < no_token_index  # noqa: S101
+    assert token_branch_index < secret_index < no_token_index  # noqa: S101
+    assert token_branch_index < helm_arg_index < no_token_index  # noqa: S101
