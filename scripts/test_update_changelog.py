@@ -71,5 +71,54 @@ class TestUpdateChangelog(unittest.TestCase):
         self.assertFalse(out.endswith("\n\n"))
 
 
+_EXISTING_DATED = """# Changelog
+
+All notable changes to this project will be documented in this file.
+
+## [1.21.0] — 2026-06-26
+
+### Added
+- Share articles with other users.
+
+## 1.20.0
+- Smarter recommendations.
+"""
+
+
+class TestUpdateChangelogDatedHeadings(unittest.TestCase):
+    def test_date_produces_keep_a_changelog_heading(self):
+        out = update_changelog(_EXISTING, "1.22.0", "- A feature.", date="2026-07-03")
+        self.assertIn("## [1.22.0] — 2026-07-03\n- A feature.", out)
+
+    def test_replaces_existing_dated_section_for_same_version(self):
+        out = update_changelog(_EXISTING_DATED, "1.21.0", "- Rewritten.", date="2026-06-27")
+        # The old dated section is gone; exactly one 1.21.0 heading remains.
+        self.assertNotIn("2026-06-26", out)
+        self.assertNotIn("- Share articles with other users.", out)
+        self.assertEqual(out.count("[1.21.0]"), 1)
+        self.assertIn("## [1.21.0] — 2026-06-27\n- Rewritten.", out)
+
+    def test_dated_entry_replaces_plain_section_for_same_version(self):
+        out = update_changelog(_EXISTING_DATED, "1.20.0", "- Updated.", date="2026-07-01")
+        self.assertNotIn("## 1.20.0", out)
+        self.assertNotIn("- Smarter recommendations.", out)
+        self.assertIn("## [1.20.0] — 2026-07-01\n- Updated.", out)
+
+    def test_plain_entry_replaces_dated_section_for_same_version(self):
+        out = update_changelog(_EXISTING_DATED, "1.21.0", "- Plain again.")
+        self.assertEqual(out.count("1.21.0"), 1)
+        self.assertIn("## 1.21.0\n- Plain again.", out)
+
+    def test_idempotent_with_date(self):
+        once = update_changelog(_EXISTING_DATED, "1.22.0", "- New.", date="2026-07-03")
+        twice = update_changelog(once, "1.22.0", "- New.", date="2026-07-03")
+        self.assertEqual(once, twice)
+        self.assertEqual(twice.count("[1.22.0]"), 1)
+
+    def test_prose_header_preserved(self):
+        out = update_changelog(_EXISTING_DATED, "1.22.0", "- New.", date="2026-07-03")
+        self.assertTrue(out.startswith("# Changelog\n\nAll notable changes"))
+
+
 if __name__ == "__main__":
     unittest.main()
