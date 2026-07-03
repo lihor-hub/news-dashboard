@@ -1,13 +1,17 @@
-name: PR test metrics
+name: PR test timing
 
-# On every pull request, measure test coverage and wall-clock test time for
-# BOTH the PR head and its merge base (main), then post a sticky comment that
-# diffs the two. Lets you see at a glance whether a PR moves coverage or makes
-# the suite slower before you merge.
+# On every pull request, measure wall-clock test time for BOTH the PR head
+# and its merge base (main), then post a sticky comment that diffs the two.
+# Lets you see at a glance whether a PR makes the suite slower before you
+# merge.
+#
+# Coverage feedback lives on Codecov (see codecov.yml and the
+# `coverage-upload` job in ci.yml) — this workflow is timing-only so PRs get
+# one clear source of coverage commentary.
 #
 # This workflow measures the FULL backend + frontend suites (same as the
-# nightly lane) so coverage numbers are comprehensive. The per-PR CI (ci.yml)
-# uses change-aware routing; metrics here intentionally run everything for an
+# nightly lane) so timing numbers are comprehensive. The per-PR CI (ci.yml)
+# uses change-aware routing; timing here intentionally runs everything for an
 # accurate diff regardless of which files changed.
 #
 # Strategy: a 2-entry matrix runs the suite once per ref and uploads a small
@@ -24,7 +28,7 @@ permissions:
 
 # A newer push to the same PR makes in-flight measurements stale — cancel them.
 concurrency:
-  group: pr-metrics-${{ github.event.pull_request.number }}
+  group: pr-timing-${{ github.event.pull_request.number }}
   cancel-in-progress: true
 
 jobs:
@@ -71,26 +75,23 @@ jobs:
           cache: npm
       - run: npm ci
 
-      # Backend: pytest with JSON coverage; time the run with the bash SECONDS
-      # builtin. `|| true` so a measurement on the base ref never fails the PR.
-      - name: Backend tests + coverage
+      # Time the run with the bash SECONDS builtin. `|| true` so a
+      # measurement on the base ref never fails the PR.
+      - name: Backend tests
         id: backend
         env:
           DATABASE_URL: postgresql://news_dashboard:news_dashboard@127.0.0.1:5432/news_dashboard
           TEST_DATABASE_URL: postgresql://news_dashboard:news_dashboard@127.0.0.1:5432/news_dashboard
         run: |
           SECONDS=0
-          pytest -q --cov --cov-report=json:cov-backend.json \
-            -o faulthandler_timeout=120 || true
+          pytest -q -o faulthandler_timeout=120 || true
           echo "seconds=$SECONDS" >> "$GITHUB_OUTPUT"
 
-      # Frontend: vitest with v8 JSON summary coverage.
-      - name: Frontend tests + coverage
+      - name: Frontend tests
         id: frontend
         run: |
           SECONDS=0
-          npm run test:frontend:coverage --silent -- \
-            --coverage.reporter=json-summary || true
+          npm run test:frontend --silent || true
           echo "seconds=$SECONDS" >> "$GITHUB_OUTPUT"
 
       # Reduce raw outputs to one metrics.json for this ref.
@@ -104,20 +105,8 @@ jobs:
           python - <<'PY'
           import json, os
 
-          def num(path, *keys):
-              try:
-                  with open(path) as f:
-                      d = json.load(f)
-                  for k in keys:
-                      d = d[k]
-                  return round(float(d), 2)
-              except Exception:
-                  return None
-
           metrics = {
               "ref": os.environ["REF"],
-              "backend_cov": num("cov-backend.json", "totals", "percent_covered"),
-              "frontend_cov": num("coverage/coverage-summary.json", "total", "lines", "pct"),
               "backend_seconds": int(os.environ["BACKEND_SECONDS"]),
               "frontend_seconds": int(os.environ["FRONTEND_SECONDS"]),
           }
@@ -155,15 +144,8 @@ jobs:
             const pr = JSON.parse(fs.readFileSync('pr/metrics.json', 'utf8'));
             const base = JSON.parse(fs.readFileSync('base/metrics.json', 'utf8'));
 
-            const pct = (v) => (v == null ? 'n/a' : `${v.toFixed(2)}%`);
             const secs = (v) => (v == null ? 'n/a' : `${v}s`);
 
-            const covRow = (label, p, b) => {
-              if (p == null || b == null) return `| ${label} | ${pct(p)} | ${pct(b)} | n/a |`;
-              const d = p - b;
-              const arrow = d > 0.01 ? '🟢 +' : d < -0.01 ? '🔴 ' : '⚪ ';
-              return `| ${label} | ${pct(p)} | ${pct(b)} | ${arrow}${d.toFixed(2)} pp |`;
-            };
             const timeRow = (label, p, b) => {
               const d = p - b;
               const arrow = d > 1 ? '🔴 +' : d < -1 ? '🟢 ' : '⚪ ';
@@ -171,34 +153,30 @@ jobs:
             };
 
             const body = [
-              '<!-- pr-test-metrics -->',
-              '### 📊 Test metrics vs `main`',
-              '',
-              '**Coverage**',
-              '',
-              '| Suite | PR | main | Δ |',
-              '| --- | --- | --- | --- |',
-              covRow('Backend', pr.backend_cov, base.backend_cov),
-              covRow('Frontend', pr.frontend_cov, base.frontend_cov),
-              '',
-              '**Timing**',
+              '<!-- pr-test-timing -->',
+              '### ⏱️ Test timing vs `main`',
               '',
               '| Suite | PR | main | Δ |',
               '| --- | --- | --- | --- |',
               timeRow('Backend', pr.backend_seconds, base.backend_seconds),
               timeRow('Frontend', pr.frontend_seconds, base.frontend_seconds),
               '',
-              `<sub>PR \`${pr.ref.slice(0,7)}\` vs base \`${base.ref.slice(0,7)}\`. pp = percentage points.</sub>`,
+              'Coverage feedback is posted by Codecov, not this workflow.',
+              '',
+              `<sub>PR \`${pr.ref.slice(0,7)}\` vs base \`${base.ref.slice(0,7)}\`.</sub>`,
             ].join('\n');
 
             const { owner, repo } = context.repo;
             const issue_number = context.payload.pull_request.number;
-            const marker = '<!-- pr-test-metrics -->';
+            const marker = '<!-- pr-test-timing -->';
+            const staleMarker = '<!-- pr-test-metrics -->';
 
             const { data: comments } = await github.rest.issues.listComments({
               owner, repo, issue_number, per_page: 100,
             });
-            const existing = comments.find((c) => c.body.includes(marker));
+            const existing = comments.find(
+              (c) => c.body.includes(marker) || c.body.includes(staleMarker),
+            );
             if (existing) {
               await github.rest.issues.updateComment({ owner, repo, comment_id: existing.id, body });
             } else {

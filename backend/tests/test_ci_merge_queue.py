@@ -22,6 +22,7 @@ import yaml  # type: ignore[import-untyped]
 REPO_ROOT = Path(__file__).parent.parent.parent
 CI_FILE = REPO_ROOT / ".github" / "workflows" / "ci.yml"
 WORKFLOWS_DIR = REPO_ROOT / ".github" / "workflows"
+PR_TIMING_FILE = WORKFLOWS_DIR / "pr-timing.yml"
 
 # Jobs that must run the suite when GitHub builds a merge group.
 _TEST_JOBS = ("test-backend", "test-frontend")
@@ -122,3 +123,30 @@ def test_workflows_do_not_queue_pull_requests_for_auto_merge() -> None:
     assert not offenders, (
         "GitHub Actions workflows must not queue PRs for auto-merge:\n" + "\n".join(offenders)
     )
+
+
+def test_pr_timing_workflow_does_not_collect_coverage() -> None:
+    """pr-timing.yml (issue #708) must be timing-only; Codecov owns coverage.
+
+    Running two full-suite coverage collections per PR (once for the head,
+    once for the base) duplicated Codecov's job and produced a second,
+    potentially conflicting coverage comment. The workflow should measure
+    wall-clock time only.
+    """
+    assert PR_TIMING_FILE.exists(), f"pr-timing.yml not found at {PR_TIMING_FILE}"
+    content = PR_TIMING_FILE.read_text()
+    forbidden = ("--cov", "coverage.reporter", "cov-backend.json", "coverage-summary.json")
+    offenders = [pattern for pattern in forbidden if pattern in content]
+    assert not offenders, f"pr-timing.yml still collects coverage: {offenders}"
+
+
+def test_pr_timing_workflow_comment_has_no_coverage_table() -> None:
+    """The sticky comment body must not render a coverage table.
+
+    PRs should have one clear source of coverage feedback (Codecov); this
+    workflow's comment should be timing-only.
+    """
+    content = PR_TIMING_FILE.read_text()
+    assert "covRow" not in content, "pr-timing.yml comment still renders a coverage table"
+    assert "backend_cov" not in content, "pr-timing.yml metrics still include backend_cov"
+    assert "pr-test-timing" in content, "pr-timing.yml sticky comment marker is missing"

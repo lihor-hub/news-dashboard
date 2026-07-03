@@ -35,7 +35,7 @@ env:
 # and models:read for publish, security-events:write for trivy, pull-requests:write
 # for coverage-upload) declare their own narrower `permissions:` block below —
 # see .github/workflows/trivy-scan.yml, dependency-review.yml, release.yml, and
-# pr-metrics.yml for the same per-job pattern.
+# pr-timing.yml for the same per-job pattern.
 permissions:
   contents: read
 
