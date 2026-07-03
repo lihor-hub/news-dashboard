@@ -464,6 +464,26 @@ describe('ArticlePage — keyboard shortcuts', () => {
       'noopener,noreferrer'
     );
   });
+
+  it('stops re-attaching the keydown listener once the article and body have settled', async () => {
+    const addSpy = vi.spyOn(window, 'addEventListener');
+    renderReader();
+    await waitFor(() => screen.getByText('Test Article Title'));
+    // Wait for the async body fetch to resolve so `article` stops changing identity
+    // (one re-registration is expected here, when article goes from null to loaded).
+    await waitFor(() => screen.getByText('Text'));
+
+    const keydownCallCount = () => addSpy.mock.calls.filter(([type]) => type === 'keydown').length;
+    const settledCount = keydownCallCount();
+    expect(settledCount).toBeGreaterThan(0);
+
+    // Trigger extra re-renders (state updates unrelated to the keyboard deps)
+    // — the listener must not be torn down and re-attached for these.
+    fireEvent.keyDown(window, { key: 'ArrowLeft' });
+    fireEvent.keyDown(window, { key: 'ArrowRight' });
+
+    expect(keydownCallCount()).toBe(settledCount);
+  });
 });
 
 // ─── Touch gesture handling ────────────────────────────────────────────────────
