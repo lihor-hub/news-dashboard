@@ -278,6 +278,14 @@ DEFAULT_SOURCES: list[SourceDefinition] = [
         priority=76,
         interest_tags=("security", "infra", "software-development"),
     ),
+    SourceDefinition(
+        "github-security-lab",
+        "GitHub Security Lab",
+        "https://github.blog/tag/github-security-lab/feed/",
+        "security",
+        priority=74,
+        interest_tags=("security", "infra", "product-news"),
+    ),
     # ── Cloud / infra ────────────────────────────────────────────────────────
     SourceDefinition(
         "kubernetes-blog",
