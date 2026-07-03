@@ -156,8 +156,24 @@ See the [README Configuration section](../README.md#configuration) for the compl
 | Variable | Description |
 |----------|-------------|
 | `ENABLE_API_DOCS` | Set to `true` to serve the interactive API docs (`/docs`, `/redoc`, `/openapi.json`). Off by default so a public deployment doesn't leak its full API surface to anonymous visitors; enable it for local development or trusted environments. |
+| `ENABLE_HSTS` | Set to `true` to have the app send `Strict-Transport-Security` itself. Off by default, since HSTS is only correct behind HTTPS — leave it unset for local HTTP dev, or when a TLS-terminating proxy (e.g. Caddy, see below) already sets it. |
 
 > **Important**: Never commit secrets to version control. Use environment variables or a `.env` file (not committed to Git) to manage sensitive values.
+
+### Baseline browser security headers
+
+The app itself sets `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`,
+`Referrer-Policy: no-referrer`, and a conservative `Permissions-Policy` on
+every response (API and static frontend alike), so this baseline applies
+regardless of which front door is used — `docker run`, `docker-compose.prod.yml`,
+or a reverse proxy other than Caddy. `Strict-Transport-Security` stays opt-in
+via `ENABLE_HSTS` above.
+
+The documented Caddy deployment ([HTTPS with Caddy](https://docs.lihor.ro/docs/configuration/https-caddy),
+config in `deploy/Caddyfile`) also sets these headers at the edge, including
+HSTS. The two layers are compatible — headers the app already set are left
+alone (`setdefault` semantics), so the edge proxy can still enforce a
+stricter policy.
 
 ### Optional article body extraction (Crawl4AI)
 
