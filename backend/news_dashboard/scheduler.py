@@ -342,6 +342,23 @@ def _run_reading_list_fetch() -> tuple[str, str | None] | None:
     return "success", f"fetched {processed} item(s)"
 
 
+def _run_watchlist_evaluation() -> tuple[str, str | None]:
+    from news_dashboard.watchlist_agent import evaluate_watchlists
+
+    logger.info("Watchlist evaluation starting…")
+    try:
+        summary = evaluate_watchlists()
+        msg = (
+            f"{summary['watchlists_evaluated']} watchlist(s) evaluated, "
+            f"{summary['nudges_created']} nudge(s) created"
+        )
+        logger.info("Watchlist evaluation: %s", msg)
+        return "success", msg
+    except Exception as exc:
+        logger.exception("Watchlist evaluation failed")
+        return "failure", str(exc)[:500]
+
+
 def _run_and_record(
     job_name: str,
     fn: Callable[[], tuple[str, str | None] | None],
@@ -406,6 +423,10 @@ def _job_weekly_recaps() -> None:
 
 def _job_reading_list_fetch() -> None:
     _run_and_record("reading_list_fetch", _run_reading_list_fetch)
+
+
+def _job_watchlist_evaluation() -> None:
+    _run_and_record("watchlist_evaluation", _run_watchlist_evaluation)
 
 
 def _parse_cron_hm(cron: str, default_minute: str, default_hour: str) -> tuple[str, str]:
@@ -540,6 +561,14 @@ def start_scheduler() -> None:
         trigger="interval",
         minutes=int(os.getenv("READING_LIST_FETCH_INTERVAL_MINUTES", "5")),
         id="reading_list_fetch",
+        replace_existing=True,
+    )
+
+    scheduler.add_job(
+        _job_watchlist_evaluation,
+        trigger="interval",
+        minutes=int(os.getenv("WATCHLIST_EVALUATION_INTERVAL_MINUTES", "15")),
+        id="watchlist_evaluation",
         replace_existing=True,
     )
 

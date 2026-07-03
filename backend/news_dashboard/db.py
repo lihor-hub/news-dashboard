@@ -617,6 +617,36 @@ POSTGRES_MULTIUSER_SCHEMA = [
     )
     """,
     "CREATE INDEX IF NOT EXISTS idx_agent_action_steps_run ON agent_action_steps(run_id, ordinal)",
+    """
+    CREATE TABLE IF NOT EXISTS user_ai_watchlists (
+      id           SERIAL PRIMARY KEY,
+      user_id      INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      label        TEXT NOT NULL,
+      query        TEXT NOT NULL,
+      threshold    DOUBLE PRECISION NOT NULL DEFAULT 0.5,
+      enabled      BOOLEAN NOT NULL DEFAULT TRUE,
+      notify_push  BOOLEAN NOT NULL DEFAULT TRUE,
+      created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      CHECK (threshold >= 0 AND threshold <= 1)
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_user_ai_watchlists_user"
+    " ON user_ai_watchlists(user_id, enabled)",
+    """
+    CREATE TABLE IF NOT EXISTS user_ai_nudges (
+      id           BIGSERIAL PRIMARY KEY,
+      user_id      INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      watchlist_id INTEGER NOT NULL REFERENCES user_ai_watchlists(id) ON DELETE CASCADE,
+      article_id   BIGINT  NOT NULL REFERENCES articles(id) ON DELETE CASCADE,
+      score        DOUBLE PRECISION NOT NULL,
+      explanation  TEXT,
+      created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE (user_id, watchlist_id, article_id)
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_user_ai_nudges_user"
+    " ON user_ai_nudges(user_id, created_at DESC)",
 ]
 
 

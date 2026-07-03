@@ -2035,6 +2035,111 @@ def dismiss_personalization_nudge(
     )
 
 
+# ── AI watchlists ──────────────────────────────────────────────────────────────
+
+
+class WatchlistCreateRequest(BaseModel):
+    label: str
+    query: str
+    threshold: float = 0.5
+    enabled: bool = True
+    notify_push: bool = True
+
+
+class WatchlistUpdateRequest(BaseModel):
+    label: str | None = None
+    query: str | None = None
+    threshold: float | None = None
+    enabled: bool | None = None
+    notify_push: bool | None = None
+
+
+class WatchlistPreviewRequest(BaseModel):
+    query: str
+    threshold: float = 0.5
+
+
+@api.get("/api/watchlists")
+def list_watchlists_endpoint(
+    current_user: Annotated[dict[str, Any], Depends(require_auth)],
+) -> dict[str, Any]:
+    from news_dashboard.watchlist_agent import list_watchlists
+
+    return {"items": list_watchlists(int(current_user["id"]))}
+
+
+@api.post("/api/watchlists")
+def create_watchlist_endpoint(
+    payload: WatchlistCreateRequest,
+    current_user: Annotated[dict[str, Any], Depends(require_auth)],
+) -> dict[str, Any]:
+    from news_dashboard.watchlist_agent import create_watchlist
+
+    try:
+        return create_watchlist(
+            int(current_user["id"]),
+            payload.label,
+            payload.query,
+            threshold=payload.threshold,
+            enabled=payload.enabled,
+            notify_push=payload.notify_push,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@api.patch("/api/watchlists/{watchlist_id}")
+def update_watchlist_endpoint(
+    watchlist_id: int,
+    payload: WatchlistUpdateRequest,
+    current_user: Annotated[dict[str, Any], Depends(require_auth)],
+) -> dict[str, Any]:
+    from news_dashboard.watchlist_agent import WatchlistNotFoundError, update_watchlist
+
+    try:
+        return update_watchlist(
+            int(current_user["id"]),
+            watchlist_id,
+            **payload.model_dump(exclude_unset=True),
+        )
+    except WatchlistNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="watchlist not found") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@api.delete("/api/watchlists/{watchlist_id}")
+def delete_watchlist_endpoint(
+    watchlist_id: int,
+    current_user: Annotated[dict[str, Any], Depends(require_auth)],
+) -> dict[str, Any]:
+    from news_dashboard.watchlist_agent import delete_watchlist
+
+    if not delete_watchlist(int(current_user["id"]), watchlist_id):
+        raise HTTPException(status_code=404, detail="watchlist not found")
+    return {"deleted": True}
+
+
+@api.post("/api/watchlists/preview")
+def preview_watchlist_endpoint(
+    payload: WatchlistPreviewRequest,
+    current_user: Annotated[dict[str, Any], Depends(require_auth)],
+) -> dict[str, Any]:
+    from news_dashboard.watchlist_agent import preview_matches
+
+    matches = preview_matches(int(current_user["id"]), payload.query, threshold=payload.threshold)
+    return {"items": matches}
+
+
+@api.get("/api/watchlists/nudges")
+def list_watchlist_nudges_endpoint(
+    current_user: Annotated[dict[str, Any], Depends(require_auth)],
+) -> dict[str, Any]:
+    from news_dashboard.watchlist_agent import list_nudges
+
+    return {"items": list_nudges(int(current_user["id"]))}
+
+
 @api.patch("/api/sources/{slug}/enabled")
 def set_source_enabled(
     slug: str,
