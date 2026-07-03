@@ -19,6 +19,8 @@ health, search, briefings, and saved/read history.
 The app uses a FastAPI backend, a Vite React frontend, PostgreSQL storage, and
 optional OpenAI features for embeddings, Ask AI, and briefings.
 
+![News Dashboard home screen showing the Today feed with triage filters](docs/assets/screenshot-home.png)
+
 ## Features
 
 - Curated Python, AI/LLM, agents, cloud, engineering, trending, and repository feeds.
