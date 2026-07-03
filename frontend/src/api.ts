@@ -17,6 +17,7 @@ import type {
   BriefingLatestResponse,
   CategoryMixPoint,
   IngestedVsHandledPoint,
+  McpToken,
   NotificationSettings,
   NotificationSettingsUpdate,
   OnboardingInterest,
@@ -324,6 +325,23 @@ export async function learnAiMemoriesFromReading(): Promise<AiMemory[]> {
     { method: 'POST' }
   );
   return data.items;
+}
+
+export async function fetchMcpTokens(): Promise<{ items: McpToken[]; enabled: boolean }> {
+  return requestJson('/api/users/me/mcp-tokens');
+}
+
+export async function createMcpToken(name: string): Promise<McpToken> {
+  return requestJson<McpToken>('/api/users/me/mcp-tokens', {
+    method: 'POST',
+    body: JSON.stringify({ name }),
+  });
+}
+
+export async function revokeMcpToken(tokenId: number): Promise<McpToken> {
+  return requestJson<McpToken>(`/api/users/me/mcp-tokens/${tokenId}`, {
+    method: 'DELETE',
+  });
 }
 
 export async function ingestNow(): Promise<{

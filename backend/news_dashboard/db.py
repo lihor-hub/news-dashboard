@@ -709,6 +709,20 @@ POSTGRES_MULTIUSER_SCHEMA = [
     """,
     "CREATE INDEX IF NOT EXISTS idx_user_ai_memory_events_user"
     " ON user_ai_memory_events(user_id, created_at DESC)",
+    """
+    CREATE TABLE IF NOT EXISTS mcp_tokens (
+      id            BIGSERIAL PRIMARY KEY,
+      user_id       INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      name          TEXT NOT NULL,
+      token_hash    TEXT NOT NULL UNIQUE,
+      token_prefix  TEXT NOT NULL,
+      scopes        TEXT NOT NULL DEFAULT 'search,read,ask,briefings',
+      created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      last_used_at  TIMESTAMPTZ,
+      revoked_at    TIMESTAMPTZ
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_mcp_tokens_user ON mcp_tokens(user_id, created_at DESC)",
 ]
 
 
