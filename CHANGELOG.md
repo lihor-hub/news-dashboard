@@ -3,6 +3,9 @@
 All notable changes to this project will be documented in this file.
 This project adheres to [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.93.0] — 2026-07-03
+- Your dashboard now remembers your preferences and habits over time, so it gets better at suggesting what matters to you.
+
 ## [1.90.1] — 2026-07-03
 The user wants me to write "What's new" release notes for end users based on a single git commit. Let me analyze the commit:
 
