@@ -41,3 +41,22 @@ export function presentFailedBriefing(error?: string | null): FriendlyError {
     detail: error ?? undefined,
   };
 }
+
+export type SourceActionKind = 'add' | 'toggle' | 'cleanup' | 'delete';
+
+/** Friendly copy for source management failures, without leaking raw backend/server strings as the primary message. */
+export function sourceActionErrorMessage(err: unknown, action: SourceActionKind): string {
+  if (err instanceof HttpError && err.status === 409) {
+    return 'That slug is already in use — choose a different slug or source.';
+  }
+  switch (action) {
+    case 'add':
+      return 'Could not add source. Check the feed URL and try again.';
+    case 'toggle':
+      return 'Could not update the source — it has been reverted to its previous state.';
+    case 'cleanup':
+      return "Cleanup couldn't be applied — the source list has been restored.";
+    case 'delete':
+      return "Couldn't delete the source — it has been restored.";
+  }
+}
