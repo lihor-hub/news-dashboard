@@ -18,13 +18,19 @@ const REPULSION = 0.08; // fraction of area per node pair
 const SPRING = 0.02;
 const CENTERING = 0.01;
 const COOLING = 0.98;
+const MIN_SEPARATION = 30; // px between node centers so labels stay legible
+const SEPARATION_PASSES = 40;
 
 /**
  * Deterministic force-directed layout: nodes start evenly spaced on a circle
  * (so the result is reproducible without randomness), then iterate pairwise
  * repulsion, weighted spring attraction along edges, and a centering pull,
- * with a cooling step cap. Positions are clamped to the viewport with an
- * optional `margin` so node circles never clip at the SVG boundary.
+ * with a cooling step cap.
+ *
+ * The simulation itself runs unclamped — clamping each iteration piles nodes
+ * up along the viewport edges in straight rows. Instead the finished layout is
+ * rescaled to fit the viewport minus `margin`, then minimum-separation passes
+ * push near-coincident nodes apart so circles and labels don't overlap.
  */
 export function forceLayout(
   nodes: ForceNode[],
@@ -105,13 +111,90 @@ export function forceLayout(
       const magnitude = Math.hypot(f.x, f.y) || 1;
       const step = Math.min(magnitude, maxStep);
       layout.set(id, {
-        x: Math.min(width - margin, Math.max(margin, p.x + (f.x / magnitude) * step)),
-        y: Math.min(height - margin, Math.max(margin, p.y + (f.y / magnitude) * step)),
+        x: p.x + (f.x / magnitude) * step,
+        y: p.y + (f.y / magnitude) * step,
       });
     }
 
     maxStep *= COOLING;
   }
 
+  fitToViewport(layout, width, height, margin);
+  separate(layout, ids, width, height, margin);
   return layout;
+}
+
+/** Rescale the layout's bounding box to fill the viewport minus `margin`. */
+function fitToViewport(
+  layout: Map<string, ForcePoint>,
+  width: number,
+  height: number,
+  margin: number
+): void {
+  let minX = Infinity;
+  let maxX = -Infinity;
+  let minY = Infinity;
+  let maxY = -Infinity;
+  for (const p of layout.values()) {
+    minX = Math.min(minX, p.x);
+    maxX = Math.max(maxX, p.x);
+    minY = Math.min(minY, p.y);
+    maxY = Math.max(maxY, p.y);
+  }
+  const spanX = maxX - minX;
+  const spanY = maxY - minY;
+  const innerW = width - 2 * margin;
+  const innerH = height - 2 * margin;
+  for (const [id, p] of layout) {
+    layout.set(id, {
+      x: spanX < 1 ? width / 2 : margin + ((p.x - minX) / spanX) * innerW,
+      y: spanY < 1 ? height / 2 : margin + ((p.y - minY) / spanY) * innerH,
+    });
+  }
+}
+
+/**
+ * Push pairs closer than MIN_SEPARATION apart, clamped to the viewport.
+ * Moves are small relative to the canvas, so clamping here cannot recreate
+ * the wall pile-up the simulation avoids.
+ */
+function separate(
+  layout: Map<string, ForcePoint>,
+  ids: string[],
+  width: number,
+  height: number,
+  margin: number
+): void {
+  const clampX = (x: number) => Math.min(width - margin, Math.max(margin, x));
+  const clampY = (y: number) => Math.min(height - margin, Math.max(margin, y));
+  for (let pass = 0; pass < SEPARATION_PASSES; pass++) {
+    let moved = false;
+    for (let i = 0; i < ids.length; i++) {
+      for (let j = i + 1; j < ids.length; j++) {
+        const a = layout.get(ids[i])!;
+        const b = layout.get(ids[j])!;
+        let dx = b.x - a.x;
+        let dy = b.y - a.y;
+        let dist = Math.hypot(dx, dy);
+        if (dist >= MIN_SEPARATION) continue;
+        if (dist < 1e-3) {
+          // Deterministic direction for coincident points.
+          dx = i - j;
+          dy = 1;
+          dist = Math.hypot(dx, dy);
+        }
+        const shift = (MIN_SEPARATION - dist) / 2 / dist;
+        layout.set(ids[i], {
+          x: clampX(a.x - dx * shift),
+          y: clampY(a.y - dy * shift),
+        });
+        layout.set(ids[j], {
+          x: clampX(b.x + dx * shift),
+          y: clampY(b.y + dy * shift),
+        });
+        moved = true;
+      }
+    }
+    if (!moved) break;
+  }
 }
