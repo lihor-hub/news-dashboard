@@ -291,11 +291,13 @@ jobs:
           fi
           echo "All test lanes passed (backend=$backend, frontend=$frontend, a11y=$a11y)"
   # ── 7. COVERAGE UPLOAD ─────────────────────────────────────────────────────
-  # Uploads coverage reports to Codecov for tracking test coverage trends.
+  # Uploads coverage reports to Codecov for PR comments, status checks, and
+  # coverage trends. Merge groups run the full test suite, so they also upload
+  # coverage to keep queued merges covered by the same Codecov flag wiring.
   coverage-upload:
     needs: [test-backend, test-frontend]
     runs-on: ubuntu-latest
-    if: always() && (github.event_name == 'push' || github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch')
+    if: always() && (github.event_name == 'push' || github.event_name == 'pull_request' || github.event_name == 'merge_group' || github.event_name == 'workflow_dispatch')
     permissions:
       contents: read
       pull-requests: write
@@ -309,6 +311,15 @@ jobs:
           name: backend-coverage
           path: ./coverage-backend
 
+      - name: Check backend coverage report
+        id: backend-coverage
+        run: |
+          if compgen -G "./coverage-backend/*.xml" > /dev/null; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Download frontend coverage
         if: needs.test-frontend.result == 'success' || needs.test-frontend.result == 'failure'
         uses: actions/download-artifact@v8
@@ -316,8 +327,18 @@ jobs:
           name: frontend-coverage
           path: ./coverage-frontend
 
+      - name: Check frontend coverage report
+        id: frontend-coverage
+        run: |
+          if [[ -f "./coverage-frontend/lcov.info" ]]; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Upload Backend to Codecov
-        uses: codecov/codecov-action@v4
+        if: steps.backend-coverage.outputs.exists == 'true'
+        uses: codecov/codecov-action@v5
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: ./coverage-backend/*.xml
@@ -327,7 +348,8 @@ jobs:
           verbose: true
 
       - name: Upload Frontend to Codecov
-        uses: codecov/codecov-action@v4
+        if: steps.frontend-coverage.outputs.exists == 'true'
+        uses: codecov/codecov-action@v5
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: ./coverage-frontend/lcov.info
