@@ -144,17 +144,9 @@ jobs:
 
       - name: Inject version (not committed — only for this build)
         env:
-          V: ${{ needs.release.outputs.version }}
+          VERSION: ${{ needs.release.outputs.version }}
           CODE: ${{ needs.release.outputs.code }}
-        run: |
-          # Patterns require at least one digit to avoid matching empty strings
-          # (POSIX BRE: [0-9][0-9]* = one or more).
-          sed -i "s/versionCode [0-9][0-9]*/versionCode $CODE/" android/app/build.gradle
-          sed -i "s/versionName \"[0-9][^\"]*\"/versionName \"$V\"/" android/app/build.gradle
-          jq --arg v "$V" --argjson c "$CODE" \
-            '.appVersionName = $v | .appVersionCode = $c' \
-            android/twa-manifest.json > /tmp/twa.json
-          mv /tmp/twa.json android/twa-manifest.json
+        run: bash scripts/inject_app_version.sh android
 
       - uses: actions/setup-java@v4
         with:
@@ -225,11 +217,8 @@ jobs:
 
       - name: Inject version (not committed — only for this build)
         env:
-          V: ${{ needs.release.outputs.version }}
-        run: |
-          jq --arg v "$V" '.version = $v' \
-            desktop/package.json > /tmp/pkg.json
-          mv /tmp/pkg.json desktop/package.json
+          VERSION: ${{ needs.release.outputs.version }}
+        run: bash scripts/inject_app_version.sh desktop
 
       - uses: actions/setup-node@v4
         with:
