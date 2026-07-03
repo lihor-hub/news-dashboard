@@ -15,6 +15,7 @@ import yaml  # type: ignore[import-untyped]
 
 REPO_ROOT = Path(__file__).parent.parent.parent
 COMPOSE_FILE = REPO_ROOT / "docker-compose.yml"
+COMPOSE_PROD_FILE = REPO_ROOT / "docker-compose.prod.yml"
 
 _REQUIRED_AUTH_VARS = {
     "SESSION_SECRET",
@@ -64,3 +65,49 @@ def test_compose_app_service_has_auth_env_vars() -> None:
 
     assert not missing, f"Auth env vars not declared in compose: {missing}"
     assert not empty, f"Auth env vars have no default value in compose: {empty}"
+
+
+def test_compose_prod_file_exists() -> None:
+    assert COMPOSE_PROD_FILE.exists(), f"docker-compose.prod.yml not found at {COMPOSE_PROD_FILE}"
+
+
+def _assert_app_healthcheck_uses_no_extra_tools(compose_file: Path) -> None:
+    """The news-dashboard service healthcheck must not rely on curl/wget.
+
+    The production image (python:3.14-slim) does not install curl or wget, so
+    the healthcheck must use the Python standard library to probe /api/ready.
+    """
+    compose = yaml.safe_load(compose_file.read_text())
+    services = compose.get("services", {})
+    assert "news-dashboard" in services, "news-dashboard service missing from compose"
+
+    healthcheck = services["news-dashboard"].get("healthcheck")
+    assert healthcheck is not None, (
+        f"news-dashboard service in {compose_file.name} has no healthcheck"
+    )
+
+    test = healthcheck.get("test")
+    assert isinstance(test, list), f"healthcheck.test in {compose_file.name} must be a list"
+    assert test, f"healthcheck.test in {compose_file.name} must be non-empty"
+    assert test[0] == "CMD", (
+        f"healthcheck.test in {compose_file.name} must use exec form (CMD), not CMD-SHELL"
+    )
+
+    command = " ".join(test)
+    assert "curl" not in command, f"healthcheck in {compose_file.name} must not depend on curl"
+    assert "wget" not in command, f"healthcheck in {compose_file.name} must not depend on wget"
+    assert "/api/ready" in command, f"healthcheck in {compose_file.name} must probe /api/ready"
+    assert "127.0.0.1" in command, (
+        f"healthcheck in {compose_file.name} must probe the local container"
+    )
+
+    for field in ("interval", "timeout", "retries", "start_period"):
+        assert field in healthcheck, f"healthcheck in {compose_file.name} is missing '{field}'"
+
+
+def test_compose_app_healthcheck_configured() -> None:
+    _assert_app_healthcheck_uses_no_extra_tools(COMPOSE_FILE)
+
+
+def test_compose_prod_app_healthcheck_configured() -> None:
+    _assert_app_healthcheck_uses_no_extra_tools(COMPOSE_PROD_FILE)
