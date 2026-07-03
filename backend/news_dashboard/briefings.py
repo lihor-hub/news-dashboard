@@ -15,6 +15,7 @@ from functools import partial
 from pathlib import Path
 from typing import Any
 
+from news_dashboard import briefing_agent
 from news_dashboard.db import connect, row_to_dict
 
 CANDIDATE_LIMIT = 40
@@ -252,37 +253,17 @@ def _call_openai(
 
 
 def _validate_content(raw: dict[str, Any], candidate_ids: set[int]) -> dict[str, Any]:
-    """Validate structure and strip citations that reference unknown article IDs."""
-    required = {"title", "summary", "sections"}
-    missing = required - raw.keys()
-    if missing:
-        msg = f"AI response missing required keys: {missing}"
-        raise BriefingGenerationError(msg)
+    """Validate structure and strip citations that reference unknown article IDs.
 
-    sections = raw.get("sections") or []
-    if not isinstance(sections, list):
-        msg = "AI response 'sections' must be a list"
-        raise BriefingGenerationError(msg)
-
-    clean_sections = []
-    for section in sections:
-        citations = [c for c in (section.get("citations") or []) if int(c) in candidate_ids]
-        clean_sections.append(
-            {
-                "title": section.get("title", ""),
-                "body": section.get("body", ""),
-                "citations": citations,
-            }
-        )
-
-    worth_opening = [int(c) for c in (raw.get("worth_opening") or []) if int(c) in candidate_ids]
-
-    return {
-        "title": str(raw.get("title", "")),
-        "summary": str(raw.get("summary", "")),
-        "sections": clean_sections,
-        "worth_opening": worth_opening,
-    }
+    Thin backward-compatible wrapper around the citation-verification stage in
+    ``briefing_agent`` (kept as its own module so it can be unit tested, and
+    reused, without a network-calling AI client).
+    """
+    try:
+        content, _unsupported_sections = briefing_agent.verify_citations(raw, candidate_ids)
+    except (ValueError, TypeError) as exc:
+        raise BriefingGenerationError(str(exc)) from exc
+    return content
 
 
 def _save_briefing(  # noqa: PLR0913
@@ -484,7 +465,7 @@ def _keyword_score(article: dict[str, Any], keywords: list[str]) -> float:
     return score
 
 
-def generate_briefing(  # noqa: PLR0913
+def generate_briefing(  # noqa: PLR0913, PLR0915
     database_url: str | None = None,
     *,
     model: str | None = None,
@@ -525,10 +506,31 @@ def generate_briefing(  # noqa: PLR0913
     until_at = datetime.now(timezone.utc)
     since_at = _current_day_since_at(until_at)
 
+    run_id = briefing_agent.start_run(database_url, user_id)
+    stage_ordinal = {stage: i for i, stage in enumerate(briefing_agent.STAGE_ORDER)}
+
+    def _record(stage: str, status: str, **kwargs: Any) -> None:
+        briefing_agent.record_step(
+            database_url, run_id, stage, stage_ordinal[stage], status=status, **kwargs
+        )
+
+    def _fail_run(stage: str, exc: Exception) -> None:
+        briefing_agent.finish_run(
+            database_url, run_id, status="failed", failed_stage=stage, error=str(exc)
+        )
+
+    # Stage 1: candidate selection.
+    t0 = time.monotonic()
     candidates = select_candidates(
         since_at, until_at=until_at, database_url=database_url, user_id=user_id
     )
+    _record(
+        briefing_agent.STAGE_CANDIDATE_SELECTION,
+        "complete",
+        latency_ms=int((time.monotonic() - t0) * 1000),
+    )
     if not candidates:
+        briefing_agent.finish_run(database_url, run_id, status="complete")
         return {"status": "no_candidates"}
 
     keywords = []
@@ -546,21 +548,41 @@ def generate_briefing(  # noqa: PLR0913
             reverse=True,
         )
 
+    # Stage 2: theme clustering (deterministic, no AI call).
+    t0 = time.monotonic()
+    themes = briefing_agent.cluster_themes(candidates)
+    candidates = briefing_agent.flatten_themes(themes)
+    _record(
+        briefing_agent.STAGE_THEME_CLUSTERING,
+        "complete",
+        latency_ms=int((time.monotonic() - t0) * 1000),
+    )
+
     candidate_ids = {int(a["id"]) for a in candidates}
     call_ai: AiFn = (
         ai_fn
         if ai_fn is not None
         else partial(_call_openai, user_id=user_id, focus_prompt=focus_prompt)
     )
+
+    # Stage 3: section drafting, with retry on transient AI failures.
     attempts = max(1, max_attempts)
-    content: dict[str, Any] | None = None
+    raw_content: dict[str, Any] | None = None
+    t0 = time.monotonic()
     for attempt in range(1, attempts + 1):
         try:
             raw_content = call_ai(candidates, resolved_model)
-            content = _validate_content(raw_content, candidate_ids)
             break
         except BriefingAINotConfiguredError as exc:
             # Misconfiguration won't fix itself on retry — fail fast.
+            _record(
+                briefing_agent.STAGE_DRAFTING,
+                "failed",
+                model=resolved_model,
+                latency_ms=int((time.monotonic() - t0) * 1000),
+                error=str(exc),
+            )
+            _fail_run(briefing_agent.STAGE_DRAFTING, exc)
             _save_failed_briefing(
                 since_at,
                 until_at,
@@ -573,6 +595,14 @@ def generate_briefing(  # noqa: PLR0913
             raise
         except BriefingGenerationError as exc:
             if attempt >= attempts:
+                _record(
+                    briefing_agent.STAGE_DRAFTING,
+                    "failed",
+                    model=resolved_model,
+                    latency_ms=int((time.monotonic() - t0) * 1000),
+                    error=str(exc),
+                )
+                _fail_run(briefing_agent.STAGE_DRAFTING, exc)
                 _save_failed_briefing(
                     since_at,
                     until_at,
@@ -594,19 +624,55 @@ def generate_briefing(  # noqa: PLR0913
             if delay > 0:
                 time.sleep(delay)
 
-    if content is None:  # pragma: no cover — loop either breaks or raises
+    if raw_content is None:  # pragma: no cover — loop either breaks or raises
         msg = "Briefing generation produced no content"
         raise BriefingGenerationError(msg)
-    return _save_briefing(
-        since_at,
-        until_at,
-        content,
-        candidate_ids,
-        resolved_model,
-        database_url,
-        user_id=user_id,
-        focus_prompt=focus_prompt,
+    _record(
+        briefing_agent.STAGE_DRAFTING,
+        "complete",
+        model=resolved_model,
+        latency_ms=int((time.monotonic() - t0) * 1000),
     )
+
+    # Stage 4: citation verification.
+    try:
+        content = _validate_content(raw_content, candidate_ids)
+    except BriefingGenerationError as exc:
+        _record(briefing_agent.STAGE_CITATION_VERIFICATION, "failed", error=str(exc))
+        _fail_run(briefing_agent.STAGE_CITATION_VERIFICATION, exc)
+        _save_failed_briefing(
+            since_at,
+            until_at,
+            exc,
+            resolved_model,
+            database_url,
+            user_id=user_id,
+            focus_prompt=focus_prompt,
+        )
+        raise
+    _record(briefing_agent.STAGE_CITATION_VERIFICATION, "complete")
+
+    # Stage 5: assembly (persistence).
+    try:
+        result = _save_briefing(
+            since_at,
+            until_at,
+            content,
+            candidate_ids,
+            resolved_model,
+            database_url,
+            user_id=user_id,
+            focus_prompt=focus_prompt,
+        )
+    except Exception as exc:
+        _record(briefing_agent.STAGE_ASSEMBLY, "failed", error=str(exc))
+        _fail_run(briefing_agent.STAGE_ASSEMBLY, exc)
+        raise
+    _record(briefing_agent.STAGE_ASSEMBLY, "complete")
+    briefing_agent.finish_run(
+        database_url, run_id, status="complete", briefing_id=int(result["id"])
+    )
+    return result
 
 
 def get_latest_briefing(

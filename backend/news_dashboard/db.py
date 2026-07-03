@@ -647,6 +647,38 @@ POSTGRES_MULTIUSER_SCHEMA = [
     """,
     "CREATE INDEX IF NOT EXISTS idx_user_ai_nudges_user"
     " ON user_ai_nudges(user_id, created_at DESC)",
+    """
+    CREATE TABLE IF NOT EXISTS briefing_agent_runs (
+      id           BIGSERIAL PRIMARY KEY,
+      briefing_id  INTEGER REFERENCES briefings(id) ON DELETE CASCADE,
+      user_id      INTEGER REFERENCES users(id) ON DELETE CASCADE,
+      status       TEXT NOT NULL DEFAULT 'running'
+        CHECK(status IN ('running','complete','failed')),
+      failed_stage TEXT,
+      error        TEXT,
+      created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_briefing_agent_runs_briefing"
+    " ON briefing_agent_runs(briefing_id)",
+    """
+    CREATE TABLE IF NOT EXISTS briefing_agent_steps (
+      id           BIGSERIAL PRIMARY KEY,
+      run_id       BIGINT NOT NULL REFERENCES briefing_agent_runs(id) ON DELETE CASCADE,
+      stage        TEXT NOT NULL,
+      ordinal      INTEGER NOT NULL,
+      status       TEXT NOT NULL DEFAULT 'running'
+        CHECK(status IN ('running','complete','failed')),
+      model        TEXT,
+      latency_ms   INTEGER,
+      error        TEXT,
+      created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE (run_id, ordinal)
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_briefing_agent_steps_run"
+    " ON briefing_agent_steps(run_id, ordinal)",
 ]
 
 

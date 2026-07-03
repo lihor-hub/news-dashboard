@@ -34,7 +34,7 @@ from news_dashboard.briefings import (
     list_briefings,
     select_candidates,
 )
-from news_dashboard.db import connect
+from news_dashboard.db import connect, row_to_dict
 
 # ── Seeding helpers ───────────────────────────────────────────────────────────
 
@@ -1260,3 +1260,79 @@ def test_get_latest_briefing_and_list_returns_focus_prompt(pg_clean: str) -> Non
     history = list_briefings(database_url=pg_clean)
     assert len(history) == 1
     assert history[0]["focus_prompt"] == "fusion"
+
+
+# ── Multi-stage pipeline diagnostics (briefing_agent_runs/steps) ──────────────
+
+
+def _fetch_agent_run(pg_url: str, briefing_id: int) -> dict[str, Any]:
+    with connect(database_url=pg_url) as conn:
+        row = conn.execute(
+            "SELECT * FROM briefing_agent_runs WHERE briefing_id = %s",
+            (briefing_id,),
+        ).fetchone()
+    assert row is not None
+    return row_to_dict(row)
+
+
+def _fetch_agent_steps(pg_url: str, run_id: int) -> list[dict[str, Any]]:
+    with connect(database_url=pg_url) as conn:
+        rows = conn.execute(
+            "SELECT * FROM briefing_agent_steps WHERE run_id = %s ORDER BY ordinal",
+            (run_id,),
+        ).fetchall()
+    return [row_to_dict(r) for r in rows]
+
+
+def test_generate_briefing_records_all_stages_on_success(pg_clean: str) -> None:
+    _seed_source(pg_clean)
+    _seed_article(pg_clean, url="https://example.com/stage1", title="Stage 1", state="today")
+
+    result = generate_briefing(database_url=pg_clean, ai_fn=_fake_ai)
+
+    run = _fetch_agent_run(pg_clean, result["id"])
+    assert run["status"] == "complete"
+    assert run["failed_stage"] is None
+
+    steps = _fetch_agent_steps(pg_clean, run["id"])
+    assert [s["stage"] for s in steps] == [
+        "candidate_selection",
+        "theme_clustering",
+        "drafting",
+        "citation_verification",
+        "assembly",
+    ]
+    assert all(s["status"] == "complete" for s in steps)
+
+
+def test_generate_briefing_records_failed_stage_on_drafting_failure(pg_clean: str) -> None:
+    _seed_source(pg_clean)
+    _seed_article(pg_clean, url="https://example.com/stage2", title="Stage 2", state="today")
+
+    def _bad_ai(candidates: list[dict[str, Any]], model: str) -> dict[str, Any]:
+        msg = "simulated drafting failure"
+        raise BriefingGenerationError(msg)
+
+    with pytest.raises(BriefingGenerationError):
+        generate_briefing(database_url=pg_clean, ai_fn=_bad_ai, max_attempts=1)
+
+    with connect(database_url=pg_clean) as conn:
+        row = conn.execute(
+            "SELECT * FROM briefing_agent_runs ORDER BY created_at DESC LIMIT 1"
+        ).fetchone()
+    run = row_to_dict(row)
+    assert run["status"] == "failed"
+    assert run["failed_stage"] == "drafting"
+    assert "simulated drafting failure" in (run["error"] or "")
+
+
+def test_generate_briefing_records_no_run_row_for_no_candidates(pg_clean: str) -> None:
+    generate_briefing(database_url=pg_clean, ai_fn=_fake_ai)
+
+    with connect(database_url=pg_clean) as conn:
+        row = conn.execute(
+            "SELECT status, briefing_id FROM briefing_agent_runs ORDER BY created_at DESC LIMIT 1"
+        ).fetchone()
+    run = row_to_dict(row)
+    assert run["status"] == "complete"
+    assert run["briefing_id"] is None
