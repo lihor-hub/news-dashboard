@@ -135,4 +135,13 @@ describe('WhatsNewDialog', () => {
     render(<WhatsNewDialog state={makeState({ open: false })} />);
     expect(screen.queryByText(/What's new/)).toBeNull();
   });
+
+  it('caps dialog height and scrolls the item list instead of overflowing the page', () => {
+    const manyItems = Array.from({ length: 50 }, (_, i) => `Change number ${i + 1}`);
+    render(<WhatsNewDialog state={makeState({ items: manyItems })} />);
+    const dialogContent = screen.getByRole('dialog');
+    expect(dialogContent.className).toMatch(/max-h-\[85vh\]/);
+    const list = screen.getByRole('list');
+    expect(list.className).toMatch(/overflow-y-auto/);
+  });
 });
