@@ -38,6 +38,14 @@ class TestReleaseSyncJob(unittest.TestCase):
             if expected not in self.workflow:
                 self.fail(f"release.yml sync job does not update {expected}")
 
+    def test_sync_job_skips_when_rolling_pr_is_queued_for_merge(self) -> None:
+        # A branch whose PR sits in the merge queue rejects pushes (GH006), and
+        # the next release catches up anyway — the job must skip, not fail.
+        if "isInMergeQueue" not in self.workflow:
+            self.fail("sync job must check whether the rolling PR is in the merge queue")
+        if "queued in the merge queue" not in self.workflow:
+            self.fail("sync job must log why it skipped when the rolling PR is queued")
+
     def test_sync_job_opens_a_rolling_pr_instead_of_pushing_main(self) -> None:
         if "bot/sync-versioning" not in self.workflow:
             self.fail("sync job must push a rolling bot/sync-versioning branch")
