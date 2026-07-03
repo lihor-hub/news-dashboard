@@ -55,6 +55,66 @@ describe('forceLayout', () => {
     expect(mean(connected)).toBeLessThan(mean(unconnected));
   });
 
+  describe('with a large sparse graph (realistic entity extraction shape)', () => {
+    const MARGIN = 28;
+    const bigNodes = Array.from({ length: 60 }, (_, i) => ({ id: `b${i}` }));
+    const bigEdges = [
+      // hub-and-spoke around b0
+      ...Array.from({ length: 8 }, (_, i) => ({
+        source: 'b0',
+        target: `b${i + 1}`,
+        weight: 1 + (i % 3),
+      })),
+      // a chain b10..b20
+      ...Array.from({ length: 10 }, (_, i) => ({
+        source: `b${i + 10}`,
+        target: `b${i + 11}`,
+        weight: 1,
+      })),
+      // a few cross links; the rest of the nodes stay isolated
+      { source: 'b5', target: 'b15', weight: 2 },
+      { source: 'b8', target: 'b30', weight: 1 },
+      { source: 'b25', target: 'b40', weight: 3 },
+    ];
+
+    it('does not pile nodes up along the viewport boundary', () => {
+      const layout = forceLayout(bigNodes, bigEdges, W, H, MARGIN);
+      let onBoundary = 0;
+      for (const { x, y } of layout.values()) {
+        const atEdge =
+          Math.abs(x - MARGIN) < 0.5 ||
+          Math.abs(x - (W - MARGIN)) < 0.5 ||
+          Math.abs(y - MARGIN) < 0.5 ||
+          Math.abs(y - (H - MARGIN)) < 0.5;
+        if (atEdge) onBoundary++;
+      }
+      // A fitted layout touches the boundary only at its bounding-box extremes.
+      expect(onBoundary).toBeLessThanOrEqual(Math.ceil(bigNodes.length * 0.15));
+    });
+
+    it('keeps every pair of nodes far enough apart for labels to stay legible', () => {
+      const layout = forceLayout(bigNodes, bigEdges, W, H, MARGIN);
+      const pts = [...layout.values()];
+      let minDist = Infinity;
+      for (let i = 0; i < pts.length; i++) {
+        for (let j = i + 1; j < pts.length; j++) {
+          minDist = Math.min(minDist, Math.hypot(pts[i].x - pts[j].x, pts[i].y - pts[j].y));
+        }
+      }
+      expect(minDist).toBeGreaterThanOrEqual(24);
+    });
+
+    it('stays inside the margin bounds', () => {
+      const layout = forceLayout(bigNodes, bigEdges, W, H, MARGIN);
+      for (const { x, y } of layout.values()) {
+        expect(x).toBeGreaterThanOrEqual(MARGIN);
+        expect(x).toBeLessThanOrEqual(W - MARGIN);
+        expect(y).toBeGreaterThanOrEqual(MARGIN);
+        expect(y).toBeLessThanOrEqual(H - MARGIN);
+      }
+    });
+  });
+
   it('ignores edges that reference unknown nodes', () => {
     const layout = forceLayout(
       [{ id: 'a' }, { id: 'b' }],
