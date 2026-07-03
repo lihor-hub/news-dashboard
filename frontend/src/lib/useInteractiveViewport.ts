@@ -37,7 +37,9 @@ export interface UseInteractiveViewportReturn {
   clientToCanvas: (clientX: number, clientY: number) => { x: number; y: number };
 }
 
-const INITIAL: Viewport = { tx: 0, ty: 0, scale: 1 };
+function initialViewport(): Viewport {
+  return { tx: 0, ty: 0, scale: 1 };
+}
 
 export function useInteractiveViewport({
   minScale = 0.2,
@@ -45,7 +47,7 @@ export function useInteractiveViewport({
   width,
   height,
 }: UseInteractiveViewportOptions): UseInteractiveViewportReturn {
-  const [viewport, setViewport] = useState<Viewport>(INITIAL);
+  const [viewport, setViewport] = useState<Viewport>(initialViewport);
   const [isPanning, setIsPanning] = useState(false);
   const svgRef = useRef<SVGSVGElement | null>(null);
 
@@ -148,7 +150,7 @@ export function useInteractiveViewport({
     [width, height, minScale, maxScale]
   );
 
-  const resetViewport = useCallback(() => setViewport(INITIAL), []);
+  const resetViewport = useCallback(() => setViewport(initialViewport()), []);
 
   return {
     viewport,
