@@ -537,8 +537,13 @@ def test_otp_expired_rejected(tmp_db: str) -> None:
 
 
 def test_otp_request_endpoint_returns_sent_for_unknown_email(
-    tmp_db: str, clean_throttle: None
+    tmp_db: str, clean_throttle: None, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    import news_dashboard.email as email_mod
+
+    # Default auto-registration means an unknown email now sends a real OTP; stub
+    # the SMTP send so the test exercises only the enumeration-safe response.
+    monkeypatch.setattr(email_mod, "send_otp_email", lambda *_args: None)
     client = _fresh_client()
     resp = client.post("/api/auth/otp/request", json={"email": "ghost@example.com"})
     assert resp.status_code == 200
@@ -803,8 +808,11 @@ def test_otp_request_throttles_known_email(
 
 
 def test_otp_request_throttles_unknown_email_at_same_threshold(
-    tmp_db: str, clean_throttle: None
+    tmp_db: str, clean_throttle: None, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    import news_dashboard.email as email_mod
+
+    monkeypatch.setattr(email_mod, "send_otp_email", lambda *_args: None)
     client = _fresh_client()
     for _ in range(5):
         resp = client.post("/api/auth/otp/request", json={"email": "ghost2@example.com"})
