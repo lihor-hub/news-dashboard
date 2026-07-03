@@ -102,6 +102,56 @@ def test_codecov_upload_specifies_token_and_flags() -> None:
     assert found_codecov, "No codecov/codecov-action steps found in ci.yml"
 
 
+def test_coverage_upload_runs_for_prs_and_merge_groups() -> None:
+    """Coverage upload must run where PR authors and the queue need feedback."""
+    coverage_job = _load_ci().get("jobs", {}).get("coverage-upload")
+    assert coverage_job is not None, "coverage-upload job missing from ci.yml"
+
+    condition = str(coverage_job.get("if", ""))
+    for event_name in ("pull_request", "push", "merge_group"):
+        assert event_name in condition, (
+            f"coverage-upload job condition does not include {event_name!r}: {condition!r}"
+        )
+
+
+def test_codecov_upload_uses_current_action_major() -> None:
+    """Pin the reviewed Codecov action major so accidental downgrades fail tests."""
+    ci = _load_ci()
+    codecov_uses = [
+        step.get("uses", "")
+        for job_data in ci.get("jobs", {}).values()
+        for step in job_data.get("steps", [])
+        if "codecov/codecov-action" in step.get("uses", "")
+    ]
+    assert codecov_uses, "No codecov/codecov-action steps found in ci.yml"
+    assert all(uses == "codecov/codecov-action@v5" for uses in codecov_uses)
+
+
+def test_codecov_uploads_are_guarded_by_report_existence() -> None:
+    """Path-filtered PRs must not call Codecov when one report is absent."""
+    coverage_job = _load_ci().get("jobs", {}).get("coverage-upload")
+    assert coverage_job is not None, "coverage-upload job missing from ci.yml"
+
+    steps = coverage_job.get("steps", [])
+    check_steps = {
+        step.get("id"): step
+        for step in steps
+        if step.get("id") in {"backend-coverage", "frontend-coverage"}
+    }
+    assert set(check_steps) == {"backend-coverage", "frontend-coverage"}
+    assert "coverage-backend" in str(check_steps["backend-coverage"].get("run", ""))
+    assert "coverage-frontend" in str(check_steps["frontend-coverage"].get("run", ""))
+
+    upload_steps = {
+        step.get("with", {}).get("flags"): step
+        for step in steps
+        if "codecov/codecov-action" in step.get("uses", "")
+    }
+    assert set(upload_steps) == {"backend", "frontend"}
+    assert upload_steps["backend"].get("if") == "steps.backend-coverage.outputs.exists == 'true'"
+    assert upload_steps["frontend"].get("if") == "steps.frontend-coverage.outputs.exists == 'true'"
+
+
 def test_workflows_do_not_queue_pull_requests_for_auto_merge() -> None:
     """GitHub Actions must not enable auto-merge for pull requests."""
     forbidden_patterns = (
