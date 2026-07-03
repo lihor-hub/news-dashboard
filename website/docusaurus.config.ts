@@ -24,6 +24,10 @@ const config: Config = {
 
   onBrokenLinks: 'throw',
 
+  markdown: {
+    mermaid: true,
+  },
+
   // Even if you don't use internationalization, you can use this field to set
   // useful metadata like html lang. For example, if your site is Chinese, you
   // may want to replace "en" with "zh-Hans".
@@ -48,7 +52,7 @@ const config: Config = {
     ],
   ],
 
-  themes: ['@easyops-cn/docusaurus-search-local'],
+  themes: ['@easyops-cn/docusaurus-search-local', '@docusaurus/theme-mermaid'],
 
   themeConfig: {
     image: 'img/social-card.png',
