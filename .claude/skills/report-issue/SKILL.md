@@ -83,16 +83,9 @@ queued for AFK pickup, not implemented now.
 
 ## How AFK pickup works
 
-Issues labelled `ready-for-agent` form the autonomous backlog. An agent drains
-that pool through `tdd-ship`.
-
-To dispatch the backlog, point an agent at the open `ready-for-agent` issues:
-
-```bash
-gh issue list --label ready-for-agent --state open
-```
-
-Then run `tdd-ship` against a chosen issue (for example, "implement issue #NNN").
+Issues labelled `ready-for-agent` form the autonomous backlog; the
+`drain-backlog` skill (`/drain-backlog`) is the consumer that works that
+queue.
 
 ## Guardrails
 

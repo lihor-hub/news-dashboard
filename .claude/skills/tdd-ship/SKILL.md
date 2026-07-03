@@ -9,7 +9,7 @@ description: >-
 # TDD → Issue → PR → CI → Merge
 
 This is how tracked changes ship in this repo: issue -> branch -> red/green
-TDD -> PR -> CI -> auto-merge.
+TDD -> review -> PR -> CI -> auto-merge.
 
 ## When this applies
 
@@ -74,16 +74,29 @@ defer to the language skills for exact commands and patterns:
 - TypeScript / React / frontend changes → follow `typescript-dev`
   (vitest, eslint `--max-warnings 0`, prettier, `tsc`).
 
-Codex worktrees may not include the ignored `.env` file. Before running
-backend tests or pushing, check whether the current worktree has `.env`; if it
-does not, copy it from the main checkout (usually `/Users/ioachimlihor/news-dashboard/.env`)
-into the worktree. Do not print secret values. It is enough to verify that
-`DATABASE_URL` and `TEST_DATABASE_URL` are present so the pre-push backend
-pytest hook can connect to PostgreSQL.
+In a fresh worktree (no `.venv`, `node_modules`, or `.env`), run
+`scripts/bootstrap-worktree.sh` first and keep `.venv/bin` on `PATH` so the
+pre-commit and pre-push hooks find their tools. Do not print secret values
+from `.env`.
 
 Push only after the relevant tests and type/lint gates pass locally.
 
-### 4. Rebase on `origin/main`, open the PR, and queue it for merge
+### 4. Review and verify the diff
+
+CI only re-runs the tests you just wrote, so the diff needs one independent
+check before it heads for auto-merge:
+
+- Run the `code-review` skill on the working diff (medium effort) and fix
+  confirmed findings before pushing.
+- For user-facing changes (UI, API responses, CLI output), run the `verify`
+  skill to see the change working in the running app — a green unit suite is
+  not the same as the feature working.
+
+Completion: every confirmed finding is fixed or explicitly dismissed with a
+stated reason. Don't chase speculative findings, and don't loop — one review
+pass, one fix pass, done.
+
+### 5. Rebase on `origin/main`, open the PR, and queue it for merge
 
 Rebase immediately before pushing, re-run gates if the rebase changes the base,
 push, open the PR, then queue auto-merge:
@@ -104,7 +117,7 @@ merge queue; do not pass `--delete-branch` with queued merges.
 
 Do not bypass the queue with `gh pr merge --admin` or a direct push to `main`.
 
-### 5. Watch CI and the merge queue
+### 6. Watch CI and the merge queue
 
 CI (`.github/workflows/ci.yml`) runs on every PR to `main`. Watch it:
 
@@ -116,7 +129,7 @@ If a check fails, read the logs (`gh run view <run-id> --log-failed`), fix the
 cause on the branch, push, and let CI re-run. Required checks are `Lint &
 typecheck` and `Test & build`; both must pass on the PR and merge queue.
 
-### 6. Confirm the merge completed
+### 7. Confirm the merge completed
 
 Once CI is green, confirm auto-merge landed (`gh pr view <pr#> --json
 state,mergedAt`), confirm the issue closed, delete the remote branch if GitHub

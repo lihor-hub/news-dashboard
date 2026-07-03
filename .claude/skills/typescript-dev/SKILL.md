@@ -13,20 +13,13 @@ vitest + Testing Library; end-to-end tests use Playwright in `e2e/`.
 
 ## 0. Detect before you act
 
-Prefer `npm` scripts and `make` targets; they are what CI runs. Confirm what exists:
+Use the `npm` scripts — they are what CI runs: `lint`, `lint:fix`, `format`,
+`format:check`, `typecheck` (`tsc -b --noEmit`), `build` (`tsc -b && vite
+build`), `test:frontend` (`vitest run`). At repo level, `make lint typecheck
+test` covers both stacks.
 
-```bash
-cat package.json | sed -n '/"scripts"/,/}/p'
-grep -E '^(lint|typecheck|test|check):' Makefile 2>/dev/null
-```
-
-Key scripts here: `lint`, `lint:fix`, `format`, `format:check`, `typecheck`
-(`tsc -b --noEmit`), `build` (`tsc -b && vite build`), `test:frontend`
-(`vitest run`). At repo level, `make lint typecheck test` covers both stacks.
-
-Run `npm install` if `node_modules` is stale. If you're in a *different* project
-with no frontend tooling at all, read
-[references/bootstrap.md](references/bootstrap.md).
+Run `npm install` if `node_modules` is stale; in a fresh worktree run
+`scripts/bootstrap-worktree.sh`.
 
 ## 1. While writing code — clear the gates by construction
 

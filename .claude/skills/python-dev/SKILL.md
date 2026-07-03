@@ -13,21 +13,10 @@ Write code that clears the configured gates without loosening them.
 
 ## 0. Detect before you act
 
-Prefer `Makefile` targets; they are what CI runs. Confirm what exists:
-
-```bash
-ls Makefile pyproject.toml uv.lock 2>/dev/null   # what governs the project
-grep -E '^(lint|typecheck|test|check|format|install):' Makefile
-```
-
-- If `make` targets exist (they do here): use `make lint`, `make typecheck`,
-  `make test`, `make check`.
-- If you're in a *different* project with no Makefile, fall back to the raw
-  tools you find configured (`ruff`, `mypy`, `pytest`), and read
-  [references/bootstrap.md](references/bootstrap.md) only when a project has
-  **no** Python tooling at all and you're setting it up from scratch.
-
-Run `pip install -e '.[dev]'` (or `make install`) once if the tools aren't importable.
+Use the `Makefile` targets — they are what CI runs: `make lint`,
+`make typecheck`, `make test`, `make check` (`make format` auto-fixes).
+In a fresh worktree or when the tools aren't importable, run
+`scripts/bootstrap-worktree.sh`.
 
 ## 1. While writing code — clear the gates by construction
 
@@ -60,9 +49,9 @@ mypy `# type: ignore[<code>]`, ty `# ty: ignore[<rule>]`, pyrefly
 
 Preserve these repo decisions:
 
-- **PostgreSQL only.** Runtime code uses PostgreSQL SQL + psycopg param style.
-  Do **not** add SQLite fallbacks, db-type sniffing, or placeholder-translation
-  layers. SQLite appears only in legacy import/migration tooling.
+- **PostgreSQL only.** `CLAUDE.md` and
+  [ADR 0001](../../../docs/adr/0001-postgresql-only-runtime.md) are the source
+  of truth: PostgreSQL SQL + psycopg param style, no SQLite fallbacks.
 - **Ruff `target-version = py313`** on a `requires-python >=3.14` project is
   intentional (avoids PEP 758 rewrites mypy can't parse). Leave it.
 - **Lazy imports are deliberate** (`PLC0415` ignored) for optional deps / startup

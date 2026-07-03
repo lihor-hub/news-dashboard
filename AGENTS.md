@@ -18,3 +18,8 @@
 
 - Keep Claude and Codex skill access synchronized at all times.
 - `.agents/skills` must point at `.claude/skills` so Codex agents see the same project skills without maintaining duplicate copies.
+- `CLAUDE.md` must be a symlink to `AGENTS.md` so Claude Code loads these instructions too; edit `AGENTS.md` only.
+
+## Worktrees
+
+- Fresh worktrees lack `.venv`, `node_modules`, and the ignored `.env`; run `scripts/bootstrap-worktree.sh` before testing or committing, and keep `.venv/bin` on `PATH` so pre-commit hooks find their tools.
