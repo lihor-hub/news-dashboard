@@ -3,6 +3,10 @@
 **Note**: The GHCR package must be made public (or accessible via pull secret) for this to work.
 > This is a one-time maintainer action: go to the repository's Packages settings,
 > select the `ghcr.io/lihor-hub/news-dashboard` package, and change its visibility to Public.
+> If the package stays private, configure the production `GHCR_TOKEN` Actions
+> secret with `read:packages` so CI can create the cluster pull secret. Public
+> packages do not need `GHCR_TOKEN`; the deploy workflow leaves
+> `image.pullSecretName` empty in that mode.
 
 This guide explains how to deploy News Dashboard for production use using the published Docker image from GitHub Container Registry (GHCR).
 
