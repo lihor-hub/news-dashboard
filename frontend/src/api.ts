@@ -25,6 +25,8 @@ import type {
   QuizResult,
   ReadingDna,
   ReadingGoal,
+  ReadingListImportResult,
+  ReadingListImportService,
   RecommendationPreferences,
   ReceivedShare,
   ShareDetail,
@@ -818,4 +820,22 @@ export async function importOpml(file: File): Promise<OpmlImportResult> {
   });
   if (!response.ok) throw new HttpError(response.status, await readErrorMessage(response));
   return response.json() as Promise<OpmlImportResult>;
+}
+
+// ── Reading list import (Pocket / Instapaper / Omnivore) ──────────────────────
+
+export async function importReadingList(
+  file: File,
+  service: ReadingListImportService
+): Promise<ReadingListImportResult> {
+  const form = new FormData();
+  form.append('file', file);
+  form.append('service', service);
+  const response = await fetch('/api/reading-list/import', {
+    method: 'POST',
+    credentials: 'same-origin',
+    body: form,
+  });
+  if (!response.ok) throw new HttpError(response.status, await readErrorMessage(response));
+  return response.json() as Promise<ReadingListImportResult>;
 }

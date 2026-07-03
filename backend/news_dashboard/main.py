@@ -19,6 +19,7 @@ from fastapi import (
     Depends,
     FastAPI,
     File,
+    Form,
     HTTPException,
     Query,
     Request,
@@ -90,6 +91,11 @@ from news_dashboard.ingest import (
 )
 from news_dashboard.ingest_events import stream_ingest_events
 from news_dashboard.login_throttle import clear_failures, is_throttled, record_failure
+from news_dashboard.reading_list_import import (
+    SUPPORTED_SERVICES,
+    ReadingListImportError,
+    import_reading_list,
+)
 from news_dashboard.run_history import get_ingest_run_sources, list_ingest_runs
 from news_dashboard.scheduler import (
     get_interval_minutes,
@@ -1892,6 +1898,27 @@ def import_opml(
                 failed.append({"url": xml_url, "error": "failed to import source"})
 
     return {"added": added, "skipped": skipped, "failed": failed}
+
+
+@api.post("/api/reading-list/import")
+def import_reading_list_endpoint(
+    current_user: Annotated[dict[str, Any], Depends(require_auth)],
+    file: Annotated[UploadFile, File()],
+    service: Annotated[str, Form()],
+) -> dict[str, Any]:
+    """Import saved articles from a Pocket/Instapaper/Omnivore export file."""
+    service = service.strip().lower()
+    if service not in SUPPORTED_SERVICES:
+        allowed = sorted(SUPPORTED_SERVICES)
+        raise HTTPException(
+            status_code=400,
+            detail=f"unsupported service: {service!r} (expected one of {allowed})",
+        )
+    contents = file.file.read()
+    try:
+        return import_reading_list(current_user["id"], service, file.filename or "", contents)
+    except ReadingListImportError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 # ── Personalization nudges ────────────────────────────────────────────────────

@@ -550,3 +550,12 @@ export interface OpmlImportResult {
   skipped: { url: string; reason: string }[];
   failed: { url: string; error: string }[];
 }
+
+export type ReadingListImportService = 'pocket' | 'instapaper' | 'omnivore';
+
+export interface ReadingListImportResult {
+  added: { url: string; title: string }[];
+  skipped: { url: string; reason: string }[];
+  failed: { url: string; error: string }[];
+  truncated: boolean;
+}

@@ -12,17 +12,20 @@ import {
   Bell,
   BellOff,
   Trash2,
+  Upload,
 } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useTheme } from '@/hooks/useTheme';
 import { cn } from '@/lib/utils';
 import type { Theme } from '@/lib/theme';
+import type { ReadingListImportResult, ReadingListImportService } from '@/types';
 import { useUpdateCheck } from '@/hooks/useUpdateCheck';
 import { useAuth } from '@/contexts/auth';
 import {
   deleteOwnAccount,
   downloadUserExport,
   fetchNotificationSettings,
+  importReadingList,
   recalculateMyRecommendations,
   subscribePush,
   unsubscribePush,
@@ -733,6 +736,97 @@ function DataExportSection() {
   );
 }
 
+const READING_LIST_SERVICES: { v: ReadingListImportService; label: string }[] = [
+  { v: 'pocket', label: 'Pocket' },
+  { v: 'instapaper', label: 'Instapaper' },
+  { v: 'omnivore', label: 'Omnivore' },
+];
+
+function ReadingListImportSection() {
+  const [service, setService] = useState<ReadingListImportService>('pocket');
+  const [isImporting, setIsImporting] = useState(false);
+  const [result, setResult] = useState<ReadingListImportResult | null>(null);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  const handleFile = async (file: File) => {
+    setIsImporting(true);
+    setResult(null);
+    setErrorMsg(null);
+    try {
+      setResult(await importReadingList(file, service));
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : 'Import failed.');
+    } finally {
+      setIsImporting(false);
+    }
+  };
+
+  return (
+    <section>
+      <div className="text-[10px] uppercase tracking-wider text-subtle font-medium mb-2">
+        Import Reading List
+      </div>
+      <div className="rounded-lg border border-border bg-card p-4 space-y-3">
+        <p className="text-xs text-muted-foreground">
+          Bring your saved articles over from Pocket, Instapaper, or Omnivore. Import creates saved
+          (&quot;Later&quot;) articles with tags preserved where available; re-importing the same
+          file won&apos;t create duplicates.
+        </p>
+        <div className="flex items-center gap-2 flex-wrap">
+          <select
+            aria-label="Reading list export service"
+            value={service}
+            onChange={(e) => setService(e.target.value as ReadingListImportService)}
+            disabled={isImporting}
+            className="rounded-md border border-border bg-background px-2 py-1.5 text-xs"
+          >
+            {READING_LIST_SERVICES.map(({ v, label }) => (
+              <option key={v} value={v}>
+                {label}
+              </option>
+            ))}
+          </select>
+          <button
+            onClick={() => document.getElementById('reading-list-file-input')?.click()}
+            disabled={isImporting}
+            className="flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-60"
+          >
+            {isImporting ? (
+              <RefreshCw className="size-3 animate-spin" />
+            ) : (
+              <Upload className="size-3" />
+            )}
+            {isImporting ? 'Importing…' : 'Choose export file'}
+          </button>
+          <input
+            id="reading-list-file-input"
+            aria-label="Import reading list export"
+            type="file"
+            accept=".csv,.html,.htm,.json"
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              const input = e.target;
+              if (file) void handleFile(file);
+              input.value = '';
+            }}
+          />
+        </div>
+
+        {result && (
+          <p className="text-xs text-green-600 dark:text-green-400">
+            Imported {result.added.length} article{result.added.length === 1 ? '' : 's'}
+            {result.skipped.length > 0 ? `, skipped ${result.skipped.length} duplicate(s)` : ''}
+            {result.failed.length > 0 ? `, ${result.failed.length} failed` : ''}.
+            {result.truncated ? ' File was truncated to the first 2000 items.' : ''}
+          </p>
+        )}
+        {errorMsg && <p className="text-xs text-destructive">{errorMsg}</p>}
+      </div>
+    </section>
+  );
+}
+
 type DeleteAccountState = 'idle' | 'confirming' | 'deleting' | 'error';
 
 function DeleteAccountSection() {
@@ -873,6 +967,8 @@ export function SettingsPage() {
       <PersonalizationSection />
 
       <DataExportSection />
+
+      <ReadingListImportSection />
 
       <DailyBriefSection />
 
