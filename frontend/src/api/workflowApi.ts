@@ -81,6 +81,7 @@ export function adaptArticle(a: LegacyArticle): WorkflowArticle {
     starred_at,
     later_until: a.later_until ?? undefined,
     restored_at: a.restored_at ?? undefined,
+    alsoFrom: a.also_from,
   };
 }
 

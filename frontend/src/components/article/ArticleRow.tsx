@@ -14,6 +14,15 @@ interface Props {
   showLaterUntil?: boolean;
 }
 
+const MAX_ALSO_FROM_SHOWN = 3;
+
+/** "A, B, C" for ≤3 names; "A, B, C, +N more" beyond that. */
+function formatAlsoFrom(names: string[]): string {
+  const shown = names.slice(0, MAX_ALSO_FROM_SHOWN).join(', ');
+  const remaining = names.length - MAX_ALSO_FROM_SHOWN;
+  return remaining > 0 ? `${shown}, +${remaining} more` : shown;
+}
+
 function ArticleRowComponent({ article, focused, showLaterUntil }: Props) {
   const { setState, toggleStar } = useTriageMutations();
 
@@ -68,6 +77,11 @@ function ArticleRowComponent({ article, focused, showLaterUntil }: Props) {
               <Star className="size-3.5 shrink-0 fill-star text-star" strokeWidth={1.5} />
             )}
           </div>
+          {article.alsoFrom && article.alsoFrom.length > 0 && (
+            <div className="mb-1 truncate text-[11px] text-muted-foreground">
+              Also covered by {formatAlsoFrom(article.alsoFrom)}
+            </div>
+          )}
           <h3 className="text-[15px] leading-snug font-semibold tracking-tight text-foreground mb-1.5">
             {article.title}
           </h3>
