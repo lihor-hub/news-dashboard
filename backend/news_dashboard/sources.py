@@ -336,6 +336,14 @@ DEFAULT_SOURCES: list[SourceDefinition] = [
         priority=55,
         interest_tags=("infra", "cloud"),
     ),
+    SourceDefinition(
+        "martin-fowler",
+        "Martin Fowler",
+        "https://martinfowler.com/feed.atom",
+        "engineering",
+        priority=65,
+        interest_tags=("infra", "software-development", "architecture"),
+    ),
     # ── Trending / repositories ───────────────────────────────────────────────
     SourceDefinition(
         "hacker-news-best",
