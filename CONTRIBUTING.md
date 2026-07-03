@@ -70,16 +70,31 @@ This runs lint, format check, type checking, and the test suites. CI runs the sa
 
 ## Commit conventions
 
-Use [Conventional Commits](https://www.conventionalcommits.org/):
+Use either [Conventional Commits](https://www.conventionalcommits.org/) or
+[Scoped Commits](https://scopedcommits.com/). Pick the style that best
+communicates the change.
+
+Conventional Commits use `<type>: <description>` or
+`<type>(<scope>): <description>`:
 
 ```
 feat: add OPML export button to SourcesPage
+fix(api): handle missing source IDs
 fix: correct infinite-query snapshot in triage mutations
 docs: add PRIVACY.md data-flow transparency
 chore: upgrade vite to 6.x
 ```
 
-Prefixes: `feat:`, `fix:`, `docs:`, `chore:`, `ci:`, `test:`, `refactor:`.
+Scoped Commits use `<scope>: <description>`:
+
+```
+sources: add OPML export button
+api: handle missing source IDs
+docs: clarify local setup
+```
+
+Common Conventional Commit prefixes include `feat:`, `fix:`, `docs:`,
+`chore:`, `ci:`, `test:`, and `refactor:`.
 
 ## Git workflow
 
@@ -108,7 +123,7 @@ Don't hardcode a version literal anywhere else — read `VERSION` (or `app.versi
 1. Fork the repo and create a feature branch.
 2. Make your changes, add tests.
 3. Run `make check` — all targets must pass.
-4. Open a PR with a Conventional Commit title and a clear description.
+4. Open a PR with a Conventional Commit or Scoped Commit title and a clear description.
 5. Link any related issue (`Closes #123`).
 
 ## Internationalization (i18n)
