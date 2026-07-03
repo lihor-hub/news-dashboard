@@ -3,6 +3,9 @@
 All notable changes to this project will be documented in this file.
 This project adheres to [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.100.0] — 2026-07-03
+- Added a new source with news and updates from Berkeley BAIR, so you can stay in the loop on the latest AI research.
+
 ## [1.93.0] — 2026-07-03
 - Your dashboard now remembers your preferences and habits over time, so it gets better at suggesting what matters to you.
 
