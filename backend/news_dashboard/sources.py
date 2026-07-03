@@ -303,6 +303,14 @@ DEFAULT_SOURCES: list[SourceDefinition] = [
         priority=70,
         interest_tags=("web", "frontend", "product-news"),
     ),
+    SourceDefinition(
+        "cloudflare-blog",
+        "Cloudflare Blog",
+        "https://blog.cloudflare.com/rss/",
+        "cloud-infra",
+        priority=70,
+        interest_tags=("cloud", "infra", "security"),
+    ),
     # ── Engineering ──────────────────────────────────────────────────────────
     SourceDefinition(
         "pragmatic-engineer",
