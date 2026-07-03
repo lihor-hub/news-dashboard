@@ -23,13 +23,15 @@ const COOLING = 0.98;
  * Deterministic force-directed layout: nodes start evenly spaced on a circle
  * (so the result is reproducible without randomness), then iterate pairwise
  * repulsion, weighted spring attraction along edges, and a centering pull,
- * with a cooling step cap. Positions are clamped to the viewport.
+ * with a cooling step cap. Positions are clamped to the viewport with an
+ * optional `margin` so node circles never clip at the SVG boundary.
  */
 export function forceLayout(
   nodes: ForceNode[],
   edges: ForceEdge[],
   width: number,
-  height: number
+  height: number,
+  margin = 0
 ): Map<string, ForcePoint> {
   const layout = new Map<string, ForcePoint>();
   if (nodes.length === 0) return layout;
@@ -103,8 +105,8 @@ export function forceLayout(
       const magnitude = Math.hypot(f.x, f.y) || 1;
       const step = Math.min(magnitude, maxStep);
       layout.set(id, {
-        x: Math.min(width, Math.max(0, p.x + (f.x / magnitude) * step)),
-        y: Math.min(height, Math.max(0, p.y + (f.y / magnitude) * step)),
+        x: Math.min(width - margin, Math.max(margin, p.x + (f.x / magnitude) * step)),
+        y: Math.min(height - margin, Math.max(margin, p.y + (f.y / magnitude) * step)),
       });
     }
 

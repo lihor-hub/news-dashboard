@@ -15,6 +15,8 @@ export default tseslint.config(
       // Stale git worktrees — lint runs on the whole tree so exclude them explicitly
       '.claude/worktrees/**',
       '.worktrees/**',
+      // Python virtual environment — contains playwright/patchright JS bundles
+      '.venv/**',
     ],
   },
   {
