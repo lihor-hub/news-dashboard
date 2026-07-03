@@ -529,6 +529,26 @@ def _verify_otp_hash(otp: str, otp_hash: str) -> bool:
         return False
 
 
+def otp_auto_register_enabled() -> bool:
+    """Whether an unknown email requesting an OTP should get a new account."""
+    return _truthy(os.getenv("OTP_AUTO_REGISTER", "true"))
+
+
+def get_or_create_otp_user(email: str) -> dict[str, Any] | None:
+    """Return the user for this email, creating one if auto-registration is on.
+
+    The new account uses the full email as its username and a random password
+    (OTP login never checks it). Returns None only when no user exists and
+    auto-registration is disabled.
+    """
+    user = get_user_by_email(email)
+    if user is not None:
+        return user
+    if not otp_auto_register_enabled():
+        return None
+    return create_user(email, secrets.token_urlsafe(32), email=email)
+
+
 def create_otp_for_user(user_id: int) -> str:
     """Generate a 6-digit OTP, store its hash, and return the plaintext pin."""
     otp = _generate_otp()

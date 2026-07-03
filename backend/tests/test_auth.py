@@ -18,6 +18,7 @@ from news_dashboard.auth import (
     create_user,
     delete_user,
     ensure_keycloak_user,
+    get_user_by_email,
     get_user_by_id,
     hash_password,
     init_auth,
@@ -542,6 +543,51 @@ def test_otp_request_endpoint_returns_sent_for_unknown_email(
     resp = client.post("/api/auth/otp/request", json={"email": "ghost@example.com"})
     assert resp.status_code == 200
     assert resp.json() == {"status": "sent"}
+
+
+def test_otp_request_auto_registers_unknown_email(
+    tmp_db: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import news_dashboard.email as email_mod
+
+    monkeypatch.setenv("OTP_AUTO_REGISTER", "true")
+    sent: list[tuple[str, str]] = []
+    monkeypatch.setattr(email_mod, "send_otp_email", lambda to, code: sent.append((to, code)))
+
+    client = _fresh_client()
+    resp = client.post("/api/auth/otp/request", json={"email": "newbie@example.com"})
+    assert resp.status_code == 200
+    assert resp.json() == {"status": "sent"}
+
+    # A user was created with the full email as username, and an OTP was sent.
+    assert len(sent) == 1
+    _, code = sent[0]
+    user = get_user_by_email("newbie@example.com")
+    assert user is not None
+    assert user["username"] == "newbie@example.com"
+
+    # The freshly created account can complete the OTP login flow.
+    resp = client.post("/api/auth/otp/login", json={"email": "newbie@example.com", "otp": code})
+    assert resp.status_code == 200
+    assert resp.json()["username"] == "newbie@example.com"
+
+
+def test_otp_request_no_auto_register_when_disabled(
+    tmp_db: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import news_dashboard.email as email_mod
+
+    monkeypatch.setenv("OTP_AUTO_REGISTER", "false")
+    sent: list[tuple[str, str]] = []
+    monkeypatch.setattr(email_mod, "send_otp_email", lambda to, code: sent.append((to, code)))
+
+    client = _fresh_client()
+    resp = client.post("/api/auth/otp/request", json={"email": "ghost2@example.com"})
+    # Enumeration-safe response is preserved, but no user or OTP is created.
+    assert resp.status_code == 200
+    assert resp.json() == {"status": "sent"}
+    assert sent == []
+    assert get_user_by_email("ghost2@example.com") is None
 
 
 def test_otp_login_endpoint_full_flow(tmp_db: str, monkeypatch: pytest.MonkeyPatch) -> None:
