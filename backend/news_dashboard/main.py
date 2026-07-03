@@ -3277,6 +3277,7 @@ from news_dashboard.quizzes.router import router as quizzes_router  # noqa: E402
 from news_dashboard.reading_list.router import router as reading_list_router  # noqa: E402
 from news_dashboard.reading_progress.router import router as reading_progress_router  # noqa: E402
 from news_dashboard.recaps.router import router as recaps_router  # noqa: E402
+from news_dashboard.saved_searches.router import router as saved_searches_router  # noqa: E402
 
 api.include_router(ai_stats_router)
 api.include_router(ai_memory_router)
@@ -3285,6 +3286,7 @@ api.include_router(quizzes_router)
 api.include_router(reading_list_router)
 api.include_router(reading_progress_router)
 api.include_router(recaps_router)
+api.include_router(saved_searches_router)
 
 app.include_router(api)
 app.include_router(admin)

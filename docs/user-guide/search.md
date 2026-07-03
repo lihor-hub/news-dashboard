@@ -49,6 +49,16 @@ Results show:
 
 Click any result to open the article in the main view.
 
+## Saved Views
+
+Use **Save view** on the Search page to store the current query and filters as a
+manual preset. Saved views are private to your account. Selecting one replaces
+the current Search URL parameters, so results refresh through the same search
+path as ordinary filters.
+
+Saved views are reusable shortcuts only. They do not send alerts, scheduled
+notifications, or email digests.
+
 ## Search scope
 
 Search looks across **all articles in your database**, regardless of:

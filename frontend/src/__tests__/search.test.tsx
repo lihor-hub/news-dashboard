@@ -32,6 +32,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   vi.spyOn(api, 'fetchSources').mockResolvedValue([]);
   vi.spyOn(tagsApi, 'fetchTags').mockResolvedValue([]);
+  vi.spyOn(workflowApi, 'fetchSavedSearches').mockResolvedValue([]);
 });
 
 function makeArticle(overrides: Partial<WorkflowArticle> = {}): WorkflowArticle {
@@ -369,6 +370,138 @@ describe('SearchPage — tag filter', () => {
 
     await waitFor(() => {
       expect(screen.getByRole('button', { name: /Tag · rust/i })).toBeTruthy();
+    });
+  });
+});
+
+describe('SearchPage — saved views', () => {
+  it('saves the current URL-backed filters', async () => {
+    vi.spyOn(workflowApi, 'searchArticlesFiltered').mockResolvedValue(makePage([]));
+    const createSpy = vi.spyOn(workflowApi, 'createSavedSearch').mockResolvedValue({
+      id: 1,
+      user_id: 1,
+      name: 'AI later',
+      filters: {
+        q: 'agents',
+        states: ['later'],
+        categories: [],
+        sources: [],
+        starred_only: true,
+        include_archived: false,
+        date_range: 'week',
+        tag_id: null,
+      },
+      created_at: '2026-01-01T00:00:00Z',
+      updated_at: '2026-01-01T00:00:00Z',
+    });
+    vi.stubGlobal(
+      'prompt',
+      vi.fn(() => 'AI later')
+    );
+
+    renderSearch('?q=agents&states=later&starred_only=1&date_range=week');
+    await userEvent.click(screen.getByRole('button', { name: 'Save view' }));
+
+    await waitFor(() => {
+      expect(createSpy).toHaveBeenCalledWith(
+        {
+          name: 'AI later',
+          filters: {
+            q: 'agents',
+            states: ['later'],
+            categories: [],
+            sources: [],
+            starred_only: true,
+            include_archived: false,
+            date_range: 'week',
+            tag_id: null,
+          },
+        },
+        expect.anything()
+      );
+    });
+  });
+
+  it('loads a saved view by updating search parameters', async () => {
+    const searchSpy = vi
+      .spyOn(workflowApi, 'searchArticlesFiltered')
+      .mockResolvedValue(makePage([]));
+    vi.spyOn(workflowApi, 'fetchSavedSearches').mockResolvedValue([
+      {
+        id: 2,
+        user_id: 1,
+        name: 'Python done',
+        filters: {
+          q: 'python',
+          states: ['done'],
+          categories: ['python'],
+          sources: [],
+          starred_only: false,
+          include_archived: true,
+          date_range: 'month',
+          tag_id: null,
+        },
+        created_at: '2026-01-01T00:00:00Z',
+        updated_at: '2026-01-01T00:00:00Z',
+      },
+    ]);
+
+    renderSearch();
+    await screen.findByRole('option', { name: 'Python done' });
+    await userEvent.selectOptions(screen.getByLabelText('Saved search views'), '2');
+
+    await waitFor(() => {
+      expect(searchSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          q: 'python',
+          states: ['done'],
+          categories: ['python'],
+          includeArchived: true,
+          dateRange: 'month',
+        })
+      );
+    });
+  });
+
+  it('renames and deletes the selected saved view', async () => {
+    vi.spyOn(workflowApi, 'searchArticlesFiltered').mockResolvedValue(makePage([]));
+    vi.spyOn(workflowApi, 'fetchSavedSearches').mockResolvedValue([
+      {
+        id: 3,
+        user_id: 1,
+        name: 'Old name',
+        filters: {
+          q: 'rust',
+          states: [],
+          categories: [],
+          sources: [],
+          starred_only: false,
+          include_archived: false,
+          date_range: 'all',
+          tag_id: null,
+        },
+        created_at: '2026-01-01T00:00:00Z',
+        updated_at: '2026-01-01T00:00:00Z',
+      },
+    ]);
+    const updateSpy = vi.spyOn(workflowApi, 'updateSavedSearch').mockResolvedValue({} as never);
+    const deleteSpy = vi
+      .spyOn(workflowApi, 'deleteSavedSearch')
+      .mockResolvedValue({ deleted: true });
+    vi.stubGlobal(
+      'prompt',
+      vi.fn(() => 'New name')
+    );
+
+    renderSearch();
+    await screen.findByRole('option', { name: 'Old name' });
+    await userEvent.selectOptions(screen.getByLabelText('Saved search views'), '3');
+    await userEvent.click(screen.getByRole('button', { name: 'Rename' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Delete' }));
+
+    await waitFor(() => {
+      expect(updateSpy).toHaveBeenCalledWith(3, { name: 'New name' });
+      expect(deleteSpy).toHaveBeenCalledWith(3, expect.anything());
     });
   });
 });

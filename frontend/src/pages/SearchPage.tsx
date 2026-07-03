@@ -1,6 +1,6 @@
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useEffect, useRef, useState } from 'react';
-import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Search as SearchIcon } from 'lucide-react';
 import { ArticleRow } from '@/components/article/ArticleRow';
 import { EmptyState } from '@/components/EmptyState';
@@ -8,7 +8,14 @@ import { useArticleListNav } from '@/hooks/useArticleListNav';
 import { useTriageMutations } from '@/hooks/useTriageMutations';
 import { useFocusedArticle } from '@/contexts/focusedArticle';
 import { setReaderList } from '@/lib/readerList';
-import { searchArticlesFiltered } from '@/api/workflowApi';
+import {
+  createSavedSearch,
+  deleteSavedSearch,
+  fetchSavedSearches,
+  searchArticlesFiltered,
+  updateSavedSearch,
+} from '@/api/workflowApi';
+import type { SavedSearchFilters, SavedSearchView } from '@/api/workflowApi';
 import { fetchSources } from '@/api';
 import { fetchTags } from '@/api/tagsApi';
 import type { WorkflowState } from '@/lib/workflowTypes';
@@ -71,11 +78,47 @@ function encodedFilters(
   return p;
 }
 
+function currentSavedFilters(
+  q: string,
+  states: WorkflowState[],
+  categories: string[],
+  sources: string[],
+  starredOnly: boolean,
+  includeArchived: boolean,
+  dateRange: string,
+  tagId: string
+): SavedSearchFilters {
+  return {
+    q,
+    states,
+    categories,
+    sources,
+    starred_only: starredOnly,
+    include_archived: includeArchived,
+    date_range: (dateRange || 'all') as SavedSearchFilters['date_range'],
+    tag_id: tagId ? Number(tagId) : null,
+  };
+}
+
+function filtersToParams(filters: SavedSearchFilters): URLSearchParams {
+  return encodedFilters(
+    filters.q,
+    filters.states,
+    filters.categories,
+    filters.sources,
+    filters.starred_only,
+    filters.include_archived,
+    filters.date_range,
+    filters.tag_id ? String(filters.tag_id) : ''
+  );
+}
+
 // ─── Page ────────────────────────────────────────────────────────────────────
 
 export function SearchPage() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
+  const queryClient = useQueryClient();
 
   const q = searchParams.get('q') ?? '';
   const states = parseList(searchParams, 'states') as WorkflowState[];
@@ -144,6 +187,43 @@ export function SearchPage() {
     queryKey: ['tags'],
     queryFn: fetchTags,
     staleTime: 60_000,
+  });
+
+  const { data: savedSearches = [] } = useQuery({
+    queryKey: ['saved-searches'],
+    queryFn: fetchSavedSearches,
+    staleTime: 30_000,
+  });
+
+  const savedFilters = currentSavedFilters(
+    q,
+    states,
+    categories,
+    sources,
+    starredOnly,
+    includeArchived,
+    dateRange,
+    tagId
+  );
+  const invalidateSavedSearches = () =>
+    queryClient.invalidateQueries({ queryKey: ['saved-searches'] });
+  const createSavedMutation = useMutation({
+    mutationFn: createSavedSearch,
+    onSuccess: invalidateSavedSearches,
+  });
+  const updateSavedMutation = useMutation({
+    mutationFn: ({
+      id,
+      payload,
+    }: {
+      id: number;
+      payload: { name?: string; filters?: SavedSearchFilters };
+    }) => updateSavedSearch(id, payload),
+    onSuccess: invalidateSavedSearches,
+  });
+  const deleteSavedMutation = useMutation({
+    mutationFn: deleteSavedSearch,
+    onSuccess: invalidateSavedSearches,
   });
 
   const { data, isLoading, fetchNextPage, hasNextPage, isFetchingNextPage } = useInfiniteQuery({
@@ -288,6 +368,22 @@ export function SearchPage() {
             />
           )}
         </div>
+
+        <SavedSearchControls
+          savedSearches={savedSearches}
+          onLoad={(view) => setSearchParams(filtersToParams(view.filters), { replace: true })}
+          onSave={(name) => createSavedMutation.mutate({ name, filters: savedFilters })}
+          onRename={(view, name) => updateSavedMutation.mutate({ id: view.id, payload: { name } })}
+          onUpdate={(view) =>
+            updateSavedMutation.mutate({ id: view.id, payload: { filters: savedFilters } })
+          }
+          onDelete={(view) => deleteSavedMutation.mutate(view.id)}
+          busy={
+            createSavedMutation.isPending ||
+            updateSavedMutation.isPending ||
+            deleteSavedMutation.isPending
+          }
+        />
       </div>
 
       {/* Result count */}
@@ -360,6 +456,94 @@ function Chip({
     >
       {children}
     </button>
+  );
+}
+
+function SavedSearchControls({
+  savedSearches,
+  onLoad,
+  onSave,
+  onRename,
+  onUpdate,
+  onDelete,
+  busy,
+}: {
+  savedSearches: SavedSearchView[];
+  onLoad: (view: SavedSearchView) => void;
+  onSave: (name: string) => void;
+  onRename: (view: SavedSearchView, name: string) => void;
+  onUpdate: (view: SavedSearchView) => void;
+  onDelete: (view: SavedSearchView) => void;
+  busy: boolean;
+}) {
+  const [selectedId, setSelectedId] = useState('');
+  const selected = savedSearches.find((view) => String(view.id) === selectedId) ?? null;
+
+  function askName(defaultName = ''): string | null {
+    const value = window.prompt('Saved view name', defaultName);
+    const trimmed = value?.trim() ?? '';
+    return trimmed ? trimmed : null;
+  }
+
+  return (
+    <div className="mt-3 flex flex-wrap items-center gap-2">
+      <select
+        aria-label="Saved search views"
+        value={selectedId}
+        onChange={(event) => {
+          const view = savedSearches.find((item) => String(item.id) === event.target.value);
+          setSelectedId(event.target.value);
+          if (view) onLoad(view);
+        }}
+        className="h-8 min-w-44 rounded-md border border-border bg-surface px-2 text-xs text-foreground"
+      >
+        <option value="">Saved views</option>
+        {savedSearches.map((view) => (
+          <option key={view.id} value={view.id}>
+            {view.name}
+          </option>
+        ))}
+      </select>
+      <button
+        type="button"
+        disabled={busy}
+        onClick={() => {
+          const name = askName();
+          if (name) onSave(name);
+        }}
+        className="h-8 px-2.5 rounded-md border border-border bg-surface text-xs font-medium text-foreground hover:border-border-strong disabled:opacity-60"
+      >
+        Save view
+      </button>
+      <button
+        type="button"
+        disabled={busy || !selected}
+        onClick={() => selected && onUpdate(selected)}
+        className="h-8 px-2.5 rounded-md border border-border bg-surface text-xs font-medium text-foreground hover:border-border-strong disabled:opacity-60"
+      >
+        Update
+      </button>
+      <button
+        type="button"
+        disabled={busy || !selected}
+        onClick={() => {
+          if (!selected) return;
+          const name = askName(selected.name);
+          if (name) onRename(selected, name);
+        }}
+        className="h-8 px-2.5 rounded-md border border-border bg-surface text-xs font-medium text-foreground hover:border-border-strong disabled:opacity-60"
+      >
+        Rename
+      </button>
+      <button
+        type="button"
+        disabled={busy || !selected}
+        onClick={() => selected && onDelete(selected)}
+        className="h-8 px-2.5 rounded-md border border-border bg-surface text-xs font-medium text-foreground hover:border-border-strong disabled:opacity-60"
+      >
+        Delete
+      </button>
+    </div>
   );
 }
 
