@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -203,7 +203,7 @@ export function ArticlePage() {
     staleTime: 30_000,
   });
 
-  const article = rawArticle ? adaptArticle(rawArticle) : null;
+  const article = useMemo(() => (rawArticle ? adaptArticle(rawArticle) : null), [rawArticle]);
   const [showOriginal, setShowOriginal] = useState(false);
 
   useEffect(() => {
@@ -257,33 +257,36 @@ export function ArticlePage() {
   const nextId =
     idx >= 0 && idx < (readerList?.ids.length ?? 0) - 1 ? readerList!.ids[idx + 1] : null;
 
-  const goBack = () => void navigate(-1);
-  const goPrev = () => {
+  const goBack = useCallback(() => void navigate(-1), [navigate]);
+  const goPrev = useCallback(() => {
     if (prevId) void navigate(`/a/${prevId}`, { replace: true });
-  };
-  const goNext = () => {
+  }, [navigate, prevId]);
+  const goNext = useCallback(() => {
     if (nextId) void navigate(`/a/${nextId}`, { replace: true });
-  };
+  }, [navigate, nextId]);
 
   // Triage mutations — inline (no extra hook so we stay self-contained)
-  async function doAction(state: WorkflowState, label: string) {
-    if (!article) return;
-    if (state === 'skipped' && article.starred) {
-      toast.error("Starred articles can't be skipped");
-      return;
-    }
-    try {
-      await patchArticleState(article.id, state, article.starred);
-      void queryClient.invalidateQueries({ queryKey: ['articles'] });
-      void queryClient.invalidateQueries({ queryKey: ['summary'] });
-      toast(label);
-      goBack();
-    } catch {
-      toast.error('Action failed');
-    }
-  }
+  const doAction = useCallback(
+    async (state: WorkflowState, label: string) => {
+      if (!article) return;
+      if (state === 'skipped' && article.starred) {
+        toast.error("Starred articles can't be skipped");
+        return;
+      }
+      try {
+        await patchArticleState(article.id, state, article.starred);
+        void queryClient.invalidateQueries({ queryKey: ['articles'] });
+        void queryClient.invalidateQueries({ queryKey: ['summary'] });
+        toast(label);
+        goBack();
+      } catch {
+        toast.error('Action failed');
+      }
+    },
+    [article, queryClient, goBack]
+  );
 
-  async function doStar() {
+  const doStar = useCallback(async () => {
     if (!article) return;
     const next = !article.starred;
     try {
@@ -296,7 +299,7 @@ export function ArticlePage() {
     } catch {
       toast.error('Action failed');
     }
-  }
+  }, [article, id, queryClient, goBack]);
 
   async function saveCurrentArticleOffline() {
     if (!article) return;
@@ -455,7 +458,7 @@ export function ArticlePage() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  });
+  }, [goBack, goPrev, goNext, article, doAction, doStar]);
 
   const signalColor =
     article?.signal === 'high'
