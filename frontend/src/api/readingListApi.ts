@@ -1,6 +1,6 @@
 /** API layer for the reading list (#893). */
 
-import { requestJson } from '../api';
+import { HttpError, readErrorMessage, requestJson } from '../api';
 
 export type ReadingListStatus = 'unread' | 'done' | 'archived';
 export type ReadingListKind = 'article' | 'video' | 'channel' | 'link';
@@ -63,4 +63,28 @@ export async function reorderReadingList(orderedIds: number[]): Promise<ReadingL
 
 export async function deleteReadingListItem(id: number): Promise<void> {
   await requestJson(`/api/reading-list/${id}`, { method: 'DELETE' });
+}
+
+export type ReadingListImportSource = 'pocket' | 'instapaper' | 'omnivore';
+
+export interface ReadingListImportResult {
+  added: number;
+  skipped: number;
+  failed: number;
+}
+
+export async function importReadingList(
+  file: File,
+  source: ReadingListImportSource
+): Promise<ReadingListImportResult> {
+  const form = new FormData();
+  form.append('file', file);
+  form.append('source', source);
+  const response = await fetch('/api/reading-list/import', {
+    method: 'POST',
+    credentials: 'same-origin',
+    body: form,
+  });
+  if (!response.ok) throw new HttpError(response.status, await readErrorMessage(response));
+  return response.json() as Promise<ReadingListImportResult>;
 }
