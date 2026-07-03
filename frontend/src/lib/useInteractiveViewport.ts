@@ -72,44 +72,37 @@ export function useInteractiveViewport({
     [width, height]
   );
 
-  const onMouseDown = useCallback((e: React.MouseEvent<SVGSVGElement>) => {
-    // Only pan on the background (target is the SVG or a <rect> backdrop)
-    const tag = (e.target as SVGElement).tagName.toLowerCase();
-    if (tag !== 'svg' && tag !== 'rect' && tag !== 'line' && tag !== 'path') return;
-    e.preventDefault();
-    dragStart.current = {
-      clientX: e.clientX,
-      clientY: e.clientY,
-      tx: 0,
-      ty: 0,
-    };
-    setViewport((v) => {
+  const onMouseDown = useCallback(
+    (e: React.MouseEvent<SVGSVGElement>) => {
+      // Only pan on the background (target is the SVG or a <rect> backdrop)
+      const tag = (e.target as SVGElement).tagName.toLowerCase();
+      if (tag !== 'svg' && tag !== 'rect' && tag !== 'line' && tag !== 'path') return;
+      e.preventDefault();
       dragStart.current = {
         clientX: e.clientX,
         clientY: e.clientY,
-        tx: v.tx,
-        ty: v.ty,
+        tx: viewport.tx,
+        ty: viewport.ty,
       };
-      return v;
-    });
-    setIsPanning(true);
-  }, []);
+      setIsPanning(true);
+    },
+    [viewport.tx, viewport.ty]
+  );
 
   const onMouseMove = useCallback(
     (e: React.MouseEvent<SVGSVGElement>) => {
-      if (!dragStart.current) return;
+      // Capture eagerly: a mouseup batched with this event nulls the ref
+      // before the queued updater runs at render time.
+      const start = dragStart.current;
+      if (!start) return;
       const svg = svgRef.current;
       if (!svg) return;
       const rect = svg.getBoundingClientRect();
       const scaleX = width / rect.width;
       const scaleY = height / rect.height;
-      const dx = (e.clientX - dragStart.current.clientX) * scaleX;
-      const dy = (e.clientY - dragStart.current.clientY) * scaleY;
-      setViewport((v) => ({
-        ...v,
-        tx: dragStart.current!.tx + dx,
-        ty: dragStart.current!.ty + dy,
-      }));
+      const tx = start.tx + (e.clientX - start.clientX) * scaleX;
+      const ty = start.ty + (e.clientY - start.clientY) * scaleY;
+      setViewport((v) => ({ ...v, tx, ty }));
     },
     [width, height]
   );
