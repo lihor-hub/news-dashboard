@@ -23,7 +23,7 @@ export function WhatsNewDialog({ state }: WhatsNewDialogProps) {
         if (!v) dismiss();
       }}
     >
-      <DialogContent className="max-w-sm">
+      <DialogContent className="max-w-sm max-h-[85vh] flex flex-col overflow-hidden">
         <DialogHeader>
           <DialogTitle>✨ What's new</DialogTitle>
           <DialogDescription>
@@ -33,7 +33,7 @@ export function WhatsNewDialog({ state }: WhatsNewDialogProps) {
           </DialogDescription>
         </DialogHeader>
         {hasItems ? (
-          <ul className="mt-1 space-y-1.5 text-sm text-foreground">
+          <ul className="mt-1 min-h-0 flex-1 space-y-1.5 overflow-y-auto text-sm text-foreground">
             {items.map((item) => (
               <li key={item} className="flex gap-2">
                 <span className="mt-0.5 text-muted-foreground select-none">•</span>
