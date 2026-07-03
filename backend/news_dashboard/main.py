@@ -358,6 +358,24 @@ async def enforce_csrf_origin(request: Request, call_next: Any) -> Any:
     return await call_next(request)
 
 
+# ── Baseline browser security headers ───────────────────────────────────────
+
+
+@app.middleware("http")
+async def add_security_headers(request: Request, call_next: Any) -> Any:
+    """Attach conservative security headers to every response.
+
+    Applies to API and static frontend responses alike, so the app carries
+    this baseline itself regardless of whether it's fronted by the Caddy
+    deployment in ``deploy/Caddyfile`` or run directly (Docker/Compose).
+    """
+    from news_dashboard.security_headers import apply_security_headers
+
+    response = await call_next(request)
+    apply_security_headers(response)
+    return response
+
+
 # ── AI-facing payload limits ─────────────────────────────────────────────────
 # Bounds for user-supplied text that reaches retrieval, prompt construction, or
 # storage, so a malformed client can't send oversized LLM requests or noisy
