@@ -31,13 +31,13 @@ env:
   # Full image name. GITHUB_REPOSITORY is "owner/repo" (lower-cased by GHCR).
   IMAGE: ghcr.io/${{ github.repository }}
 
-# Minimum permissions. packages:write is only exercised by the publish job;
-# GitHub scopes GITHUB_TOKEN to the individual job automatically.
-# models:read lets the publish job summarize the changelog via GitHub Models.
+# Minimum permissions at the workflow root. Jobs that need more (packages:write
+# and models:read for publish, security-events:write for trivy, pull-requests:write
+# for coverage-upload) declare their own narrower `permissions:` block below —
+# see .github/workflows/trivy-scan.yml, dependency-review.yml, release.yml, and
+# pr-metrics.yml for the same per-job pattern.
 permissions:
   contents: read
-  packages: write
-  models: read
 
 jobs:
   # ── 0. DETECT CHANGES ──────────────────────────────────────────────────────
@@ -403,6 +403,7 @@ jobs:
     permissions:
       contents: read
       packages: write
+      models: read # GitHub Models inference for the changelog entry
       id-token: write
       attestations: write
     outputs:
