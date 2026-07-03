@@ -28,7 +28,14 @@ export function LoginPage() {
 
   useEffect(() => {
     void fetchAuthConfig()
-      .then(setAuthConfig)
+      .then((config) => {
+        setAuthConfig(config);
+        // When Keycloak SSO is enabled, password login is disabled server-side,
+        // so default to the email OTP flow (Keycloak stays as a secondary option).
+        if (config.provider === 'keycloak') {
+          setMode('otp');
+        }
+      })
       .catch(() =>
         setAuthConfig({
           provider: 'password',
@@ -83,8 +90,8 @@ export function LoginPage() {
     }
   }
 
-  const keycloakLoginUrl =
-    authConfig?.provider === 'keycloak' ? (authConfig.login_url ?? '/auth/login') : null;
+  const keycloakEnabled = authConfig?.provider === 'keycloak';
+  const keycloakLoginUrl = keycloakEnabled ? (authConfig.login_url ?? '/auth/login') : null;
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background px-4">
@@ -97,26 +104,7 @@ export function LoginPage() {
           </div>
         </div>
 
-        {keycloakLoginUrl ? (
-          <div className="space-y-4">
-            <a
-              href={keycloakLoginUrl}
-              className="flex w-full items-center justify-center rounded-md bg-foreground px-4 py-2.5 text-sm font-medium text-background transition-opacity hover:opacity-90"
-            >
-              {t('auth.sign_in_with_keycloak')}
-            </a>
-            {authConfig?.registration_url && (
-              <div className="text-center">
-                <a
-                  href={authConfig.registration_url}
-                  className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors underline underline-offset-4"
-                >
-                  {t('auth.create_account')}
-                </a>
-              </div>
-            )}
-          </div>
-        ) : mode === 'password' ? (
+        {mode === 'password' ? (
           <div className="space-y-4">
             <form onSubmit={(e) => void handlePasswordSubmit(e)} className="space-y-4">
               <div className="space-y-1">
@@ -219,18 +207,39 @@ export function LoginPage() {
               </button>
             </form>
 
-            <div className="text-center">
-              <button
-                type="button"
-                onClick={() => {
-                  setMode('password');
-                  setError(null);
-                }}
-                className="text-sm text-muted-foreground hover:text-foreground transition-colors underline underline-offset-4"
-              >
-                {t('auth.back_to_password')}
-              </button>
-            </div>
+            {keycloakLoginUrl ? (
+              <div className="space-y-3 border-t border-border pt-4">
+                <a
+                  href={keycloakLoginUrl}
+                  className="flex w-full items-center justify-center rounded-md border border-border bg-surface px-4 py-2.5 text-sm font-medium text-foreground transition-opacity hover:opacity-90"
+                >
+                  {t('auth.sign_in_with_keycloak')}
+                </a>
+                {authConfig?.registration_url && (
+                  <div className="text-center">
+                    <a
+                      href={authConfig.registration_url}
+                      className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors underline underline-offset-4"
+                    >
+                      {t('auth.create_account')}
+                    </a>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="text-center">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMode('password');
+                    setError(null);
+                  }}
+                  className="text-sm text-muted-foreground hover:text-foreground transition-colors underline underline-offset-4"
+                >
+                  {t('auth.back_to_password')}
+                </button>
+              </div>
+            )}
           </div>
         ) : (
           <div className="space-y-4">
