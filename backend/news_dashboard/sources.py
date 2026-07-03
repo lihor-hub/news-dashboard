@@ -377,6 +377,14 @@ DEFAULT_SOURCES: list[SourceDefinition] = [
         priority=78,
         interest_tags=("programming", "frontend", "software-development"),
     ),
+    SourceDefinition(
+        "v8-blog",
+        "V8 Blog",
+        "https://v8.dev/blog.atom",
+        "developer-tools",
+        priority=72,
+        interest_tags=("javascript", "performance", "frontend"),
+    ),
     # ── Trending / repositories ───────────────────────────────────────────────
     SourceDefinition(
         "hacker-news-best",
