@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
 import {
   CheckCircle2,
   AlertTriangle,
@@ -27,6 +28,7 @@ import {
   updateSourceEnabled,
 } from '@/api';
 import { relativeTime } from '@/lib/format';
+import { sourceActionErrorMessage } from '@/lib/errorPresentation';
 import type { Source, SourceCleanupSuggestion, OpmlImportResult } from '@/types';
 import { OnboardingWizard } from '@/components/OnboardingWizard';
 import { useAuth } from '@/contexts/auth';
@@ -133,7 +135,7 @@ function AddSourceDialog({
       onClose();
     },
     onError: (err: Error) => {
-      setError(err.message);
+      setError(sourceActionErrorMessage(err, 'add'));
     },
   });
 
@@ -270,8 +272,9 @@ export function SourcesPage() {
       );
       return { prev };
     },
-    onError: (_err, _vars, ctx) => {
+    onError: (err, _vars, ctx) => {
       if (ctx?.prev) qc.setQueryData([SOURCES_KEY], ctx.prev);
+      toast.error(sourceActionErrorMessage(err, 'toggle'));
     },
     onSettled: () => {
       void qc.invalidateQueries({ queryKey: [SOURCES_KEY] });
@@ -294,9 +297,10 @@ export function SourcesPage() {
       );
       return { prevSources, prevSuggestions };
     },
-    onError: (_err, _vars, ctx) => {
+    onError: (err, _vars, ctx) => {
       if (ctx?.prevSources) qc.setQueryData([SOURCES_KEY], ctx.prevSources);
       if (ctx?.prevSuggestions) qc.setQueryData([SOURCE_CLEANUP_KEY], ctx.prevSuggestions);
+      toast.error(sourceActionErrorMessage(err, 'cleanup'));
     },
     onSettled: () => {
       void qc.invalidateQueries({ queryKey: [SOURCES_KEY] });
@@ -312,8 +316,9 @@ export function SourcesPage() {
       qc.setQueryData<Source[]>([SOURCES_KEY], (old = []) => old.filter((s) => s.slug !== slug));
       return { prev };
     },
-    onError: (_err, _vars, ctx) => {
+    onError: (err, _vars, ctx) => {
       if (ctx?.prev) qc.setQueryData([SOURCES_KEY], ctx.prev);
+      toast.error(sourceActionErrorMessage(err, 'delete'));
     },
     onSettled: () => {
       void qc.invalidateQueries({ queryKey: [SOURCES_KEY] });

@@ -6,33 +6,45 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useEffect, type ReactElement, type ReactNode } from 'react';
 import type { Source, User } from '../types';
 import { AuthProvider, useAuth } from '../contexts/auth';
+import { toast } from 'sonner';
 
 // ── Shared API mock ──────────────────────────────────────────────────────────
 // SourcesPage imports from '@/api', SchedulerPage from '../api'; both resolve to
 // the same module, so one mock factory covers both import specifiers.
-const apiMock = vi.hoisted(() => ({
-  fetchSources: vi.fn(),
-  fetchSourceCleanupSuggestions: vi.fn(),
-  updateSourceEnabled: vi.fn(),
-  applySourceCleanup: vi.fn(),
-  createSource: vi.fn(),
-  deleteSource: vi.fn(),
-  fetchSchedulerStatus: vi.fn(),
-  setSchedulerInterval: vi.fn(),
-  pauseScheduler: vi.fn(),
-  resumeScheduler: vi.fn(),
-  ingestNow: vi.fn(),
-  fetchOnboardingInterests: vi.fn().mockResolvedValue([]),
-  fetchOnboardingSourceRecommendations: vi.fn().mockResolvedValue([]),
-  fetchOnboardingStatus: vi.fn().mockResolvedValue({ completed: true }),
-  saveOnboardingInterests: vi.fn().mockResolvedValue(undefined),
-  exportOpml: vi.fn().mockResolvedValue(undefined),
-  importOpml: vi.fn().mockResolvedValue({
-    added: [],
-    skipped: [],
-    failed: [],
-  }),
-}));
+const apiMock = vi.hoisted(() => {
+  class HttpError extends Error {
+    status: number;
+    constructor(status: number, message: string) {
+      super(message);
+      this.status = status;
+      this.name = 'HttpError';
+    }
+  }
+  return {
+    HttpError,
+    fetchSources: vi.fn(),
+    fetchSourceCleanupSuggestions: vi.fn(),
+    updateSourceEnabled: vi.fn(),
+    applySourceCleanup: vi.fn(),
+    createSource: vi.fn(),
+    deleteSource: vi.fn(),
+    fetchSchedulerStatus: vi.fn(),
+    setSchedulerInterval: vi.fn(),
+    pauseScheduler: vi.fn(),
+    resumeScheduler: vi.fn(),
+    ingestNow: vi.fn(),
+    fetchOnboardingInterests: vi.fn().mockResolvedValue([]),
+    fetchOnboardingSourceRecommendations: vi.fn().mockResolvedValue([]),
+    fetchOnboardingStatus: vi.fn().mockResolvedValue({ completed: true }),
+    saveOnboardingInterests: vi.fn().mockResolvedValue(undefined),
+    exportOpml: vi.fn().mockResolvedValue(undefined),
+    importOpml: vi.fn().mockResolvedValue({
+      added: [],
+      skipped: [],
+      failed: [],
+    }),
+  };
+});
 vi.mock('@/api', () => apiMock);
 vi.mock('../api', () => apiMock);
 vi.mock('sonner', () => ({
@@ -188,6 +200,21 @@ describe('SourcesPage', () => {
     await waitFor(() => expect(apiMock.updateSourceEnabled).toHaveBeenCalledWith('acme', false));
   });
 
+  it('notifies and reverts the switch when a toggle fails', async () => {
+    apiMock.fetchSources.mockResolvedValue([source({ enabled: 1 })]);
+    apiMock.updateSourceEnabled.mockRejectedValue(new Error('network down'));
+    withProviders(<SourcesPage />);
+    const [toggle] = await screen.findAllByRole('switch');
+    fireEvent.click(toggle);
+
+    await waitFor(() =>
+      expect(toast.error).toHaveBeenCalledWith(
+        'Could not update the source — it has been reverted to its previous state.'
+      )
+    );
+    await waitFor(() => expect(toggle).toHaveAttribute('aria-checked', 'true'));
+  });
+
   it('opens the Add source dialog when "Add source" is clicked', async () => {
     apiMock.fetchSources.mockResolvedValue([source()]);
     withProviders(<SourcesPage />, '/', regularUser);
@@ -235,9 +262,9 @@ describe('SourcesPage', () => {
     );
   });
 
-  it('shows error message when createSource fails', async () => {
+  it('shows a friendly conflict message when createSource fails with a duplicate slug', async () => {
     apiMock.fetchSources.mockResolvedValue([source()]);
-    apiMock.createSource.mockRejectedValue(new Error('slug already exists'));
+    apiMock.createSource.mockRejectedValue(new apiMock.HttpError(409, 'slug already exists'));
     withProviders(<SourcesPage />, '/', regularUser);
     await screen.findAllByText('Acme News');
 
@@ -250,7 +277,31 @@ describe('SourcesPage', () => {
     });
     fireEvent.click(screen.getByRole('button', { name: /^add source$/i }));
 
-    await waitFor(() => expect(screen.getByText('slug already exists')).toBeTruthy());
+    expect(
+      await screen.findByText('That slug is already in use — choose a different slug or source.')
+    ).toBeTruthy();
+    expect(screen.queryByText('slug already exists')).toBeNull();
+  });
+
+  it('shows friendly copy rather than a raw server string for generic createSource failures', async () => {
+    apiMock.fetchSources.mockResolvedValue([source()]);
+    apiMock.createSource.mockRejectedValue(new Error('500 Internal Server Error'));
+    withProviders(<SourcesPage />, '/', regularUser);
+    await screen.findAllByText('Acme News');
+
+    fireEvent.click(screen.getByRole('button', { name: /add source/i }));
+    await screen.findByRole('dialog');
+
+    fireEvent.change(screen.getByLabelText(/^name$/i), { target: { value: 'My Blog' } });
+    fireEvent.change(screen.getByLabelText(/feed url/i), {
+      target: { value: 'https://myblog.com/feed' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /^add source$/i }));
+
+    expect(
+      await screen.findByText('Could not add source. Check the feed URL and try again.')
+    ).toBeTruthy();
+    expect(screen.queryByText('500 Internal Server Error')).toBeNull();
   });
 
   it('shows delete button for sources owned by current user', async () => {
@@ -316,6 +367,55 @@ describe('SourcesPage', () => {
     fireEvent.click(deleteBtn);
 
     await waitFor(() => expect(apiMock.deleteSource).toHaveBeenCalledWith('mine'));
+  });
+
+  it('notifies and restores the source row when delete fails', async () => {
+    apiMock.fetchSources.mockResolvedValue([
+      source({ slug: 'mine', name: 'My Blog', owner_user_id: regularUser.id }),
+    ]);
+    apiMock.deleteSource.mockRejectedValue(new Error('network down'));
+    withProviders(<SourcesPage />, '/', regularUser);
+    await screen.findAllByText('My Blog');
+
+    const [deleteBtn] = screen.getAllByRole('button', { name: /delete my blog/i });
+    fireEvent.click(deleteBtn);
+
+    await waitFor(() =>
+      expect(toast.error).toHaveBeenCalledWith("Couldn't delete the source — it has been restored.")
+    );
+    expect(await screen.findAllByText('My Blog')).toHaveLength(2); // desktop + mobile
+  });
+
+  it('notifies and restores the source list when cleanup fails', async () => {
+    const suggestion = {
+      source_slug: 'acme',
+      source_name: 'Acme News',
+      action: 'unsubscribe' as const,
+      reason: 'stale' as const,
+      message: 'No articles from Acme News in 30 days',
+      articles_last_30_days: 0,
+      skip_rate: 0,
+      skipped_count: 0,
+      done_count: 0,
+      starred_count: 0,
+      archived_count: 0,
+      engagement_score: 0,
+    };
+    apiMock.fetchSources.mockResolvedValue([source()]);
+    apiMock.fetchSourceCleanupSuggestions.mockResolvedValue([suggestion]);
+    apiMock.applySourceCleanup.mockRejectedValue(new Error('network down'));
+    withProviders(<SourcesPage />);
+    await screen.findAllByText('Acme News');
+
+    const applyBtn = await screen.findByRole('button', { name: /apply cleanup/i });
+    fireEvent.click(applyBtn);
+
+    await waitFor(() =>
+      expect(toast.error).toHaveBeenCalledWith(
+        "Cleanup couldn't be applied — the source list has been restored."
+      )
+    );
+    expect(await screen.findByRole('button', { name: /apply cleanup/i })).toBeTruthy();
   });
 
   it('calls exportOpml when "Export OPML" button is clicked', async () => {
