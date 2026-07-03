@@ -110,6 +110,11 @@ app:
     vapidPrivateKeyKey: VAPID_PRIVATE_KEY
     # VAPID claims email address. Omit or leave empty to default safely.
     email: ""
+  email:
+    # Optional: pre-existing Secret with Gmail SMTP creds for OTP sign-in emails.
+    existingSecret: ""
+    smtpUsernameKey: SMTP_USERNAME
+    smtpPasswordKey: SMTP_PASSWORD
   sentry:
     # Optional: pre-existing Secret with SENTRY_DSN and/or SENTRY_DSN_FRONTEND.
     existingSecret: ""
