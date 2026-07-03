@@ -360,9 +360,12 @@ def ask(
     context_text = "\n\n".join(context_blocks)
 
     from news_dashboard.ai_client import get_prompt, observe
+    from news_dashboard.ai_memory.service import format_memories_for_prompt
 
     prompt = get_prompt("ask-system", fallback=ASK_SYSTEM_PROMPT)
-    user_prompt = f"Articles:\n\n{context_text}\n\nQuestion: {query}"
+    memory_text = format_memories_for_prompt(user_id)
+    memory_block = f"{memory_text}\n\n" if memory_text else ""
+    user_prompt = f"{memory_block}Articles:\n\n{context_text}\n\nQuestion: {query}"
 
     # 6. Call OpenAI for the answer, grouping retrieval + generation under one
     #    Langfuse trace so its id can carry user feedback (see /api/feedback).

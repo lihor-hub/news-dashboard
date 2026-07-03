@@ -117,8 +117,45 @@ def assemble_user_export(
             ]
             briefings.append(bd)
 
+        memory_rows = conn.execute(
+            """
+            SELECT id, memory_type, content, source, confidence, active, created_at, updated_at
+            FROM user_ai_memories
+            WHERE user_id = %s
+            ORDER BY id ASC
+            """,
+            (user_id,),
+        ).fetchall()
+        memories: list[dict[str, Any]] = []
+        for row in memory_rows:
+            md = row_to_dict(row)
+            for ts_col in ("created_at", "updated_at"):
+                val = md.get(ts_col)
+                if val is not None and not isinstance(val, str):
+                    md[ts_col] = val.isoformat()
+            memories.append(md)
+
+        event_rows = conn.execute(
+            """
+            SELECT id, memory_id, event_type, source, content, metadata, created_at
+            FROM user_ai_memory_events
+            WHERE user_id = %s
+            ORDER BY id ASC
+            """,
+            (user_id,),
+        ).fetchall()
+        memory_events: list[dict[str, Any]] = []
+        for row in event_rows:
+            ed = row_to_dict(row)
+            created_at = ed.get("created_at")
+            if created_at is not None and not isinstance(created_at, str):
+                ed["created_at"] = created_at.isoformat()
+            memory_events.append(ed)
+
     return {
         "schema_version": 1,
         "articles": articles,
         "briefings": briefings,
+        "ai_memories": memories,
+        "ai_memory_events": memory_events,
     }

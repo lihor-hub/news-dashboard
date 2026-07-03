@@ -2935,7 +2935,7 @@ class FeedbackRequest(BaseModel):
 @api.post("/api/feedback")
 def submit_feedback(
     payload: FeedbackRequest,
-    _current_user: Annotated[dict[str, Any], Depends(require_auth)],
+    current_user: Annotated[dict[str, Any], Depends(require_auth)],
 ) -> dict[str, Any]:
     """Record a user's thumbs up/down on an AI answer as a Langfuse score.
 
@@ -2945,8 +2945,16 @@ def submit_feedback(
     disabled, so feedback never errors for the user.
     """
     from news_dashboard.ai_client import create_score
+    from news_dashboard.ai_memory.service import record_memory_event
 
     comment = (payload.comment or "").strip() or None
+    record_memory_event(
+        int(current_user["id"]),
+        event_type="feedback",
+        source="ask_feedback",
+        content=comment or ("helpful" if payload.helpful else "not helpful"),
+        metadata={"trace_id": payload.trace_id, "helpful": payload.helpful},
+    )
     recorded = create_score(
         payload.trace_id,
         name="user-thumbs",
@@ -3214,6 +3222,7 @@ def admin_delete_user(
 
 # Feature-module routers mount onto ``api`` so they inherit its ``require_auth``
 # gate. Add each new domain's router here as it is extracted from main.py.
+from news_dashboard.ai_memory.router import router as ai_memory_router  # noqa: E402
 from news_dashboard.ai_stats.router import router as ai_stats_router  # noqa: E402
 from news_dashboard.quizzes.router import router as quizzes_router  # noqa: E402
 from news_dashboard.reading_list.router import router as reading_list_router  # noqa: E402
@@ -3221,6 +3230,7 @@ from news_dashboard.reading_progress.router import router as reading_progress_ro
 from news_dashboard.recaps.router import router as recaps_router  # noqa: E402
 
 api.include_router(ai_stats_router)
+api.include_router(ai_memory_router)
 api.include_router(quizzes_router)
 api.include_router(reading_list_router)
 api.include_router(reading_progress_router)

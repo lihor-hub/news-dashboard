@@ -244,7 +244,7 @@ def pg_url() -> Generator[str]:
 
 
 def truncate_all_tables(database_url: str) -> None:
-    """Truncate every table in the ``public`` schema and reset identities.
+    """Truncate every table in the active test schema and reset identities.
 
     Tables are discovered dynamically rather than hardcoded: a hand-maintained
     list silently drifts out of sync as the schema grows, leaking rows between
@@ -260,7 +260,7 @@ def truncate_all_tables(database_url: str) -> None:
         tables = [
             row[0]
             for row in conn.execute(
-                "SELECT tablename FROM pg_tables WHERE schemaname = 'public'"
+                "SELECT tablename FROM pg_tables WHERE schemaname = current_schema()"
             ).fetchall()
         ]
         if not tables:

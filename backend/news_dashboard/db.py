@@ -679,6 +679,36 @@ POSTGRES_MULTIUSER_SCHEMA = [
     """,
     "CREATE INDEX IF NOT EXISTS idx_briefing_agent_steps_run"
     " ON briefing_agent_steps(run_id, ordinal)",
+    """
+    CREATE TABLE IF NOT EXISTS user_ai_memories (
+      id          BIGSERIAL PRIMARY KEY,
+      user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      memory_type TEXT NOT NULL DEFAULT 'preference',
+      content     TEXT NOT NULL,
+      source      TEXT NOT NULL DEFAULT 'explicit',
+      confidence  DOUBLE PRECISION NOT NULL DEFAULT 1.0,
+      active      BOOLEAN NOT NULL DEFAULT TRUE,
+      created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      CHECK (confidence >= 0 AND confidence <= 1)
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_user_ai_memories_user_active"
+    " ON user_ai_memories(user_id, active, updated_at DESC)",
+    """
+    CREATE TABLE IF NOT EXISTS user_ai_memory_events (
+      id          BIGSERIAL PRIMARY KEY,
+      user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      memory_id   BIGINT REFERENCES user_ai_memories(id) ON DELETE SET NULL,
+      event_type  TEXT NOT NULL,
+      source      TEXT NOT NULL,
+      content     TEXT NOT NULL,
+      metadata    JSONB NOT NULL DEFAULT '{}'::jsonb,
+      created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_user_ai_memory_events_user"
+    " ON user_ai_memory_events(user_id, created_at DESC)",
 ]
 
 
@@ -816,19 +846,44 @@ def init_db(db_path: Path | str | None = None, database_url: str | None = None) 
         if cache_key in _INITIALIZED_DATABASES:
             return
 
-    # Each statement runs in its own transaction so one failed statement does
-    # not leave later attempts in an aborted transaction.
-    applied = 0
-    for statement in POSTGRES_SCHEMA + POSTGRES_MULTIUSER_SCHEMA:
-        try:
-            with connect(db_path, database_url=database_url) as conn:
-                conn.execute(statement)
-                applied += 1
-        except Exception as exc:
-            statement_preview = " ".join(statement.split())[:240]
-            logger.exception("Schema initialization failed on statement: %s", statement_preview)
-            message = f"Schema initialization failed on statement: {statement_preview}"
-            raise SchemaInitializationError(message) from exc
+    lock_key = int.from_bytes(
+        sha256(f"news-dashboard-schema:{cache_key!r}".encode()).digest()[:8],
+        byteorder="big",
+        signed=True,
+    )
+    use_advisory_lock = getattr(connect, "__module__", __name__) == __name__
+    lock_context: Any | None = None
+    lock_conn = None
+    if use_advisory_lock:
+        lock_context = connect(db_path, database_url=database_url)
+        lock_conn = lock_context.__enter__()
+        lock_conn.execute("SELECT pg_advisory_lock(%s)", (lock_key,))
+        lock_conn.commit()
+    try:
+        with _INIT_DB_LOCK:
+            if cache_key in _INITIALIZED_DATABASES:
+                return
+
+        # Each statement runs in its own transaction so one failed statement does
+        # not leave later attempts in an aborted transaction.
+        applied = 0
+        for statement in POSTGRES_SCHEMA + POSTGRES_MULTIUSER_SCHEMA:
+            try:
+                with connect(db_path, database_url=database_url) as conn:
+                    conn.execute(statement)
+                    applied += 1
+            except Exception as exc:
+                statement_preview = " ".join(statement.split())[:240]
+                logger.exception("Schema initialization failed on statement: %s", statement_preview)
+                message = f"Schema initialization failed on statement: {statement_preview}"
+                raise SchemaInitializationError(message) from exc
+    finally:
+        if lock_conn is not None:
+            if lock_context is None:
+                message = "Schema advisory lock context missing"
+                raise RuntimeError(message)
+            lock_conn.execute("SELECT pg_advisory_unlock(%s)", (lock_key,))
+            lock_context.__exit__(None, None, None)
     if applied > 0:
         with _INIT_DB_LOCK:
             _INITIALIZED_DATABASES.add(cache_key)
