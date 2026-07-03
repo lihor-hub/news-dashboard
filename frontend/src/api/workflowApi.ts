@@ -177,6 +177,26 @@ export interface SearchFilters {
   offset?: number;
 }
 
+export interface SavedSearchFilters {
+  q: string;
+  states: WorkflowState[];
+  categories: string[];
+  sources: string[];
+  starred_only: boolean;
+  include_archived: boolean;
+  date_range: 'all' | 'today' | 'week' | 'month';
+  tag_id: number | null;
+}
+
+export interface SavedSearchView {
+  id: number;
+  user_id: number;
+  name: string;
+  filters: SavedSearchFilters;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface SearchArticlePage {
   items: WorkflowArticle[];
   total: number;
@@ -214,4 +234,33 @@ export async function searchArticlesFiltered(filters: SearchFilters): Promise<Se
     offset: data.offset ?? filters.offset ?? 0,
     hasMore: Boolean(data.has_more),
   };
+}
+
+export async function fetchSavedSearches(): Promise<SavedSearchView[]> {
+  const data = await requestJson<{ items: SavedSearchView[] }>('/api/search/saved');
+  return data.items;
+}
+
+export async function createSavedSearch(payload: {
+  name: string;
+  filters: SavedSearchFilters;
+}): Promise<SavedSearchView> {
+  return requestJson<SavedSearchView>('/api/search/saved', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function updateSavedSearch(
+  id: number,
+  payload: { name?: string; filters?: SavedSearchFilters }
+): Promise<SavedSearchView> {
+  return requestJson<SavedSearchView>(`/api/search/saved/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function deleteSavedSearch(id: number): Promise<{ deleted: boolean }> {
+  return requestJson<{ deleted: boolean }>(`/api/search/saved/${id}`, { method: 'DELETE' });
 }
