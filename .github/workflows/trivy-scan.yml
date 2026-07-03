@@ -8,6 +8,10 @@ on:
     - cron: '0 2 * * 0'  # Every Sunday at 02:00 UTC
   workflow_dispatch:  # Allow manual triggering
 
+env:
+  # Full image name. GITHUB_REPOSITORY is "owner/repo" (lower-cased by GHCR).
+  IMAGE: ghcr.io/${{ github.repository }}
+
 permissions:
   contents: read
   packages: read
@@ -37,7 +41,7 @@ jobs:
       - name: Run Trivy vulnerability scanner on latest image
         uses: aquasecurity/trivy-action@v0.36.0
         with:
-          image-ref: ${{ github.repository }}:latest
+          image-ref: ${{ env.IMAGE }}:latest
           format: sarif
           output: trivy-results.sarif
           exit-code: '1'  # Fail on any vulnerabilities
