@@ -244,7 +244,7 @@ def pg_url() -> Generator[str]:
 
 
 def truncate_all_tables(database_url: str) -> None:
-    """Truncate every table in the ``public`` schema and reset identities.
+    """Truncate every table in the active schema and reset identities.
 
     Tables are discovered dynamically rather than hardcoded: a hand-maintained
     list silently drifts out of sync as the schema grows, leaking rows between
@@ -252,6 +252,15 @@ def truncate_all_tables(database_url: str) -> None:
     ``RESTART IDENTITY CASCADE`` resets serial sequences and propagates
     truncation to child tables via FK constraints, giving each test a fully
     clean slate without needing a separate container per test.
+
+    Uses ``current_schema()`` rather than a hardcoded ``'public'``: under
+    xdist, each worker's DSN sets ``search_path`` to its own private
+    ``test_<worker>_<pid>`` schema (see ``pg_url``), so tables live there, not
+    in ``public``. Hardcoding ``'public'`` would instead pick up whatever
+    unrelated tables happen to sit in that schema (e.g. leftovers from an
+    older non-xdist run against a shared container) and fail with
+    ``UndefinedTable`` when truncating names that don't exist in the worker's
+    real schema.
     """
     import psycopg
     from psycopg import sql
@@ -260,7 +269,7 @@ def truncate_all_tables(database_url: str) -> None:
         tables = [
             row[0]
             for row in conn.execute(
-                "SELECT tablename FROM pg_tables WHERE schemaname = 'public'"
+                "SELECT tablename FROM pg_tables WHERE schemaname = current_schema()"
             ).fetchall()
         ]
         if not tables:
