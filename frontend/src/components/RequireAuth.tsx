@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { fetchAuthConfig, fetchMe } from '@/api';
+import { fetchMe } from '@/api';
 import { useAuth } from '@/contexts/auth';
 
 interface Props {
@@ -19,12 +19,10 @@ export function RequireAuth({ children }: Props) {
         setUser(user);
         setChecked(true);
       })
-      .catch(async () => {
-        const config = await fetchAuthConfig().catch(() => null);
-        if (config?.provider === 'keycloak') {
-          window.location.assign(config.login_url ?? '/auth/login');
-          return;
-        }
+      .catch(() => {
+        // Always route to the in-app login page. Even when Keycloak is enabled,
+        // the login page offers email OTP as the primary option with Keycloak as
+        // a secondary choice, so we no longer redirect straight to Keycloak.
         void navigate('/login', { state: { from: location.pathname }, replace: true });
       });
     // Run once on mount only

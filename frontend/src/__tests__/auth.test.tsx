@@ -127,7 +127,7 @@ describe('RequireAuth', () => {
     expect(screen.queryByText('Protected content')).toBeNull();
   });
 
-  it('redirects straight to Keycloak when /api/auth/me returns 401 and Keycloak is enabled', async () => {
+  it('shows the in-app login page (not an immediate Keycloak redirect) on 401 when Keycloak is enabled', async () => {
     vi.spyOn(api, 'fetchMe').mockRejectedValue(new Error('401 Unauthorized'));
     vi.spyOn(api, 'fetchAuthConfig').mockResolvedValue({
       provider: 'keycloak',
@@ -158,10 +158,10 @@ describe('RequireAuth', () => {
       );
 
       await waitFor(() => {
-        expect(assign).toHaveBeenCalledWith('/auth/login');
+        expect(screen.getByText('Login page')).toBeTruthy();
       });
+      expect(assign).not.toHaveBeenCalled();
       expect(screen.queryByText('Protected content')).toBeNull();
-      expect(screen.queryByText('Login page')).toBeNull();
     } finally {
       Object.defineProperty(window, 'location', {
         configurable: true,
@@ -348,5 +348,32 @@ describe('LoginPage', () => {
       expect(registerLink).toBeTruthy();
       expect(registerLink.getAttribute('href')).toBe('/auth/register');
     });
+  });
+
+  it('shows the email OTP form by default with Keycloak as a secondary option when Keycloak is enabled', async () => {
+    vi.spyOn(api, 'fetchAuthConfig').mockResolvedValue({
+      provider: 'keycloak',
+      keycloak_enabled: true,
+      login_url: '/auth/login',
+      logout_url: '/auth/logout',
+      registration_url: '/auth/register',
+    });
+
+    renderWithRouter(
+      <Routes>
+        <Route path="/" element={<LoginPage />} />
+      </Routes>
+    );
+
+    await waitFor(() => {
+      // OTP email form is the primary/default option.
+      expect(screen.getByLabelText(/email address/i)).toBeTruthy();
+      expect(screen.getByRole('button', { name: /send code/i })).toBeTruthy();
+    });
+    // Keycloak remains available as a secondary option.
+    const loginLink = screen.getByRole('link', { name: /sign in with keycloak/i });
+    expect(loginLink.getAttribute('href')).toBe('/auth/login');
+    // No password fields in Keycloak mode (password login is disabled server-side).
+    expect(screen.queryByLabelText(/^password$/i)).toBeNull();
   });
 });
