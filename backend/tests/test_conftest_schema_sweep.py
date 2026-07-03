@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import os
+import subprocess
+import sys
 import uuid
 
 import pytest
@@ -70,6 +72,98 @@ def test_sweep_stale_test_schemas() -> None:
                     assert row is not None
                 finally:
                     holder_conn.execute("SELECT pg_advisory_unlock(%s)", (_SCHEMA_SWEEP_LOCK_KEY,))
+    finally:
+        with psycopg.connect(admin_url, autocommit=True) as admin_conn:
+            admin_conn.execute(
+                sql.SQL("DROP DATABASE IF EXISTS {} WITH (FORCE)").format(
+                    sql.Identifier(scratch_db)
+                )
+            )
+
+
+def test_sweep_skips_schemas_owned_by_a_still_alive_process() -> None:
+    """PID-suffixed schemas whose owning process is still running are not dropped.
+
+    Two concurrent pytest sessions sharing one TEST_DATABASE_URL must not be
+    able to destroy each other's live worker schema: the sweep only treats a
+    ``test_<workerid>_<pid>`` schema as stale once that PID is gone.
+    """
+    import psycopg
+    from conftest import sweep_stale_test_schemas
+    from psycopg import sql
+
+    service_url = os.environ.get("TEST_DATABASE_URL")
+    if not service_url:
+        pytest.skip("TEST_DATABASE_URL not set")
+
+    base_url, _, _dbname = service_url.rpartition("/")
+    scratch_db = f"schema_sweep_scratch_{uuid.uuid4().hex[:12]}"
+    scratch_url = f"{base_url}/{scratch_db}"
+    admin_url = f"{base_url}/postgres"
+
+    with psycopg.connect(admin_url, autocommit=True) as admin_conn:
+        try:
+            admin_conn.execute(sql.SQL("CREATE DATABASE {}").format(sql.Identifier(scratch_db)))
+        except psycopg.errors.InsufficientPrivilege:
+            pytest.skip("connected role lacks CREATEDB; cannot build an isolated scratch database")
+    try:
+        alive_schema = f"test_gw0_{os.getpid()}"
+
+        with psycopg.connect(scratch_url, autocommit=True) as conn:
+            conn.execute(sql.SQL("CREATE SCHEMA {}").format(sql.Identifier(alive_schema)))
+
+            sweep_stale_test_schemas(scratch_url)
+
+            row = conn.execute(
+                "SELECT 1 FROM information_schema.schemata WHERE schema_name = %s",
+                (alive_schema,),
+            ).fetchone()
+            assert row is not None
+    finally:
+        with psycopg.connect(admin_url, autocommit=True) as admin_conn:
+            admin_conn.execute(
+                sql.SQL("DROP DATABASE IF EXISTS {} WITH (FORCE)").format(
+                    sql.Identifier(scratch_db)
+                )
+            )
+
+
+def test_sweep_drops_schemas_owned_by_a_dead_process() -> None:
+    """PID-suffixed schemas whose owning process has exited are genuinely stale."""
+    import psycopg
+    from conftest import sweep_stale_test_schemas
+    from psycopg import sql
+
+    service_url = os.environ.get("TEST_DATABASE_URL")
+    if not service_url:
+        pytest.skip("TEST_DATABASE_URL not set")
+
+    base_url, _, _dbname = service_url.rpartition("/")
+    scratch_db = f"schema_sweep_scratch_{uuid.uuid4().hex[:12]}"
+    scratch_url = f"{base_url}/{scratch_db}"
+    admin_url = f"{base_url}/postgres"
+
+    with psycopg.connect(admin_url, autocommit=True) as admin_conn:
+        try:
+            admin_conn.execute(sql.SQL("CREATE DATABASE {}").format(sql.Identifier(scratch_db)))
+        except psycopg.errors.InsufficientPrivilege:
+            pytest.skip("connected role lacks CREATEDB; cannot build an isolated scratch database")
+    try:
+        # A short-lived subprocess whose PID is guaranteed dead once it exits.
+        proc = subprocess.Popen([sys.executable, "-c", "pass"])
+        proc.wait(timeout=5)
+        dead_schema = f"test_gw1_{proc.pid}"
+
+        with psycopg.connect(scratch_url, autocommit=True) as conn:
+            conn.execute(sql.SQL("CREATE SCHEMA {}").format(sql.Identifier(dead_schema)))
+
+            sweep_stale_test_schemas(scratch_url)
+
+            row = conn.execute(
+                "SELECT 1 FROM information_schema.schemata WHERE schema_name = %s",
+                (dead_schema,),
+            ).fetchone()
+            assert row is None
     finally:
         with psycopg.connect(admin_url, autocommit=True) as admin_conn:
             admin_conn.execute(

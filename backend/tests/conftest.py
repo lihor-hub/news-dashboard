@@ -17,6 +17,7 @@ session behaviour should clear ``app.dependency_overrides`` themselves.
 from __future__ import annotations
 
 import os
+import re
 from collections.abc import Generator
 from pathlib import Path
 
@@ -54,16 +55,36 @@ def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
 
 
 _SCHEMA_SWEEP_LOCK_KEY = 727271
+_WORKER_SCHEMA_RE = re.compile(r"^test_[A-Za-z0-9]+_(\d+)$")
+
+
+def _pid_is_alive(pid: int) -> bool:
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except OSError:
+        # Any other errno (e.g. EPERM for a live process owned by someone
+        # else) means the PID still exists — treat it as alive.
+        return True
+    return True
 
 
 def sweep_stale_test_schemas(dsn: str) -> None:
     """Drop leaked ``test_%`` schemas from crashed pytest-xdist runs.
 
     Guarded by a Postgres advisory lock. This must only be called before any
-    xdist worker has created its own ``test_{worker_id}`` schema (i.e. from
-    ``pytest_configure`` in the xdist *master* process, never from a worker's
-    ``pg_url`` fixture) — otherwise the sweep can race with, and drop, a
-    schema another already-running worker is actively using.
+    xdist worker has created its own ``test_{worker_id}_{pid}`` schema (i.e.
+    from ``pytest_configure`` in the xdist *master* process, never from a
+    worker's ``pg_url`` fixture) — otherwise the sweep can race with, and
+    drop, a schema another already-running worker is actively using.
+
+    Worker schemas are named ``test_<worker_id>_<pid>``; a schema in that
+    shape is only swept once its owning PID is no longer alive, so a second,
+    concurrently-running pytest session sharing the same database cannot have
+    its live worker schemas destroyed by this session's startup sweep.
+    Schemas that don't match the pattern (e.g. leaked from an older run) are
+    dropped unconditionally, as before.
     """
     import psycopg
     from psycopg import sql
@@ -81,6 +102,9 @@ def sweep_stale_test_schemas(dsn: str) -> None:
                 r"WHERE schema_name LIKE 'test\_%' ESCAPE '\'"
             ).fetchall()
             for (schema_name,) in rows:
+                match = _WORKER_SCHEMA_RE.match(schema_name)
+                if match and _pid_is_alive(int(match.group(1))):
+                    continue
                 conn.execute(
                     sql.SQL("DROP SCHEMA IF EXISTS {} CASCADE").format(sql.Identifier(schema_name))
                 )
@@ -170,7 +194,10 @@ def pg_url() -> Generator[str]:
     original_url = service_url
 
     if service_url and worker_id and worker_id != "master":
-        worker_schema = f"test_{worker_id}"
+        # Suffix with this worker's own PID (unique system-wide while alive)
+        # so two concurrent pytest sessions sharing one database never reuse
+        # the same schema name — see sweep_stale_test_schemas.
+        worker_schema = f"test_{worker_id}_{os.getpid()}"
 
         # Create/recreate the schema using the base DSN
         from psycopg import sql
