@@ -4,6 +4,12 @@ export type { RecommendationSignals };
 
 export type ArticleStatus = 'new' | 'read' | 'saved' | 'skipped' | 'archived';
 
+/**
+ * Raw article shape as returned by the backend (snake_case, legacy `status`
+ * field). Use this only in `api.ts` function signatures and the adapter in
+ * `api/workflowApi.ts`; UI code should consume `WorkflowArticle` from
+ * `lib/workflowTypes` via `adaptArticle` instead.
+ */
 export interface Article {
   id: number;
   url: string;

@@ -45,6 +45,13 @@ function legacyStatusToState(status: ArticleStatus): WorkflowState {
   }
 }
 
+/**
+ * Normalizes the raw (snake_case, legacy-status) server `Article` into the
+ * canonical `WorkflowArticle` the UI consumes. This can't be a zero-cost cast:
+ * the backend still returns snake_case field names and a legacy `status`
+ * enum, and remapping those to the `state`/camelCase model is out of scope
+ * for the frontend-only type consolidation (#830).
+ */
 export function adaptArticle(a: LegacyArticle): WorkflowArticle {
   const state: WorkflowState = a.state ?? legacyStatusToState(a.status);
   const starred = a.state != null ? Boolean(a.starred) : a.status === 'saved';
