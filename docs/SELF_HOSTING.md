@@ -395,6 +395,16 @@ helm upgrade news-dashboard ./helm/news-dashboard \
 kubectl -n news-dashboard rollout status deployment/news-dashboard
 ```
 
+The `app.config` values in `helm/news-dashboard/values.yaml` expose the
+optional runtime env vars above as structured chart values instead of a
+manifest overlay: `app.config.metricsEnabled` (`METRICS_ENABLED`),
+`app.config.enableApiDocs` (`ENABLE_API_DOCS`),
+`app.config.analyticsRetentionDays` (`ANALYTICS_RETENTION_DAYS`), and
+`app.config.corsOrigins` (`CORS_ORIGINS`). All default to off/unset, matching
+the app's own defaults. Sentry DSNs and other secret-bearing values are
+supplied via `app.sentry.existingSecret` (a pre-existing Secret), never
+committed to `values.yaml`.
+
 ### Migration / Schema Updates
 
 The app calls `init_db()` on every startup, which creates missing tables and

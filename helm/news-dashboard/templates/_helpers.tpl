@@ -73,3 +73,22 @@
   value: {{ .Values.app.sentry.release | quote }}
 {{- end }}
 {{- end -}}
+
+{{- define "news-dashboard.configEnv" -}}
+{{- if .Values.app.config.metricsEnabled }}
+- name: METRICS_ENABLED
+  value: "true"
+{{- end }}
+{{- if .Values.app.config.enableApiDocs }}
+- name: ENABLE_API_DOCS
+  value: "true"
+{{- end }}
+{{- if .Values.app.config.analyticsRetentionDays }}
+- name: ANALYTICS_RETENTION_DAYS
+  value: {{ .Values.app.config.analyticsRetentionDays | quote }}
+{{- end }}
+{{- if .Values.app.config.corsOrigins }}
+- name: CORS_ORIGINS
+  value: {{ .Values.app.config.corsOrigins | quote }}
+{{- end }}
+{{- end -}}
