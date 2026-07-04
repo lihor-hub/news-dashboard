@@ -246,6 +246,30 @@ export async function createSource(payload: CreateSourcePayload): Promise<Source
   });
 }
 
+export interface PreviewSourcePayload {
+  url: string;
+  kind?: string;
+}
+
+export interface SourcePreviewItem {
+  title: string;
+  url: string;
+  date: string | null;
+}
+
+export interface SourcePreviewResult {
+  kind: string;
+  entry_count: number;
+  items: SourcePreviewItem[];
+}
+
+export async function previewSource(payload: PreviewSourcePayload): Promise<SourcePreviewResult> {
+  return requestJson<SourcePreviewResult>('/api/sources/preview', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
 export async function deleteSource(slug: string): Promise<{ status: string }> {
   return requestJson<{ status: string }>(`/api/sources/${slug}`, { method: 'DELETE' });
 }

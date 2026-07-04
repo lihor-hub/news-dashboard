@@ -25,8 +25,10 @@ import {
   fetchSourceCleanupSuggestions,
   fetchSources,
   importOpml,
+  previewSource,
   updateSourceEnabled,
 } from '@/api';
+import type { SourcePreviewResult } from '@/api';
 import { relativeTime } from '@/lib/format';
 import { sourceActionErrorMessage } from '@/lib/errorPresentation';
 import type { Source, SourceCleanupSuggestion, OpmlImportResult } from '@/types';
@@ -118,6 +120,8 @@ function AddSourceDialog({
 }) {
   const [form, setForm] = useState<AddSourceFormState>(EMPTY_FORM);
   const [error, setError] = useState<string | null>(null);
+  const [preview, setPreview] = useState<SourcePreviewResult | null>(null);
+  const [previewError, setPreviewError] = useState<string | null>(null);
 
   const mutation = useMutation({
     mutationFn: () =>
@@ -131,11 +135,25 @@ function AddSourceDialog({
     onSuccess: () => {
       setForm(EMPTY_FORM);
       setError(null);
+      setPreview(null);
+      setPreviewError(null);
       onCreated();
       onClose();
     },
     onError: (err: Error) => {
       setError(sourceActionErrorMessage(err, 'add'));
+    },
+  });
+
+  const previewMutation = useMutation({
+    mutationFn: () => previewSource({ url: form.url, kind: form.kind }),
+    onSuccess: (result) => {
+      setPreview(result);
+      setPreviewError(null);
+    },
+    onError: (err: Error) => {
+      setPreview(null);
+      setPreviewError(sourceActionErrorMessage(err, 'add'));
     },
   });
 
@@ -145,10 +163,24 @@ function AddSourceDialog({
     mutation.mutate();
   }
 
+  function handlePreview() {
+    setPreviewError(null);
+    setPreview(null);
+    previewMutation.mutate();
+  }
+
   function handleClose() {
     setForm(EMPTY_FORM);
     setError(null);
+    setPreview(null);
+    setPreviewError(null);
     onClose();
+  }
+
+  function handleUrlOrKindChange(next: Partial<AddSourceFormState>) {
+    setForm((f) => ({ ...f, ...next }));
+    setPreview(null);
+    setPreviewError(null);
   }
 
   return (
@@ -165,7 +197,7 @@ function AddSourceDialog({
             <select
               id="src-kind"
               value={form.kind}
-              onChange={(e) => setForm((f) => ({ ...f, kind: e.target.value }))}
+              onChange={(e) => handleUrlOrKindChange({ kind: e.target.value })}
               className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-base shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 md:text-sm"
             >
               <option value="rss_feed">RSS Feed</option>
@@ -195,10 +227,42 @@ function AddSourceDialog({
               type="url"
               placeholder="https://example.com/feed.xml"
               value={form.url}
-              onChange={(e) => setForm((f) => ({ ...f, url: e.target.value }))}
+              onChange={(e) => handleUrlOrKindChange({ url: e.target.value })}
               required
             />
           </div>
+          <div className="flex items-center justify-between gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={!form.url.trim() || previewMutation.isPending}
+              onClick={handlePreview}
+            >
+              {previewMutation.isPending ? 'Testing…' : 'Test source'}
+            </Button>
+          </div>
+          {previewError && <p className="text-xs text-[color:var(--err)]">{previewError}</p>}
+          {preview && (
+            <div className="rounded-md border border-input bg-muted/30 p-2 text-xs">
+              {preview.entry_count === 0 ? (
+                <p className="text-muted-foreground">Source responded but no entries were found.</p>
+              ) : (
+                <>
+                  <p className="mb-1 font-medium text-[color:var(--ok)]">
+                    Found {preview.entry_count} entr{preview.entry_count === 1 ? 'y' : 'ies'}
+                  </p>
+                  <ul className="flex flex-col gap-1">
+                    {preview.items.map((item, i) => (
+                      <li key={i} className="truncate text-muted-foreground" title={item.title}>
+                        {item.title}
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              )}
+            </div>
+          )}
           <div className="grid grid-cols-2 gap-3">
             <div className="flex flex-col gap-1">
               <label className="text-xs font-medium text-muted-foreground" htmlFor="src-category">

@@ -730,6 +730,15 @@ def _fetch_entries_by_kind(source: SourceDefinition) -> list[dict[str, Any]]:
     return _fetch_feed_entries(source)
 
 
+def preview_source_entries(source: SourceDefinition) -> list[dict[str, Any]]:
+    """Fetch candidate entries for a source without writing run history or articles.
+
+    Raises FeedFetchError on failure. Reuses the same fetch path as ingestion so a
+    preview reflects what a real ingest run would find.
+    """
+    return _fetch_entries_by_kind(source)
+
+
 def _ingest_source(
     source: SourceDefinition, db_path: Path | str | None = None
 ) -> SourceIngestOutcome:
