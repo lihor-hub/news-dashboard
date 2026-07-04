@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   CheckCircle,
   Flame,
@@ -27,15 +28,11 @@ import {
 } from '../api';
 import type {
   Quiz,
-  QuizCandidate,
   QuizHistoryItem,
   QuizQuestion,
   QuizResult,
   Achievement,
-  ReadingDna,
   ReadingDnaBucket,
-  ReadingGoal,
-  ReadingStreak,
   RecommendationPreferences,
 } from '../types';
 
@@ -43,90 +40,69 @@ const DEFAULT_CATEGORIES = ['tech', 'science', 'business', 'world', 'ai'];
 
 type Tab = 'dna' | 'learning';
 
-interface PageState {
-  dna: ReadingDna | null;
-  streak: ReadingStreak | null;
-  achievements: Achievement[];
-  preferences: RecommendationPreferences | null;
-  loading: boolean;
-  saving: boolean;
-  error: string | null;
-}
+const READING_DNA_KEY = ['reading-dna'];
+const REC_PREFERENCES_KEY = ['rec-preferences'];
 
 export function ReadingDnaPage() {
   const [tab, setTab] = useState<Tab>('dna');
-  const [state, setState] = useState<PageState>({
-    dna: null,
-    streak: null,
-    achievements: [],
-    preferences: null,
-    loading: true,
-    saving: false,
-    error: null,
+  const queryClient = useQueryClient();
+
+  const dnaQuery = useQuery({ queryKey: READING_DNA_KEY, queryFn: fetchReadingDna });
+  const preferencesQuery = useQuery({
+    queryKey: REC_PREFERENCES_KEY,
+    queryFn: fetchRecommendationPreferences,
+  });
+  const streakQuery = useQuery({ queryKey: ['reading-streak'], queryFn: fetchReadingStreak });
+  const achievementsQuery = useQuery({ queryKey: ['achievements'], queryFn: fetchAchievements });
+
+  const preferencesMutation = useMutation({
+    mutationFn: (next: Partial<RecommendationPreferences>) => saveRecommendationPreferences(next),
+    onMutate: async (next) => {
+      await queryClient.cancelQueries({ queryKey: REC_PREFERENCES_KEY });
+      const prev = queryClient.getQueryData<RecommendationPreferences>(REC_PREFERENCES_KEY);
+      if (prev) {
+        queryClient.setQueryData<RecommendationPreferences>(REC_PREFERENCES_KEY, {
+          ...prev,
+          ...next,
+          category_weights: next.category_weights ?? prev.category_weights,
+        });
+      }
+      return { prev };
+    },
+    onError: (_err, _next, ctx) => {
+      if (ctx?.prev) queryClient.setQueryData(REC_PREFERENCES_KEY, ctx.prev);
+    },
+    onSuccess: (preferences) => {
+      queryClient.setQueryData(REC_PREFERENCES_KEY, preferences);
+      void queryClient.invalidateQueries({ queryKey: READING_DNA_KEY });
+    },
   });
 
-  useEffect(() => {
-    let cancelled = false;
-    Promise.all([
-      fetchReadingDna(),
-      fetchRecommendationPreferences(),
-      fetchReadingStreak().catch(() => null),
-      fetchAchievements().catch(() => []),
-    ])
-      .then(([dna, preferences, streak, achievements]) => {
-        if (!cancelled) {
-          setState({
-            dna,
-            preferences,
-            streak,
-            achievements,
-            loading: false,
-            saving: false,
-            error: null,
-          });
-        }
-      })
-      .catch((err) => {
-        if (!cancelled) {
-          setState((s) => ({
-            ...s,
-            loading: false,
-            error: err instanceof Error ? err.message : 'Failed to load Reading DNA',
-          }));
-        }
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  const categories = useMemo(() => {
-    const fromStats = state.dna?.categories.map((item) => item.category).filter(Boolean) ?? [];
-    return Array.from(new Set([...fromStats, ...DEFAULT_CATEGORIES])).slice(0, 8) as string[];
-  }, [state.dna]);
-
-  async function updatePreferences(next: Partial<RecommendationPreferences>) {
-    if (!state.preferences) return;
-    const optimistic = {
-      ...state.preferences,
-      ...next,
-      category_weights: next.category_weights ?? state.preferences.category_weights,
-    };
-    setState((s) => ({ ...s, preferences: optimistic, saving: true, error: null }));
-    try {
-      const preferences = await saveRecommendationPreferences(next);
-      const dna = await fetchReadingDna();
-      setState((s) => ({ ...s, dna, preferences, saving: false }));
-    } catch (err) {
-      setState((s) => ({
-        ...s,
-        saving: false,
-        error: err instanceof Error ? err.message : 'Failed to save preferences',
-      }));
-    }
+  function updatePreferences(next: Partial<RecommendationPreferences>) {
+    preferencesMutation.mutate(next);
   }
 
-  const { dna, streak, achievements, preferences, loading, saving, error } = state;
+  const dna = dnaQuery.data ?? null;
+  const streak = streakQuery.data ?? null;
+  const achievements = achievementsQuery.data ?? [];
+  const preferences = preferencesQuery.data ?? null;
+  const loading = dnaQuery.isLoading || preferencesQuery.isLoading;
+  const saving = preferencesMutation.isPending;
+  const loadError = dnaQuery.error ?? preferencesQuery.error;
+  const error = preferencesMutation.error
+    ? preferencesMutation.error instanceof Error
+      ? preferencesMutation.error.message
+      : 'Failed to save preferences'
+    : loadError
+      ? loadError instanceof Error
+        ? loadError.message
+        : 'Failed to load Reading DNA'
+      : null;
+
+  const categories = useMemo(() => {
+    const fromStats = dna?.categories.map((item) => item.category).filter(Boolean) ?? [];
+    return Array.from(new Set([...fromStats, ...DEFAULT_CATEGORIES])).slice(0, 8) as string[];
+  }, [dna]);
 
   if (loading) {
     return (
@@ -309,119 +285,106 @@ function AchievementBadge({ achievement }: { achievement: Achievement }) {
   );
 }
 
+const GOALS_KEY = ['goals'];
+const QUIZ_LATEST_KEY = ['quiz-latest'];
+const QUIZ_CANDIDATES_KEY = ['quiz-candidates'];
+const QUIZ_HISTORY_KEY = ['quiz-history'];
+
 function LearningCenter() {
-  const [goals, setGoals] = useState<ReadingGoal[]>([]);
-  const [quiz, setQuiz] = useState<Quiz | null>(null);
-  const [quizHistory, setQuizHistory] = useState<QuizHistoryItem[]>([]);
-  const [result, setResult] = useState<QuizResult | null>(null);
+  const queryClient = useQueryClient();
   const [answers, setAnswers] = useState<Record<number, number>>({});
-  const [loadingGoals, setLoadingGoals] = useState(true);
-  const [loadingQuiz, setLoadingQuiz] = useState(true);
-  const [generatingQuiz, setGeneratingQuiz] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [goalsError, setGoalsError] = useState<string | null>(null);
-  const [quizError, setQuizError] = useState<string | null>(null);
-  const [historyError, setHistoryError] = useState<string | null>(null);
-  const [candidatesError, setCandidatesError] = useState<string | null>(null);
   const [newDescription, setNewDescription] = useState('');
   const [newKeywords, setNewKeywords] = useState('');
-  const [addingGoal, setAddingGoal] = useState(false);
   const [showGoalForm, setShowGoalForm] = useState(false);
-  const [candidates, setCandidates] = useState<QuizCandidate[] | null>(null);
 
-  const refreshQuizHistory = async () => {
-    try {
-      setQuizHistory(await fetchQuizHistory());
-      setHistoryError(null);
-    } catch {
-      setHistoryError('Failed to load quiz history.');
-    }
-  };
+  const goalsQuery = useQuery({ queryKey: GOALS_KEY, queryFn: fetchGoals });
+  const quizQuery = useQuery({ queryKey: QUIZ_LATEST_KEY, queryFn: fetchLatestQuiz });
+  const candidatesQuery = useQuery({
+    queryKey: QUIZ_CANDIDATES_KEY,
+    queryFn: fetchQuizCandidates,
+  });
+  const historyQuery = useQuery({ queryKey: QUIZ_HISTORY_KEY, queryFn: fetchQuizHistory });
 
-  useEffect(() => {
-    fetchGoals()
-      .then((g) => {
-        setGoals(g);
-        setGoalsError(null);
-      })
-      .catch(() => setGoalsError('Failed to load goals.'))
-      .finally(() => setLoadingGoals(false));
-    fetchLatestQuiz()
-      .then((q) => {
-        setQuiz(q);
-        setQuizError(null);
-        if (q?.completed_result) {
-          setResult(q.completed_result);
-        }
-      })
-      .catch(() => setQuizError('Failed to load quiz.'))
-      .finally(() => setLoadingQuiz(false));
-    fetchQuizCandidates()
-      .then((c) => {
-        setCandidates(c);
-        setCandidatesError(null);
-      })
-      .catch(() => setCandidatesError('Failed to load quiz material.'));
-    void refreshQuizHistory();
-  }, []);
+  const goals = goalsQuery.data ?? [];
+  const quiz = quizQuery.data ?? null;
+  const candidates = candidatesQuery.data ?? null;
+  const quizHistory = historyQuery.data ?? [];
+  const loadingGoals = goalsQuery.isLoading;
+  const loadingQuiz = quizQuery.isLoading;
+  const goalsError = goalsQuery.isError ? 'Failed to load goals.' : null;
+  const quizError = quizQuery.isError ? 'Failed to load quiz.' : null;
+  const historyError = historyQuery.isError ? 'Failed to load quiz history.' : null;
+  const candidatesError = candidatesQuery.isError ? 'Failed to load quiz material.' : null;
 
-  async function handleAddGoal() {
-    if (!newDescription.trim()) return;
-    setAddingGoal(true);
-    setError(null);
-    try {
-      const goal = await createGoal(newDescription.trim(), newKeywords.trim());
-      setGoals((prev) => [goal, ...prev]);
+  const createGoalMutation = useMutation({
+    mutationFn: ({ description, keywords }: { description: string; keywords: string }) =>
+      createGoal(description, keywords),
+    onMutate: () => setError(null),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: GOALS_KEY });
       setNewDescription('');
       setNewKeywords('');
       setShowGoalForm(false);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to add goal');
-    } finally {
-      setAddingGoal(false);
-    }
+    },
+    onError: (err) => setError(err instanceof Error ? err.message : 'Failed to add goal'),
+  });
+
+  const deleteGoalMutation = useMutation({
+    mutationFn: (goalId: number) => deleteGoal(goalId),
+    onMutate: () => setError(null),
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: GOALS_KEY }),
+    onError: () => setError('Failed to delete goal'),
+  });
+
+  const generateQuizMutation = useMutation({
+    mutationFn: () => generateQuiz(),
+    onMutate: () => {
+      setError(null);
+      setAnswers({});
+    },
+    onSuccess: (newQuiz) => {
+      queryClient.setQueryData(QUIZ_LATEST_KEY, newQuiz);
+      void queryClient.invalidateQueries({ queryKey: QUIZ_HISTORY_KEY });
+    },
+    onError: (err) => setError(err instanceof Error ? err.message : 'Failed to generate quiz'),
+  });
+
+  const submitQuizMutation = useMutation({
+    mutationFn: ({ quizId, answerList }: { quizId: number; answerList: number[] }) =>
+      submitQuiz(quizId, answerList),
+    onMutate: () => setError(null),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: QUIZ_HISTORY_KEY });
+    },
+    onError: (err) => setError(err instanceof Error ? err.message : 'Failed to submit quiz'),
+  });
+
+  const result = submitQuizMutation.data ?? quiz?.completed_result ?? null;
+  const generatingQuiz = generateQuizMutation.isPending;
+  const submitting = submitQuizMutation.isPending;
+  const addingGoal = createGoalMutation.isPending;
+
+  function handleAddGoal() {
+    if (!newDescription.trim()) return;
+    createGoalMutation.mutate({
+      description: newDescription.trim(),
+      keywords: newKeywords.trim(),
+    });
   }
 
-  async function handleDeleteGoal(goalId: number) {
-    try {
-      await deleteGoal(goalId);
-      setGoals((prev) => prev.filter((g) => g.id !== goalId));
-    } catch {
-      setError('Failed to delete goal');
-    }
+  function handleDeleteGoal(goalId: number) {
+    deleteGoalMutation.mutate(goalId);
   }
 
-  async function handleGenerateQuiz() {
-    setGeneratingQuiz(true);
-    setError(null);
-    setResult(null);
-    setAnswers({});
-    try {
-      const newQuiz = await generateQuiz();
-      setQuiz(newQuiz);
-      await refreshQuizHistory();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to generate quiz');
-    } finally {
-      setGeneratingQuiz(false);
-    }
+  function handleGenerateQuiz() {
+    generateQuizMutation.mutate();
   }
 
-  async function handleSubmitQuiz() {
+  function handleSubmitQuiz() {
     if (!quiz) return;
     const answerList = quiz.questions.map((_, i) => answers[i] ?? -1);
-    setSubmitting(true);
-    setError(null);
-    try {
-      const quizResult = await submitQuiz(quiz.id, answerList);
-      setResult(quizResult);
-      await refreshQuizHistory();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to submit quiz');
-    } finally {
-      setSubmitting(false);
-    }
+    submitQuizMutation.mutate({ quizId: quiz.id, answerList });
   }
 
   return (

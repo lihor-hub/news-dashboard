@@ -1,9 +1,19 @@
 // @vitest-environment happy-dom
 import { render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import * as api from '../api';
 import { ReadingDnaPage } from '../pages/ReadingDnaPage';
 import type { Achievement, ReadingDna, ReadingStreak } from '../types';
+
+function renderPage() {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return render(
+    <QueryClientProvider client={client}>
+      <ReadingDnaPage />
+    </QueryClientProvider>
+  );
+}
 
 const dna: ReadingDna = {
   range_days: 30,
@@ -56,7 +66,7 @@ describe('ReadingDnaPage reading progress', () => {
   });
 
   it('renders streak and achievement progress on Reading DNA', async () => {
-    render(<ReadingDnaPage />);
+    renderPage();
 
     await waitFor(() => expect(screen.getByText('Reading streak')).toBeTruthy());
     expect(screen.getByText('Longest streak: 9 days')).toBeTruthy();

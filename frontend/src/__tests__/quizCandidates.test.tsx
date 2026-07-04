@@ -2,6 +2,7 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ReadingDnaPage } from '../pages/ReadingDnaPage';
 import * as api from '../api';
 
@@ -24,10 +25,13 @@ vi.mock('../api', () => ({
 const mockedApi = vi.mocked(api, true);
 
 async function renderLearningTab() {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(
-    <MemoryRouter>
-      <ReadingDnaPage />
-    </MemoryRouter>
+    <QueryClientProvider client={client}>
+      <MemoryRouter>
+        <ReadingDnaPage />
+      </MemoryRouter>
+    </QueryClientProvider>
   );
   // Wait for the top-level page to finish loading, then switch to the Learning tab.
   await waitFor(() => {
