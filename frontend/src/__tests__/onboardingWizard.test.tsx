@@ -263,8 +263,32 @@ describe('OnboardingWizard', () => {
     await waitFor(() => expect(save).toHaveBeenCalled());
     const payload = save.mock.calls[0][0];
     // Both recommended sources should be in the enabled list
-    expect(payload.enabled_slugs).toContain('hn');
-    expect(payload.enabled_slugs).toContain('arxiv');
+    expect(payload.enabled_source_slugs).toContain('hn');
+    expect(payload.enabled_source_slugs).toContain('arxiv');
+    expect(payload.disabled_source_slugs).toEqual([]);
+  });
+
+  it('sends unselected recommendations as disabled_source_slugs on Apply', async () => {
+    vi.spyOn(api, 'fetchOnboardingInterests').mockResolvedValue(MOCK_INTERESTS);
+    vi.spyOn(api, 'fetchOnboardingSourceRecommendations').mockResolvedValue(MOCK_RECOMMENDATIONS);
+    const save = vi.spyOn(api, 'saveOnboardingInterests').mockResolvedValue(undefined);
+    const onClose = vi.fn();
+    render(
+      <Wrapper>
+        <OnboardingWizard {...makeProps({ onClose })} />
+      </Wrapper>
+    );
+    await waitFor(() => expect(screen.getByText('Technology')).toBeTruthy());
+    fireEvent.click(screen.getByText('Technology'));
+    fireEvent.click(screen.getByRole('button', { name: /next/i }));
+    await waitFor(() => expect(screen.getByText('Hacker News')).toBeTruthy());
+    // Deselect arXiv, leaving only Hacker News selected
+    fireEvent.click(screen.getByText('arXiv'));
+    fireEvent.click(screen.getByRole('button', { name: /apply/i }));
+    await waitFor(() => expect(save).toHaveBeenCalled());
+    const payload = save.mock.calls[0][0];
+    expect(payload.enabled_source_slugs).toEqual(['hn']);
+    expect(payload.disabled_source_slugs).toEqual(['arxiv']);
   });
 });
 
@@ -314,7 +338,7 @@ describe('onboarding API functions', () => {
     expect(body.interest_ids).toEqual(['tech', 'science']);
   });
 
-  it('saveOnboardingInterests POSTs to /api/onboarding/profile', async () => {
+  it('saveOnboardingInterests POSTs to /api/onboarding/interests', async () => {
     const calls: { url: string; init?: RequestInit }[] = [];
     vi.stubGlobal(
       'fetch',
@@ -323,14 +347,20 @@ describe('onboarding API functions', () => {
         return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({}) });
       })
     );
-    await api.saveOnboardingInterests({ interest_ids: ['tech'], enabled_slugs: ['hn'] });
-    expect(calls[0].url).toBe('/api/onboarding/profile');
+    await api.saveOnboardingInterests({
+      interests: ['tech'],
+      enabled_source_slugs: ['hn'],
+      disabled_source_slugs: ['arxiv'],
+    });
+    expect(calls[0].url).toBe('/api/onboarding/interests');
     expect(calls[0].init?.method).toBe('POST');
     const body = JSON.parse(calls[0].init?.body as string) as {
-      interest_ids: string[];
-      enabled_slugs: string[];
+      interests: string[];
+      enabled_source_slugs: string[];
+      disabled_source_slugs: string[];
     };
-    expect(body.interest_ids).toEqual(['tech']);
-    expect(body.enabled_slugs).toEqual(['hn']);
+    expect(body.interests).toEqual(['tech']);
+    expect(body.enabled_source_slugs).toEqual(['hn']);
+    expect(body.disabled_source_slugs).toEqual(['arxiv']);
   });
 });

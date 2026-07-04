@@ -43,7 +43,7 @@ import type {
   ShareDetail,
   ShareAnnotation,
   ShareMessage,
-  SaveOnboardingProfileRequest,
+  SaveOnboardingInterestsRequest,
   ShareableUser,
   Source,
   SourceCleanupSuggestion,
@@ -907,9 +907,9 @@ export async function fetchOnboardingSourceRecommendations(
 }
 
 export async function saveOnboardingInterests(
-  payload: SaveOnboardingProfileRequest
+  payload: SaveOnboardingInterestsRequest
 ): Promise<void> {
-  await requestJson('/api/onboarding/profile', {
+  await requestJson('/api/onboarding/interests', {
     method: 'POST',
     body: JSON.stringify(payload),
   });

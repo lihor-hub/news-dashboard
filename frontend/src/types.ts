@@ -761,9 +761,10 @@ export interface OnboardingStatus {
   completed: boolean;
 }
 
-export interface SaveOnboardingProfileRequest {
-  interest_ids: string[];
-  enabled_slugs: string[];
+export interface SaveOnboardingInterestsRequest {
+  interests: string[];
+  enabled_source_slugs: string[];
+  disabled_source_slugs: string[];
 }
 
 export interface OpmlImportResult {
