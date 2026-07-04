@@ -249,7 +249,9 @@ def _call_openai(
         endpoint = base_url or "the default OpenAI endpoint"
         msg = f"Briefing AI request to {endpoint} failed: {exc}"
         raise BriefingGenerationError(msg) from exc
-    text = response.choices[0].message.content or "{}"
+    from news_dashboard.ai_client import strip_markdown_fence
+
+    text = strip_markdown_fence(response.choices[0].message.content or "{}")
     try:
         return json.loads(text)  # type: ignore[no-any-return]
     except json.JSONDecodeError as exc:

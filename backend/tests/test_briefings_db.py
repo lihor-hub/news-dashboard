@@ -759,6 +759,22 @@ def test_call_openai_raises_on_invalid_json(monkeypatch: pytest.MonkeyPatch) -> 
         _call_openai([{"id": 1, "title": "A"}], model="gpt-x")
 
 
+def test_call_openai_strips_markdown_fence(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Response wrapped in ```json ... ``` is parsed correctly."""
+    payload = '{"title": "T", "sections": []}'
+    _patch_openai(monkeypatch, f"```json\n{payload}\n```")
+    result = _call_openai([{"id": 1, "title": "A"}], model="gpt-x")
+    assert result["title"] == "T"
+
+
+def test_call_openai_strips_plain_fence(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Response wrapped in ``` ... ``` (no language tag) is also handled."""
+    payload = '{"title": "T", "sections": []}'
+    _patch_openai(monkeypatch, f"```\n{payload}\n```")
+    result = _call_openai([{"id": 1, "title": "A"}], model="gpt-x")
+    assert result["title"] == "T"
+
+
 def test_call_openai_wraps_upstream_error(monkeypatch: pytest.MonkeyPatch) -> None:
     """An error from the gateway surfaces as BriefingGenerationError, not a bare 500."""
     from openai import OpenAIError
