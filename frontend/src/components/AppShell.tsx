@@ -10,11 +10,13 @@ import { ShortcutOverlay } from './ShortcutOverlay';
 import { WhatsNewDialog } from './WhatsNewDialog';
 import { OnboardingWizard } from './OnboardingWizard';
 import { ListenQueuePlayer } from './ListenQueuePlayer';
+import { NavLink } from './NavLink';
 import { useWhatsNew } from '@/hooks/useWhatsNew';
 import { useOnboardingWizard } from '@/hooks/useOnboardingWizard';
 import { useElectronBriefNotifier } from '@/hooks/useElectronBriefNotifier';
+import { useLogout } from '@/hooks/useLogout';
 import { cn } from '@/lib/utils';
-import { fetchSummary, fetchSharesUnreadCount, fetchAnalyticsSettings, logoutUser } from '@/api';
+import { fetchSummary, fetchSharesUnreadCount, fetchAnalyticsSettings } from '@/api';
 import { startAnalytics, stopAnalytics, trackRoute, setAnalyticsAllowed } from '@/lib/analytics';
 import { useAuth } from '@/contexts/auth';
 import {
@@ -65,8 +67,8 @@ function useOnlineStatus() {
 
 function DesktopRail({ pathname }: { pathname: string }) {
   const counts = useNavCounts();
-  const { user, setUser } = useAuth();
-  const navigate = useNavigate();
+  const { user } = useAuth();
+  const handleLogout = useLogout();
   const countFor = (item: NavigationItem): number | null =>
     item.to === '/today'
       ? counts.today
@@ -76,62 +78,33 @@ function DesktopRail({ pathname }: { pathname: string }) {
           ? counts.shared
           : null;
 
-  async function handleLogout() {
-    await logoutUser();
-    setUser(null);
-    void navigate('/login', { replace: true });
-  }
-
   return (
     <aside className="hidden md:flex md:flex-col md:w-[200px] md:shrink-0 md:border-r md:border-border md:min-h-[calc(100vh-3rem)] md:sticky md:top-12 md:self-start">
       <nav className="flex flex-col p-2 gap-0.5">
-        {primaryNavigationItems.map((n) => {
-          const Icon = n.icon;
-          const active = isNavigationItemActive(n.to, pathname);
-          const count = countFor(n);
-          return (
-            <Link
-              key={n.to}
-              to={n.to}
-              className={cn(
-                'flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-sm',
-                active
-                  ? 'bg-surface-2 text-foreground font-medium'
-                  : 'text-muted-foreground hover:bg-surface hover:text-foreground'
-              )}
-            >
-              <Icon className="size-4" />
-              <span className="flex-1">{n.label}</span>
-              {count != null && count > 0 && (
-                <span className="text-[10px] font-medium tabular-nums text-muted-foreground">
-                  {count}
-                </span>
-              )}
-            </Link>
-          );
-        })}
+        {primaryNavigationItems.map((n) => (
+          <NavLink
+            key={n.to}
+            to={n.to}
+            label={n.label}
+            icon={n.icon}
+            isActive={isNavigationItemActive(n.to, pathname)}
+            count={countFor(n)}
+            variant="rail"
+          />
+        ))}
       </nav>
       <div className="mx-2 my-2 h-px bg-border" />
       <nav className="flex flex-col p-2 gap-0.5">
-        {secondaryNavigationItemsFor(Boolean(user?.is_admin)).map((m) => {
-          const Icon = m.icon;
-          const active = isNavigationItemActive(m.to, pathname);
-          return (
-            <Link
-              key={m.to}
-              to={m.to}
-              className={cn(
-                'flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-sm',
-                active
-                  ? 'bg-surface-2 text-foreground font-medium'
-                  : 'text-muted-foreground hover:bg-surface hover:text-foreground'
-              )}
-            >
-              <Icon className="size-4" />
-              {m.label}
-            </Link>
-          );
-        })}
+        {secondaryNavigationItemsFor(Boolean(user?.is_admin)).map((m) => (
+          <NavLink
+            key={m.to}
+            to={m.to}
+            label={m.label}
+            icon={m.icon}
+            isActive={isNavigationItemActive(m.to, pathname)}
+            variant="rail"
+          />
+        ))}
       </nav>
       <div className="mt-auto mx-2 mb-2 pt-2 border-t border-border">
         {user && (
@@ -152,7 +125,8 @@ function DesktopRail({ pathname }: { pathname: string }) {
 export function AppShell() {
   const { pathname } = useLocation();
   const navigate = useNavigate();
-  const { user, setUser } = useAuth();
+  const { user } = useAuth();
+  const handleLogout = useLogout();
   const [moreOpen, setMoreOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
@@ -160,12 +134,6 @@ export function AppShell() {
   const onboarding = useOnboardingWizard();
   const online = useOnlineStatus();
   useElectronBriefNotifier((path) => void navigate(path));
-
-  async function handleLogout() {
-    await logoutUser();
-    setUser(null);
-    void navigate('/login', { replace: true });
-  }
 
   useEffect(() => {
     let cancelled = false;
@@ -282,49 +250,31 @@ export function AppShell() {
                   )}
                 </SheetHeader>
                 <nav className="p-2">
-                  {mobilePrimaryOverflowItems.map((m) => {
-                    const Icon = m.icon;
-                    const active = isNavigationItemActive(m.to, pathname);
-                    return (
-                      <Link
-                        key={m.to}
-                        to={m.to}
-                        onClick={() => setMoreOpen(false)}
-                        className={cn(
-                          'flex items-center gap-3 rounded-md px-3 py-2.5 text-sm',
-                          active
-                            ? 'bg-surface-2 text-foreground'
-                            : 'text-muted-foreground hover:bg-surface hover:text-foreground'
-                        )}
-                      >
-                        <Icon className="size-4" />
-                        {m.label}
-                      </Link>
-                    );
-                  })}
+                  {mobilePrimaryOverflowItems.map((m) => (
+                    <NavLink
+                      key={m.to}
+                      to={m.to}
+                      label={m.label}
+                      icon={m.icon}
+                      isActive={isNavigationItemActive(m.to, pathname)}
+                      variant="sheet"
+                      onClick={() => setMoreOpen(false)}
+                    />
+                  ))}
                   {mobilePrimaryOverflowItems.length > 0 && (
                     <div className="mx-1 my-1 h-px bg-border" />
                   )}
-                  {secondaryNavigationItemsFor(Boolean(user?.is_admin)).map((m) => {
-                    const Icon = m.icon;
-                    const active = isNavigationItemActive(m.to, pathname);
-                    return (
-                      <Link
-                        key={m.to}
-                        to={m.to}
-                        onClick={() => setMoreOpen(false)}
-                        className={cn(
-                          'flex items-center gap-3 rounded-md px-3 py-2.5 text-sm',
-                          active
-                            ? 'bg-surface-2 text-foreground'
-                            : 'text-muted-foreground hover:bg-surface hover:text-foreground'
-                        )}
-                      >
-                        <Icon className="size-4" />
-                        {m.label}
-                      </Link>
-                    );
-                  })}
+                  {secondaryNavigationItemsFor(Boolean(user?.is_admin)).map((m) => (
+                    <NavLink
+                      key={m.to}
+                      to={m.to}
+                      label={m.label}
+                      icon={m.icon}
+                      isActive={isNavigationItemActive(m.to, pathname)}
+                      variant="sheet"
+                      onClick={() => setMoreOpen(false)}
+                    />
+                  ))}
                   <button
                     onClick={() => void handleLogout()}
                     className="flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-sm text-muted-foreground hover:bg-surface hover:text-foreground"
