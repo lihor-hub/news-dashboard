@@ -1,14 +1,35 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import type { ReactNode } from 'react';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import type { DragEndEvent } from '@dnd-kit/core';
 import { ReadingListPage } from '../pages/ReadingListPage';
 import * as readingListApi from '../api/readingListApi';
 import type { ReadingListItem } from '../api/readingListApi';
 
 vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+let capturedOnDragEnd: ((event: DragEndEvent) => void) | undefined;
+
+vi.mock('@dnd-kit/core', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@dnd-kit/core')>();
+  return {
+    ...actual,
+    DndContext: ({
+      children,
+      onDragEnd,
+    }: {
+      children: ReactNode;
+      onDragEnd: (event: DragEndEvent) => void;
+    }) => {
+      capturedOnDragEnd = onDragEnd;
+      return children;
+    },
+  };
+});
 
 function makeItem(overrides: Partial<ReadingListItem> = {}): ReadingListItem {
   return {
@@ -118,6 +139,39 @@ describe('ReadingListPage', () => {
     await screen.findByText('First');
     const [moveFirstDown] = screen.getAllByRole('button', { name: 'Move down' });
     await userEvent.click(moveFirstDown);
+
+    await waitFor(() => {
+      expect(reorderSpy).toHaveBeenCalledWith([2, 1]);
+    });
+  });
+
+  it('renders a drag handle for each item to support drag-and-drop reordering', async () => {
+    vi.spyOn(readingListApi, 'fetchReadingList').mockResolvedValue([
+      makeItem({ id: 1, title: 'First' }),
+      makeItem({ id: 2, title: 'Second', priority: 2 }),
+    ]);
+
+    renderPage();
+    await screen.findByText('First');
+
+    expect(screen.getAllByRole('button', { name: 'Drag to reorder' })).toHaveLength(2);
+  });
+
+  it('reorders items when a drag-and-drop gesture completes', async () => {
+    vi.spyOn(readingListApi, 'fetchReadingList').mockResolvedValue([
+      makeItem({ id: 1, title: 'First' }),
+      makeItem({ id: 2, title: 'Second', priority: 2 }),
+    ]);
+    const reorderSpy = vi.spyOn(readingListApi, 'reorderReadingList').mockResolvedValue([]);
+
+    renderPage();
+    await screen.findByText('First');
+
+    expect(capturedOnDragEnd).toBeDefined();
+    capturedOnDragEnd?.({
+      active: { id: 1 },
+      over: { id: 2 },
+    } as DragEndEvent);
 
     await waitFor(() => {
       expect(reorderSpy).toHaveBeenCalledWith([2, 1]);
