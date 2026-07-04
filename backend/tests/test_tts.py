@@ -309,6 +309,35 @@ def test_generate_podcast_script() -> None:
     assert script[1]["text"] == "Hi Alex!"
 
 
+def test_generate_podcast_script_strips_markdown_fence() -> None:
+    """Response wrapped in ```json ... ``` is parsed correctly."""
+    mock_response = MagicMock()
+    mock_response.choices = [
+        MagicMock(
+            message=MagicMock(
+                content=(
+                    "```json\n"
+                    '{"script": [{"speaker": "Alex", "voice": "alloy", "text": "Hello!"}]}\n'
+                    "```"
+                )
+            )
+        )
+    ]
+    with (
+        patch.dict("os.environ", {"FREE_LLM_API_KEY": "sk-free-llm"}),
+        patch("news_dashboard.ai_client.chat_create", return_value=mock_response),
+    ):
+        script = generate_podcast_script(
+            {
+                "title": "Briefing",
+                "summary": "Briefing Summary",
+                "sections": [{"title": "S1", "body": "Body 1"}],
+            }
+        )
+    assert len(script) == 1
+    assert script[0]["text"] == "Hello!"
+
+
 def test_generate_podcast_script_raises_when_no_key(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

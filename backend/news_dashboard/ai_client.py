@@ -151,6 +151,22 @@ def chat_create(
     return cast("ChatCompletion", completion)
 
 
+def strip_markdown_fence(text: str) -> str:
+    """Strip a wrapping ```json ... ``` or ``` ... ``` code fence, if present.
+
+    Some model/gateway combinations ignore ``response_format={"type": "json_object"}``
+    and wrap the JSON payload in a markdown code fence, which breaks a direct
+    ``json.loads`` on the raw content. Only strips when the text actually starts
+    with a fence, so already-clean JSON passes through unchanged.
+    """
+    stripped = text.strip()
+    if not stripped.startswith("```"):
+        return text
+    lines = stripped.splitlines()
+    lines = lines[1:-1] if lines and lines[-1].strip() == "```" else lines[1:]
+    return "\n".join(lines)
+
+
 def openai_config() -> tuple[str, str | None]:
     """Return (api_key, base_url) for real-OpenAI-only features (TTS audio, body extraction).
 
