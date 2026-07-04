@@ -48,6 +48,19 @@ class TestReadmeVersionBadge(unittest.TestCase):
         )
 
 
+class TestVultureWhitelistExists(unittest.TestCase):
+    """`make lint` / `make dead-code` pass `backend/vulture_whitelist.py` on the
+    vulture command line; if the file is deleted those commands break silently
+    (vulture just sees fewer paths) instead of failing loudly.
+    """
+
+    def test_vulture_whitelist_file_exists(self) -> None:
+        whitelist = ROOT / "backend" / "vulture_whitelist.py"
+        assert whitelist.is_file(), (
+            "backend/vulture_whitelist.py must exist for `make lint`/`make dead-code`"
+        )
+
+
 class TestNoPrivatePersonalPhrases(unittest.TestCase):
     _FORBIDDEN: ClassVar[list[str]] = ["private personal", "for Ioachim"]
     _EXTENSIONS: ClassVar[set[str]] = {".py", ".md", ".toml", ".ts", ".tsx", ".txt", ".rst"}

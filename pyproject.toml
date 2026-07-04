@@ -49,6 +49,7 @@ dev = [
   "testcontainers[postgres]>=4.14.2",
   "pytest-xdist>=3.0.0",
   "types-defusedxml>=0.7.0",
+  "vulture>=2.14",
 ]
 
 [project.scripts]
@@ -222,3 +223,10 @@ include = ["backend", "backend/tests"]
 python-version = "3.14"
 project-includes = ["backend"]
 search-path = ["backend", "backend/tests"]
+
+# ── vulture (dead code) ──────────────────────────────────────────────────────
+[tool.vulture]
+# Pytest fixture parameters that are only used for their setup/teardown side
+# effects (e.g. seeding the test DB, patching env vars) and a fake-connect
+# shim parameter kept to match psycopg's real signature.
+ignore_names = ["tmp_db", "clean_throttle", "row_factory"]
