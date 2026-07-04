@@ -157,6 +157,7 @@ spec:
                   name: {{ include "news-dashboard.fullname" . }}-auth
                   key: TOKEN_SECRET
 {{- end }}
+{{- include "news-dashboard.configEnv" . | indent 12 }}
           ports:
             - containerPort: 8080
               name: http

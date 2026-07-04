@@ -207,6 +207,41 @@ def test_helm_template_app_and_ingest_receive_sentry_env() -> None:
 
 
 @pytest.mark.skipif(HELM_BIN is None, reason="helm binary not found on path")
+def test_helm_template_app_config_defaults_off() -> None:
+    output = _render_chart()
+    deployment_env = _env_block(_manifest_for_kind(output, "Deployment"))
+
+    assert "METRICS_ENABLED" not in deployment_env
+    assert "ENABLE_API_DOCS" not in deployment_env
+    assert "ANALYTICS_RETENTION_DAYS" not in deployment_env
+    assert "CORS_ORIGINS" not in deployment_env
+
+
+@pytest.mark.skipif(HELM_BIN is None, reason="helm binary not found on path")
+def test_helm_template_app_config_optional_runtime_env() -> None:
+    output = _render_chart(
+        "app.config.metricsEnabled=true",
+        "app.config.enableApiDocs=true",
+        "app.config.analyticsRetentionDays=90",
+        "app.config.corsOrigins=https://example.com",
+    )
+    deployment_env = _env_block(_manifest_for_kind(output, "Deployment"))
+
+    assert _env_entry(deployment_env, "METRICS_ENABLED") == (
+        '- name: METRICS_ENABLED\n  value: "true"'
+    )
+    assert _env_entry(deployment_env, "ENABLE_API_DOCS") == (
+        '- name: ENABLE_API_DOCS\n  value: "true"'
+    )
+    assert _env_entry(deployment_env, "ANALYTICS_RETENTION_DAYS") == (
+        '- name: ANALYTICS_RETENTION_DAYS\n  value: "90"'
+    )
+    assert _env_entry(deployment_env, "CORS_ORIGINS") == (
+        '- name: CORS_ORIGINS\n  value: "https://example.com"'
+    )
+
+
+@pytest.mark.skipif(HELM_BIN is None, reason="helm binary not found on path")
 def test_helm_template_external_postgres() -> None:
     output = _render_chart(
         "postgresql.enabled=false",

@@ -124,6 +124,18 @@ app:
     environment: ""
     # Optional release identifier, usually set by CI to the deployed commit SHA.
     release: ""
+  config:
+    # Serves GET /metrics in Prometheus exposition format. Off by default.
+    metricsEnabled: false
+    # Serves the interactive API docs (/docs, /redoc, /openapi.json). Off by
+    # default so a public deployment doesn't leak its full API surface.
+    enableApiDocs: false
+    # Days to retain user_events before the daily cleanup job prunes them.
+    # Leave empty to use the app's built-in default (180).
+    analyticsRetentionDays: ""
+    # Comma-separated browser origins allowed by CORS. Leave empty to use the
+    # app's built-in default.
+    corsOrigins: ""
 
 ingestCronJob:
   enabled: true
