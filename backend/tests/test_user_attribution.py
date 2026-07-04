@@ -215,14 +215,14 @@ def test_ai_extract_body_threads_user_id_to_chat_create() -> None:
     from news_dashboard.body_fetch import _ai_extract_body
 
     mock_cc = MagicMock(return_value=_mock_completion("Article body text."))
-    mock_http_response = MagicMock()
-    mock_http_response.text = "<html><body><p>article content here</p></body></html>"
-
     with (
         patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}),
         patch("news_dashboard.ai_client.get_openai_client"),
         patch("news_dashboard.ai_client.chat_create", new=mock_cc),
-        patch("httpx.get", return_value=mock_http_response),
+        patch(
+            "news_dashboard.body_fetch._fetch_capped_html",
+            return_value="<html><body><p>article content here</p></body></html>",
+        ),
     ):
         _ai_extract_body("https://example.com/article", user_id=55)
 
@@ -233,14 +233,14 @@ def test_ai_extract_body_passes_none_user_id_by_default() -> None:
     from news_dashboard.body_fetch import _ai_extract_body
 
     mock_cc = MagicMock(return_value=_mock_completion("Article body text."))
-    mock_http_response = MagicMock()
-    mock_http_response.text = "<html><body><p>article content here</p></body></html>"
-
     with (
         patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}),
         patch("news_dashboard.ai_client.get_openai_client"),
         patch("news_dashboard.ai_client.chat_create", new=mock_cc),
-        patch("httpx.get", return_value=mock_http_response),
+        patch(
+            "news_dashboard.body_fetch._fetch_capped_html",
+            return_value="<html><body><p>article content here</p></body></html>",
+        ),
     ):
         _ai_extract_body("https://example.com/article")
 
@@ -251,9 +251,6 @@ def test_ai_extract_body_uses_free_llm_gateway_config() -> None:
     from news_dashboard.body_fetch import _ai_extract_body
 
     mock_cc = MagicMock(return_value=_mock_completion("Article body text."))
-    mock_http_response = MagicMock()
-    mock_http_response.text = "<html><body><p>article content here</p></body></html>"
-
     with (
         patch.dict(
             "os.environ",
@@ -265,7 +262,10 @@ def test_ai_extract_body_uses_free_llm_gateway_config() -> None:
         ),
         patch("news_dashboard.ai_client.get_openai_client") as mock_client_factory,
         patch("news_dashboard.ai_client.chat_create", new=mock_cc),
-        patch("httpx.get", return_value=mock_http_response),
+        patch(
+            "news_dashboard.body_fetch._fetch_capped_html",
+            return_value="<html><body><p>article content here</p></body></html>",
+        ),
     ):
         _ai_extract_body("https://example.com/article")
 
@@ -279,14 +279,14 @@ def test_ai_extract_body_falls_back_to_openai_when_gateway_unset() -> None:
     from news_dashboard.body_fetch import _ai_extract_body
 
     mock_cc = MagicMock(return_value=_mock_completion("Article body text."))
-    mock_http_response = MagicMock()
-    mock_http_response.text = "<html><body><p>article content here</p></body></html>"
-
     with (
         patch.dict("os.environ", {"OPENAI_API_KEY": "sk-openai"}, clear=True),
         patch("news_dashboard.ai_client.get_openai_client") as mock_client_factory,
         patch("news_dashboard.ai_client.chat_create", new=mock_cc),
-        patch("httpx.get", return_value=mock_http_response),
+        patch(
+            "news_dashboard.body_fetch._fetch_capped_html",
+            return_value="<html><body><p>article content here</p></body></html>",
+        ),
     ):
         _ai_extract_body("https://example.com/article")
 
