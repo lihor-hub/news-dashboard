@@ -349,6 +349,23 @@ describe('sources, summary, ingest', () => {
     expect(calls[0].url).toBe('/api/sources/s/enabled');
     expect(calls[0].init?.body).toBe(JSON.stringify({ enabled: false }));
   });
+
+  it('previewSource POSTs url and kind and returns the preview result', async () => {
+    const { calls } = stubFetch(() =>
+      jsonOk({ kind: 'rss_feed', entry_count: 2, items: [{ title: 'A', url: 'u', date: null }] })
+    );
+    const result = await api.previewSource({
+      url: 'https://example.com/feed.xml',
+      kind: 'rss_feed',
+    });
+    expect(calls[0].url).toBe('/api/sources/preview');
+    expect(calls[0].init?.method).toBe('POST');
+    expect(calls[0].init?.body).toBe(
+      JSON.stringify({ url: 'https://example.com/feed.xml', kind: 'rss_feed' })
+    );
+    expect(result.entry_count).toBe(2);
+    expect(result.items).toEqual([{ title: 'A', url: 'u', date: null }]);
+  });
 });
 
 describe('scheduler endpoints', () => {

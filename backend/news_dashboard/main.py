@@ -81,10 +81,13 @@ from news_dashboard.briefings import (
 from news_dashboard.db import connect, describe_database, init_db, row_to_dict
 from news_dashboard.error_tracking import frontend_error_tracking_dsn, init_error_tracking
 from news_dashboard.ingest import (
+    FeedFetchError,
+    clean_html,
     get_user_summary,
     ingest_all,
     list_articles,
     now_iso,
+    preview_source_entries,
     search_articles_page,
     send_article_later,
     set_article_starred,
@@ -109,6 +112,7 @@ from news_dashboard.source_health import (
     generate_subscription_cleanup_suggestions,
     list_source_health,
 )
+from news_dashboard.sources import SourceDefinition
 from news_dashboard.stats import (
     article_counts,
     articles_over_time,
@@ -517,6 +521,20 @@ class CreateSourceRequest(BaseModel):
                 detail="slug must contain only lowercase letters, digits, and hyphens",
             )
         return slug
+
+
+class PreviewSourceRequest(BaseModel):
+    url: str
+    kind: str = "rss_feed"
+
+    def validate_kind(self) -> None:
+        if self.kind in USER_CREATED_SOURCE_KINDS:
+            return
+        allowed = ", ".join(sorted(USER_CREATED_SOURCE_KINDS))
+        raise HTTPException(
+            status_code=400,
+            detail=f"unsupported source kind '{self.kind}'. Supported kinds: {allowed}",
+        )
 
 
 class SourceCleanupRequest(BaseModel):
@@ -1795,6 +1813,45 @@ def create_source(
         )
         row = conn.execute("SELECT * FROM sources WHERE slug = %s", (slug,)).fetchone()
     return row_to_dict(row)
+
+
+_PREVIEW_MAX_ITEMS = 5
+
+
+@api.post("/api/sources/preview")
+def preview_source(
+    payload: PreviewSourceRequest,
+    _current_user: Annotated[dict[str, Any], Depends(require_auth)],
+) -> dict[str, Any]:
+    """Fetch a candidate source without persisting a source or article rows."""
+    payload.validate_kind()
+
+    try:
+        validate_server_fetch_url(payload.url)
+    except UnsafeUrlError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    source = SourceDefinition(
+        slug="preview", name="preview", url=payload.url, category="preview", kind=payload.kind
+    )
+    try:
+        entries = preview_source_entries(source)
+    except FeedFetchError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    items = [
+        {
+            "title": clean_html(entry.get("title") or "Untitled")[:200],
+            "url": entry.get("url", ""),
+            "date": entry.get("date"),
+        }
+        for entry in entries[:_PREVIEW_MAX_ITEMS]
+    ]
+    return {
+        "kind": payload.kind,
+        "entry_count": len(entries),
+        "items": items,
+    }
 
 
 @api.delete("/api/sources/{slug}")

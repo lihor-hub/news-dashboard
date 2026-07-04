@@ -27,6 +27,7 @@ const apiMock = vi.hoisted(() => {
     updateSourceEnabled: vi.fn(),
     applySourceCleanup: vi.fn(),
     createSource: vi.fn(),
+    previewSource: vi.fn(),
     deleteSource: vi.fn(),
     fetchSchedulerStatus: vi.fn(),
     setSchedulerInterval: vi.fn(),
@@ -328,6 +329,74 @@ describe('SourcesPage', () => {
       await screen.findByText('Could not add source. Check the feed URL and try again.')
     ).toBeTruthy();
     expect(screen.queryByText('500 Internal Server Error')).toBeNull();
+  });
+
+  it('previews a source and shows a sample of entries', async () => {
+    apiMock.fetchSources.mockResolvedValue([source()]);
+    apiMock.previewSource.mockResolvedValue({
+      kind: 'rss_feed',
+      entry_count: 2,
+      items: [
+        { title: 'First post', url: 'https://myblog.com/1', date: null },
+        { title: 'Second post', url: 'https://myblog.com/2', date: null },
+      ],
+    });
+    withProviders(<SourcesPage />, '/', regularUser);
+    await screen.findAllByText('Acme News');
+
+    fireEvent.click(screen.getByRole('button', { name: /add source/i }));
+    await screen.findByRole('dialog');
+
+    fireEvent.change(screen.getByLabelText(/feed url/i), {
+      target: { value: 'https://myblog.com/feed' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /test source/i }));
+
+    await waitFor(() =>
+      expect(apiMock.previewSource).toHaveBeenCalledWith({
+        url: 'https://myblog.com/feed',
+        kind: 'rss_feed',
+      })
+    );
+    expect(await screen.findByText('Found 2 entries')).toBeTruthy();
+    expect(screen.getByText('First post')).toBeTruthy();
+    expect(screen.getByText('Second post')).toBeTruthy();
+  });
+
+  it('shows an empty-feed message when preview finds no entries', async () => {
+    apiMock.fetchSources.mockResolvedValue([source()]);
+    apiMock.previewSource.mockResolvedValue({ kind: 'rss_feed', entry_count: 0, items: [] });
+    withProviders(<SourcesPage />, '/', regularUser);
+    await screen.findAllByText('Acme News');
+
+    fireEvent.click(screen.getByRole('button', { name: /add source/i }));
+    await screen.findByRole('dialog');
+
+    fireEvent.change(screen.getByLabelText(/feed url/i), {
+      target: { value: 'https://myblog.com/empty' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /test source/i }));
+
+    expect(await screen.findByText('Source responded but no entries were found.')).toBeTruthy();
+  });
+
+  it('shows a readable error when preview fails', async () => {
+    apiMock.fetchSources.mockResolvedValue([source()]);
+    apiMock.previewSource.mockRejectedValue(
+      new apiMock.HttpError(422, 'Feed parse failed: not a feed')
+    );
+    withProviders(<SourcesPage />, '/', regularUser);
+    await screen.findAllByText('Acme News');
+
+    fireEvent.click(screen.getByRole('button', { name: /add source/i }));
+    await screen.findByRole('dialog');
+
+    fireEvent.change(screen.getByLabelText(/feed url/i), {
+      target: { value: 'https://myblog.com/broken' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /test source/i }));
+
+    expect(await screen.findByText(/Feed parse failed: not a feed/i)).toBeTruthy();
   });
 
   it('shows delete button for sources owned by current user', async () => {
