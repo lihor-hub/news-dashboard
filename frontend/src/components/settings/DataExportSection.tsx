@@ -27,8 +27,10 @@ export function DataExportSection() {
       </div>
       <div className="rounded-lg border border-border bg-card p-4 space-y-3">
         <p className="text-xs text-muted-foreground">
-          Download a personal archive of your reading history, starred articles, workflow state, and
-          daily briefings as a JSON file.
+          Download a personal archive of your reading history, starred articles, workflow state,
+          daily briefings, source subscriptions, and preferences (recommendation weights, onboarding
+          interests, notification settings) as a JSON file. Cached article body text is included
+          when available; secrets are never included.
         </p>
         <button
           onClick={() => void handleExport()}

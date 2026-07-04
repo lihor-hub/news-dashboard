@@ -1,8 +1,9 @@
-"""Tests for #474 personal reading archive export."""
+"""Tests for #474 personal reading archive export and #778 subscriptions/preferences."""
 
 from __future__ import annotations
 
 import pytest
+from psycopg.types.json import Jsonb
 
 from news_dashboard.auth import create_user
 from news_dashboard.db import connect
@@ -71,7 +72,7 @@ def test_export_includes_user_article_state(pg_clean: str) -> None:
 
     result = assemble_user_export(uid, database_url=pg_clean)
 
-    assert result["schema_version"] == 1
+    assert result["schema_version"] == 2
     articles = result["articles"]
     assert len(articles) == 1
     a = articles[0]
@@ -163,6 +164,16 @@ def test_export_empty_for_new_user(pg_clean: str) -> None:
 
     assert result["articles"] == []
     assert result["briefings"] == []
+    assert result["preferences"]["recommendations"] == {
+        "category_weights": {},
+        "novelty_weight": 1.0,
+    }
+    assert result["preferences"]["onboarding"] == {
+        "interests": [],
+        "completed_at": None,
+        "updated_at": None,
+    }
+    assert result["preferences"]["notifications"]["push_enabled"] is False
 
 
 def test_export_deterministic_ordering(pg_clean: str) -> None:
@@ -204,7 +215,7 @@ def test_export_endpoint_returns_200(pg_clean: str, monkeypatch: pytest.MonkeyPa
             resp = client.get("/api/users/me/export")
             assert resp.status_code == 200
             data = resp.json()
-            assert data["schema_version"] == 1
+            assert data["schema_version"] == 2
             article_ids = [a["id"] for a in data["articles"]]
             assert aid in article_ids
     finally:
@@ -244,3 +255,150 @@ def test_export_endpoint_scoped_to_auth_user(
             assert aid_bob not in article_ids
     finally:
         app.dependency_overrides.pop(require_auth, None)
+
+
+# ── #778: metadata, source subscriptions, preferences ─────────────────────────
+
+
+def test_export_metadata_and_body_flag(pg_clean: str) -> None:
+    sync_sources(pg_clean)
+    uid = _make_user(pg_clean, "meta_user")
+
+    result = assemble_user_export(uid, database_url=pg_clean)
+
+    assert result["schema_version"] == 2
+    assert result["generated_at"]
+    assert result["includes_article_bodies"] is True
+
+
+def test_export_source_subscriptions_reflect_disabled_global_source(pg_clean: str) -> None:
+    sync_sources(pg_clean)
+    uid = _make_user(pg_clean, "sub_user")
+
+    with connect(database_url=pg_clean) as conn:
+        slug_row = conn.execute(
+            "SELECT slug FROM sources WHERE owner_user_id IS NULL ORDER BY slug LIMIT 1"
+        ).fetchone()
+        assert slug_row is not None
+        slug = slug_row["slug"]
+        conn.execute(
+            """
+            INSERT INTO user_sources(user_id, source_slug, enabled)
+            VALUES (%s, %s, FALSE)
+            ON CONFLICT(user_id, source_slug) DO UPDATE SET enabled = FALSE
+            """,
+            (uid, slug),
+        )
+
+    result = assemble_user_export(uid, database_url=pg_clean)
+
+    by_slug = {s["slug"]: s for s in result["source_subscriptions"]}
+    assert by_slug[slug]["subscribed"] is False
+    assert by_slug[slug]["private"] is False
+
+
+def test_export_includes_own_private_source_not_other_users(pg_clean: str) -> None:
+    sync_sources(pg_clean)
+    uid_alice = _make_user(pg_clean, "priv_alice")
+    uid_bob = _make_user(pg_clean, "priv_bob")
+
+    with connect(database_url=pg_clean) as conn:
+        conn.execute(
+            """
+            INSERT INTO sources(slug, name, url, category, kind, priority, enabled, owner_user_id)
+            VALUES (%s, %s, %s, %s, %s, 0, TRUE, %s)
+            """,
+            (
+                "alice-private-feed",
+                "Alice's Feed",
+                "https://example.com/feed",
+                "custom",
+                "rss_feed",
+                uid_alice,
+            ),
+        )
+
+    alice_export = assemble_user_export(uid_alice, database_url=pg_clean)
+    bob_export = assemble_user_export(uid_bob, database_url=pg_clean)
+
+    alice_slugs = {s["slug"] for s in alice_export["source_subscriptions"]}
+    bob_slugs = {s["slug"] for s in bob_export["source_subscriptions"]}
+
+    assert "alice-private-feed" in alice_slugs
+    assert "alice-private-feed" not in bob_slugs
+    alice_private = next(
+        s for s in alice_export["source_subscriptions"] if s["slug"] == "alice-private-feed"
+    )
+    assert alice_private["private"] is True
+    assert alice_private["subscribed"] is True
+
+
+def test_export_preferences_include_recommendations_onboarding_notifications(
+    pg_clean: str,
+) -> None:
+    sync_sources(pg_clean)
+    uid = _make_user(pg_clean, "pref_user")
+
+    with connect(database_url=pg_clean) as conn:
+        conn.execute(
+            """
+            INSERT INTO user_settings(user_id, category_weights, novelty_weight)
+            VALUES (%s, %s, %s)
+            ON CONFLICT(user_id) DO UPDATE SET
+              category_weights = excluded.category_weights,
+              novelty_weight = excluded.novelty_weight
+            """,
+            (uid, Jsonb({"python": 2.0}), 0.5),
+        )
+        conn.execute(
+            """
+            INSERT INTO user_interest_profiles(user_id, interests, completed_at, updated_at)
+            VALUES (%s, %s, NOW(), NOW())
+            ON CONFLICT(user_id) DO UPDATE SET
+              interests = excluded.interests, completed_at = NOW(), updated_at = NOW()
+            """,
+            (uid, Jsonb(["python", "security"])),
+        )
+        conn.execute(
+            """
+            UPDATE users
+            SET briefing_time = '07:30', briefing_timezone = 'America/New_York',
+                briefing_push_enabled = TRUE, recap_enabled = FALSE, recap_day = 'fri'
+            WHERE id = %s
+            """,
+            (uid,),
+        )
+
+    result = assemble_user_export(uid, database_url=pg_clean)
+    prefs = result["preferences"]
+
+    assert prefs["recommendations"] == {"category_weights": {"python": 2.0}, "novelty_weight": 0.5}
+    assert prefs["onboarding"]["interests"] == ["python", "security"]
+    assert prefs["onboarding"]["completed_at"] is not None
+    assert prefs["notifications"]["briefing_time"] == "07:30"
+    assert prefs["notifications"]["briefing_timezone"] == "America/New_York"
+    assert prefs["notifications"]["push_enabled"] is True
+    assert prefs["notifications"]["recap_enabled"] is False
+    assert prefs["notifications"]["recap_day"] == "fri"
+
+
+def test_export_preferences_scoped_to_user(pg_clean: str) -> None:
+    """Alice's preferences must not leak into Bob's export."""
+    sync_sources(pg_clean)
+    uid_alice = _make_user(pg_clean, "pref_scope_alice")
+    uid_bob = _make_user(pg_clean, "pref_scope_bob")
+
+    with connect(database_url=pg_clean) as conn:
+        conn.execute(
+            """
+            INSERT INTO user_settings(user_id, category_weights, novelty_weight)
+            VALUES (%s, %s, %s)
+            """,
+            (uid_alice, Jsonb({"security": 3.0}), 1.5),
+        )
+
+    alice_export = assemble_user_export(uid_alice, database_url=pg_clean)
+    bob_export = assemble_user_export(uid_bob, database_url=pg_clean)
+
+    assert alice_export["preferences"]["recommendations"]["category_weights"] == {"security": 3.0}
+    assert bob_export["preferences"]["recommendations"]["category_weights"] == {}
