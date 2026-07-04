@@ -225,15 +225,6 @@ DEFAULT_SOURCES: list[SourceDefinition] = [
         80,
         interest_tags=("model-releases", "evals", "infra", "product-news"),
     ),
-    # ── AI research ──────────────────────────────────────────────────────────
-    SourceDefinition(
-        "arxiv-ai-ml",
-        "arXiv AI/ML",
-        "https://rss.arxiv.org/rss/cs.AI",
-        "ai-research",
-        priority=70,
-        interest_tags=("evals", "model-releases", "research"),
-    ),
     SourceDefinition(
         "google-research-blog",
         "Google Research Blog",
