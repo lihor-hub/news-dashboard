@@ -72,10 +72,6 @@ export async function fetchShareDetail(shareId: number): Promise<ShareDetail> {
   return requestJson<ShareDetail>(`/api/shares/${shareId}`);
 }
 
-export async function fetchShareMessages(shareId: number): Promise<{ items: ShareMessage[] }> {
-  return requestJson<{ items: ShareMessage[] }>(`/api/shares/${shareId}/messages`);
-}
-
 export async function postShareMessage(shareId: number, message: string): Promise<ShareMessage> {
   return requestJson<ShareMessage>(`/api/shares/${shareId}/messages`, {
     method: 'POST',

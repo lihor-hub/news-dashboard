@@ -12,7 +12,6 @@ const apiMock = vi.hoisted(() => ({
   revokeShare: vi.fn(),
   markShareRead: vi.fn(),
   fetchShareDetail: vi.fn(),
-  fetchShareMessages: vi.fn(),
   postShareMessage: vi.fn(),
 }));
 vi.mock('../api', () => apiMock);
