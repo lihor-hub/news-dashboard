@@ -35,6 +35,7 @@ from news_dashboard.briefings import (
     select_candidates,
 )
 from news_dashboard.db import connect, row_to_dict
+from news_dashboard.reading_list.service import add_item as add_reading_list_item
 
 # ── Seeding helpers ───────────────────────────────────────────────────────────
 
@@ -1336,3 +1337,78 @@ def test_generate_briefing_records_no_run_row_for_no_candidates(pg_clean: str) -
     run = row_to_dict(row)
     assert run["status"] == "complete"
     assert run["briefing_id"] is None
+
+
+# ── reading-list "saved for later" section ────────────────────────────────────
+
+
+def _set_reading_list_opt_in(
+    pg_url: str, user_id: int, *, enabled: bool, limit: int | None = None
+) -> None:
+    with connect(database_url=pg_url) as conn:
+        if limit is None:
+            conn.execute(
+                "UPDATE users SET briefing_include_reading_list = %s WHERE id = %s",
+                (enabled, user_id),
+            )
+        else:
+            conn.execute(
+                "UPDATE users SET briefing_include_reading_list = %s,"
+                " briefing_reading_list_limit = %s WHERE id = %s",
+                (enabled, limit, user_id),
+            )
+
+
+def test_generate_briefing_omits_reading_list_by_default(pg_clean: str) -> None:
+    _seed_source(pg_clean)
+    _seed_article(pg_clean, url="https://example.com/rl1", title="Article 1", state="today")
+    user_id = _seed_user(pg_clean, username="rl-default-user")
+    add_reading_list_item(user_id, "https://example.com/saved", database_url=pg_clean)
+
+    result = generate_briefing(database_url=pg_clean, ai_fn=_fake_ai, user_id=user_id)
+
+    assert "reading_list" not in result["content"]
+
+
+def test_generate_briefing_includes_unread_reading_list_items_when_opted_in(
+    pg_clean: str,
+) -> None:
+    _seed_source(pg_clean)
+    _seed_article(pg_clean, url="https://example.com/rl2", title="Article 1", state="today")
+    user_id = _seed_user(pg_clean, username="rl-opt-in-user")
+    _set_reading_list_opt_in(pg_clean, user_id, enabled=True)
+    saved = add_reading_list_item(user_id, "https://example.com/saved-1", database_url=pg_clean)
+    add_reading_list_item(user_id, "https://example.com/saved-2", database_url=pg_clean)
+
+    result = generate_briefing(database_url=pg_clean, ai_fn=_fake_ai, user_id=user_id)
+
+    reading_list = result["content"]["reading_list"]
+    assert len(reading_list) == 2
+    assert {item["id"] for item in reading_list} == {saved["id"], saved["id"] + 1}
+
+
+def test_generate_briefing_respects_reading_list_limit(pg_clean: str) -> None:
+    _seed_source(pg_clean)
+    _seed_article(pg_clean, url="https://example.com/rl3", title="Article 1", state="today")
+    user_id = _seed_user(pg_clean, username="rl-limit-user")
+    _set_reading_list_opt_in(pg_clean, user_id, enabled=True, limit=1)
+    add_reading_list_item(user_id, "https://example.com/saved-a", database_url=pg_clean)
+    add_reading_list_item(user_id, "https://example.com/saved-b", database_url=pg_clean)
+
+    result = generate_briefing(database_url=pg_clean, ai_fn=_fake_ai, user_id=user_id)
+
+    assert len(result["content"]["reading_list"]) == 1
+
+
+def test_generate_briefing_excludes_done_reading_list_items(pg_clean: str) -> None:
+    _seed_source(pg_clean)
+    _seed_article(pg_clean, url="https://example.com/rl4", title="Article 1", state="today")
+    user_id = _seed_user(pg_clean, username="rl-done-user")
+    _set_reading_list_opt_in(pg_clean, user_id, enabled=True)
+    add_reading_list_item(user_id, "https://example.com/saved-done", database_url=pg_clean)
+    with connect(database_url=pg_clean) as conn:
+        conn.execute("UPDATE reading_list_items SET status = 'done' WHERE user_id = %s", (user_id,))
+
+    result = generate_briefing(database_url=pg_clean, ai_fn=_fake_ai, user_id=user_id)
+
+    assert result["content"].get("reading_list", []) == []

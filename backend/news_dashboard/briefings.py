@@ -17,6 +17,7 @@ from typing import Any
 
 from news_dashboard import briefing_agent
 from news_dashboard.db import connect, row_to_dict
+from news_dashboard.reading_list import service as reading_list_service
 
 CANDIDATE_LIMIT = 40
 DEFAULT_BRIEFING_MODEL = "gpt-4o-mini"
@@ -270,6 +271,35 @@ def _validate_content(raw: dict[str, Any], candidate_ids: set[int]) -> dict[str,
     return content
 
 
+_READING_LIST_FIELDS = ("id", "url", "title", "site_name", "image_url")
+
+
+def _reading_list_section(
+    user_id: int | None,
+    database_url: str | None = None,
+) -> list[dict[str, Any]]:
+    """Return the opted-in "saved for later" items for a briefing, or [] if disabled.
+
+    Marking an item done stays a manual, separate action — surfacing it here
+    never mutates reading_list_items.status.
+    """
+    if user_id is None:
+        return []
+    with connect(database_url=database_url) as conn:
+        row = conn.execute(
+            "SELECT briefing_include_reading_list, briefing_reading_list_limit"
+            " FROM users WHERE id = %s",
+            (user_id,),
+        ).fetchone()
+    if row is None or not row["briefing_include_reading_list"]:
+        return []
+    limit = int(row["briefing_reading_list_limit"] or 0)
+    if limit <= 0:
+        return []
+    items = reading_list_service.list_items(user_id, status="unread", database_url=database_url)
+    return [{field: item.get(field) for field in _READING_LIST_FIELDS} for item in items[:limit]]
+
+
 def _save_briefing(  # noqa: PLR0913
     since_at: datetime,
     until_at: datetime,
@@ -279,6 +309,7 @@ def _save_briefing(  # noqa: PLR0913
     database_url: str | None = None,
     user_id: int | None = None,
     focus_prompt: str | None = None,
+    reading_list_items: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Insert briefing + article links; return the full briefing dict."""
     title = content.get("title") or ""
@@ -287,6 +318,8 @@ def _save_briefing(  # noqa: PLR0913
         "sections": content.get("sections", []),
         "worth_opening": content.get("worth_opening", []),
     }
+    if reading_list_items:
+        content_blob["reading_list"] = reading_list_items
 
     with connect(database_url=database_url) as conn:
         row = conn.execute(
@@ -657,6 +690,7 @@ def generate_briefing(  # noqa: PLR0913, PLR0915
     _record(briefing_agent.STAGE_CITATION_VERIFICATION, "complete")
 
     # Stage 5: assembly (persistence).
+    reading_list_items = _reading_list_section(user_id, database_url=database_url)
     try:
         result = _save_briefing(
             since_at,
@@ -667,6 +701,7 @@ def generate_briefing(  # noqa: PLR0913, PLR0915
             database_url,
             user_id=user_id,
             focus_prompt=focus_prompt,
+            reading_list_items=reading_list_items,
         )
     except Exception as exc:
         _record(briefing_agent.STAGE_ASSEMBLY, "failed", error=str(exc))
