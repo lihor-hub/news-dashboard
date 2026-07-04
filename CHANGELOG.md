@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 This project adheres to [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.108.2] — 2026-07-04
+- Stability and performance improvements.
+
+---
+
+*If this release had additional commits, I would process them here. The two provided commits are internal-only (chore + refactor) with no user-facing changes, so they collapse into the standard single bullet.*
+
 ## [1.108.1] — 2026-07-04
 - Fixed an issue where your default news source settings could be saved twice, so your preferences now apply correctly the first time.
 
