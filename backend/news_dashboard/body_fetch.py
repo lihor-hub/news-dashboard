@@ -27,11 +27,43 @@ from news_dashboard.url_safety import (
 logger = logging.getLogger(__name__)
 
 _AI_HTML_LIMIT = 15_000
+# Raw bytes downloaded from the network before decoding, well above _AI_HTML_LIMIT
+# to tolerate multi-byte charsets while still bounding worst-case memory/network use.
+_AI_FETCH_BYTE_CAP = 200_000
 _AI_MODEL = "gpt-4o-mini"
 _AI_PROMPT = (
     "Extract the main article text from this HTML. "
     "Return only the article body as plain text, no HTML tags."
 )
+
+
+def _fetch_capped_html(url: str, *, byte_cap: int) -> str:
+    """Stream ``url`` and decode at most ``byte_cap`` bytes of the response body.
+
+    Stops reading as soon as the cap is reached instead of downloading the
+    full response before truncating, so a large HTML page can't be pulled
+    entirely into memory just to be sliced down afterward.
+    """
+    import httpx  # lazy import — optional at module load time
+
+    chunks: list[bytes] = []
+    total = 0
+    with httpx.stream(
+        "GET",
+        url,
+        timeout=15,
+        headers={"User-Agent": USER_AGENT},
+        follow_redirects=False,
+    ) as resp:
+        resp.raise_for_status()
+        encoding = resp.encoding or "utf-8"
+        for chunk in resp.iter_bytes():
+            chunks.append(chunk)
+            total += len(chunk)
+            if total >= byte_cap:
+                break
+    raw = b"".join(chunks)[:byte_cap]
+    return raw.decode(encoding, errors="replace")
 
 
 def _ai_extract_body(url: str, *, user_id: int | None = None) -> tuple[str, str]:
@@ -50,15 +82,7 @@ def _ai_extract_body(url: str, *, user_id: int | None = None) -> tuple[str, str]
 
     try:
         validate_server_fetch_url(url)
-        import httpx  # lazy import — optional at module load time
-
-        resp = httpx.get(
-            url,
-            timeout=15,
-            headers={"User-Agent": USER_AGENT},
-            follow_redirects=False,
-        )
-        html = resp.text[:_AI_HTML_LIMIT]
+        html = _fetch_capped_html(url, byte_cap=_AI_FETCH_BYTE_CAP)[:_AI_HTML_LIMIT]
     except UnsafeUrlError as exc:
         logger.warning("ai_body_fetch: unsafe URL %r: %s", url, exc)
         return "", "error"

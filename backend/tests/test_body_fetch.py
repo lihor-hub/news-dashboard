@@ -5,7 +5,7 @@ from __future__ import annotations
 import http.server
 import threading
 import urllib.request
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from pathlib import Path
 from unittest.mock import patch
@@ -444,6 +444,42 @@ def test_prefetch_article_bodies_skips_already_ok(tmp_path: Path) -> None:
 # ── _ai_extract_body ──────────────────────────────────────────────────────────
 
 
+class _FakeStreamResponse:
+    """Minimal stand-in for the ``httpx.stream(...)`` context manager."""
+
+    def __init__(
+        self,
+        text: str,
+        *,
+        status_code: int = 200,
+        encoding: str = "utf-8",
+        chunk_size: int = 65_536,
+        on_chunk: Callable[[], None] | None = None,
+    ) -> None:
+        self._data = text.encode(encoding)
+        self.status_code = status_code
+        self.encoding = encoding
+        self._chunk_size = chunk_size
+        self._on_chunk = on_chunk
+
+    def raise_for_status(self) -> None:
+        if self.status_code >= 400:
+            msg = f"HTTP {self.status_code}"
+            raise RuntimeError(msg)
+
+    def iter_bytes(self) -> Iterator[bytes]:
+        for i in range(0, len(self._data), self._chunk_size):
+            if self._on_chunk is not None:
+                self._on_chunk()
+            yield self._data[i : i + self._chunk_size]
+
+    def __enter__(self) -> _FakeStreamResponse:
+        return self
+
+    def __exit__(self, *exc_info: object) -> None:
+        return None
+
+
 def test_ai_extract_body_skipped_without_api_key(tmp_path: Path) -> None:
     from news_dashboard.body_fetch import _ai_extract_body
 
@@ -482,13 +518,13 @@ def test_ai_extract_body_rejects_private_network_url_before_fetch() -> None:
 
     called = False
 
-    def fake_get(*_: object, **__: object) -> None:
+    def fake_stream(*_: object, **__: object) -> None:
         nonlocal called
         called = True
 
     with (
         patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}),
-        patch("httpx.get", side_effect=fake_get),
+        patch("httpx.stream", side_effect=fake_stream),
     ):
         body, status = _ai_extract_body("http://169.254.169.254/latest/meta-data")
 
@@ -502,8 +538,7 @@ def test_ai_extract_body_calls_openai_on_html(tmp_path: Path) -> None:
 
     from news_dashboard.body_fetch import _ai_extract_body
 
-    mock_resp = MagicMock()
-    mock_resp.text = "<html><body>Hello world</body></html>"
+    fake_stream = _FakeStreamResponse("<html><body>Hello world</body></html>")
 
     mock_completion = MagicMock()
     mock_completion.choices[0].message.content = "Hello world"
@@ -512,7 +547,7 @@ def test_ai_extract_body_calls_openai_on_html(tmp_path: Path) -> None:
 
     with (
         patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}),
-        patch("httpx.get", return_value=mock_resp),
+        patch("httpx.stream", return_value=fake_stream),
         patch("openai.OpenAI", return_value=mock_client),
     ):
         body, status = _ai_extract_body("https://example.com/article")
@@ -527,9 +562,24 @@ def test_ai_extract_body_returns_error_on_http_failure(tmp_path: Path) -> None:
 
     with (
         patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}),
-        patch("httpx.get", side_effect=RuntimeError("connection refused")),
+        patch("httpx.stream", side_effect=RuntimeError("connection refused")),
     ):
         body, status = _ai_extract_body("https://example.com/article")
+
+    assert status == "error"
+    assert body == ""
+
+
+def test_ai_extract_body_returns_error_on_non_2xx_status(tmp_path: Path) -> None:
+    from news_dashboard.body_fetch import _ai_extract_body
+
+    fake_stream = _FakeStreamResponse("<html>not found</html>", status_code=404)
+
+    with (
+        patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}),
+        patch("httpx.stream", return_value=fake_stream),
+    ):
+        body, status = _ai_extract_body("https://example.com/missing")
 
     assert status == "error"
     assert body == ""
@@ -540,8 +590,7 @@ def test_ai_extract_body_returns_error_when_openai_returns_empty(tmp_path: Path)
 
     from news_dashboard.body_fetch import _ai_extract_body
 
-    mock_resp = MagicMock()
-    mock_resp.text = "<html><body>some html</body></html>"
+    fake_stream = _FakeStreamResponse("<html><body>some html</body></html>")
 
     mock_completion = MagicMock()
     mock_completion.choices[0].message.content = "   "
@@ -550,7 +599,7 @@ def test_ai_extract_body_returns_error_when_openai_returns_empty(tmp_path: Path)
 
     with (
         patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}),
-        patch("httpx.get", return_value=mock_resp),
+        patch("httpx.stream", return_value=fake_stream),
         patch("openai.OpenAI", return_value=mock_client),
     ):
         body, status = _ai_extract_body("https://example.com/article")
@@ -566,8 +615,7 @@ def test_ai_extract_body_truncates_html_to_limit(tmp_path: Path) -> None:
 
     # 'A' * limit + 'B' * limit — 'B' must never appear in the OpenAI call
     long_html = "A" * _AI_HTML_LIMIT + "B" * _AI_HTML_LIMIT
-    mock_resp = MagicMock()
-    mock_resp.text = long_html
+    fake_stream = _FakeStreamResponse(long_html)
 
     mock_completion = MagicMock()
     mock_completion.choices[0].message.content = "extracted"
@@ -576,7 +624,7 @@ def test_ai_extract_body_truncates_html_to_limit(tmp_path: Path) -> None:
 
     with (
         patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}),
-        patch("httpx.get", return_value=mock_resp),
+        patch("httpx.stream", return_value=fake_stream),
         patch("openai.OpenAI", return_value=mock_client),
     ):
         _ai_extract_body("https://example.com/article")
@@ -594,6 +642,27 @@ def test_ai_extract_body_truncates_html_to_limit(tmp_path: Path) -> None:
     assert "A" * 10 in prompt_msg
     # Exact length: prompt + '\n\n' + truncated html
     assert len(prompt_msg) == len(_AI_PROMPT) + 2 + _AI_HTML_LIMIT
+
+
+def test_ai_extract_body_stops_streaming_once_byte_cap_reached() -> None:
+    """A response far larger than the byte cap must not be fully consumed."""
+    from news_dashboard.body_fetch import _AI_FETCH_BYTE_CAP, _fetch_capped_html
+
+    huge_html = "X" * (_AI_FETCH_BYTE_CAP * 10)
+    consumed_chunks = 0
+
+    def count_chunk() -> None:
+        nonlocal consumed_chunks
+        consumed_chunks += 1
+
+    fake_stream = _FakeStreamResponse(huge_html, chunk_size=4096, on_chunk=count_chunk)
+
+    with patch("httpx.stream", return_value=fake_stream):
+        text = _fetch_capped_html("https://example.com/huge", byte_cap=_AI_FETCH_BYTE_CAP)
+
+    assert len(text) == _AI_FETCH_BYTE_CAP
+    # Only enough chunks to cross the cap should have been pulled, not all of them.
+    assert consumed_chunks < len(huge_html) // 4096
 
 
 # ── fetch_and_cache_body with AI fallback ─────────────────────────────────────
