@@ -599,6 +599,9 @@ POSTGRES_MULTIUSER_SCHEMA = [
     " ON reading_list_items(user_id, status, priority)",
     "CREATE INDEX IF NOT EXISTS idx_reading_list_items_fetch_status"
     " ON reading_list_items(fetch_status)",
+    "ALTER TABLE reading_list_items ADD COLUMN IF NOT EXISTS summary TEXT",
+    "ALTER TABLE reading_list_items ADD COLUMN IF NOT EXISTS summary_status"
+    " TEXT NOT NULL DEFAULT 'pending'",
     """
     CREATE TABLE IF NOT EXISTS agent_action_runs (
       id          BIGSERIAL PRIMARY KEY,

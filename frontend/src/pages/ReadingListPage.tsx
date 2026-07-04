@@ -10,6 +10,7 @@ import {
   MonitorPlay,
   Newspaper,
   RotateCcw,
+  Sparkles,
   Trash2,
   TriangleAlert,
   Upload,
@@ -76,6 +77,7 @@ function ItemCard({
   onToggleDone: (item: ReadingListItem) => void;
   onDelete: (id: number) => void;
 }) {
+  const [summaryExpanded, setSummaryExpanded] = useState(false);
   const pending = item.fetch_status === 'pending';
   const { label: kindLabel, Icon: KindIcon } = KIND_META[item.kind];
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
@@ -150,6 +152,21 @@ function ItemCard({
         </a>
         {item.description ? (
           <p className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">{item.description}</p>
+        ) : null}
+        {item.summary ? (
+          <div className="mt-1">
+            <button
+              type="button"
+              onClick={() => setSummaryExpanded((expanded) => !expanded)}
+              className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+            >
+              <Sparkles className="size-3" strokeWidth={1.75} />
+              {summaryExpanded ? 'Hide AI summary' : 'AI summary'}
+            </button>
+            {summaryExpanded ? (
+              <p className="mt-0.5 text-xs text-muted-foreground">{item.summary}</p>
+            ) : null}
+          </div>
         ) : null}
       </div>
 

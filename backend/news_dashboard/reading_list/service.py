@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import os
 from typing import Any
 from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
@@ -14,6 +15,18 @@ logger = logging.getLogger(__name__)
 
 _TRACKING_PARAM_PREFIXES = ("utm_",)
 _TRACKING_PARAMS = {"fbclid", "gclid", "mc_cid", "mc_eid"}
+
+DEFAULT_SUMMARY_MODEL = "gpt-4o-mini"
+_SUMMARY_PROMPT = (
+    "You are helping a reader triage their reading list. Based ONLY on the title and "
+    "description below, write one concise sentence (max 40 words) describing what this "
+    "item is about, so the reader can decide whether to open it without reading further. "
+    "Do not invent details that are not present in the text. Return only the sentence."
+)
+
+
+class ReadingListSummaryNotConfiguredError(Exception):
+    """Raised when no AI chat credentials are configured for summary generation."""
 
 
 class InvalidReadingListUrlError(ValueError):
@@ -219,6 +232,92 @@ def fetch_metadata_for_item(item_id: int, *, database_url: str | None = None) ->
                 meta.get("kind"),
                 item_id,
             ),
+        )
+    generate_summary_for_item(item_id, database_url=database_url)
+
+
+def _summary_ai_config() -> tuple[str, str | None, str]:
+    from news_dashboard.ai_client import free_llm_config
+
+    api_key, base_url = free_llm_config()
+    if not api_key:
+        message = "FREE_LLM_API_KEY (or OPENAI_API_KEY) is not configured"
+        raise ReadingListSummaryNotConfiguredError(message)
+    model = os.getenv("OPENAI_READING_LIST_SUMMARY_MODEL", DEFAULT_SUMMARY_MODEL)
+    return api_key, base_url, model
+
+
+def _call_summary_model(api_key: str, base_url: str | None, model: str, text: str) -> str:
+    from news_dashboard.ai_client import chat_create, get_chat_client
+
+    client = get_chat_client(api_key=api_key, base_url=base_url)
+    result = chat_create(
+        client,
+        name="reading-list-summary",
+        tags=["reading-list"],
+        model=model,
+        messages=[{"role": "user", "content": f"{_SUMMARY_PROMPT}\n\n{text}"}],
+        max_tokens=120,
+    )
+    summary = (result.choices[0].message.content or "").strip()
+    if not summary:
+        message = "empty summary response"
+        raise ValueError(message)
+    return summary
+
+
+def generate_summary_for_item(item_id: int, *, database_url: str | None = None) -> None:
+    """Generate and store an AI summary from an item's title/description.
+
+    Failures are recorded on the row (``summary_status='error'``) instead of
+    raised, so callers chaining this onto the metadata fetch never crash.
+    Items with neither a title nor a description, or with AI credentials
+    unconfigured, are marked ``summary_status='skipped'``.
+    """
+    with connect(database_url=database_url) as conn:
+        row = conn.execute(
+            "SELECT title, description FROM reading_list_items WHERE id = %s",
+            (item_id,),
+        ).fetchone()
+    if row is None:
+        return
+    title = (row["title"] or "").strip()
+    description = (row["description"] or "").strip()
+    if not title and not description:
+        with connect(database_url=database_url) as conn:
+            conn.execute(
+                "UPDATE reading_list_items SET summary_status = 'skipped' WHERE id = %s",
+                (item_id,),
+            )
+        return
+    text = f"Title: {title}\nDescription: {description}" if title else description
+
+    try:
+        api_key, base_url, model = _summary_ai_config()
+    except ReadingListSummaryNotConfiguredError:
+        logger.info("Reading list summary skipped for item %s: AI not configured", item_id)
+        with connect(database_url=database_url) as conn:
+            conn.execute(
+                "UPDATE reading_list_items SET summary_status = 'skipped' WHERE id = %s",
+                (item_id,),
+            )
+        return
+
+    try:
+        summary = _call_summary_model(api_key, base_url, model, text)
+    except Exception as exc:
+        logger.warning("Reading list summary generation failed for item %s: %s", item_id, exc)
+        with connect(database_url=database_url) as conn:
+            conn.execute(
+                "UPDATE reading_list_items SET summary_status = 'error' WHERE id = %s",
+                (item_id,),
+            )
+        return
+
+    with connect(database_url=database_url) as conn:
+        conn.execute(
+            "UPDATE reading_list_items SET summary = %s, summary_status = 'ok' WHERE id = %s",
+            (summary, item_id),
         )
 
 

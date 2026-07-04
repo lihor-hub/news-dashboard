@@ -5,6 +5,7 @@ import { HttpError, readErrorMessage, requestJson } from './core';
 export type ReadingListStatus = 'unread' | 'done' | 'archived';
 export type ReadingListKind = 'article' | 'video' | 'channel' | 'link';
 export type ReadingListFetchStatus = 'pending' | 'ok' | 'error';
+export type ReadingListSummaryStatus = 'pending' | 'ok' | 'error' | 'skipped';
 
 export interface ReadingListItem {
   id: number;
@@ -19,6 +20,8 @@ export interface ReadingListItem {
   fetch_status: ReadingListFetchStatus;
   fetch_error: string | null;
   fetched_at: string | null;
+  summary: string | null;
+  summary_status: ReadingListSummaryStatus;
   status: ReadingListStatus;
   priority: number;
   note: string | null;
