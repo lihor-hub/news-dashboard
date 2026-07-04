@@ -73,19 +73,23 @@ def share_article(
 
 
 def list_received_shares(user_id: int, *, limit: int = 100) -> list[dict[str, Any]]:
-    """Return shares received by a user, newest first, with article + sender info."""
+    """Return shares received by a user, newest first, with article + sender info.
+
+    Revoked shares are excluded — a revoked share should not appear in the
+    recipient's inbox or count toward their unread total.
+    """
     with connect() as conn:
         rows = conn.execute(
             """
             SELECT s.id, s.note, s.context_summary, s.created_at, s.read_at,
-                   s.from_user_id, u.username AS from_username,
+                   s.revoked_at, s.from_user_id, u.username AS from_username,
                    a.id AS article_id, a.title AS article_title,
                    a.url AS article_url, a.source_name AS article_source_name,
                    a.summary AS article_summary
             FROM article_shares s
             JOIN users u ON u.id = s.from_user_id
             JOIN articles a ON a.id = s.article_id
-            WHERE s.to_user_id = %s
+            WHERE s.to_user_id = %s AND s.revoked_at IS NULL
             ORDER BY s.created_at DESC
             LIMIT %s
             """,
@@ -98,20 +102,74 @@ def list_received_shares(user_id: int, *, limit: int = 100) -> list[dict[str, An
     return shares
 
 
+def list_sent_shares(user_id: int, *, limit: int = 100) -> list[dict[str, Any]]:
+    """Return shares sent by a user, newest first, with article + recipient info.
+
+    Unlike ``list_received_shares``, revoked shares are included here so the
+    sender retains a full audit trail of what they sent.
+    """
+    with connect() as conn:
+        rows = conn.execute(
+            """
+            SELECT s.id, s.note, s.context_summary, s.created_at, s.read_at,
+                   s.revoked_at, s.to_user_id, u.username AS to_username,
+                   a.id AS article_id, a.title AS article_title,
+                   a.url AS article_url, a.source_name AS article_source_name,
+                   a.summary AS article_summary
+            FROM article_shares s
+            JOIN users u ON u.id = s.to_user_id
+            JOIN articles a ON a.id = s.article_id
+            WHERE s.from_user_id = %s
+            ORDER BY s.created_at DESC
+            LIMIT %s
+            """,
+            (user_id, limit),
+        ).fetchall()
+        shares = [row_to_dict(r) for r in rows]
+    for share in shares:
+        share["annotations"] = list_annotations(int(share["id"]))
+        share["messages"] = list_messages(int(share["id"]))
+    return shares
+
+
+def revoke_share(share_id: int, user_id: int) -> dict[str, Any] | None:
+    """Revoke a share sent by user_id. Idempotent.
+
+    Returns the updated share row, or None if no share with that id is owned
+    by user_id (already-revoked shares are returned unchanged, not re-raised).
+    """
+    with connect() as conn:
+        row = conn.execute(
+            """
+            UPDATE article_shares
+            SET revoked_at = COALESCE(revoked_at, NOW())
+            WHERE id = %s AND from_user_id = %s
+            RETURNING id, revoked_at
+            """,
+            (share_id, user_id),
+        ).fetchone()
+    return row_to_dict(row) if row is not None else None
+
+
 def get_share(share_id: int, user_id: int) -> dict[str, Any] | None:
-    """Return a single share visible to user_id (sender or recipient), with full detail."""
+    """Return a single share visible to user_id (sender or recipient), with full detail.
+
+    A revoked share is only visible to its sender (with a populated
+    ``revoked_at``); the recipient gets None as if the share never existed.
+    """
     with connect() as conn:
         row = conn.execute(
             """
             SELECT s.id, s.note, s.context_summary, s.created_at, s.read_at,
-                   s.from_user_id, u.username AS from_username,
+                   s.revoked_at, s.from_user_id, u.username AS from_username,
                    a.id AS article_id, a.title AS article_title,
                    a.url AS article_url, a.source_name AS article_source_name,
                    a.summary AS article_summary
             FROM article_shares s
             JOIN users u ON u.id = s.from_user_id
             JOIN articles a ON a.id = s.article_id
-            WHERE s.id = %s AND (s.to_user_id = %s OR s.from_user_id = %s)
+            WHERE s.id = %s
+              AND ((s.to_user_id = %s AND s.revoked_at IS NULL) OR s.from_user_id = %s)
             """,
             (share_id, user_id, user_id),
         ).fetchone()
@@ -124,14 +182,19 @@ def get_share(share_id: int, user_id: int) -> dict[str, Any] | None:
 
 
 def get_shared_article(share_id: int, user_id: int) -> dict[str, Any] | None:
-    """Return a share's article when user_id is the sender or recipient."""
+    """Return a share's article when user_id is the sender or recipient.
+
+    A revoked share's article is no longer reachable through the recipient's
+    share access; the sender retains access for their own audit trail.
+    """
     with connect() as conn:
         row = conn.execute(
             """
             SELECT a.*
             FROM article_shares s
             JOIN articles a ON a.id = s.article_id
-            WHERE s.id = %s AND (s.to_user_id = %s OR s.from_user_id = %s)
+            WHERE s.id = %s
+              AND ((s.to_user_id = %s AND s.revoked_at IS NULL) OR s.from_user_id = %s)
             """,
             (share_id, user_id, user_id),
         ).fetchone()
@@ -158,7 +221,7 @@ def mark_share_read(share_id: int, user_id: int) -> bool:
             """
             UPDATE article_shares
             SET read_at = NOW()
-            WHERE id = %s AND to_user_id = %s AND read_at IS NULL
+            WHERE id = %s AND to_user_id = %s AND read_at IS NULL AND revoked_at IS NULL
             """,
             (share_id, user_id),
         )
@@ -166,10 +229,13 @@ def mark_share_read(share_id: int, user_id: int) -> bool:
 
 
 def unread_share_count(user_id: int) -> int:
-    """Return the number of unread shares for a user."""
+    """Return the number of unread, non-revoked shares for a user."""
     with connect() as conn:
         row = conn.execute(
-            "SELECT COUNT(*) AS n FROM article_shares WHERE to_user_id = %s AND read_at IS NULL",
+            """
+            SELECT COUNT(*) AS n FROM article_shares
+            WHERE to_user_id = %s AND read_at IS NULL AND revoked_at IS NULL
+            """,
             (user_id,),
         ).fetchone()
         return int(row_to_dict(row)["n"])

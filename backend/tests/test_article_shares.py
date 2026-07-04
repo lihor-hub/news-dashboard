@@ -23,7 +23,9 @@ from news_dashboard.shares import (
     list_annotations,
     list_messages,
     list_received_shares,
+    list_sent_shares,
     mark_share_read,
+    revoke_share,
     share_article,
     shareable_users,
     unread_share_count,
@@ -354,6 +356,158 @@ def test_get_share_returns_none_for_unauthorized(db: str) -> None:
     share = share_article(article_id=article_id, from_user_id=alice, to_user_id=bob)
 
     assert get_share(int(share["id"]), charlie) is None
+
+
+# ── Sent shares & revoke tests (#784) ──────────────────────────────────────────
+
+
+def test_list_sent_shares(db: str) -> None:
+    alice = _make_user(db, "alice")
+    bob = _make_user(db, "bob")
+    article_id = _insert_article(db)
+    share_article(article_id=article_id, from_user_id=alice, to_user_id=bob, note="check this")
+
+    sent = list_sent_shares(alice)
+    assert len(sent) == 1
+    assert sent[0]["to_username"] == "bob"
+    assert sent[0]["article_title"] == "Article 1"
+    assert sent[0]["note"] == "check this"
+    assert sent[0]["revoked_at"] is None
+    # Recipient has nothing in their own sent history.
+    assert list_sent_shares(bob) == []
+
+
+def test_revoke_share_by_owner(db: str) -> None:
+    alice = _make_user(db, "alice")
+    bob = _make_user(db, "bob")
+    article_id = _insert_article(db)
+    share = share_article(article_id=article_id, from_user_id=alice, to_user_id=bob)
+    share_id = int(share["id"])
+
+    result = revoke_share(share_id, alice)
+    assert result is not None
+    assert result["revoked_at"] is not None
+
+    # Revoked shares still show up in sender history, marked revoked.
+    sent = list_sent_shares(alice)
+    assert sent[0]["revoked_at"] is not None
+
+
+def test_revoke_share_rejects_non_owner(db: str) -> None:
+    alice = _make_user(db, "alice")
+    bob = _make_user(db, "bob")
+    charlie = _make_user(db, "charlie")
+    article_id = _insert_article(db)
+    share = share_article(article_id=article_id, from_user_id=alice, to_user_id=bob)
+    share_id = int(share["id"])
+
+    # Neither the recipient nor an unrelated user can revoke.
+    assert revoke_share(share_id, bob) is None
+    assert revoke_share(share_id, charlie) is None
+
+
+def test_revoke_share_is_idempotent(db: str) -> None:
+    alice = _make_user(db, "alice")
+    bob = _make_user(db, "bob")
+    article_id = _insert_article(db)
+    share = share_article(article_id=article_id, from_user_id=alice, to_user_id=bob)
+    share_id = int(share["id"])
+
+    first = revoke_share(share_id, alice)
+    second = revoke_share(share_id, alice)
+    assert first is not None
+    assert second is not None
+    assert first["revoked_at"] == second["revoked_at"]
+
+
+def test_revoked_share_disappears_from_recipient_inbox_and_unread_count(db: str) -> None:
+    alice = _make_user(db, "alice")
+    bob = _make_user(db, "bob")
+    article_id = _insert_article(db)
+    share = share_article(article_id=article_id, from_user_id=alice, to_user_id=bob)
+    share_id = int(share["id"])
+
+    assert unread_share_count(bob) == 1
+    revoke_share(share_id, alice)
+
+    assert list_received_shares(bob) == []
+    assert unread_share_count(bob) == 0
+
+
+def test_revoked_share_returns_404_for_recipient_detail_and_article(db: str) -> None:
+    alice = _make_user(db, "alice")
+    bob = _make_user(db, "bob")
+    article_id = _insert_article(db)
+    share = share_article(article_id=article_id, from_user_id=alice, to_user_id=bob)
+    share_id = int(share["id"])
+    revoke_share(share_id, alice)
+
+    assert get_share(share_id, bob) is None
+    assert get_shared_article(share_id, bob) is None
+    assert fetch_shared_article_body(share_id, bob) is None
+
+    # Sender still has full access to their revoked share.
+    sender_detail = get_share(share_id, alice)
+    assert sender_detail is not None
+    assert sender_detail["revoked_at"] is not None
+    assert get_shared_article(share_id, alice) is not None
+
+
+def test_mark_share_read_rejects_revoked_share(db: str) -> None:
+    alice = _make_user(db, "alice")
+    bob = _make_user(db, "bob")
+    article_id = _insert_article(db)
+    share = share_article(article_id=article_id, from_user_id=alice, to_user_id=bob)
+    share_id = int(share["id"])
+    revoke_share(share_id, alice)
+
+    assert mark_share_read(share_id, bob) is False
+
+
+def test_sent_shares_endpoint(db: str) -> None:
+    alice = _make_user(db, "alice")
+    bob = _make_user(db, "bob")
+    article_id = _insert_article(db)
+    share_article(article_id=article_id, from_user_id=alice, to_user_id=bob)
+    client = _authed_client(alice)
+
+    try:
+        response = client.get("/api/shares/sent")
+        assert response.status_code == 200
+        items = response.json()["items"]
+        assert len(items) == 1
+        assert items[0]["to_username"] == "bob"
+    finally:
+        app.dependency_overrides.pop(require_auth, None)
+
+
+def test_revoke_share_endpoint(db: str) -> None:
+    alice = _make_user(db, "alice")
+    bob = _make_user(db, "bob")
+    article_id = _insert_article(db)
+    share = share_article(article_id=article_id, from_user_id=alice, to_user_id=bob)
+    client = _authed_client(alice)
+
+    try:
+        response = client.post(f"/api/shares/{share['id']}/revoke")
+        assert response.status_code == 200
+        assert response.json()["revoked_at"] is not None
+    finally:
+        app.dependency_overrides.pop(require_auth, None)
+
+
+def test_revoke_share_endpoint_rejects_non_owner(db: str) -> None:
+    alice = _make_user(db, "alice")
+    bob = _make_user(db, "bob")
+    article_id = _insert_article(db)
+    share = share_article(article_id=article_id, from_user_id=alice, to_user_id=bob)
+    client = _authed_client(bob)
+
+    try:
+        response = client.post(f"/api/shares/{share['id']}/revoke")
+        assert response.status_code == 404
+    finally:
+        app.dependency_overrides.pop(require_auth, None)
 
 
 # ── AI context generation tests ───────────────────────────────────────────────

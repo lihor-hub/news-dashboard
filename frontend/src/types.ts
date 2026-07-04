@@ -66,8 +66,25 @@ export interface ReceivedShare {
   context_summary?: string | null;
   created_at: string;
   read_at?: string | null;
+  revoked_at?: string | null;
   from_user_id: number;
   from_username: string;
+  article_id: number;
+  article_title: string;
+  article_url: string;
+  article_source_name: string;
+  article_summary?: string | null;
+}
+
+export interface SentShare {
+  id: number;
+  note?: string | null;
+  context_summary?: string | null;
+  created_at: string;
+  read_at?: string | null;
+  revoked_at?: string | null;
+  to_user_id: number;
+  to_username: string;
   article_id: number;
   article_title: string;
   article_url: string;
