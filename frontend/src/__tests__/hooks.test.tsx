@@ -1,8 +1,12 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, renderHook, waitFor } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { createElement } from 'react';
 import { useIsMobile } from '../hooks/use-mobile';
 import { useTheme } from '../hooks/useTheme';
+import { useArticleAudio } from '../hooks/useArticleAudio';
+import * as api from '../api';
 
 // ── matchMedia harness ──────────────────────────────────────────────────────
 // happy-dom ships a minimal matchMedia; we replace it with a controllable mock
@@ -90,5 +94,40 @@ describe('useTheme', () => {
     renderHook(() => useTheme());
     act(() => mql.dispatch());
     expect(document.documentElement.getAttribute('data-theme')).toBe('dark');
+  });
+});
+
+// ── useArticleAudio ─────────────────────────────────────────────────────────
+
+describe('useArticleAudio', () => {
+  function wrapper({ children }: { children: React.ReactNode }) {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    });
+    return createElement(QueryClientProvider, { client: queryClient }, children);
+  }
+
+  it('starts in idle state', () => {
+    const { result } = renderHook(() => useArticleAudio('42'), { wrapper });
+    expect(result.current.audioState).toBe('idle');
+  });
+
+  it('revokes the object URL on unmount', async () => {
+    vi.spyOn(api, 'fetchArticleAudioUrl').mockResolvedValue('blob:mock-url');
+    const revokeSpy = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => undefined);
+    vi.stubGlobal(
+      'Audio',
+      vi.fn(function MockAudio(this: { play: () => void; pause: () => void }) {
+        this.play = vi.fn();
+        this.pause = vi.fn();
+      })
+    );
+
+    const { result, unmount } = renderHook(() => useArticleAudio('42'), { wrapper });
+    act(() => result.current.handleListen());
+    await waitFor(() => expect(result.current.audioState).toBe('playing'));
+
+    unmount();
+    expect(revokeSpy).toHaveBeenCalledWith('blob:mock-url');
   });
 });
