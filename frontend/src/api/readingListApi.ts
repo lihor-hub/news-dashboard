@@ -1,6 +1,6 @@
 /** API layer for the reading list (#893). */
 
-import { HttpError, readErrorMessage, requestJson } from '../api';
+import { HttpError, readErrorMessage, requestJson } from './core';
 
 export type ReadingListStatus = 'unread' | 'done' | 'archived';
 export type ReadingListKind = 'article' | 'video' | 'channel' | 'link';

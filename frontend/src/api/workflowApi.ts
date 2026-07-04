@@ -7,7 +7,7 @@
 
 import type { Article as LegacyArticle, ArticleStatus } from '../types';
 import type { WorkflowArticle, WorkflowState, Signal, UndoSnapshot } from '../lib/workflowTypes';
-import { requestJson } from '../api';
+import { requestJson } from './core';
 
 // ─── Adapter ────────────────────────────────────────────────────────────────
 
