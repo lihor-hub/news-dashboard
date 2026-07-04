@@ -1351,6 +1351,28 @@ def list_shares(
     }
 
 
+@api.get("/api/shares/sent")
+def list_sent_shares_endpoint(
+    current_user: Annotated[dict[str, Any], Depends(require_auth)],
+) -> dict[str, Any]:
+    from news_dashboard.shares import list_sent_shares
+
+    return {"items": list_sent_shares(current_user["id"])}
+
+
+@api.post("/api/shares/{share_id}/revoke")
+def revoke_share_endpoint(
+    share_id: int,
+    current_user: Annotated[dict[str, Any], Depends(require_auth)],
+) -> dict[str, Any]:
+    from news_dashboard.shares import revoke_share
+
+    share = revoke_share(share_id, current_user["id"])
+    if share is None:
+        raise HTTPException(status_code=404, detail="Share not found")
+    return share
+
+
 @api.get("/api/shares/unread_count")
 def shares_unread_count(
     current_user: Annotated[dict[str, Any], Depends(require_auth)],

@@ -781,6 +781,9 @@ POSTGRES_MULTIUSER_SCHEMA = [
     """,
     "CREATE INDEX IF NOT EXISTS idx_mcp_tokens_user ON mcp_tokens(user_id, created_at DESC)",
     "ALTER TABLE users ADD COLUMN IF NOT EXISTS analytics_enabled BOOLEAN NOT NULL DEFAULT TRUE",
+    "ALTER TABLE article_shares ADD COLUMN IF NOT EXISTS revoked_at TIMESTAMPTZ",
+    "CREATE INDEX IF NOT EXISTS idx_article_shares_sender"
+    " ON article_shares(from_user_id, created_at DESC)",
 ]
 
 

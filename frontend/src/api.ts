@@ -39,6 +39,7 @@ import type {
   ReadingStreak,
   RecommendationPreferences,
   ReceivedShare,
+  SentShare,
   ShareDetail,
   ShareAnnotation,
   ShareMessage,
@@ -795,6 +796,14 @@ export async function fetchReceivedShares(): Promise<{
 export async function fetchSharesUnreadCount(): Promise<number> {
   const data = await requestJson<{ unread: number }>('/api/shares/unread_count');
   return data.unread;
+}
+
+export async function fetchSentShares(): Promise<{ items: SentShare[] }> {
+  return requestJson('/api/shares/sent');
+}
+
+export async function revokeShare(shareId: number): Promise<void> {
+  await requestJson(`/api/shares/${shareId}/revoke`, { method: 'POST' });
 }
 
 // ── Reading Goals & Quizzes ───────────────────────────────────────────────────

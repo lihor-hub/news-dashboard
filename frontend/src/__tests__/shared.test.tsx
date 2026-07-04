@@ -8,6 +8,8 @@ import type { ReactElement } from 'react';
 // ── API mock ─────────────────────────────────────────────────────────────────
 const apiMock = vi.hoisted(() => ({
   fetchReceivedShares: vi.fn(),
+  fetchSentShares: vi.fn(),
+  revokeShare: vi.fn(),
   markShareRead: vi.fn(),
   fetchShareDetail: vi.fn(),
   fetchShareMessages: vi.fn(),
@@ -35,6 +37,7 @@ function makeShare(overrides = {}) {
     context_summary: null,
     created_at: new Date(Date.now() - 60_000).toISOString(),
     read_at: null,
+    revoked_at: null,
     from_user_id: 2,
     from_username: 'bob',
     article_id: 99,
@@ -44,6 +47,25 @@ function makeShare(overrides = {}) {
     article_summary: null,
     annotations: [],
     messages: [],
+    ...overrides,
+  };
+}
+
+function makeSentShare(overrides = {}) {
+  return {
+    id: 43,
+    note: 'Check this out',
+    context_summary: null,
+    created_at: new Date(Date.now() - 60_000).toISOString(),
+    read_at: null,
+    revoked_at: null,
+    to_user_id: 3,
+    to_username: 'charlie',
+    article_id: 100,
+    article_title: 'Rust vs Go in 2026',
+    article_url: 'https://example.com/rust-go',
+    article_source_name: 'Tech Blog',
+    article_summary: null,
     ...overrides,
   };
 }
@@ -66,6 +88,8 @@ function renderWithRouter(ui: ReactElement, { path = '/', route = '/' } = {}) {
 describe('SharedPage', () => {
   beforeEach(() => {
     apiMock.markShareRead.mockResolvedValue(true);
+    apiMock.fetchSentShares.mockResolvedValue({ items: [] });
+    apiMock.revokeShare.mockResolvedValue(undefined);
   });
 
   it('shows empty state when no shares', async () => {
@@ -92,6 +116,46 @@ describe('SharedPage', () => {
     await waitFor(() => expect(screen.getByText('The Future of TypeScript')).toBeTruthy());
     const original = screen.getByRole('link', { name: /Original/ });
     expect(original.getAttribute('href')).toBe('https://example.com/ts');
+  });
+
+  it('switches to the Sent tab and shows sent shares', async () => {
+    apiMock.fetchReceivedShares.mockResolvedValue({ items: [] });
+    apiMock.fetchSentShares.mockResolvedValue({ items: [makeSentShare()] });
+    renderWithRouter(<SharedPage />, { path: '/shared', route: '/shared' });
+    await waitFor(() => expect(screen.getByText('Nothing shared yet')).toBeTruthy());
+
+    fireEvent.click(screen.getByRole('button', { name: 'Sent' }));
+
+    await waitFor(() => expect(screen.getByText('Rust vs Go in 2026')).toBeTruthy());
+    expect(screen.getByText('charlie')).toBeTruthy();
+  });
+
+  it('revokes a sent share', async () => {
+    apiMock.fetchReceivedShares.mockResolvedValue({ items: [] });
+    apiMock.fetchSentShares.mockResolvedValue({ items: [makeSentShare()] });
+    renderWithRouter(<SharedPage />, { path: '/shared', route: '/shared' });
+    await waitFor(() => expect(screen.getByText('Nothing shared yet')).toBeTruthy());
+
+    fireEvent.click(screen.getByRole('button', { name: 'Sent' }));
+    await waitFor(() => expect(screen.getByText('Rust vs Go in 2026')).toBeTruthy());
+
+    fireEvent.click(screen.getByRole('button', { name: /Revoke/ }));
+    await waitFor(() => expect(apiMock.revokeShare).toHaveBeenCalledWith(43));
+  });
+
+  it('shows a revoked badge and hides the revoke action for revoked sent shares', async () => {
+    apiMock.fetchReceivedShares.mockResolvedValue({ items: [] });
+    apiMock.fetchSentShares.mockResolvedValue({
+      items: [makeSentShare({ revoked_at: new Date().toISOString() })],
+    });
+    renderWithRouter(<SharedPage />, { path: '/shared', route: '/shared' });
+    await waitFor(() => expect(screen.getByText('Nothing shared yet')).toBeTruthy());
+
+    fireEvent.click(screen.getByRole('button', { name: 'Sent' }));
+    await waitFor(() => expect(screen.getByText('Rust vs Go in 2026')).toBeTruthy());
+
+    expect(screen.getByText('Revoked')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /Revoke/ })).toBeNull();
   });
 });
 
