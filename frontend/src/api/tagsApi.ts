@@ -1,6 +1,6 @@
 /** API layer for user-defined tags/collections (#652). */
 
-import { requestJson } from '../api';
+import { requestJson } from './core';
 import { adaptArticle } from './workflowApi';
 import type { Article as LegacyArticle } from '../types';
 import type { TriageArticlePage } from './workflowApi';
