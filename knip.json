@@ -1,0 +1,17 @@
+{
+  "$schema": "https://unpkg.com/knip@latest/schema.json",
+  "entry": ["frontend/src/AppRouter.tsx"],
+  "project": ["frontend/src/**/*.{ts,tsx}"],
+  "ignore": ["frontend/src/components/ui/**"],
+  "ignoreDependencies": [
+    "tailwindcss",
+    "tw-animate-css",
+    "@fontsource-variable/inter",
+    "@fontsource-variable/jetbrains-mono",
+    "@fontsource-variable/source-serif-4",
+    "@bubblewrap/core",
+    "@resvg/resvg-js",
+    "axe-core"
+  ],
+  "ignoreExportsUsedInFile": true
+}

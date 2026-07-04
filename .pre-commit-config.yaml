@@ -61,6 +61,12 @@ repos:
         language: system
         files: \.(ts|tsx|css|html|json|mjs)$
         pass_filenames: false
+      - id: knip
+        name: knip (dead exports & deps)
+        entry: npm run dead-code --silent
+        language: system
+        files: \.(ts|tsx|json)$
+        pass_filenames: false
       - id: tsc
         name: tsc (typecheck)
         entry: npm run typecheck --silent

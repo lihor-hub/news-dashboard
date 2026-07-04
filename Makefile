@@ -21,10 +21,12 @@ lint:
 	vulture backend backend/vulture_whitelist.py --min-confidence 80
 	npm run lint --silent
 	npm run format:check --silent
+	npm run dead-code --silent
 
-## dead-code: scan Python source for unused symbols (vulture)
+## dead-code: scan Python source for unused symbols (vulture) and TypeScript for dead exports/deps (knip)
 dead-code:
 	vulture backend backend/vulture_whitelist.py --min-confidence 80
+	npm run dead-code --silent
 
 ## format: auto-format backend and frontend code
 format:

@@ -518,17 +518,6 @@ export interface AiWatchlistMatch {
   explanation: string;
 }
 
-export interface AiWatchlistNudge {
-  id: number;
-  watchlist_id: number;
-  article_id: number;
-  score: number;
-  explanation: string;
-  created_at: string;
-  watchlist_label: string;
-  article_title: string;
-}
-
 export interface AnalyticsSummary {
   dau: number;
   wau: number;

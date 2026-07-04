@@ -9,7 +9,7 @@ import type {
   Summary,
   WeeklyRecap,
 } from '../types';
-import { requestJson, HttpError } from './core';
+import { requestJson } from './core';
 
 export async function fetchSummary(): Promise<Summary> {
   return requestJson<Summary>('/api/summary');
@@ -31,15 +31,6 @@ export async function fetchAchievements(): Promise<Achievement[]> {
 export async function fetchRecaps(): Promise<WeeklyRecap[]> {
   const data = await requestJson<{ items: WeeklyRecap[] }>('/api/recaps');
   return data.items;
-}
-
-export async function fetchLatestRecap(): Promise<WeeklyRecap | null> {
-  try {
-    return await requestJson<WeeklyRecap>('/api/recaps/latest');
-  } catch (err) {
-    if (err instanceof HttpError && err.status === 404) return null;
-    throw err;
-  }
 }
 
 export async function fetchRecommendationPreferences(): Promise<RecommendationPreferences> {

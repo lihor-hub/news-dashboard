@@ -1,4 +1,4 @@
-import { Component, type ComponentType, type ErrorInfo, type ReactNode } from 'react';
+import { Component, type ErrorInfo, type ReactNode } from 'react';
 import { Button } from '@/components/ui/button';
 import { reportError } from '@/lib/errorTracking';
 
@@ -35,21 +35,4 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
     }
     return this.props.children;
   }
-}
-
-// eslint-disable-next-line react-refresh/only-export-components
-export function withErrorBoundary<P extends object>(
-  WrappedComponent: ComponentType<P>
-): ComponentType<P> {
-  function ComponentWithErrorBoundary(props: P) {
-    return (
-      <ErrorBoundary>
-        <WrappedComponent {...props} />
-      </ErrorBoundary>
-    );
-  }
-  ComponentWithErrorBoundary.displayName = `withErrorBoundary(${
-    WrappedComponent.displayName ?? WrappedComponent.name ?? 'Component'
-  })`;
-  return ComponentWithErrorBoundary;
 }

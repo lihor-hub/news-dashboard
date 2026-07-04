@@ -1,4 +1,4 @@
-import type { AiWatchlist, AiWatchlistMatch, AiWatchlistNudge } from '../types';
+import type { AiWatchlist, AiWatchlistMatch } from '../types';
 import { requestJson } from './core';
 
 export async function fetchWatchlists(): Promise<AiWatchlist[]> {
@@ -51,10 +51,5 @@ export async function previewWatchlist(
     method: 'POST',
     body: JSON.stringify({ query, threshold }),
   });
-  return data.items;
-}
-
-export async function fetchWatchlistNudges(): Promise<AiWatchlistNudge[]> {
-  const data = await requestJson<{ items: AiWatchlistNudge[] }>('/api/watchlists/nudges');
   return data.items;
 }
