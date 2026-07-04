@@ -5,6 +5,7 @@ import {
   BookmarkPlus,
   Check,
   ExternalLink,
+  GripVertical,
   Loader2,
   MonitorPlay,
   Newspaper,
@@ -15,6 +16,23 @@ import {
   Users,
 } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  DndContext,
+  KeyboardSensor,
+  PointerSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from '@dnd-kit/core';
+import {
+  SortableContext,
+  arrayMove,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import {
   addReadingListItem,
   deleteReadingListItem,
@@ -60,9 +78,30 @@ function ItemCard({
 }) {
   const pending = item.fetch_status === 'pending';
   const { label: kindLabel, Icon: KindIcon } = KIND_META[item.kind];
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: item.id,
+  });
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  };
 
   return (
-    <div className="flex items-start gap-3 px-4 md:px-5 py-3 hover:bg-surface">
+    <div
+      ref={setNodeRef}
+      style={style}
+      className="flex items-start gap-3 px-4 md:px-5 py-3 hover:bg-surface"
+    >
+      <button
+        type="button"
+        aria-label="Drag to reorder"
+        className="mt-4 shrink-0 cursor-grab touch-none rounded-sm p-1 text-muted-foreground hover:text-foreground active:cursor-grabbing"
+        {...attributes}
+        {...listeners}
+      >
+        <GripVertical className="size-4" strokeWidth={1.75} />
+      </button>
       {item.image_url ? (
         <img
           src={item.image_url}
@@ -165,6 +204,10 @@ export function ReadingListPage() {
   const [importSource, setImportSource] = useState<ReadingListImportSource>('pocket');
   const [importResult, setImportResult] = useState<ReadingListImportResult | null>(null);
   const [importError, setImportError] = useState<string | null>(null);
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+  );
 
   const { data: items = [], isLoading } = useQuery({
     queryKey: ['reading-list', filter],
@@ -226,6 +269,16 @@ export function ReadingListPage() {
     if (index < 0 || target < 0 || target >= ids.length) return;
     [ids[index], ids[target]] = [ids[target], ids[index]];
     reorderMutation.mutate(ids);
+  }
+
+  function handleDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const ids = items.map((item) => item.id);
+    const oldIndex = ids.indexOf(Number(active.id));
+    const newIndex = ids.indexOf(Number(over.id));
+    if (oldIndex < 0 || newIndex < 0) return;
+    reorderMutation.mutate(arrayMove(ids, oldIndex, newIndex));
   }
 
   function handleToggleDone(item: ReadingListItem) {
@@ -351,19 +404,26 @@ export function ReadingListPage() {
           }
         />
       ) : (
-        <div className="divide-y divide-border border-t border-border">
-          {items.map((item, index) => (
-            <ItemCard
-              key={item.id}
-              item={item}
-              isFirst={index === 0}
-              isLast={index === items.length - 1}
-              onMove={handleMove}
-              onToggleDone={handleToggleDone}
-              onDelete={(id) => deleteMutation.mutate(id)}
-            />
-          ))}
-        </div>
+        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+          <SortableContext
+            items={items.map((item) => item.id)}
+            strategy={verticalListSortingStrategy}
+          >
+            <div className="divide-y divide-border border-t border-border">
+              {items.map((item, index) => (
+                <ItemCard
+                  key={item.id}
+                  item={item}
+                  isFirst={index === 0}
+                  isLast={index === items.length - 1}
+                  onMove={handleMove}
+                  onToggleDone={handleToggleDone}
+                  onDelete={(id) => deleteMutation.mutate(id)}
+                />
+              ))}
+            </div>
+          </SortableContext>
+        </DndContext>
       )}
     </div>
   );
