@@ -566,9 +566,36 @@ def _fetch_lobsters_feed(source: SourceDefinition) -> list[dict[str, Any]]:
     return _parse_feed_url(source.url)
 
 
+def _mastodon_title(entry: Any) -> str:
+    """Derive a title from the post body for Mastodon entries, which have no <title>."""
+    raw = entry.get("summary") or entry.get("description") or ""
+    text = clean_html(raw)
+    if not text:
+        return "Untitled"
+    return text[:80].rstrip() + ("…" if len(text) > 80 else "")
+
+
 def _fetch_mastodon_feed(source: SourceDefinition) -> list[dict[str, Any]]:
-    """Fetch a Mastodon user or hashtag RSS feed."""
-    return _parse_feed_url(source.url)
+    """Fetch a Mastodon user or hashtag RSS feed.
+
+    Mastodon hashtag/user RSS entries have no <title> element, so the generic
+    "Untitled" fallback in _parse_feed_url always fires; derive one from the body.
+    """
+    content = _fetch_feed_content(source.url)
+    parsed = feedparser.parse(content)
+    if parsed.bozo and not parsed.entries:
+        exc = getattr(parsed, "bozo_exception", None)
+        msg = f"Feed parse failed: {exc or 'no entries, bozo=True'}"
+        raise FeedFetchError(msg)
+    return [
+        {
+            "url": e.get("link") or e.get("id") or "",
+            "title": e.get("title") or _mastodon_title(e),
+            "description": e.get("summary") or e.get("description") or "",
+            "date": parse_date(e),
+        }
+        for e in parsed.entries
+    ]
 
 
 def _fetch_media_feed(source: SourceDefinition) -> list[dict[str, Any]]:

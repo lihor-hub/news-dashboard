@@ -54,13 +54,32 @@ def test_fetch_lobsters_feed_passthrough() -> None:
         mock_parse.assert_called_once_with("https://lobste.rs/rss")
 
 
-def test_fetch_mastodon_feed_passthrough() -> None:
-    """Test that Mastodon URL is passed through unchanged."""
-    source = _make_source("mastodon_feed", "https://mastodon.social/tags/tech.rss")
-    with patch("news_dashboard.ingest._parse_feed_url") as mock_parse:
-        mock_parse.return_value = [{"url": "test", "title": "Test", "description": ""}]
-        _fetch_mastodon_feed(source)
-        mock_parse.assert_called_once_with("https://mastodon.social/tags/tech.rss")
+def test_mastodon_feed_derives_title_from_summary() -> None:
+    """Title should be derived from entry summary when entry.title is absent."""
+    source = _make_source("mastodon_feed", "https://mastodon.social/tags/technology.rss")
+    body_html = "<p>This is a Mastodon post about open-source software and distributed nets.</p>"
+    fake_entry = {"link": "https://mastodon.social/@user/1", "title": "", "summary": body_html}
+    with (
+        patch("news_dashboard.ingest._fetch_feed_content", return_value=b""),
+        patch("news_dashboard.ingest.feedparser") as mock_fp,
+    ):
+        mock_fp.parse.return_value = Mock(bozo=False, entries=[fake_entry])
+        entries = _fetch_mastodon_feed(source)
+    assert entries[0]["title"] != "Untitled"
+    assert "Mastodon post" in entries[0]["title"]
+
+
+def test_mastodon_feed_falls_back_to_untitled_when_no_body() -> None:
+    """Falls back to 'Untitled' only when summary and description are also absent."""
+    source = _make_source("mastodon_feed", "https://mastodon.social/tags/technology.rss")
+    fake_entry = {"link": "https://mastodon.social/@user/2", "title": "", "summary": ""}
+    with (
+        patch("news_dashboard.ingest._fetch_feed_content", return_value=b""),
+        patch("news_dashboard.ingest.feedparser") as mock_fp,
+    ):
+        mock_fp.parse.return_value = Mock(bozo=False, entries=[fake_entry])
+        entries = _fetch_mastodon_feed(source)
+    assert entries[0]["title"] == "Untitled"
 
 
 def test_ingest_source_routes_to_correct_function() -> None:
