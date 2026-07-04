@@ -212,7 +212,7 @@ def _call_openai(
 
     from openai import OpenAIError  # lazy import — optional dep at import time
 
-    from news_dashboard.ai_client import chat_create, get_chat_client, get_prompt
+    from news_dashboard.ai_client import chat_create, get_chat_client, get_prompt, observe
     from news_dashboard.ai_memory.service import format_memories_for_prompt
 
     prompt = get_prompt("briefing-system", fallback=_BRIEFING_SYSTEM_PROMPT)
@@ -227,36 +227,42 @@ def _call_openai(
     user = "Articles:\n\n" + "\n\n".join(article_lines)
 
     client = get_chat_client(api_key=api_key, base_url=base_url)
-    try:
-        response = chat_create(
-            client,
-            name="briefing-generation",
-            tags=["briefing"],
-            user_id=user_id,
-            prompt=prompt,
-            model=model,
-            messages=[
-                {"role": "system", "content": system},
-                {"role": "user", "content": user},
-            ],
-            response_format={"type": "json_object"},
-            max_tokens=2048,
-        )
-    except OpenAIError as exc:
-        # Connection refused, auth failure, or the model/gateway rejecting the
-        # request (e.g. an endpoint that does not support JSON response_format).
-        # Surface the upstream reason instead of an opaque 500.
-        endpoint = base_url or "the default OpenAI endpoint"
-        msg = f"Briefing AI request to {endpoint} failed: {exc}"
-        raise BriefingGenerationError(msg) from exc
-    from news_dashboard.ai_client import strip_markdown_fence
+    # Grouped under one Langfuse trace so its id can carry user thumbs feedback
+    # (see the ``ai_feedback`` module) even though this helper only returns JSON.
+    with observe("briefing-generation", input={"model": model}) as trace:
+        try:
+            response = chat_create(
+                client,
+                name="briefing-generation",
+                tags=["briefing"],
+                user_id=user_id,
+                prompt=prompt,
+                model=model,
+                messages=[
+                    {"role": "system", "content": system},
+                    {"role": "user", "content": user},
+                ],
+                response_format={"type": "json_object"},
+                max_tokens=2048,
+            )
+        except OpenAIError as exc:
+            # Connection refused, auth failure, or the model/gateway rejecting the
+            # request (e.g. an endpoint that does not support JSON response_format).
+            # Surface the upstream reason instead of an opaque 500.
+            endpoint = base_url or "the default OpenAI endpoint"
+            msg = f"Briefing AI request to {endpoint} failed: {exc}"
+            raise BriefingGenerationError(msg) from exc
+        from news_dashboard.ai_client import strip_markdown_fence
 
-    text = strip_markdown_fence(response.choices[0].message.content or "{}")
-    try:
-        return json.loads(text)  # type: ignore[no-any-return]
-    except json.JSONDecodeError as exc:
-        msg = f"AI returned invalid JSON: {exc}"
-        raise BriefingGenerationError(msg) from exc
+        text = strip_markdown_fence(response.choices[0].message.content or "{}")
+        try:
+            parsed: dict[str, Any] = json.loads(text)
+        except json.JSONDecodeError as exc:
+            msg = f"AI returned invalid JSON: {exc}"
+            raise BriefingGenerationError(msg) from exc
+        trace.update_output(parsed)
+    parsed["_trace_id"] = trace.trace_id
+    return parsed
 
 
 def _validate_content(raw: dict[str, Any], candidate_ids: set[int]) -> dict[str, Any]:
@@ -312,6 +318,7 @@ def _save_briefing(  # noqa: PLR0913
     user_id: int | None = None,
     focus_prompt: str | None = None,
     reading_list_items: list[dict[str, Any]] | None = None,
+    trace_id: str | None = None,
 ) -> dict[str, Any]:
     """Insert briefing + article links; return the full briefing dict."""
     title = content.get("title") or ""
@@ -328,9 +335,9 @@ def _save_briefing(  # noqa: PLR0913
             """
             INSERT INTO briefings(
                 scope, since_at, until_at, status,
-                title, summary, content, model, user_id, focus_prompt
+                title, summary, content, model, user_id, focus_prompt, trace_id
             )
-            VALUES (%s, %s, %s, %s, %s, %s, %s::jsonb, %s, %s, %s)
+            VALUES (%s, %s, %s, %s, %s, %s, %s::jsonb, %s, %s, %s, %s)
             RETURNING id
             """,
             (
@@ -344,6 +351,7 @@ def _save_briefing(  # noqa: PLR0913
                 model,
                 user_id,
                 focus_prompt,
+                trace_id,
             ),
         ).fetchone()
         if row is None:
@@ -673,6 +681,8 @@ def generate_briefing(  # noqa: PLR0913, PLR0915
         latency_ms=int((time.monotonic() - t0) * 1000),
     )
 
+    trace_id = raw_content.pop("_trace_id", None)
+
     # Stage 4: citation verification.
     try:
         content = _validate_content(raw_content, candidate_ids)
@@ -704,6 +714,7 @@ def generate_briefing(  # noqa: PLR0913, PLR0915
             user_id=user_id,
             focus_prompt=focus_prompt,
             reading_list_items=reading_list_items,
+            trace_id=trace_id,
         )
     except Exception as exc:
         _record(briefing_agent.STAGE_ASSEMBLY, "failed", error=str(exc))

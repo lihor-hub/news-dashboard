@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { RefreshCw, Headphones, ChevronDown, ChevronUp, Sparkles, AlertCircle } from 'lucide-react';
+import { AiFeedbackThumbs } from '@/components/AiFeedbackThumbs';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { formatDate, formatWindow } from '@/lib/briefingUtils';
@@ -146,10 +147,16 @@ export function BriefingView({
           <h2 className="text-[22px] font-semibold tracking-tight leading-tight break-words">
             {briefing.title}
           </h2>
-          <p className="text-xs text-muted-foreground mt-1">
-            {formatDate(briefing.created_at)} · {formatWindow(briefing.since_at, briefing.until_at)}{' '}
-            · {articleCount} {articleCount === 1 ? 'article' : 'articles'}
-          </p>
+          <div className="text-xs text-muted-foreground mt-1 flex items-center gap-2">
+            <span>
+              {formatDate(briefing.created_at)} ·{' '}
+              {formatWindow(briefing.since_at, briefing.until_at)} · {articleCount}{' '}
+              {articleCount === 1 ? 'article' : 'articles'}
+            </span>
+            {briefing.status === 'complete' && (
+              <AiFeedbackThumbs subjectType="briefing" subjectId={briefing.id} />
+            )}
+          </div>
           {afterMeta}
         </div>
         {onGenerate && (

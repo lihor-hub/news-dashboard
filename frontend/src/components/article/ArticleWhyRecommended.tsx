@@ -1,13 +1,16 @@
 import { useState } from 'react';
 import { Lightbulb } from 'lucide-react';
+import { AiFeedbackThumbs } from '@/components/AiFeedbackThumbs';
 import { recommendationExplanation } from '@/lib/recommendation';
 import type { RecommendationSignals } from '@/lib/workflowTypes';
 
 export function ArticleWhyRecommended({
+  articleId,
   aiExplanation,
   score,
   signals,
 }: {
+  articleId: number;
   aiExplanation: string | null | undefined;
   score: number | null | undefined;
   signals: RecommendationSignals | null | undefined;
@@ -16,15 +19,18 @@ export function ArticleWhyRecommended({
 
   return (
     <div className="mt-3">
-      <button
-        onClick={() => setShowWhyRecommended((v) => !v)}
-        data-testid="why-recommended-button"
-        aria-expanded={showWhyRecommended}
-        className="inline-flex items-center gap-1.5 rounded-md border border-border bg-surface/40 px-3 py-1.5 text-[12px] font-medium text-muted-foreground hover:text-foreground hover:bg-surface transition-colors"
-      >
-        <Lightbulb className="size-3.5" strokeWidth={1.75} />
-        {showWhyRecommended ? 'Hide why recommended' : 'Why recommended?'}
-      </button>
+      <div className="flex items-center gap-2">
+        <button
+          onClick={() => setShowWhyRecommended((v) => !v)}
+          data-testid="why-recommended-button"
+          aria-expanded={showWhyRecommended}
+          className="inline-flex items-center gap-1.5 rounded-md border border-border bg-surface/40 px-3 py-1.5 text-[12px] font-medium text-muted-foreground hover:text-foreground hover:bg-surface transition-colors"
+        >
+          <Lightbulb className="size-3.5" strokeWidth={1.75} />
+          {showWhyRecommended ? 'Hide why recommended' : 'Why recommended?'}
+        </button>
+        <AiFeedbackThumbs subjectType="recommendation" subjectId={articleId} />
+      </div>
       {showWhyRecommended &&
         (() => {
           const explanation = recommendationExplanation({ score, signals });

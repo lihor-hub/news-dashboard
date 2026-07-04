@@ -750,7 +750,7 @@ def test_call_openai_parses_valid_json(monkeypatch: pytest.MonkeyPatch) -> None:
         [{"id": 1, "title": "A", "summary": "s", "source_name": "S", "category": "c"}],
         model="gpt-x",
     )
-    assert result == {"title": "T", "sections": []}
+    assert result == {"title": "T", "sections": [], "_trace_id": None}
 
 
 def test_call_openai_raises_on_invalid_json(monkeypatch: pytest.MonkeyPatch) -> None:
