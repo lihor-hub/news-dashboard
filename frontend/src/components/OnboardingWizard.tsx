@@ -79,9 +79,13 @@ export function OnboardingWizard({ open, onClose }: Props) {
   }
 
   function handleApply() {
+    const disabledSlugs = recommendations
+      .map((rec) => rec.slug)
+      .filter((slug) => !selectedSlugs.has(slug));
     saveMutation.mutate({
-      interest_ids: [...selectedInterests],
-      enabled_slugs: [...selectedSlugs],
+      interests: [...selectedInterests],
+      enabled_source_slugs: [...selectedSlugs],
+      disabled_source_slugs: disabledSlugs,
     });
   }
 

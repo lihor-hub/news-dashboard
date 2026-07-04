@@ -214,6 +214,45 @@ def test_save_onboarding_interests_persists_profile_and_source_choices(
     }
 
 
+def test_onboarding_disabled_source_excluded_from_articles(
+    pg_clean: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("DATABASE_URL", pg_clean)
+    sync_sources(pg_clean)
+    user_id = _make_user(pg_clean)
+
+    with connect(pg_clean) as conn:
+        conn.execute(
+            """
+            INSERT INTO articles(url, canonical_url, title, source_slug, source_name,
+              category, kind, state)
+            VALUES (%s, %s, 'Disabled source article', 'openai-blog', 'openai-blog',
+              'tech', 'rss_feed', 'today')
+            """,
+            (
+                "https://example.com/onboarding-disabled",
+                "https://example.com/onboarding-disabled",
+            ),
+        )
+
+    with _api_client(user_id) as client:
+        response = client.post(
+            "/api/onboarding/interests",
+            json={
+                "interests": ["agents"],
+                "enabled_source_slugs": ["langgraph-releases"],
+                "disabled_source_slugs": ["openai-blog"],
+            },
+        )
+        assert response.status_code == 200
+
+        articles_response = client.get("/api/articles", params={"limit": 500})
+
+    assert articles_response.status_code == 200
+    titles = {item["title"] for item in articles_response.json()["items"]}
+    assert "Disabled source article" not in titles
+
+
 def test_new_user_has_no_explicit_global_source_subscriptions(
     pg_clean: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
