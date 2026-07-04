@@ -1,190 +1,28 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import {
-  ArrowLeft,
-  ChevronLeft,
-  ChevronRight,
-  ExternalLink,
-  Star,
-  Check,
-  Clock,
-  X as XIcon,
-  Archive,
-  AlertCircle,
-  Loader2,
-  Volume2,
-  Square,
-  Share2,
-  Highlighter,
-  Sparkles,
-  Lightbulb,
-  Scale,
-  Download,
-} from 'lucide-react';
+import { ArrowLeft, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
-import {
-  fetchArticle,
-  fetchArticleBody,
-  createArticleHighlight,
-  deleteArticleHighlight,
-  fetchArticleAudioUrl,
-  fetchArticleHighlights,
-  fetchArticleInsights,
-  fetchArticlePerspectives,
-  fetchSharedArticle,
-  fetchSharedArticleBody,
-} from '@/api';
+import { fetchArticle, fetchArticleBody, fetchSharedArticle, fetchSharedArticleBody } from '@/api';
 import { adaptArticle, patchArticleState, patchArticleStar } from '@/api/workflowApi';
 import type { WorkflowState } from '@/lib/workflowTypes';
-import { formatDate, readingTime, signalLabel } from '@/lib/format';
 import { getReaderList } from '@/lib/readerList';
-import { cacheArticleBody, isOfflineCacheSupported } from '@/lib/offline';
-import { recommendationExplanation } from '@/lib/recommendation';
+import { cacheArticleBody } from '@/lib/offline';
 import { trackArticleOpen, trackArticleClose } from '@/lib/analytics';
-import { cn } from '@/lib/utils';
+import { useArticleAudio } from '@/hooks/useArticleAudio';
+import { useArticleKeyboardShortcuts } from '@/hooks/useArticleKeyboardShortcuts';
+import { useArticleSwipeNav } from '@/hooks/useArticleSwipeNav';
+import { useArticleSharing } from '@/hooks/useArticleSharing';
 import { ShareDialog } from '@/components/ShareDialog';
-import { ArticleTags } from '@/components/article/ArticleTags';
-
-const LANGUAGE_NAMES: Record<string, string> = {
-  en: 'English',
-  ja: 'Japanese',
-  zh: 'Chinese',
-  ru: 'Russian',
-  fr: 'French',
-  de: 'German',
-  es: 'Spanish',
-  ko: 'Korean',
-  it: 'Italian',
-  pt: 'Portuguese',
-  vi: 'Vietnamese',
-  ar: 'Arabic',
-  tr: 'Turkish',
-};
-
-function renderBody(md: string): string {
-  const escape = (s: string) =>
-    s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
-  const decodeEscapedMarkdown = (s: string) =>
-    s
-      .replace(/&quot;/g, '"')
-      .replace(/&lt;/g, '<')
-      .replace(/&gt;/g, '>')
-      .replace(/&amp;/g, '&');
-  const safeHref = (rawHref: string): string | null => {
-    const href = decodeEscapedMarkdown(rawHref).trim();
-    if (!href || /[\s\p{Cc}]/u.test(href)) return null;
-
-    try {
-      const url = new URL(href);
-      return url.protocol === 'http:' || url.protocol === 'https:' ? url.href : null;
-    } catch {
-      return null;
-    }
-  };
-  const lines = md.split('\n');
-  let html = '';
-  let inCode = false;
-  let inList = false;
-  const para: string[] = [];
-
-  const flushPara = () => {
-    if (para.length) {
-      html += `<p>${inline(para.join(' '))}</p>`;
-      para.length = 0;
-    }
-  };
-
-  const inline = (s: string) =>
-    s
-      .replace(/`([^`]+)`/g, (_, t: string) => `<code>${escape(t)}</code>`)
-      .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
-      .replace(/\[([^\]]+)\]\((.+)\)/g, (_, label: string, rawHref: string) => {
-        const href = safeHref(rawHref);
-        return href
-          ? `<a href="${escape(href)}" target="_blank" rel="noopener noreferrer">${label}</a>`
-          : label;
-      });
-
-  for (const raw of lines) {
-    if (raw.startsWith('```')) {
-      if (inCode) {
-        html += '</code></pre>';
-        inCode = false;
-      } else {
-        flushPara();
-        html += '<pre><code>';
-        inCode = true;
-      }
-      continue;
-    }
-    if (inCode) {
-      html += escape(raw) + '\n';
-      continue;
-    }
-    if (raw.startsWith('## ')) {
-      flushPara();
-      if (inList) {
-        html += '</ul>';
-        inList = false;
-      }
-      html += `<h2>${inline(escape(raw.slice(3)))}</h2>`;
-      continue;
-    }
-    if (raw.startsWith('- ')) {
-      flushPara();
-      if (!inList) {
-        html += '<ul>';
-        inList = true;
-      }
-      html += `<li>${inline(escape(raw.slice(2)))}</li>`;
-      continue;
-    }
-    if (raw.trim() === '') {
-      flushPara();
-      if (inList) {
-        html += '</ul>';
-        inList = false;
-      }
-      continue;
-    }
-    para.push(escape(raw));
-  }
-  flushPara();
-  if (inList) html += '</ul>';
-  if (inCode) html += '</code></pre>';
-  return html;
-}
-
-function ActionBtn({
-  onClick,
-  icon: Icon,
-  label,
-  active,
-  disabled,
-}: {
-  onClick: () => void;
-  icon: React.ComponentType<{ className?: string; strokeWidth?: number }>;
-  label: string;
-  active?: boolean;
-  disabled?: boolean;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      disabled={disabled}
-      className={cn(
-        'flex flex-col items-center justify-center gap-0.5 py-2 rounded-md text-[11px] font-medium transition-colors',
-        active ? 'text-star' : 'text-muted-foreground hover:text-foreground hover:bg-surface',
-        disabled && 'opacity-30 cursor-not-allowed hover:bg-transparent'
-      )}
-    >
-      <Icon className={cn('size-5', active && 'fill-current')} strokeWidth={1.75} />
-      {label}
-    </button>
-  );
-}
+import { ArticleInsights } from '@/components/article/ArticleInsights';
+import { ArticlePerspectives } from '@/components/article/ArticlePerspectives';
+import { ArticleWhyRecommended } from '@/components/article/ArticleWhyRecommended';
+import { ArticleHighlights } from '@/components/article/ArticleHighlights';
+import { ArticleActionBar } from '@/components/article/ArticleActionBar';
+import { ArticleReaderHeader } from '@/components/article/ArticleReaderHeader';
+import { ArticleMetaHeader } from '@/components/article/ArticleMetaHeader';
+import { ArticleBody } from '@/components/article/ArticleBody';
+import { ArticleSelectionActions } from '@/components/article/ArticleSelectionActions';
 
 export function ArticlePage() {
   const { id, shareId } = useParams<{ id?: string; shareId?: string }>();
@@ -242,14 +80,6 @@ export function ArticlePage() {
     return () => trackArticleClose(articleId);
   }, [rawArticle]);
 
-  const insightsMutation = useMutation({
-    mutationFn: () => fetchArticleInsights(String(article!.id)),
-  });
-
-  const perspectivesMutation = useMutation({
-    mutationFn: () => fetchArticlePerspectives(String(article!.id)),
-  });
-
   // Prev/next navigation from sessionStorage list
   const readerList = getReaderList();
   const idx = readerList && id ? readerList.ids.indexOf(String(id)) : -1;
@@ -264,6 +94,8 @@ export function ArticlePage() {
   const goNext = useCallback(() => {
     if (nextId) void navigate(`/a/${nextId}`, { replace: true });
   }, [navigate, nextId]);
+
+  const { swipeDx, touchHandlers } = useArticleSwipeNav(goPrev, goNext);
 
   // Triage mutations — inline (no extra hook so we stay self-contained)
   const doAction = useCallback(
@@ -311,161 +143,30 @@ export function ArticlePage() {
     }
   }
 
-  // TTS audio player
-  type AudioState = 'idle' | 'loading' | 'playing' | 'paused';
-  const [audioState, setAudioState] = useState<AudioState>('idle');
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-  const audioUrlRef = useRef<string | null>(null);
+  const { audioState, handleListen } = useArticleAudio(id);
 
-  const audioMutation = useMutation({
-    mutationFn: () => fetchArticleAudioUrl(id!),
-    onSuccess: (url) => {
-      audioUrlRef.current = url;
-      const audio = new Audio(url);
-      audioRef.current = audio;
-      audio.onended = () => setAudioState('paused');
-      audio.onerror = () => {
-        toast.error('Audio playback failed');
-        setAudioState('idle');
-      };
-      void audio.play();
-      setAudioState('playing');
-    },
-    onError: () => {
-      toast.error('Could not load audio');
-      setAudioState('idle');
-    },
+  const {
+    shareOpen,
+    setShareOpen,
+    selectedShareText,
+    pendingShareHighlight,
+    highlights,
+    deleteHighlight,
+    handleShare,
+    updateSelectedShareText,
+    handleShareSelected,
+    handleHighlightSelected,
+  } = useArticleSharing({ id, shareId, article });
+
+  useArticleKeyboardShortcuts({
+    hasArticle: Boolean(article),
+    articleUrl: article?.url,
+    goBack,
+    goPrev,
+    goNext,
+    doAction: (state, label) => void doAction(state, label),
+    doStar: () => void doStar(),
   });
-
-  useEffect(() => {
-    return () => {
-      if (audioRef.current) {
-        audioRef.current.pause();
-        audioRef.current = null;
-      }
-      if (audioUrlRef.current) {
-        URL.revokeObjectURL(audioUrlRef.current);
-        audioUrlRef.current = null;
-      }
-    };
-  }, []);
-
-  function handleListen() {
-    if (audioState === 'loading') return;
-    if (audioState === 'playing') {
-      audioRef.current?.pause();
-      setAudioState('paused');
-      return;
-    }
-    if (audioState === 'paused' && audioRef.current) {
-      void audioRef.current.play();
-      setAudioState('playing');
-      return;
-    }
-    setAudioState('loading');
-    audioMutation.mutate();
-  }
-
-  const [shareOpen, setShareOpen] = useState(false);
-  const [selectedShareText, setSelectedShareText] = useState('');
-  const [pendingShareHighlight, setPendingShareHighlight] = useState<{ text: string } | null>(null);
-  const highlightsQuery = useQuery({
-    queryKey: ['article-highlights', id],
-    queryFn: () => fetchArticleHighlights(id!),
-    enabled: Boolean(id) && !shareId,
-  });
-
-  const createHighlightMutation = useMutation({
-    mutationFn: ({ text, note }: { text: string; note: string | null }) =>
-      createArticleHighlight(id!, {
-        highlighted_text: text,
-        offset_chars: article?.body?.indexOf(text) ?? 0,
-        note,
-      }),
-    onSuccess: () => {
-      setSelectedShareText('');
-      window.getSelection()?.removeAllRanges();
-      void queryClient.invalidateQueries({ queryKey: ['article-highlights', id] });
-      toast('Highlight saved');
-    },
-    onError: () => toast.error('Could not save highlight'),
-  });
-
-  const deleteHighlightMutation = useMutation({
-    mutationFn: (highlightId: number) => deleteArticleHighlight(id!, highlightId),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['article-highlights', id] });
-      toast('Highlight deleted');
-    },
-    onError: () => toast.error('Could not delete highlight'),
-  });
-
-  function handleShare() {
-    if (!article) return;
-    setPendingShareHighlight(null);
-    setShareOpen(true);
-  }
-
-  function selectedTextWithinReader(): string {
-    const selection = window.getSelection();
-    const text = selection?.toString().trim() ?? '';
-    if (!selection || !text || selection.rangeCount === 0) return '';
-    const reader = document.querySelector('.reader-prose');
-    const container = selection.getRangeAt(0).commonAncestorContainer;
-    if (!reader?.contains(container)) return '';
-    return text;
-  }
-
-  function updateSelectedShareText() {
-    setSelectedShareText(selectedTextWithinReader());
-  }
-
-  function handleShareSelected() {
-    if (!article || !selectedShareText) return;
-    setPendingShareHighlight({ text: selectedShareText });
-    setShareOpen(true);
-  }
-
-  function handleHighlightSelected() {
-    if (!article || !selectedShareText || shareId) return;
-    const note = window.prompt('Add a private note to this highlight?')?.trim() ?? null;
-    createHighlightMutation.mutate({ text: selectedShareText, note });
-  }
-
-  // On-demand recommendation explanation — kept collapsed by default so the
-  // reader surface stays clean until the user asks why the article was ranked.
-  const [showWhyRecommended, setShowWhyRecommended] = useState(false);
-
-  // Touch swipe
-  const swipeRef = useRef<{ x: number; y: number } | null>(null);
-  const [swipeDx, setSwipeDx] = useState(0);
-
-  // Keyboard shortcuts
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      const t = e.target as HTMLElement;
-      if (t?.tagName === 'INPUT' || t?.tagName === 'TEXTAREA' || t?.isContentEditable) return;
-      if (e.metaKey || e.ctrlKey || e.altKey) return;
-      if (e.key === 'Escape') goBack();
-      else if (e.key === 'ArrowLeft') goPrev();
-      else if (e.key === 'ArrowRight') goNext();
-      else if ((e.key === 'r' || e.key === 'd') && article) void doAction('done', 'Done');
-      else if (e.key === 'l' && article) void doAction('later', 'Later');
-      else if (e.key === 's' && article) void doStar();
-      else if (e.key === 'x' && article) void doAction('skipped', 'Skipped');
-      else if (e.key === 'e' && article) void doAction('archived', 'Archived');
-      else if (e.key === 'o' && article) window.open(article.url, '_blank', 'noopener,noreferrer');
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [goBack, goPrev, goNext, article, doAction, doStar]);
-
-  const signalColor =
-    article?.signal === 'high'
-      ? 'text-signal-high'
-      : article?.signal === 'mid'
-        ? 'text-signal-mid'
-        : 'text-signal-low';
 
   if (isLoading || !article) {
     return (
@@ -500,77 +201,19 @@ export function ArticlePage() {
           sibling outside this wrapper so its position:fixed always resolves
           against the viewport, even while the entry transform is active. */}
       <div className="flex-1 flex flex-col motion-slide-in-right">
-        {/* Sticky header */}
-        <header className="sticky top-0 z-20 border-b border-border bg-background/90 backdrop-blur">
-          <div className="mx-auto max-w-2xl flex h-12 items-center justify-between px-3">
-            <button
-              onClick={goBack}
-              className="inline-flex items-center gap-1 px-2 py-1 -ml-1 rounded-md text-sm text-muted-foreground hover:text-foreground hover:bg-surface"
-            >
-              <ChevronLeft className="size-4" /> Back
-            </button>
-            <div className="flex items-center gap-1">
-              <button
-                onClick={goPrev}
-                disabled={!prevId}
-                className="inline-flex size-8 items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-surface disabled:opacity-30"
-                aria-label="Previous article"
-              >
-                <ChevronLeft className="size-4" />
-              </button>
-              <button
-                onClick={goNext}
-                disabled={!nextId}
-                className="inline-flex size-8 items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-surface disabled:opacity-30"
-                aria-label="Next article"
-              >
-                <ChevronRight className="size-4" />
-              </button>
-              <a
-                href={article.url}
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex size-8 items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-surface"
-                aria-label="Open original"
-              >
-                <ExternalLink className="size-4" />
-              </a>
-              {isOfflineCacheSupported() && !shareId && (
-                <button
-                  onClick={() => void saveCurrentArticleOffline()}
-                  className="inline-flex size-8 items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-surface"
-                  aria-label="Save for offline"
-                >
-                  <Download className="size-4" />
-                </button>
-              )}
-            </div>
-          </div>
-        </header>
+        <ArticleReaderHeader
+          goBack={goBack}
+          goPrev={goPrev}
+          goNext={goNext}
+          prevId={prevId}
+          nextId={nextId}
+          articleUrl={article.url}
+          isShared={Boolean(shareId)}
+          onSaveOffline={() => void saveCurrentArticleOffline()}
+        />
 
         {/* Article content */}
-        <div
-          className="flex-1 pb-32 overflow-x-hidden"
-          onTouchStart={(e) => {
-            swipeRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
-          }}
-          onTouchMove={(e) => {
-            if (!swipeRef.current) return;
-            const dx = e.touches[0].clientX - swipeRef.current.x;
-            const dy = Math.abs(e.touches[0].clientY - swipeRef.current.y);
-            if (dy < 40) setSwipeDx(dx);
-          }}
-          onTouchEnd={() => {
-            if (swipeDx < -80) goNext();
-            else if (swipeDx > 80) goPrev();
-            setSwipeDx(0);
-            swipeRef.current = null;
-          }}
-          onTouchCancel={() => {
-            swipeRef.current = null;
-            setSwipeDx(0);
-          }}
-        >
+        <div className="flex-1 pb-32 overflow-x-hidden" {...touchHandlers}>
           <article
             className="mx-auto max-w-2xl px-5 pt-6"
             style={{
@@ -578,173 +221,18 @@ export function ArticlePage() {
               transition: swipeDx ? 'none' : 'transform 0.2s ease',
             }}
           >
-            {/* Meta line */}
-            <div className="text-[11px] text-subtle flex items-center gap-1.5 flex-wrap">
-              <span className="font-medium text-muted-foreground">{article.sourceName}</span>
-              <span>·</span>
-              <span>{article.category}</span>
-              <span>·</span>
-              <span>{formatDate(article.publishedAt)}</span>
-              <span>·</span>
-              <span className={cn('font-medium', signalColor)}>{signalLabel(article.signal)}</span>
-              <span>·</span>
-              <a
-                href={article.url}
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex items-center gap-0.5 hover:text-foreground"
-                aria-label="Open original article"
-              >
-                <ExternalLink className="size-3" />
-                Open original
-              </a>
-              {article.detectedLang && article.detectedLang !== 'en' && article.originalTitle && (
-                <>
-                  <span>·</span>
-                  <button
-                    onClick={() => setShowOriginal(!showOriginal)}
-                    className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-surface border border-border text-[10px] font-medium text-accent hover:bg-surface-hover hover:text-foreground transition-colors"
-                  >
-                    {showOriginal
-                      ? `Show English (Translated from ${LANGUAGE_NAMES[article.detectedLang] || article.detectedLang.toUpperCase()})`
-                      : `Show Original (${article.detectedLang.toUpperCase()} → EN)`}
-                  </button>
-                </>
-              )}
-            </div>
-
-            {/* Title */}
-            <h1 className="mt-3 text-[26px] md:text-[30px] font-semibold tracking-tight leading-tight">
-              {showOriginal && article.originalTitle ? article.originalTitle : article.title}
-            </h1>
-
-            {/* User-defined tags — independent of workflow state */}
-            {!shareId && <ArticleTags articleId={article.id} />}
-
-            {/* Reading time — only shown once body is available */}
-            {article.bodyStatus === 'ok' && article.body && (
-              <div className="mt-2 flex items-center gap-1 text-[12px] text-muted-foreground">
-                <Clock className="size-3.5" strokeWidth={1.75} />
-                <span>{readingTime(article.body)} min read</span>
-              </div>
-            )}
+            <ArticleMetaHeader
+              article={article}
+              isShared={Boolean(shareId)}
+              showOriginal={showOriginal}
+              setShowOriginal={setShowOriginal}
+            />
 
             {/* AI insights — on-demand button → loading → bullet list */}
-            {insightsMutation.isIdle && (
-              <button
-                onClick={() => insightsMutation.mutate()}
-                data-testid="insights-button"
-                className="mt-4 inline-flex items-center gap-1.5 rounded-md border border-border bg-surface/40 px-3 py-1.5 text-[12px] font-medium text-muted-foreground hover:text-foreground hover:bg-surface transition-colors"
-              >
-                <Sparkles className="size-3.5" strokeWidth={1.75} />
-                Key takeaways
-              </button>
-            )}
-            {insightsMutation.isPending && (
-              <div className="mt-4 rounded-lg border border-border bg-surface/40 px-4 py-3">
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <Loader2 className="size-3.5 animate-spin" />
-                  <span>Analyzing…</span>
-                </div>
-              </div>
-            )}
-            {insightsMutation.isSuccess && insightsMutation.data.length > 0 && (
-              <div
-                className="mt-4 rounded-lg border border-border bg-surface/40 px-4 py-3"
-                data-testid="insights-section"
-              >
-                <div className="text-[10px] font-medium uppercase tracking-wider text-subtle mb-2">
-                  Key takeaways
-                </div>
-                <ul className="space-y-1.5">
-                  {insightsMutation.data.map((bullet, i) => (
-                    <li
-                      key={i}
-                      className="flex items-start gap-2 text-[13px] leading-snug text-foreground"
-                    >
-                      <span className="mt-0.5 shrink-0 text-accent">•</span>
-                      <span>{bullet}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
+            <ArticleInsights articleId={String(article.id)} />
 
             {/* Context & Perspectives — on-demand AI fact-check widget */}
-            {perspectivesMutation.isIdle && (
-              <button
-                onClick={() => perspectivesMutation.mutate()}
-                data-testid="perspectives-button"
-                className="mt-4 inline-flex items-center gap-1.5 rounded-md border border-border bg-surface/40 px-3 py-1.5 text-[12px] font-medium text-muted-foreground hover:text-foreground hover:bg-surface transition-colors"
-              >
-                <Scale className="size-3.5" strokeWidth={1.75} />
-                Context &amp; Perspectives
-              </button>
-            )}
-            {perspectivesMutation.isPending && (
-              <div className="mt-4 rounded-lg border border-border bg-surface/40 px-4 py-3">
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <Loader2 className="size-3.5 animate-spin" />
-                  <span>Analyzing perspectives…</span>
-                </div>
-              </div>
-            )}
-            {perspectivesMutation.isSuccess && (
-              <div
-                className="mt-4 rounded-lg border border-border bg-surface/40 px-4 py-4"
-                data-testid="perspectives-section"
-              >
-                <div className="flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wider text-subtle mb-3">
-                  <Scale className="size-3" strokeWidth={2} />
-                  Context &amp; Perspectives
-                </div>
-                {[
-                  {
-                    label: 'Facts Verified',
-                    items: perspectivesMutation.data.verified_facts,
-                    color: 'text-emerald-500',
-                  },
-                  {
-                    label: 'Missing Context',
-                    items: perspectivesMutation.data.omissions,
-                    color: 'text-amber-500',
-                  },
-                  {
-                    label: 'Differing Opinions',
-                    items: perspectivesMutation.data.alternative_perspectives,
-                    color: 'text-blue-400',
-                  },
-                ]
-                  .filter((section) => section.items.length > 0)
-                  .map((section) => (
-                    <div key={section.label} className="mb-3 last:mb-0">
-                      <div
-                        className={`text-[10px] font-semibold uppercase tracking-wide mb-1 ${section.color}`}
-                      >
-                        {section.label}
-                      </div>
-                      <ul className="space-y-1">
-                        {section.items.map((item, i) => (
-                          <li
-                            key={i}
-                            className="flex items-start gap-2 text-[13px] leading-snug text-foreground"
-                          >
-                            <span className={`mt-0.5 shrink-0 ${section.color}`}>•</span>
-                            <span>{item}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  ))}
-                {perspectivesMutation.data.verified_facts.length === 0 &&
-                  perspectivesMutation.data.omissions.length === 0 &&
-                  perspectivesMutation.data.alternative_perspectives.length === 0 && (
-                    <p className="text-[13px] text-muted-foreground">
-                      No additional context available for this article.
-                    </p>
-                  )}
-              </div>
-            )}
+            <ArticlePerspectives articleId={String(article.id)} />
 
             {/* Why this matters */}
             <div className="mt-4 rounded-lg border-l-2 border-accent bg-surface/60 px-4 py-3">
@@ -754,213 +242,45 @@ export function ArticlePage() {
               <p className="text-[14px] leading-snug text-foreground">{article.reason}</p>
             </div>
 
-            {/* Why recommended — on-demand explanation of the personalized ranking.
-                Collapsed by default to keep the reader clean; expands to concise
-                reasons naming the real factors (affinity, similarity, freshness,
-                novelty) or a useful fallback when no breakdown is available. */}
-            <div className="mt-3">
-              <button
-                onClick={() => setShowWhyRecommended((v) => !v)}
-                data-testid="why-recommended-button"
-                aria-expanded={showWhyRecommended}
-                className="inline-flex items-center gap-1.5 rounded-md border border-border bg-surface/40 px-3 py-1.5 text-[12px] font-medium text-muted-foreground hover:text-foreground hover:bg-surface transition-colors"
-              >
-                <Lightbulb className="size-3.5" strokeWidth={1.75} />
-                {showWhyRecommended ? 'Hide why recommended' : 'Why recommended?'}
-              </button>
-              {showWhyRecommended &&
-                (() => {
-                  const aiExplanation = article.recommendationExplanation;
-                  const explanation = recommendationExplanation({
-                    score: article.recommendationScore,
-                    signals: article.recommendationSignals,
-                  });
-                  return (
-                    <div
-                      className="mt-2 rounded-lg border border-border bg-surface/40 px-4 py-3"
-                      data-testid="why-recommended-section"
-                    >
-                      <div className="text-[10px] font-medium uppercase tracking-wider text-subtle mb-2">
-                        Why recommended
-                      </div>
-                      {aiExplanation ? (
-                        <p
-                          className="text-[13px] leading-snug text-foreground"
-                          data-testid="why-recommended-ai-explanation"
-                        >
-                          {aiExplanation}
-                        </p>
-                      ) : (
-                        <ul className="space-y-1.5">
-                          {explanation.reasons.map((reason, i) => (
-                            <li
-                              key={i}
-                              className="flex items-start gap-2 text-[13px] leading-snug text-foreground"
-                            >
-                              <span className="mt-0.5 shrink-0 text-accent">•</span>
-                              <span>{reason}</span>
-                            </li>
-                          ))}
-                        </ul>
-                      )}
-                    </div>
-                  );
-                })()}
-            </div>
+            {/* Why recommended — on-demand explanation of the personalized ranking */}
+            <ArticleWhyRecommended
+              aiExplanation={article.recommendationExplanation}
+              score={article.recommendationScore}
+              signals={article.recommendationSignals}
+            />
 
-            {/* Body */}
             <div className="mt-8">
-              {bodyLoading ? (
-                <div className="flex items-center gap-2 text-sm text-muted-foreground py-12">
-                  <Loader2 className="size-4 animate-spin" /> Loading article…
-                </div>
-              ) : article.bodyStatus === 'error' || !article.body ? (
-                <div className="rounded-lg border border-border bg-surface px-4 py-5">
-                  <div className="flex items-start gap-2 mb-2">
-                    <AlertCircle className="size-4 mt-0.5 text-destructive shrink-0" />
-                    <div className="text-sm font-medium text-foreground">
-                      Couldn't extract article text
-                    </div>
-                  </div>
-                  <p className="text-sm text-muted-foreground mb-4">{article.summary}</p>
-                  <a
-                    href={article.url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="inline-flex items-center gap-1.5 rounded-md bg-foreground text-background px-3 py-1.5 text-sm font-medium hover:opacity-90"
-                  >
-                    Open original <ExternalLink className="size-3.5" />
-                  </a>
-                </div>
-              ) : (
-                <div
-                  className="reader-prose"
-                  onMouseUp={updateSelectedShareText}
-                  onKeyUp={updateSelectedShareText}
-                  dangerouslySetInnerHTML={{
-                    __html: renderBody(
-                      showOriginal && article.originalBody ? article.originalBody : article.body
-                    ),
-                  }}
-                />
-              )}
+              <ArticleBody
+                article={article}
+                bodyLoading={bodyLoading}
+                showOriginal={showOriginal}
+                onSelectText={updateSelectedShareText}
+              />
             </div>
 
-            {!shareId && highlightsQuery.data && highlightsQuery.data.length > 0 ? (
-              <section
-                className="mt-8 rounded-lg border border-border bg-surface/40 px-4 py-4"
-                aria-label="Personal highlights"
-              >
-                <div className="mb-3 flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wider text-subtle">
-                  <Highlighter className="size-3" strokeWidth={2} />
-                  Highlights
-                </div>
-                <ul className="space-y-3">
-                  {highlightsQuery.data.map((highlight) => (
-                    <li key={highlight.id} className="border-l-2 border-accent pl-3">
-                      <div className="flex items-start justify-between gap-3">
-                        <p className="text-[13px] leading-snug text-foreground">
-                          {highlight.highlighted_text}
-                        </p>
-                        <button
-                          type="button"
-                          onClick={() => deleteHighlightMutation.mutate(highlight.id)}
-                          className="inline-flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-surface hover:text-foreground"
-                          aria-label="Delete highlight"
-                        >
-                          <XIcon className="size-3.5" />
-                        </button>
-                      </div>
-                      {highlight.note ? (
-                        <p className="mt-1 text-[12px] leading-snug text-muted-foreground">
-                          {highlight.note}
-                        </p>
-                      ) : null}
-                    </li>
-                  ))}
-                </ul>
-              </section>
-            ) : null}
+            {!shareId && <ArticleHighlights highlights={highlights} onDelete={deleteHighlight} />}
           </article>
         </div>
       </div>
       {/* end animated wrapper */}
 
-      {/* Action bar rendered via portal so its position:fixed always resolves
-          against the viewport regardless of any CSS transform that may exist on
-          an ancestor or sibling of the ArticlePage root during the entry
-          animation (motion-slide-in-right carries transform:translateX in its
-          from-keyframe; even as a sibling, some mobile browser compositors
-          bleed this transform onto nearby fixed elements for the first paint). */}
-      {createPortal(
-        <div
-          data-testid="action-bar"
-          className="fixed bottom-0 inset-x-0 z-20 border-t border-border bg-background/95 backdrop-blur pb-[env(safe-area-inset-bottom)]"
-        >
-          <div className="mx-auto max-w-2xl grid grid-cols-7 gap-1 p-2">
-            <ActionBtn
-              onClick={() => void doStar()}
-              icon={Star}
-              label={article.starred ? 'Unstar' : 'Star'}
-              active={article.starred}
-            />
-            <ActionBtn onClick={() => void doAction('done', 'Done')} icon={Check} label="Done" />
-            <ActionBtn onClick={() => void doAction('later', 'Later')} icon={Clock} label="Later" />
-            <ActionBtn
-              onClick={() => void doAction('skipped', 'Skipped')}
-              icon={XIcon}
-              label="Skip"
-              disabled={article.starred}
-            />
-            <ActionBtn
-              onClick={() => void doAction('archived', 'Archived')}
-              icon={Archive}
-              label="Archive"
-            />
-            <ActionBtn
-              onClick={handleListen}
-              icon={
-                audioState === 'loading' ? Loader2 : audioState === 'playing' ? Square : Volume2
-              }
-              label={
-                audioState === 'loading'
-                  ? 'Loading…'
-                  : audioState === 'playing'
-                    ? 'Stop'
-                    : audioState === 'paused'
-                      ? 'Resume'
-                      : 'Listen'
-              }
-              disabled={audioState === 'loading'}
-            />
-            <ActionBtn onClick={() => void handleShare()} icon={Share2} label="Share" />
-          </div>
-        </div>,
-        document.body
-      )}
-      {selectedShareText ? (
-        <div className="fixed bottom-20 left-1/2 z-30 flex -translate-x-1/2 items-center gap-2 rounded-md border border-border bg-background p-1 shadow-lg">
-          {!shareId ? (
-            <button
-              type="button"
-              onClick={handleHighlightSelected}
-              className="inline-flex items-center gap-2 rounded px-3 py-2 text-sm font-medium text-foreground hover:bg-surface"
-            >
-              <Highlighter className="size-4" strokeWidth={1.75} />
-              Highlight
-            </button>
-          ) : null}
-          <button
-            type="button"
-            onClick={handleShareSelected}
-            aria-label="Share selected text"
-            className="inline-flex items-center gap-2 rounded px-3 py-2 text-sm font-medium text-foreground hover:bg-surface"
-          >
-            <Share2 className="size-4" strokeWidth={1.75} />
-            Share
-          </button>
-        </div>
-      ) : null}
+      <ArticleActionBar
+        starred={article.starred}
+        onStar={() => void doStar()}
+        onDone={() => void doAction('done', 'Done')}
+        onLater={() => void doAction('later', 'Later')}
+        onSkip={() => void doAction('skipped', 'Skipped')}
+        onArchive={() => void doAction('archived', 'Archived')}
+        onShare={() => void handleShare()}
+        audioState={audioState}
+        onListen={handleListen}
+      />
+      <ArticleSelectionActions
+        selectedText={selectedShareText}
+        isShared={Boolean(shareId)}
+        onHighlight={handleHighlightSelected}
+        onShare={handleShareSelected}
+      />
       <ShareDialog
         open={shareOpen}
         onOpenChange={setShareOpen}
