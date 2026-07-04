@@ -353,6 +353,8 @@ def test_get_notification_settings_returns_defaults(
         "briefing_timezone": "UTC",
         "recap_enabled": True,
         "recap_day": "mon",
+        "briefing_include_reading_list": False,
+        "briefing_reading_list_limit": 3,
     }
 
     with patch("news_dashboard.main.connect") as mock_connect:
@@ -383,6 +385,8 @@ def test_get_notification_settings_utc_fallback(
         "briefing_timezone": None,
         "recap_enabled": True,
         "recap_day": "mon",
+        "briefing_include_reading_list": False,
+        "briefing_reading_list_limit": 3,
     }
 
     with patch("news_dashboard.main.connect") as mock_connect:
@@ -402,6 +406,8 @@ def test_put_notification_settings_valid_time(client: TestClient) -> None:
         "briefing_timezone": "UTC",
         "recap_enabled": True,
         "recap_day": "mon",
+        "briefing_include_reading_list": False,
+        "briefing_reading_list_limit": 3,
     }
 
     with patch("news_dashboard.main.connect") as mock_connect:
@@ -426,6 +432,8 @@ def test_put_notification_settings_valid_timezone(client: TestClient) -> None:
         "briefing_timezone": "Europe/Bucharest",
         "recap_enabled": True,
         "recap_day": "mon",
+        "briefing_include_reading_list": False,
+        "briefing_reading_list_limit": 3,
     }
 
     with patch("news_dashboard.main.connect") as mock_connect:
@@ -439,6 +447,40 @@ def test_put_notification_settings_valid_timezone(client: TestClient) -> None:
 
     assert resp.status_code == 200
     assert resp.json()["briefing_timezone"] == "Europe/Bucharest"
+
+
+def test_put_notification_settings_valid_reading_list_opt_in(client: TestClient) -> None:
+    fake_row: dict[str, Any] = {
+        "briefing_time": "09:00",
+        "briefing_push_enabled": False,
+        "briefing_timezone": "UTC",
+        "recap_enabled": True,
+        "recap_day": "mon",
+        "briefing_include_reading_list": True,
+        "briefing_reading_list_limit": 5,
+    }
+
+    with patch("news_dashboard.main.connect") as mock_connect:
+        ctx = mock_connect.return_value.__enter__.return_value
+        ctx.execute.return_value.fetchone.return_value = fake_row
+
+        resp = client.put(
+            "/api/settings/notifications",
+            json={"briefing_include_reading_list": True, "briefing_reading_list_limit": 5},
+        )
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["briefing_include_reading_list"] is True
+    assert data["briefing_reading_list_limit"] == 5
+
+
+def test_put_notification_settings_invalid_reading_list_limit(client: TestClient) -> None:
+    resp = client.put("/api/settings/notifications", json={"briefing_reading_list_limit": 0})
+    assert resp.status_code == 422
+
+    resp = client.put("/api/settings/notifications", json={"briefing_reading_list_limit": 21})
+    assert resp.status_code == 422
 
 
 def test_put_notification_settings_invalid_timezone(client: TestClient) -> None:

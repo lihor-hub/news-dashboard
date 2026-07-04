@@ -784,6 +784,10 @@ POSTGRES_MULTIUSER_SCHEMA = [
     "ALTER TABLE article_shares ADD COLUMN IF NOT EXISTS revoked_at TIMESTAMPTZ",
     "CREATE INDEX IF NOT EXISTS idx_article_shares_sender"
     " ON article_shares(from_user_id, created_at DESC)",
+    "ALTER TABLE users ADD COLUMN IF NOT EXISTS briefing_include_reading_list"
+    " BOOLEAN NOT NULL DEFAULT FALSE",
+    "ALTER TABLE users ADD COLUMN IF NOT EXISTS briefing_reading_list_limit"
+    " INTEGER NOT NULL DEFAULT 3",
 ]
 
 

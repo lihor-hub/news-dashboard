@@ -2700,9 +2700,11 @@ def briefings_chat(
 
 _BRIEFING_TIME_RE = __import__("re").compile(r"^([01]\d|2[0-3]):[0-5]\d$")
 _NOTIFICATION_COLS = (
-    "briefing_time, briefing_push_enabled, briefing_timezone, recap_enabled, recap_day"
+    "briefing_time, briefing_push_enabled, briefing_timezone, recap_enabled, recap_day, "
+    "briefing_include_reading_list, briefing_reading_list_limit"
 )
 _RECAP_DAYS = frozenset({"mon", "tue", "wed", "thu", "fri", "sat", "sun"})
+_READING_LIST_LIMIT_MAX = 20
 
 
 class NotificationSettingsUpdate(BaseModel):
@@ -2711,6 +2713,8 @@ class NotificationSettingsUpdate(BaseModel):
     briefing_timezone: str | None = None
     recap_enabled: bool | None = None
     recap_day: str | None = None
+    briefing_include_reading_list: bool | None = None
+    briefing_reading_list_limit: int | None = None
 
 
 class PushSubscribeRequest(BaseModel):
@@ -2823,8 +2827,22 @@ def get_notification_settings(
         "push_enabled": bool(row["briefing_push_enabled"]),
         "recap_enabled": bool(row["recap_enabled"]),
         "recap_day": row["recap_day"] or "mon",
+        "briefing_include_reading_list": bool(row["briefing_include_reading_list"]),
+        "briefing_reading_list_limit": row["briefing_reading_list_limit"] or 3,
         "vapid_public_key": get_vapid_public_key(),
     }
+
+
+def _reading_list_updates(payload: NotificationSettingsUpdate) -> dict[str, Any]:
+    updates: dict[str, Any] = {}
+    if payload.briefing_include_reading_list is not None:
+        updates["briefing_include_reading_list"] = payload.briefing_include_reading_list
+    if payload.briefing_reading_list_limit is not None:
+        if not 1 <= payload.briefing_reading_list_limit <= _READING_LIST_LIMIT_MAX:
+            detail = f"briefing_reading_list_limit must be between 1 and {_READING_LIST_LIMIT_MAX}"
+            raise HTTPException(status_code=422, detail=detail)
+        updates["briefing_reading_list_limit"] = payload.briefing_reading_list_limit
+    return updates
 
 
 @api.put("/api/settings/notifications")
@@ -2855,6 +2873,7 @@ def update_notification_settings(
             detail = "recap_day must be one of: " + ", ".join(sorted(_RECAP_DAYS))
             raise HTTPException(status_code=422, detail=detail)
         updates["recap_day"] = payload.recap_day
+    updates.update(_reading_list_updates(payload))
     if updates:
         set_clauses = ", ".join(f"{k} = %s" for k in updates)
         with connect() as conn:
@@ -2875,6 +2894,8 @@ def update_notification_settings(
         "push_enabled": bool(row["briefing_push_enabled"]),
         "recap_enabled": bool(row["recap_enabled"]),
         "recap_day": row["recap_day"] or "mon",
+        "briefing_include_reading_list": bool(row["briefing_include_reading_list"]),
+        "briefing_reading_list_limit": row["briefing_reading_list_limit"] or 3,
     }
 
 
