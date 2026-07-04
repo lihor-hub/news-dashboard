@@ -1,4 +1,4 @@
-.PHONY: install ci-install lint format typecheck \
+.PHONY: install ci-install lint format typecheck dead-code \
         test test-smoke test-backend test-frontend test-e2e test-a11y test-nightly test-full \
         helm-validate check build
 
@@ -18,8 +18,13 @@ ci-install:
 lint:
 	ruff check backend
 	ruff format --check backend
+	vulture backend backend/vulture_whitelist.py --min-confidence 80
 	npm run lint --silent
 	npm run format:check --silent
+
+## dead-code: scan Python source for unused symbols (vulture)
+dead-code:
+	vulture backend backend/vulture_whitelist.py --min-confidence 80
 
 ## format: auto-format backend and frontend code
 format:

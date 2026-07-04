@@ -43,6 +43,12 @@ repos:
         language: system
         types: [python]
         pass_filenames: false
+      - id: vulture
+        name: vulture (dead code)
+        entry: vulture backend backend/vulture_whitelist.py --min-confidence 80
+        language: system
+        types: [python]
+        pass_filenames: false
       - id: eslint
         name: eslint
         entry: npm run lint --silent
