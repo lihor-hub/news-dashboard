@@ -2,6 +2,7 @@
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import * as api from '../api';
 import { ReadingDnaPage } from '../pages/ReadingDnaPage';
 import type { Quiz, QuizResult, ReadingDna } from '../types';
@@ -68,7 +69,12 @@ function mockBasics() {
 }
 
 async function renderLearningCenter() {
-  render(<ReadingDnaPage />);
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  render(
+    <QueryClientProvider client={client}>
+      <ReadingDnaPage />
+    </QueryClientProvider>
+  );
   await waitFor(() => expect(screen.getByRole('button', { name: 'Learning Center' })).toBeTruthy());
   await userEvent.click(screen.getByRole('button', { name: 'Learning Center' }));
 }
