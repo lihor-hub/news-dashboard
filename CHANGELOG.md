@@ -3,6 +3,9 @@
 All notable changes to this project will be documented in this file.
 This project adheres to [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.105.2] — 2026-07-04
+- Stability and performance improvements.
+
 ## [1.105.0] — 2026-07-04
 - You can now export your subscriptions and personal preferences along with your other data — everything in one place when you download a copy of your information.
 
