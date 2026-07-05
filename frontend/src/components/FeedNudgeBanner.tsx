@@ -10,7 +10,7 @@ import type { PersonalizationNudge } from '@/types';
 
 const NUDGES_KEY = 'personalization-nudges';
 
-function NudgeCard({ nudge }: { nudge: PersonalizationNudge }) {
+export function NudgeCard({ nudge }: { nudge: PersonalizationNudge }) {
   const qc = useQueryClient();
 
   const applyMutation = useMutation({
