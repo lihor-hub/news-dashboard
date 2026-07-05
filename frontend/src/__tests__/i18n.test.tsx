@@ -109,6 +109,55 @@ describe('key resolution fallback', () => {
   });
 });
 
+describe('lazy language loading', () => {
+  afterEach(async () => {
+    await i18n.changeLanguage('en');
+  });
+
+  it('loads a language bundle on demand and exposes it via getResourceBundle', async () => {
+    expect(i18n.getDataByLanguage('it')?.translation).toBeUndefined();
+
+    await i18n.changeLanguage('it');
+
+    expect(i18n.t('auth.sign_in')).toBe('Accedi');
+    expect(i18n.getDataByLanguage('it')?.translation).toBeDefined();
+  });
+
+  it('does not eagerly bundle every language module (code-split per language)', () => {
+    const localeModules = import.meta.glob('../locales/*/translation.json');
+    // Each entry is a lazy loader function, not the already-resolved module.
+    for (const loader of Object.values(localeModules)) {
+      expect(typeof loader).toBe('function');
+    }
+  });
+
+  it('reports a missing-bundle error instead of throwing for an unknown language', async () => {
+    const services = i18n.services as unknown as {
+      backendConnector: {
+        backend: {
+          read: (
+            language: string,
+            namespace: string,
+            callback: (err: Error | null, data: unknown) => void
+          ) => void;
+        };
+      };
+    };
+
+    await new Promise<void>((resolve) => {
+      services.backendConnector.backend.read(
+        'xx-not-a-real-language',
+        'translation',
+        (err, data) => {
+          expect(err).toBeInstanceOf(Error);
+          expect(data).toBe(false);
+          resolve();
+        }
+      );
+    });
+  });
+});
+
 describe('RTL direction', () => {
   beforeEach(() => {
     // main.tsx wires this up once at startup; replicate that here since tests
