@@ -8,9 +8,11 @@ import { initErrorTracking } from './lib/errorTracking';
 import { initTheme } from './lib/theme';
 import { queryClient } from './lib/queryClient';
 import { AppRouter } from './AppRouter';
-import '@/lib/i18n'; // Initialize i18n
+import i18n from '@/lib/i18n';
+import { initLanguageDirection } from '@/lib/languages';
 
 initTheme();
+initLanguageDirection(i18n);
 void initErrorTracking();
 
 ReactDOM.createRoot(document.getElementById('root')!).render(

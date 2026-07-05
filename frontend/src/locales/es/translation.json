@@ -1,0 +1,90 @@
+{
+  "app": {
+    "name": "Panel de Noticias",
+    "tagline": "Tu plataforma privada de noticias"
+  },
+  "auth": {
+    "sign_in": "Iniciar sesión",
+    "username": "Usuario",
+    "password": "Contraseña",
+    "email_address": "Correo electrónico",
+    "use_email_code": "Usar código por correo",
+    "back_to_password": "Volver a la contraseña",
+    "6_digit_code": "Código de 6 dígitos",
+    "resend_code": "Reenviar código",
+    "a_6_digit_code_was_sent_to": "Se envió un código de 6 dígitos a",
+    "invalid_username_or_password": "Usuario o contraseña incorrectos.",
+    "failed_to_send_code": "No se pudo enviar el código. Inténtalo de nuevo.",
+    "invalid_or_expired_code": "Código inválido o expirado. Inténtalo de nuevo.",
+    "sending": "Enviando…",
+    "send_code": "Enviar código",
+    "verifying": "Verificando…",
+    "verify_code": "Verificar código",
+    "signing_in": "Iniciando sesión…",
+    "sign_in_with_keycloak": "Iniciar sesión con Keycloak",
+    "create_account": "Crear cuenta"
+  },
+  "nav": {
+    "brief": "Resumen",
+    "today": "Hoy",
+    "later": "Más tarde",
+    "starred": "Destacados",
+    "shared": "Compartidos",
+    "search": "Buscar",
+    "ask": "Preguntar",
+    "reading_list": "Lista de lectura",
+    "briefing_history": "Historial de resúmenes",
+    "topic_map": "Mapa de temas",
+    "ai_stats": "Estadísticas de IA",
+    "feeds": "Fuentes",
+    "reading_dna": "ADN de lectura",
+    "weekly_recap": "Resumen semanal",
+    "archive": "Archivo",
+    "collections": "Colecciones",
+    "settings": "Configuración",
+    "stats": "Estadísticas",
+    "analytics": "Analítica",
+    "users": "Usuarios"
+  },
+  "page_title": {
+    "brief": "Resumen",
+    "today": "Hoy",
+    "later": "Más tarde",
+    "starred": "Destacados",
+    "shared": "Compartidos",
+    "search": "Buscar",
+    "ask": "Preguntar a la IA",
+    "topic_map": "Mapa de temas",
+    "ai_stats": "Estadísticas de IA",
+    "briefs": "Resúmenes",
+    "feeds": "Fuentes",
+    "stats": "Estadísticas",
+    "reading_dna": "ADN de lectura",
+    "reading_list": "Lista de lectura",
+    "weekly_recap": "Resumen semanal",
+    "archive": "Archivo",
+    "collections": "Colecciones",
+    "settings": "Configuración",
+    "analytics": "Analítica",
+    "users": "Usuarios",
+    "default": "Radar"
+  },
+  "shell": {
+    "offline": "Sin conexión",
+    "command": "Comando",
+    "menu": "Menú",
+    "more": "Más",
+    "log_out": "Cerrar sesión"
+  },
+  "settings": {
+    "title": "Configuración",
+    "about_heading": "Acerca de",
+    "about_body": "Radar es una herramienta privada de clasificación de noticias técnicas. El estado se guarda en el servidor.",
+    "shortcuts_hint_prefix": "Presiona",
+    "shortcuts_hint_suffix": "en cualquier lugar para ver los atajos de teclado.",
+    "language": {
+      "heading": "Idioma",
+      "description": "Elige el idioma de la interfaz de la aplicación."
+    }
+  }
+}

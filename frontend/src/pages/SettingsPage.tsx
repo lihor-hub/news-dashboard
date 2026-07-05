@@ -1,4 +1,6 @@
+import { useTranslation } from 'react-i18next';
 import { ThemeSection } from '@/components/settings/ThemeSection';
+import { LanguageSection } from '@/components/settings/LanguageSection';
 import { PersonalizationSection } from '@/components/settings/PersonalizationSection';
 import { WatchlistsSection } from '@/components/settings/WatchlistsSection';
 import { AiMemorySection } from '@/components/settings/AiMemorySection';
@@ -12,13 +14,16 @@ import { UpdatesSection } from '@/components/settings/UpdatesSection';
 import { DeleteAccountSection } from '@/components/settings/DeleteAccountSection';
 
 export function SettingsPage() {
+  const { t } = useTranslation();
+
   return (
     <div className="p-4 md:p-5 max-w-2xl space-y-6">
       <div>
-        <h2 className="text-[22px] font-semibold tracking-tight">Settings</h2>
+        <h2 className="text-[22px] font-semibold tracking-tight">{t('settings.title')}</h2>
       </div>
 
       <ThemeSection />
+      <LanguageSection />
       <PersonalizationSection />
       <WatchlistsSection />
       <AiMemorySection />
@@ -32,14 +37,16 @@ export function SettingsPage() {
       <DeleteAccountSection />
 
       <section className="text-xs text-muted-foreground space-y-2">
-        <div className="text-[10px] uppercase tracking-wider text-subtle font-medium">About</div>
-        <p>Radar is a private technical news triage tool. State is stored on the server.</p>
+        <div className="text-[10px] uppercase tracking-wider text-subtle font-medium">
+          {t('settings.about_heading')}
+        </div>
+        <p>{t('settings.about_body')}</p>
         <p>
-          Press{' '}
+          {t('settings.shortcuts_hint_prefix')}{' '}
           <kbd className="font-mono text-[10px] px-1 py-0.5 bg-surface-2 border border-border rounded">
             ?
           </kbd>{' '}
-          anywhere for keyboard shortcuts.
+          {t('settings.shortcuts_hint_suffix')}
         </p>
       </section>
     </div>

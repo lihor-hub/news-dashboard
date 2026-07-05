@@ -1,5 +1,6 @@
 import { useLocation, useNavigate, Outlet, Link } from 'react-router-dom';
 import { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useQuery } from '@tanstack/react-query';
 import { LogOut, MoreHorizontal, Search, WifiOff } from 'lucide-react';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
@@ -20,7 +21,7 @@ import { fetchSummary, fetchSharesUnreadCount, fetchAnalyticsSettings } from '@/
 import { startAnalytics, stopAnalytics, trackRoute, setAnalyticsAllowed } from '@/lib/analytics';
 import { useAuth } from '@/contexts/auth';
 import {
-  getPageTitle,
+  getPageTitleKey,
   getShortcutTarget,
   isNavigationItemActive,
   mobilePrimaryOverflowItems,
@@ -66,6 +67,7 @@ function useOnlineStatus() {
 }
 
 function DesktopRail({ pathname }: { pathname: string }) {
+  const { t } = useTranslation();
   const counts = useNavCounts();
   const { user } = useAuth();
   const handleLogout = useLogout();
@@ -85,7 +87,7 @@ function DesktopRail({ pathname }: { pathname: string }) {
           <NavLink
             key={n.to}
             to={n.to}
-            label={n.label}
+            label={t(n.labelKey)}
             icon={n.icon}
             isActive={isNavigationItemActive(n.to, pathname)}
             count={countFor(n)}
@@ -99,7 +101,7 @@ function DesktopRail({ pathname }: { pathname: string }) {
           <NavLink
             key={m.to}
             to={m.to}
-            label={m.label}
+            label={t(m.labelKey)}
             icon={m.icon}
             isActive={isNavigationItemActive(m.to, pathname)}
             variant="rail"
@@ -115,7 +117,7 @@ function DesktopRail({ pathname }: { pathname: string }) {
           className="flex w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-sm text-muted-foreground hover:bg-surface hover:text-foreground"
         >
           <LogOut className="size-4" />
-          Log out
+          {t('shell.log_out')}
         </button>
       </div>
     </aside>
@@ -123,6 +125,7 @@ function DesktopRail({ pathname }: { pathname: string }) {
 }
 
 export function AppShell() {
+  const { t } = useTranslation();
   const { pathname } = useLocation();
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -207,7 +210,7 @@ export function AppShell() {
     );
   }
 
-  const title = getPageTitle(pathname);
+  const title = t(getPageTitleKey(pathname));
 
   return (
     <div className="app-shell min-h-screen flex flex-col bg-background text-foreground">
@@ -222,7 +225,7 @@ export function AppShell() {
             {!online && (
               <div className="inline-flex items-center gap-1 rounded-md border border-border bg-surface px-2 py-1 text-xs font-medium text-muted-foreground">
                 <WifiOff className="size-3.5" />
-                Offline
+                {t('shell.offline')}
               </div>
             )}
             <button
@@ -230,21 +233,21 @@ export function AppShell() {
               className="hidden md:inline-flex items-center gap-2 rounded-md border border-border bg-surface px-2.5 py-1 text-xs text-muted-foreground hover:text-foreground hover:border-border-strong transition-colors"
             >
               <Search className="size-3.5" />
-              <span>Command</span>
+              <span>{t('shell.command')}</span>
               <kbd className="font-mono text-[10px] text-subtle">⌘K</kbd>
             </button>
             <Sheet open={moreOpen} onOpenChange={setMoreOpen}>
               <SheetTrigger asChild>
                 <button
                   className="inline-flex size-9 items-center justify-center rounded-md hover:bg-surface-2 text-muted-foreground hover:text-foreground transition-colors"
-                  aria-label="More"
+                  aria-label={t('shell.more')}
                 >
                   <MoreHorizontal className="size-5" />
                 </button>
               </SheetTrigger>
               <SheetContent side="right" className="w-[280px] p-0">
                 <SheetHeader className="px-5 pt-5 pb-3">
-                  <SheetTitle className="text-sm">Menu</SheetTitle>
+                  <SheetTitle className="text-sm">{t('shell.menu')}</SheetTitle>
                   {user && (
                     <p className="text-xs text-muted-foreground truncate">{user.username}</p>
                   )}
@@ -254,7 +257,7 @@ export function AppShell() {
                     <NavLink
                       key={m.to}
                       to={m.to}
-                      label={m.label}
+                      label={t(m.labelKey)}
                       icon={m.icon}
                       isActive={isNavigationItemActive(m.to, pathname)}
                       variant="sheet"
@@ -268,7 +271,7 @@ export function AppShell() {
                     <NavLink
                       key={m.to}
                       to={m.to}
-                      label={m.label}
+                      label={t(m.labelKey)}
                       icon={m.icon}
                       isActive={isNavigationItemActive(m.to, pathname)}
                       variant="sheet"
@@ -280,7 +283,7 @@ export function AppShell() {
                     className="flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-sm text-muted-foreground hover:bg-surface hover:text-foreground"
                   >
                     <LogOut className="size-4" />
-                    Log out
+                    {t('shell.log_out')}
                   </button>
                 </nav>
               </SheetContent>
@@ -317,7 +320,7 @@ export function AppShell() {
                 )}
               >
                 <Icon className={cn('size-5', active && 'stroke-[2.25]')} />
-                {n.label}
+                {t(n.labelKey)}
               </Link>
             );
           })}

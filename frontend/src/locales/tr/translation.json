@@ -1,0 +1,90 @@
+{
+  "app": {
+    "name": "Haber Panosu",
+    "tagline": "Kendi özel haber platformunuz"
+  },
+  "auth": {
+    "sign_in": "Giriş yap",
+    "username": "Kullanıcı adı",
+    "password": "Şifre",
+    "email_address": "E-posta adresi",
+    "use_email_code": "Bunun yerine e-posta kodu kullan",
+    "back_to_password": "Şifreyle girişe dön",
+    "6_digit_code": "6 haneli kod",
+    "resend_code": "Kodu yeniden gönder",
+    "a_6_digit_code_was_sent_to": "6 haneli kod şu adrese gönderildi:",
+    "invalid_username_or_password": "Geçersiz kullanıcı adı veya şifre.",
+    "failed_to_send_code": "Kod gönderilemedi. Lütfen tekrar deneyin.",
+    "invalid_or_expired_code": "Geçersiz veya süresi dolmuş kod. Lütfen tekrar deneyin.",
+    "sending": "Gönderiliyor…",
+    "send_code": "Kodu gönder",
+    "verifying": "Doğrulanıyor…",
+    "verify_code": "Kodu doğrula",
+    "signing_in": "Giriş yapılıyor…",
+    "sign_in_with_keycloak": "Keycloak ile giriş yap",
+    "create_account": "Hesap oluştur"
+  },
+  "nav": {
+    "brief": "Özet",
+    "today": "Bugün",
+    "later": "Sonra",
+    "starred": "Yıldızlı",
+    "shared": "Paylaşılan",
+    "search": "Ara",
+    "ask": "Sor",
+    "reading_list": "Okuma listesi",
+    "briefing_history": "Özet geçmişi",
+    "topic_map": "Konu haritası",
+    "ai_stats": "Yapay zeka istatistikleri",
+    "feeds": "Kaynaklar",
+    "reading_dna": "Okuma DNA'sı",
+    "weekly_recap": "Haftalık özet",
+    "archive": "Arşiv",
+    "collections": "Koleksiyonlar",
+    "settings": "Ayarlar",
+    "stats": "İstatistikler",
+    "analytics": "Analitik",
+    "users": "Kullanıcılar"
+  },
+  "page_title": {
+    "brief": "Özet",
+    "today": "Bugün",
+    "later": "Sonra",
+    "starred": "Yıldızlı",
+    "shared": "Paylaşılan",
+    "search": "Ara",
+    "ask": "Yapay zekaya sor",
+    "topic_map": "Konu haritası",
+    "ai_stats": "Yapay zeka istatistikleri",
+    "briefs": "Özetler",
+    "feeds": "Kaynaklar",
+    "stats": "İstatistikler",
+    "reading_dna": "Okuma DNA'sı",
+    "reading_list": "Okuma listesi",
+    "weekly_recap": "Haftalık özet",
+    "archive": "Arşiv",
+    "collections": "Koleksiyonlar",
+    "settings": "Ayarlar",
+    "analytics": "Analitik",
+    "users": "Kullanıcılar",
+    "default": "Radar"
+  },
+  "shell": {
+    "offline": "Çevrimdışı",
+    "command": "Komut",
+    "menu": "Menü",
+    "more": "Daha fazla",
+    "log_out": "Çıkış yap"
+  },
+  "settings": {
+    "title": "Ayarlar",
+    "about_heading": "Hakkında",
+    "about_body": "Radar, teknik haberleri ayıklamak için özel bir araçtır. Durum sunucuda saklanır.",
+    "shortcuts_hint_prefix": "Klavye kısayolları için herhangi bir yerde",
+    "shortcuts_hint_suffix": "tuşuna basın.",
+    "language": {
+      "heading": "Dil",
+      "description": "Uygulama arayüz dilini seçin."
+    }
+  }
+}

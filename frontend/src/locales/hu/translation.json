@@ -1,0 +1,90 @@
+{
+  "app": {
+    "name": "Hírműszerfal",
+    "tagline": "Az Ön saját hírplatformja"
+  },
+  "auth": {
+    "sign_in": "Bejelentkezés",
+    "username": "Felhasználónév",
+    "password": "Jelszó",
+    "email_address": "E-mail cím",
+    "use_email_code": "Inkább e-mailes kód használata",
+    "back_to_password": "Vissza a jelszavas bejelentkezéshez",
+    "6_digit_code": "6 jegyű kód",
+    "resend_code": "Kód újraküldése",
+    "a_6_digit_code_was_sent_to": "6 jegyű kódot küldtünk erre a címre:",
+    "invalid_username_or_password": "Érvénytelen felhasználónév vagy jelszó.",
+    "failed_to_send_code": "A kód küldése sikertelen. Próbálja újra.",
+    "invalid_or_expired_code": "Érvénytelen vagy lejárt kód. Próbálja újra.",
+    "sending": "Küldés…",
+    "send_code": "Kód küldése",
+    "verifying": "Ellenőrzés…",
+    "verify_code": "Kód ellenőrzése",
+    "signing_in": "Bejelentkezés…",
+    "sign_in_with_keycloak": "Bejelentkezés Keycloakkal",
+    "create_account": "Fiók létrehozása"
+  },
+  "nav": {
+    "brief": "Összefoglaló",
+    "today": "Ma",
+    "later": "Később",
+    "starred": "Csillagozott",
+    "shared": "Megosztott",
+    "search": "Keresés",
+    "ask": "Kérdezés",
+    "reading_list": "Olvasási lista",
+    "briefing_history": "Összefoglaló előzmények",
+    "topic_map": "Témakör-térkép",
+    "ai_stats": "AI statisztika",
+    "feeds": "Hírforrások",
+    "reading_dna": "Olvasási DNS",
+    "weekly_recap": "Heti összegzés",
+    "archive": "Archívum",
+    "collections": "Gyűjtemények",
+    "settings": "Beállítások",
+    "stats": "Statisztikák",
+    "analytics": "Analitika",
+    "users": "Felhasználók"
+  },
+  "page_title": {
+    "brief": "Összefoglaló",
+    "today": "Ma",
+    "later": "Később",
+    "starred": "Csillagozott",
+    "shared": "Megosztott",
+    "search": "Keresés",
+    "ask": "Kérdezd az AI-t",
+    "topic_map": "Témakör-térkép",
+    "ai_stats": "AI statisztika",
+    "briefs": "Összefoglalók",
+    "feeds": "Hírforrások",
+    "stats": "Statisztikák",
+    "reading_dna": "Olvasási DNS",
+    "reading_list": "Olvasási lista",
+    "weekly_recap": "Heti összegzés",
+    "archive": "Archívum",
+    "collections": "Gyűjtemények",
+    "settings": "Beállítások",
+    "analytics": "Analitika",
+    "users": "Felhasználók",
+    "default": "Radar"
+  },
+  "shell": {
+    "offline": "Offline",
+    "command": "Parancs",
+    "menu": "Menü",
+    "more": "Több",
+    "log_out": "Kijelentkezés"
+  },
+  "settings": {
+    "title": "Beállítások",
+    "about_heading": "Névjegy",
+    "about_body": "A Radar egy privát eszköz a technikai hírek rendszerezésére. Az állapot a szerveren tárolódik.",
+    "shortcuts_hint_prefix": "Nyomd meg bárhol a",
+    "shortcuts_hint_suffix": "billentyűt a billentyűparancsok megjelenítéséhez.",
+    "language": {
+      "heading": "Nyelv",
+      "description": "Válaszd ki az alkalmazás felületének nyelvét."
+    }
+  }
+}

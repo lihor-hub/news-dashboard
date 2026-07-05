@@ -1,0 +1,90 @@
+{
+  "app": {
+    "name": "Painel de Notícias",
+    "tagline": "Sua plataforma privada de notícias"
+  },
+  "auth": {
+    "sign_in": "Entrar",
+    "username": "Usuário",
+    "password": "Senha",
+    "email_address": "Endereço de e-mail",
+    "use_email_code": "Usar código por e-mail",
+    "back_to_password": "Voltar para a senha",
+    "6_digit_code": "Código de 6 dígitos",
+    "resend_code": "Reenviar código",
+    "a_6_digit_code_was_sent_to": "Um código de 6 dígitos foi enviado para",
+    "invalid_username_or_password": "Usuário ou senha inválidos.",
+    "failed_to_send_code": "Falha ao enviar o código. Tente novamente.",
+    "invalid_or_expired_code": "Código inválido ou expirado. Tente novamente.",
+    "sending": "Enviando…",
+    "send_code": "Enviar código",
+    "verifying": "Verificando…",
+    "verify_code": "Verificar código",
+    "signing_in": "Entrando…",
+    "sign_in_with_keycloak": "Entrar com Keycloak",
+    "create_account": "Criar conta"
+  },
+  "nav": {
+    "brief": "Resumo",
+    "today": "Hoje",
+    "later": "Mais tarde",
+    "starred": "Favoritos",
+    "shared": "Compartilhados",
+    "search": "Buscar",
+    "ask": "Perguntar",
+    "reading_list": "Lista de leitura",
+    "briefing_history": "Histórico de resumos",
+    "topic_map": "Mapa de tópicos",
+    "ai_stats": "Estatísticas de IA",
+    "feeds": "Feeds",
+    "reading_dna": "DNA de leitura",
+    "weekly_recap": "Retrospectiva semanal",
+    "archive": "Arquivo",
+    "collections": "Coleções",
+    "settings": "Configurações",
+    "stats": "Estatísticas",
+    "analytics": "Análises",
+    "users": "Usuários"
+  },
+  "page_title": {
+    "brief": "Resumo",
+    "today": "Hoje",
+    "later": "Mais tarde",
+    "starred": "Favoritos",
+    "shared": "Compartilhados",
+    "search": "Buscar",
+    "ask": "Perguntar à IA",
+    "topic_map": "Mapa de tópicos",
+    "ai_stats": "Estatísticas de IA",
+    "briefs": "Resumos",
+    "feeds": "Feeds",
+    "stats": "Estatísticas",
+    "reading_dna": "DNA de leitura",
+    "reading_list": "Lista de leitura",
+    "weekly_recap": "Retrospectiva semanal",
+    "archive": "Arquivo",
+    "collections": "Coleções",
+    "settings": "Configurações",
+    "analytics": "Análises",
+    "users": "Usuários",
+    "default": "Radar"
+  },
+  "shell": {
+    "offline": "Offline",
+    "command": "Comando",
+    "menu": "Menu",
+    "more": "Mais",
+    "log_out": "Sair"
+  },
+  "settings": {
+    "title": "Configurações",
+    "about_heading": "Sobre",
+    "about_body": "O Radar é uma ferramenta privada de triagem de notícias técnicas. O estado é armazenado no servidor.",
+    "shortcuts_hint_prefix": "Pressione",
+    "shortcuts_hint_suffix": "em qualquer lugar para ver os atalhos de teclado.",
+    "language": {
+      "heading": "Idioma",
+      "description": "Escolha o idioma da interface do aplicativo."
+    }
+  }
+}

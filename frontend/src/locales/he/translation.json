@@ -1,0 +1,90 @@
+{
+  "app": {
+    "name": "לוח בקרת חדשות",
+    "tagline": "פלטפורמת החדשות הפרטית שלך"
+  },
+  "auth": {
+    "sign_in": "התחברות",
+    "username": "שם משתמש",
+    "password": "סיסמה",
+    "email_address": "כתובת אימייל",
+    "use_email_code": "השתמש בקוד באימייל במקום",
+    "back_to_password": "חזרה להתחברות עם סיסמה",
+    "6_digit_code": "קוד בן 6 ספרות",
+    "resend_code": "שלח קוד מחדש",
+    "a_6_digit_code_was_sent_to": "קוד בן 6 ספרות נשלח אל",
+    "invalid_username_or_password": "שם משתמש או סיסמה שגויים.",
+    "failed_to_send_code": "שליחת הקוד נכשלה. נסה שוב.",
+    "invalid_or_expired_code": "קוד לא תקין או פג תוקף. נסה שוב.",
+    "sending": "שולח…",
+    "send_code": "שלח קוד",
+    "verifying": "מאמת…",
+    "verify_code": "אימות קוד",
+    "signing_in": "מתחבר…",
+    "sign_in_with_keycloak": "התחבר עם Keycloak",
+    "create_account": "יצירת חשבון"
+  },
+  "nav": {
+    "brief": "תקציר",
+    "today": "היום",
+    "later": "מאוחר יותר",
+    "starred": "מסומן בכוכב",
+    "shared": "משותף",
+    "search": "חיפוש",
+    "ask": "שאל",
+    "reading_list": "רשימת קריאה",
+    "briefing_history": "היסטוריית תקצירים",
+    "topic_map": "מפת נושאים",
+    "ai_stats": "נתוני בינה מלאכותית",
+    "feeds": "פידים",
+    "reading_dna": "DNA קריאה",
+    "weekly_recap": "סיכום שבועי",
+    "archive": "ארכיון",
+    "collections": "אוספים",
+    "settings": "הגדרות",
+    "stats": "נתונים",
+    "analytics": "אנליטיקס",
+    "users": "משתמשים"
+  },
+  "page_title": {
+    "brief": "תקציר",
+    "today": "היום",
+    "later": "מאוחר יותר",
+    "starred": "מסומן בכוכב",
+    "shared": "משותף",
+    "search": "חיפוש",
+    "ask": "שאל את הבינה המלאכותית",
+    "topic_map": "מפת נושאים",
+    "ai_stats": "נתוני בינה מלאכותית",
+    "briefs": "תקצירים",
+    "feeds": "פידים",
+    "stats": "נתונים",
+    "reading_dna": "DNA קריאה",
+    "reading_list": "רשימת קריאה",
+    "weekly_recap": "סיכום שבועי",
+    "archive": "ארכיון",
+    "collections": "אוספים",
+    "settings": "הגדרות",
+    "analytics": "אנליטיקס",
+    "users": "משתמשים",
+    "default": "Radar"
+  },
+  "shell": {
+    "offline": "לא מקוון",
+    "command": "פקודה",
+    "menu": "תפריט",
+    "more": "עוד",
+    "log_out": "התנתקות"
+  },
+  "settings": {
+    "title": "הגדרות",
+    "about_heading": "אודות",
+    "about_body": "Radar הוא כלי פרטי למיון חדשות טכנולוגיות. המצב נשמר בשרת.",
+    "shortcuts_hint_prefix": "לחץ",
+    "shortcuts_hint_suffix": "בכל מקום כדי להציג את קיצורי המקלדת.",
+    "language": {
+      "heading": "שפה",
+      "description": "בחר את שפת ממשק האפליקציה."
+    }
+  }
+}

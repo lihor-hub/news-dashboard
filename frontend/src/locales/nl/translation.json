@@ -1,0 +1,90 @@
+{
+  "app": {
+    "name": "Nieuwsdashboard",
+    "tagline": "Jouw privé nieuwsplatform"
+  },
+  "auth": {
+    "sign_in": "Inloggen",
+    "username": "Gebruikersnaam",
+    "password": "Wachtwoord",
+    "email_address": "E-mailadres",
+    "use_email_code": "Gebruik in plaats daarvan een e-mailcode",
+    "back_to_password": "Terug naar wachtwoord",
+    "6_digit_code": "6-cijferige code",
+    "resend_code": "Code opnieuw versturen",
+    "a_6_digit_code_was_sent_to": "Een 6-cijferige code is verstuurd naar",
+    "invalid_username_or_password": "Ongeldige gebruikersnaam of wachtwoord.",
+    "failed_to_send_code": "Code verzenden mislukt. Probeer het opnieuw.",
+    "invalid_or_expired_code": "Ongeldige of verlopen code. Probeer het opnieuw.",
+    "sending": "Verzenden…",
+    "send_code": "Code versturen",
+    "verifying": "Verifiëren…",
+    "verify_code": "Code verifiëren",
+    "signing_in": "Inloggen…",
+    "sign_in_with_keycloak": "Inloggen met Keycloak",
+    "create_account": "Account aanmaken"
+  },
+  "nav": {
+    "brief": "Overzicht",
+    "today": "Vandaag",
+    "later": "Later",
+    "starred": "Favorieten",
+    "shared": "Gedeeld",
+    "search": "Zoeken",
+    "ask": "Vraag",
+    "reading_list": "Leeslijst",
+    "briefing_history": "Overzichtsgeschiedenis",
+    "topic_map": "Onderwerpenkaart",
+    "ai_stats": "AI-statistieken",
+    "feeds": "Feeds",
+    "reading_dna": "Lees-DNA",
+    "weekly_recap": "Wekelijkse samenvatting",
+    "archive": "Archief",
+    "collections": "Collecties",
+    "settings": "Instellingen",
+    "stats": "Statistieken",
+    "analytics": "Analyse",
+    "users": "Gebruikers"
+  },
+  "page_title": {
+    "brief": "Overzicht",
+    "today": "Vandaag",
+    "later": "Later",
+    "starred": "Favorieten",
+    "shared": "Gedeeld",
+    "search": "Zoeken",
+    "ask": "Vraag de AI",
+    "topic_map": "Onderwerpenkaart",
+    "ai_stats": "AI-statistieken",
+    "briefs": "Overzichten",
+    "feeds": "Feeds",
+    "stats": "Statistieken",
+    "reading_dna": "Lees-DNA",
+    "reading_list": "Leeslijst",
+    "weekly_recap": "Wekelijkse samenvatting",
+    "archive": "Archief",
+    "collections": "Collecties",
+    "settings": "Instellingen",
+    "analytics": "Analyse",
+    "users": "Gebruikers",
+    "default": "Radar"
+  },
+  "shell": {
+    "offline": "Offline",
+    "command": "Commando",
+    "menu": "Menu",
+    "more": "Meer",
+    "log_out": "Uitloggen"
+  },
+  "settings": {
+    "title": "Instellingen",
+    "about_heading": "Over",
+    "about_body": "Radar is een privétool voor het sorteren van technisch nieuws. De status wordt op de server bewaard.",
+    "shortcuts_hint_prefix": "Druk op",
+    "shortcuts_hint_suffix": "overal voor sneltoetsen.",
+    "language": {
+      "heading": "Taal",
+      "description": "Kies de taal van de app-interface."
+    }
+  }
+}

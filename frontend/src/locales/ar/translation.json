@@ -1,0 +1,90 @@
+{
+  "app": {
+    "name": "لوحة الأخبار",
+    "tagline": "منصتك الإخبارية الخاصة"
+  },
+  "auth": {
+    "sign_in": "تسجيل الدخول",
+    "username": "اسم المستخدم",
+    "password": "كلمة المرور",
+    "email_address": "البريد الإلكتروني",
+    "use_email_code": "استخدام رمز عبر البريد الإلكتروني بدلاً من ذلك",
+    "back_to_password": "العودة إلى كلمة المرور",
+    "6_digit_code": "رمز مكوّن من 6 أرقام",
+    "resend_code": "إعادة إرسال الرمز",
+    "a_6_digit_code_was_sent_to": "تم إرسال رمز مكوّن من 6 أرقام إلى",
+    "invalid_username_or_password": "اسم المستخدم أو كلمة المرور غير صحيحة.",
+    "failed_to_send_code": "فشل إرسال الرمز. حاول مرة أخرى.",
+    "invalid_or_expired_code": "الرمز غير صالح أو منتهي الصلاحية. حاول مرة أخرى.",
+    "sending": "جارٍ الإرسال…",
+    "send_code": "إرسال الرمز",
+    "verifying": "جارٍ التحقق…",
+    "verify_code": "التحقق من الرمز",
+    "signing_in": "جارٍ تسجيل الدخول…",
+    "sign_in_with_keycloak": "تسجيل الدخول عبر Keycloak",
+    "create_account": "إنشاء حساب"
+  },
+  "nav": {
+    "brief": "الموجز",
+    "today": "اليوم",
+    "later": "لاحقًا",
+    "starred": "المميزة بنجمة",
+    "shared": "المشاركة",
+    "search": "بحث",
+    "ask": "اسأل",
+    "reading_list": "قائمة القراءة",
+    "briefing_history": "سجل الموجزات",
+    "topic_map": "خريطة الموضوعات",
+    "ai_stats": "إحصاءات الذكاء الاصطناعي",
+    "feeds": "المصادر",
+    "reading_dna": "حمض القراءة النووي",
+    "weekly_recap": "ملخص الأسبوع",
+    "archive": "الأرشيف",
+    "collections": "المجموعات",
+    "settings": "الإعدادات",
+    "stats": "الإحصاءات",
+    "analytics": "التحليلات",
+    "users": "المستخدمون"
+  },
+  "page_title": {
+    "brief": "الموجز",
+    "today": "اليوم",
+    "later": "لاحقًا",
+    "starred": "المميزة بنجمة",
+    "shared": "المشاركة",
+    "search": "بحث",
+    "ask": "اسأل الذكاء الاصطناعي",
+    "topic_map": "خريطة الموضوعات",
+    "ai_stats": "إحصاءات الذكاء الاصطناعي",
+    "briefs": "الموجزات",
+    "feeds": "المصادر",
+    "stats": "الإحصاءات",
+    "reading_dna": "حمض القراءة النووي",
+    "reading_list": "قائمة القراءة",
+    "weekly_recap": "ملخص الأسبوع",
+    "archive": "الأرشيف",
+    "collections": "المجموعات",
+    "settings": "الإعدادات",
+    "analytics": "التحليلات",
+    "users": "المستخدمون",
+    "default": "Radar"
+  },
+  "shell": {
+    "offline": "غير متصل",
+    "command": "أمر",
+    "menu": "القائمة",
+    "more": "المزيد",
+    "log_out": "تسجيل الخروج"
+  },
+  "settings": {
+    "title": "الإعدادات",
+    "about_heading": "حول",
+    "about_body": "Radar أداة خاصة لفرز الأخبار التقنية. تُخزَّن الحالة على الخادم.",
+    "shortcuts_hint_prefix": "اضغط",
+    "shortcuts_hint_suffix": "في أي مكان لعرض اختصارات لوحة المفاتيح.",
+    "language": {
+      "heading": "اللغة",
+      "description": "اختر لغة واجهة التطبيق."
+    }
+  }
+}

@@ -1,0 +1,90 @@
+{
+  "app": {
+    "name": "Панель новин",
+    "tagline": "Ваша приватна новинна платформа"
+  },
+  "auth": {
+    "sign_in": "Увійти",
+    "username": "Ім'я користувача",
+    "password": "Пароль",
+    "email_address": "Електронна адреса",
+    "use_email_code": "Використати код електронною поштою",
+    "back_to_password": "Повернутися до пароля",
+    "6_digit_code": "6-значний код",
+    "resend_code": "Надіслати код повторно",
+    "a_6_digit_code_was_sent_to": "6-значний код надіслано на",
+    "invalid_username_or_password": "Невірне ім'я користувача або пароль.",
+    "failed_to_send_code": "Не вдалося надіслати код. Спробуйте ще раз.",
+    "invalid_or_expired_code": "Недійсний або прострочений код. Спробуйте ще раз.",
+    "sending": "Надсилання…",
+    "send_code": "Надіслати код",
+    "verifying": "Перевірка…",
+    "verify_code": "Перевірити код",
+    "signing_in": "Вхід…",
+    "sign_in_with_keycloak": "Увійти через Keycloak",
+    "create_account": "Створити обліковий запис"
+  },
+  "nav": {
+    "brief": "Огляд",
+    "today": "Сьогодні",
+    "later": "Пізніше",
+    "starred": "Обрані",
+    "shared": "Спільні",
+    "search": "Пошук",
+    "ask": "Запитати",
+    "reading_list": "Список читання",
+    "briefing_history": "Історія оглядів",
+    "topic_map": "Карта тем",
+    "ai_stats": "Статистика ШІ",
+    "feeds": "Стрічки",
+    "reading_dna": "ДНК читання",
+    "weekly_recap": "Тижневий підсумок",
+    "archive": "Архів",
+    "collections": "Колекції",
+    "settings": "Налаштування",
+    "stats": "Статистика",
+    "analytics": "Аналітика",
+    "users": "Користувачі"
+  },
+  "page_title": {
+    "brief": "Огляд",
+    "today": "Сьогодні",
+    "later": "Пізніше",
+    "starred": "Обрані",
+    "shared": "Спільні",
+    "search": "Пошук",
+    "ask": "Запитати ШІ",
+    "topic_map": "Карта тем",
+    "ai_stats": "Статистика ШІ",
+    "briefs": "Огляди",
+    "feeds": "Стрічки",
+    "stats": "Статистика",
+    "reading_dna": "ДНК читання",
+    "reading_list": "Список читання",
+    "weekly_recap": "Тижневий підсумок",
+    "archive": "Архів",
+    "collections": "Колекції",
+    "settings": "Налаштування",
+    "analytics": "Аналітика",
+    "users": "Користувачі",
+    "default": "Radar"
+  },
+  "shell": {
+    "offline": "Офлайн",
+    "command": "Команда",
+    "menu": "Меню",
+    "more": "Більше",
+    "log_out": "Вийти"
+  },
+  "settings": {
+    "title": "Налаштування",
+    "about_heading": "Про застосунок",
+    "about_body": "Radar — це приватний інструмент для сортування технічних новин. Стан зберігається на сервері.",
+    "shortcuts_hint_prefix": "Натисніть",
+    "shortcuts_hint_suffix": "будь-де, щоб побачити комбінації клавіш.",
+    "language": {
+      "heading": "Мова",
+      "description": "Виберіть мову інтерфейсу застосунку."
+    }
+  }
+}

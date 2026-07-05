@@ -1,0 +1,90 @@
+{
+  "app": {
+    "name": "ニュースダッシュボード",
+    "tagline": "あなた専用のニュースプラットフォーム"
+  },
+  "auth": {
+    "sign_in": "サインイン",
+    "username": "ユーザー名",
+    "password": "パスワード",
+    "email_address": "メールアドレス",
+    "use_email_code": "代わりにメールコードを使う",
+    "back_to_password": "パスワードでのサインインに戻る",
+    "6_digit_code": "6桁のコード",
+    "resend_code": "コードを再送信",
+    "a_6_digit_code_was_sent_to": "6桁のコードを次の宛先に送信しました：",
+    "invalid_username_or_password": "ユーザー名またはパスワードが正しくありません。",
+    "failed_to_send_code": "コードの送信に失敗しました。もう一度お試しください。",
+    "invalid_or_expired_code": "コードが無効か期限切れです。もう一度お試しください。",
+    "sending": "送信中…",
+    "send_code": "コードを送信",
+    "verifying": "確認中…",
+    "verify_code": "コードを確認",
+    "signing_in": "サインイン中…",
+    "sign_in_with_keycloak": "Keycloak でサインイン",
+    "create_account": "アカウントを作成"
+  },
+  "nav": {
+    "brief": "ブリーフ",
+    "today": "今日",
+    "later": "後で読む",
+    "starred": "スター付き",
+    "shared": "共有済み",
+    "search": "検索",
+    "ask": "質問",
+    "reading_list": "リーディングリスト",
+    "briefing_history": "ブリーフ履歴",
+    "topic_map": "トピックマップ",
+    "ai_stats": "AI統計",
+    "feeds": "フィード",
+    "reading_dna": "リーディングDNA",
+    "weekly_recap": "週間まとめ",
+    "archive": "アーカイブ",
+    "collections": "コレクション",
+    "settings": "設定",
+    "stats": "統計",
+    "analytics": "分析",
+    "users": "ユーザー"
+  },
+  "page_title": {
+    "brief": "ブリーフ",
+    "today": "今日",
+    "later": "後で読む",
+    "starred": "スター付き",
+    "shared": "共有済み",
+    "search": "検索",
+    "ask": "AIに質問",
+    "topic_map": "トピックマップ",
+    "ai_stats": "AI統計",
+    "briefs": "ブリーフ",
+    "feeds": "フィード",
+    "stats": "統計",
+    "reading_dna": "リーディングDNA",
+    "reading_list": "リーディングリスト",
+    "weekly_recap": "週間まとめ",
+    "archive": "アーカイブ",
+    "collections": "コレクション",
+    "settings": "設定",
+    "analytics": "分析",
+    "users": "ユーザー",
+    "default": "Radar"
+  },
+  "shell": {
+    "offline": "オフライン",
+    "command": "コマンド",
+    "menu": "メニュー",
+    "more": "その他",
+    "log_out": "ログアウト"
+  },
+  "settings": {
+    "title": "設定",
+    "about_heading": "このアプリについて",
+    "about_body": "Radar は技術ニュースを整理するためのプライベートツールです。状態はサーバーに保存されます。",
+    "shortcuts_hint_prefix": "どこでも",
+    "shortcuts_hint_suffix": "を押すとキーボードショートカットが表示されます。",
+    "language": {
+      "heading": "言語",
+      "description": "アプリのインターフェース言語を選択してください。"
+    }
+  }
+}

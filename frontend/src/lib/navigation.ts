@@ -25,6 +25,8 @@ import {
 export interface NavigationItem {
   to: string;
   label: string;
+  /** i18next key for the translated label, used by shell surfaces (rail, mobile nav, sheet menu). */
+  labelKey: string;
   icon: LucideIcon;
   commandLabel?: string;
   shortcut?: string;
@@ -32,33 +34,57 @@ export interface NavigationItem {
 }
 
 export const primaryNavigationItems: NavigationItem[] = [
-  { to: '/', label: 'Brief', icon: Newspaper, shortcut: 'b' },
-  { to: '/today', label: 'Today', icon: Inbox, shortcut: 't' },
-  { to: '/later', label: 'Later', icon: Clock, shortcut: 'l' },
-  { to: '/starred', label: 'Starred', icon: Star, shortcut: 's' },
-  { to: '/shared', label: 'Shared', icon: Send },
-  { to: '/search', label: 'Search', icon: Search },
-  { to: '/ask', label: 'Ask', commandLabel: 'Ask AI', icon: Sparkles, shortcut: 'a' },
+  { to: '/', label: 'Brief', labelKey: 'nav.brief', icon: Newspaper, shortcut: 'b' },
+  { to: '/today', label: 'Today', labelKey: 'nav.today', icon: Inbox, shortcut: 't' },
+  { to: '/later', label: 'Later', labelKey: 'nav.later', icon: Clock, shortcut: 'l' },
+  { to: '/starred', label: 'Starred', labelKey: 'nav.starred', icon: Star, shortcut: 's' },
+  { to: '/shared', label: 'Shared', labelKey: 'nav.shared', icon: Send },
+  { to: '/search', label: 'Search', labelKey: 'nav.search', icon: Search },
+  {
+    to: '/ask',
+    label: 'Ask',
+    labelKey: 'nav.ask',
+    commandLabel: 'Ask AI',
+    icon: Sparkles,
+    shortcut: 'a',
+  },
 ];
 
 export const secondaryNavigationItems: NavigationItem[] = [
-  { to: '/reading-list', label: 'Reading List', icon: Bookmark, shortcut: 'r' },
-  { to: '/briefs', label: 'Briefing History', icon: History, shortcut: 'h' },
-  { to: '/topic-map', label: 'Topic Map', icon: Network },
-  { to: '/ai-stats', label: 'AI Stats', icon: BrainCircuit },
-  { to: '/feeds', label: 'Feeds', icon: Radio, shortcut: 'f' },
-  { to: '/reading-dna', label: 'Reading DNA', icon: SlidersHorizontal },
-  { to: '/recap', label: 'Weekly Recap', icon: Flame },
-  { to: '/archive', label: 'Archive', icon: Archive },
-  { to: '/collections', label: 'Collections', icon: Tag },
-  { to: '/settings', label: 'Settings', icon: Settings },
+  {
+    to: '/reading-list',
+    label: 'Reading List',
+    labelKey: 'nav.reading_list',
+    icon: Bookmark,
+    shortcut: 'r',
+  },
+  {
+    to: '/briefs',
+    label: 'Briefing History',
+    labelKey: 'nav.briefing_history',
+    icon: History,
+    shortcut: 'h',
+  },
+  { to: '/topic-map', label: 'Topic Map', labelKey: 'nav.topic_map', icon: Network },
+  { to: '/ai-stats', label: 'AI Stats', labelKey: 'nav.ai_stats', icon: BrainCircuit },
+  { to: '/feeds', label: 'Feeds', labelKey: 'nav.feeds', icon: Radio, shortcut: 'f' },
+  {
+    to: '/reading-dna',
+    label: 'Reading DNA',
+    labelKey: 'nav.reading_dna',
+    icon: SlidersHorizontal,
+  },
+  { to: '/recap', label: 'Weekly Recap', labelKey: 'nav.weekly_recap', icon: Flame },
+  { to: '/archive', label: 'Archive', labelKey: 'nav.archive', icon: Archive },
+  { to: '/collections', label: 'Collections', labelKey: 'nav.collections', icon: Tag },
+  { to: '/settings', label: 'Settings', labelKey: 'nav.settings', icon: Settings },
 ];
 
 // Shown in the secondary nav only for admin users.
 export const adminNavigationItems: NavigationItem[] = [
-  { to: '/stats', label: 'Stats', icon: BarChart3 },
-  { to: '/analytics', label: 'Analytics', icon: Activity },
-  { to: '/admin', label: 'Users', icon: Users },
+  { to: '/stats', label: 'Stats', labelKey: 'nav.stats', icon: BarChart3 },
+  { to: '/analytics', label: 'Analytics', labelKey: 'nav.analytics', icon: Activity },
+  { to: '/admin', label: 'Users', labelKey: 'nav.users', icon: Users },
 ];
 
 export function secondaryNavigationItemsFor(isAdmin: boolean): NavigationItem[] {
@@ -130,26 +156,45 @@ export function isNavigationItemActive(to: string, pathname: string): boolean {
   return pathname.startsWith(to);
 }
 
+// Single source of truth for page titles: each rule pairs a route match with
+// its English label and i18next key, so the two can never drift out of sync.
+const pageTitleRules: { test: (pathname: string) => boolean; en: string; key: string }[] = [
+  { test: (p) => p === '/', en: 'Brief', key: 'page_title.brief' },
+  { test: (p) => p === '/today', en: 'Today', key: 'page_title.today' },
+  { test: (p) => p.startsWith('/later'), en: 'Later', key: 'page_title.later' },
+  { test: (p) => p.startsWith('/starred'), en: 'Starred', key: 'page_title.starred' },
+  { test: (p) => p.startsWith('/shared'), en: 'Shared', key: 'page_title.shared' },
+  { test: (p) => p.startsWith('/search'), en: 'Search', key: 'page_title.search' },
+  { test: (p) => p.startsWith('/ask'), en: 'Ask AI', key: 'page_title.ask' },
+  { test: (p) => p.startsWith('/topic-map'), en: 'Topic Map', key: 'page_title.topic_map' },
+  { test: (p) => p.startsWith('/ai-stats'), en: 'AI Stats', key: 'page_title.ai_stats' },
+  { test: (p) => p.startsWith('/briefs'), en: 'Briefs', key: 'page_title.briefs' },
+  { test: (p) => p.startsWith('/feeds'), en: 'Feeds', key: 'page_title.feeds' },
+  { test: (p) => p.startsWith('/stats'), en: 'Stats', key: 'page_title.stats' },
+  { test: (p) => p.startsWith('/reading-dna'), en: 'Reading DNA', key: 'page_title.reading_dna' },
+  {
+    test: (p) => p.startsWith('/reading-list'),
+    en: 'Reading List',
+    key: 'page_title.reading_list',
+  },
+  { test: (p) => p.startsWith('/recap'), en: 'Weekly Recap', key: 'page_title.weekly_recap' },
+  { test: (p) => p.startsWith('/archive'), en: 'Archive', key: 'page_title.archive' },
+  { test: (p) => p.startsWith('/collections'), en: 'Collections', key: 'page_title.collections' },
+  { test: (p) => p.startsWith('/settings'), en: 'Settings', key: 'page_title.settings' },
+  { test: (p) => p.startsWith('/analytics'), en: 'Analytics', key: 'page_title.analytics' },
+  { test: (p) => p.startsWith('/admin'), en: 'Users', key: 'page_title.users' },
+];
+const defaultPageTitle = { en: 'Radar', key: 'page_title.default' };
+
+function resolvePageTitle(pathname: string): { en: string; key: string } {
+  return pageTitleRules.find((rule) => rule.test(pathname)) ?? defaultPageTitle;
+}
+
 export function getPageTitle(pathname: string): string {
-  if (pathname === '/') return 'Brief';
-  if (pathname === '/today') return 'Today';
-  if (pathname.startsWith('/later')) return 'Later';
-  if (pathname.startsWith('/starred')) return 'Starred';
-  if (pathname.startsWith('/shared')) return 'Shared';
-  if (pathname.startsWith('/search')) return 'Search';
-  if (pathname.startsWith('/ask')) return 'Ask AI';
-  if (pathname.startsWith('/topic-map')) return 'Topic Map';
-  if (pathname.startsWith('/ai-stats')) return 'AI Stats';
-  if (pathname.startsWith('/briefs')) return 'Briefs';
-  if (pathname.startsWith('/feeds')) return 'Feeds';
-  if (pathname.startsWith('/stats')) return 'Stats';
-  if (pathname.startsWith('/reading-dna')) return 'Reading DNA';
-  if (pathname.startsWith('/reading-list')) return 'Reading List';
-  if (pathname.startsWith('/recap')) return 'Weekly Recap';
-  if (pathname.startsWith('/archive')) return 'Archive';
-  if (pathname.startsWith('/collections')) return 'Collections';
-  if (pathname.startsWith('/settings')) return 'Settings';
-  if (pathname.startsWith('/analytics')) return 'Analytics';
-  if (pathname.startsWith('/admin')) return 'Users';
-  return 'Radar';
+  return resolvePageTitle(pathname).en;
+}
+
+/** i18next key for the page title, for shell surfaces that render translated text. */
+export function getPageTitleKey(pathname: string): string {
+  return resolvePageTitle(pathname).key;
 }

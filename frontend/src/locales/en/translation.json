@@ -23,5 +23,68 @@
     "signing_in": "Signing in…",
     "sign_in_with_keycloak": "Sign in with Keycloak",
     "create_account": "Create Account"
+  },
+  "nav": {
+    "brief": "Brief",
+    "today": "Today",
+    "later": "Later",
+    "starred": "Starred",
+    "shared": "Shared",
+    "search": "Search",
+    "ask": "Ask",
+    "reading_list": "Reading List",
+    "briefing_history": "Briefing History",
+    "topic_map": "Topic Map",
+    "ai_stats": "AI Stats",
+    "feeds": "Feeds",
+    "reading_dna": "Reading DNA",
+    "weekly_recap": "Weekly Recap",
+    "archive": "Archive",
+    "collections": "Collections",
+    "settings": "Settings",
+    "stats": "Stats",
+    "analytics": "Analytics",
+    "users": "Users"
+  },
+  "page_title": {
+    "brief": "Brief",
+    "today": "Today",
+    "later": "Later",
+    "starred": "Starred",
+    "shared": "Shared",
+    "search": "Search",
+    "ask": "Ask AI",
+    "topic_map": "Topic Map",
+    "ai_stats": "AI Stats",
+    "briefs": "Briefs",
+    "feeds": "Feeds",
+    "stats": "Stats",
+    "reading_dna": "Reading DNA",
+    "reading_list": "Reading List",
+    "weekly_recap": "Weekly Recap",
+    "archive": "Archive",
+    "collections": "Collections",
+    "settings": "Settings",
+    "analytics": "Analytics",
+    "users": "Users",
+    "default": "Radar"
+  },
+  "shell": {
+    "offline": "Offline",
+    "command": "Command",
+    "menu": "Menu",
+    "more": "More",
+    "log_out": "Log out"
+  },
+  "settings": {
+    "title": "Settings",
+    "about_heading": "About",
+    "about_body": "Radar is a private technical news triage tool. State is stored on the server.",
+    "shortcuts_hint_prefix": "Press",
+    "shortcuts_hint_suffix": "anywhere for keyboard shortcuts.",
+    "language": {
+      "heading": "Language",
+      "description": "Choose the language for the app interface."
+    }
   }
 }

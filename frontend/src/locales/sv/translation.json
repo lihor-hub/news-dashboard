@@ -1,0 +1,90 @@
+{
+  "app": {
+    "name": "Nyhetspanel",
+    "tagline": "Din privata nyhetsplattform"
+  },
+  "auth": {
+    "sign_in": "Logga in",
+    "username": "Användarnamn",
+    "password": "Lösenord",
+    "email_address": "E-postadress",
+    "use_email_code": "Använd e-postkod istället",
+    "back_to_password": "Tillbaka till lösenord",
+    "6_digit_code": "6-siffrig kod",
+    "resend_code": "Skicka koden igen",
+    "a_6_digit_code_was_sent_to": "En 6-siffrig kod har skickats till",
+    "invalid_username_or_password": "Ogiltigt användarnamn eller lösenord.",
+    "failed_to_send_code": "Det gick inte att skicka koden. Försök igen.",
+    "invalid_or_expired_code": "Ogiltig eller utgången kod. Försök igen.",
+    "sending": "Skickar…",
+    "send_code": "Skicka kod",
+    "verifying": "Verifierar…",
+    "verify_code": "Verifiera kod",
+    "signing_in": "Loggar in…",
+    "sign_in_with_keycloak": "Logga in med Keycloak",
+    "create_account": "Skapa konto"
+  },
+  "nav": {
+    "brief": "Överblick",
+    "today": "Idag",
+    "later": "Senare",
+    "starred": "Stjärnmärkta",
+    "shared": "Delade",
+    "search": "Sök",
+    "ask": "Fråga",
+    "reading_list": "Läslista",
+    "briefing_history": "Överblickshistorik",
+    "topic_map": "Ämneskarta",
+    "ai_stats": "AI-statistik",
+    "feeds": "Flöden",
+    "reading_dna": "Läs-DNA",
+    "weekly_recap": "Veckosammanfattning",
+    "archive": "Arkiv",
+    "collections": "Samlingar",
+    "settings": "Inställningar",
+    "stats": "Statistik",
+    "analytics": "Analys",
+    "users": "Användare"
+  },
+  "page_title": {
+    "brief": "Överblick",
+    "today": "Idag",
+    "later": "Senare",
+    "starred": "Stjärnmärkta",
+    "shared": "Delade",
+    "search": "Sök",
+    "ask": "Fråga AI",
+    "topic_map": "Ämneskarta",
+    "ai_stats": "AI-statistik",
+    "briefs": "Överblickar",
+    "feeds": "Flöden",
+    "stats": "Statistik",
+    "reading_dna": "Läs-DNA",
+    "reading_list": "Läslista",
+    "weekly_recap": "Veckosammanfattning",
+    "archive": "Arkiv",
+    "collections": "Samlingar",
+    "settings": "Inställningar",
+    "analytics": "Analys",
+    "users": "Användare",
+    "default": "Radar"
+  },
+  "shell": {
+    "offline": "Offline",
+    "command": "Kommando",
+    "menu": "Meny",
+    "more": "Mer",
+    "log_out": "Logga ut"
+  },
+  "settings": {
+    "title": "Inställningar",
+    "about_heading": "Om",
+    "about_body": "Radar är ett privat verktyg för att sortera tekniska nyheter. Status lagras på servern.",
+    "shortcuts_hint_prefix": "Tryck på",
+    "shortcuts_hint_suffix": "var som helst för tangentbordsgenvägar.",
+    "language": {
+      "heading": "Språk",
+      "description": "Välj språk för appens gränssnitt."
+    }
+  }
+}

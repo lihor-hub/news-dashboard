@@ -1,0 +1,90 @@
+{
+  "app": {
+    "name": "Nachrichten-Dashboard",
+    "tagline": "Ihre private Nachrichtenplattform"
+  },
+  "auth": {
+    "sign_in": "Anmelden",
+    "username": "Benutzername",
+    "password": "Passwort",
+    "email_address": "E-Mail-Adresse",
+    "use_email_code": "Stattdessen E-Mail-Code verwenden",
+    "back_to_password": "Zurück zum Passwort",
+    "6_digit_code": "6-stelliger Code",
+    "resend_code": "Code erneut senden",
+    "a_6_digit_code_was_sent_to": "Ein 6-stelliger Code wurde gesendet an",
+    "invalid_username_or_password": "Ungültiger Benutzername oder ungültiges Passwort.",
+    "failed_to_send_code": "Code konnte nicht gesendet werden. Bitte erneut versuchen.",
+    "invalid_or_expired_code": "Ungültiger oder abgelaufener Code. Bitte erneut versuchen.",
+    "sending": "Wird gesendet…",
+    "send_code": "Code senden",
+    "verifying": "Wird überprüft…",
+    "verify_code": "Code bestätigen",
+    "signing_in": "Anmeldung läuft…",
+    "sign_in_with_keycloak": "Mit Keycloak anmelden",
+    "create_account": "Konto erstellen"
+  },
+  "nav": {
+    "brief": "Übersicht",
+    "today": "Heute",
+    "later": "Später",
+    "starred": "Markiert",
+    "shared": "Geteilt",
+    "search": "Suche",
+    "ask": "Fragen",
+    "reading_list": "Leseliste",
+    "briefing_history": "Verlauf der Übersichten",
+    "topic_map": "Themenkarte",
+    "ai_stats": "KI-Statistiken",
+    "feeds": "Feeds",
+    "reading_dna": "Lese-DNA",
+    "weekly_recap": "Wochenrückblick",
+    "archive": "Archiv",
+    "collections": "Sammlungen",
+    "settings": "Einstellungen",
+    "stats": "Statistiken",
+    "analytics": "Analytik",
+    "users": "Benutzer"
+  },
+  "page_title": {
+    "brief": "Übersicht",
+    "today": "Heute",
+    "later": "Später",
+    "starred": "Markiert",
+    "shared": "Geteilt",
+    "search": "Suche",
+    "ask": "KI fragen",
+    "topic_map": "Themenkarte",
+    "ai_stats": "KI-Statistiken",
+    "briefs": "Übersichten",
+    "feeds": "Feeds",
+    "stats": "Statistiken",
+    "reading_dna": "Lese-DNA",
+    "reading_list": "Leseliste",
+    "weekly_recap": "Wochenrückblick",
+    "archive": "Archiv",
+    "collections": "Sammlungen",
+    "settings": "Einstellungen",
+    "analytics": "Analytik",
+    "users": "Benutzer",
+    "default": "Radar"
+  },
+  "shell": {
+    "offline": "Offline",
+    "command": "Befehl",
+    "menu": "Menü",
+    "more": "Mehr",
+    "log_out": "Abmelden"
+  },
+  "settings": {
+    "title": "Einstellungen",
+    "about_heading": "Über",
+    "about_body": "Radar ist ein privates Werkzeug zur Sichtung technischer Nachrichten. Der Status wird auf dem Server gespeichert.",
+    "shortcuts_hint_prefix": "Drücke",
+    "shortcuts_hint_suffix": "überall für Tastenkürzel.",
+    "language": {
+      "heading": "Sprache",
+      "description": "Wähle die Sprache der App-Oberfläche."
+    }
+  }
+}

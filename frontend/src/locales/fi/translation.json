@@ -1,0 +1,90 @@
+{
+  "app": {
+    "name": "Uutiskojelauta",
+    "tagline": "Yksityinen uutisalustasi"
+  },
+  "auth": {
+    "sign_in": "Kirjaudu sisään",
+    "username": "Käyttäjänimi",
+    "password": "Salasana",
+    "email_address": "Sähköpostiosoite",
+    "use_email_code": "Käytä sen sijaan sähköpostikoodia",
+    "back_to_password": "Takaisin salasanaan",
+    "6_digit_code": "6-numeroinen koodi",
+    "resend_code": "Lähetä koodi uudelleen",
+    "a_6_digit_code_was_sent_to": "6-numeroinen koodi on lähetetty osoitteeseen",
+    "invalid_username_or_password": "Virheellinen käyttäjänimi tai salasana.",
+    "failed_to_send_code": "Koodin lähetys epäonnistui. Yritä uudelleen.",
+    "invalid_or_expired_code": "Virheellinen tai vanhentunut koodi. Yritä uudelleen.",
+    "sending": "Lähetetään…",
+    "send_code": "Lähetä koodi",
+    "verifying": "Vahvistetaan…",
+    "verify_code": "Vahvista koodi",
+    "signing_in": "Kirjaudutaan sisään…",
+    "sign_in_with_keycloak": "Kirjaudu Keycloakilla",
+    "create_account": "Luo tili"
+  },
+  "nav": {
+    "brief": "Yhteenveto",
+    "today": "Tänään",
+    "later": "Myöhemmin",
+    "starred": "Tähdellä merkityt",
+    "shared": "Jaetut",
+    "search": "Haku",
+    "ask": "Kysy",
+    "reading_list": "Lukulista",
+    "briefing_history": "Yhteenvetohistoria",
+    "topic_map": "Aihekartta",
+    "ai_stats": "Tekoälytilastot",
+    "feeds": "Syötteet",
+    "reading_dna": "Lukemis-DNA",
+    "weekly_recap": "Viikkokooste",
+    "archive": "Arkisto",
+    "collections": "Kokoelmat",
+    "settings": "Asetukset",
+    "stats": "Tilastot",
+    "analytics": "Analytiikka",
+    "users": "Käyttäjät"
+  },
+  "page_title": {
+    "brief": "Yhteenveto",
+    "today": "Tänään",
+    "later": "Myöhemmin",
+    "starred": "Tähdellä merkityt",
+    "shared": "Jaetut",
+    "search": "Haku",
+    "ask": "Kysy tekoälyltä",
+    "topic_map": "Aihekartta",
+    "ai_stats": "Tekoälytilastot",
+    "briefs": "Yhteenvedot",
+    "feeds": "Syötteet",
+    "stats": "Tilastot",
+    "reading_dna": "Lukemis-DNA",
+    "reading_list": "Lukulista",
+    "weekly_recap": "Viikkokooste",
+    "archive": "Arkisto",
+    "collections": "Kokoelmat",
+    "settings": "Asetukset",
+    "analytics": "Analytiikka",
+    "users": "Käyttäjät",
+    "default": "Radar"
+  },
+  "shell": {
+    "offline": "Offline",
+    "command": "Komento",
+    "menu": "Valikko",
+    "more": "Lisää",
+    "log_out": "Kirjaudu ulos"
+  },
+  "settings": {
+    "title": "Asetukset",
+    "about_heading": "Tietoja",
+    "about_body": "Radar on yksityinen työkalu teknisten uutisten lajitteluun. Tila tallennetaan palvelimelle.",
+    "shortcuts_hint_prefix": "Paina",
+    "shortcuts_hint_suffix": "missä tahansa nähdäksesi pikanäppäimet.",
+    "language": {
+      "heading": "Kieli",
+      "description": "Valitse sovelluksen käyttöliittymän kieli."
+    }
+  }
+}

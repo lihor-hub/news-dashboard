@@ -1,0 +1,90 @@
+{
+  "app": {
+    "name": "Nyhetspanel",
+    "tagline": "Din private nyhetsplattform"
+  },
+  "auth": {
+    "sign_in": "Logg inn",
+    "username": "Brukernavn",
+    "password": "Passord",
+    "email_address": "E-postadresse",
+    "use_email_code": "Bruk e-postkode i stedet",
+    "back_to_password": "Tilbake til passord",
+    "6_digit_code": "6-sifret kode",
+    "resend_code": "Send koden på nytt",
+    "a_6_digit_code_was_sent_to": "En 6-sifret kode er sendt til",
+    "invalid_username_or_password": "Ugyldig brukernavn eller passord.",
+    "failed_to_send_code": "Kunne ikke sende koden. Prøv igjen.",
+    "invalid_or_expired_code": "Ugyldig eller utløpt kode. Prøv igjen.",
+    "sending": "Sender…",
+    "send_code": "Send kode",
+    "verifying": "Verifiserer…",
+    "verify_code": "Bekreft kode",
+    "signing_in": "Logger inn…",
+    "sign_in_with_keycloak": "Logg inn med Keycloak",
+    "create_account": "Opprett konto"
+  },
+  "nav": {
+    "brief": "Oversikt",
+    "today": "I dag",
+    "later": "Senere",
+    "starred": "Stjernemerket",
+    "shared": "Delt",
+    "search": "Søk",
+    "ask": "Spør",
+    "reading_list": "Leseliste",
+    "briefing_history": "Oversikthistorikk",
+    "topic_map": "Emnekart",
+    "ai_stats": "AI-statistikk",
+    "feeds": "Kilder",
+    "reading_dna": "Lese-DNA",
+    "weekly_recap": "Ukesoppsummering",
+    "archive": "Arkiv",
+    "collections": "Samlinger",
+    "settings": "Innstillinger",
+    "stats": "Statistikk",
+    "analytics": "Analyse",
+    "users": "Brukere"
+  },
+  "page_title": {
+    "brief": "Oversikt",
+    "today": "I dag",
+    "later": "Senere",
+    "starred": "Stjernemerket",
+    "shared": "Delt",
+    "search": "Søk",
+    "ask": "Spør AI",
+    "topic_map": "Emnekart",
+    "ai_stats": "AI-statistikk",
+    "briefs": "Oversikter",
+    "feeds": "Kilder",
+    "stats": "Statistikk",
+    "reading_dna": "Lese-DNA",
+    "reading_list": "Leseliste",
+    "weekly_recap": "Ukesoppsummering",
+    "archive": "Arkiv",
+    "collections": "Samlinger",
+    "settings": "Innstillinger",
+    "analytics": "Analyse",
+    "users": "Brukere",
+    "default": "Radar"
+  },
+  "shell": {
+    "offline": "Frakoblet",
+    "command": "Kommando",
+    "menu": "Meny",
+    "more": "Mer",
+    "log_out": "Logg ut"
+  },
+  "settings": {
+    "title": "Innstillinger",
+    "about_heading": "Om",
+    "about_body": "Radar er et privat verktøy for å sortere tekniske nyheter. Status lagres på serveren.",
+    "shortcuts_hint_prefix": "Trykk",
+    "shortcuts_hint_suffix": "hvor som helst for tastatursnarveier.",
+    "language": {
+      "heading": "Språk",
+      "description": "Velg språk for appens grensesnitt."
+    }
+  }
+}

@@ -1,0 +1,90 @@
+{
+  "app": {
+    "name": "新聞儀表板",
+    "tagline": "您的私人新聞平台"
+  },
+  "auth": {
+    "sign_in": "登入",
+    "username": "使用者名稱",
+    "password": "密碼",
+    "email_address": "電子郵件地址",
+    "use_email_code": "改用電子郵件驗證碼",
+    "back_to_password": "返回密碼登入",
+    "6_digit_code": "6 位數驗證碼",
+    "resend_code": "重新傳送驗證碼",
+    "a_6_digit_code_was_sent_to": "6 位數驗證碼已傳送至",
+    "invalid_username_or_password": "使用者名稱或密碼無效。",
+    "failed_to_send_code": "驗證碼傳送失敗，請再試一次。",
+    "invalid_or_expired_code": "驗證碼無效或已過期，請再試一次。",
+    "sending": "傳送中…",
+    "send_code": "傳送驗證碼",
+    "verifying": "驗證中…",
+    "verify_code": "驗證代碼",
+    "signing_in": "登入中…",
+    "sign_in_with_keycloak": "使用 Keycloak 登入",
+    "create_account": "建立帳戶"
+  },
+  "nav": {
+    "brief": "簡報",
+    "today": "今天",
+    "later": "稍後",
+    "starred": "已加星號",
+    "shared": "已分享",
+    "search": "搜尋",
+    "ask": "提問",
+    "reading_list": "閱讀清單",
+    "briefing_history": "簡報歷史",
+    "topic_map": "主題地圖",
+    "ai_stats": "AI 統計",
+    "feeds": "來源",
+    "reading_dna": "閱讀 DNA",
+    "weekly_recap": "每週回顧",
+    "archive": "封存",
+    "collections": "收藏集",
+    "settings": "設定",
+    "stats": "統計",
+    "analytics": "分析",
+    "users": "使用者"
+  },
+  "page_title": {
+    "brief": "簡報",
+    "today": "今天",
+    "later": "稍後",
+    "starred": "已加星號",
+    "shared": "已分享",
+    "search": "搜尋",
+    "ask": "詢問 AI",
+    "topic_map": "主題地圖",
+    "ai_stats": "AI 統計",
+    "briefs": "簡報",
+    "feeds": "來源",
+    "stats": "統計",
+    "reading_dna": "閱讀 DNA",
+    "reading_list": "閱讀清單",
+    "weekly_recap": "每週回顧",
+    "archive": "封存",
+    "collections": "收藏集",
+    "settings": "設定",
+    "analytics": "分析",
+    "users": "使用者",
+    "default": "Radar"
+  },
+  "shell": {
+    "offline": "離線",
+    "command": "指令",
+    "menu": "選單",
+    "more": "更多",
+    "log_out": "登出"
+  },
+  "settings": {
+    "title": "設定",
+    "about_heading": "關於",
+    "about_body": "Radar 是一款私人技術新聞分類工具，狀態儲存在伺服器上。",
+    "shortcuts_hint_prefix": "按下",
+    "shortcuts_hint_suffix": "可在任何地方查看鍵盤快速鍵。",
+    "language": {
+      "heading": "語言",
+      "description": "選擇應用程式介面的語言。"
+    }
+  }
+}

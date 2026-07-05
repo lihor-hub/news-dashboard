@@ -1,0 +1,90 @@
+{
+  "app": {
+    "name": "Bảng Tin Tức",
+    "tagline": "Nền tảng tin tức riêng của bạn"
+  },
+  "auth": {
+    "sign_in": "Đăng nhập",
+    "username": "Tên đăng nhập",
+    "password": "Mật khẩu",
+    "email_address": "Địa chỉ email",
+    "use_email_code": "Dùng mã qua email thay thế",
+    "back_to_password": "Quay lại đăng nhập bằng mật khẩu",
+    "6_digit_code": "Mã gồm 6 chữ số",
+    "resend_code": "Gửi lại mã",
+    "a_6_digit_code_was_sent_to": "Mã gồm 6 chữ số đã được gửi đến",
+    "invalid_username_or_password": "Tên đăng nhập hoặc mật khẩu không hợp lệ.",
+    "failed_to_send_code": "Gửi mã thất bại. Vui lòng thử lại.",
+    "invalid_or_expired_code": "Mã không hợp lệ hoặc đã hết hạn. Vui lòng thử lại.",
+    "sending": "Đang gửi…",
+    "send_code": "Gửi mã",
+    "verifying": "Đang xác minh…",
+    "verify_code": "Xác minh mã",
+    "signing_in": "Đang đăng nhập…",
+    "sign_in_with_keycloak": "Đăng nhập bằng Keycloak",
+    "create_account": "Tạo tài khoản"
+  },
+  "nav": {
+    "brief": "Tóm tắt",
+    "today": "Hôm nay",
+    "later": "Để sau",
+    "starred": "Đã gắn sao",
+    "shared": "Đã chia sẻ",
+    "search": "Tìm kiếm",
+    "ask": "Hỏi",
+    "reading_list": "Danh sách đọc",
+    "briefing_history": "Lịch sử tóm tắt",
+    "topic_map": "Bản đồ chủ đề",
+    "ai_stats": "Thống kê AI",
+    "feeds": "Nguồn tin",
+    "reading_dna": "DNA đọc",
+    "weekly_recap": "Tổng kết tuần",
+    "archive": "Lưu trữ",
+    "collections": "Bộ sưu tập",
+    "settings": "Cài đặt",
+    "stats": "Thống kê",
+    "analytics": "Phân tích",
+    "users": "Người dùng"
+  },
+  "page_title": {
+    "brief": "Tóm tắt",
+    "today": "Hôm nay",
+    "later": "Để sau",
+    "starred": "Đã gắn sao",
+    "shared": "Đã chia sẻ",
+    "search": "Tìm kiếm",
+    "ask": "Hỏi AI",
+    "topic_map": "Bản đồ chủ đề",
+    "ai_stats": "Thống kê AI",
+    "briefs": "Tóm tắt",
+    "feeds": "Nguồn tin",
+    "stats": "Thống kê",
+    "reading_dna": "DNA đọc",
+    "reading_list": "Danh sách đọc",
+    "weekly_recap": "Tổng kết tuần",
+    "archive": "Lưu trữ",
+    "collections": "Bộ sưu tập",
+    "settings": "Cài đặt",
+    "analytics": "Phân tích",
+    "users": "Người dùng",
+    "default": "Radar"
+  },
+  "shell": {
+    "offline": "Ngoại tuyến",
+    "command": "Lệnh",
+    "menu": "Menu",
+    "more": "Thêm",
+    "log_out": "Đăng xuất"
+  },
+  "settings": {
+    "title": "Cài đặt",
+    "about_heading": "Giới thiệu",
+    "about_body": "Radar là công cụ riêng tư để phân loại tin tức công nghệ. Trạng thái được lưu trên máy chủ.",
+    "shortcuts_hint_prefix": "Nhấn",
+    "shortcuts_hint_suffix": "ở bất kỳ đâu để xem phím tắt.",
+    "language": {
+      "heading": "Ngôn ngữ",
+      "description": "Chọn ngôn ngữ cho giao diện ứng dụng."
+    }
+  }
+}
