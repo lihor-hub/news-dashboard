@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Flame, Loader2 } from 'lucide-react';
 import { fetchRecaps } from '../api';
+import { NudgeCard } from '../components/FeedNudgeBanner';
 import type { WeeklyRecap, WeeklyRecapField } from '../types';
 
 interface PageState {
@@ -92,6 +93,36 @@ export function WeeklyRecapPage() {
               <FieldBars items={latest.data.sources} labelKey="source" />
             </Panel>
           </section>
+
+          {latest.data.saved && (
+            <Panel title="Saved backlog">
+              <div className="grid grid-cols-3 gap-3 text-center">
+                <SavedStat label="Saved this week" value={latest.data.saved.starred_this_week} />
+                <SavedStat label="Read from backlog" value={latest.data.saved.read_from_backlog} />
+                <SavedStat label="Backlog" value={latest.data.saved.backlog_total} />
+              </div>
+            </Panel>
+          )}
+
+          {latest.data.dwell && (
+            <Panel title="Skim vs deep read">
+              <div className="grid grid-cols-3 gap-3 text-center">
+                <SavedStat label="Skims" value={latest.data.dwell.skims} />
+                <SavedStat label="Deep reads" value={latest.data.dwell.reads} />
+                <SavedStat label="Avg. dwell" value={`${latest.data.dwell.average_seconds}s`} />
+              </div>
+            </Panel>
+          )}
+
+          {latest.data.nudges && latest.data.nudges.length > 0 && (
+            <Panel title="Suggested changes">
+              <div className="-mx-3 space-y-2">
+                {latest.data.nudges.map((nudge) => (
+                  <NudgeCard key={nudge.id} nudge={nudge} />
+                ))}
+              </div>
+            </Panel>
+          )}
         </>
       )}
 
@@ -122,6 +153,15 @@ function Metric({ label, value }: { label: string; value: string }) {
     <div className="rounded-md border border-border bg-surface px-3 py-2">
       <div className="text-[11px] text-muted-foreground">{label}</div>
       <div className="mt-1 text-xl font-semibold tabular-nums">{value}</div>
+    </div>
+  );
+}
+
+function SavedStat({ label, value }: { label: string; value: number | string }) {
+  return (
+    <div>
+      <div className="text-lg font-semibold tabular-nums">{value}</div>
+      <div className="text-[11px] text-muted-foreground">{label}</div>
     </div>
   );
 }

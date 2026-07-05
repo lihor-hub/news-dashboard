@@ -20,6 +20,7 @@ from news_dashboard.reading_progress.service import get_streak
 logger = logging.getLogger(__name__)
 
 RECAP_WINDOW_DAYS = 7
+SKIM_THRESHOLD_MS = 30_000
 
 
 def assemble_weekly_recap(
@@ -33,6 +34,9 @@ def assemble_weekly_recap(
     now = now or datetime.now(timezone.utc)
     start = now - timedelta(days=RECAP_WINDOW_DAYS)
     streak = get_streak(user_id, now=now, database_url=database_url)
+
+    from news_dashboard.personalization_nudges import generate_nudges
+
     with connect(db_path, database_url=database_url) as conn:
         return {
             "week_start": start.date().isoformat(),
@@ -43,6 +47,11 @@ def assemble_weekly_recap(
             "sources": _top_field(conn, user_id, start, "a.source_name", "source"),
             "minutes_read": _minutes_read(conn, user_id, start),
             "current_streak_days": streak["current_streak_days"],
+            "saved": _saved_backlog(conn, user_id, start),
+            "dwell": _dwell_profile(conn, user_id, start),
+            "nudges": generate_nudges(
+                user_id, database_url=database_url, db_path=db_path, max_results=2
+            ),
         }
 
 
@@ -149,3 +158,50 @@ def _minutes_read(conn: Any, user_id: int, start: datetime) -> float:
     if row is None or row["minutes"] is None:
         return 0.0
     return float(row["minutes"])
+
+
+def _saved_backlog(conn: Any, user_id: int, start: datetime) -> dict[str, int]:
+    row = conn.execute(
+        """
+        SELECT
+          COUNT(*) FILTER (WHERE starred_at >= %(start)s) AS starred_this_week,
+          COUNT(*) FILTER (
+            WHERE state = 'done' AND done_at >= %(start)s AND starred = TRUE
+          ) AS read_from_backlog,
+          COUNT(*) FILTER (
+            WHERE starred = TRUE AND state NOT IN ('done', 'archived')
+          ) AS backlog_total
+        FROM user_article_state
+        WHERE user_id = %(user_id)s
+        """,
+        {"user_id": user_id, "start": start},
+    ).fetchone()
+    return {
+        "starred_this_week": int(row["starred_this_week"]) if row else 0,
+        "read_from_backlog": int(row["read_from_backlog"]) if row else 0,
+        "backlog_total": int(row["backlog_total"]) if row else 0,
+    }
+
+
+def _dwell_profile(conn: Any, user_id: int, start: datetime) -> dict[str, Any]:
+    row = conn.execute(
+        """
+        SELECT
+          COUNT(*) FILTER (WHERE duration_ms < %(threshold)s) AS skims,
+          COUNT(*) FILTER (WHERE duration_ms >= %(threshold)s) AS reads,
+          ROUND(AVG(duration_ms) / 1000.0, 1) AS average_seconds
+        FROM user_events
+        WHERE user_id = %(user_id)s
+          AND event_type = 'article_close'
+          AND duration_ms IS NOT NULL
+          AND created_at >= %(start)s
+        """,
+        {"user_id": user_id, "start": start, "threshold": SKIM_THRESHOLD_MS},
+    ).fetchone()
+    return {
+        "skims": int(row["skims"]) if row else 0,
+        "reads": int(row["reads"]) if row else 0,
+        "average_seconds": float(row["average_seconds"])
+        if row and row["average_seconds"] is not None
+        else 0.0,
+    }

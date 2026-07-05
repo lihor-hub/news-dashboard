@@ -429,6 +429,18 @@ export interface WeeklyRecapField {
   count: number;
 }
 
+export interface WeeklyRecapSaved {
+  starred_this_week: number;
+  read_from_backlog: number;
+  backlog_total: number;
+}
+
+export interface WeeklyRecapDwell {
+  skims: number;
+  reads: number;
+  average_seconds: number;
+}
+
 export interface WeeklyRecapData {
   week_start: string;
   week_end: string;
@@ -438,6 +450,9 @@ export interface WeeklyRecapData {
   sources: WeeklyRecapField[];
   minutes_read: number;
   current_streak_days: number;
+  saved?: WeeklyRecapSaved;
+  dwell?: WeeklyRecapDwell;
+  nudges?: PersonalizationNudge[];
 }
 
 export interface WeeklyRecap {

@@ -105,6 +105,103 @@ def test_assemble_weekly_recap_aggregates_trailing_week(monkeypatch: Any, pg_cle
     assert recap["categories"][0]["count"] == 1
     assert recap["minutes_read"] == 2.0
     assert recap["current_streak_days"] == 1
+    assert recap["saved"] == {"starred_this_week": 0, "read_from_backlog": 0, "backlog_total": 0}
+    assert recap["dwell"] == {"skims": 0, "reads": 0, "average_seconds": 0.0}
+    assert recap["nudges"] == []
+
+
+def test_assemble_weekly_recap_saved_backlog_counts(monkeypatch: Any, pg_clean: str) -> None:
+    db_path = _setup_db(monkeypatch, pg_clean)
+    user_id = _make_user(db_path, "alice")
+    now = datetime.now(timezone.utc)
+    start = now - timedelta(days=7)
+
+    starred_and_read = _insert_article(db_path, "starred-and-read", "science")
+    starred_only = _insert_article(db_path, "starred-only", "science")
+    archived_starred = _insert_article(db_path, "archived-starred", "science")
+    stale_starred = _insert_article(db_path, "stale-starred", "science")
+
+    with connect(db_path) as conn:
+        conn.execute(
+            "INSERT INTO user_article_state(user_id, article_id, state, starred, starred_at,"
+            " done_at) VALUES (%s, %s, 'done', TRUE, %s, %s)",
+            (user_id, starred_and_read, now, now),
+        )
+        conn.execute(
+            "INSERT INTO user_article_state(user_id, article_id, state, starred, starred_at)"
+            " VALUES (%s, %s, 'today', TRUE, %s)",
+            (user_id, starred_only, now),
+        )
+        conn.execute(
+            "INSERT INTO user_article_state(user_id, article_id, state, starred, starred_at)"
+            " VALUES (%s, %s, 'archived', TRUE, %s)",
+            (user_id, archived_starred, now),
+        )
+        conn.execute(
+            "INSERT INTO user_article_state(user_id, article_id, state, starred, starred_at)"
+            " VALUES (%s, %s, 'today', TRUE, %s)",
+            (user_id, stale_starred, start - timedelta(days=10)),
+        )
+
+    recap = assemble_weekly_recap(user_id, now=now, database_url=db_path)
+
+    assert recap["saved"]["starred_this_week"] == 3
+    assert recap["saved"]["read_from_backlog"] == 1
+    # backlog_total is all-time and excludes done/archived states.
+    assert recap["saved"]["backlog_total"] == 2
+
+
+def test_assemble_weekly_recap_dwell_profile_buckets_by_threshold(
+    monkeypatch: Any, pg_clean: str
+) -> None:
+    db_path = _setup_db(monkeypatch, pg_clean)
+    user_id = _make_user(db_path, "alice")
+    now = datetime.now(timezone.utc)
+
+    with connect(db_path) as conn:
+        conn.execute(
+            "INSERT INTO user_events(user_id, event_type, duration_ms, created_at)"
+            " VALUES (%s, 'article_close', %s, %s)",
+            (user_id, 10_000, now),
+        )
+        conn.execute(
+            "INSERT INTO user_events(user_id, event_type, duration_ms, created_at)"
+            " VALUES (%s, 'article_close', %s, %s)",
+            (user_id, 60_000, now),
+        )
+
+    recap = assemble_weekly_recap(user_id, now=now, database_url=db_path)
+
+    assert recap["dwell"] == {"skims": 1, "reads": 1, "average_seconds": 35.0}
+
+
+def test_assemble_weekly_recap_includes_nudges(monkeypatch: Any, pg_clean: str) -> None:
+    db_path = _setup_db(monkeypatch, pg_clean)
+    user_id = _make_user(db_path, "alice")
+    now = datetime.now(timezone.utc)
+
+    fake_nudges = [
+        {
+            "id": "source:noise-feed",
+            "kind": "source",
+            "title": "Noisy source: Noise Feed",
+            "message": "You've skipped 90% of recent articles from 'Noise Feed'.",
+            "reason": "low_signal",
+            "skip_rate": 0.9,
+            "articles_last_30_days": 50,
+            "action": "disable_source",
+            "target": "noise-feed",
+            "target_label": "Noise Feed",
+        }
+    ]
+    monkeypatch.setattr(
+        "news_dashboard.personalization_nudges.generate_nudges",
+        lambda *_args, **_kwargs: fake_nudges,
+    )
+
+    recap = assemble_weekly_recap(user_id, now=now, database_url=db_path)
+
+    assert recap["nudges"] == fake_nudges
 
 
 def test_save_and_list_recaps_upserts_by_week(monkeypatch: Any, pg_clean: str) -> None:
