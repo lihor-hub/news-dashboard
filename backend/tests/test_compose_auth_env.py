@@ -16,6 +16,7 @@ import yaml  # type: ignore[import-untyped]
 REPO_ROOT = Path(__file__).parent.parent.parent
 COMPOSE_FILE = REPO_ROOT / "docker-compose.yml"
 COMPOSE_PROD_FILE = REPO_ROOT / "docker-compose.prod.yml"
+COMPOSE_DEMO_FILE = REPO_ROOT / "docker-compose.demo.yml"
 
 _REQUIRED_AUTH_VARS = {
     "SESSION_SECRET",
@@ -71,6 +72,28 @@ def test_compose_prod_file_exists() -> None:
     assert COMPOSE_PROD_FILE.exists(), f"docker-compose.prod.yml not found at {COMPOSE_PROD_FILE}"
 
 
+def test_compose_demo_file_exists() -> None:
+    assert COMPOSE_DEMO_FILE.exists(), f"docker-compose.demo.yml not found at {COMPOSE_DEMO_FILE}"
+
+
+def test_compose_demo_app_service_has_demo_mode_and_session_secret() -> None:
+    """The demo compose file must enable DEMO_MODE and supply SESSION_SECRET."""
+    compose = yaml.safe_load(COMPOSE_DEMO_FILE.read_text())
+    services = compose.get("services", {})
+    assert "news-dashboard" in services, "news-dashboard service missing from demo compose"
+
+    env = services["news-dashboard"].get("environment", {})
+    if isinstance(env, list):
+        env = dict(item.split("=", 1) if "=" in item else (item, "") for item in env)
+
+    assert _resolve_default(env.get("DEMO_MODE")) in ("1", "true", "yes", "on"), (
+        "DEMO_MODE must be enabled in docker-compose.demo.yml"
+    )
+    assert _resolve_default(env.get("SESSION_SECRET")), (
+        "SESSION_SECRET must have a value in docker-compose.demo.yml"
+    )
+
+
 def _assert_app_healthcheck_uses_no_extra_tools(compose_file: Path) -> None:
     """The news-dashboard service healthcheck must not rely on curl/wget.
 
@@ -111,3 +134,7 @@ def test_compose_app_healthcheck_configured() -> None:
 
 def test_compose_prod_app_healthcheck_configured() -> None:
     _assert_app_healthcheck_uses_no_extra_tools(COMPOSE_PROD_FILE)
+
+
+def test_compose_demo_app_healthcheck_configured() -> None:
+    _assert_app_healthcheck_uses_no_extra_tools(COMPOSE_DEMO_FILE)

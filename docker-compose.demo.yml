@@ -1,0 +1,47 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_DB: news_dashboard
+      POSTGRES_USER: news_dashboard
+      POSTGRES_PASSWORD: demo-only-password
+    volumes:
+      - news-dashboard-demo-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U news_dashboard -d news_dashboard"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  news-dashboard:
+    image: ghcr.io/lihor-hub/news-dashboard:latest
+    ports:
+      - "8080:8080"
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      POSTGRES_DB: news_dashboard
+      POSTGRES_USER: news_dashboard
+      POSTGRES_PASSWORD: demo-only-password
+      SESSION_SECRET: demo-only-session-secret-not-for-real-deployments
+      DEMO_MODE: "1"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/api/ready', timeout=5).read()",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    restart: unless-stopped
+
+volumes:
+  news-dashboard-demo-postgres:

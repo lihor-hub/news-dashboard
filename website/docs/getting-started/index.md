@@ -1,12 +1,13 @@
 # Getting Started
 
-Welcome to **News Dashboard** — your private news platform. There are three ways
+Welcome to **News Dashboard** — your private news platform. There are four ways
 to start using the app, depending on how you want to access it.
 
 | On-ramp | Best for |
 |---------|----------|
 | [Install the Android APK](install-android-apk.md) | Reading on an Android phone or tablet |
 | [Create a web account](create-web-account.md) | Reading in a browser on any device |
+| [Try the demo](try-the-demo.md) | Trying the app locally with sample data, no setup |
 | [Self-host your own instance](https://github.com/lihor-hub/news-dashboard#quick-start) | Running News Dashboard on your own infrastructure |
 
 The public instance runs at **[news.lihor.ro](https://news.lihor.ro)**. If you
