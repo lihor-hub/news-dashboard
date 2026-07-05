@@ -375,6 +375,14 @@ DEFAULT_SOURCES: list[SourceDefinition] = [
         priority=65,
         interest_tags=("infra", "software-development", "architecture"),
     ),
+    SourceDefinition(
+        "netflix-techblog",
+        "Netflix TechBlog",
+        "https://netflixtechblog.com/feed",
+        "engineering",
+        priority=68,
+        interest_tags=("infra", "software-development", "cloud"),
+    ),
     # ── Developer tools ──────────────────────────────────────────────────────
     SourceDefinition(
         "typescript-blog",
