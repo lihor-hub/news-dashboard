@@ -28,7 +28,7 @@ from fastapi import (
     UploadFile,
 )
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, StreamingResponse
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from psycopg.errors import UniqueViolation
 from psycopg.types.json import Jsonb
@@ -44,29 +44,21 @@ from news_dashboard.analytics import (
     record_events,
 )
 from news_dashboard.auth import (
-    _session_days,
-    authenticate,
-    consume_otp,
     count_admins,
-    create_otp_for_user,
-    create_session_token,
     create_user,
     delete_user,
-    exchange_keycloak_code,
-    get_or_create_otp_user,
     get_user_by_id,
     init_auth,
-    keycloak_auth_metadata,
-    keycloak_authorization_url,
     keycloak_config,
-    keycloak_logout_url,
-    keycloak_registration_url,
     list_users,
     require_admin,
     require_auth,
     update_password,
     verify_session_token,
 )
+from news_dashboard.auth_routes.router import SESSION_COOKIE as _SESSION_COOKIE
+from news_dashboard.auth_routes.router import public_router as auth_public_router
+from news_dashboard.auth_routes.router import router as auth_router
 from news_dashboard.body_fetch import fetch_and_cache_body, get_article, prefetch_article_bodies
 from news_dashboard.briefings import (
     BriefingAINotConfiguredError,
@@ -95,7 +87,6 @@ from news_dashboard.ingest import (
     transition_article_state,
 )
 from news_dashboard.ingest_events import stream_ingest_events
-from news_dashboard.login_throttle import clear_failures, is_throttled, record_failure
 from news_dashboard.run_history import get_ingest_run_sources, list_ingest_runs
 from news_dashboard.scheduler import (
     get_interval_minutes,
@@ -126,9 +117,6 @@ from news_dashboard.stats import (
 from news_dashboard.url_safety import UnsafeUrlError, validate_server_fetch_url
 
 logger = logging.getLogger(__name__)
-
-_SESSION_COOKIE = "nd_session"
-_OAUTH_STATE_COOKIE = "nd_oauth_state"
 
 _VERSION_FILE = Path(__file__).resolve().parents[2] / "VERSION"
 
@@ -552,11 +540,6 @@ class IntervalUpdate(BaseModel):
     minutes: int
 
 
-class LoginRequest(BaseModel):
-    username: str
-    password: str
-
-
 class CreateUserRequest(BaseModel):
     username: str
     password: str
@@ -584,15 +567,6 @@ class AnalyticsEvent(BaseModel):
 
 class AnalyticsEventsRequest(BaseModel):
     events: list[AnalyticsEvent] = Field(max_length=MAX_EVENTS_PER_BATCH)
-
-
-class OTPRequestPayload(BaseModel):
-    email: str
-
-
-class OTPLoginPayload(BaseModel):
-    email: str
-    otp: str
 
 
 # ── OPML helpers ──────────────────────────────────────────────────────────────
@@ -662,157 +636,7 @@ def public_config() -> dict[str, Any]:
     return {"sentry_dsn": frontend_error_tracking_dsn()}
 
 
-@public_router.get("/api/auth/config")
-def auth_config() -> dict[str, Any]:
-    return keycloak_auth_metadata()
-
-
-@public_router.get("/api/auth/metadata")
-def auth_metadata() -> dict[str, Any]:
-    return keycloak_auth_metadata()
-
-
-@public_router.get("/auth/login")
-def keycloak_login() -> RedirectResponse:
-    if not keycloak_config().enabled:
-        return RedirectResponse(url="/login")
-    state = secrets.token_urlsafe(32)
-    redirect = RedirectResponse(url=keycloak_authorization_url(state))
-    redirect.set_cookie(
-        key=_OAUTH_STATE_COOKIE,
-        value=state,
-        httponly=True,
-        secure=True,
-        samesite="lax",
-        max_age=600,
-        path="/auth/callback",
-    )
-    return redirect
-
-
-@public_router.get("/auth/register")
-def keycloak_register() -> RedirectResponse:
-    if not keycloak_config().enabled:
-        return RedirectResponse(url="/login")
-    state = secrets.token_urlsafe(32)
-    redirect = RedirectResponse(url=keycloak_registration_url(state))
-    redirect.set_cookie(
-        key=_OAUTH_STATE_COOKIE,
-        value=state,
-        httponly=True,
-        secure=True,
-        samesite="lax",
-        max_age=600,
-        path="/auth/callback",
-    )
-    return redirect
-
-
-@public_router.get("/auth/callback")
-async def keycloak_callback(request: Request) -> RedirectResponse:
-    expected_state = request.cookies.get(_OAUTH_STATE_COOKIE)
-    state = request.query_params.get("state")
-    code = request.query_params.get("code")
-    if not expected_state or not state or not secrets.compare_digest(expected_state, state):
-        raise HTTPException(status_code=400, detail="Invalid Keycloak OAuth state")
-    if not code:
-        raise HTTPException(status_code=400, detail="Missing Keycloak OAuth code")
-
-    user = await exchange_keycloak_code(code)
-    token = create_session_token(user["id"], bool(user["is_admin"]))
-    redirect = RedirectResponse(url="/")
-    redirect.set_cookie(
-        key=_SESSION_COOKIE,
-        value=token,
-        httponly=True,
-        secure=True,
-        samesite="strict",
-        max_age=_session_days() * 86400,
-        path="/",
-    )
-    redirect.delete_cookie(key=_OAUTH_STATE_COOKIE, path="/auth/callback")
-    return redirect
-
-
-@public_router.get("/auth/logout")
-def keycloak_logout() -> RedirectResponse:
-    redirect = RedirectResponse(url=keycloak_logout_url())
-    redirect.delete_cookie(key=_SESSION_COOKIE, path="/")
-    return redirect
-
-
-@public_router.post("/api/auth/login")
-def login(payload: LoginRequest, response: Response) -> dict[str, Any]:
-    if keycloak_config().enabled:
-        raise HTTPException(status_code=409, detail="Password login is disabled; use Keycloak")
-    if is_throttled(payload.username):
-        raise HTTPException(
-            status_code=429,
-            detail="Too many failed login attempts; try again later",
-        )
-    user = authenticate(payload.username, payload.password)
-    if not user:
-        record_failure(payload.username)
-        raise HTTPException(status_code=401, detail="Invalid credentials")
-    clear_failures(payload.username)
-    token = create_session_token(user["id"], bool(user["is_admin"]))
-    response.set_cookie(
-        key=_SESSION_COOKIE,
-        value=token,
-        httponly=True,
-        secure=True,
-        samesite="strict",
-        max_age=_session_days() * 86400,
-        path="/",
-    )
-    return {"id": user["id"], "username": user["username"], "is_admin": bool(user["is_admin"])}
-
-
-@public_router.get("/api/auth/logout")
-def logout(response: Response) -> dict[str, str]:
-    response.delete_cookie(key=_SESSION_COOKIE, path="/")
-    return {"status": "logged_out"}
-
-
-@public_router.post("/api/auth/otp/request")
-def otp_request(payload: OTPRequestPayload, background_tasks: BackgroundTasks) -> dict[str, str]:
-    from news_dashboard.email import send_otp_email
-
-    request_key = f"otp-request:{payload.email.strip().lower()}"
-    if is_throttled(request_key):
-        raise HTTPException(status_code=429, detail="Too many code requests; try again later")
-    record_failure(request_key)
-
-    user = get_or_create_otp_user(payload.email)
-    if user:
-        otp = create_otp_for_user(int(user["id"]))
-        background_tasks.add_task(send_otp_email, payload.email, otp)
-    # Always return success to prevent user enumeration
-    return {"status": "sent"}
-
-
-@public_router.post("/api/auth/otp/login")
-def otp_login(payload: OTPLoginPayload, response: Response) -> dict[str, Any]:
-    login_key = f"otp-login:{payload.email.strip().lower()}"
-    if is_throttled(login_key):
-        raise HTTPException(status_code=429, detail="Too many code attempts; try again later")
-
-    user = consume_otp(payload.email, payload.otp)
-    if not user:
-        record_failure(login_key)
-        raise HTTPException(status_code=401, detail="Invalid or expired code")
-    clear_failures(login_key)
-    token = create_session_token(int(user["id"]), bool(user["is_admin"]))
-    response.set_cookie(
-        key=_SESSION_COOKIE,
-        value=token,
-        httponly=True,
-        secure=True,
-        samesite="strict",
-        max_age=_session_days() * 86400,
-        path="/",
-    )
-    return {"id": user["id"], "username": user["username"], "is_admin": bool(user["is_admin"])}
+public_router.include_router(auth_public_router)
 
 
 @public_router.get("/api/articles/{article_id}/read")
@@ -904,14 +728,7 @@ def ingest_events(
     return {"stored": stored}
 
 
-@api.get("/api/auth/me")
-def auth_me(current_user: Annotated[dict[str, Any], Depends(require_auth)]) -> dict[str, Any]:
-    return {
-        "id": current_user["id"],
-        "username": current_user["username"],
-        "email": current_user.get("email"),
-        "is_admin": bool(current_user["is_admin"]),
-    }
+api.include_router(auth_router)
 
 
 @api.post("/api/ingest", dependencies=[Depends(require_admin)])
