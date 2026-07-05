@@ -81,6 +81,21 @@
   }
 }
 
+.screenshot {
+  padding: 3rem 0;
+  text-align: center;
+  background: var(--ifm-background-surface-color);
+}
+
+.screenshotImg {
+  max-width: 960px;
+  width: 100%;
+  height: auto;
+  border-radius: 12px;
+  border: 1px solid var(--ifm-toc-border-color);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.12);
+}
+
 .sections {
   padding: 1rem 0 4rem;
 }

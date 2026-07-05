@@ -19,7 +19,7 @@ health, search, briefings, and saved/read history.
 The app uses a FastAPI backend, a Vite React frontend, PostgreSQL storage, and
 optional OpenAI features for embeddings, Ask AI, and briefings.
 
-![News Dashboard home screen showing the Today feed with triage filters](docs/assets/screenshot-home.png)
+![News Dashboard Today feed showing triaged articles with recommendation scores](docs/screenshots/today-feed.webp)
 
 ## Features
 
@@ -31,6 +31,23 @@ optional OpenAI features for embeddings, Ask AI, and briefings.
 - Optional Keycloak login.
 - Optional OpenAI embeddings, Ask AI, and generated briefings.
 - Docker, Helm, and GitHub Actions deployment support.
+
+<details>
+<summary>Screenshots</summary>
+
+| Article reader | AI briefing |
+| --- | --- |
+| ![Article reader view with AI-generated key takeaways](docs/screenshots/article-detail.webp) | ![AI daily briefing landing page](docs/screenshots/briefing.webp) |
+
+| Source management |
+| --- |
+| ![Feeds page listing subscribed sources with health status](docs/screenshots/sources.webp) |
+
+Screenshots are generated from demo-mode seed data by `npm run capture:screenshots`
+(see [scripts/capture-screenshots.spec.ts](scripts/capture-screenshots.spec.ts)); no
+real account data is shown.
+
+</details>
 
 ## Stack
 

@@ -13,5 +13,6 @@
     "@resvg/resvg-js",
     "axe-core"
   ],
-  "ignoreExportsUsedInFile": true
+  "ignoreExportsUsedInFile": true,
+  "ignoreBinaries": ["python3"]
 }

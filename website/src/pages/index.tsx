@@ -30,6 +30,21 @@ function HeroArt() {
   );
 }
 
+function HomepageScreenshot() {
+  return (
+    <section className={styles.screenshot}>
+      <div className="container">
+        <img
+          src="/img/screenshot-hero.webp"
+          alt="News Dashboard Today feed showing triaged articles with recommendation scores"
+          className={styles.screenshotImg}
+          loading="lazy"
+        />
+      </div>
+    </section>
+  );
+}
+
 function HomepageHeader() {
   const { siteConfig } = useDocusaurusContext();
   return (
@@ -122,6 +137,7 @@ export default function Home(): ReactNode {
       description="Documentation for News Dashboard — your private, self-hosted news platform."
     >
       <HomepageHeader />
+      <HomepageScreenshot />
       <main>
         <HomepageFeatures />
         <DocSections />

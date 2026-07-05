@@ -1,9 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="960" height="540" viewBox="0 0 960 540">
-  <rect width="960" height="540" fill="#0f172a"/>
-  <rect x="20" y="20" width="920" height="60" rx="8" fill="#1e293b"/>
-  <text x="40" y="57" font-family="monospace" font-size="22" fill="#e2e8f0">News Dashboard — Today</text>
-  <rect x="20" y="100" width="280" height="420" rx="8" fill="#1e293b"/>
-  <rect x="316" y="100" width="624" height="420" rx="8" fill="#1e293b"/>
-  <text x="480" y="320" font-family="monospace" font-size="26" fill="#64748b" text-anchor="middle">Screenshot placeholder</text>
-  <text x="480" y="356" font-family="monospace" font-size="16" fill="#475569" text-anchor="middle">TODO: replace with a real capture of the Today feed</text>
-</svg>
