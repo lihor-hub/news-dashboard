@@ -342,6 +342,21 @@ def _run_reading_list_fetch() -> tuple[str, str | None] | None:
     return "success", f"fetched {processed} item(s)"
 
 
+def _run_newsletter_poll() -> tuple[str, str | None] | None:
+    from news_dashboard.newsletter_ingest import poll_newsletters
+
+    try:
+        processed = poll_newsletters()
+    except Exception as exc:
+        logger.exception("Newsletter IMAP poll failed")
+        return "failure", str(exc)[:500]
+    if processed == 0:
+        # Nothing new most polls; skip recording to keep scheduled_job_runs lean.
+        return None
+    logger.info("Newsletter IMAP poll done: %d message(s).", processed)
+    return "success", f"processed {processed} message(s)"
+
+
 def _run_watchlist_evaluation() -> tuple[str, str | None]:
     from news_dashboard.watchlist_agent import evaluate_watchlists
 
@@ -429,6 +444,10 @@ def _job_watchlist_evaluation() -> None:
     _run_and_record("watchlist_evaluation", _run_watchlist_evaluation)
 
 
+def _job_newsletter_poll() -> None:
+    _run_and_record("newsletter_poll", _run_newsletter_poll)
+
+
 def _parse_cron_hm(cron: str, default_minute: str, default_hour: str) -> tuple[str, str]:
     """Extract (minute, hour) from a cron string, falling back to defaults.
 
@@ -442,6 +461,22 @@ def _parse_cron_hm(cron: str, default_minute: str, default_hour: str) -> tuple[s
     except Exception:
         logger.debug("Could not parse cron %r; using defaults", cron, exc_info=True)
     return default_minute, default_hour
+
+
+def _register_newsletter_job(scheduler: Any) -> None:
+    """Register the newsletter IMAP poll job only when the mailbox is configured."""
+    from news_dashboard.newsletter_ingest import imap_configured, poll_minutes
+
+    if not imap_configured():
+        logger.info("Newsletter IMAP ingest not configured; job not registered.")
+        return
+    scheduler.add_job(
+        _job_newsletter_poll,
+        trigger="interval",
+        minutes=poll_minutes(),
+        id="newsletter_poll",
+        replace_existing=True,
+    )
 
 
 def start_scheduler() -> None:
@@ -571,6 +606,8 @@ def start_scheduler() -> None:
         id="watchlist_evaluation",
         replace_existing=True,
     )
+
+    _register_newsletter_job(scheduler)
 
     scheduler.start()
     _state.scheduler = scheduler

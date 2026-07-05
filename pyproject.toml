@@ -235,5 +235,8 @@ search-path = ["backend", "backend/tests"]
 [tool.vulture]
 # Pytest fixture parameters that are only used for their setup/teardown side
 # effects (e.g. seeding the test DB, patching env vars) and a fake-connect
-# shim parameter kept to match psycopg's real signature.
-ignore_names = ["tmp_db", "clean_throttle", "row_factory"]
+# shim parameter kept to match psycopg's real signature. `criteria` and
+# `message_parts` are imaplib.IMAP4_SSL-shaped Protocol stub parameters
+# (news_dashboard.newsletter_ingest.ImapClient) kept to match the real
+# imaplib method signatures for structural typing.
+ignore_names = ["tmp_db", "clean_throttle", "row_factory", "criteria", "message_parts"]
