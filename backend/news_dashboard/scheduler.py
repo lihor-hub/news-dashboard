@@ -95,6 +95,18 @@ def _run_analytics_retention() -> tuple[str, str | None]:
         return "failure", str(exc)[:500]
 
 
+def _run_embedding_dedup() -> tuple[str, str | None]:
+    from news_dashboard.embedding_dedup import run_embedding_dedup
+
+    try:
+        summary = run_embedding_dedup()
+        msg = f"embedded={summary['embedded']} merged={summary['merged']}"
+        return "success", msg
+    except Exception as exc:
+        logger.exception("Embedding dedup failed")
+        return "failure", str(exc)[:500]
+
+
 def _run_briefing() -> tuple[str, str | None]:
     from news_dashboard.briefings import (
         BriefingAINotConfiguredError,
@@ -448,6 +460,10 @@ def _job_newsletter_poll() -> None:
     _run_and_record("newsletter_poll", _run_newsletter_poll)
 
 
+def _job_embedding_dedup() -> None:
+    _run_and_record("embedding_dedup", _run_embedding_dedup)
+
+
 def _parse_cron_hm(cron: str, default_minute: str, default_hour: str) -> tuple[str, str]:
     """Extract (minute, hour) from a cron string, falling back to defaults.
 
@@ -475,6 +491,61 @@ def _register_newsletter_job(scheduler: Any) -> None:
         trigger="interval",
         minutes=poll_minutes(),
         id="newsletter_poll",
+        replace_existing=True,
+    )
+
+
+def _register_recurring_jobs(scheduler: Any) -> None:
+    """Register the plain fixed-interval background jobs.
+
+    Split out of start_scheduler so that function stays under the
+    statement-count lint limit as more jobs get added over time.
+    """
+    scheduler.add_job(
+        _job_per_user_briefings,
+        trigger="interval",
+        minutes=1,
+        id="per_user_briefings",
+        replace_existing=True,
+    )
+
+    scheduler.add_job(
+        _job_entity_extraction,
+        trigger="interval",
+        minutes=int(os.getenv("ENTITY_EXTRACTION_INTERVAL_MINUTES", "30")),
+        id="entity_extraction",
+        replace_existing=True,
+    )
+
+    scheduler.add_job(
+        _job_weekly_recaps,
+        trigger="interval",
+        minutes=1,
+        id="weekly_recaps",
+        replace_existing=True,
+    )
+
+    scheduler.add_job(
+        _job_reading_list_fetch,
+        trigger="interval",
+        minutes=int(os.getenv("READING_LIST_FETCH_INTERVAL_MINUTES", "5")),
+        id="reading_list_fetch",
+        replace_existing=True,
+    )
+
+    scheduler.add_job(
+        _job_watchlist_evaluation,
+        trigger="interval",
+        minutes=int(os.getenv("WATCHLIST_EVALUATION_INTERVAL_MINUTES", "15")),
+        id="watchlist_evaluation",
+        replace_existing=True,
+    )
+
+    scheduler.add_job(
+        _job_embedding_dedup,
+        trigger="interval",
+        minutes=int(os.getenv("EMBEDDING_DEDUP_INTERVAL_MINUTES", "60")),
+        id="embedding_dedup",
         replace_existing=True,
     )
 
@@ -567,46 +638,7 @@ def start_scheduler() -> None:
         replace_existing=True,
     )
 
-    scheduler.add_job(
-        _job_per_user_briefings,
-        trigger="interval",
-        minutes=1,
-        id="per_user_briefings",
-        replace_existing=True,
-    )
-
-    scheduler.add_job(
-        _job_entity_extraction,
-        trigger="interval",
-        minutes=int(os.getenv("ENTITY_EXTRACTION_INTERVAL_MINUTES", "30")),
-        id="entity_extraction",
-        replace_existing=True,
-    )
-
-    scheduler.add_job(
-        _job_weekly_recaps,
-        trigger="interval",
-        minutes=1,
-        id="weekly_recaps",
-        replace_existing=True,
-    )
-
-    scheduler.add_job(
-        _job_reading_list_fetch,
-        trigger="interval",
-        minutes=int(os.getenv("READING_LIST_FETCH_INTERVAL_MINUTES", "5")),
-        id="reading_list_fetch",
-        replace_existing=True,
-    )
-
-    scheduler.add_job(
-        _job_watchlist_evaluation,
-        trigger="interval",
-        minutes=int(os.getenv("WATCHLIST_EVALUATION_INTERVAL_MINUTES", "15")),
-        id="watchlist_evaluation",
-        replace_existing=True,
-    )
-
+    _register_recurring_jobs(scheduler)
     _register_newsletter_job(scheduler)
 
     scheduler.start()
