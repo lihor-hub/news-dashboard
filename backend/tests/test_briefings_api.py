@@ -17,6 +17,7 @@ from collections.abc import Generator
 from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock
+from urllib.parse import urlsplit
 
 import pytest
 from fastapi.testclient import TestClient
@@ -398,8 +399,8 @@ def test_get_podcast_feed_token_endpoint_uses_request_host(monkeypatch: Any) -> 
         resp = c.get("/api/briefings/podcast-feed-token")
     assert resp.status_code == 200
     data = resp.json()
-    assert data["url"].startswith("https://example.com")
-    assert "localhost" not in data["url"]
+    parsed = urlsplit(data["url"])
+    assert (parsed.scheme, parsed.netloc) == ("https", "example.com")
 
 
 def test_get_podcast_feed_token_endpoint_app_base_url_takes_precedence(
@@ -410,7 +411,8 @@ def test_get_podcast_feed_token_endpoint_app_base_url_takes_precedence(
     monkeypatch.setattr("news_dashboard.auth.get_podcast_feed_token_version", lambda _uid: 1)
     resp = client.get("/api/briefings/podcast-feed-token")
     assert resp.status_code == 200
-    assert resp.json()["url"].startswith("https://pinned.example.org")
+    parsed = urlsplit(resp.json()["url"])
+    assert (parsed.scheme, parsed.netloc) == ("https", "pinned.example.org")
 
 
 def test_regenerate_podcast_feed_token_endpoint_issues_new_token(
