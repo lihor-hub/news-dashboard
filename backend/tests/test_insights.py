@@ -7,7 +7,6 @@ DB-touching tests use the pg_clean fixture (live Postgres).
 from __future__ import annotations
 
 import json
-import struct
 from typing import Any
 from unittest.mock import MagicMock, patch
 
@@ -503,8 +502,12 @@ def test_get_or_generate_insights_endpoint_returns_404_for_unauthorized_cached(
 # ── clustering unit tests (no DB, no AI) ─────────────────────────────────────
 
 
-def _pack_vec(vec: list[float]) -> bytes:
-    return struct.pack(f"{len(vec)}f", *vec)
+def _pack_vec(vec: list[float]) -> str:
+    """A pgvector literal padded to the real embedding_vec(1536) width."""
+    from news_dashboard.db import EMBEDDING_DIMENSIONS
+    from news_dashboard.embeddings import vector_literal
+
+    return vector_literal(vec + [0.0] * (EMBEDDING_DIMENSIONS - len(vec)))
 
 
 def _unit_vec(dim: int, idx: int) -> list[float]:
@@ -605,12 +608,12 @@ def _seed_articles_with_embeddings(pg_url: str, groups: list[list[list[float]]])
                     """
                     INSERT INTO articles(
                       url, canonical_url, title, source_slug, source_name,
-                      category, kind, summary, embedding,
+                      category, kind, summary, embedding_vec,
                       discovered_at
                     )
                     VALUES (
                       %s, %s, %s, 'test-src2', 'Test2', 'tech', 'rss_feed',
-                      %s, %s,
+                      %s, %s::vector,
                       NOW()
                     )
                     RETURNING id
@@ -634,17 +637,17 @@ def _seed_topic_map_article(
     source_slug: str,
     title: str,
     url_slug: str,
-    embedding: bytes,
+    embedding: str,
 ) -> int:
     with connect(database_url=pg_url) as conn:
         row = conn.execute(
             """
             INSERT INTO articles(
               url, canonical_url, title, source_slug, source_name,
-              category, kind, summary, embedding, discovered_at
+              category, kind, summary, embedding_vec, discovered_at
             )
             VALUES (
-              %s, %s, %s, %s, %s, 'tech', 'rss_feed', %s, %s, NOW()
+              %s, %s, %s, %s, %s, 'tech', 'rss_feed', %s, %s::vector, NOW()
             )
             RETURNING id
             """,
@@ -867,5 +870,5 @@ def test_load_recent_embedded_articles_returns_only_embedded_rows(pg_clean: str)
 
     assert len(rows) == 2
     for row in rows:
-        assert set(row) >= {"id", "title", "url", "summary", "category", "embedding"}
-        assert row["embedding"] is not None
+        assert set(row) >= {"id", "title", "url", "summary", "category", "embedding_vec"}
+        assert row["embedding_vec"] is not None

@@ -164,7 +164,7 @@ jobs:
       (github.event_name == 'pull_request' && needs.detect-changes.outputs.backend == 'true')
     services:
       postgres:
-        image: postgres:16
+        image: pgvector/pgvector:pg16
         env:
           POSTGRES_DB: news_dashboard
           POSTGRES_USER: news_dashboard

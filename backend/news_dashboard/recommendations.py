@@ -534,24 +534,24 @@ def _load_user_history_vectors(conn: Any, user_id: int) -> list[list[float]]:
     Articles without an embedding are skipped, so an empty list means "no
     embedded history" and semantic scoring stays disabled for this user.
     """
-    from news_dashboard.embeddings import decode_embedding
+    from news_dashboard.embeddings import parse_vector
 
     rows = conn.execute(
         """
-        SELECT a.embedding
+        SELECT a.embedding_vec
         FROM user_article_state uas
         JOIN articles a ON a.id = uas.article_id
         WHERE uas.user_id = %s
-          AND a.embedding IS NOT NULL
+          AND a.embedding_vec IS NOT NULL
           AND (uas.starred IS TRUE OR uas.state = 'done')
         """,
         (user_id,),
     ).fetchall()
     vectors: list[list[float]] = []
     for row in rows:
-        blob = row_to_dict(row).get("embedding")
-        if blob is not None:
-            vectors.append(decode_embedding(bytes(blob)))
+        value = row_to_dict(row).get("embedding_vec")
+        if value is not None:
+            vectors.append(parse_vector(value))
     return vectors
 
 
@@ -565,7 +565,7 @@ def _load_candidates(conn: Any, user_id: int, limit: int) -> list[dict[str, Any]
 
     rows = conn.execute(
         f"""
-        SELECT a.id, a.title, a.source_slug, a.category, a.tags, a.embedding,
+        SELECT a.id, a.title, a.source_slug, a.category, a.tags, a.embedding_vec,
           a.importance_score,
           EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - a.discovered_at::timestamptz))
             / 3600.0 AS age_hours,
@@ -639,7 +639,7 @@ def recompute_user_recommendations(
         adjustment = profile.adjustment(source_slug, category, tags)
         category_factor = preferences.category_weights.get(str(category).lower(), 1.0)
         manual_category = (category_factor - 1.0) * CATEGORY_AFFINITY_WEIGHT * AFFINITY_SCORE_SPAN
-        candidate_vector = _decode_candidate_embedding(candidate.get("embedding"))
+        candidate_vector = _decode_candidate_embedding(candidate.get("embedding_vec"))
         semantic = semantic_adjustment(candidate_vector, semantic_profile)
         freshness = freshness_adjustment(age_hours, importance)
         novelty = (
@@ -709,10 +709,10 @@ def _opt_float(value: Any) -> float | None:
     return float(value)
 
 
-def _decode_candidate_embedding(blob: Any) -> list[float] | None:
+def _decode_candidate_embedding(value: Any) -> list[float] | None:
     """Best-effort decode of a candidate's stored embedding, ``None`` if absent."""
-    if blob is None:
+    if value is None:
         return None
-    from news_dashboard.embeddings import decode_embedding
+    from news_dashboard.embeddings import parse_vector
 
-    return decode_embedding(bytes(blob))
+    return parse_vector(value)

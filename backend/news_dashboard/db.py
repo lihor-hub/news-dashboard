@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import os
+import struct
 import threading
 import time
 from collections.abc import Iterator, Mapping, Sequence
@@ -16,6 +17,10 @@ from psycopg import sql
 from psycopg.rows import dict_row
 
 POSTGRES_PREFIXES = ("postgres:" + "//", "postgresql:" + "//")
+
+# Dimension of the OpenAI text-embedding-3-small vectors stored in
+# articles.embedding_vec (backend/news_dashboard/embeddings.py).
+EMBEDDING_DIMENSIONS = 1536
 
 logger = logging.getLogger(__name__)
 _INIT_DB_LOCK = threading.Lock()
@@ -143,6 +148,7 @@ POSTGRES_SCHEMA = [
     """,
     "ALTER TABLE articles ADD COLUMN IF NOT EXISTS canonical_id BIGINT REFERENCES articles(id)",
     "ALTER TABLE articles ADD COLUMN IF NOT EXISTS embedding BYTEA",
+    f"ALTER TABLE articles ADD COLUMN IF NOT EXISTS embedding_vec vector({EMBEDDING_DIMENSIONS})",
     "ALTER TABLE articles ADD COLUMN IF NOT EXISTS body TEXT",
     "ALTER TABLE articles ADD COLUMN IF NOT EXISTS body_status TEXT NOT NULL DEFAULT 'missing'",
     "ALTER TABLE articles ADD COLUMN IF NOT EXISTS insights TEXT",
@@ -790,6 +796,18 @@ POSTGRES_MULTIUSER_SCHEMA = [
     " INTEGER NOT NULL DEFAULT 3",
 ]
 
+# Runs after POSTGRES_SCHEMA/POSTGRES_MULTIUSER_SCHEMA and the embedding_vec
+# backfill (see init_db): building the ANN index before backfill would make
+# every backfill UPDATE pay index-maintenance cost, and dropping the legacy
+# BLOB column before backfill would destroy the data it reads from.
+POSTGRES_POST_BACKFILL_SCHEMA = [
+    """
+    CREATE INDEX IF NOT EXISTS idx_articles_embedding_vec_hnsw
+      ON articles USING hnsw (embedding_vec vector_cosine_ops)
+    """,
+    "ALTER TABLE articles DROP COLUMN IF EXISTS embedding",
+]
+
 
 def _validate_postgres_url(url: str) -> str:
     if not url.startswith(POSTGRES_PREFIXES):
@@ -887,7 +905,11 @@ def connect(
         if isinstance(db_path, Path):
             schema = _schema_name(db_path)
             conn.execute(sql.SQL("CREATE SCHEMA IF NOT EXISTS {}").format(sql.Identifier(schema)))
-            conn.execute(sql.SQL("SET search_path TO {}").format(sql.Identifier(schema)))
+            # `public` stays on the path (after the test schema) so extension
+            # types/operators pgvector installs there — e.g. `vector`,
+            # `<=>` — resolve even though tables/functions still isolate per
+            # test schema.
+            conn.execute(sql.SQL("SET search_path TO {}, public").format(sql.Identifier(schema)))
         yield conn
         conn.commit()
     except Exception:
@@ -897,12 +919,116 @@ def connect(
         conn.close()
 
 
+def _unpack_embedding_blob(blob: bytes) -> list[float]:
+    n = len(blob) // 4
+    return list(struct.unpack(f"{n}f", blob))
+
+
+def _vector_literal(vector: list[float]) -> str:
+    return "[" + ",".join(repr(float(x)) for x in vector) + "]"
+
+
+def _backfill_embedding_vectors(
+    db_path: Path | str | None,
+    database_url: str | None,
+    batch_size: int = 500,
+) -> int:
+    """Migrate pre-pgvector BLOB embeddings into the embedding_vec column.
+
+    Runs on every init_db call; a no-op once every legacy BLOB has a vector
+    (or the legacy `embedding` column has already been dropped). Batches so a
+    large existing archive doesn't hold one long-running transaction.
+    """
+    total = 0
+    while True:
+        with connect(db_path, database_url=database_url) as conn:
+            has_column = conn.execute(
+                """
+                SELECT 1 FROM information_schema.columns
+                WHERE table_schema = current_schema()
+                  AND table_name = 'articles' AND column_name = 'embedding'
+                """
+            ).fetchone()
+            if not has_column:
+                return total
+            rows = conn.execute(
+                """
+                SELECT id, embedding FROM articles
+                WHERE embedding IS NOT NULL AND embedding_vec IS NULL
+                LIMIT %s
+                """,
+                (batch_size,),
+            ).fetchall()
+            if not rows:
+                return total
+            for row in rows:
+                vector = _unpack_embedding_blob(bytes(row["embedding"]))
+                conn.execute(
+                    "UPDATE articles SET embedding_vec = %s::vector WHERE id = %s",
+                    (_vector_literal(vector), row["id"]),
+                )
+            total += len(rows)
+
+
+def _run_schema_statements(
+    statements: list[str],
+    db_path: Path | str | None,
+    database_url: str | None,
+) -> int:
+    """Run each schema statement in its own transaction and return the count applied.
+
+    Isolating each statement in its own transaction means one failure doesn't
+    leave later attempts in an aborted transaction.
+    """
+    applied = 0
+    for statement in statements:
+        try:
+            with connect(db_path, database_url=database_url) as conn:
+                conn.execute(statement)
+                applied += 1
+        except Exception as exc:
+            statement_preview = " ".join(statement.split())[:240]
+            logger.exception("Schema initialization failed on statement: %s", statement_preview)
+            message = f"Schema initialization failed on statement: {statement_preview}"
+            raise SchemaInitializationError(message) from exc
+    return applied
+
+
+def _ensure_vector_extension(db_path: Path | str | None, database_url: str | None) -> None:
+    """Create the pgvector `vector` extension if it isn't already installed.
+
+    Extensions are database-wide, not schema-scoped, so two concurrent
+    init_db() calls against different schemas of the same database (e.g. the
+    app Deployment and the ingest CronJob starting together) can both pass
+    the "IF NOT EXISTS" check and race to create it; the loser gets a unique
+    violation even though the extension now exists either way, so that race
+    is treated as success rather than failure.
+    """
+    try:
+        with connect(db_path, database_url=database_url) as conn:
+            # Explicit SCHEMA public: db_path-based test connections put a
+            # per-test schema first on search_path (see connect()), which
+            # would otherwise become the implicit target schema here.
+            conn.execute("CREATE EXTENSION IF NOT EXISTS vector SCHEMA public")
+    except (psycopg.errors.UniqueViolation, psycopg.errors.DuplicateObject):
+        logger.debug("pgvector extension already created by a concurrent init_db call")
+    except Exception as exc:
+        message = (
+            "PostgreSQL is missing the pgvector 'vector' extension. Use the "
+            "pgvector/pgvector:pg16 image (or install the vector extension) "
+            "instead of stock postgres:16."
+        )
+        raise SchemaInitializationError(message) from exc
+
+
 def init_db(db_path: Path | str | None = None, database_url: str | None = None) -> None:
     if isinstance(db_path, str) and db_path.startswith(POSTGRES_PREFIXES):
         database_url = db_path
         db_path = None
     schema_fingerprint = sha256(
-        "\0".join(POSTGRES_SCHEMA + POSTGRES_MULTIUSER_SCHEMA).encode("utf-8")
+        "\0".join(
+            POSTGRES_SCHEMA + POSTGRES_MULTIUSER_SCHEMA + POSTGRES_POST_BACKFILL_SCHEMA
+        ).encode("utf-8")
     ).hexdigest()
     env_key = (
         database_url
@@ -943,19 +1069,20 @@ def init_db(db_path: Path | str | None = None, database_url: str | None = None) 
             if cache_key in _INITIALIZED_DATABASES:
                 return
 
+        _ensure_vector_extension(db_path, database_url)
+
         # Each statement runs in its own transaction so one failed statement does
         # not leave later attempts in an aborted transaction.
-        applied = 0
-        for statement in POSTGRES_SCHEMA + POSTGRES_MULTIUSER_SCHEMA:
-            try:
-                with connect(db_path, database_url=database_url) as conn:
-                    conn.execute(statement)
-                    applied += 1
-            except Exception as exc:
-                statement_preview = " ".join(statement.split())[:240]
-                logger.exception("Schema initialization failed on statement: %s", statement_preview)
-                message = f"Schema initialization failed on statement: {statement_preview}"
-                raise SchemaInitializationError(message) from exc
+        applied = _run_schema_statements(
+            POSTGRES_SCHEMA + POSTGRES_MULTIUSER_SCHEMA, db_path, database_url
+        )
+
+        # Backfill embedding_vec from any pre-migration BLOB embeddings before
+        # building the ANN index and dropping the legacy column, so no data
+        # is lost and the index is built once, over final data.
+        _backfill_embedding_vectors(db_path, database_url)
+
+        applied += _run_schema_statements(POSTGRES_POST_BACKFILL_SCHEMA, db_path, database_url)
     finally:
         if lock_conn is not None:
             if lock_context is None:

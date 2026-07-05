@@ -12,7 +12,7 @@ import re
 from typing import Any
 
 from news_dashboard.db import connect, init_db
-from news_dashboard.embeddings import decode_embedding
+from news_dashboard.embeddings import parse_vector
 from news_dashboard.insights import (
     greedy_cluster,
     load_recent_embedded_articles,
@@ -384,7 +384,7 @@ def _load_recent_articles(
         if user_id is None:
             rows = conn.execute(
                 """
-                SELECT id, title, summary, category, (embedding IS NOT NULL) AS embedded
+                SELECT id, title, summary, category, (embedding_vec IS NOT NULL) AS embedded
                 FROM articles
                 WHERE discovered_at::timestamptz >= NOW() - INTERVAL '1 day' * %s
                 ORDER BY discovered_at DESC
@@ -396,7 +396,7 @@ def _load_recent_articles(
             rows = conn.execute(
                 """
                 SELECT a.id, a.title, a.summary, a.category,
-                       (a.embedding IS NOT NULL) AS embedded
+                       (a.embedding_vec IS NOT NULL) AS embedded
                 FROM articles a
                 JOIN sources src ON src.slug = a.source_slug
                 LEFT JOIN user_sources us
@@ -500,9 +500,7 @@ def embedding_map(
             "days": days,
         }
 
-    norm_vecs = [
-        normalize_vector(decode_embedding(bytes(article["embedding"]))) for article in embedded
-    ]
+    norm_vecs = [normalize_vector(parse_vector(article["embedding_vec"])) for article in embedded]
     coords = pca_2d(norm_vecs)
     assignments = greedy_cluster(norm_vecs, _CLUSTER_THRESHOLD)
 

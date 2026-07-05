@@ -1,14 +1,13 @@
 from __future__ import annotations
 
-import struct
 from pathlib import Path
 from typing import Any
 
 import pytest
 
 import news_dashboard.embeddings as embeddings_mod
-from news_dashboard.db import connect, init_db
-from news_dashboard.embeddings import embedding_text, ensure_article_embedded
+from news_dashboard.db import EMBEDDING_DIMENSIONS, connect, init_db
+from news_dashboard.embeddings import embedding_text, ensure_article_embedded, vector_literal
 from news_dashboard.recommendations import (
     SEMANTIC_SCORE_SPAN,
     build_semantic_profile,
@@ -17,6 +16,16 @@ from news_dashboard.recommendations import (
 )
 
 pytestmark = pytest.mark.postgres
+
+
+def _padded(vec: list[float]) -> list[float]:
+    """Right-pad a toy test vector with zeros to the real embedding_vec(1536) width.
+
+    Trailing zeros in the same positions on both sides of a cosine comparison
+    leave the similarity unchanged, so tests can keep using small, readable
+    vectors like [1.0, 0.0].
+    """
+    return vec + [0.0] * (EMBEDDING_DIMENSIONS - len(vec))
 
 
 # ── Pure semantic logic (no database) ─────────────────────────────────────────
@@ -97,15 +106,15 @@ def _insert_article(
     importance: int = 50,
     embedding: list[float] | None = None,
 ) -> int:
-    blob = struct.pack(f"{len(embedding)}f", *embedding) if embedding is not None else None
+    vec = vector_literal(_padded(embedding)) if embedding is not None else None
     with connect(db_path) as conn:
         row = conn.execute(
             """
             INSERT INTO articles(
               url, canonical_url, title, source_slug, source_name,
-              category, kind, state, importance_score, discovered_at, embedding
+              category, kind, state, importance_score, discovered_at, embedding_vec
             )
-            VALUES (%s, %s, %s, %s, %s, %s, 'rss_feed', 'today', %s, %s, %s)
+            VALUES (%s, %s, %s, %s, %s, %s, 'rss_feed', 'today', %s, %s, %s::vector)
             RETURNING id
             """,
             (
@@ -117,7 +126,7 @@ def _insert_article(
                 category,
                 importance,
                 "2026-06-21T10:00:00+00:00",
-                blob,
+                vec,
             ),
         ).fetchone()
     assert row is not None

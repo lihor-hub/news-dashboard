@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import struct
 import sys
 from collections.abc import Generator
 from types import SimpleNamespace
@@ -241,8 +240,12 @@ def test_list_briefings_tool_is_scoped_per_user(pg_clean: str) -> None:
     assert bob_result["briefings"] == []
 
 
-def _pack(vector: list[float]) -> bytes:
-    return struct.pack(f"{len(vector)}f", *vector)
+def _pack(vector: list[float]) -> str:
+    """A pgvector literal padded to the real embedding_vec(1536) width."""
+    from news_dashboard.db import EMBEDDING_DIMENSIONS
+    from news_dashboard.embeddings import vector_literal
+
+    return vector_literal(vector + [0.0] * (EMBEDDING_DIMENSIONS - len(vector)))
 
 
 def _make_openai_stub(monkeypatch: pytest.MonkeyPatch, answer: str = "ok") -> None:
@@ -264,7 +267,9 @@ def _make_openai_stub(monkeypatch: pytest.MonkeyPatch, answer: str = "ok") -> No
 
     class FakeEmbeddingData:
         def __init__(self) -> None:
-            self.embedding = [0.1] * 10
+            from news_dashboard.db import EMBEDDING_DIMENSIONS
+
+            self.embedding = [0.1] * 10 + [0.0] * (EMBEDDING_DIMENSIONS - 10)
 
     class FakeEmbeddingResponse:
         def __init__(self) -> None:
@@ -304,8 +309,8 @@ def test_ask_tool_answers_over_users_corpus(pg_clean: str, monkeypatch: pytest.M
                 INSERT INTO articles(
                     id, url, canonical_url, title, source_slug, source_name,
                     category, kind, status, importance_score, summary, reason,
-                    tags, embedding
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    tags, embedding_vec
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s::vector)
                 """,
                 (
                     i,

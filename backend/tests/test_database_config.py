@@ -26,8 +26,11 @@ def test_postgres_url_is_reported_without_password() -> None:
 def test_postgres_articles_schema_includes_embedding_column() -> None:
     postgres_schema = "\n".join(POSTGRES_SCHEMA).lower()
 
+    # Legacy BLOB column, kept only so pre-pgvector installs have something to
+    # backfill from (see db._backfill_embedding_vectors); dropped after backfill.
     assert "embedding bytea" in postgres_schema
     assert "alter table articles add column if not exists embedding bytea" in postgres_schema
+    assert "embedding_vec vector(1536)" in postgres_schema
 
 
 def test_postgres_schema_includes_user_article_recommendations() -> None:

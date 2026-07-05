@@ -17,6 +17,7 @@ PostgreSQL is the application database. Runtime code should be written directly 
 - Do not add SQLite fallbacks, database-type sniffing, placeholder translation, or generic multi-database SQL.
 - Configure the app with `DATABASE_URL` or `POSTGRES_HOST`, `POSTGRES_PORT`, `POSTGRES_DB`, `POSTGRES_USER`, and `POSTGRES_PASSWORD`.
 - SQLite is allowed only as an input format for legacy migration tooling that imports old local data into PostgreSQL.
+- PostgreSQL must have the [pgvector](https://github.com/pgvector/pgvector) extension available (the `pgvector/pgvector:pg16` image, or `CREATE EXTENSION vector` on an external instance): article embeddings live in `articles.embedding_vec`, with similarity search (Ask AI, topic map, recommendations) running as SQL `<=>` queries over an HNSW index instead of a Python cosine loop.
 
 ## Runtime Topology
 
@@ -41,7 +42,7 @@ flowchart TB
     Deployment["news-dashboard Deployment<br/>replicas: 1"]
     CronJob["K8s CronJob<br/>news-dashboard ingest<br/>every 6 hours"]
     PostgresSvc["Postgres Service"]
-    Postgres["Postgres StatefulSet<br/>postgres:16-alpine"]
+    Postgres["Postgres StatefulSet<br/>pgvector/pgvector:pg16"]
     PVC["HostPath / PVC storage"]
   end
 

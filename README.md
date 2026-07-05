@@ -9,7 +9,7 @@
 [![License: MIT](https://img.shields.io/github/license/lihor-hub/news-dashboard)](LICENSE)
 ![Python 3.14+](https://img.shields.io/badge/python-3.14%2B-blue)
 ![Node 26](https://img.shields.io/badge/node-26-339933)
-![PostgreSQL 16+](https://img.shields.io/badge/postgresql-16%2B-4169E1)
+![PostgreSQL 16+ pgvector](https://img.shields.io/badge/postgresql-16%2B%20pgvector-4169E1)
 [![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/lihor-hub/news-dashboard)
 [![Open in Dev Containers](https://img.shields.io/static/v1?label=Dev%20Containers&message=Open&color=blue&logo=visualstudiocode)](https://vscode.dev/redirect?url=vscode://ms-vscode-remote.remote-containers/cloneInVolume?url=https://github.com/lihor-hub/news-dashboard)
 
@@ -43,7 +43,7 @@ optional OpenAI features for embeddings, Ask AI, and briefings.
 
 - Python 3.14+
 - Node.js and npm compatible with `package-lock.json`
-- PostgreSQL 16+
+- PostgreSQL 16+ with the [pgvector](https://github.com/pgvector/pgvector) extension (the `pgvector/pgvector:pg16` image, or install `vector` on an external Postgres)
 - Docker and Docker Compose for the container flow
 - API key for AI features (`FREE_LLM_API_KEY` or `OPENAI_API_KEY`)
 
@@ -78,6 +78,15 @@ Runtime storage is PostgreSQL only. Set `DATABASE_URL` or the split
 SQLite is supported only as a legacy import source for
 `news-dashboard-migrate sqlite-to-postgres`.
 
+> **Upgrading an existing deployment:** article embeddings moved from an
+> opaque BLOB column to [pgvector](https://github.com/pgvector/pgvector), so
+> similarity search (Ask AI, topic map, recommendations) runs in SQL instead
+> of Python. Swap your Postgres image to `pgvector/pgvector:pg16` (or install
+> the `vector` extension on an external Postgres) before starting the new
+> version — the app backfills existing embeddings into the new column
+> automatically on first boot. Starting against a Postgres without the
+> extension fails fast with a clear error naming it.
+
 ## Quick Start
 
 You can run News Dashboard in two ways:
@@ -99,7 +108,7 @@ docker run --rm -d \
   -e POSTGRES_PASSWORD=news-dashboard-local-password \
   -v news-dashboard-postgres-data:/var/lib/postgresql/data \
   -p 5432:5432 \
-  postgres:16-alpine
+  pgvector/pgvector:pg16
 ```
 
 Then run the application:
@@ -164,7 +173,7 @@ docker run --rm -d \
   -e POSTGRES_USER=news_dashboard \
   -e POSTGRES_PASSWORD=news-dashboard-local-password \
   -p 5432:5432 \
-  postgres:16-alpine
+  pgvector/pgvector:pg16
 ```
 
 Set backend env (or copy `.env.example` to `.env` and adjust values):

@@ -2,14 +2,13 @@
 
 Embedding model : text-embedding-3-small (OpenAI)
 Answer model    : gpt-4o-mini (OpenAI)
-Storage         : articles.embedding BLOB (serialized float32 numpy array)
-Retrieval       : pure-Python cosine similarity over stored vectors
+Storage         : articles.embedding_vec (pgvector, cosine ops, HNSW index)
+Retrieval       : SQL top-k via the `<=>` cosine-distance operator
 """
 
 from __future__ import annotations
 
 import os
-import struct
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -45,21 +44,20 @@ def _require_env(name: str, purpose: str) -> str:
     raise MissingAICredentialsError(message)
 
 
-# ── Embedding serialisation ────────────────────────────────────────────────
+# ── pgvector (de)serialisation ──────────────────────────────────────────────
 
 
-def _pack(vector: list[float]) -> bytes:
-    return struct.pack(f"{len(vector)}f", *vector)
+def vector_literal(vector: list[float]) -> str:
+    """Format a Python float vector as a pgvector input literal, e.g. "[0.1,0.2]"."""
+    return "[" + ",".join(repr(float(x)) for x in vector) + "]"
 
 
-def _unpack(blob: bytes) -> list[float]:
-    n = len(blob) // 4
-    return list(struct.unpack(f"{n}f", blob))
-
-
-def decode_embedding(blob: bytes) -> list[float]:
-    """Public helper: deserialize a stored embedding BLOB into a float vector."""
-    return _unpack(blob)
+def parse_vector(value: Any) -> list[float]:
+    """Parse a pgvector column value (returned as text) into a float vector."""
+    text = value.strip("[]") if isinstance(value, str) else str(value).strip("[]")
+    if not text:
+        return []
+    return [float(x) for x in text.split(",")]
 
 
 # ── Embedding source text ──────────────────────────────────────────────────
@@ -169,19 +167,18 @@ def ensure_article_embedded(article_id: int, db_path: Any = None) -> None:
     init_db(db_path)
     with connect(db_path) as conn:
         row = conn.execute(
-            "SELECT id, title, summary, reason, tags, embedding FROM articles WHERE id=%s",
+            "SELECT id, title, summary, reason, tags, embedding_vec FROM articles WHERE id=%s",
             (article_id,),
         ).fetchone()
-        if row is None or row["embedding"] is not None:
+        if row is None or row["embedding_vec"] is not None:
             return  # already embedded or gone
         text = embedding_text(row["title"], row["summary"], row["reason"], row["tags"])
         if not text:
             return
         vector = _embed(text)
-        blob = _pack(vector)
         conn.execute(
-            "UPDATE articles SET embedding=%s WHERE id=%s",
-            (blob, article_id),
+            "UPDATE articles SET embedding_vec=%s::vector WHERE id=%s",
+            (vector_literal(vector), article_id),
         )
 
 
@@ -212,7 +209,7 @@ def embed_all_eligible(
                     LEFT JOIN user_article_state uas
                         ON uas.article_id = a.id AND uas.user_id = %s
                     WHERE COALESCE(uas.state, 'today') != 'archived'
-                      AND a.embedding IS NULL
+                      AND a.embedding_vec IS NULL
                       AND (
                         (src.owner_user_id IS NULL AND COALESCE(us_src.enabled, TRUE))
                         OR src.owner_user_id = %s
@@ -228,7 +225,7 @@ def embed_all_eligible(
                     JOIN user_article_state uas
                         ON uas.article_id = a.id AND uas.user_id = %s
                     WHERE (uas.state = 'done' OR uas.starred = TRUE)
-                      AND a.embedding IS NULL
+                      AND a.embedding_vec IS NULL
                       AND (
                         (src.owner_user_id IS NULL AND COALESCE(us_src.enabled, TRUE))
                         OR src.owner_user_id = %s
@@ -239,7 +236,7 @@ def embed_all_eligible(
             status_filter = "status != 'archived'" if include_all else "status IN ('saved', 'read')"
             rows = conn.execute(
                 "SELECT id, title, summary, reason, tags FROM articles "
-                f"WHERE {status_filter} AND embedding IS NULL"
+                f"WHERE {status_filter} AND embedding_vec IS NULL"
             ).fetchall()
 
     count = 0
@@ -248,13 +245,12 @@ def embed_all_eligible(
         if not text:
             continue
         vector = _embed(text)
-        blob = _pack(vector)
         from news_dashboard.db import connect as _connect
 
         with _connect(db_path) as conn:
             conn.execute(
-                "UPDATE articles SET embedding=%s WHERE id=%s",
-                (blob, row["id"]),
+                "UPDATE articles SET embedding_vec=%s::vector WHERE id=%s",
+                (vector_literal(vector), row["id"]),
             )
         count += 1
     return count
@@ -289,71 +285,78 @@ def ask(
     # 1. Backfill embeddings for any eligible articles not yet embedded
     embed_all_eligible(db_path, include_all=include_all, user_id=user_id)
 
-    # 2. Load embedded articles scoped to the requesting user
+    # 2. Embed the user's question, then let Postgres rank + return the top-k
+    #    nearest articles in one query via the pgvector `<=>` cosine-distance
+    #    operator (using the embedding_vec HNSW index), with a COUNT(*) in the
+    #    same round trip for the MIN_ARTICLES eligibility check.
+    query_vec = vector_literal(_embed(query))
     init_db(db_path)
     with connect(db_path) as conn:
         if user_id is not None:
             if include_all:
                 sql = """
-                    SELECT a.id, a.title, a.url, a.summary, a.embedding
+                    SELECT a.id, a.title, a.url, a.summary,
+                      COUNT(*) OVER () AS eligible_count
                     FROM articles a
                     LEFT JOIN sources src ON src.slug = a.source_slug
                     LEFT JOIN user_sources us_src
-                        ON us_src.user_id = %s AND us_src.source_slug = a.source_slug
+                        ON us_src.user_id = %(user_id)s AND us_src.source_slug = a.source_slug
                     LEFT JOIN user_article_state uas
-                        ON uas.article_id = a.id AND uas.user_id = %s
+                        ON uas.article_id = a.id AND uas.user_id = %(user_id)s
                     WHERE COALESCE(uas.state, 'today') != 'archived'
-                      AND a.embedding IS NOT NULL
+                      AND a.embedding_vec IS NOT NULL
                       AND (
                         (src.owner_user_id IS NULL AND COALESCE(us_src.enabled, TRUE))
-                        OR src.owner_user_id = %s
+                        OR src.owner_user_id = %(user_id)s
                       )
+                    ORDER BY a.embedding_vec <=> %(query_vec)s::vector
+                    LIMIT %(top_k)s
                 """
             else:
                 sql = """
-                    SELECT a.id, a.title, a.url, a.summary, a.embedding
+                    SELECT a.id, a.title, a.url, a.summary,
+                      COUNT(*) OVER () AS eligible_count
                     FROM articles a
                     LEFT JOIN sources src ON src.slug = a.source_slug
                     LEFT JOIN user_sources us_src
-                        ON us_src.user_id = %s AND us_src.source_slug = a.source_slug
+                        ON us_src.user_id = %(user_id)s AND us_src.source_slug = a.source_slug
                     JOIN user_article_state uas
-                        ON uas.article_id = a.id AND uas.user_id = %s
+                        ON uas.article_id = a.id AND uas.user_id = %(user_id)s
                     WHERE (uas.state = 'done' OR uas.starred = TRUE)
-                      AND a.embedding IS NOT NULL
+                      AND a.embedding_vec IS NOT NULL
                       AND (
                         (src.owner_user_id IS NULL AND COALESCE(us_src.enabled, TRUE))
-                        OR src.owner_user_id = %s
+                        OR src.owner_user_id = %(user_id)s
                       )
+                    ORDER BY a.embedding_vec <=> %(query_vec)s::vector
+                    LIMIT %(top_k)s
                 """
-            rows = conn.execute(sql, (user_id, user_id, user_id)).fetchall()
+            rows = conn.execute(
+                sql, {"user_id": user_id, "query_vec": query_vec, "top_k": TOP_K}
+            ).fetchall()
         else:
             status_filter = "status != 'archived'" if include_all else "status IN ('saved', 'read')"
             rows = conn.execute(
-                "SELECT id, title, url, summary, embedding FROM articles "
-                f"WHERE {status_filter} AND embedding IS NOT NULL"
+                "SELECT id, title, url, summary, COUNT(*) OVER () AS eligible_count "
+                f"FROM articles WHERE {status_filter} AND embedding_vec IS NOT NULL "
+                "ORDER BY embedding_vec <=> %(query_vec)s::vector LIMIT %(top_k)s",
+                {"query_vec": query_vec, "top_k": TOP_K},
             ).fetchall()
 
-    if len(rows) < MIN_ARTICLES:
+    eligible_count = rows[0]["eligible_count"] if rows else 0
+    if eligible_count < MIN_ARTICLES:
         return {
             "answer": (
                 f"Not enough articles yet — I need at least {MIN_ARTICLES} saved or read "
-                f"articles to answer questions. You currently have {len(rows)}."
+                f"articles to answer questions. You currently have {eligible_count}."
             ),
             "sources": [],
             "trace_id": None,
         }
 
-    # 3. Embed the user's question
-    query_vec = _embed(query)
-
-    # 4. Rank by cosine similarity and pick top-k
-    scored = [(row, _cosine(query_vec, _unpack(bytes(row["embedding"])))) for row in rows]
-    scored.sort(key=lambda x: x[1], reverse=True)
-    top = scored[:TOP_K]
-
-    # 5. Build context for the prompt
+    # 3. Build context for the prompt (rows already top-k, nearest first)
     context_blocks = []
-    for i, (row, _score) in enumerate(top, 1):
+    for i, row in enumerate(rows, 1):
         context_blocks.append(
             f"[{i}] Title: {row['title']}\nURL: {row['url']}\nSummary: {row['summary']}"
         )
@@ -373,6 +376,6 @@ def ask(
         answer_text = _answer(prompt.text, user_prompt, user_id=user_id, prompt=prompt)
         trace.update_output(answer_text)
 
-    # 7. Return answer + deduplicated source list (top-k order)
-    sources = [{"id": row["id"], "title": row["title"], "url": row["url"]} for row, _ in top]
+    # 7. Return answer + source list (top-k order)
+    sources = [{"id": row["id"], "title": row["title"], "url": row["url"]} for row in rows]
     return {"answer": answer_text, "sources": sources, "trace_id": trace.trace_id}

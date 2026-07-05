@@ -16,7 +16,6 @@ user survive the whole ingest → score → serve pipeline:
 
 from __future__ import annotations
 
-import struct
 from pathlib import Path
 from typing import Any
 
@@ -24,7 +23,8 @@ import pytest
 from fastapi.testclient import TestClient
 
 from news_dashboard.auth import require_auth
-from news_dashboard.db import connect, init_db
+from news_dashboard.db import EMBEDDING_DIMENSIONS, connect, init_db
+from news_dashboard.embeddings import vector_literal
 from news_dashboard.main import app
 from news_dashboard.recommendations import upsert_recommendation_score
 
@@ -77,9 +77,9 @@ def _insert_article(
             """
             INSERT INTO articles(
               url, canonical_url, title, source_slug, source_name,
-              category, kind, state, importance_score, tags, discovered_at, embedding
+              category, kind, state, importance_score, tags, discovered_at, embedding_vec
             )
-            VALUES (%s, %s, %s, %s, %s, %s, 'rss_feed', 'today', %s, '', %s, %s)
+            VALUES (%s, %s, %s, %s, %s, %s, 'rss_feed', 'today', %s, '', %s, %s::vector)
             RETURNING id
             """,
             (
@@ -91,7 +91,9 @@ def _insert_article(
                 category,
                 importance,
                 discovered_at,
-                struct.pack(f"{len(embedding)}f", *embedding) if embedding else None,
+                vector_literal(embedding + [0.0] * (EMBEDDING_DIMENSIONS - len(embedding)))
+                if embedding
+                else None,
             ),
         ).fetchone()
     assert row is not None

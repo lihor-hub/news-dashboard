@@ -176,7 +176,7 @@ ingestCronJob:
 
 postgresql:
   enabled: true
-  image: postgres:16-alpine
+  image: pgvector/pgvector:pg16
   podSecurityContext:
     fsGroup: 999
     seccompProfile:

@@ -213,7 +213,7 @@ def test_get_article_returns_article(tmp_path: Path) -> None:
     assert result is not None
     assert result["id"] == article_id
     assert result["title"] == "Test Article"
-    assert "embedding" not in result
+    assert "embedding_vec" not in result
 
 
 def test_get_article_returns_none_for_missing(tmp_path: Path) -> None:
