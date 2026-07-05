@@ -1,6 +1,5 @@
 'use strict';
 
-const assert = require('assert');
 const { isAppUrl } = require('./url-helper');
 
 const cases = [

@@ -387,8 +387,6 @@ def test_submit_quiz_partial_score(tmp_path: Path) -> None:
     user_id, article_id = _seed(db_path)
     _seed_done_article(db_path, user_id, article_id)
 
-    import json
-
     mock_response = MagicMock()
     mock_response.choices[0].message.content = json.dumps(_MOCK_QUESTIONS)
 
@@ -416,8 +414,6 @@ def test_submit_quiz_not_found(tmp_path: Path) -> None:
 
 
 def _generate_quiz_with_mock(user_id: int, db_path: Path) -> dict[str, Any]:
-    import json
-
     mock_response = MagicMock()
     mock_response.choices[0].message.content = json.dumps(_MOCK_QUESTIONS)
     with (

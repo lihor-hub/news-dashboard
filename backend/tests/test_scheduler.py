@@ -948,7 +948,6 @@ def test_scheduler_status_reports_external_ingest_authority(
 # connect/row_to_dict/generate_briefing/push helpers are lazily imported inside
 # _run_per_user_briefings, so they must be patched at their source modules.
 _CONNECT_PATH = "news_dashboard.db.connect"
-_ROW_TO_DICT_PATH = "news_dashboard.db.row_to_dict"
 _PER_USER_GEN_PATH = "news_dashboard.briefings.generate_briefing"
 _SEND_PUSH_PATH = "news_dashboard.push.send_push_for_user"
 _GEN_PUSH_HOOK_PATH = "news_dashboard.push.generate_push_hook"

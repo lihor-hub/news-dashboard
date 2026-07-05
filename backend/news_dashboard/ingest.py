@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 import logging
 import os
 import re
@@ -441,15 +442,15 @@ def _fetch_feed_content(url: str) -> bytes:
         with open_server_fetch_url(req, timeout=FEED_FETCH_TIMEOUT_SECS) as resp:
             content_length = resp.headers.get("Content-Length")
             if content_length is not None:
-                try:
+                # Content-Length is attacker-controlled and may be non-numeric;
+                # ignore malformed values rather than failing the fetch on them.
+                with contextlib.suppress(ValueError):
                     if int(content_length) > FEED_FETCH_MAX_BYTES:
                         msg = (
                             f"Feed response too large ({content_length} bytes, "
                             f"max {FEED_FETCH_MAX_BYTES}): {url}"
                         )
                         raise FeedFetchError(msg)
-                except ValueError:
-                    pass
             content: bytes = resp.read(FEED_FETCH_MAX_BYTES + 1)
     except TimeoutError as exc:
         msg = f"Feed fetch timed out after {FEED_FETCH_TIMEOUT_SECS}s: {url}"
@@ -669,7 +670,6 @@ def detect_and_translate_article(
 ) -> tuple[str, str, str, str | None]:
     """Detect language and translate title and summary to English if needed."""
     import json
-    import re
 
     from news_dashboard.ai_client import chat_create, get_chat_client
 
@@ -1131,20 +1131,6 @@ def _search_tsquery(value: str) -> str | None:
         return None
     return " & ".join(f"{token}:*" for token in tokens)
 
-
-# UAS columns that override article-level state when a user_id is provided
-_UAS_STATE_COLUMNS = frozenset(
-    {
-        "state",
-        "starred",
-        "done_at",
-        "starred_at",
-        "skipped_at",
-        "archived_at",
-        "later_until",
-        "restored_at",
-    }
-)
 
 _COLD_START_RECOMMENDATION_SCORE_SQL = """
     (

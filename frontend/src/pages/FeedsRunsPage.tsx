@@ -218,7 +218,7 @@ export function FeedsRunsPage() {
                 variant="outline"
                 size="sm"
                 onClick={() => setPage((p) => Math.max(1, p - 1))}
-                disabled={loading || page === 1}
+                disabled={page === 1}
               >
                 ‹
               </Button>
@@ -226,7 +226,7 @@ export function FeedsRunsPage() {
                 variant="outline"
                 size="sm"
                 onClick={() => setPage((p) => p + 1)}
-                disabled={loading || !hasMore}
+                disabled={!hasMore}
               >
                 ›
               </Button>
