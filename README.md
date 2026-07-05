@@ -104,6 +104,28 @@ SQLite is supported only as a legacy import source for
 > automatically on first boot. Starting against a Postgres without the
 > extension fails fast with a clear error naming it.
 
+## Try the demo
+
+Want to try News Dashboard before self-hosting it? One command runs a
+throwaway instance seeded with sample articles and a read-only guest account
+— no AI keys, no configuration:
+
+```bash
+docker compose -f docker-compose.demo.yml up
+```
+
+Open [http://localhost:8080](http://localhost:8080) and log in with:
+
+| Field    | Value   |
+| -------- | ------- |
+| Username | `guest` |
+| Password | `demo`  |
+
+The guest account is **read-only** — write actions (saving, marking read,
+adding sources, etc.) are rejected. This compose file uses fixed demo secrets
+and is not meant for real deployments; see [Quick Start](#quick-start) below
+to self-host for real.
+
 ## Quick Start
 
 You can run News Dashboard in two ways:
