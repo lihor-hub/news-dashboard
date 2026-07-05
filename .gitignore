@@ -27,3 +27,7 @@ pi-output.log
 # Docusaurus docs site build outputs
 website/build/
 website/.docusaurus/
+
+# Playwright test artifacts
+playwright-report/
+test-results/
