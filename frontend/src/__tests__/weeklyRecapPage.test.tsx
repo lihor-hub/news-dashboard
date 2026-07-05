@@ -100,4 +100,19 @@ describe('WeeklyRecapPage', () => {
     expect(screen.queryByText('Skim vs deep read')).not.toBeInTheDocument();
     expect(screen.queryByText('Suggested changes')).not.toBeInTheDocument();
   });
+
+  it('renders a multi-paragraph narrative as separate paragraph elements', async () => {
+    const first = 'You read 4 articles in 15 minutes this week.';
+    const second = 'Keep up the great momentum with your 3 day streak.';
+    vi.mocked(api.fetchRecaps).mockResolvedValue([
+      { ...LEGACY_RECAP, narrative: `${first}\n\n${second}` },
+    ]);
+    render(<WeeklyRecapPage />, { wrapper: Wrapper });
+
+    const firstParagraph = await screen.findByText(first);
+    const secondParagraph = await screen.findByText(second);
+    expect(firstParagraph.tagName).toBe('P');
+    expect(secondParagraph.tagName).toBe('P');
+    expect(firstParagraph).not.toBe(secondParagraph);
+  });
 });

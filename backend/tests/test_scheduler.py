@@ -203,6 +203,10 @@ def test_run_weekly_recaps_sends_push_when_enabled() -> None:
             "news_dashboard.recaps.service.save_weekly_recap",
             return_value={"id": 1, **recap},
         ) as save,
+        patch(
+            "news_dashboard.recaps.narrative.generate_recap_narrative",
+            return_value="Your week in review...",
+        ) as narrative,
         patch("news_dashboard.push.generate_recap_push_hook", return_value="Nice week!") as hook,
         patch("news_dashboard.push.send_push_for_user") as send_push,
     ):
@@ -211,8 +215,9 @@ def test_run_weekly_recaps_sends_push_when_enabled() -> None:
 
     assert "recap_enabled" in fake_conn.sql
     assemble.assert_called_once_with(42)
+    narrative.assert_called_once_with(recap)
     hook.assert_called_once_with(recap)
-    save.assert_called_once_with(42, recap, "Nice week!")
+    save.assert_called_once_with(42, recap, "Your week in review...")
     send_push.assert_called_once_with(42, "Nice week!", "", target_url="/recap")
 
 
@@ -239,13 +244,18 @@ def test_run_weekly_recaps_generates_but_skips_push_when_disabled() -> None:
             "news_dashboard.recaps.service.save_weekly_recap",
             return_value={"id": 1, **recap},
         ) as save,
+        patch(
+            "news_dashboard.recaps.narrative.generate_recap_narrative",
+            return_value="Your week in review...",
+        ) as narrative,
         patch("news_dashboard.push.generate_recap_push_hook") as hook,
         patch("news_dashboard.push.send_push_for_user") as send_push,
     ):
         mock_dt.now.return_value = now
         _run_weekly_recaps()
 
-    save.assert_called_once_with(42, recap, None)
+    narrative.assert_called_once_with(recap)
+    save.assert_called_once_with(42, recap, "Your week in review...")
     hook.assert_not_called()
     send_push.assert_not_called()
 
