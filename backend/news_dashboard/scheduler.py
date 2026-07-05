@@ -229,19 +229,21 @@ def _run_per_user_briefings() -> tuple[str, str | None] | None:
 def _generate_recap_for_user(user_id: int, *, push_enabled: bool = True) -> bool:
     """Assemble, persist, and (optionally) push a weekly recap for one user."""
     from news_dashboard.push import generate_recap_push_hook, send_push_for_user
+    from news_dashboard.recaps.narrative import generate_recap_narrative
     from news_dashboard.recaps.service import assemble_weekly_recap, save_weekly_recap
 
     logger.info("Weekly recap: generating for user_id=%s", user_id)
     try:
         recap = assemble_weekly_recap(user_id)
-        narrative = generate_recap_push_hook(recap) if push_enabled else None
+        narrative = generate_recap_narrative(recap)
         saved = save_weekly_recap(user_id, recap, narrative)
         logger.info("Weekly recap: complete for user_id=%s id=%s", user_id, saved.get("id"))
         if push_enabled:
             try:
+                hook = generate_recap_push_hook(recap)
                 send_push_for_user(
                     user_id,
-                    narrative or "Your weekly reading recap is ready.",
+                    hook or "Your weekly reading recap is ready.",
                     "",
                     target_url="/recap",
                 )

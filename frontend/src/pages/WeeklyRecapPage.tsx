@@ -80,7 +80,15 @@ export function WeeklyRecapPage() {
                 <div className="flex size-10 shrink-0 items-center justify-center rounded bg-primary/10 text-primary">
                   <Flame className="size-5" />
                 </div>
-                <p className="text-sm">{latest.narrative}</p>
+                <div className="space-y-2 text-sm">
+                  {latest.narrative
+                    .split(/\n\s*\n/)
+                    .map((paragraph) => paragraph.trim())
+                    .filter(Boolean)
+                    .map((paragraph, index) => (
+                      <p key={index}>{paragraph}</p>
+                    ))}
+                </div>
               </div>
             </Panel>
           )}
