@@ -34,6 +34,8 @@ const apiMock = vi.hoisted(() => {
     pauseScheduler: vi.fn(),
     resumeScheduler: vi.fn(),
     ingestNow: vi.fn(),
+    fetchIngestRuns: vi.fn(),
+    fetchIngestRunSources: vi.fn(),
     fetchOnboardingInterests: vi.fn().mockResolvedValue([]),
     fetchOnboardingSourceRecommendations: vi.fn().mockResolvedValue([]),
     fetchOnboardingStatus: vi.fn().mockResolvedValue({ completed: true }),
@@ -59,8 +61,10 @@ vi.mock('sonner', () => ({
 
 import { FeedsPage } from '../pages/FeedsPage';
 import { FeedsLogsPage } from '../pages/FeedsLogsPage';
+import { FeedsRunsPage } from '../pages/FeedsRunsPage';
 import { SourcesPage } from '../pages/SourcesPage';
 import { SchedulerPage } from '../pages/SchedulerPage';
+import { AdminOnlyGuard } from '../AppRouter';
 
 function SetUser({ user, children }: { user: User | null; children: ReactNode }) {
   const { setUser } = useAuth();
@@ -715,6 +719,92 @@ describe('SchedulerPage', () => {
     fireEvent.change(input, { target: { value: '45' } });
     fireEvent.click(screen.getByText('Save'));
     await waitFor(() => expect(apiMock.setSchedulerInterval).toHaveBeenCalledWith(45));
+  });
+});
+
+// ── Admin-only route guarding for Feeds operational pages ──────────────────
+
+describe('AdminOnlyGuard on Feeds operational routes', () => {
+  let eventSourceCreations = 0;
+
+  class FakeEventSource {
+    close = vi.fn();
+    addEventListener = vi.fn();
+    onopen: (() => void) | null = null;
+    onerror: (() => void) | null = null;
+    constructor() {
+      eventSourceCreations += 1;
+    }
+  }
+
+  beforeEach(() => {
+    eventSourceCreations = 0;
+    vi.stubGlobal('EventSource', FakeEventSource);
+  });
+
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('blocks non-admin users from Scheduler and never calls fetchSchedulerStatus', () => {
+    withProviders(
+      <AdminOnlyGuard>
+        <SchedulerPage />
+      </AdminOnlyGuard>,
+      '/',
+      regularUser
+    );
+    expect(screen.getByText('Admins only')).toBeTruthy();
+    expect(apiMock.fetchSchedulerStatus).not.toHaveBeenCalled();
+  });
+
+  it('blocks non-admin users from Runs and never calls fetchIngestRuns or fetchIngestRunSources', () => {
+    withProviders(
+      <AdminOnlyGuard>
+        <FeedsRunsPage />
+      </AdminOnlyGuard>,
+      '/',
+      regularUser
+    );
+    expect(screen.getByText('Admins only')).toBeTruthy();
+    expect(apiMock.fetchIngestRuns).not.toHaveBeenCalled();
+    expect(apiMock.fetchIngestRunSources).not.toHaveBeenCalled();
+  });
+
+  it('blocks non-admin users from Logs and never opens the ingest EventSource', () => {
+    withProviders(
+      <AdminOnlyGuard>
+        <FeedsLogsPage />
+      </AdminOnlyGuard>,
+      '/',
+      regularUser
+    );
+    expect(screen.getByText('Admins only')).toBeTruthy();
+    expect(eventSourceCreations).toBe(0);
+  });
+
+  it('lets admin users through to the real Scheduler, Runs, and Logs pages', async () => {
+    apiMock.fetchSchedulerStatus.mockResolvedValue({
+      interval_minutes: 30,
+      paused: false,
+      next_run_at: null,
+    });
+    withProviders(
+      <AdminOnlyGuard>
+        <SchedulerPage />
+      </AdminOnlyGuard>,
+      '/',
+      adminUser
+    );
+    expect(await screen.findByText('▶ Running')).toBeTruthy();
+
+    apiMock.fetchIngestRuns.mockResolvedValue({ items: [], total: 0, page: 1, has_more: false });
+    withProviders(
+      <AdminOnlyGuard>
+        <FeedsRunsPage />
+      </AdminOnlyGuard>,
+      '/',
+      adminUser
+    );
+    await waitFor(() => expect(apiMock.fetchIngestRuns).toHaveBeenCalled());
   });
 });
 
