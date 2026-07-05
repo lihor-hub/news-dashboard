@@ -1217,3 +1217,67 @@ def test_watchlist_evaluation_failure_does_not_abort_other_jobs(
 
     mock_save.assert_called_once()
     assert mock_save.call_args.kwargs["status"] == "failure"
+
+
+# ── start_scheduler — newsletter IMAP job wiring ─────────────────────────────
+
+
+def test_start_scheduler_registers_newsletter_job_when_configured(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("NEWSLETTER_IMAP_HOST", "imap.example.com")
+    monkeypatch.setenv("NEWSLETTER_IMAP_USERNAME", "inbox@example.com")
+    monkeypatch.setenv("NEWSLETTER_IMAP_PASSWORD", "secret")
+    monkeypatch.setenv("NEWSLETTER_POLL_MINUTES", "20")
+    mock_sched = _start_with_env(monkeypatch)
+    jobs = {c.kwargs.get("id"): c.kwargs for c in mock_sched.add_job.call_args_list}
+    assert "newsletter_poll" in jobs
+    assert jobs["newsletter_poll"]["trigger"] == "interval"
+    assert jobs["newsletter_poll"]["minutes"] == 20
+
+
+def test_start_scheduler_skips_newsletter_job_without_config(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("NEWSLETTER_IMAP_HOST", raising=False)
+    monkeypatch.delenv("NEWSLETTER_IMAP_USERNAME", raising=False)
+    monkeypatch.delenv("NEWSLETTER_IMAP_PASSWORD", raising=False)
+    mock_sched = _start_with_env(monkeypatch)
+    ids = [c.kwargs.get("id") for c in mock_sched.add_job.call_args_list]
+    assert "newsletter_poll" not in ids
+
+
+def test_run_newsletter_poll_reports_processed_count() -> None:
+    from news_dashboard.scheduler import _run_newsletter_poll
+
+    with patch("news_dashboard.newsletter_ingest.poll_newsletters", return_value=3):
+        result = _run_newsletter_poll()
+
+    assert result is not None
+    status, message = result
+    assert status == "success"
+    assert "3" in (message or "")
+
+
+def test_run_newsletter_poll_returns_none_when_nothing_processed() -> None:
+    from news_dashboard.scheduler import _run_newsletter_poll
+
+    with patch("news_dashboard.newsletter_ingest.poll_newsletters", return_value=0):
+        result = _run_newsletter_poll()
+
+    assert result is None
+
+
+def test_run_newsletter_poll_reports_failure() -> None:
+    from news_dashboard.scheduler import _run_newsletter_poll
+
+    with patch(
+        "news_dashboard.newsletter_ingest.poll_newsletters",
+        side_effect=RuntimeError("imap down"),
+    ):
+        result = _run_newsletter_poll()
+
+    assert result is not None
+    status, message = result
+    assert status == "failure"
+    assert "imap down" in (message or "")
