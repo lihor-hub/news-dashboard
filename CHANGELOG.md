@@ -3,6 +3,9 @@
 All notable changes to this project will be documented in this file.
 This project adheres to [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.118.0] — 2026-07-05
+- Get a full AI-written summary at the top of your weekly recap, so you can quickly catch up on the biggest stories you might have missed.
+
 ## [1.113.0] — 2026-07-05
 - You can now connect your email account to automatically bring in newsletter subscriptions as private news sources—no more copying and pasting links.
 
