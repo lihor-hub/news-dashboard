@@ -18,6 +18,9 @@
     "url": "https://github.com/lihor-hub/news-dashboard.git"
   },
   "private": true,
+  "overrides": {
+    "tar": "^7.5.16"
+  },
   "scripts": {
     "dev": "vite --host 0.0.0.0",
     "build": "tsc -b && vite build",
