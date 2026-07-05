@@ -3,6 +3,10 @@
 All notable changes to this project will be documented in this file.
 This project adheres to [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.118.2] — 2026-07-05
+- Fixed an issue where AI-powered features could temporarily stop working under heavy load.  
+- Stability and performance improvements.
+
 ## [1.118.0] — 2026-07-05
 - Get a full AI-written summary at the top of your weekly recap, so you can quickly catch up on the biggest stories you might have missed.
 
