@@ -171,6 +171,20 @@ def test_try_amp_url_non_medium_returns_none() -> None:
     assert _try_amp_url("https://example.com/article") is None
 
 
+def test_try_amp_url_medium_subdomain() -> None:
+    amp = _try_amp_url("https://blog.medium.com/post")
+    assert amp is not None
+    assert "/amp/" in amp
+
+
+def test_try_amp_url_medium_lookalike_suffix_returns_none() -> None:
+    assert _try_amp_url("https://medium.com.evil.example/post") is None
+
+
+def test_try_amp_url_medium_lookalike_prefix_returns_none() -> None:
+    assert _try_amp_url("https://notmedium.com/post") is None
+
+
 # ── Fetch timeout handling ───────────────────────────────────────────────────
 
 

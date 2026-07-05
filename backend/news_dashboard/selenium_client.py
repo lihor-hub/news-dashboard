@@ -225,7 +225,7 @@ def _try_amp_url(url: str) -> str | None:
     """Return an AMP variant of *url* for domains that support it, or None."""
     parsed = urllib.parse.urlparse(url)
     hostname = parsed.hostname or ""
-    if "medium.com" in hostname:
+    if hostname == "medium.com" or hostname.endswith(".medium.com"):
         path = parsed.path
         if not path.startswith("/amp"):
             return urllib.parse.urlunparse(parsed._replace(path=f"/amp{path}"))
