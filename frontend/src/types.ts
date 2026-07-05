@@ -487,6 +487,16 @@ export interface McpToken {
   token?: string;
 }
 
+export interface GreaderToken {
+  id: number;
+  name: string;
+  token_prefix: string;
+  created_at: string;
+  last_used_at: string | null;
+  revoked_at: string | null;
+  token?: string;
+}
+
 export interface PersonalizationNudge {
   id: string;
   kind: 'source' | 'topic';

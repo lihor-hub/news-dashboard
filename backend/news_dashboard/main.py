@@ -3371,6 +3371,8 @@ def admin_delete_user(
 # gate. Add each new domain's router here as it is extracted from main.py.
 from news_dashboard.ai_memory.router import router as ai_memory_router  # noqa: E402
 from news_dashboard.ai_stats.router import router as ai_stats_router  # noqa: E402
+from news_dashboard.greader import public_greader_router  # noqa: E402
+from news_dashboard.greader import router as greader_router  # noqa: E402
 from news_dashboard.mcp.router import public_mcp_router  # noqa: E402
 from news_dashboard.mcp.router import router as mcp_router  # noqa: E402
 from news_dashboard.quizzes.router import router as quizzes_router  # noqa: E402
@@ -3381,6 +3383,7 @@ from news_dashboard.saved_searches.router import router as saved_searches_router
 
 api.include_router(ai_stats_router)
 api.include_router(ai_memory_router)
+api.include_router(greader_router)
 api.include_router(mcp_router)
 api.include_router(quizzes_router)
 api.include_router(reading_list_router)
@@ -3390,9 +3393,11 @@ api.include_router(saved_searches_router)
 
 app.include_router(api)
 app.include_router(admin)
-# MCP tool-calling endpoints authenticate via bearer token, not the session
-# cookie, so they mount directly on the app rather than the `api` router.
+# MCP tool-calling and GReader-sync endpoints authenticate via bearer token,
+# not the session cookie, so they mount directly on the app rather than the
+# `api` router.
 app.include_router(public_mcp_router)
+app.include_router(public_greader_router)
 
 
 # ── SPA static files ─────────────────────────────────────────────────────────

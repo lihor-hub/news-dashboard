@@ -794,6 +794,22 @@ POSTGRES_MULTIUSER_SCHEMA = [
     " BOOLEAN NOT NULL DEFAULT FALSE",
     "ALTER TABLE users ADD COLUMN IF NOT EXISTS briefing_reading_list_limit"
     " INTEGER NOT NULL DEFAULT 3",
+    """
+    CREATE TABLE IF NOT EXISTS greader_tokens (
+      id            BIGSERIAL PRIMARY KEY,
+      user_id       INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      name          TEXT NOT NULL,
+      token_hash    TEXT NOT NULL UNIQUE,
+      token_prefix  TEXT NOT NULL,
+      created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      last_used_at  TIMESTAMPTZ,
+      revoked_at    TIMESTAMPTZ
+    )
+    """,
+    (
+        "CREATE INDEX IF NOT EXISTS idx_greader_tokens_user"
+        " ON greader_tokens(user_id, created_at DESC)"
+    ),
 ]
 
 # Runs after POSTGRES_SCHEMA/POSTGRES_MULTIUSER_SCHEMA and the embedding_vec

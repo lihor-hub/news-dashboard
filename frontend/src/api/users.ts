@@ -1,6 +1,7 @@
 import type {
   Achievement,
   AiMemory,
+  GreaderToken,
   McpToken,
   ReadingDna,
   ReadingGoal,
@@ -95,6 +96,23 @@ export async function createMcpToken(name: string): Promise<McpToken> {
 
 export async function revokeMcpToken(tokenId: number): Promise<McpToken> {
   return requestJson<McpToken>(`/api/users/me/mcp-tokens/${tokenId}`, {
+    method: 'DELETE',
+  });
+}
+
+export async function fetchGreaderTokens(): Promise<{ items: GreaderToken[] }> {
+  return requestJson('/api/users/me/greader-tokens');
+}
+
+export async function createGreaderToken(name: string): Promise<GreaderToken> {
+  return requestJson<GreaderToken>('/api/users/me/greader-tokens', {
+    method: 'POST',
+    body: JSON.stringify({ name }),
+  });
+}
+
+export async function revokeGreaderToken(tokenId: number): Promise<GreaderToken> {
+  return requestJson<GreaderToken>(`/api/users/me/greader-tokens/${tokenId}`, {
     method: 'DELETE',
   });
 }

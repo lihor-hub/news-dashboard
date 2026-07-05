@@ -3,6 +3,7 @@ import { PersonalizationSection } from '@/components/settings/PersonalizationSec
 import { WatchlistsSection } from '@/components/settings/WatchlistsSection';
 import { AiMemorySection } from '@/components/settings/AiMemorySection';
 import { McpTokensSection } from '@/components/settings/McpTokensSection';
+import { GreaderTokensSection } from '@/components/settings/GreaderTokensSection';
 import { DataExportSection } from '@/components/settings/DataExportSection';
 import { DailyBriefSection } from '@/components/settings/DailyBriefSection';
 import { WeeklyRecapSection } from '@/components/settings/WeeklyRecapSection';
@@ -22,6 +23,7 @@ export function SettingsPage() {
       <WatchlistsSection />
       <AiMemorySection />
       <McpTokensSection />
+      <GreaderTokensSection />
       <DataExportSection />
       <DailyBriefSection />
       <WeeklyRecapSection />
