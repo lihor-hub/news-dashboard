@@ -32,6 +32,7 @@
     "test:frontend:coverage": "vitest run --coverage",
     "test:e2e": "playwright test",
     "test:a11y": "playwright test e2e/a11y.spec.ts",
+    "capture:screenshots": "playwright test --config=scripts/screenshots.playwright.config.ts && python3 scripts/optimize_screenshots.py",
     "dead-code": "knip"
   },
   "dependencies": {

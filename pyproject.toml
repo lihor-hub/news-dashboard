@@ -50,6 +50,7 @@ dev = [
   "pytest-xdist>=3.0.0",
   "types-defusedxml>=0.7.0",
   "vulture>=2.14",
+  "Pillow>=11.0.0",
 ]
 
 [project.scripts]
@@ -161,6 +162,12 @@ ban-relative-imports = "all"
   "T201",    # print is the intended CLI output for shell consumption
 ]
 "scripts/humanize_commits.py" = [
+  "T201",    # print is the intended CLI output for shell consumption
+]
+"scripts/ensure_demo_database.py" = [
+  "T201",    # print is the intended CLI output for shell consumption
+]
+"scripts/optimize_screenshots.py" = [
   "T201",    # print is the intended CLI output for shell consumption
 ]
 "scripts/test_humanize_commits.py" = [
