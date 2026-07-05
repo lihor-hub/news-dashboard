@@ -285,6 +285,14 @@ DEFAULT_SOURCES: list[SourceDefinition] = [
         priority=74,
         interest_tags=("security", "infra", "product-news"),
     ),
+    SourceDefinition(
+        "google-project-zero",
+        "Google Project Zero",
+        "https://googleprojectzero.blogspot.com/feeds/posts/default",
+        "security",
+        priority=82,
+        interest_tags=("security", "research"),
+    ),
     # ── Cloud / infra ────────────────────────────────────────────────────────
     SourceDefinition(
         "kubernetes-blog",
