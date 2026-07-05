@@ -130,6 +130,32 @@ describe('lazy language loading', () => {
       expect(typeof loader).toBe('function');
     }
   });
+
+  it('reports a missing-bundle error instead of throwing for an unknown language', async () => {
+    const services = i18n.services as unknown as {
+      backendConnector: {
+        backend: {
+          read: (
+            language: string,
+            namespace: string,
+            callback: (err: Error | null, data: unknown) => void
+          ) => void;
+        };
+      };
+    };
+
+    await new Promise<void>((resolve) => {
+      services.backendConnector.backend.read(
+        'xx-not-a-real-language',
+        'translation',
+        (err, data) => {
+          expect(err).toBeInstanceOf(Error);
+          expect(data).toBe(false);
+          resolve();
+        }
+      );
+    });
+  });
 });
 
 describe('RTL direction', () => {
