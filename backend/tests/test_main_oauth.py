@@ -1,8 +1,10 @@
 """Tests for the public OAuth / Keycloak endpoints and the version endpoint.
 
-These routes live in main.py and were previously uncovered. Keycloak helpers
-are patched so no real identity provider is contacted; the TestClient is built
-without auth overrides because every route here is public.
+The OAuth/login/OTP routes live in the ``auth_routes`` feature-module package
+(mounted on ``main``'s ``public_router``); the version endpoints stay in
+main.py. Keycloak helpers are patched so no real identity provider is
+contacted; the TestClient is built without auth overrides because every route
+here is public.
 """
 
 from __future__ import annotations
@@ -26,7 +28,10 @@ def _client() -> TestClient:
 
 
 def test_keycloak_login_redirects_to_local_login_when_disabled() -> None:
-    with patch("news_dashboard.main.keycloak_config", return_value=SimpleNamespace(enabled=False)):
+    with patch(
+        "news_dashboard.auth_routes.router.keycloak_config",
+        return_value=SimpleNamespace(enabled=False),
+    ):
         resp = _client().get("/auth/login")
     assert resp.status_code == 307
     assert resp.headers["location"] == "/login"
@@ -34,9 +39,12 @@ def test_keycloak_login_redirects_to_local_login_when_disabled() -> None:
 
 def test_keycloak_login_redirects_to_provider_and_sets_state_cookie() -> None:
     with (
-        patch("news_dashboard.main.keycloak_config", return_value=SimpleNamespace(enabled=True)),
         patch(
-            "news_dashboard.main.keycloak_authorization_url",
+            "news_dashboard.auth_routes.router.keycloak_config",
+            return_value=SimpleNamespace(enabled=True),
+        ),
+        patch(
+            "news_dashboard.auth_routes.router.keycloak_authorization_url",
             return_value="https://idp.example/auth?state=x",
         ),
     ):
@@ -75,10 +83,10 @@ def test_keycloak_callback_success_sets_session_and_redirects() -> None:
     client.cookies.set("nd_oauth_state", "match")
     with (
         patch(
-            "news_dashboard.main.exchange_keycloak_code",
+            "news_dashboard.auth_routes.router.exchange_keycloak_code",
             new=AsyncMock(return_value={"id": 7, "is_admin": False}),
         ),
-        patch("news_dashboard.main.create_session_token", return_value="sess-token"),
+        patch("news_dashboard.auth_routes.router.create_session_token", return_value="sess-token"),
     ):
         resp = client.get("/auth/callback?state=match&code=good")
     assert resp.status_code == 307
@@ -91,7 +99,8 @@ def test_keycloak_callback_success_sets_session_and_redirects() -> None:
 
 def test_keycloak_logout_redirects_to_provider_logout() -> None:
     with patch(
-        "news_dashboard.main.keycloak_logout_url", return_value="https://idp.example/logout"
+        "news_dashboard.auth_routes.router.keycloak_logout_url",
+        return_value="https://idp.example/logout",
     ):
         resp = _client().get("/auth/logout")
     assert resp.status_code == 307
@@ -102,7 +111,10 @@ def test_keycloak_logout_redirects_to_provider_logout() -> None:
 
 
 def test_password_login_returns_409_when_keycloak_enabled() -> None:
-    with patch("news_dashboard.main.keycloak_config", return_value=SimpleNamespace(enabled=True)):
+    with patch(
+        "news_dashboard.auth_routes.router.keycloak_config",
+        return_value=SimpleNamespace(enabled=True),
+    ):
         resp = _client().post("/api/auth/login", json={"username": "u", "password": "p"})
     assert resp.status_code == 409
 
@@ -111,7 +123,10 @@ def test_password_login_returns_409_when_keycloak_enabled() -> None:
 
 
 def test_auth_config_returns_metadata() -> None:
-    with patch("news_dashboard.main.keycloak_auth_metadata", return_value={"provider": "password"}):
+    with patch(
+        "news_dashboard.auth_routes.router.keycloak_auth_metadata",
+        return_value={"provider": "password"},
+    ):
         resp = _client().get("/api/auth/config")
     assert resp.status_code == 200
     assert resp.json() == {"provider": "password"}
