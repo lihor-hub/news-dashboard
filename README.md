@@ -30,6 +30,7 @@ optional OpenAI features for embeddings, Ask AI, and briefings.
 - Local password auth with first-admin bootstrap.
 - Optional Keycloak login.
 - Optional OpenAI embeddings, Ask AI, and generated briefings.
+- Google Reader-compatible sync API for third-party RSS clients (NetNewsWire, Reeder, Unread, ...).
 - Docker, Helm, and GitHub Actions deployment support.
 
 <details>
