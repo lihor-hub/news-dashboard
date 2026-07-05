@@ -5,6 +5,7 @@ metadata fetch, prioritization, and mark-as-done.
 from __future__ import annotations
 
 from typing import Any
+from unittest.mock import MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
@@ -330,6 +331,127 @@ def test_fetch_metadata_for_item_records_error(
     items = service.list_items(user_id, database_url=database_url)
     assert items[0]["fetch_status"] == "error"
     assert "connection refused" in items[0]["fetch_error"]
+
+
+# ── AI summary generation (Postgres) ─────────────────────────────────────────
+
+
+def test_generate_summary_for_item_success(monkeypatch: pytest.MonkeyPatch, pg_clean: str) -> None:
+    database_url = _setup_db(monkeypatch, pg_clean)
+    user_id = _make_user(database_url)
+    item = service.add_item(user_id, "https://example.com/post", database_url=database_url)
+    with connect(database_url=database_url) as conn:
+        conn.execute(
+            "UPDATE reading_list_items SET title = %s, description = %s WHERE id = %s",
+            ("A great post", "It explains things", item["id"]),
+        )
+
+    mock_completion = MagicMock()
+    mock_completion.choices[0].message.content = "A concise take on why this post matters."
+    mock_client = MagicMock()
+    mock_client.chat.completions.create.return_value = mock_completion
+
+    with (
+        patch.dict("os.environ", {"FREE_LLM_API_KEY": "test-key"}),
+        patch("openai.OpenAI", return_value=mock_client),
+    ):
+        service.generate_summary_for_item(item["id"], database_url=database_url)
+
+    items = service.list_items(user_id, database_url=database_url)
+    assert items[0]["summary_status"] == "ok"
+    assert items[0]["summary"] == "A concise take on why this post matters."
+    call_kwargs = mock_client.chat.completions.create.call_args.kwargs
+    assert "A great post" in call_kwargs["messages"][0]["content"]
+
+
+def test_generate_summary_for_item_records_error_on_ai_failure(
+    monkeypatch: pytest.MonkeyPatch, pg_clean: str
+) -> None:
+    database_url = _setup_db(monkeypatch, pg_clean)
+    user_id = _make_user(database_url)
+    item = service.add_item(user_id, "https://example.com/post", database_url=database_url)
+    with connect(database_url=database_url) as conn:
+        conn.execute(
+            "UPDATE reading_list_items SET title = %s, description = %s WHERE id = %s",
+            ("A great post", "It explains things", item["id"]),
+        )
+
+    mock_client = MagicMock()
+    mock_client.chat.completions.create.side_effect = RuntimeError("upstream 429")
+
+    with (
+        patch.dict("os.environ", {"FREE_LLM_API_KEY": "test-key"}),
+        patch("openai.OpenAI", return_value=mock_client),
+    ):
+        service.generate_summary_for_item(item["id"], database_url=database_url)
+
+    items = service.list_items(user_id, database_url=database_url)
+    assert items[0]["summary_status"] == "error"
+    assert items[0]["summary"] is None
+
+
+def test_generate_summary_for_item_skipped_without_ai_credentials(
+    monkeypatch: pytest.MonkeyPatch, pg_clean: str
+) -> None:
+    database_url = _setup_db(monkeypatch, pg_clean)
+    user_id = _make_user(database_url)
+    item = service.add_item(user_id, "https://example.com/post", database_url=database_url)
+    with connect(database_url=database_url) as conn:
+        conn.execute(
+            "UPDATE reading_list_items SET title = %s, description = %s WHERE id = %s",
+            ("A great post", "It explains things", item["id"]),
+        )
+    monkeypatch.delenv("FREE_LLM_API_KEY", raising=False)
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+
+    service.generate_summary_for_item(item["id"], database_url=database_url)
+
+    items = service.list_items(user_id, database_url=database_url)
+    assert items[0]["summary_status"] == "skipped"
+    assert items[0]["summary"] is None
+
+
+def test_generate_summary_for_item_skipped_without_title_or_description(
+    monkeypatch: pytest.MonkeyPatch, pg_clean: str
+) -> None:
+    database_url = _setup_db(monkeypatch, pg_clean)
+    user_id = _make_user(database_url)
+    item = service.add_item(user_id, "https://example.com/post", database_url=database_url)
+
+    service.generate_summary_for_item(item["id"], database_url=database_url)
+
+    items = service.list_items(user_id, database_url=database_url)
+    assert items[0]["summary_status"] == "skipped"
+
+
+def test_fetch_metadata_for_item_chains_summary_generation(
+    monkeypatch: pytest.MonkeyPatch, pg_clean: str
+) -> None:
+    database_url = _setup_db(monkeypatch, pg_clean)
+    user_id = _make_user(database_url)
+    item = service.add_item(user_id, "https://example.com/post", database_url=database_url)
+
+    monkeypatch.setattr(
+        service,
+        "fetch_url_metadata",
+        lambda _url: {
+            "title": "Fetched title",
+            "description": "Fetched description",
+            "image_url": None,
+            "site_name": None,
+            "kind": "article",
+        },
+    )
+    captured: dict[str, int] = {}
+    monkeypatch.setattr(
+        service,
+        "generate_summary_for_item",
+        lambda item_id, **_kwargs: captured.setdefault("item_id", item_id),
+    )
+
+    service.fetch_metadata_for_item(item["id"], database_url=database_url)
+
+    assert captured["item_id"] == item["id"]
 
 
 def test_process_pending_items_sweeps_pending(

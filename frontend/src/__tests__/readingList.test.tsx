@@ -45,6 +45,8 @@ function makeItem(overrides: Partial<ReadingListItem> = {}): ReadingListItem {
     fetch_status: 'ok',
     fetch_error: null,
     fetched_at: '2026-07-03T10:00:00Z',
+    summary: null,
+    summary_status: 'pending',
     status: 'unread',
     priority: 1,
     note: null,
@@ -82,6 +84,29 @@ describe('ReadingListPage', () => {
     });
     expect(screen.getByText('Example Blog')).toBeTruthy();
     expect(screen.getByText('A very insightful post.')).toBeTruthy();
+  });
+
+  it('reveals the AI summary when the toggle is clicked', async () => {
+    vi.spyOn(readingListApi, 'fetchReadingList').mockResolvedValue([
+      makeItem({ summary: 'A concise take on the post.', summary_status: 'ok' }),
+    ]);
+
+    renderPage();
+    const toggle = await screen.findByRole('button', { name: /ai summary/i });
+    expect(screen.queryByText('A concise take on the post.')).toBeNull();
+
+    await userEvent.click(toggle);
+    expect(screen.getByText('A concise take on the post.')).toBeTruthy();
+  });
+
+  it('does not show an AI summary toggle when no summary is available', async () => {
+    vi.spyOn(readingListApi, 'fetchReadingList').mockResolvedValue([makeItem({ summary: null })]);
+
+    renderPage();
+    await waitFor(() => {
+      expect(screen.getByText('Great post')).toBeTruthy();
+    });
+    expect(screen.queryByRole('button', { name: /ai summary/i })).toBeNull();
   });
 
   it('shows a pending placeholder while metadata is being fetched', async () => {
