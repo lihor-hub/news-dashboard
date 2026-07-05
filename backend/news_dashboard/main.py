@@ -2466,6 +2466,7 @@ def briefings_list(
 
 @api.get("/api/briefings/podcast-feed-token")
 def get_podcast_feed_token_endpoint(
+    request: Request,
     current_user: Annotated[dict[str, Any], Depends(require_auth)],
 ) -> dict[str, str]:
     """Return the user's current (revocable) podcast feed token and subscribe URL."""
@@ -2476,11 +2477,12 @@ def get_podcast_feed_token_endpoint(
     if version is None:
         raise HTTPException(status_code=404, detail="user not found")
     token = make_feed_token(current_user["id"], version)
-    return {"token": token, "url": feed_url(token)}
+    return {"token": token, "url": feed_url(token, _request_base_origin(request))}
 
 
 @api.post("/api/briefings/podcast-feed-token/regenerate")
 def regenerate_podcast_feed_token_endpoint(
+    request: Request,
     current_user: Annotated[dict[str, Any], Depends(require_auth)],
 ) -> dict[str, str]:
     """Revoke the user's current podcast feed token and issue a new one."""
@@ -2489,11 +2491,11 @@ def regenerate_podcast_feed_token_endpoint(
 
     version = bump_podcast_feed_token_version(current_user["id"])
     token = make_feed_token(current_user["id"], version)
-    return {"token": token, "url": feed_url(token)}
+    return {"token": token, "url": feed_url(token, _request_base_origin(request))}
 
 
 @api.get("/api/briefings/podcast.rss")
-def podcast_rss_feed_endpoint(token: Annotated[str, Query()]) -> Response:
+def podcast_rss_feed_endpoint(request: Request, token: Annotated[str, Query()]) -> Response:
     """Serve the authenticated user's podcast feed of previously-generated briefs.
 
     Authenticated via a revocable per-user token (not the session cookie), since
@@ -2526,7 +2528,7 @@ def podcast_rss_feed_endpoint(token: Annotated[str, Query()]) -> Response:
         briefing["audio_bytes"] = audio_path.stat().st_size
         episodes.append(briefing)
 
-    xml = build_feed_xml(token=token, briefings=episodes)
+    xml = build_feed_xml(token=token, briefings=episodes, base_url=_request_base_origin(request))
     return Response(content=xml, media_type="application/rss+xml")
 
 
