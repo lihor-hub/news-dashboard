@@ -36,6 +36,10 @@ STATE_SIGNAL_WEIGHTS: dict[str, float] = {
 # Starred is the strongest positive signal; it stacks on top of the state weight.
 STAR_WEIGHT = 2.0
 
+# Explicit thumbs feedback on a recommendation is a stronger, deliberate signal
+# than any implicit workflow action, so it must outweigh a single star/click.
+EXPLICIT_FEEDBACK_WEIGHT = 3.0
+
 # Laplace-style smoothing: shrinks affinity toward neutral when only a handful of
 # interactions exist for a feature, so a single click can't dominate scoring.
 AFFINITY_SMOOTHING = 2.0
@@ -100,13 +104,15 @@ class ArticleSignal:
     source_slug: str
     category: str | None = None
     tags: tuple[str, ...] = ()
+    explicit_verdict: int = 0
 
     @property
     def weight(self) -> float:
-        """Signed strength of this interaction as an implicit-feedback signal."""
+        """Signed strength of this interaction as an affinity-learning signal."""
         base = STATE_SIGNAL_WEIGHTS.get(self.state, 0.0)
         if self.starred:
             base += STAR_WEIGHT
+        base += self.explicit_verdict * EXPLICIT_FEEDBACK_WEIGHT
         return base
 
 
@@ -519,6 +525,28 @@ def _load_user_signals(conn: Any, user_id: int) -> list[ArticleSignal]:
                 source_slug=str(d["source_slug"]),
                 category=d.get("category"),
                 tags=parse_tags(d.get("tags")),
+            )
+        )
+
+    feedback_rows = conn.execute(
+        """
+        SELECT f.verdict, a.source_slug, a.category, a.tags
+        FROM ai_feedback f
+        JOIN articles a ON a.id = f.subject_id
+        WHERE f.user_id = %s AND f.subject_type = 'recommendation'
+        """,
+        (user_id,),
+    ).fetchall()
+    for row in feedback_rows:
+        d = row_to_dict(row)
+        signals.append(
+            ArticleSignal(
+                state="today",
+                starred=False,
+                source_slug=str(d["source_slug"]),
+                category=d.get("category"),
+                tags=parse_tags(d.get("tags")),
+                explicit_verdict=int(d["verdict"]),
             )
         )
     return signals

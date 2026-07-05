@@ -23,6 +23,7 @@ vi.spyOn(console, 'error').mockImplementation(() => undefined);
 beforeEach(() => {
   vi.clearAllMocks();
   vi.spyOn(api, 'fetchArticleHighlights').mockResolvedValue([]);
+  vi.spyOn(api, 'fetchAiFeedback').mockResolvedValue({});
 });
 
 function makeArticle(overrides: Partial<Article> = {}): Article {

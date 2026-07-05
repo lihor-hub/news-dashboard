@@ -244,6 +244,7 @@ export function ArticlePage() {
 
             {/* Why recommended — on-demand explanation of the personalized ranking */}
             <ArticleWhyRecommended
+              articleId={Number(article.id)}
               aiExplanation={article.recommendationExplanation}
               score={article.recommendationScore}
               signals={article.recommendationSignals}

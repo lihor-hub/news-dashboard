@@ -1,5 +1,6 @@
 export * from './core';
 export * from './admin';
+export * from './aiFeedback';
 export * from './ask';
 export * from './articles';
 export * from './auth';

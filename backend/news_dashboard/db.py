@@ -813,6 +813,30 @@ POSTGRES_MULTIUSER_SCHEMA = [
         "CREATE INDEX IF NOT EXISTS idx_greader_tokens_user"
         " ON greader_tokens(user_id, created_at DESC)"
     ),
+    "ALTER TABLE briefings ADD COLUMN IF NOT EXISTS trace_id TEXT",
+    """
+    CREATE TABLE IF NOT EXISTS ai_feedback (
+      id           BIGSERIAL PRIMARY KEY,
+      user_id      INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      subject_type TEXT NOT NULL CHECK (subject_type IN ('briefing', 'recommendation')),
+      subject_id   BIGINT NOT NULL,
+      article_id   BIGINT REFERENCES articles(id) ON DELETE SET NULL,
+      verdict      SMALLINT NOT NULL CHECK (verdict IN (-1, 1)),
+      comment      TEXT,
+      created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_ai_feedback_subject ON ai_feedback(subject_type, subject_id)",
+    # Two partial unique indexes instead of one plain UNIQUE constraint: Postgres
+    # treats NULLs as distinct in a unique constraint, so a plain
+    # UNIQUE(user_id, subject_type, subject_id, article_id) would let a user
+    # insert unlimited duplicate whole-briefing rows (article_id IS NULL).
+    "CREATE UNIQUE INDEX IF NOT EXISTS idx_ai_feedback_unique_item"
+    " ON ai_feedback(user_id, subject_type, subject_id, article_id)"
+    " WHERE article_id IS NOT NULL",
+    "CREATE UNIQUE INDEX IF NOT EXISTS idx_ai_feedback_unique_subject"
+    " ON ai_feedback(user_id, subject_type, subject_id) WHERE article_id IS NULL",
 ]
 
 # Runs after POSTGRES_SCHEMA/POSTGRES_MULTIUSER_SCHEMA and the embedding_vec
