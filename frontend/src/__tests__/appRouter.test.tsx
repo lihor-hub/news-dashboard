@@ -1,12 +1,15 @@
 // @vitest-environment happy-dom
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import { RouterProvider, createMemoryRouter } from 'react-router-dom';
 
 // Stub every page/shell so the route table can be exercised cheaply without
 // pulling in real data fetching. Each stub renders an identifiable marker.
-const { stub } = vi.hoisted(() => ({
+const { stub, authState } = vi.hoisted(() => ({
   stub: (label: string) => () => <div>{label}</div>,
+  authState: {
+    user: { id: 1, username: 'admin', is_admin: true },
+  },
 }));
 
 vi.mock('../components/RequireAuth', () => ({
@@ -18,6 +21,7 @@ vi.mock('../components/AppShell', async () => {
 });
 vi.mock('../contexts/auth', () => ({
   AuthProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+  useAuth: () => ({ user: authState.user, setUser: vi.fn() }),
 }));
 vi.mock('../contexts/focusedArticle', () => ({
   FocusedArticleProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
@@ -73,6 +77,33 @@ describe('AppRouter routes', () => {
   it('renders a nested feeds child route', async () => {
     renderAt('/feeds/runs');
     expect(await screen.findByText('runs-page')).toBeTruthy();
+  });
+
+  describe('admin-guarded feeds operational routes', () => {
+    afterEach(() => {
+      authState.user = { id: 1, username: 'admin', is_admin: true };
+    });
+
+    it.each([
+      ['/feeds/schedule', 'scheduler-page'],
+      ['/feeds/runs', 'runs-page'],
+      ['/feeds/logs', 'logs-page'],
+    ])('mounts %s for admin users', async (path, label) => {
+      authState.user = { id: 1, username: 'admin', is_admin: true };
+      renderAt(path);
+      expect(await screen.findByText(label)).toBeTruthy();
+    });
+
+    it.each([
+      ['/feeds/schedule', 'scheduler-page'],
+      ['/feeds/runs', 'runs-page'],
+      ['/feeds/logs', 'logs-page'],
+    ])('does not mount %s for non-admin users', async (path, label) => {
+      authState.user = { id: 2, username: 'user', is_admin: false };
+      renderAt(path);
+      expect(await screen.findByText('Admins only')).toBeTruthy();
+      expect(screen.queryByText(label)).toBeNull();
+    });
   });
 
   it('redirects legacy /inbox to /today', async () => {

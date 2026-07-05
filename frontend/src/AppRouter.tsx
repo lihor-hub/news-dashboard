@@ -84,7 +84,7 @@ function withSuspense(Component: React.ComponentType) {
   );
 }
 
-function AdminOnlyGuard({ children }: { children: React.ReactNode }) {
+export function AdminOnlyGuard({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
   if (!user?.is_admin) {
     return (
@@ -157,9 +157,36 @@ export const routes: RouteObject[] = [
         element: <FeedsPage />,
         children: [
           { index: true, element: <SourcesPage /> },
-          { path: 'schedule', element: withSuspense(SchedulerPage) },
-          { path: 'runs', element: withSuspense(FeedsRunsPage) },
-          { path: 'logs', element: withSuspense(FeedsLogsPage) },
+          {
+            path: 'schedule',
+            element: (
+              <AdminOnlyGuard>
+                <Suspense fallback={<PageLoader />}>
+                  <SchedulerPage />
+                </Suspense>
+              </AdminOnlyGuard>
+            ),
+          },
+          {
+            path: 'runs',
+            element: (
+              <AdminOnlyGuard>
+                <Suspense fallback={<PageLoader />}>
+                  <FeedsRunsPage />
+                </Suspense>
+              </AdminOnlyGuard>
+            ),
+          },
+          {
+            path: 'logs',
+            element: (
+              <AdminOnlyGuard>
+                <Suspense fallback={<PageLoader />}>
+                  <FeedsLogsPage />
+                </Suspense>
+              </AdminOnlyGuard>
+            ),
+          },
         ],
       },
       { path: 'briefs', element: withSuspense(BriefingsHistoryPage) },
