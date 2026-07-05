@@ -105,7 +105,7 @@ kubectl -n news-dashboard scale deployment news-dashboard --replicas=1
 pg_restore --list news_dashboard_20260628T020001Z.dump | head -40
 
 # Restore into a throwaway local container:
-docker run --rm -e POSTGRES_PASSWORD=test -p 5433:5432 -d --name pg-verify postgres:16-alpine
+docker run --rm -e POSTGRES_PASSWORD=test -p 5433:5432 -d --name pg-verify pgvector/pgvector:pg16
 sleep 3
 pg_restore -h 127.0.0.1 -p 5433 -U postgres -d postgres \
   --create news_dashboard_20260628T020001Z.dump

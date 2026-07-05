@@ -201,7 +201,7 @@ def get_shared_article(share_id: int, user_id: int) -> dict[str, Any] | None:
     if row is None:
         return None
     article = row_to_dict(row)
-    article.pop("embedding", None)
+    article.pop("embedding_vec", None)
     article.pop("fts_vector", None)
     return article
 

@@ -424,7 +424,7 @@ def _merge_user_recommendation(
 
 def _article_from_row(row: Any, conn: Any, article_id: int, user_id: int | None) -> dict[str, Any]:
     d = row_to_dict(row)
-    d.pop("embedding", None)
+    d.pop("embedding_vec", None)
     d.pop("fts_vector", None)
     if user_id is not None:
         _merge_user_state(d, conn, article_id, user_id)

@@ -6,16 +6,20 @@ including per-user visibility scoping (global vs private vs disabled sources).
 
 from __future__ import annotations
 
-import struct
-
 from news_dashboard.ai_stats.service import _tokenize, embedding_map, word_cloud
-from news_dashboard.db import connect
+from news_dashboard.db import EMBEDDING_DIMENSIONS, connect
+from news_dashboard.embeddings import vector_literal
 
 # ── helpers ───────────────────────────────────────────────────────────────────
 
 
-def _pack_vec(vec: list[float]) -> bytes:
-    return struct.pack(f"{len(vec)}f", *vec)
+def _padded_vec(vec: list[float]) -> str:
+    """A pgvector literal padded to the real embedding_vec(1536) width.
+
+    Trailing zeros don't change cosine similarity/ordering, so tests can keep
+    seeding short, readable vectors.
+    """
+    return vector_literal(vec + [0.0] * (EMBEDDING_DIMENSIONS - len(vec)))
 
 
 def _seed_source(
@@ -46,15 +50,15 @@ def _seed_article(
     embedding: list[float] | None = None,
 ) -> int:
     _seed_source(pg_url, slug)
-    blob = _pack_vec(embedding) if embedding is not None else None
+    vec = _padded_vec(embedding) if embedding is not None else None
     with connect(database_url=pg_url) as conn:
         row = conn.execute(
             """
             INSERT INTO articles(
               url, canonical_url, title, source_slug, source_name,
-              category, kind, summary, embedding, discovered_at
+              category, kind, summary, embedding_vec, discovered_at
             )
-            VALUES (%s, %s, %s, %s, %s, %s, 'rss_feed', %s, %s, NOW())
+            VALUES (%s, %s, %s, %s, %s, %s, 'rss_feed', %s, %s::vector, NOW())
             RETURNING id
             """,
             (
@@ -65,7 +69,7 @@ def _seed_article(
                 slug,
                 category,
                 summary,
-                blob,
+                vec,
             ),
         ).fetchone()
     assert row is not None

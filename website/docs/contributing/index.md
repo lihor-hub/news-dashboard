@@ -7,7 +7,8 @@ News Dashboard.
 
 - Python 3.14+
 - Node.js LTS
-- PostgreSQL 16+
+- PostgreSQL 16+ with the [pgvector](https://github.com/pgvector/pgvector) extension
+  (use the `pgvector/pgvector:pg16` image)
 - A running PostgreSQL instance for backend tests and local development
 
 Start with the root

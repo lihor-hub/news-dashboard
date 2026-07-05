@@ -337,21 +337,23 @@ def test_manual_category_preferences_change_user_scores(
 def test_manual_novelty_weight_changes_novel_article_score(
     tmp_path: Path, monkeypatch: Any, pg_clean: str
 ) -> None:
-    import struct
+    from news_dashboard.db import EMBEDDING_DIMENSIONS
+    from news_dashboard.embeddings import vector_literal
 
     db_path = _setup_db(monkeypatch, pg_clean)
     _insert_source(db_path, "src", category="ai")
     user_id = _make_user(db_path, "alice")
     history = _insert_article(db_path, "src", "history", category="ai")
     candidate = _insert_article(db_path, "src", "candidate", category="ai", importance=100)
+    pad = [0.0] * (EMBEDDING_DIMENSIONS - 2)
     with connect(db_path) as conn:
         conn.execute(
-            "UPDATE articles SET embedding = %s WHERE id = %s",
-            (struct.pack("2f", 1.0, 0.0), history),
+            "UPDATE articles SET embedding_vec = %s::vector WHERE id = %s",
+            (vector_literal([1.0, 0.0, *pad]), history),
         )
         conn.execute(
-            "UPDATE articles SET embedding = %s WHERE id = %s",
-            (struct.pack("2f", -1.0, 0.0), candidate),
+            "UPDATE articles SET embedding_vec = %s::vector WHERE id = %s",
+            (vector_literal([-1.0, 0.0, *pad]), candidate),
         )
     _set_state(db_path, user_id, history, state="done")
 

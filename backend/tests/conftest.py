@@ -208,9 +208,11 @@ def pg_url() -> Generator[str]:
             )
             conn.execute(sql.SQL("CREATE SCHEMA {}").format(sql.Identifier(worker_schema)))
 
-        # Append connection options to set search_path
+        # Append connection options to set search_path. `public` stays on the
+        # path (after the worker schema) so pgvector's extension types/
+        # operators — installed into `public` — stay resolvable.
         separator = "&" if "?" in original_url else "?"
-        service_url = f"{original_url}{separator}options=-csearch_path%3D{worker_schema}"
+        service_url = f"{original_url}{separator}options=-csearch_path%3D{worker_schema}%2Cpublic"
 
     orig_db_url = os.environ.get("DATABASE_URL")
     if service_url:

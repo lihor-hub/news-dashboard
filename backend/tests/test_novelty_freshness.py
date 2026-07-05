@@ -1,13 +1,13 @@
 from __future__ import annotations
 
-import struct
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
 import pytest
 
-from news_dashboard.db import connect, init_db
+from news_dashboard.db import EMBEDDING_DIMENSIONS, connect, init_db
+from news_dashboard.embeddings import vector_literal
 from news_dashboard.recommendations import (
     FRESHNESS_SCORE_SPAN,
     NOVELTY_SCORE_SPAN,
@@ -17,6 +17,11 @@ from news_dashboard.recommendations import (
 )
 
 pytestmark = pytest.mark.postgres
+
+
+def _padded(vec: list[float]) -> list[float]:
+    """Right-pad a toy test vector with zeros to the real embedding_vec(1536) width."""
+    return vec + [0.0] * (EMBEDDING_DIMENSIONS - len(vec))
 
 
 # ── Pure freshness/novelty logic (no database) ────────────────────────────────
@@ -104,15 +109,15 @@ def _insert_article(
     discovered_at: str = "2026-06-21T10:00:00+00:00",
     embedding: list[float] | None = None,
 ) -> int:
-    blob = struct.pack(f"{len(embedding)}f", *embedding) if embedding is not None else None
+    vec = vector_literal(_padded(embedding)) if embedding is not None else None
     with connect(db_path) as conn:
         row = conn.execute(
             """
             INSERT INTO articles(
               url, canonical_url, title, source_slug, source_name,
-              category, kind, state, importance_score, discovered_at, embedding
+              category, kind, state, importance_score, discovered_at, embedding_vec
             )
-            VALUES (%s, %s, %s, %s, %s, %s, 'rss_feed', 'today', %s, %s, %s)
+            VALUES (%s, %s, %s, %s, %s, %s, 'rss_feed', 'today', %s, %s, %s::vector)
             RETURNING id
             """,
             (
@@ -124,7 +129,7 @@ def _insert_article(
                 category,
                 importance,
                 discovered_at,
-                blob,
+                vec,
             ),
         ).fetchone()
     assert row is not None

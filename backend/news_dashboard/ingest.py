@@ -1075,7 +1075,7 @@ def ingest_all(db_path: Path | str | None = None) -> IngestResult:
     return IngestResult(results=results, run_id=run_id, total_errors=total_errors)
 
 
-_INTERNAL_ARTICLE_COLUMNS = frozenset({"embedding", "fts_vector", "search_vector"})
+_INTERNAL_ARTICLE_COLUMNS = frozenset({"embedding_vec", "fts_vector", "search_vector"})
 _ARTICLE_LIST_COLUMNS = (
     "id, url, canonical_url, canonical_id, title, source_slug, source_name,"
     " category, kind, published_at, discovered_at, status, importance_score,"
@@ -1189,9 +1189,9 @@ def _article_order_clause(*, state: str | None) -> str:
 def _article_dict(row: Any) -> dict[str, Any]:
     """Convert a DB row to a dict, stripping internal-only columns.
 
-    'embedding' (BLOB/BYTEA) contains binary float data that is not
-    UTF-8-safe and must never be sent to the frontend.  'fts_vector'
-    (Postgres GENERATED ALWAYS tsvector) is similarly internal.
+    'embedding_vec' (pgvector) is a large internal-only field that must
+    never be sent to the frontend.  'fts_vector' (Postgres GENERATED ALWAYS
+    tsvector) is similarly internal.
     """
     d = row_to_dict(row)
     for col in _INTERNAL_ARTICLE_COLUMNS:

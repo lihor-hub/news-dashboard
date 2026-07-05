@@ -13,11 +13,11 @@ import json
 import logging
 import math
 import os
-import struct
 from typing import Any
 
 from news_dashboard.body_fetch import get_article
 from news_dashboard.db import connect, init_db
+from news_dashboard.embeddings import parse_vector
 
 logger = logging.getLogger(__name__)
 
@@ -203,11 +203,6 @@ def _cluster_ai_config() -> tuple[str, str | None, str]:
     return api_key, base_url, model
 
 
-def _unpack_embedding(blob: bytes) -> list[float]:
-    n = len(blob) // 4
-    return list(struct.unpack(f"{n}f", blob))
-
-
 def _cosine_sim(a: list[float], b: list[float]) -> float:
     dot = sum(x * y for x, y in zip(a, b, strict=False))
     norm_a = math.sqrt(sum(x * x for x in a))
@@ -316,7 +311,6 @@ def _greedy_cluster(normalized_vecs: list[list[float]], threshold: float) -> lis
 pca_2d = _pca_2d
 greedy_cluster = _greedy_cluster
 normalize_vector = _normalize
-unpack_embedding = _unpack_embedding
 
 
 def _generate_cluster_label(
@@ -374,7 +368,7 @@ def load_recent_embedded_articles(
 ) -> list[dict[str, Any]]:
     """Load recent articles that have an embedding, scoped to the user's visible sources.
 
-    Returns dicts with keys: id, title, url, summary, category, embedding.
+    Returns dicts with keys: id, title, url, summary, category, embedding_vec.
     """
     init_db(database_url=database_url)
 
@@ -382,10 +376,10 @@ def load_recent_embedded_articles(
         if user_id is None:
             rows = conn.execute(
                 """
-                SELECT id, title, url, summary, category, embedding
+                SELECT id, title, url, summary, category, embedding_vec
                 FROM articles
                 WHERE discovered_at::timestamptz >= NOW() - INTERVAL '1 day' * %s
-                  AND embedding IS NOT NULL
+                  AND embedding_vec IS NOT NULL
                 ORDER BY discovered_at DESC
                 LIMIT %s
                 """,
@@ -394,7 +388,7 @@ def load_recent_embedded_articles(
         else:
             rows = conn.execute(
                 """
-                SELECT a.id, a.title, a.url, a.summary, a.category, a.embedding
+                SELECT a.id, a.title, a.url, a.summary, a.category, a.embedding_vec
                 FROM articles a
                 JOIN sources src ON src.slug = a.source_slug
                 LEFT JOIN user_sources us
@@ -402,7 +396,7 @@ def load_recent_embedded_articles(
                 LEFT JOIN user_article_state uas
                   ON uas.article_id = a.id AND uas.user_id = %s
                 WHERE a.discovered_at::timestamptz >= NOW() - INTERVAL '1 day' * %s
-                  AND a.embedding IS NOT NULL
+                  AND a.embedding_vec IS NOT NULL
                   AND COALESCE(uas.state, 'today') != 'archived'
                   AND (
                     (
@@ -445,7 +439,7 @@ def cluster_recent_articles(
     article_data: list[dict[str, Any]] = []
     norm_vecs: list[list[float]] = []
     for row in rows:
-        vec = _unpack_embedding(bytes(row["embedding"]))
+        vec = parse_vector(row["embedding_vec"])
         norm_vec = _normalize(vec)
         article_data.append(
             {

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import struct
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -11,11 +10,18 @@ from typing import Any
 import pytest
 from fastapi.testclient import TestClient
 
-from news_dashboard.db import connect, init_db
+from news_dashboard.db import EMBEDDING_DIMENSIONS, connect, init_db
+from news_dashboard.embeddings import vector_literal
 
 
-def _pack(vector: list[float]) -> bytes:
-    return struct.pack(f"{len(vector)}f", *vector)
+def _test_vector(value: float = 0.1, dims: int = 10) -> str:
+    """A pgvector literal padded to the real embedding_vec(1536) width.
+
+    Trailing zeros don't change cosine similarity/ordering, so tests can keep
+    seeding short, readable vectors.
+    """
+    vec = [value] * dims + [0.0] * (EMBEDDING_DIMENSIONS - dims)
+    return vector_literal(vec)
 
 
 def _seed_source(db_path: Path, slug: str = "test-source", name: str = "TestSource") -> None:
@@ -34,7 +40,7 @@ def _seed_articles(db_path: Path) -> None:
     """Insert one article per legacy status with a pre-set embedding."""
     init_db(db_path)
     _seed_source(db_path)
-    embedding = _pack([0.1] * 10)
+    embedding = _test_vector()
     statuses = ["new", "saved", "read", "skipped", "archived"]
     with connect(db_path) as conn:
         for i, status in enumerate(statuses, start=1):
@@ -43,8 +49,8 @@ def _seed_articles(db_path: Path) -> None:
                 INSERT INTO articles(
                     id, url, canonical_url, title, source_slug, source_name,
                     category, kind, status, importance_score, summary, reason,
-                    tags, embedding
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    tags, embedding_vec
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s::vector)
                 """,
                 (
                     i,
@@ -86,7 +92,7 @@ def _make_openai_stub(monkeypatch: pytest.MonkeyPatch, answer: str = "ok") -> No
 
     class FakeEmbeddingData:
         def __init__(self) -> None:
-            self.embedding = [0.1] * 10
+            self.embedding = [0.1] * 10 + [0.0] * (EMBEDDING_DIMENSIONS - 10)
 
     class FakeEmbeddingResponse:
         def __init__(self) -> None:
@@ -110,7 +116,7 @@ def _ids_in_pool(db_path: Path, include_all: bool) -> set[int]:
     status_filter = "status != 'archived'" if include_all else "status IN ('saved', 'read')"
     with connect(db_path) as conn:
         rows = conn.execute(
-            f"SELECT id FROM articles WHERE {status_filter} AND embedding IS NOT NULL"
+            f"SELECT id FROM articles WHERE {status_filter} AND embedding_vec IS NOT NULL"
         ).fetchall()
     return {row["id"] for row in rows}
 
@@ -144,7 +150,7 @@ def test_ask_default_scope_returns_answer(tmp_path: Path, monkeypatch: pytest.Mo
     db_path = tmp_path / "ask.db"
     init_db(db_path)
     _seed_source(db_path, "s", "S")
-    embedding = _pack([0.1] * 10)
+    embedding = _test_vector()
     with connect(db_path) as conn:
         for i in range(1, 8):  # 7 saved/read articles — above MIN_ARTICLES=5
             conn.execute(
@@ -152,8 +158,8 @@ def test_ask_default_scope_returns_answer(tmp_path: Path, monkeypatch: pytest.Mo
                 INSERT INTO articles(
                     id, url, canonical_url, title, source_slug, source_name,
                     category, kind, status, importance_score, summary, reason,
-                    tags, embedding
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    tags, embedding_vec
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s::vector)
                 """,
                 (
                     i,
@@ -201,7 +207,7 @@ def test_ask_include_all_widens_corpus(tmp_path: Path, monkeypatch: pytest.Monke
     db_path = tmp_path / "ask.db"
     init_db(db_path)
     _seed_source(db_path, "s", "S")
-    embedding = _pack([0.1] * 10)
+    embedding = _test_vector()
     # Insert 6 articles with status 'new' — not picked up by default scope
     with connect(db_path) as conn:
         for i in range(1, 7):
@@ -210,8 +216,8 @@ def test_ask_include_all_widens_corpus(tmp_path: Path, monkeypatch: pytest.Monke
                 INSERT INTO articles(
                     id, url, canonical_url, title, source_slug, source_name,
                     category, kind, status, importance_score, summary, reason,
-                    tags, embedding
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    tags, embedding_vec
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s::vector)
                 """,
                 (
                     i,
@@ -263,15 +269,15 @@ def _seed_article_with_embedding(
     source_name: str = "TestSource",
     legacy_status: str = "new",
 ) -> None:
-    embedding = _pack([0.1] * 10)
+    embedding = _test_vector()
     with connect(db_path) as conn:
         conn.execute(
             """
             INSERT INTO articles(
                 id, url, canonical_url, title, source_slug, source_name,
                 category, kind, status, importance_score, summary, reason,
-                tags, embedding
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                tags, embedding_vec
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s::vector)
             """,
             (
                 article_id,

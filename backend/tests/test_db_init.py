@@ -35,6 +35,9 @@ def test_init_db_postgres_applies_all_statements(tmp_path: Any) -> None:
         patch("news_dashboard.db.connect", fake_connect),
         patch("news_dashboard.db.POSTGRES_SCHEMA", fake_schema),
         patch("news_dashboard.db.POSTGRES_MULTIUSER_SCHEMA", []),
+        patch("news_dashboard.db.POSTGRES_POST_BACKFILL_SCHEMA", []),
+        patch("news_dashboard.db._ensure_vector_extension", lambda *_a, **_k: None),
+        patch("news_dashboard.db._backfill_embedding_vectors", lambda *_a, **_k: 0),
     ):
         from news_dashboard.db import init_db
 
@@ -67,6 +70,9 @@ def test_init_db_postgres_failure_surfaces_and_is_not_cached(
         patch("news_dashboard.db.connect", fake_connect),
         patch("news_dashboard.db.POSTGRES_SCHEMA", fake_schema),
         patch("news_dashboard.db.POSTGRES_MULTIUSER_SCHEMA", []),
+        patch("news_dashboard.db.POSTGRES_POST_BACKFILL_SCHEMA", []),
+        patch("news_dashboard.db._ensure_vector_extension", lambda *_a, **_k: None),
+        patch("news_dashboard.db._backfill_embedding_vectors", lambda *_a, **_k: 0),
     ):
         from news_dashboard.db import SchemaInitializationError, init_db
 
@@ -106,6 +112,9 @@ def test_init_db_postgres_each_statement_uses_own_connection(tmp_path: Any) -> N
         patch("news_dashboard.db.connect", fake_connect),
         patch("news_dashboard.db.POSTGRES_SCHEMA", fake_schema),
         patch("news_dashboard.db.POSTGRES_MULTIUSER_SCHEMA", []),
+        patch("news_dashboard.db.POSTGRES_POST_BACKFILL_SCHEMA", []),
+        patch("news_dashboard.db._ensure_vector_extension", lambda *_a, **_k: None),
+        patch("news_dashboard.db._backfill_embedding_vectors", lambda *_a, **_k: 0),
     ):
         from news_dashboard.db import init_db
 
@@ -136,6 +145,9 @@ def test_init_db_postgres_caches_successful_schema_runs(tmp_path: Any) -> None:
         patch("news_dashboard.db.connect", fake_connect),
         patch("news_dashboard.db.POSTGRES_SCHEMA", fake_schema),
         patch("news_dashboard.db.POSTGRES_MULTIUSER_SCHEMA", []),
+        patch("news_dashboard.db.POSTGRES_POST_BACKFILL_SCHEMA", []),
+        patch("news_dashboard.db._ensure_vector_extension", lambda *_a, **_k: None),
+        patch("news_dashboard.db._backfill_embedding_vectors", lambda *_a, **_k: 0),
     ):
         from news_dashboard.db import init_db
 
