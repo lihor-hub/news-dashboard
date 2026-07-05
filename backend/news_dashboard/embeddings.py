@@ -8,16 +8,24 @@ Retrieval       : SQL top-k via the `<=>` cosine-distance operator
 
 from __future__ import annotations
 
+import logging
 import os
+import time
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from news_dashboard.ai_client import ManagedPrompt
 
+logger = logging.getLogger(__name__)
+
 MIN_ARTICLES = 5  # refuse to answer if fewer than this many articles are embedded
 TOP_K = 8  # articles to include as context
 DEFAULT_ANSWER_MODEL = "gpt-4o-mini"
 DEFAULT_EMBEDDING_MODEL = "text-embedding-3-small"
+
+# Retry budget for transient (e.g. 429 rate-limit) embedding failures.
+EMBED_MAX_ATTEMPTS = 4
+EMBED_BACKOFF_SECONDS = 1.0
 
 # Local fallback for the Ask AI system prompt. The live prompt is managed in
 # Langfuse (name "ask-system", label "production"); this string is used verbatim
@@ -34,6 +42,10 @@ ASK_SYSTEM_PROMPT = (
 
 class MissingAICredentialsError(RuntimeError):
     """Raised when Ask AI is used without the required provider credentials."""
+
+
+class EmbeddingUnavailableError(RuntimeError):
+    """Raised when the embedding provider stays unavailable after retries (e.g. persistent 429s)."""
 
 
 def _require_env(name: str, purpose: str) -> str:
@@ -96,18 +108,52 @@ def _embeddings_ai_config() -> tuple[str, str | None, str]:
     return api_key, base_url, model
 
 
+def _is_retryable_embedding_error(exc: Exception) -> bool:
+    """True for transient upstream errors (429 rate limits) worth retrying."""
+    from openai import APIStatusError, RateLimitError
+
+    if isinstance(exc, RateLimitError):
+        return True
+    return isinstance(exc, APIStatusError) and exc.status_code == 429
+
+
 def _embed(text: str) -> list[float]:
-    """Embed *text* via the configured OpenAI-compatible endpoint."""
+    """Embed *text* via the configured OpenAI-compatible endpoint.
+
+    Retries transient rate-limit (429) errors with exponential backoff. Once
+    the retry budget is exhausted, raises EmbeddingUnavailableError instead of
+    the raw provider exception so callers can distinguish "provider is
+    rate-limiting us" from other failures (e.g. bad credentials).
+    """
     from news_dashboard.ai_client import get_chat_client, trace_params
 
     api_key, base_url, model = _embeddings_ai_config()
     client = get_chat_client(api_key=api_key, base_url=base_url)
-    response = client.embeddings.create(
-        model=model,
-        input=text,
-        **trace_params("article-embedding", tags=["embedding"], user_id="system"),
-    )
-    return list(response.data[0].embedding)
+
+    attempt = 0
+    while True:
+        try:
+            response = client.embeddings.create(
+                model=model,
+                input=text,
+                **trace_params("article-embedding", tags=["embedding"], user_id="system"),
+            )
+            return list(response.data[0].embedding)
+        except Exception as exc:
+            if not _is_retryable_embedding_error(exc):
+                raise
+            attempt += 1
+            if attempt >= EMBED_MAX_ATTEMPTS:
+                message = f"embedding provider rate-limited after {attempt} attempts: {exc}"
+                raise EmbeddingUnavailableError(message) from exc
+            wait = EMBED_BACKOFF_SECONDS * (2 ** (attempt - 1))
+            logger.warning(
+                "embedding request rate-limited (attempt %d/%d); retrying in %.1fs",
+                attempt,
+                EMBED_MAX_ATTEMPTS,
+                wait,
+            )
+            time.sleep(wait)
 
 
 def _answer(
@@ -192,6 +238,8 @@ def embed_all_eligible(
 
     Called lazily on the first /api/ask request to backfill existing articles.
     When user_id is provided, only backfills articles visible to that user.
+    A single article's embedding failure (e.g. exhausted rate-limit retries)
+    is logged and skipped rather than aborting the rest of the backfill.
     Returns the number of articles newly embedded.
     """
     from news_dashboard.db import connect, init_db
@@ -244,7 +292,13 @@ def embed_all_eligible(
         text = embedding_text(row["title"], row["summary"], row["reason"], row["tags"])
         if not text:
             continue
-        vector = _embed(text)
+        try:
+            vector = _embed(text)
+        except Exception:
+            logger.warning(
+                "failed to embed article %s during backfill; skipping", row["id"], exc_info=True
+            )
+            continue
         from news_dashboard.db import connect as _connect
 
         with _connect(db_path) as conn:

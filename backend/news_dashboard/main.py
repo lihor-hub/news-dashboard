@@ -2978,13 +2978,17 @@ def ask_ai(
     payload: AskRequest,
     current_user: Annotated[dict[str, Any], Depends(require_auth)],
 ) -> dict[str, Any]:
-    from news_dashboard.embeddings import ask
+    from news_dashboard.embeddings import EmbeddingUnavailableError, ask
 
     q = payload.query.strip()
     if not q:
         raise HTTPException(status_code=400, detail="query must not be empty")
     try:
         return ask(q, include_all=payload.include_all, user_id=current_user["id"])
+    except EmbeddingUnavailableError as exc:
+        raise HTTPException(
+            status_code=503, detail="Ask AI is temporarily unavailable, try again shortly."
+        ) from exc
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
