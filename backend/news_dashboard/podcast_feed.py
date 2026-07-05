@@ -72,16 +72,28 @@ def verify_feed_token(token: str) -> int | None:
     return user_id
 
 
-def _base_url() -> str:
-    return os.getenv("APP_BASE_URL", "http://localhost:8000")
+def _base_url(base_url: str | None = None) -> str:
+    """Return the feed's base URL.
+
+    ``APP_BASE_URL`` always wins when set (needed for worker contexts that have
+    no live request, e.g. digest emails). Otherwise prefer the caller-supplied
+    ``base_url`` (derived from the inbound request's Host/X-Forwarded-* headers)
+    and fall back to localhost only when neither is available.
+    """
+    override = os.getenv("APP_BASE_URL")
+    if override:
+        return override
+    if base_url:
+        return base_url
+    return "http://localhost:8000"
 
 
-def feed_url(token: str) -> str:
-    return f"{_base_url()}/api/briefings/podcast.rss?token={token}"
+def feed_url(token: str, base_url: str | None = None) -> str:
+    return f"{_base_url(base_url)}/api/briefings/podcast.rss?token={token}"
 
 
-def audio_url(briefing_id: int, token: str) -> str:
-    return f"{_base_url()}/api/briefings/{briefing_id}/podcast-audio?token={token}"
+def audio_url(briefing_id: int, token: str, base_url: str | None = None) -> str:
+    return f"{_base_url(base_url)}/api/briefings/{briefing_id}/podcast-audio?token={token}"
 
 
 def _rfc2822(value: Any) -> str | None:
@@ -97,14 +109,16 @@ def _rfc2822(value: Any) -> str | None:
     return None
 
 
-def build_feed_xml(*, token: str, briefings: list[dict[str, Any]]) -> str:
+def build_feed_xml(
+    *, token: str, briefings: list[dict[str, Any]], base_url: str | None = None
+) -> str:
     """Build a podcast RSS 2.0 (+ iTunes tags) document for the given briefings.
 
     Each entry in ``briefings`` must have ``id``, ``created_at``, ``title``,
     ``summary``, and ``audio_bytes`` (size in bytes of the already-generated
     MP3 for that briefing).
     """
-    base = _base_url()
+    base = _base_url(base_url)
     itunes_ns = "http://www.itunes.org/dtds/podcast-1.0.dtd"
     atom_ns = "http://www.w3.org/2005/Atom"
     ET.register_namespace("itunes", itunes_ns)
@@ -121,7 +135,7 @@ def build_feed_xml(*, token: str, briefings: list[dict[str, Any]]) -> str:
     ET.SubElement(channel, f"{{{itunes_ns}}}author").text = "News Dashboard"
     ET.SubElement(channel, f"{{{itunes_ns}}}explicit").text = "false"
     atom_link = ET.SubElement(channel, f"{{{atom_ns}}}link")
-    atom_link.set("href", feed_url(token))
+    atom_link.set("href", feed_url(token, base_url))
     atom_link.set("rel", "self")
     atom_link.set("type", "application/rss+xml")
 
@@ -137,7 +151,7 @@ def build_feed_xml(*, token: str, briefings: list[dict[str, Any]]) -> str:
         guid.set("isPermaLink", "false")
         guid.text = f"briefing-{briefing_id}"
         enclosure = ET.SubElement(item, "enclosure")
-        enclosure.set("url", audio_url(briefing_id, token))
+        enclosure.set("url", audio_url(briefing_id, token, base_url))
         enclosure.set("length", str(briefing.get("audio_bytes") or 0))
         enclosure.set("type", "audio/mpeg")
 
