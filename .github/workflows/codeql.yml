@@ -58,6 +58,8 @@ jobs:
             **/__pycache__/
             **/.venv/
             **/.pytest_cache/
+            playwright-report/
+            test-results/
 
       # Perform CodeQL Analysis.
       # For compiled languages (C/C++, C#, Go, Java, Swift), autobuild
