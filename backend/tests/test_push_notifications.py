@@ -17,6 +17,7 @@ from news_dashboard.push import (
     get_user_push_subscriptions,
     save_push_subscription,
     send_push_for_user,
+    send_push_notification,
     validate_push_subscription,
 )
 
@@ -139,8 +140,6 @@ def test_delete_push_subscription_by_endpoint(
 
 
 def test_send_push_notification_calls_webpush(monkeypatch: pytest.MonkeyPatch) -> None:
-    import news_dashboard.push as push_mod
-
     monkeypatch.setenv("VAPID_PRIVATE_KEY", "fake-private-key")
     monkeypatch.setenv("VAPID_EMAIL", "test@example.com")
 
@@ -154,7 +153,7 @@ def test_send_push_notification_calls_webpush(monkeypatch: pytest.MonkeyPatch) -
         "WebPushException": _FakeWebPushError,
     }
     with patch.dict("sys.modules", {"pywebpush": MagicMock(**fake_module)}):
-        push_mod.send_push_notification(
+        send_push_notification(
             endpoint="https://ep.example.com",
             p256dh="abc",
             auth="xyz",
@@ -171,8 +170,6 @@ def test_send_push_notification_calls_webpush(monkeypatch: pytest.MonkeyPatch) -
 def test_send_push_notification_payload_without_url(monkeypatch: pytest.MonkeyPatch) -> None:
     import json
 
-    import news_dashboard.push as push_mod
-
     monkeypatch.setenv("VAPID_PRIVATE_KEY", "fake-private-key")
 
     mock_webpush = MagicMock()
@@ -185,7 +182,7 @@ def test_send_push_notification_payload_without_url(monkeypatch: pytest.MonkeyPa
         "WebPushException": _FakeWebPushError,
     }
     with patch.dict("sys.modules", {"pywebpush": MagicMock(**fake_module)}):
-        push_mod.send_push_notification(
+        send_push_notification(
             endpoint="https://ep.example.com",
             p256dh="abc",
             auth="xyz",
@@ -201,8 +198,6 @@ def test_send_push_notification_payload_without_url(monkeypatch: pytest.MonkeyPa
 def test_send_push_notification_payload_with_url(monkeypatch: pytest.MonkeyPatch) -> None:
     import json
 
-    import news_dashboard.push as push_mod
-
     monkeypatch.setenv("VAPID_PRIVATE_KEY", "fake-private-key")
 
     mock_webpush = MagicMock()
@@ -215,7 +210,7 @@ def test_send_push_notification_payload_with_url(monkeypatch: pytest.MonkeyPatch
         "WebPushException": _FakeWebPushError,
     }
     with patch.dict("sys.modules", {"pywebpush": MagicMock(**fake_module)}):
-        push_mod.send_push_notification(
+        send_push_notification(
             endpoint="https://ep.example.com",
             p256dh="abc",
             auth="xyz",
@@ -231,8 +226,6 @@ def test_send_push_notification_payload_with_url(monkeypatch: pytest.MonkeyPatch
 def test_send_push_notification_payload_with_tag(monkeypatch: pytest.MonkeyPatch) -> None:
     import json
 
-    import news_dashboard.push as push_mod
-
     monkeypatch.setenv("VAPID_PRIVATE_KEY", "fake-private-key")
 
     mock_webpush = MagicMock()
@@ -245,7 +238,7 @@ def test_send_push_notification_payload_with_tag(monkeypatch: pytest.MonkeyPatch
         "WebPushException": _FakeWebPushError,
     }
     with patch.dict("sys.modules", {"pywebpush": MagicMock(**fake_module)}):
-        push_mod.send_push_notification(
+        send_push_notification(
             endpoint="https://ep.example.com",
             p256dh="abc",
             auth="xyz",
@@ -262,8 +255,6 @@ def test_send_push_notification_payload_with_tag(monkeypatch: pytest.MonkeyPatch
 def test_send_push_notification_logs_on_webpush_exception(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    import news_dashboard.push as push_mod
-
     monkeypatch.setenv("VAPID_PRIVATE_KEY", "fake-private-key")
 
     class _FakeWebPushError(Exception):
@@ -275,7 +266,7 @@ def test_send_push_notification_logs_on_webpush_exception(
         "WebPushException": _FakeWebPushError,
     }
     with patch.dict("sys.modules", {"pywebpush": MagicMock(**fake_module)}):
-        push_mod.send_push_notification(
+        send_push_notification(
             endpoint="https://ep.example.com",
             p256dh="abc",
             auth="xyz",

@@ -18,14 +18,6 @@ def client() -> Generator[TestClient]:
         yield c
 
 
-_FAKE_ADMIN = {
-    "id": 1,
-    "username": "adminuser",
-    "email": None,
-    "is_admin": True,
-}
-
-
 def test_ingest_requires_admin(client: TestClient) -> None:
     from news_dashboard.auth import require_admin, require_auth
 

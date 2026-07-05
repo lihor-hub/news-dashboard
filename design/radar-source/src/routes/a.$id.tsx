@@ -2,7 +2,7 @@ import { createFileRoute, Link, useNavigate, useRouter } from "@tanstack/react-r
 import { useEffect, useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight, ChevronLeft as PrevIcon, Star, Check, Clock, X as XIcon, Archive, ExternalLink, AlertCircle, Loader2 } from "lucide-react";
 import { useApp } from "@/lib/store";
-import { relativeTime, formatDate, signalLabel } from "@/lib/format";
+import { formatDate, signalLabel } from "@/lib/format";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 

@@ -254,7 +254,6 @@ def generate_podcast_script(briefing_content: dict[str, Any]) -> list[dict[str, 
         if not isinstance(item, dict):
             continue
         speaker = str(item.get("speaker") or "")
-        voice = str(item.get("voice") or "")
         txt = str(item.get("text") or "")
 
         if speaker.lower() == "alex":

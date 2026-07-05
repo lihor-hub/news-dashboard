@@ -497,10 +497,6 @@ def upsert_recommendation_score(  # noqa: PLR0913
         )
 
 
-# States that constitute an explicit interaction worth learning from.
-_INTERACTION_STATES = ("done", "skipped", "archived", "later")
-
-
 def _load_user_signals(conn: Any, user_id: int) -> list[ArticleSignal]:
     """Read the user's live workflow state + starred metadata into signals."""
     rows = conn.execute(
