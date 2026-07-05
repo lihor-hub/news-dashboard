@@ -1,0 +1,90 @@
+{
+  "app": {
+    "name": "Panou de Știri",
+    "tagline": "Platforma ta privată de știri"
+  },
+  "auth": {
+    "sign_in": "Conectare",
+    "username": "Nume utilizator",
+    "password": "Parolă",
+    "email_address": "Adresă de e-mail",
+    "use_email_code": "Folosește în schimb un cod prin e-mail",
+    "back_to_password": "Înapoi la parolă",
+    "6_digit_code": "Cod din 6 cifre",
+    "resend_code": "Retrimite codul",
+    "a_6_digit_code_was_sent_to": "Un cod din 6 cifre a fost trimis la",
+    "invalid_username_or_password": "Nume de utilizator sau parolă incorecte.",
+    "failed_to_send_code": "Trimiterea codului a eșuat. Încearcă din nou.",
+    "invalid_or_expired_code": "Cod invalid sau expirat. Încearcă din nou.",
+    "sending": "Se trimite…",
+    "send_code": "Trimite codul",
+    "verifying": "Se verifică…",
+    "verify_code": "Verifică codul",
+    "signing_in": "Se conectează…",
+    "sign_in_with_keycloak": "Conectare cu Keycloak",
+    "create_account": "Creează cont"
+  },
+  "nav": {
+    "brief": "Rezumat",
+    "today": "Astăzi",
+    "later": "Mai târziu",
+    "starred": "Marcate",
+    "shared": "Partajate",
+    "search": "Căutare",
+    "ask": "Întreabă",
+    "reading_list": "Listă de lectură",
+    "briefing_history": "Istoric rezumate",
+    "topic_map": "Hartă de subiecte",
+    "ai_stats": "Statistici AI",
+    "feeds": "Fluxuri",
+    "reading_dna": "ADN de lectură",
+    "weekly_recap": "Recapitulare săptămânală",
+    "archive": "Arhivă",
+    "collections": "Colecții",
+    "settings": "Setări",
+    "stats": "Statistici",
+    "analytics": "Analitică",
+    "users": "Utilizatori"
+  },
+  "page_title": {
+    "brief": "Rezumat",
+    "today": "Astăzi",
+    "later": "Mai târziu",
+    "starred": "Marcate",
+    "shared": "Partajate",
+    "search": "Căutare",
+    "ask": "Întreabă AI",
+    "topic_map": "Hartă de subiecte",
+    "ai_stats": "Statistici AI",
+    "briefs": "Rezumate",
+    "feeds": "Fluxuri",
+    "stats": "Statistici",
+    "reading_dna": "ADN de lectură",
+    "reading_list": "Listă de lectură",
+    "weekly_recap": "Recapitulare săptămânală",
+    "archive": "Arhivă",
+    "collections": "Colecții",
+    "settings": "Setări",
+    "analytics": "Analitică",
+    "users": "Utilizatori",
+    "default": "Radar"
+  },
+  "shell": {
+    "offline": "Offline",
+    "command": "Comandă",
+    "menu": "Meniu",
+    "more": "Mai multe",
+    "log_out": "Deconectare"
+  },
+  "settings": {
+    "title": "Setări",
+    "about_heading": "Despre",
+    "about_body": "Radar este un instrument privat pentru sortarea știrilor tehnice. Starea este stocată pe server.",
+    "shortcuts_hint_prefix": "Apasă",
+    "shortcuts_hint_suffix": "oriunde pentru comenzi rapide de la tastatură.",
+    "language": {
+      "heading": "Limbă",
+      "description": "Alege limba interfeței aplicației."
+    }
+  }
+}

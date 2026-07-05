@@ -1,0 +1,90 @@
+{
+  "app": {
+    "name": "Панель новостей",
+    "tagline": "Ваша частная новостная платформа"
+  },
+  "auth": {
+    "sign_in": "Войти",
+    "username": "Имя пользователя",
+    "password": "Пароль",
+    "email_address": "Адрес электронной почты",
+    "use_email_code": "Использовать код по почте",
+    "back_to_password": "Вернуться к паролю",
+    "6_digit_code": "6-значный код",
+    "resend_code": "Отправить код повторно",
+    "a_6_digit_code_was_sent_to": "6-значный код был отправлен на",
+    "invalid_username_or_password": "Неверное имя пользователя или пароль.",
+    "failed_to_send_code": "Не удалось отправить код. Попробуйте снова.",
+    "invalid_or_expired_code": "Неверный или истёкший код. Попробуйте снова.",
+    "sending": "Отправка…",
+    "send_code": "Отправить код",
+    "verifying": "Проверка…",
+    "verify_code": "Проверить код",
+    "signing_in": "Вход…",
+    "sign_in_with_keycloak": "Войти через Keycloak",
+    "create_account": "Создать аккаунт"
+  },
+  "nav": {
+    "brief": "Сводка",
+    "today": "Сегодня",
+    "later": "Позже",
+    "starred": "Избранное",
+    "shared": "Общий доступ",
+    "search": "Поиск",
+    "ask": "Спросить",
+    "reading_list": "Список чтения",
+    "briefing_history": "История сводок",
+    "topic_map": "Карта тем",
+    "ai_stats": "Статистика ИИ",
+    "feeds": "Ленты",
+    "reading_dna": "ДНК чтения",
+    "weekly_recap": "Итоги недели",
+    "archive": "Архив",
+    "collections": "Коллекции",
+    "settings": "Настройки",
+    "stats": "Статистика",
+    "analytics": "Аналитика",
+    "users": "Пользователи"
+  },
+  "page_title": {
+    "brief": "Сводка",
+    "today": "Сегодня",
+    "later": "Позже",
+    "starred": "Избранное",
+    "shared": "Общий доступ",
+    "search": "Поиск",
+    "ask": "Спросить ИИ",
+    "topic_map": "Карта тем",
+    "ai_stats": "Статистика ИИ",
+    "briefs": "Сводки",
+    "feeds": "Ленты",
+    "stats": "Статистика",
+    "reading_dna": "ДНК чтения",
+    "reading_list": "Список чтения",
+    "weekly_recap": "Итоги недели",
+    "archive": "Архив",
+    "collections": "Коллекции",
+    "settings": "Настройки",
+    "analytics": "Аналитика",
+    "users": "Пользователи",
+    "default": "Radar"
+  },
+  "shell": {
+    "offline": "Нет сети",
+    "command": "Команда",
+    "menu": "Меню",
+    "more": "Ещё",
+    "log_out": "Выйти"
+  },
+  "settings": {
+    "title": "Настройки",
+    "about_heading": "О программе",
+    "about_body": "Radar — это частный инструмент для сортировки технических новостей. Состояние хранится на сервере.",
+    "shortcuts_hint_prefix": "Нажмите",
+    "shortcuts_hint_suffix": "в любом месте, чтобы увидеть горячие клавиши.",
+    "language": {
+      "heading": "Язык",
+      "description": "Выберите язык интерфейса приложения."
+    }
+  }
+}

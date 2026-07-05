@@ -1,0 +1,90 @@
+{
+  "app": {
+    "name": "न्यूज़ डैशबोर्ड",
+    "tagline": "आपका निजी समाचार प्लेटफ़ॉर्म"
+  },
+  "auth": {
+    "sign_in": "साइन इन करें",
+    "username": "उपयोगकर्ता नाम",
+    "password": "पासवर्ड",
+    "email_address": "ईमेल पता",
+    "use_email_code": "इसके बजाय ईमेल कोड का उपयोग करें",
+    "back_to_password": "पासवर्ड साइन-इन पर वापस जाएं",
+    "6_digit_code": "6-अंकीय कोड",
+    "resend_code": "कोड फिर से भेजें",
+    "a_6_digit_code_was_sent_to": "6-अंकीय कोड इस पते पर भेजा गया:",
+    "invalid_username_or_password": "अमान्य उपयोगकर्ता नाम या पासवर्ड।",
+    "failed_to_send_code": "कोड भेजने में विफल। कृपया फिर से प्रयास करें।",
+    "invalid_or_expired_code": "अमान्य या समाप्त हो चुका कोड। कृपया फिर से प्रयास करें।",
+    "sending": "भेजा जा रहा है…",
+    "send_code": "कोड भेजें",
+    "verifying": "सत्यापित किया जा रहा है…",
+    "verify_code": "कोड सत्यापित करें",
+    "signing_in": "साइन इन हो रहा है…",
+    "sign_in_with_keycloak": "Keycloak से साइन इन करें",
+    "create_account": "खाता बनाएं"
+  },
+  "nav": {
+    "brief": "ब्रीफ़",
+    "today": "आज",
+    "later": "बाद में",
+    "starred": "स्टार किए गए",
+    "shared": "साझा किए गए",
+    "search": "खोजें",
+    "ask": "पूछें",
+    "reading_list": "पठन सूची",
+    "briefing_history": "ब्रीफ़ इतिहास",
+    "topic_map": "विषय मानचित्र",
+    "ai_stats": "AI आँकड़े",
+    "feeds": "फ़ीड",
+    "reading_dna": "रीडिंग DNA",
+    "weekly_recap": "साप्ताहिक सारांश",
+    "archive": "संग्रह",
+    "collections": "संग्रहण",
+    "settings": "सेटिंग्स",
+    "stats": "आँकड़े",
+    "analytics": "विश्लेषिकी",
+    "users": "उपयोगकर्ता"
+  },
+  "page_title": {
+    "brief": "ब्रीफ़",
+    "today": "आज",
+    "later": "बाद में",
+    "starred": "स्टार किए गए",
+    "shared": "साझा किए गए",
+    "search": "खोजें",
+    "ask": "AI से पूछें",
+    "topic_map": "विषय मानचित्र",
+    "ai_stats": "AI आँकड़े",
+    "briefs": "ब्रीफ़",
+    "feeds": "फ़ीड",
+    "stats": "आँकड़े",
+    "reading_dna": "रीडिंग DNA",
+    "reading_list": "पठन सूची",
+    "weekly_recap": "साप्ताहिक सारांश",
+    "archive": "संग्रह",
+    "collections": "संग्रहण",
+    "settings": "सेटिंग्स",
+    "analytics": "विश्लेषिकी",
+    "users": "उपयोगकर्ता",
+    "default": "Radar"
+  },
+  "shell": {
+    "offline": "ऑफ़लाइन",
+    "command": "कमांड",
+    "menu": "मेनू",
+    "more": "अधिक",
+    "log_out": "लॉग आउट करें"
+  },
+  "settings": {
+    "title": "सेटिंग्स",
+    "about_heading": "परिचय",
+    "about_body": "Radar तकनीकी समाचारों को छाँटने का एक निजी उपकरण है। स्थिति सर्वर पर संग्रहीत होती है।",
+    "shortcuts_hint_prefix": "कीबोर्ड शॉर्टकट देखने के लिए कहीं भी",
+    "shortcuts_hint_suffix": "दबाएँ।",
+    "language": {
+      "heading": "भाषा",
+      "description": "ऐप इंटरफ़ेस की भाषा चुनें।"
+    }
+  }
+}

@@ -1,0 +1,90 @@
+{
+  "app": {
+    "name": "Přehled zpráv",
+    "tagline": "Vaše soukromá zpravodajská platforma"
+  },
+  "auth": {
+    "sign_in": "Přihlásit se",
+    "username": "Uživatelské jméno",
+    "password": "Heslo",
+    "email_address": "E-mailová adresa",
+    "use_email_code": "Použít místo toho kód e-mailem",
+    "back_to_password": "Zpět na přihlášení heslem",
+    "6_digit_code": "6místný kód",
+    "resend_code": "Odeslat kód znovu",
+    "a_6_digit_code_was_sent_to": "6místný kód byl odeslán na",
+    "invalid_username_or_password": "Neplatné uživatelské jméno nebo heslo.",
+    "failed_to_send_code": "Odeslání kódu se nezdařilo. Zkuste to znovu.",
+    "invalid_or_expired_code": "Neplatný nebo vypršelý kód. Zkuste to znovu.",
+    "sending": "Odesílání…",
+    "send_code": "Odeslat kód",
+    "verifying": "Ověřování…",
+    "verify_code": "Ověřit kód",
+    "signing_in": "Přihlašování…",
+    "sign_in_with_keycloak": "Přihlásit se přes Keycloak",
+    "create_account": "Vytvořit účet"
+  },
+  "nav": {
+    "brief": "Přehled",
+    "today": "Dnes",
+    "later": "Později",
+    "starred": "Oblíbené",
+    "shared": "Sdílené",
+    "search": "Hledat",
+    "ask": "Zeptat se",
+    "reading_list": "Seznam ke čtení",
+    "briefing_history": "Historie přehledů",
+    "topic_map": "Mapa témat",
+    "ai_stats": "Statistiky AI",
+    "feeds": "Zdroje",
+    "reading_dna": "Čtenářské DNA",
+    "weekly_recap": "Týdenní shrnutí",
+    "archive": "Archiv",
+    "collections": "Kolekce",
+    "settings": "Nastavení",
+    "stats": "Statistiky",
+    "analytics": "Analýza",
+    "users": "Uživatelé"
+  },
+  "page_title": {
+    "brief": "Přehled",
+    "today": "Dnes",
+    "later": "Později",
+    "starred": "Oblíbené",
+    "shared": "Sdílené",
+    "search": "Hledat",
+    "ask": "Zeptat se AI",
+    "topic_map": "Mapa témat",
+    "ai_stats": "Statistiky AI",
+    "briefs": "Přehledy",
+    "feeds": "Zdroje",
+    "stats": "Statistiky",
+    "reading_dna": "Čtenářské DNA",
+    "reading_list": "Seznam ke čtení",
+    "weekly_recap": "Týdenní shrnutí",
+    "archive": "Archiv",
+    "collections": "Kolekce",
+    "settings": "Nastavení",
+    "analytics": "Analýza",
+    "users": "Uživatelé",
+    "default": "Radar"
+  },
+  "shell": {
+    "offline": "Offline",
+    "command": "Příkaz",
+    "menu": "Nabídka",
+    "more": "Více",
+    "log_out": "Odhlásit se"
+  },
+  "settings": {
+    "title": "Nastavení",
+    "about_heading": "O aplikaci",
+    "about_body": "Radar je soukromý nástroj pro třídění technických zpráv. Stav se ukládá na serveru.",
+    "shortcuts_hint_prefix": "Stiskněte",
+    "shortcuts_hint_suffix": "kdekoli pro zobrazení klávesových zkratek.",
+    "language": {
+      "heading": "Jazyk",
+      "description": "Vyberte jazyk rozhraní aplikace."
+    }
+  }
+}

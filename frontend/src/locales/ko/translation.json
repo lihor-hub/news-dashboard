@@ -1,0 +1,90 @@
+{
+  "app": {
+    "name": "뉴스 대시보드",
+    "tagline": "나만의 프라이빗 뉴스 플랫폼"
+  },
+  "auth": {
+    "sign_in": "로그인",
+    "username": "사용자 이름",
+    "password": "비밀번호",
+    "email_address": "이메일 주소",
+    "use_email_code": "대신 이메일 코드 사용",
+    "back_to_password": "비밀번호 로그인으로 돌아가기",
+    "6_digit_code": "6자리 코드",
+    "resend_code": "코드 재전송",
+    "a_6_digit_code_was_sent_to": "6자리 코드가 다음으로 전송되었습니다:",
+    "invalid_username_or_password": "사용자 이름 또는 비밀번호가 올바르지 않습니다.",
+    "failed_to_send_code": "코드 전송에 실패했습니다. 다시 시도해 주세요.",
+    "invalid_or_expired_code": "코드가 유효하지 않거나 만료되었습니다. 다시 시도해 주세요.",
+    "sending": "전송 중…",
+    "send_code": "코드 보내기",
+    "verifying": "확인 중…",
+    "verify_code": "코드 확인",
+    "signing_in": "로그인 중…",
+    "sign_in_with_keycloak": "Keycloak으로 로그인",
+    "create_account": "계정 만들기"
+  },
+  "nav": {
+    "brief": "브리핑",
+    "today": "오늘",
+    "later": "나중에",
+    "starred": "즐겨찾기",
+    "shared": "공유됨",
+    "search": "검색",
+    "ask": "질문하기",
+    "reading_list": "읽기 목록",
+    "briefing_history": "브리핑 기록",
+    "topic_map": "토픽 맵",
+    "ai_stats": "AI 통계",
+    "feeds": "피드",
+    "reading_dna": "독서 DNA",
+    "weekly_recap": "주간 요약",
+    "archive": "보관함",
+    "collections": "컬렉션",
+    "settings": "설정",
+    "stats": "통계",
+    "analytics": "분석",
+    "users": "사용자"
+  },
+  "page_title": {
+    "brief": "브리핑",
+    "today": "오늘",
+    "later": "나중에",
+    "starred": "즐겨찾기",
+    "shared": "공유됨",
+    "search": "검색",
+    "ask": "AI에게 질문",
+    "topic_map": "토픽 맵",
+    "ai_stats": "AI 통계",
+    "briefs": "브리핑",
+    "feeds": "피드",
+    "stats": "통계",
+    "reading_dna": "독서 DNA",
+    "reading_list": "읽기 목록",
+    "weekly_recap": "주간 요약",
+    "archive": "보관함",
+    "collections": "컬렉션",
+    "settings": "설정",
+    "analytics": "분석",
+    "users": "사용자",
+    "default": "Radar"
+  },
+  "shell": {
+    "offline": "오프라인",
+    "command": "명령",
+    "menu": "메뉴",
+    "more": "더 보기",
+    "log_out": "로그아웃"
+  },
+  "settings": {
+    "title": "설정",
+    "about_heading": "정보",
+    "about_body": "Radar는 기술 뉴스를 분류하는 개인용 도구입니다. 상태는 서버에 저장됩니다.",
+    "shortcuts_hint_prefix": "어디서나",
+    "shortcuts_hint_suffix": "키를 누르면 키보드 단축키를 볼 수 있습니다.",
+    "language": {
+      "heading": "언어",
+      "description": "앱 인터페이스 언어를 선택하세요."
+    }
+  }
+}

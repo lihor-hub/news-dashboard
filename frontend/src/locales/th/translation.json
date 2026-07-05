@@ -1,0 +1,90 @@
+{
+  "app": {
+    "name": "แดชบอร์ดข่าว",
+    "tagline": "แพลตฟอร์มข่าวส่วนตัวของคุณ"
+  },
+  "auth": {
+    "sign_in": "เข้าสู่ระบบ",
+    "username": "ชื่อผู้ใช้",
+    "password": "รหัสผ่าน",
+    "email_address": "ที่อยู่อีเมล",
+    "use_email_code": "ใช้รหัสทางอีเมลแทน",
+    "back_to_password": "กลับไปเข้าสู่ระบบด้วยรหัสผ่าน",
+    "6_digit_code": "รหัส 6 หลัก",
+    "resend_code": "ส่งรหัสอีกครั้ง",
+    "a_6_digit_code_was_sent_to": "ส่งรหัส 6 หลักไปที่",
+    "invalid_username_or_password": "ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง",
+    "failed_to_send_code": "ส่งรหัสไม่สำเร็จ กรุณาลองใหม่",
+    "invalid_or_expired_code": "รหัสไม่ถูกต้องหรือหมดอายุ กรุณาลองใหม่",
+    "sending": "กำลังส่ง…",
+    "send_code": "ส่งรหัส",
+    "verifying": "กำลังตรวจสอบ…",
+    "verify_code": "ยืนยันรหัส",
+    "signing_in": "กำลังเข้าสู่ระบบ…",
+    "sign_in_with_keycloak": "เข้าสู่ระบบด้วย Keycloak",
+    "create_account": "สร้างบัญชี"
+  },
+  "nav": {
+    "brief": "สรุปข่าว",
+    "today": "วันนี้",
+    "later": "ไว้ทีหลัง",
+    "starred": "ติดดาว",
+    "shared": "แชร์แล้ว",
+    "search": "ค้นหา",
+    "ask": "ถาม",
+    "reading_list": "รายการอ่าน",
+    "briefing_history": "ประวัติสรุปข่าว",
+    "topic_map": "แผนที่หัวข้อ",
+    "ai_stats": "สถิติ AI",
+    "feeds": "ฟีด",
+    "reading_dna": "ดีเอ็นเอการอ่าน",
+    "weekly_recap": "สรุปประจำสัปดาห์",
+    "archive": "เก็บถาวร",
+    "collections": "คอลเลกชัน",
+    "settings": "การตั้งค่า",
+    "stats": "สถิติ",
+    "analytics": "การวิเคราะห์",
+    "users": "ผู้ใช้"
+  },
+  "page_title": {
+    "brief": "สรุปข่าว",
+    "today": "วันนี้",
+    "later": "ไว้ทีหลัง",
+    "starred": "ติดดาว",
+    "shared": "แชร์แล้ว",
+    "search": "ค้นหา",
+    "ask": "ถาม AI",
+    "topic_map": "แผนที่หัวข้อ",
+    "ai_stats": "สถิติ AI",
+    "briefs": "สรุปข่าว",
+    "feeds": "ฟีด",
+    "stats": "สถิติ",
+    "reading_dna": "ดีเอ็นเอการอ่าน",
+    "reading_list": "รายการอ่าน",
+    "weekly_recap": "สรุปประจำสัปดาห์",
+    "archive": "เก็บถาวร",
+    "collections": "คอลเลกชัน",
+    "settings": "การตั้งค่า",
+    "analytics": "การวิเคราะห์",
+    "users": "ผู้ใช้",
+    "default": "Radar"
+  },
+  "shell": {
+    "offline": "ออฟไลน์",
+    "command": "คำสั่ง",
+    "menu": "เมนู",
+    "more": "เพิ่มเติม",
+    "log_out": "ออกจากระบบ"
+  },
+  "settings": {
+    "title": "การตั้งค่า",
+    "about_heading": "เกี่ยวกับ",
+    "about_body": "Radar เป็นเครื่องมือส่วนตัวสำหรับจัดเรียงข่าวเทคโนโลยี สถานะจะถูกเก็บไว้บนเซิร์ฟเวอร์",
+    "shortcuts_hint_prefix": "กด",
+    "shortcuts_hint_suffix": "ที่ใดก็ได้เพื่อดูปุ่มลัดแป้นพิมพ์",
+    "language": {
+      "heading": "ภาษา",
+      "description": "เลือกภาษาของอินเทอร์เฟซแอป"
+    }
+  }
+}

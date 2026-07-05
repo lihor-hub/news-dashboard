@@ -1,0 +1,90 @@
+{
+  "app": {
+    "name": "新闻仪表盘",
+    "tagline": "您的私人新闻平台"
+  },
+  "auth": {
+    "sign_in": "登录",
+    "username": "用户名",
+    "password": "密码",
+    "email_address": "电子邮件地址",
+    "use_email_code": "改用邮箱验证码",
+    "back_to_password": "返回密码登录",
+    "6_digit_code": "6 位验证码",
+    "resend_code": "重新发送验证码",
+    "a_6_digit_code_was_sent_to": "6 位验证码已发送至",
+    "invalid_username_or_password": "用户名或密码无效。",
+    "failed_to_send_code": "验证码发送失败，请重试。",
+    "invalid_or_expired_code": "验证码无效或已过期，请重试。",
+    "sending": "发送中…",
+    "send_code": "发送验证码",
+    "verifying": "验证中…",
+    "verify_code": "验证代码",
+    "signing_in": "登录中…",
+    "sign_in_with_keycloak": "使用 Keycloak 登录",
+    "create_account": "创建账户"
+  },
+  "nav": {
+    "brief": "简报",
+    "today": "今天",
+    "later": "稍后",
+    "starred": "已加星标",
+    "shared": "已分享",
+    "search": "搜索",
+    "ask": "提问",
+    "reading_list": "阅读清单",
+    "briefing_history": "简报历史",
+    "topic_map": "主题地图",
+    "ai_stats": "AI 统计",
+    "feeds": "信息源",
+    "reading_dna": "阅读画像",
+    "weekly_recap": "每周回顾",
+    "archive": "归档",
+    "collections": "收藏集",
+    "settings": "设置",
+    "stats": "统计",
+    "analytics": "分析",
+    "users": "用户"
+  },
+  "page_title": {
+    "brief": "简报",
+    "today": "今天",
+    "later": "稍后",
+    "starred": "已加星标",
+    "shared": "已分享",
+    "search": "搜索",
+    "ask": "向 AI 提问",
+    "topic_map": "主题地图",
+    "ai_stats": "AI 统计",
+    "briefs": "简报",
+    "feeds": "信息源",
+    "stats": "统计",
+    "reading_dna": "阅读画像",
+    "reading_list": "阅读清单",
+    "weekly_recap": "每周回顾",
+    "archive": "归档",
+    "collections": "收藏集",
+    "settings": "设置",
+    "analytics": "分析",
+    "users": "用户",
+    "default": "Radar"
+  },
+  "shell": {
+    "offline": "离线",
+    "command": "命令",
+    "menu": "菜单",
+    "more": "更多",
+    "log_out": "退出登录"
+  },
+  "settings": {
+    "title": "设置",
+    "about_heading": "关于",
+    "about_body": "Radar 是一款私人技术新闻分拣工具，状态保存在服务器上。",
+    "shortcuts_hint_prefix": "按",
+    "shortcuts_hint_suffix": "可在任意位置查看键盘快捷键。",
+    "language": {
+      "heading": "语言",
+      "description": "选择应用界面的语言。"
+    }
+  }
+}

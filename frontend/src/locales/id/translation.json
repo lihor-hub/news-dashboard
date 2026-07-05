@@ -1,0 +1,90 @@
+{
+  "app": {
+    "name": "Dasbor Berita",
+    "tagline": "Platform berita pribadi Anda"
+  },
+  "auth": {
+    "sign_in": "Masuk",
+    "username": "Nama pengguna",
+    "password": "Kata sandi",
+    "email_address": "Alamat email",
+    "use_email_code": "Gunakan kode email sebagai gantinya",
+    "back_to_password": "Kembali ke masuk dengan kata sandi",
+    "6_digit_code": "Kode 6 digit",
+    "resend_code": "Kirim ulang kode",
+    "a_6_digit_code_was_sent_to": "Kode 6 digit telah dikirim ke",
+    "invalid_username_or_password": "Nama pengguna atau kata sandi tidak valid.",
+    "failed_to_send_code": "Gagal mengirim kode. Silakan coba lagi.",
+    "invalid_or_expired_code": "Kode tidak valid atau kedaluwarsa. Silakan coba lagi.",
+    "sending": "Mengirim…",
+    "send_code": "Kirim kode",
+    "verifying": "Memverifikasi…",
+    "verify_code": "Verifikasi kode",
+    "signing_in": "Sedang masuk…",
+    "sign_in_with_keycloak": "Masuk dengan Keycloak",
+    "create_account": "Buat akun"
+  },
+  "nav": {
+    "brief": "Ringkasan",
+    "today": "Hari ini",
+    "later": "Nanti",
+    "starred": "Berbintang",
+    "shared": "Dibagikan",
+    "search": "Cari",
+    "ask": "Tanya",
+    "reading_list": "Daftar bacaan",
+    "briefing_history": "Riwayat ringkasan",
+    "topic_map": "Peta topik",
+    "ai_stats": "Statistik AI",
+    "feeds": "Umpan",
+    "reading_dna": "DNA bacaan",
+    "weekly_recap": "Rekap mingguan",
+    "archive": "Arsip",
+    "collections": "Koleksi",
+    "settings": "Pengaturan",
+    "stats": "Statistik",
+    "analytics": "Analitik",
+    "users": "Pengguna"
+  },
+  "page_title": {
+    "brief": "Ringkasan",
+    "today": "Hari ini",
+    "later": "Nanti",
+    "starred": "Berbintang",
+    "shared": "Dibagikan",
+    "search": "Cari",
+    "ask": "Tanya AI",
+    "topic_map": "Peta topik",
+    "ai_stats": "Statistik AI",
+    "briefs": "Ringkasan",
+    "feeds": "Umpan",
+    "stats": "Statistik",
+    "reading_dna": "DNA bacaan",
+    "reading_list": "Daftar bacaan",
+    "weekly_recap": "Rekap mingguan",
+    "archive": "Arsip",
+    "collections": "Koleksi",
+    "settings": "Pengaturan",
+    "analytics": "Analitik",
+    "users": "Pengguna",
+    "default": "Radar"
+  },
+  "shell": {
+    "offline": "Offline",
+    "command": "Perintah",
+    "menu": "Menu",
+    "more": "Lainnya",
+    "log_out": "Keluar"
+  },
+  "settings": {
+    "title": "Pengaturan",
+    "about_heading": "Tentang",
+    "about_body": "Radar adalah alat pribadi untuk menyortir berita teknis. Status disimpan di server.",
+    "shortcuts_hint_prefix": "Tekan",
+    "shortcuts_hint_suffix": "di mana saja untuk pintasan keyboard.",
+    "language": {
+      "heading": "Bahasa",
+      "description": "Pilih bahasa antarmuka aplikasi."
+    }
+  }
+}

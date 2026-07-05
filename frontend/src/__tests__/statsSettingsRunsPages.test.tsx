@@ -55,6 +55,7 @@ vi.mock('recharts', () => {
   };
 });
 
+import '@/lib/i18n';
 import { StatsPage } from '../pages/StatsPage';
 import { SettingsPage } from '../pages/SettingsPage';
 import { FeedsRunsPage } from '../pages/FeedsRunsPage';

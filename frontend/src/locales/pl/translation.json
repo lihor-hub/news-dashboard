@@ -1,0 +1,90 @@
+{
+  "app": {
+    "name": "Panel Wiadomości",
+    "tagline": "Twoja prywatna platforma informacyjna"
+  },
+  "auth": {
+    "sign_in": "Zaloguj się",
+    "username": "Nazwa użytkownika",
+    "password": "Hasło",
+    "email_address": "Adres e-mail",
+    "use_email_code": "Użyj kodu e-mail zamiast tego",
+    "back_to_password": "Wróć do hasła",
+    "6_digit_code": "6-cyfrowy kod",
+    "resend_code": "Wyślij kod ponownie",
+    "a_6_digit_code_was_sent_to": "6-cyfrowy kod został wysłany na",
+    "invalid_username_or_password": "Nieprawidłowa nazwa użytkownika lub hasło.",
+    "failed_to_send_code": "Nie udało się wysłać kodu. Spróbuj ponownie.",
+    "invalid_or_expired_code": "Nieprawidłowy lub wygasły kod. Spróbuj ponownie.",
+    "sending": "Wysyłanie…",
+    "send_code": "Wyślij kod",
+    "verifying": "Weryfikowanie…",
+    "verify_code": "Zweryfikuj kod",
+    "signing_in": "Logowanie…",
+    "sign_in_with_keycloak": "Zaloguj się przez Keycloak",
+    "create_account": "Utwórz konto"
+  },
+  "nav": {
+    "brief": "Podsumowanie",
+    "today": "Dziś",
+    "later": "Później",
+    "starred": "Oznaczone",
+    "shared": "Udostępnione",
+    "search": "Szukaj",
+    "ask": "Zapytaj",
+    "reading_list": "Lista do przeczytania",
+    "briefing_history": "Historia podsumowań",
+    "topic_map": "Mapa tematów",
+    "ai_stats": "Statystyki AI",
+    "feeds": "Kanały",
+    "reading_dna": "DNA czytania",
+    "weekly_recap": "Podsumowanie tygodnia",
+    "archive": "Archiwum",
+    "collections": "Kolekcje",
+    "settings": "Ustawienia",
+    "stats": "Statystyki",
+    "analytics": "Analityka",
+    "users": "Użytkownicy"
+  },
+  "page_title": {
+    "brief": "Podsumowanie",
+    "today": "Dziś",
+    "later": "Później",
+    "starred": "Oznaczone",
+    "shared": "Udostępnione",
+    "search": "Szukaj",
+    "ask": "Zapytaj AI",
+    "topic_map": "Mapa tematów",
+    "ai_stats": "Statystyki AI",
+    "briefs": "Podsumowania",
+    "feeds": "Kanały",
+    "stats": "Statystyki",
+    "reading_dna": "DNA czytania",
+    "reading_list": "Lista do przeczytania",
+    "weekly_recap": "Podsumowanie tygodnia",
+    "archive": "Archiwum",
+    "collections": "Kolekcje",
+    "settings": "Ustawienia",
+    "analytics": "Analityka",
+    "users": "Użytkownicy",
+    "default": "Radar"
+  },
+  "shell": {
+    "offline": "Offline",
+    "command": "Polecenie",
+    "menu": "Menu",
+    "more": "Więcej",
+    "log_out": "Wyloguj się"
+  },
+  "settings": {
+    "title": "Ustawienia",
+    "about_heading": "O aplikacji",
+    "about_body": "Radar to prywatne narzędzie do segregowania wiadomości technicznych. Stan jest przechowywany na serwerze.",
+    "shortcuts_hint_prefix": "Naciśnij",
+    "shortcuts_hint_suffix": "w dowolnym miejscu, aby zobaczyć skróty klawiszowe.",
+    "language": {
+      "heading": "Język",
+      "description": "Wybierz język interfejsu aplikacji."
+    }
+  }
+}

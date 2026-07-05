@@ -1,0 +1,90 @@
+{
+  "app": {
+    "name": "Πίνακας Ειδήσεων",
+    "tagline": "Η προσωπική σας πλατφόρμα ειδήσεων"
+  },
+  "auth": {
+    "sign_in": "Σύνδεση",
+    "username": "Όνομα χρήστη",
+    "password": "Κωδικός πρόσβασης",
+    "email_address": "Διεύθυνση email",
+    "use_email_code": "Χρήση κωδικού μέσω email",
+    "back_to_password": "Επιστροφή στον κωδικό πρόσβασης",
+    "6_digit_code": "6ψήφιος κωδικός",
+    "resend_code": "Επαναποστολή κωδικού",
+    "a_6_digit_code_was_sent_to": "Ένας 6ψήφιος κωδικός στάλθηκε στο",
+    "invalid_username_or_password": "Μη έγκυρο όνομα χρήστη ή κωδικός πρόσβασης.",
+    "failed_to_send_code": "Αποτυχία αποστολής κωδικού. Δοκιμάστε ξανά.",
+    "invalid_or_expired_code": "Μη έγκυρος ή ληγμένος κωδικός. Δοκιμάστε ξανά.",
+    "sending": "Αποστολή…",
+    "send_code": "Αποστολή κωδικού",
+    "verifying": "Επαλήθευση…",
+    "verify_code": "Επαλήθευση κωδικού",
+    "signing_in": "Σύνδεση σε εξέλιξη…",
+    "sign_in_with_keycloak": "Σύνδεση με Keycloak",
+    "create_account": "Δημιουργία λογαριασμού"
+  },
+  "nav": {
+    "brief": "Σύνοψη",
+    "today": "Σήμερα",
+    "later": "Αργότερα",
+    "starred": "Με αστέρι",
+    "shared": "Κοινοποιημένα",
+    "search": "Αναζήτηση",
+    "ask": "Ρώτησε",
+    "reading_list": "Λίστα ανάγνωσης",
+    "briefing_history": "Ιστορικό συνόψεων",
+    "topic_map": "Χάρτης θεμάτων",
+    "ai_stats": "Στατιστικά AI",
+    "feeds": "Ροές",
+    "reading_dna": "DNA ανάγνωσης",
+    "weekly_recap": "Εβδομαδιαία ανασκόπηση",
+    "archive": "Αρχείο",
+    "collections": "Συλλογές",
+    "settings": "Ρυθμίσεις",
+    "stats": "Στατιστικά",
+    "analytics": "Αναλυτικά",
+    "users": "Χρήστες"
+  },
+  "page_title": {
+    "brief": "Σύνοψη",
+    "today": "Σήμερα",
+    "later": "Αργότερα",
+    "starred": "Με αστέρι",
+    "shared": "Κοινοποιημένα",
+    "search": "Αναζήτηση",
+    "ask": "Ρώτησε το AI",
+    "topic_map": "Χάρτης θεμάτων",
+    "ai_stats": "Στατιστικά AI",
+    "briefs": "Συνόψεις",
+    "feeds": "Ροές",
+    "stats": "Στατιστικά",
+    "reading_dna": "DNA ανάγνωσης",
+    "reading_list": "Λίστα ανάγνωσης",
+    "weekly_recap": "Εβδομαδιαία ανασκόπηση",
+    "archive": "Αρχείο",
+    "collections": "Συλλογές",
+    "settings": "Ρυθμίσεις",
+    "analytics": "Αναλυτικά",
+    "users": "Χρήστες",
+    "default": "Radar"
+  },
+  "shell": {
+    "offline": "Εκτός σύνδεσης",
+    "command": "Εντολή",
+    "menu": "Μενού",
+    "more": "Περισσότερα",
+    "log_out": "Αποσύνδεση"
+  },
+  "settings": {
+    "title": "Ρυθμίσεις",
+    "about_heading": "Σχετικά",
+    "about_body": "Το Radar είναι ένα προσωπικό εργαλείο ταξινόμησης τεχνικών ειδήσεων. Η κατάσταση αποθηκεύεται στον διακομιστή.",
+    "shortcuts_hint_prefix": "Πατήστε",
+    "shortcuts_hint_suffix": "οπουδήποτε για συντομεύσεις πληκτρολογίου.",
+    "language": {
+      "heading": "Γλώσσα",
+      "description": "Επιλέξτε τη γλώσσα διεπαφής της εφαρμογής."
+    }
+  }
+}
