@@ -402,13 +402,16 @@ def _authenticate(authorization: str | None) -> int:
 @public_greader_router.post("/accounts/ClientLogin")
 def client_login(
     email: Annotated[str, Form(alias="Email")] = "",
-    passwd: Annotated[str, Form(alias="Passwd")] = "",
+    client_secret: Annotated[str, Form(alias="Passwd")] = "",
 ) -> PlainTextResponse:
+    # GReader clients send the API token as the "Passwd" form field — it is
+    # a high-entropy opaque token (secrets.token_urlsafe), not a user-chosen
+    # password, so SHA-256 (matching mcp/service.py's token hashing) applies.
     _ = email
-    user_id = authenticate_token(passwd)
+    user_id = authenticate_token(client_secret)
     if user_id is None:
         raise HTTPException(status_code=401, detail="invalid credentials")
-    body = f"SID={passwd}\nLSID={passwd}\nAuth={passwd}\n"
+    body = f"SID={client_secret}\nLSID={client_secret}\nAuth={client_secret}\n"
     return PlainTextResponse(body)
 
 

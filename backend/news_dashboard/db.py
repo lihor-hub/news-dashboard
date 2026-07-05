@@ -806,8 +806,10 @@ POSTGRES_MULTIUSER_SCHEMA = [
       revoked_at    TIMESTAMPTZ
     )
     """,
-    "CREATE INDEX IF NOT EXISTS idx_greader_tokens_user"
-    " ON greader_tokens(user_id, created_at DESC)",
+    (
+        "CREATE INDEX IF NOT EXISTS idx_greader_tokens_user"
+        " ON greader_tokens(user_id, created_at DESC)"
+    ),
 ]
 
 # Runs after POSTGRES_SCHEMA/POSTGRES_MULTIUSER_SCHEMA and the embedding_vec
