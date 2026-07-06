@@ -187,6 +187,68 @@ POSTGRES_SCHEMA = [
     "ALTER TABLE articles ADD COLUMN IF NOT EXISTS starred_at TEXT",
     "ALTER TABLE articles ADD COLUMN IF NOT EXISTS later_until TEXT",
     "ALTER TABLE articles ADD COLUMN IF NOT EXISTS restored_at TEXT",
+    # Some rows in production already carry a duplicate `url` (see #1064),
+    # predating this constraint being consistently enforced on every insert
+    # path. `url` itself is never touched by the bulk UPDATEs below, but any
+    # non-HOT update rewriting those rows re-inserts their index entries and
+    # trips the articles_url_key UNIQUE constraint on the pre-existing
+    # duplicate. Merge duplicates (keeping the lowest id) before those
+    # UPDATEs run, repointing every FK column that references articles(id)
+    # (discovered dynamically, not hardcoded) so per-user state and other
+    # child data survive the merge instead of being cascade-deleted.
+    """
+    DO $$
+    DECLARE
+      dup RECORD;
+      fk RECORD;
+      child RECORD;
+    BEGIN
+      FOR dup IN
+        SELECT id AS loser_id, keep_id
+        FROM (
+          SELECT id, MIN(id) OVER (PARTITION BY url) AS keep_id
+          FROM articles
+        ) ranked
+        WHERE id <> keep_id
+      LOOP
+        FOR fk IN
+          SELECT tc.table_name, kcu.column_name
+          FROM information_schema.table_constraints tc
+          JOIN information_schema.key_column_usage kcu
+            ON tc.constraint_name = kcu.constraint_name
+           AND tc.table_schema = kcu.table_schema
+          JOIN information_schema.constraint_column_usage ccu
+            ON tc.constraint_name = ccu.constraint_name
+           AND tc.table_schema = ccu.table_schema
+          WHERE tc.constraint_type = 'FOREIGN KEY'
+            AND tc.table_schema = current_schema()
+            AND ccu.table_name = 'articles'
+            AND ccu.column_name = 'id'
+        LOOP
+          -- Repoint one child row at a time (by ctid) rather than a single
+          -- blanket UPDATE: if any row referencing the loser collides with
+          -- an existing keeper row, a whole-table UPDATE would fail and a
+          -- whole-table fallback DELETE would wipe out unrelated, non-
+          -- conflicting rows that also referenced the loser.
+          FOR child IN
+            EXECUTE format('SELECT ctid FROM %I WHERE %I = $1', fk.table_name, fk.column_name)
+            USING dup.loser_id
+          LOOP
+            BEGIN
+              EXECUTE format(
+                'UPDATE %I SET %I = $1 WHERE ctid = $2',
+                fk.table_name, fk.column_name
+              ) USING dup.keep_id, child.ctid;
+            EXCEPTION WHEN unique_violation THEN
+              EXECUTE format('DELETE FROM %I WHERE ctid = $1', fk.table_name)
+              USING child.ctid;
+            END;
+          END LOOP;
+        END LOOP;
+        DELETE FROM articles WHERE id = dup.loser_id;
+      END LOOP;
+    END $$;
+    """,
     """
     UPDATE articles SET state = CASE status
       WHEN 'new'      THEN 'today'
