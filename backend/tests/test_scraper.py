@@ -2,9 +2,17 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 import pytest
 
-from news_dashboard.scraper import _AnthropicParser, scrape_source
+from news_dashboard.scraper import (
+    SCRAPE_FETCH_MAX_BYTES,
+    ScrapeFetchError,
+    _AnthropicParser,
+    _fetch_html,
+    scrape_source,
+)
 from news_dashboard.sources import SourceDefinition
 
 # Minimal static HTML that mimics the Anthropic news page structure
@@ -74,7 +82,6 @@ def test_scrape_source_uses_fixture(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_fetch_html_rejects_private_network_url(monkeypatch: pytest.MonkeyPatch) -> None:
-    from news_dashboard.scraper import _fetch_html
 
     called = False
 
@@ -96,3 +103,73 @@ def test_scrape_source_unknown_slug_raises() -> None:
     )
     with pytest.raises(NotImplementedError, match="no-scraper"):
         scrape_source(source)
+
+
+class _FakeHeaders:
+    def __init__(self, content_length: str | None) -> None:
+        self._content_length = content_length
+
+    def get(self, name: str, default: Any = None) -> Any:
+        if name == "Content-Length":
+            return self._content_length
+        return default
+
+    def get_content_charset(self, default: str = "utf-8") -> str:
+        return default
+
+
+class _FakeResponse:
+    def __init__(self, body: bytes, content_length: str | None) -> None:
+        self._body = body
+        self.headers = _FakeHeaders(content_length)
+
+    def read(self, amt: int | None = None) -> bytes:
+        if amt is None:
+            return self._body
+        return self._body[:amt]
+
+    def __enter__(self) -> _FakeResponse:
+        return self
+
+    def __exit__(self, *exc_info: object) -> None:
+        return None
+
+
+def test_fetch_html_under_limit_succeeds(monkeypatch: pytest.MonkeyPatch) -> None:
+    body = b"<html>hello</html>"
+    monkeypatch.setattr(
+        "news_dashboard.scraper.open_server_fetch_url",
+        lambda _req, **_kwargs: _FakeResponse(body, str(len(body))),
+    )
+    html = _fetch_html("https://example.com/news")
+    assert html == "<html>hello</html>"
+
+
+def test_fetch_html_rejects_oversized_content_length(monkeypatch: pytest.MonkeyPatch) -> None:
+    read_called = False
+
+    class _NoReadResponse(_FakeResponse):
+        def read(self, amt: int | None = None) -> bytes:
+            nonlocal read_called
+            read_called = True
+            return super().read(amt)
+
+    monkeypatch.setattr(
+        "news_dashboard.scraper.open_server_fetch_url",
+        lambda _req, **_kwargs: _NoReadResponse(b"x", str(SCRAPE_FETCH_MAX_BYTES + 1)),
+    )
+    with pytest.raises(ScrapeFetchError, match="too large"):
+        _fetch_html("https://example.com/news")
+    assert read_called is False
+
+
+def test_fetch_html_rejects_body_over_limit_without_content_length(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    oversized_body = b"x" * (SCRAPE_FETCH_MAX_BYTES + 100)
+    monkeypatch.setattr(
+        "news_dashboard.scraper.open_server_fetch_url",
+        lambda _req, **_kwargs: _FakeResponse(oversized_body, None),
+    )
+    with pytest.raises(ScrapeFetchError, match="exceeded"):
+        _fetch_html("https://example.com/news")

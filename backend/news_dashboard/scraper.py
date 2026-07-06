@@ -6,6 +6,7 @@ Scrapers must be polite: single request, reasonable timeout, proper user-agent.
 
 from __future__ import annotations
 
+import contextlib
 import re
 import urllib.request
 from html.parser import HTMLParser
@@ -15,6 +16,13 @@ from news_dashboard.url_safety import open_server_fetch_url, validate_server_fet
 
 USER_AGENT = "news-dashboard/0.1 (personal RSS reader; contact@lihor.ro)"
 TIMEOUT_SECS = 15
+# Scraped news-listing pages are rarely more than a few hundred KB; 2 MiB leaves
+# headroom for verbose pages while bounding memory use and parse time for bad actors.
+SCRAPE_FETCH_MAX_BYTES = 2 * 1024 * 1024
+
+
+class ScrapeFetchError(RuntimeError):
+    """Raised when a scraped-page fetch fails or exceeds the size cap."""
 
 
 def _fetch_html(url: str, *, use_selenium: bool = False) -> str:
@@ -25,7 +33,21 @@ def _fetch_html(url: str, *, use_selenium: bool = False) -> str:
         return fetch_spa_html(url)
     req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})  # noqa: S310 - scheme validated above
     with open_server_fetch_url(req, timeout=TIMEOUT_SECS) as resp:
-        raw: bytes = resp.read()
+        content_length = resp.headers.get("Content-Length")
+        if content_length is not None:
+            # Content-Length is attacker-controlled and may be non-numeric;
+            # ignore malformed values rather than failing the fetch on them.
+            with contextlib.suppress(ValueError):
+                if int(content_length) > SCRAPE_FETCH_MAX_BYTES:
+                    msg = (
+                        f"Scraped-page response too large ({content_length} bytes, "
+                        f"max {SCRAPE_FETCH_MAX_BYTES}): {url}"
+                    )
+                    raise ScrapeFetchError(msg)
+        raw: bytes = resp.read(SCRAPE_FETCH_MAX_BYTES + 1)
+        if len(raw) > SCRAPE_FETCH_MAX_BYTES:
+            msg = f"Scraped-page response exceeded {SCRAPE_FETCH_MAX_BYTES} byte limit: {url}"
+            raise ScrapeFetchError(msg)
         charset = resp.headers.get_content_charset("utf-8") or "utf-8"
         return raw.decode(str(charset), errors="replace")
 
