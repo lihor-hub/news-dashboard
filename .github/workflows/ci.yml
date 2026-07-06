@@ -104,7 +104,7 @@ jobs:
       - name: pyrefly
         run: pyrefly check backend
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: '26'
           cache: npm
@@ -141,7 +141,7 @@ jobs:
           fi
           pytest -m smoke -v
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: '26'
           cache: npm
@@ -213,7 +213,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: '26'
           cache: npm
@@ -245,7 +245,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: '26'
           cache: npm
