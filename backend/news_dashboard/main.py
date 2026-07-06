@@ -71,7 +71,7 @@ from news_dashboard.briefings import (
     list_briefings,
 )
 from news_dashboard.db import connect, describe_database, init_db, row_to_dict
-from news_dashboard.error_tracking import frontend_error_tracking_dsn, init_error_tracking
+from news_dashboard.error_tracking import init_error_tracking
 from news_dashboard.ingest import (
     FeedFetchError,
     clean_html,
@@ -497,7 +497,6 @@ class CreateSourceRequest(BaseModel):
 
     def validated_slug(self, name: str) -> str:
         """Return a non-empty slug, normalised from name if not provided."""
-        import re
 
         raw = self.slug or re.sub(r"[^a-z0-9-]", "-", name.lower()).strip("-")
         slug = re.sub(r"-{2,}", "-", raw).strip("-")[:80]
@@ -596,46 +595,6 @@ def _generate_opml(sources: list[dict[str, Any]]) -> str:
 public_router = APIRouter()
 
 
-@public_router.get("/api/health")
-def health() -> dict[str, Any]:
-    init_db()
-    return {"status": "ok"}
-
-
-@public_router.get("/api/live")
-def liveness() -> dict[str, Any]:
-    return {"status": "ok"}
-
-
-@public_router.get("/api/ready")
-def readiness() -> dict[str, Any]:
-    try:
-        with connect() as conn:
-            conn.execute("SELECT 1")
-    except Exception as exc:
-        raise HTTPException(status_code=503, detail="database unavailable") from exc
-    return {"status": "ok"}
-
-
-@public_router.get("/metrics")
-def prometheus_metrics() -> Response:
-    from news_dashboard.metrics import CONTENT_TYPE_LATEST, metrics_enabled, render_metrics
-
-    if not metrics_enabled():
-        raise HTTPException(status_code=404, detail="not found")
-    return Response(content=render_metrics(), media_type=CONTENT_TYPE_LATEST)
-
-
-@public_router.get("/api/config")
-def public_config() -> dict[str, Any]:
-    """Public, non-sensitive runtime config the SPA needs before login.
-
-    ``sentry_dsn`` is a Sentry/GlitchTip DSN, which is designed to be
-    exposed to clients — it only lets a client *send* events, not read data.
-    """
-    return {"sentry_dsn": frontend_error_tracking_dsn()}
-
-
 public_router.include_router(auth_public_router)
 
 
@@ -666,51 +625,6 @@ def _embed_article_background(article_id: int) -> None:
         ensure_article_embedded(article_id)
     except Exception:
         logger.debug("Background embedding skipped for article %d", article_id, exc_info=True)
-
-
-# ── Public version / changelog endpoints (no auth) ───────────────────────────
-
-_CHANGELOG_FILE = Path(__file__).resolve().parents[2] / "CHANGELOG.md"
-
-# "## 1.2.3" or Keep a Changelog style "## [1.2.3] — 2026-07-03" (em dash or
-# hyphen). The version must come out bare: the frontend What's New popup
-# matches entry.version against the app version exactly.
-_CHANGELOG_HEADING = re.compile(r"^##\s+\[?(?P<version>[^\]\s]+)\]?(?:\s*[—-]\s*(?P<date>\S+))?")
-
-
-def _parse_changelog() -> list[dict[str, object]]:
-    try:
-        text = _CHANGELOG_FILE.read_text()
-    except OSError:
-        return []
-    entries: list[dict[str, object]] = []
-    current_items: list[str] = []
-    for line in text.splitlines():
-        if line.startswith("## "):
-            m = _CHANGELOG_HEADING.match(line)
-            current_items = []
-            entries.append(
-                {
-                    "version": m.group("version") if m else line[3:].strip(),
-                    "date": m.group("date") if m else None,
-                    "items": current_items,
-                }
-            )
-        elif line.startswith("- ") and entries:
-            current_items.append(line[2:].strip())
-    return entries
-
-
-@app.get("/api/version")
-def version_endpoint() -> dict[str, str]:
-    """Return the running app version, matching the OpenAPI ``info.version``."""
-    return {"version": app.version}
-
-
-@app.get("/api/changelog")
-def changelog_endpoint() -> dict[str, object]:
-    """Return changelog entries parsed from CHANGELOG.md."""
-    return {"version": app.version, "entries": _parse_changelog()}
 
 
 # ── Authenticated API router ─────────────────────────────────────────────────
@@ -3204,6 +3118,7 @@ from news_dashboard.reading_list.router import router as reading_list_router  # 
 from news_dashboard.reading_progress.router import router as reading_progress_router  # noqa: E402
 from news_dashboard.recaps.router import router as recaps_router  # noqa: E402
 from news_dashboard.saved_searches.router import router as saved_searches_router  # noqa: E402
+from news_dashboard.system.router import router as system_router  # noqa: E402
 
 api.include_router(ai_feedback_router)
 api.include_router(ai_stats_router)
@@ -3223,6 +3138,9 @@ app.include_router(admin)
 # `api` router.
 app.include_router(public_mcp_router)
 app.include_router(public_greader_router)
+# System/health endpoints are unauthenticated, so mount directly on the app
+# rather than the `api` router.
+app.include_router(system_router)
 
 
 # ── SPA static files ─────────────────────────────────────────────────────────
