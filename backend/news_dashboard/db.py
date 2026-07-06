@@ -187,6 +187,27 @@ POSTGRES_SCHEMA = [
     "ALTER TABLE articles ADD COLUMN IF NOT EXISTS starred_at TEXT",
     "ALTER TABLE articles ADD COLUMN IF NOT EXISTS later_until TEXT",
     "ALTER TABLE articles ADD COLUMN IF NOT EXISTS restored_at TEXT",
+    # Some rows in production already carry a duplicate `url` (see #1064),
+    # predating this constraint being consistently enforced on every insert
+    # path. `url` itself is never touched by the bulk UPDATEs below, but any
+    # non-HOT update rewriting those rows re-inserts their index entries and
+    # trips the articles_url_key UNIQUE constraint on the pre-existing
+    # duplicate. Fold each duplicate into the lowest-id row using the same
+    # canonical/duplicate shape as embedding_dedup._merge_duplicate (older
+    # row stays canonical; the rest become archived with canonical_id set)
+    # instead of deleting them: deleting would cascade away other users'
+    # per-article state (user_article_state, ai_feedback, ...) on the
+    # duplicate row, and this repo's one other duplicate-merge path never
+    # does that. The url is suffixed to stay unique since, unlike that
+    # embedding-similarity path, these rows share one literal url and can't
+    # both keep it.
+    (
+        "UPDATE articles AS dup SET"
+        " url = dup.url || '#dup-' || dup.id::text,"
+        " state = 'archived', status = 'archived', canonical_id = ranked.keep_id"
+        " FROM (SELECT id, MIN(id) OVER (PARTITION BY url) AS keep_id FROM articles) AS ranked"
+        " WHERE dup.id = ranked.id AND dup.id != ranked.keep_id"
+    ),
     """
     UPDATE articles SET state = CASE status
       WHEN 'new'      THEN 'today'
