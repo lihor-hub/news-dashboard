@@ -5,8 +5,8 @@ Production already contains `articles` rows that share the same `url`
 every insert path). Because `url` is UNIQUE, a bulk UPDATE that rewrites those
 rows (like the state backfill in POSTGRES_SCHEMA) surfaces the latent
 duplicate as a UniqueViolation and crash-loops init_db(). These tests confirm
-the dedupe migration step merges such rows instead of crashing, and repoints
-per-user state onto the surviving "keeper" article.
+the dedupe migration step archives the duplicate onto the surviving "keeper"
+article, in place, instead of crashing or deleting per-user state.
 """
 
 from __future__ import annotations
@@ -50,15 +50,25 @@ def test_init_db_merges_duplicate_url_articles(pg_clean: str) -> None:
     db = pg_clean
     sync_sources(db)
     _drop_url_unique_constraint(db)
+    # pg_clean's schema is reused by later tests in this worker; leaving the
+    # constraint dropped would break their ON CONFLICT (url) inserts.
+    try:
+        _run_merge_test(db)
+    finally:
+        with connect(db) as conn:
+            conn.execute("ALTER TABLE articles ADD CONSTRAINT articles_url_key UNIQUE (url)")
 
+
+def _run_merge_test(db: str) -> None:
     keeper_id = _insert_duplicate_article(db, title="First copy")
     loser_id = _insert_duplicate_article(db, title="Second copy")
     assert loser_id > keeper_id
 
     user = create_user("dupe-tester", "password123", db_path=db)
     with connect(db) as conn:
-        # A state row on the keeper for this user, so repointing the loser's
-        # row would collide with the (user_id, article_id) primary key.
+        # Each duplicate has its own per-user state, referencing its own
+        # article id. Nothing here is repointed, so no PK collision is
+        # possible even when the same user triaged both duplicates.
         conn.execute(
             "INSERT INTO user_article_state(user_id, article_id, state) VALUES (%s, %s, 'done')",
             (user["id"], keeper_id),
@@ -68,35 +78,38 @@ def test_init_db_merges_duplicate_url_articles(pg_clean: str) -> None:
             (user["id"], loser_id),
         )
 
-    other_user = create_user("dupe-tester-2", "password123", db_path=db)
-    with connect(db) as conn:
-        # Only the loser has state for this user, so it must be repointed
-        # onto the keeper rather than dropped.
-        conn.execute(
-            "INSERT INTO user_article_state(user_id, article_id, state) VALUES (%s, %s, 'later')",
-            (other_user["id"], loser_id),
-        )
-
     db_mod._INITIALIZED_DATABASES.clear()
     init_db(db)
 
     with connect(db) as conn:
-        articles = conn.execute(
-            "SELECT id FROM articles WHERE url = %s", (DUPLICATE_URL,)
-        ).fetchall()
-        assert len(articles) == 1
-        assert int(articles[0]["id"]) == keeper_id
+        keeper = conn.execute(
+            "SELECT url, state, status, canonical_id FROM articles WHERE id = %s",
+            (keeper_id,),
+        ).fetchone()
+        loser = conn.execute(
+            "SELECT url, state, status, canonical_id FROM articles WHERE id = %s",
+            (loser_id,),
+        ).fetchone()
 
         state_rows = {
-            row["user_id"]: (row["article_id"], row["state"])
+            row["article_id"]: row["state"]
             for row in conn.execute(
-                "SELECT user_id, article_id, state FROM user_article_state WHERE article_id = %s",
-                (keeper_id,),
+                "SELECT article_id, state FROM user_article_state WHERE user_id = %s",
+                (user["id"],),
             ).fetchall()
         }
 
-    # The keeper's own state for the first user survives; the loser's
-    # conflicting duplicate row for that user is dropped, not preferred.
-    assert state_rows[user["id"]] == (keeper_id, "done")
-    # The second user only had state on the loser, so it must be repointed.
-    assert state_rows[other_user["id"]] == (keeper_id, "later")
+    # The keeper keeps the real url and is never archived by the merge.
+    assert keeper["url"] == DUPLICATE_URL
+    assert keeper["canonical_id"] is None
+
+    # The loser is archived in place and points at the keeper, rather than
+    # being deleted — its url is freed up so it no longer collides.
+    assert loser["url"] != DUPLICATE_URL
+    assert loser["state"] == "archived"
+    assert loser["status"] == "archived"
+    assert int(loser["canonical_id"]) == keeper_id
+
+    # Both duplicates' own per-user state survive untouched, on their own ids.
+    assert state_rows[keeper_id] == "done"
+    assert state_rows[loser_id] == "today"
