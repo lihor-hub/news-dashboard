@@ -87,6 +87,86 @@ def test_helm_template_default() -> None:
 
 
 @pytest.mark.skipif(HELM_BIN is None, reason="helm binary not found on path")
+def test_helm_template_keycloak_auth_mode_injects_session_secret_and_keycloak_env() -> None:
+    output = _render_chart()
+    deployment_env = _env_block(_manifest_for_kind(output, "Deployment"))
+
+    session_secret = _env_entry(deployment_env, "SESSION_SECRET")
+    assert "name: news-dashboard-news-dashboard-auth" in session_secret
+    assert "key: SESSION_SECRET" in session_secret
+
+    assert _env_entry(deployment_env, "KEYCLOAK_AUTH_ENABLED") == (
+        '- name: KEYCLOAK_AUTH_ENABLED\n  value: "1"'
+    )
+    assert "KEYCLOAK_CLIENT_ID" in deployment_env
+    assert "BOOTSTRAP_ADMIN_USERNAME" not in deployment_env
+    assert "BOOTSTRAP_ADMIN_PASSWORD" not in deployment_env
+
+    secret_manifest = _manifest_for_kind(output, "Secret")
+    assert "KEYCLOAK_CLIENT_SECRET" in secret_manifest
+    assert "KEYCLOAK_ADMIN_CLIENT_SECRET" in secret_manifest
+
+
+@pytest.mark.skipif(HELM_BIN is None, reason="helm binary not found on path")
+def test_helm_template_local_password_auth_mode_omits_keycloak_env() -> None:
+    output = _render_chart(
+        "app.auth.keycloak.enabled=false",
+        "app.auth.bootstrapAdmin.existingSecret=news-dashboard-bootstrap-admin",
+    )
+    deployment_env = _env_block(_manifest_for_kind(output, "Deployment"))
+
+    session_secret = _env_entry(deployment_env, "SESSION_SECRET")
+    assert "key: SESSION_SECRET" in session_secret
+
+    assert "KEYCLOAK_AUTH_ENABLED" not in deployment_env
+    assert "KEYCLOAK_CLIENT_ID" not in deployment_env
+    assert "KEYCLOAK_SERVER_URL" not in deployment_env
+
+    bootstrap_username = _env_entry(deployment_env, "BOOTSTRAP_ADMIN_USERNAME")
+    assert 'name: "news-dashboard-bootstrap-admin"' in bootstrap_username
+    assert 'key: "BOOTSTRAP_ADMIN_USERNAME"' in bootstrap_username
+    bootstrap_password = _env_entry(deployment_env, "BOOTSTRAP_ADMIN_PASSWORD")
+    assert 'name: "news-dashboard-bootstrap-admin"' in bootstrap_password
+    assert 'key: "BOOTSTRAP_ADMIN_PASSWORD"' in bootstrap_password
+
+    secret_manifest = _manifest_for_kind(output, "Secret")
+    assert "KEYCLOAK_CLIENT_SECRET" not in secret_manifest
+    assert "KEYCLOAK_ADMIN_CLIENT_SECRET" not in secret_manifest
+
+
+@pytest.mark.skipif(HELM_BIN is None, reason="helm binary not found on path")
+def test_helm_template_local_password_auth_mode_without_bootstrap_secret_omits_env() -> None:
+    output = _render_chart("app.auth.keycloak.enabled=false")
+    deployment_env = _env_block(_manifest_for_kind(output, "Deployment"))
+
+    assert "KEYCLOAK_AUTH_ENABLED" not in deployment_env
+    assert "BOOTSTRAP_ADMIN_USERNAME" not in deployment_env
+    assert "BOOTSTRAP_ADMIN_PASSWORD" not in deployment_env
+
+
+@pytest.mark.skipif(HELM_BIN is None, reason="helm binary not found on path")
+def test_helm_template_fails_without_session_secret_in_local_password_mode() -> None:
+    assert HELM_BIN is not None
+    res = subprocess.run(  # noqa: S603
+        [
+            HELM_BIN,
+            "template",
+            "news-dashboard",
+            str(CHART_DIR),
+            "--set-string",
+            "postgresql.password=dummy-postgres-password-for-render-only",
+            "--set",
+            "app.auth.keycloak.enabled=false",
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert res.returncode != 0
+    assert "app.auth.sessionSecret is required" in res.stderr
+
+
+@pytest.mark.skipif(HELM_BIN is None, reason="helm binary not found on path")
 def test_helm_template_app_mounts_writable_data_dir() -> None:
     output = _render_chart()
     deployment = _manifest_for_kind(output, "Deployment")

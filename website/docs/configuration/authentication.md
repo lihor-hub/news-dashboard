@@ -70,7 +70,9 @@ https://news.lihor.ro/keycloak
 
 ## Helm
 
-The chart exposes the Keycloak settings under `app.auth` in `helm/news-dashboard/values.yaml`. When `app.auth.enabled=true`, Helm renders an auth Secret containing `SESSION_SECRET` and injects the Keycloak env vars into the app deployment.
+The chart always renders an auth Secret containing `SESSION_SECRET` — it is required in every install, Keycloak or not, because it signs the local session cookie either way.
+
+Keycloak SSO is controlled separately by `app.auth.keycloak.enabled` in `helm/news-dashboard/values.yaml` (default `true`, matching this deployment). When `true`, Helm also injects `KEYCLOAK_AUTH_ENABLED=1` and the `KEYCLOAK_*` env vars from `app.auth.keycloak.*`.
 
 For local deployment, override `app.auth.sessionSecret` with a generated value:
 
@@ -78,6 +80,23 @@ For local deployment, override `app.auth.sessionSecret` with a generated value:
 helm upgrade --install news-dashboard ./helm/news-dashboard \
   --set app.auth.sessionSecret="$(python -c 'import secrets; print(secrets.token_hex(32))')"
 ```
+
+### Local-password mode (no Keycloak)
+
+Set `app.auth.keycloak.enabled=false` to skip Keycloak entirely and use the app's built-in username/password auth. `SESSION_SECRET` is still required. Optionally point `app.auth.bootstrapAdmin.existingSecret` at a pre-existing Secret containing `BOOTSTRAP_ADMIN_USERNAME`/`BOOTSTRAP_ADMIN_PASSWORD` keys so the app can provision the first admin account on startup:
+
+```bash
+kubectl -n news-dashboard create secret generic news-dashboard-bootstrap-admin \
+  --from-literal=BOOTSTRAP_ADMIN_USERNAME=admin \
+  --from-literal=BOOTSTRAP_ADMIN_PASSWORD="$(python -c 'import secrets; print(secrets.token_urlsafe(24))')"
+
+helm upgrade --install news-dashboard ./helm/news-dashboard \
+  --set app.auth.keycloak.enabled=false \
+  --set app.auth.bootstrapAdmin.existingSecret=news-dashboard-bootstrap-admin \
+  --set app.auth.sessionSecret="$(python -c 'import secrets; print(secrets.token_hex(32))')"
+```
+
+If no bootstrap admin is supplied, the app starts but logs a warning and login is impossible until an admin is created another way.
 
 ## Keycloak realm/client
 
