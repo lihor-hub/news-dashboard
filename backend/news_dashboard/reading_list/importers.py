@@ -163,3 +163,8 @@ PARSERS = {
 }
 
 MAX_IMPORT_ITEMS = 5000
+
+# Upload memory/parse protection, independent of MAX_IMPORT_ITEMS (which caps
+# the database write size). 10 MiB comfortably covers 5,000 URL rows with
+# titles and tags in any of the supported formats.
+MAX_IMPORT_BYTES = 10 * 1024 * 1024

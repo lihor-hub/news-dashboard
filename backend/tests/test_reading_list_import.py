@@ -8,7 +8,7 @@ from fastapi.testclient import TestClient
 from news_dashboard.auth import require_auth
 from news_dashboard.db import connect, init_db
 from news_dashboard.main import app
-from news_dashboard.reading_list import importers, service
+from news_dashboard.reading_list import importers, router, service
 
 POCKET_CSV = (
     "title,url,time_added,tags,status\n"
@@ -249,3 +249,79 @@ def test_import_enforces_batch_cap(monkeypatch: pytest.MonkeyPatch, pg_clean: st
 
     with pytest.raises(service.ImportTooLargeError):
         service.import_items(user_id, items, max_items=2, database_url=database_url)
+
+
+def test_import_rejects_oversized_upload(monkeypatch: pytest.MonkeyPatch, pg_clean: str) -> None:
+    database_url = _setup_db(monkeypatch, pg_clean)
+    user_id = _make_user(database_url)
+    monkeypatch.setattr(router, "MAX_IMPORT_BYTES", 100)
+    oversized_csv = "url\n" + "\n".join(f"https://example.com/{i}" for i in range(50))
+    assert len(oversized_csv) > 100
+
+    try:
+        with _client_for(user_id) as client:
+            response = client.post(
+                "/api/reading-list/import",
+                files={"file": ("pocket.csv", oversized_csv, "text/csv")},
+                data={"source": "pocket"},
+            )
+    finally:
+        app.dependency_overrides.pop(require_auth, None)
+
+    assert response.status_code == 413
+
+    with connect(database_url=database_url) as conn:
+        count = conn.execute(
+            "SELECT COUNT(*) AS count FROM reading_list_items WHERE user_id = %s",
+            (user_id,),
+        ).fetchone()["count"]
+    assert count == 0
+
+
+def test_import_rejects_oversized_content_length_before_parsing(
+    monkeypatch: pytest.MonkeyPatch, pg_clean: str
+) -> None:
+    database_url = _setup_db(monkeypatch, pg_clean)
+    user_id = _make_user(database_url)
+    monkeypatch.setattr(router, "MAX_IMPORT_BYTES", 100)
+    calls: list[bytes] = []
+
+    def _tracking_parser(contents: bytes) -> list[importers.ImportedItem]:
+        calls.append(contents)
+        return []
+
+    monkeypatch.setattr(router, "PARSERS", {"pocket": _tracking_parser})
+    oversized_csv = "url\n" + "\n".join(f"https://example.com/{i}" for i in range(50))
+
+    try:
+        with _client_for(user_id) as client:
+            response = client.post(
+                "/api/reading-list/import",
+                files={"file": ("pocket.csv", oversized_csv, "text/csv")},
+                data={"source": "pocket"},
+                headers={"content-length": str(len(oversized_csv) * 10)},
+            )
+    finally:
+        app.dependency_overrides.pop(require_auth, None)
+
+    assert response.status_code == 413
+    assert calls == []
+
+
+def test_import_under_limit_still_succeeds(monkeypatch: pytest.MonkeyPatch, pg_clean: str) -> None:
+    database_url = _setup_db(monkeypatch, pg_clean)
+    user_id = _make_user(database_url)
+    monkeypatch.setattr(router, "MAX_IMPORT_BYTES", 10_000)
+
+    try:
+        with _client_for(user_id) as client:
+            response = client.post(
+                "/api/reading-list/import",
+                files={"file": ("pocket.csv", POCKET_CSV, "text/csv")},
+                data={"source": "pocket"},
+            )
+    finally:
+        app.dependency_overrides.pop(require_auth, None)
+
+    assert response.status_code == 200
+    assert response.json() == {"added": 2, "skipped": 0, "failed": 0}
