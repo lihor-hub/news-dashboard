@@ -10,6 +10,7 @@ from fastapi.testclient import TestClient
 from sentry_sdk.types import Event
 
 from news_dashboard.error_tracking import (
+    _scrub_pii,
     error_tracking_enabled,
     frontend_error_tracking_dsn,
     init_error_tracking,
@@ -44,7 +45,7 @@ def test_init_does_not_call_sentry_when_unset(monkeypatch: pytest.MonkeyPatch) -
 
 
 @pytest.mark.smoke
-def test_init_calls_sentry_when_dsn_set(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_init_calls_sentry_with_privacy_safe_kwargs(monkeypatch: pytest.MonkeyPatch) -> None:
     dsn = "https://example@o0.ingest.sentry.io/0"
     monkeypatch.setenv("SENTRY_DSN", dsn)
     monkeypatch.setenv("SENTRY_ENVIRONMENT", "production")
@@ -57,7 +58,8 @@ def test_init_calls_sentry_when_dsn_set(monkeypatch: pytest.MonkeyPatch) -> None
     assert kwargs["dsn"] == dsn
     assert kwargs["environment"] == "production"
     assert kwargs["release"] == "news-dashboard@1.2.3"
-    assert kwargs["send_default_pii"] is True
+    assert kwargs["send_default_pii"] is False
+    assert kwargs["before_send"] is _scrub_pii
 
 
 @pytest.mark.smoke
@@ -74,8 +76,6 @@ def test_frontend_dsn_returned_when_set(monkeypatch: pytest.MonkeyPatch) -> None
 
 @pytest.mark.smoke
 def test_scrub_pii_strips_cookies_headers_and_user() -> None:
-    from news_dashboard.error_tracking import _scrub_pii
-
     event = {
         "request": {
             "cookies": {"nd_session": "secret"},
