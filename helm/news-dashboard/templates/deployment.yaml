@@ -119,33 +119,6 @@ spec:
                   optional: true
 {{- end }}
 {{- end }}
-{{- if .Values.app.auth.enabled }}
-            - name: KEYCLOAK_AUTH_ENABLED
-              value: "1"
-            - name: NEWS_DASHBOARD_BASE_URL
-              value: {{ .Values.app.auth.publicBaseUrl | quote }}
-            - name: KEYCLOAK_SERVER_URL
-              value: {{ .Values.app.auth.keycloakServerUrl | quote }}
-            - name: KEYCLOAK_INTERNAL_SERVER_URL
-              value: {{ .Values.app.auth.keycloakInternalServerUrl | quote }}
-            - name: KEYCLOAK_REALM
-              value: {{ .Values.app.auth.realm | quote }}
-            - name: KEYCLOAK_CLIENT_ID
-              value: {{ .Values.app.auth.clientId | quote }}
-            - name: KEYCLOAK_CLIENT_SECRET
-              valueFrom:
-                secretKeyRef:
-                  name: {{ include "news-dashboard.fullname" . }}-auth
-                  key: KEYCLOAK_CLIENT_SECRET
-            - name: KEYCLOAK_ADMIN_USERNAMES
-              value: {{ .Values.app.auth.adminUsernames | quote }}
-            - name: KEYCLOAK_ADMIN_CLIENT_ID
-              value: {{ .Values.app.auth.adminClientId | quote }}
-            - name: KEYCLOAK_ADMIN_CLIENT_SECRET
-              valueFrom:
-                secretKeyRef:
-                  name: {{ include "news-dashboard.fullname" . }}-auth
-                  key: KEYCLOAK_ADMIN_CLIENT_SECRET
             - name: SESSION_SECRET
               valueFrom:
                 secretKeyRef:
@@ -156,6 +129,46 @@ spec:
                 secretKeyRef:
                   name: {{ include "news-dashboard.fullname" . }}-auth
                   key: TOKEN_SECRET
+{{- if .Values.app.auth.keycloak.enabled }}
+            - name: KEYCLOAK_AUTH_ENABLED
+              value: "1"
+            - name: NEWS_DASHBOARD_BASE_URL
+              value: {{ .Values.app.auth.keycloak.publicBaseUrl | quote }}
+            - name: KEYCLOAK_SERVER_URL
+              value: {{ .Values.app.auth.keycloak.keycloakServerUrl | quote }}
+            - name: KEYCLOAK_INTERNAL_SERVER_URL
+              value: {{ .Values.app.auth.keycloak.keycloakInternalServerUrl | quote }}
+            - name: KEYCLOAK_REALM
+              value: {{ .Values.app.auth.keycloak.realm | quote }}
+            - name: KEYCLOAK_CLIENT_ID
+              value: {{ .Values.app.auth.keycloak.clientId | quote }}
+            - name: KEYCLOAK_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "news-dashboard.fullname" . }}-auth
+                  key: KEYCLOAK_CLIENT_SECRET
+            - name: KEYCLOAK_ADMIN_USERNAMES
+              value: {{ .Values.app.auth.keycloak.adminUsernames | quote }}
+            - name: KEYCLOAK_ADMIN_CLIENT_ID
+              value: {{ .Values.app.auth.keycloak.adminClientId | quote }}
+            - name: KEYCLOAK_ADMIN_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "news-dashboard.fullname" . }}-auth
+                  key: KEYCLOAK_ADMIN_CLIENT_SECRET
+{{- else if .Values.app.auth.bootstrapAdmin.existingSecret }}
+            - name: BOOTSTRAP_ADMIN_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.app.auth.bootstrapAdmin.existingSecret | quote }}
+                  key: {{ .Values.app.auth.bootstrapAdmin.usernameKey | default "BOOTSTRAP_ADMIN_USERNAME" | quote }}
+                  optional: true
+            - name: BOOTSTRAP_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.app.auth.bootstrapAdmin.existingSecret | quote }}
+                  key: {{ .Values.app.auth.bootstrapAdmin.passwordKey | default "BOOTSTRAP_ADMIN_PASSWORD" | quote }}
+                  optional: true
 {{- end }}
 {{- include "news-dashboard.configEnv" . | indent 12 }}
           ports:

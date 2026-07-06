@@ -62,27 +62,43 @@ app:
       size: 1Gi
       storageClassName: ""
   auth:
-    enabled: true
-    publicBaseUrl: https://news.lihor.ro
-    keycloakServerUrl: https://news.lihor.ro/keycloak
-    keycloakInternalServerUrl: https://news.lihor.ro/keycloak
-    realm: news-dashboard
-    clientId: news-dashboard
-    # Optional. Set this when the Keycloak client uses "confidential" access type.
-    clientSecret: ""
-    # Comma-separated usernames that become app admins when first seen from Keycloak.
-    adminUsernames: ioachim
-    # Optional. Confidential client (service account) used by the in-app admin
-    # page to create users via the Keycloak Admin REST API. The client needs the
-    # realm-management "manage-users" role. Defaults to clientId when unset.
-    adminClientId: ""
-    # Service-account secret for adminClientId. Leave empty to disable in-app
-    # user creation (the admin page then reports it is not configured).
-    adminClientSecret: ""
-    # Override in CI/local deploy with a long random string.
+    # SESSION_SECRET is always required and always injected, regardless of
+    # auth mode: it signs the local session cookie for both Keycloak logins
+    # and local-password logins. Override in CI/local deploy with a long
+    # random string.
     sessionSecret: ""
     # Optional. Overrides digest mark-read token signing separately from sessionSecret.
     tokenSecret: ""
+    keycloak:
+      # Set to false for a self-hosted install that only wants local
+      # username/password auth (no SSO). When false, KEYCLOAK_AUTH_ENABLED
+      # and the KEYCLOAK_* env vars below are not rendered, and the app uses
+      # bootstrapAdmin below to provision the first local admin account.
+      enabled: true
+      publicBaseUrl: https://news.lihor.ro
+      keycloakServerUrl: https://news.lihor.ro/keycloak
+      keycloakInternalServerUrl: https://news.lihor.ro/keycloak
+      realm: news-dashboard
+      clientId: news-dashboard
+      # Optional. Set this when the Keycloak client uses "confidential" access type.
+      clientSecret: ""
+      # Comma-separated usernames that become app admins when first seen from Keycloak.
+      adminUsernames: ioachim
+      # Optional. Confidential client (service account) used by the in-app admin
+      # page to create users via the Keycloak Admin REST API. The client needs the
+      # realm-management "manage-users" role. Defaults to clientId when unset.
+      adminClientId: ""
+      # Service-account secret for adminClientId. Leave empty to disable in-app
+      # user creation (the admin page then reports it is not configured).
+      adminClientSecret: ""
+    # Local-password bootstrap admin, used only when keycloak.enabled=false.
+    # Ignored when a user already exists. Prefer an existing Secret over
+    # plain values so credentials never land in rendered manifests.
+    bootstrapAdmin:
+      # Name of a pre-existing Secret with the two keys below.
+      existingSecret: ""
+      usernameKey: BOOTSTRAP_ADMIN_USERNAME
+      passwordKey: BOOTSTRAP_ADMIN_PASSWORD
   ai:
     # Optional: pre-existing Secret with OPENAI_API_KEY and FREE_LLM_API_KEY.
     existingSecret: ""
