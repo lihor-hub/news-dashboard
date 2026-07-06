@@ -19,7 +19,7 @@ def _client() -> TestClient:
 
 @pytest.mark.smoke
 def test_live_returns_200_without_db() -> None:
-    with patch("news_dashboard.main.connect") as mock_connect:
+    with patch("news_dashboard.system.service.connect") as mock_connect:
         resp = _client().get("/api/live")
     assert resp.status_code == 200
     assert resp.json() == {"status": "ok"}
@@ -36,7 +36,7 @@ def test_ready_returns_200_when_db_ok() -> None:
 
         yield _Conn()
 
-    with patch("news_dashboard.main.connect", fake_connect):
+    with patch("news_dashboard.system.service.connect", fake_connect):
         resp = _client().get("/api/ready")
     assert resp.status_code == 200
     assert resp.json() == {"status": "ok"}
@@ -53,6 +53,6 @@ def test_ready_returns_503_when_db_unavailable() -> None:
 
         yield _BrokenConn()
 
-    with patch("news_dashboard.main.connect", broken_connect):
+    with patch("news_dashboard.system.service.connect", broken_connect):
         resp = _client().get("/api/ready")
     assert resp.status_code == 503
