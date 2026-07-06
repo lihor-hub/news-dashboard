@@ -17,13 +17,19 @@ from fastapi import (
     Form,
     HTTPException,
     Query,
+    Request,
     Response,
     UploadFile,
 )
 
 from news_dashboard.auth import require_auth
 from news_dashboard.reading_list import service
-from news_dashboard.reading_list.importers import MAX_IMPORT_ITEMS, PARSERS, ImportParseError
+from news_dashboard.reading_list.importers import (
+    MAX_IMPORT_BYTES,
+    MAX_IMPORT_ITEMS,
+    PARSERS,
+    ImportParseError,
+)
 from news_dashboard.reading_list.models import (
     ReadingListAddRequest,
     ReadingListReorderRequest,
@@ -53,6 +59,7 @@ def add_reading_list_item_endpoint(
 
 @router.post("/api/reading-list/import")
 async def import_reading_list_endpoint(
+    request: Request,
     current_user: Annotated[dict[str, Any], Depends(require_auth)],
     file: Annotated[UploadFile, File()],
     source: Annotated[str, Form()],
@@ -64,7 +71,25 @@ async def import_reading_list_endpoint(
             status_code=400,
             detail=f"Unsupported import source {source!r}; expected one of {sorted(PARSERS)}",
         )
-    contents = await file.read()
+
+    declared_length = request.headers.get("content-length")
+    if (
+        declared_length is not None
+        and declared_length.isdigit()
+        and int(declared_length) > MAX_IMPORT_BYTES
+    ):
+        raise HTTPException(
+            status_code=413,
+            detail=f"Import file exceeds the {MAX_IMPORT_BYTES}-byte limit",
+        )
+
+    contents = await file.read(MAX_IMPORT_BYTES + 1)
+    if len(contents) > MAX_IMPORT_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail=f"Import file exceeds the {MAX_IMPORT_BYTES}-byte limit",
+        )
+
     try:
         items = parser(contents)
     except ImportParseError as exc:
