@@ -49,7 +49,8 @@ def init_error_tracking() -> None:
         dsn=os.environ["SENTRY_DSN"],
         environment=os.getenv("SENTRY_ENVIRONMENT", "production"),
         release=os.getenv("SENTRY_RELEASE") or None,
-        send_default_pii=True,
+        send_default_pii=False,
+        before_send=_scrub_pii,
     )
 
 
