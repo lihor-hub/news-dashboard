@@ -225,7 +225,7 @@ jobs:
           VERSION: ${{ needs.release.outputs.version }}
         run: bash scripts/inject_app_version.sh desktop
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: '20'
           cache: 'npm'
