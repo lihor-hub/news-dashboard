@@ -236,14 +236,22 @@ def test_evaluate_watchlists_creates_nudge_and_dedupes(pg_clean: str) -> None:
     uid = _make_user(pg_clean)
     with connect(pg_clean) as conn:
         _add_source(conn, "global-feed", "Global Feed")
-        _add_article(conn, slug="global-feed", index=1, title="Quantum computing breakthrough")
+        article_id = _add_article(
+            conn, slug="global-feed", index=1, title="Quantum computing breakthrough"
+        )
     create_watchlist(uid, "Quantum", "quantum computing", database_url=pg_clean)
 
     with patch("news_dashboard.push.send_push_for_user") as mock_push:
         summary = evaluate_watchlists(use_ai=False, database_url=pg_clean)
     assert summary["watchlists_evaluated"] == 1
     assert summary["nudges_created"] == 1
-    mock_push.assert_called_once()
+    mock_push.assert_called_once_with(
+        uid,
+        "Watchlist: Quantum",
+        "Quantum computing breakthrough",
+        target_url=f"/a/{article_id}",
+        database_url=pg_clean,
+    )
 
     nudges = list_nudges(uid, database_url=pg_clean)
     assert len(nudges) == 1

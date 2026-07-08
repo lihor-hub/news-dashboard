@@ -417,7 +417,7 @@ def evaluate_watchlists(
                         user_id,
                         f"Watchlist: {wl['label']}",
                         str(match["article"].get("title") or ""),
-                        target_url=f"/article/{match['article']['id']}",
+                        target_url=f"/a/{match['article']['id']}",
                         database_url=dsn,
                     )
                 except Exception:
