@@ -380,6 +380,7 @@ def test_token_management_endpoints_when_enabled(
         assert created.status_code == 200
         body = created.json()
         assert body["token"].startswith("ndmcp_")
+        assert sorted(body["scopes"]) == sorted(["search", "read", "ask", "briefings"])
         token_id = body["id"]
 
         listed = client.get("/api/users/me/mcp-tokens")
@@ -391,6 +392,47 @@ def test_token_management_endpoints_when_enabled(
         revoked = client.delete(f"/api/users/me/mcp-tokens/{token_id}")
         assert revoked.status_code == 200
         assert revoked.json()["revoked_at"] is not None
+
+
+def test_create_token_with_explicit_scope_subset(
+    pg_clean: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("MCP_SERVER_ENABLED", "true")
+    alice = _make_user(pg_clean, "alice-scopes")
+
+    with _client_for(alice) as client:
+        created = client.post(
+            "/api/users/me/mcp-tokens",
+            json={"name": "search-only", "scopes": ["search"]},
+        )
+        assert created.status_code == 200
+        assert created.json()["scopes"] == ["search"]
+
+
+def test_create_token_rejects_unknown_scope(pg_clean: str, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("MCP_SERVER_ENABLED", "true")
+    alice = _make_user(pg_clean, "alice-badscope")
+
+    with _client_for(alice) as client:
+        resp = client.post(
+            "/api/users/me/mcp-tokens",
+            json={"name": "client", "scopes": ["search", "delete_everything"]},
+        )
+        assert resp.status_code == 422
+
+
+def test_create_token_rejects_empty_scope_list(
+    pg_clean: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("MCP_SERVER_ENABLED", "true")
+    alice = _make_user(pg_clean, "alice-emptyscope")
+
+    with _client_for(alice) as client:
+        resp = client.post(
+            "/api/users/me/mcp-tokens",
+            json={"name": "client", "scopes": []},
+        )
+        assert resp.status_code == 422
 
 
 def test_rpc_endpoint_rejects_missing_or_invalid_bearer(
@@ -441,6 +483,30 @@ def test_rpc_endpoint_calls_tool_with_valid_token(
     body = resp.json()
     assert body["tool"] == "search_articles"
     assert any(a["id"] == 7 for a in body["result"]["articles"])
+
+
+def test_rpc_endpoint_denies_tool_outside_token_scopes(
+    client: TestClient, pg_clean: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from news_dashboard.mcp import service
+
+    monkeypatch.setenv("MCP_SERVER_ENABLED", "true")
+    alice = _make_user(pg_clean, "alice-scoped-rpc")
+    created = service.create_token(alice, "search-only", scopes=("search",), database_url=pg_clean)
+
+    ok = client.post(
+        "/api/mcp/rpc",
+        json={"tool": "search_articles", "arguments": {}},
+        headers={"Authorization": f"Bearer {created['token']}"},
+    )
+    assert ok.status_code == 200
+
+    denied = client.post(
+        "/api/mcp/rpc",
+        json={"tool": "list_briefings", "arguments": {}},
+        headers={"Authorization": f"Bearer {created['token']}"},
+    )
+    assert denied.status_code == 403
 
 
 def test_rpc_endpoint_lists_tools(

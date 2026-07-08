@@ -5,10 +5,18 @@ import type { McpToken } from '@/types';
 
 type McpTokenState = 'idle' | 'loading' | 'creating' | 'error';
 
+const ALL_SCOPES: { value: string; label: string; description: string }[] = [
+  { value: 'search', label: 'Search', description: 'Search articles visible to you.' },
+  { value: 'read', label: 'Read', description: 'Fetch a single article by id.' },
+  { value: 'ask', label: 'Ask', description: 'Ask questions answered over your corpus.' },
+  { value: 'briefings', label: 'Briefings', description: 'List your recent briefing metadata.' },
+];
+
 export function McpTokensSection() {
   const [tokens, setTokens] = useState<McpToken[]>([]);
   const [enabled, setEnabled] = useState(false);
   const [newName, setNewName] = useState('');
+  const [newScopes, setNewScopes] = useState<string[]>(ALL_SCOPES.map((s) => s.value));
   const [mintedToken, setMintedToken] = useState<string | null>(null);
   const [state, setState] = useState<McpTokenState>('loading');
 
@@ -32,15 +40,22 @@ export function McpTokensSection() {
     };
   }, []);
 
+  const toggleScope = (scope: string) => {
+    setNewScopes((current) =>
+      current.includes(scope) ? current.filter((s) => s !== scope) : [...current, scope]
+    );
+  };
+
   const create = async () => {
     const name = newName.trim();
-    if (!name) return;
+    if (!name || newScopes.length === 0) return;
     setState('creating');
     try {
-      const token = await createMcpToken(name);
+      const token = await createMcpToken(name, newScopes);
       setTokens((current) => [token, ...current]);
       setMintedToken(token.token ?? null);
       setNewName('');
+      setNewScopes(ALL_SCOPES.map((s) => s.value));
       setState('idle');
     } catch {
       setState('error');
@@ -91,22 +106,52 @@ export function McpTokensSection() {
           </div>
         )}
 
-        <div className="flex gap-2">
-          <input
-            value={newName}
-            onChange={(event) => setNewName(event.target.value)}
-            placeholder="Token name (e.g. Claude Desktop)"
-            aria-label="New MCP token name"
-            className="min-w-0 flex-1 rounded-md border border-border bg-surface px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
-          />
-          <button
-            onClick={() => void create()}
-            disabled={state === 'creating' || !newName.trim() || !enabled}
-            className="flex shrink-0 items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-60"
-          >
-            {state === 'creating' ? <RefreshCw className="size-3 animate-spin" /> : null}
-            Create token
-          </button>
+        <div className="space-y-2">
+          <div className="flex gap-2">
+            <input
+              value={newName}
+              onChange={(event) => setNewName(event.target.value)}
+              placeholder="Token name (e.g. Claude Desktop)"
+              aria-label="New MCP token name"
+              className="min-w-0 flex-1 rounded-md border border-border bg-surface px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+            />
+            <button
+              onClick={() => void create()}
+              disabled={
+                state === 'creating' || !newName.trim() || newScopes.length === 0 || !enabled
+              }
+              className="flex shrink-0 items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-60"
+            >
+              {state === 'creating' ? <RefreshCw className="size-3 animate-spin" /> : null}
+              Create token
+            </button>
+          </div>
+
+          <fieldset className="space-y-1.5">
+            <legend className="text-[11px] text-muted-foreground mb-1">
+              Scopes — the token can only use the tool groups selected here.
+            </legend>
+            <div className="flex flex-wrap gap-3">
+              {ALL_SCOPES.map((scope) => (
+                <label
+                  key={scope.value}
+                  title={scope.description}
+                  className="flex items-center gap-1.5 text-xs text-foreground"
+                >
+                  <input
+                    type="checkbox"
+                    checked={newScopes.includes(scope.value)}
+                    onChange={() => toggleScope(scope.value)}
+                    aria-label={`${scope.label} scope`}
+                  />
+                  {scope.label}
+                </label>
+              ))}
+            </div>
+            {newScopes.length === 0 && (
+              <p className="text-[11px] text-destructive">Select at least one scope.</p>
+            )}
+          </fieldset>
         </div>
 
         {state === 'error' && (
