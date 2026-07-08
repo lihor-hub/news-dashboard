@@ -1,6 +1,7 @@
 import type {
   Achievement,
   AiMemory,
+  ArchiveImportResult,
   GreaderToken,
   McpToken,
   ReadingDna,
@@ -10,7 +11,7 @@ import type {
   Summary,
   WeeklyRecap,
 } from '../types';
-import { requestJson } from './core';
+import { HttpError, readErrorMessage, requestJson } from './core';
 
 export async function fetchSummary(): Promise<Summary> {
   return requestJson<Summary>('/api/summary');
@@ -132,6 +133,18 @@ export async function downloadUserExport(): Promise<void> {
   a.download = `reading-archive-${new Date().toISOString().slice(0, 10)}.json`;
   a.click();
   URL.revokeObjectURL(url);
+}
+
+export async function importUserArchive(file: File): Promise<ArchiveImportResult> {
+  const form = new FormData();
+  form.append('file', file);
+  const response = await fetch('/api/users/me/import', {
+    method: 'POST',
+    credentials: 'same-origin',
+    body: form,
+  });
+  if (!response.ok) throw new HttpError(response.status, await readErrorMessage(response));
+  return response.json() as Promise<ArchiveImportResult>;
 }
 
 export async function deleteOwnAccount(confirmation: string): Promise<void> {

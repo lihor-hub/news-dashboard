@@ -1,12 +1,24 @@
 import { useState } from 'react';
-import { RefreshCw, Download } from 'lucide-react';
-import { downloadUserExport } from '@/api';
+import { RefreshCw, Download, Upload } from 'lucide-react';
+import { downloadUserExport, importUserArchive } from '@/api';
+import type { ArchiveImportResult } from '@/types';
 
 type ExportState = 'idle' | 'running' | 'done' | 'error';
+type ImportState = 'idle' | 'running' | 'done' | 'error';
+
+function formatCounts(counts: { added: number; updated?: number; skipped: number }): string {
+  const parts = [`${counts.added} added`];
+  if (counts.updated !== undefined) parts.push(`${counts.updated} updated`);
+  parts.push(`${counts.skipped} skipped`);
+  return parts.join(', ');
+}
 
 export function DataExportSection() {
   const [state, setState] = useState<ExportState>('idle');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [importState, setImportState] = useState<ImportState>('idle');
+  const [importError, setImportError] = useState<string | null>(null);
+  const [importResult, setImportResult] = useState<ArchiveImportResult | null>(null);
 
   const handleExport = async () => {
     setState('running');
@@ -53,6 +65,65 @@ export function DataExportSection() {
             {errorMsg ?? 'Export failed. Please try again.'}
           </p>
         )}
+
+        <div className="border-t border-border pt-3">
+          <p className="text-xs text-muted-foreground mb-2">
+            Restore a previously downloaded archive into this account. Existing articles, briefings,
+            and AI memories are matched and updated rather than duplicated.
+          </p>
+          <button
+            onClick={() => document.getElementById('archive-import-input')?.click()}
+            disabled={importState === 'running'}
+            className="flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-xs font-medium hover:bg-muted transition-colors disabled:opacity-60"
+          >
+            {importState === 'running' ? (
+              <RefreshCw className="size-3 animate-spin" />
+            ) : (
+              <Upload className="size-3" />
+            )}
+            {importState === 'running' ? 'Restoring…' : 'Restore archive'}
+          </button>
+          <input
+            id="archive-import-input"
+            aria-label="Restore archive"
+            type="file"
+            accept=".json,application/json"
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (!file) return;
+              const input = e.target;
+              setImportState('running');
+              setImportError(null);
+              setImportResult(null);
+              void (async () => {
+                try {
+                  const result = await importUserArchive(file);
+                  setImportResult(result);
+                  setImportState('done');
+                } catch (err) {
+                  setImportError(err instanceof Error ? err.message : 'Import failed.');
+                  setImportState('error');
+                } finally {
+                  input.value = '';
+                }
+              })();
+            }}
+          />
+
+          {importState === 'done' && importResult && (
+            <ul className="mt-2 text-xs text-green-600 dark:text-green-400 space-y-0.5">
+              <li>Articles: {formatCounts(importResult.articles)}</li>
+              <li>Briefings: {formatCounts(importResult.briefings)}</li>
+              <li>AI memories: {formatCounts(importResult.ai_memories)}</li>
+            </ul>
+          )}
+          {importState === 'error' && (
+            <p className="mt-2 text-xs text-destructive">
+              {importError ?? 'Import failed. Please try again.'}
+            </p>
+          )}
+        </div>
       </div>
     </section>
   );
