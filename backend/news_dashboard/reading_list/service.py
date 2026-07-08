@@ -111,6 +111,8 @@ def add_item(
 def list_items(
     user_id: int,
     status: str | None = None,
+    q: str | None = None,
+    kind: str | None = None,
     *,
     database_url: str | None = None,
 ) -> list[dict[str, Any]]:
@@ -120,6 +122,21 @@ def list_items(
     if status is not None:
         query += " AND status = %s"
         params.append(status)
+    if kind is not None:
+        query += " AND kind = %s"
+        params.append(kind)
+    if q is not None and q.strip():
+        query += """
+            AND (
+                title ILIKE %s
+                OR url ILIKE %s
+                OR description ILIKE %s
+                OR site_name ILIKE %s
+                OR note ILIKE %s
+            )
+        """
+        term = f"%{q.strip()}%"
+        params.extend([term, term, term, term, term])
     query += " ORDER BY priority ASC, created_at ASC, id ASC"
     with connect(database_url=database_url) as conn:
         rows = conn.execute(query, params).fetchall()

@@ -86,6 +86,54 @@ describe('ReadingListPage', () => {
     expect(screen.getByText('A very insightful post.')).toBeTruthy();
   });
 
+  it('sends search and type filters to the reading list API', async () => {
+    const fetchSpy = vi.spyOn(readingListApi, 'fetchReadingList').mockResolvedValue([makeItem()]);
+
+    renderPage();
+    await screen.findByText('Great post');
+
+    await userEvent.type(screen.getByPlaceholderText(/search saved links/i), 'video');
+    await userEvent.selectOptions(screen.getByLabelText(/filter by type/i), 'video');
+
+    await waitFor(() => {
+      expect(fetchSpy).toHaveBeenLastCalledWith({
+        status: 'unread',
+        q: 'video',
+        kind: 'video',
+      });
+    });
+  });
+
+  it('clears search and type filters without a page reload', async () => {
+    const fetchSpy = vi.spyOn(readingListApi, 'fetchReadingList').mockResolvedValue([makeItem()]);
+
+    renderPage();
+    await screen.findByText('Great post');
+
+    await userEvent.type(screen.getByPlaceholderText(/search saved links/i), 'briefing');
+    await userEvent.selectOptions(screen.getByLabelText(/filter by type/i), 'article');
+    await userEvent.click(screen.getByRole('button', { name: /clear filters/i }));
+
+    await waitFor(() => {
+      expect(fetchSpy).toHaveBeenLastCalledWith({
+        status: 'unread',
+        q: '',
+        kind: undefined,
+      });
+    });
+  });
+
+  it('shows a no-matches empty state for active filters', async () => {
+    vi.spyOn(readingListApi, 'fetchReadingList').mockResolvedValue([]);
+
+    renderPage();
+    await screen.findByText('Your reading list is empty');
+    await userEvent.type(screen.getByPlaceholderText(/search saved links/i), 'missing');
+
+    expect(await screen.findByText('No matching saved links')).toBeTruthy();
+    expect(screen.getByText(/clear search or type filters/i)).toBeTruthy();
+  });
+
   it('reveals the AI summary when the toggle is clicked', async () => {
     vi.spyOn(readingListApi, 'fetchReadingList').mockResolvedValue([
       makeItem({ summary: 'A concise take on the post.', summary_status: 'ok' }),

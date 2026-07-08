@@ -264,6 +264,67 @@ def test_mark_done_sets_done_at_and_status_filter(
         app.dependency_overrides.pop(require_auth, None)
 
 
+def test_list_items_filters_by_text_kind_status_and_user(
+    monkeypatch: pytest.MonkeyPatch, pg_clean: str
+) -> None:
+    database_url = _setup_db(monkeypatch, pg_clean)
+    alice = _make_user(database_url, "alice")
+    bob = _make_user(database_url, "bob")
+
+    article = service.add_item(
+        alice, "https://example.com/briefing", note="weekly market notes", database_url=database_url
+    )
+    video = service.add_item(
+        alice, "https://www.youtube.com/watch?v=abc", database_url=database_url
+    )
+    bob_item = service.add_item(bob, "https://example.com/private", database_url=database_url)
+    with connect(database_url=database_url) as conn:
+        conn.execute(
+            """
+            UPDATE reading_list_items
+            SET title = %s, description = %s, site_name = %s
+            WHERE id = %s
+            """,
+            ("Market briefing", "Energy equities recap", "Desk", article["id"]),
+        )
+        conn.execute(
+            """
+            UPDATE reading_list_items
+            SET title = %s, description = %s, site_name = %s, status = 'done'
+            WHERE id = %s
+            """,
+            ("Launch video", "Product walkthrough", "YouTube", video["id"]),
+        )
+        conn.execute(
+            "UPDATE reading_list_items SET title = %s WHERE id = %s",
+            ("Market private", bob_item["id"]),
+        )
+
+    text_matches = service.list_items(alice, q="market", database_url=database_url)
+    assert [item["id"] for item in text_matches] == [article["id"]]
+
+    video_matches = service.list_items(alice, kind="video", database_url=database_url)
+    assert [item["id"] for item in video_matches] == [video["id"]]
+
+    combined = service.list_items(
+        alice, status="done", q="walkthrough", kind="video", database_url=database_url
+    )
+    assert [item["id"] for item in combined] == [video["id"]]
+
+
+def test_list_endpoint_validates_kind(monkeypatch: pytest.MonkeyPatch, pg_clean: str) -> None:
+    database_url = _setup_db(monkeypatch, pg_clean)
+    user_id = _make_user(database_url)
+
+    try:
+        with _client_for(user_id) as client:
+            response = client.get("/api/reading-list?kind=podcast")
+    finally:
+        app.dependency_overrides.pop(require_auth, None)
+
+    assert response.status_code == 422
+
+
 def test_delete_item_enforces_ownership(monkeypatch: pytest.MonkeyPatch, pg_clean: str) -> None:
     database_url = _setup_db(monkeypatch, pg_clean)
     alice = _make_user(database_url, "alice")
