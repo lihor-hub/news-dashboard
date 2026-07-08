@@ -1827,51 +1827,6 @@ def import_opml(
     return {"added": added, "skipped": skipped, "failed": failed}
 
 
-# ── Personalization nudges ────────────────────────────────────────────────────
-
-
-class NudgeActionRequest(BaseModel):
-    nudge_id: str
-
-
-class NudgeDismissRequest(BaseModel):
-    nudge_id: str
-    cooldown_days: int = 7
-
-
-@api.get("/api/personalization/nudges")
-def get_personalization_nudges(
-    current_user: Annotated[dict[str, Any], Depends(require_auth)],
-) -> dict[str, Any]:
-    from news_dashboard.personalization_nudges import generate_nudges
-
-    return {"items": generate_nudges(int(current_user["id"]))}
-
-
-@api.post("/api/personalization/nudges/apply")
-def apply_personalization_nudge(
-    payload: NudgeActionRequest,
-    current_user: Annotated[dict[str, Any], Depends(require_auth)],
-) -> dict[str, Any]:
-    from news_dashboard.personalization_nudges import apply_nudge
-
-    return apply_nudge(int(current_user["id"]), payload.nudge_id)
-
-
-@api.post("/api/personalization/nudges/dismiss")
-def dismiss_personalization_nudge(
-    payload: NudgeDismissRequest,
-    current_user: Annotated[dict[str, Any], Depends(require_auth)],
-) -> dict[str, Any]:
-    from news_dashboard.personalization_nudges import dismiss_nudge
-
-    return dismiss_nudge(
-        int(current_user["id"]),
-        payload.nudge_id,
-        cooldown_days=payload.cooldown_days,
-    )
-
-
 # ── AI watchlists ──────────────────────────────────────────────────────────────
 
 
@@ -3113,6 +3068,7 @@ from news_dashboard.greader import public_greader_router  # noqa: E402
 from news_dashboard.greader import router as greader_router  # noqa: E402
 from news_dashboard.mcp.router import public_mcp_router  # noqa: E402
 from news_dashboard.mcp.router import router as mcp_router  # noqa: E402
+from news_dashboard.personalization.router import router as personalization_router  # noqa: E402
 from news_dashboard.quizzes.router import router as quizzes_router  # noqa: E402
 from news_dashboard.reading_list.router import router as reading_list_router  # noqa: E402
 from news_dashboard.reading_progress.router import router as reading_progress_router  # noqa: E402
@@ -3125,6 +3081,7 @@ api.include_router(ai_stats_router)
 api.include_router(ai_memory_router)
 api.include_router(greader_router)
 api.include_router(mcp_router)
+api.include_router(personalization_router)
 api.include_router(quizzes_router)
 api.include_router(reading_list_router)
 api.include_router(reading_progress_router)
