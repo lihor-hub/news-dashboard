@@ -48,3 +48,18 @@ def test_metrics_disabled_flag_values(monkeypatch: pytest.MonkeyPatch, flag_valu
     monkeypatch.setenv("METRICS_ENABLED", flag_value)
     resp = _client().get("/metrics")
     assert resp.status_code == 404
+
+
+@pytest.mark.smoke
+def test_request_duration_is_exposed_as_histogram(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("METRICS_ENABLED", "true")
+    client = _client()
+
+    # The request-duration middleware records each request's own latency
+    # after the response is built, so it shows up starting on the next scrape.
+    client.get("/metrics")
+    body = client.get("/metrics").text
+
+    assert "news_dashboard_http_request_duration_seconds_bucket" in body
+    assert "news_dashboard_http_request_duration_seconds_sum" in body
+    assert "news_dashboard_http_request_duration_seconds_count" in body

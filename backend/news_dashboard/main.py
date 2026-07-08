@@ -218,7 +218,7 @@ async def record_request_metrics(request: Request, call_next: Any) -> Any:
     path = route.path if route is not None else request.url.path
     labels = {"method": request.method, "path": path}
     http_requests_total.labels(status=str(response.status_code), **labels).inc()
-    http_request_duration_seconds.labels(**labels).inc(duration)
+    http_request_duration_seconds.labels(**labels).observe(duration)
     return response
 
 

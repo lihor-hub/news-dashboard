@@ -327,7 +327,8 @@ it from inside your cluster/VPC).
 
 Metrics exposed:
 
-- `news_dashboard_http_requests_total{method,path,status}` / `news_dashboard_http_request_duration_seconds_sum{method,path}` — request counts and cumulative latency, labeled by route template (e.g. `/api/articles/{article_id}`), never the raw URL.
+- `news_dashboard_http_requests_total{method,path,status}` — request counts, labeled by route template (e.g. `/api/articles/{article_id}`), never the raw URL.
+- `news_dashboard_http_request_duration_seconds{method,path}` — HTTP request latency histogram (exposed as `_bucket`, `_sum`, and `_count` series), labeled by route template, never the raw URL.
 - `news_dashboard_ingest_runs_total{status}` — ingest run outcomes (`success`/`failure`).
 - `news_dashboard_ingest_articles_new_total` — new articles discovered across all ingest runs.
 - `news_dashboard_source_health_checks_total{status}` — per-source fetch outcomes (`ok`/`error`) during ingest. No source identity is included in labels, since private-feed names/slugs are user-defined.
