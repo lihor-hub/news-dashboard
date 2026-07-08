@@ -264,6 +264,38 @@ def test_mark_done_sets_done_at_and_status_filter(
         app.dependency_overrides.pop(require_auth, None)
 
 
+def test_archive_and_restore_item_via_api(monkeypatch: pytest.MonkeyPatch, pg_clean: str) -> None:
+    database_url = _setup_db(monkeypatch, pg_clean)
+    user_id = _make_user(database_url)
+    monkeypatch.setattr(service, "fetch_metadata_for_item", lambda _item_id: None)
+
+    try:
+        with _client_for(user_id) as client:
+            item = client.post("/api/reading-list", json={"url": "https://example.com/1"}).json()
+
+            archived = client.patch(f"/api/reading-list/{item['id']}", json={"status": "archived"})
+            assert archived.status_code == 200
+            assert archived.json()["status"] == "archived"
+
+            unread = client.get("/api/reading-list?status=unread").json()["items"]
+            assert unread == []
+            archived_list = client.get("/api/reading-list?status=archived").json()["items"]
+            assert [entry["id"] for entry in archived_list] == [item["id"]]
+
+            restored = client.patch(f"/api/reading-list/{item['id']}", json={"status": "unread"})
+            assert restored.status_code == 200
+            assert restored.json()["status"] == "unread"
+
+            archived_list_after_restore = client.get("/api/reading-list?status=archived").json()[
+                "items"
+            ]
+            assert archived_list_after_restore == []
+            unread_after_restore = client.get("/api/reading-list?status=unread").json()["items"]
+            assert [entry["id"] for entry in unread_after_restore] == [item["id"]]
+    finally:
+        app.dependency_overrides.pop(require_auth, None)
+
+
 def test_list_items_filters_by_text_kind_status_and_user(
     monkeypatch: pytest.MonkeyPatch, pg_clean: str
 ) -> None:
