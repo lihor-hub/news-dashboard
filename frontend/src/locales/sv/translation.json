@@ -44,7 +44,8 @@
     "settings": "Inställningar",
     "stats": "Statistik",
     "analytics": "Analys",
-    "users": "Användare"
+    "users": "Användare",
+    "offline_saved": "Offline Saved"
   },
   "page_title": {
     "brief": "Överblick",
@@ -67,7 +68,8 @@
     "settings": "Inställningar",
     "analytics": "Analys",
     "users": "Användare",
-    "default": "Radar"
+    "default": "Radar",
+    "offline_saved": "Offline Saved"
   },
   "shell": {
     "offline": "Offline",

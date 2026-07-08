@@ -44,7 +44,8 @@
     "settings": "การตั้งค่า",
     "stats": "สถิติ",
     "analytics": "การวิเคราะห์",
-    "users": "ผู้ใช้"
+    "users": "ผู้ใช้",
+    "offline_saved": "Offline Saved"
   },
   "page_title": {
     "brief": "สรุปข่าว",
@@ -67,7 +68,8 @@
     "settings": "การตั้งค่า",
     "analytics": "การวิเคราะห์",
     "users": "ผู้ใช้",
-    "default": "Radar"
+    "default": "Radar",
+    "offline_saved": "Offline Saved"
   },
   "shell": {
     "offline": "ออฟไลน์",

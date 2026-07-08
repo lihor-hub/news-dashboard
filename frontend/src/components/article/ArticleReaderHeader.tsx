@@ -1,4 +1,4 @@
-import { ChevronLeft, ChevronRight, ExternalLink, Download } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ExternalLink, Download, Trash2 } from 'lucide-react';
 import { isOfflineCacheSupported } from '@/lib/offline';
 
 export function ArticleReaderHeader({
@@ -9,7 +9,9 @@ export function ArticleReaderHeader({
   nextId,
   articleUrl,
   isShared,
+  isSavedOffline,
   onSaveOffline,
+  onRemoveOffline,
 }: {
   goBack: () => void;
   goPrev: () => void;
@@ -18,7 +20,9 @@ export function ArticleReaderHeader({
   nextId: string | null;
   articleUrl: string;
   isShared: boolean;
+  isSavedOffline: boolean;
   onSaveOffline: () => void;
+  onRemoveOffline: () => void;
 }) {
   return (
     <header className="sticky top-0 z-20 border-b border-border bg-background/90 backdrop-blur">
@@ -57,11 +61,11 @@ export function ArticleReaderHeader({
           </a>
           {isOfflineCacheSupported() && !isShared && (
             <button
-              onClick={onSaveOffline}
+              onClick={isSavedOffline ? onRemoveOffline : onSaveOffline}
               className="inline-flex size-8 items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-surface"
-              aria-label="Save for offline"
+              aria-label={isSavedOffline ? 'Remove offline save' : 'Save for offline'}
             >
-              <Download className="size-4" />
+              {isSavedOffline ? <Trash2 className="size-4" /> : <Download className="size-4" />}
             </button>
           )}
         </div>

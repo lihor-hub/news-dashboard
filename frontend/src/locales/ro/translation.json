@@ -44,7 +44,8 @@
     "settings": "Setări",
     "stats": "Statistici",
     "analytics": "Analitică",
-    "users": "Utilizatori"
+    "users": "Utilizatori",
+    "offline_saved": "Offline Saved"
   },
   "page_title": {
     "brief": "Rezumat",
@@ -67,7 +68,8 @@
     "settings": "Setări",
     "analytics": "Analitică",
     "users": "Utilizatori",
-    "default": "Radar"
+    "default": "Radar",
+    "offline_saved": "Offline Saved"
   },
   "shell": {
     "offline": "Offline",

@@ -44,7 +44,8 @@
     "settings": "Pengaturan",
     "stats": "Statistik",
     "analytics": "Analitik",
-    "users": "Pengguna"
+    "users": "Pengguna",
+    "offline_saved": "Offline Saved"
   },
   "page_title": {
     "brief": "Ringkasan",
@@ -67,7 +68,8 @@
     "settings": "Pengaturan",
     "analytics": "Analitik",
     "users": "Pengguna",
-    "default": "Radar"
+    "default": "Radar",
+    "offline_saved": "Offline Saved"
   },
   "shell": {
     "offline": "Offline",

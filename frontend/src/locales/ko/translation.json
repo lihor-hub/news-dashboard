@@ -44,7 +44,8 @@
     "settings": "설정",
     "stats": "통계",
     "analytics": "분석",
-    "users": "사용자"
+    "users": "사용자",
+    "offline_saved": "Offline Saved"
   },
   "page_title": {
     "brief": "브리핑",
@@ -67,7 +68,8 @@
     "settings": "설정",
     "analytics": "분석",
     "users": "사용자",
-    "default": "Radar"
+    "default": "Radar",
+    "offline_saved": "Offline Saved"
   },
   "shell": {
     "offline": "오프라인",

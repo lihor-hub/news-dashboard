@@ -44,7 +44,8 @@
     "settings": "הגדרות",
     "stats": "נתונים",
     "analytics": "אנליטיקס",
-    "users": "משתמשים"
+    "users": "משתמשים",
+    "offline_saved": "Offline Saved"
   },
   "page_title": {
     "brief": "תקציר",
@@ -67,7 +68,8 @@
     "settings": "הגדרות",
     "analytics": "אנליטיקס",
     "users": "משתמשים",
-    "default": "Radar"
+    "default": "Radar",
+    "offline_saved": "Offline Saved"
   },
   "shell": {
     "offline": "לא מקוון",

@@ -7,7 +7,7 @@ import { fetchArticle, fetchArticleBody, fetchSharedArticle, fetchSharedArticleB
 import { adaptArticle, patchArticleState, patchArticleStar } from '@/api/workflowApi';
 import type { WorkflowState } from '@/lib/workflowTypes';
 import { getReaderList } from '@/lib/readerList';
-import { cacheArticleBody } from '@/lib/offline';
+import { getOfflineArticle, removeOfflineArticle, saveOfflineArticle } from '@/lib/offline';
 import { trackArticleOpen, trackArticleClose } from '@/lib/analytics';
 import { useArticleAudio } from '@/hooks/useArticleAudio';
 import { useArticleKeyboardShortcuts } from '@/hooks/useArticleKeyboardShortcuts';
@@ -43,10 +43,16 @@ export function ArticlePage() {
 
   const article = useMemo(() => (rawArticle ? adaptArticle(rawArticle) : null), [rawArticle]);
   const [showOriginal, setShowOriginal] = useState(false);
+  const [offlineSavedArticleId, setOfflineSavedArticleId] = useState<string | null>(null);
 
   useEffect(() => {
     setShowOriginal(false);
-  }, [articleKey]);
+    if (!id || shareId) {
+      setOfflineSavedArticleId(null);
+      return;
+    }
+    setOfflineSavedArticleId(getOfflineArticle(id)?.id ?? null);
+  }, [articleKey, id, shareId]);
 
   // Trigger body fetch in parallel with metadata — fire at mount so we don't
   // wait for the GET /api/articles/:id round-trip before starting the slow scrape.
@@ -136,10 +142,27 @@ export function ArticlePage() {
   async function saveCurrentArticleOffline() {
     if (!article) return;
     try {
-      await cacheArticleBody(article.id);
+      const saved = await saveOfflineArticle({
+        id: article.id,
+        title: article.title,
+        source: article.sourceName,
+        url: article.url,
+      });
+      setOfflineSavedArticleId(saved.id);
       toast('Saved for offline');
     } catch {
       toast.error('Could not save offline');
+    }
+  }
+
+  async function removeCurrentArticleOffline() {
+    if (!article) return;
+    try {
+      await removeOfflineArticle(article.id);
+      setOfflineSavedArticleId(null);
+      toast('Removed offline save');
+    } catch {
+      toast.error('Could not remove offline save');
     }
   }
 
@@ -209,7 +232,9 @@ export function ArticlePage() {
           nextId={nextId}
           articleUrl={article.url}
           isShared={Boolean(shareId)}
+          isSavedOffline={offlineSavedArticleId === String(article.id)}
           onSaveOffline={() => void saveCurrentArticleOffline()}
+          onRemoveOffline={() => void removeCurrentArticleOffline()}
         />
 
         {/* Article content */}

@@ -3,6 +3,7 @@ import {
   Archive,
   BarChart3,
   Bookmark,
+  Download,
   BrainCircuit,
   Clock,
   Flame,
@@ -57,6 +58,13 @@ export const secondaryNavigationItems: NavigationItem[] = [
     labelKey: 'nav.reading_list',
     icon: Bookmark,
     shortcut: 'r',
+  },
+  {
+    to: '/offline-saved',
+    label: 'Offline Saved',
+    labelKey: 'nav.offline_saved',
+    icon: Download,
+    shortcut: 'o',
   },
   {
     to: '/briefs',
@@ -176,6 +184,11 @@ const pageTitleRules: { test: (pathname: string) => boolean; en: string; key: st
     test: (p) => p.startsWith('/reading-list'),
     en: 'Reading List',
     key: 'page_title.reading_list',
+  },
+  {
+    test: (p) => p.startsWith('/offline-saved'),
+    en: 'Offline Saved',
+    key: 'page_title.offline_saved',
   },
   { test: (p) => p.startsWith('/recap'), en: 'Weekly Recap', key: 'page_title.weekly_recap' },
   { test: (p) => p.startsWith('/archive'), en: 'Archive', key: 'page_title.archive' },
