@@ -8,6 +8,7 @@ from io import BytesIO
 import pytest
 from fastapi.testclient import TestClient
 
+from news_dashboard import main
 from news_dashboard.db import connect, init_db
 from news_dashboard.main import _generate_opml, app
 
@@ -245,3 +246,54 @@ def test_export_import_roundtrip(client: TestClient, pg_clean: str) -> None:
     added_names = {s["name"] for s in data["added"]}
     assert "ArXiv AI" in added_names
     assert "Hacker News" in added_names
+
+
+def test_import_opml_rejects_oversized_file(
+    client: TestClient, pg_clean: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    init_db(database_url=pg_clean)
+    with connect(database_url=pg_clean) as conn:
+        conn.execute(
+            "INSERT INTO users(id, username, password_hash, is_admin)"
+            " VALUES (1, 'reader', 'x', FALSE)"
+        )
+    monkeypatch.setattr(main, "MAX_OPML_IMPORT_BYTES", 100)
+    oversized = OPML_VALID + ("<!-- padding -->" * 20)
+    assert len(oversized.encode()) > 100
+    response = client.post(
+        "/api/sources/import",
+        files={"file": ("big.opml", BytesIO(oversized.encode()), "application/xml")},
+    )
+    assert response.status_code == 413
+    assert "too large" in response.json()["detail"]
+
+
+def test_import_opml_rejects_too_many_outlines(
+    client: TestClient, pg_clean: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    init_db(database_url=pg_clean)
+    with connect(database_url=pg_clean) as conn:
+        conn.execute(
+            "INSERT INTO users(id, username, password_hash, is_admin)"
+            " VALUES (1, 'reader', 'x', FALSE)"
+        )
+    monkeypatch.setattr(main, "MAX_OPML_IMPORT_OUTLINES", 2)
+    outlines = "\n".join(
+        f'    <outline type="rss" text="Feed {i}" xmlUrl="https://feed{i}.example.com/rss" />'
+        for i in range(3)
+    )
+    opml_many = f"""\
+<?xml version="1.0" encoding="UTF-8"?>
+<opml version="2.0">
+  <head><title>Many</title></head>
+  <body>
+{outlines}
+  </body>
+</opml>
+"""
+    response = client.post(
+        "/api/sources/import",
+        files={"file": ("many.opml", BytesIO(opml_many.encode()), "application/xml")},
+    )
+    assert response.status_code == 400
+    assert "too many outlines" in response.json()["detail"]

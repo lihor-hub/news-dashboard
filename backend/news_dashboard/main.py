@@ -1736,6 +1736,13 @@ def export_opml(
     )
 
 
+# OPML files are plain text and rarely exceed a few hundred KB even with
+# thousands of outlines; 5 MiB and 1000 outlines leave headroom while bounding
+# memory use and per-request import time for oversized or hostile uploads.
+MAX_OPML_IMPORT_BYTES = int(os.getenv("MAX_OPML_IMPORT_BYTES", str(5 * 1024 * 1024)))
+MAX_OPML_IMPORT_OUTLINES = int(os.getenv("MAX_OPML_IMPORT_OUTLINES", "1000"))
+
+
 @api.post("/api/sources/import")
 def import_opml(
     current_user: Annotated[dict[str, Any], Depends(require_auth)],
@@ -1744,13 +1751,29 @@ def import_opml(
     """Import RSS feed subscriptions from an OPML file."""
     init_db()
     uid = current_user["id"]
-    contents = file.file.read()
+    contents = file.file.read(MAX_OPML_IMPORT_BYTES + 1)
+    if len(contents) > MAX_OPML_IMPORT_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail=(
+                f"OPML file too large (max {MAX_OPML_IMPORT_BYTES} bytes); "
+                "split it into smaller files and import them separately"
+            ),
+        )
     try:
         root = safe_fromstring(contents)
     except (ET.ParseError, DefusedXmlException) as exc:
         raise HTTPException(status_code=400, detail=f"Invalid OPML: {exc}") from exc
 
     outlines = root.findall(".//outline")
+    if len(outlines) > MAX_OPML_IMPORT_OUTLINES:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"OPML file has too many outlines ({len(outlines)}, "
+                f"max {MAX_OPML_IMPORT_OUTLINES}); split it into smaller files"
+            ),
+        )
     added: list[dict[str, Any]] = []
     skipped: list[dict[str, Any]] = []
     failed: list[dict[str, Any]] = []
