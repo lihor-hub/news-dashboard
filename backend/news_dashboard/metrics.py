@@ -10,7 +10,13 @@ from __future__ import annotations
 
 import os
 
-from prometheus_client import CONTENT_TYPE_LATEST, CollectorRegistry, Counter, generate_latest
+from prometheus_client import (
+    CONTENT_TYPE_LATEST,
+    CollectorRegistry,
+    Counter,
+    Histogram,
+    generate_latest,
+)
 
 registry = CollectorRegistry()
 
@@ -21,9 +27,9 @@ http_requests_total = Counter(
     registry=registry,
 )
 
-http_request_duration_seconds = Counter(
-    "news_dashboard_http_request_duration_seconds_sum",
-    "Cumulative HTTP request duration in seconds.",
+http_request_duration_seconds = Histogram(
+    "news_dashboard_http_request_duration_seconds",
+    "HTTP request duration in seconds.",
     ["method", "path"],
     registry=registry,
 )
