@@ -7,6 +7,7 @@ from news_dashboard.db import connect, init_db, row_to_dict
 
 LOW_SIGNAL_MIN_ARTICLES = 50
 LOW_SIGNAL_SKIP_RATE = 0.9
+REPEATED_ERROR_STREAK_MIN = 3
 
 
 def _clean_error(value: Any) -> str | None:
@@ -213,13 +214,54 @@ def generate_subscription_cleanup_suggestions(
               LEFT JOIN user_article_state uas
                 ON uas.article_id = a.id AND uas.user_id = %s
               GROUP BY uvs.slug, uvs.name
+            ),
+            ordered_runs AS (
+              SELECT
+                uvs.slug,
+                irs.error_message,
+                ROW_NUMBER() OVER source_order AS row_number,
+                COUNT(*) FILTER (
+                  WHERE irs.error_message IS NULL OR irs.error_message = ''
+                ) OVER (
+                  PARTITION BY uvs.slug
+                  ORDER BY irs.run_id DESC, irs.id DESC
+                  ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING
+                ) AS successes_before
+              FROM user_visible_sources uvs
+              JOIN ingest_run_sources irs
+                ON lower(btrim(irs.source_name)) IN (
+                  lower(btrim(uvs.slug)),
+                  lower(btrim(uvs.name))
+                )
+              WINDOW source_order AS (
+                PARTITION BY uvs.slug ORDER BY irs.run_id DESC, irs.id DESC
+              )
+            ),
+            error_streaks AS (
+              SELECT
+                slug,
+                COUNT(*) FILTER (
+                  WHERE COALESCE(successes_before, 0) = 0
+                    AND error_message IS NOT NULL
+                    AND error_message <> ''
+                ) AS error_streak,
+                MAX(error_message) FILTER (WHERE row_number = 1) AS latest_error
+              FROM ordered_runs
+              GROUP BY slug
             )
-            SELECT *
+            SELECT
+              source_totals.*,
+              COALESCE(error_streaks.error_streak, 0) AS error_streak,
+              error_streaks.latest_error
             FROM source_totals
+            LEFT JOIN error_streaks ON error_streaks.slug = source_totals.slug
             WHERE lifetime_articles > 0
-            ORDER BY articles_last_30_days DESC, name ASC
+               OR COALESCE(error_streaks.error_streak, 0) >= %s
+            ORDER BY COALESCE(error_streaks.error_streak, 0) DESC,
+                     articles_last_30_days DESC,
+                     name ASC
             """,
-            (user_id, user_id, user_id),
+            (user_id, user_id, user_id, REPEATED_ERROR_STREAK_MIN),
         ).fetchall()
 
     suggestions: list[dict[str, Any]] = []
@@ -232,11 +274,19 @@ def generate_subscription_cleanup_suggestions(
         archived = _as_int(source.get("archived_count"))
         skip_rate = round(skipped / total, 2) if total else 0.0
         engagement_score = round((done + starred) / total, 2) if total else 0.0
+        error_streak = _as_int(source.get("error_streak"))
+        latest_error = _clean_error(source.get("latest_error"))
         source_name = str(source["name"])
 
         reason: str | None = None
         message: str | None = None
-        if total >= LOW_SIGNAL_MIN_ARTICLES and skip_rate > LOW_SIGNAL_SKIP_RATE:
+        if error_streak >= REPEATED_ERROR_STREAK_MIN:
+            reason = "repeated_errors"
+            message = f"Unsubscribe from '{source_name}' ({error_streak} consecutive failures"
+            if latest_error:
+                message += f": {latest_error}"
+            message += ")"
+        elif total >= LOW_SIGNAL_MIN_ARTICLES and skip_rate > LOW_SIGNAL_SKIP_RATE:
             reason = "low_signal"
             message = (
                 f"Unsubscribe from '{source_name}' ({skip_rate:.0%} skipped in the last 30 days)"
@@ -262,6 +312,8 @@ def generate_subscription_cleanup_suggestions(
                 "archived_count": archived,
                 "skip_rate": _as_float(skip_rate),
                 "engagement_score": _as_float(engagement_score),
+                "error_streak": error_streak,
+                "last_error": latest_error,
             }
         )
 

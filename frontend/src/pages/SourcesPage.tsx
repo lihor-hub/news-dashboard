@@ -90,6 +90,13 @@ const SOURCE_CLEANUP_KEY = 'source-cleanup-suggestions';
 
 function formatSuggestionMeta(suggestion: SourceCleanupSuggestion): string {
   if (suggestion.reason === 'stale') return 'No articles in 30 days';
+  if (suggestion.reason === 'repeated_errors') {
+    const failures = suggestion.error_streak ?? 0;
+    const label = failures === 1 ? 'failure' : 'failures';
+    return suggestion.last_error
+      ? `${failures} consecutive ${label} · ${suggestion.last_error}`
+      : `${failures} consecutive ${label}`;
+  }
   return `${Math.round(suggestion.skip_rate * 100)}% skipped · ${suggestion.articles_last_30_days} articles`;
 }
 
