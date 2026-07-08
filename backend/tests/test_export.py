@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+
 import pytest
 from psycopg.types.json import Jsonb
 
@@ -11,14 +13,14 @@ from news_dashboard.export import assemble_user_export
 from news_dashboard.ingest import set_article_starred, sync_sources, transition_article_state
 
 
-def _insert_article(db_url: str, *, url_suffix: str = "1") -> int:
+def _insert_article(db_url: str, *, url_suffix: str = "1", body: str | None = None) -> int:
     with connect(database_url=db_url) as conn:
         row = conn.execute(
             """
             INSERT INTO articles(
               url, canonical_url, title, source_slug, source_name,
-              category, kind, state
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+              category, kind, state, body
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
             RETURNING id
             """,
             (
@@ -30,6 +32,7 @@ def _insert_article(db_url: str, *, url_suffix: str = "1") -> int:
                 "python",
                 "rss_feed",
                 "today",
+                body,
             ),
         ).fetchone()
     assert row is not None
@@ -81,6 +84,24 @@ def test_export_includes_user_article_state(pg_clean: str) -> None:
     assert a["done_at"] is not None
     assert a["canonical_url"] == "https://example.com/artexp1"
     assert a["title"] == "Article exp1"
+
+
+def test_export_excludes_cached_article_body_text(pg_clean: str) -> None:
+    sync_sources(pg_clean)
+    uid = _make_user(pg_clean, "exporter_no_body")
+    cached_body = "Full cached article body that should not leave the database."
+    aid = _insert_article(pg_clean, url_suffix="no_body", body=cached_body)
+
+    transition_article_state(aid, "done", db_path=pg_clean, user_id=uid)
+
+    result = assemble_user_export(uid, database_url=pg_clean)
+
+    assert result["includes_article_bodies"] is False
+    article = result["articles"][0]
+    assert article["id"] == aid
+    assert article["state"] == "done"
+    assert "body" not in article
+    assert cached_body not in json.dumps(result)
 
 
 def test_export_includes_starred_articles(pg_clean: str) -> None:
@@ -268,7 +289,7 @@ def test_export_metadata_and_body_flag(pg_clean: str) -> None:
 
     assert result["schema_version"] == 2
     assert result["generated_at"]
-    assert result["includes_article_bodies"] is True
+    assert result["includes_article_bodies"] is False
 
 
 def test_export_source_subscriptions_reflect_disabled_global_source(pg_clean: str) -> None:
