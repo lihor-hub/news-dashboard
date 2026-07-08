@@ -44,7 +44,8 @@
     "settings": "設定",
     "stats": "統計",
     "analytics": "分析",
-    "users": "使用者"
+    "users": "使用者",
+    "offline_saved": "Offline Saved"
   },
   "page_title": {
     "brief": "簡報",
@@ -67,7 +68,8 @@
     "settings": "設定",
     "analytics": "分析",
     "users": "使用者",
-    "default": "Radar"
+    "default": "Radar",
+    "offline_saved": "Offline Saved"
   },
   "shell": {
     "offline": "離線",

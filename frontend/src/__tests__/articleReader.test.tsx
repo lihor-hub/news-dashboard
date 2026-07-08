@@ -9,6 +9,14 @@ import * as api from '../api';
 import * as workflowApi from '../api/workflowApi';
 import type { Article } from '../types';
 
+interface SavedOfflineArticle {
+  id: string;
+  title: string;
+  source: string;
+  url: string;
+  bodyCacheKey: string;
+}
+
 vi.mock('../api/workflowApi', async (importOriginal) => {
   const actual = await importOriginal<typeof workflowApi>();
   return {
@@ -22,6 +30,16 @@ vi.spyOn(console, 'error').mockImplementation(() => undefined);
 
 beforeEach(() => {
   vi.clearAllMocks();
+  window.localStorage.clear();
+  Object.defineProperty(window, 'caches', {
+    configurable: true,
+    value: {
+      open: vi.fn().mockResolvedValue({
+        add: vi.fn().mockResolvedValue(undefined),
+        delete: vi.fn().mockResolvedValue(true),
+      }),
+    },
+  });
   vi.spyOn(api, 'fetchArticleHighlights').mockResolvedValue([]);
   vi.spyOn(api, 'fetchAiFeedback').mockResolvedValue({});
 });
@@ -298,6 +316,87 @@ describe('ArticlePage — Open original link', () => {
     const links = screen.getAllByText('Open original');
     const hrefs = links.map((el) => el.closest('a')?.href);
     expect(hrefs).toContain('https://example.com/article');
+  });
+});
+
+describe('ArticlePage — offline saves', () => {
+  it('records article metadata when saving for offline', async () => {
+    vi.spyOn(api, 'fetchArticle').mockResolvedValue(
+      makeArticle({ body_status: 'ok', body: 'Full text.' })
+    );
+    vi.spyOn(api, 'fetchArticleBody').mockResolvedValue(
+      makeArticle({ body_status: 'ok', body: 'Full text.' })
+    );
+
+    renderReader('42', makeArticle({ body_status: 'ok', body: 'Full text.' }));
+    await waitFor(() => screen.getByText('Test Article Title'));
+
+    await userEvent.click(screen.getByRole('button', { name: 'Save for offline' }));
+
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Remove offline save' })).toBeTruthy()
+    );
+    const saved = JSON.parse(
+      window.localStorage.getItem('offline-articles:index:v1') ?? '[]'
+    ) as SavedOfflineArticle[];
+    expect(saved[0]).toMatchObject({
+      id: '42',
+      title: 'Test Article Title',
+      source: 'Test Source',
+      url: 'https://example.com/article',
+      bodyCacheKey: '/api/articles/42/body',
+    });
+  });
+
+  it('shows saved state for an already saved article and removes it', async () => {
+    window.localStorage.setItem(
+      'offline-articles:index:v1',
+      JSON.stringify([
+        {
+          id: '42',
+          title: 'Test Article Title',
+          source: 'Test Source',
+          url: 'https://example.com/article',
+          savedAt: '2026-07-08T09:30:00.000Z',
+          bodyCacheKey: '/api/articles/42/body',
+        },
+      ])
+    );
+    vi.spyOn(api, 'fetchArticle').mockResolvedValue(
+      makeArticle({ body_status: 'ok', body: 'Full text.' })
+    );
+    vi.spyOn(api, 'fetchArticleBody').mockResolvedValue(
+      makeArticle({ body_status: 'ok', body: 'Full text.' })
+    );
+
+    renderReader('42', makeArticle({ body_status: 'ok', body: 'Full text.' }));
+    await waitFor(() => screen.getByRole('button', { name: 'Remove offline save' }));
+
+    await userEvent.click(screen.getByRole('button', { name: 'Remove offline save' }));
+
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Save for offline' })).toBeTruthy()
+    );
+    expect(window.localStorage.getItem('offline-articles:index:v1')).toBe('[]');
+  });
+
+  it('does not show offline save controls for shared article routes', async () => {
+    vi.spyOn(api, 'fetchSharedArticle').mockResolvedValue(
+      makeArticle({ id: 99, title: 'Shared private article' })
+    );
+    vi.spyOn(api, 'fetchSharedArticleBody').mockResolvedValue(
+      makeArticle({
+        id: 99,
+        title: 'Shared private article',
+        body_status: 'ok',
+        body: 'Shared body',
+      })
+    );
+
+    renderSharedReader('123');
+    await waitFor(() => screen.getByText('Shared private article'));
+
+    expect(screen.queryByRole('button', { name: 'Save for offline' })).toBeNull();
   });
 });
 

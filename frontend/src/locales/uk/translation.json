@@ -44,7 +44,8 @@
     "settings": "Налаштування",
     "stats": "Статистика",
     "analytics": "Аналітика",
-    "users": "Користувачі"
+    "users": "Користувачі",
+    "offline_saved": "Offline Saved"
   },
   "page_title": {
     "brief": "Огляд",
@@ -67,7 +68,8 @@
     "settings": "Налаштування",
     "analytics": "Аналітика",
     "users": "Користувачі",
-    "default": "Radar"
+    "default": "Radar",
+    "offline_saved": "Offline Saved"
   },
   "shell": {
     "offline": "Офлайн",

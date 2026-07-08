@@ -44,7 +44,8 @@
     "settings": "الإعدادات",
     "stats": "الإحصاءات",
     "analytics": "التحليلات",
-    "users": "المستخدمون"
+    "users": "المستخدمون",
+    "offline_saved": "Offline Saved"
   },
   "page_title": {
     "brief": "الموجز",
@@ -67,7 +68,8 @@
     "settings": "الإعدادات",
     "analytics": "التحليلات",
     "users": "المستخدمون",
-    "default": "Radar"
+    "default": "Radar",
+    "offline_saved": "Offline Saved"
   },
   "shell": {
     "offline": "غير متصل",

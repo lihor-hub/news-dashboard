@@ -250,6 +250,26 @@ describe('#118 — Briefing History in secondary nav', () => {
   });
 });
 
+describe('#943 — Offline Saved navigation', () => {
+  it('shows Offline Saved in shell navigation', async () => {
+    renderShell('/');
+    await waitFor(() => {
+      const links = screen.getAllByRole('link', { name: /offline saved/i });
+      expect(links.length).toBeGreaterThan(0);
+    });
+  });
+
+  it('Offline Saved link points to /offline-saved', async () => {
+    renderShell('/');
+    await waitFor(() => {
+      const link = screen
+        .getAllByRole('link', { name: /offline saved/i })
+        .find((l) => l.getAttribute('href') === '/offline-saved');
+      expect(link).toBeTruthy();
+    });
+  });
+});
+
 describe('#118 — Briefing History in command palette', () => {
   it('shows Briefing History as a nav item', () => {
     renderPalette();

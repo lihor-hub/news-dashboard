@@ -44,7 +44,8 @@
     "settings": "Innstillinger",
     "stats": "Statistikk",
     "analytics": "Analyse",
-    "users": "Brukere"
+    "users": "Brukere",
+    "offline_saved": "Offline Saved"
   },
   "page_title": {
     "brief": "Oversikt",
@@ -67,7 +68,8 @@
     "settings": "Innstillinger",
     "analytics": "Analyse",
     "users": "Brukere",
-    "default": "Radar"
+    "default": "Radar",
+    "offline_saved": "Offline Saved"
   },
   "shell": {
     "offline": "Frakoblet",

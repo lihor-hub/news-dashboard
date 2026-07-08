@@ -44,7 +44,8 @@
     "settings": "Ayarlar",
     "stats": "İstatistikler",
     "analytics": "Analitik",
-    "users": "Kullanıcılar"
+    "users": "Kullanıcılar",
+    "offline_saved": "Offline Saved"
   },
   "page_title": {
     "brief": "Özet",
@@ -67,7 +68,8 @@
     "settings": "Ayarlar",
     "analytics": "Analitik",
     "users": "Kullanıcılar",
-    "default": "Radar"
+    "default": "Radar",
+    "offline_saved": "Offline Saved"
   },
   "shell": {
     "offline": "Çevrimdışı",

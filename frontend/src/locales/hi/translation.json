@@ -44,7 +44,8 @@
     "settings": "सेटिंग्स",
     "stats": "आँकड़े",
     "analytics": "विश्लेषिकी",
-    "users": "उपयोगकर्ता"
+    "users": "उपयोगकर्ता",
+    "offline_saved": "Offline Saved"
   },
   "page_title": {
     "brief": "ब्रीफ़",
@@ -67,7 +68,8 @@
     "settings": "सेटिंग्स",
     "analytics": "विश्लेषिकी",
     "users": "उपयोगकर्ता",
-    "default": "Radar"
+    "default": "Radar",
+    "offline_saved": "Offline Saved"
   },
   "shell": {
     "offline": "ऑफ़लाइन",

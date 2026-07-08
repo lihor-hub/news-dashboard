@@ -44,7 +44,8 @@
     "settings": "Ρυθμίσεις",
     "stats": "Στατιστικά",
     "analytics": "Αναλυτικά",
-    "users": "Χρήστες"
+    "users": "Χρήστες",
+    "offline_saved": "Offline Saved"
   },
   "page_title": {
     "brief": "Σύνοψη",
@@ -67,7 +68,8 @@
     "settings": "Ρυθμίσεις",
     "analytics": "Αναλυτικά",
     "users": "Χρήστες",
-    "default": "Radar"
+    "default": "Radar",
+    "offline_saved": "Offline Saved"
   },
   "shell": {
     "offline": "Εκτός σύνδεσης",

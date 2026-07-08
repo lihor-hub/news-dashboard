@@ -44,7 +44,8 @@
     "settings": "Paramètres",
     "stats": "Statistiques",
     "analytics": "Analytique",
-    "users": "Utilisateurs"
+    "users": "Utilisateurs",
+    "offline_saved": "Offline Saved"
   },
   "page_title": {
     "brief": "Résumé",
@@ -67,7 +68,8 @@
     "settings": "Paramètres",
     "analytics": "Analytique",
     "users": "Utilisateurs",
-    "default": "Radar"
+    "default": "Radar",
+    "offline_saved": "Offline Saved"
   },
   "shell": {
     "offline": "Hors ligne",

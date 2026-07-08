@@ -44,7 +44,8 @@
     "settings": "Beállítások",
     "stats": "Statisztikák",
     "analytics": "Analitika",
-    "users": "Felhasználók"
+    "users": "Felhasználók",
+    "offline_saved": "Offline Saved"
   },
   "page_title": {
     "brief": "Összefoglaló",
@@ -67,7 +68,8 @@
     "settings": "Beállítások",
     "analytics": "Analitika",
     "users": "Felhasználók",
-    "default": "Radar"
+    "default": "Radar",
+    "offline_saved": "Offline Saved"
   },
   "shell": {
     "offline": "Offline",

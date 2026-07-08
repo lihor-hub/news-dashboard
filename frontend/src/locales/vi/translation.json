@@ -44,7 +44,8 @@
     "settings": "Cài đặt",
     "stats": "Thống kê",
     "analytics": "Phân tích",
-    "users": "Người dùng"
+    "users": "Người dùng",
+    "offline_saved": "Offline Saved"
   },
   "page_title": {
     "brief": "Tóm tắt",
@@ -67,7 +68,8 @@
     "settings": "Cài đặt",
     "analytics": "Phân tích",
     "users": "Người dùng",
-    "default": "Radar"
+    "default": "Radar",
+    "offline_saved": "Offline Saved"
   },
   "shell": {
     "offline": "Ngoại tuyến",
