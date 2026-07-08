@@ -19,14 +19,16 @@ When unset (or falsy), all `/api/mcp/*` endpoints and the token-management endpo
 
 ## Creating a token
 
-Once enabled, a signed-in user can create a token from **Settings → MCP Client Access**, or via:
+Once enabled, a signed-in user can create a token from **Settings → MCP Client Access**, choosing which scopes to grant, or via:
 
 ```bash
 curl -X POST https://your-instance/api/users/me/mcp-tokens \
   -H 'Content-Type: application/json' \
   --cookie "nd_session=$SESSION_COOKIE" \
-  -d '{"name": "Claude Desktop"}'
+  -d '{"name": "Claude Desktop", "scopes": ["search", "read"]}'
 ```
+
+`scopes` is optional and must be a non-empty subset of `search`, `read`, `ask`, and `briefings`; unknown scopes or an empty list are rejected with a validation error. Omitting `scopes` entirely grants all four, preserving the previous default behavior.
 
 The response includes the plaintext token (prefixed `ndmcp_`) exactly once — only its hash is stored (SHA-256) alongside a short prefix, creation time, and last-used time. Losing the token means creating a new one; tokens can be revoked at any time from the same Settings section, which sets `revoked_at` and immediately invalidates it. Each user may hold up to 10 active tokens.
 
@@ -53,7 +55,7 @@ Available tools, all read-only and scoped to the token owner's visible articles:
 | `list_briefings` | `briefings` | List the token owner's recent briefing metadata (no article bodies). |
 | `ask` | `ask` | Ask a question answered via retrieval over the token owner's corpus. |
 
-Every new token is issued all four scopes by default. Requests are bounded: queries are capped at 2,000 characters and result lists at 25 items, matching the limits used by the browser-facing `/api/ask` and search endpoints.
+A token can only call tools whose scope it holds; calling a tool outside its granted scopes returns `403 Forbidden`. New tokens are issued all four scopes unless the creation request narrows them, so a search-only dashboard integration or a briefings-only automation can be scoped to just what it needs. Requests are bounded: queries are capped at 2,000 characters and result lists at 25 items, matching the limits used by the browser-facing `/api/ask` and search endpoints.
 
 ## Security boundaries
 

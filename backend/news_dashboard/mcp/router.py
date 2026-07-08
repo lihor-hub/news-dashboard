@@ -27,8 +27,9 @@ def create_mcp_token(
 ) -> dict[str, Any]:
     if not service.mcp_enabled():
         raise HTTPException(status_code=403, detail="MCP server is not enabled on this instance")
+    scopes = service.DEFAULT_SCOPES if payload.scopes is None else tuple(payload.scopes)
     try:
-        return service.create_token(int(current_user["id"]), payload.name)
+        return service.create_token(int(current_user["id"]), payload.name, scopes=scopes)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 

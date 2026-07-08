@@ -87,10 +87,10 @@ export async function fetchMcpTokens(): Promise<{ items: McpToken[]; enabled: bo
   return requestJson('/api/users/me/mcp-tokens');
 }
 
-export async function createMcpToken(name: string): Promise<McpToken> {
+export async function createMcpToken(name: string, scopes?: string[]): Promise<McpToken> {
   return requestJson<McpToken>('/api/users/me/mcp-tokens', {
     method: 'POST',
-    body: JSON.stringify({ name }),
+    body: JSON.stringify(scopes ? { name, scopes } : { name }),
   });
 }
 

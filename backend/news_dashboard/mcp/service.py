@@ -10,6 +10,7 @@ from news_dashboard.db import connect, init_db, row_to_dict
 
 TOKEN_PREFIX = "ndmcp_"  # noqa: S105 -- token prefix, not a credential
 DEFAULT_SCOPES = ("search", "read", "ask", "briefings")
+KNOWN_SCOPES = frozenset(DEFAULT_SCOPES)
 MAX_TOKENS_PER_USER = 10
 MAX_TOKEN_NAME_LENGTH = 120
 
