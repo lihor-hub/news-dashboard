@@ -33,8 +33,20 @@ interface ReadingListResponse {
   items: ReadingListItem[];
 }
 
-export async function fetchReadingList(status?: ReadingListStatus): Promise<ReadingListItem[]> {
-  const suffix = status ? `?status=${status}` : '';
+export interface ReadingListFilters {
+  status?: ReadingListStatus;
+  q?: string;
+  kind?: ReadingListKind;
+}
+
+export async function fetchReadingList(
+  filters: ReadingListFilters = {}
+): Promise<ReadingListItem[]> {
+  const params = new URLSearchParams();
+  if (filters.status) params.set('status', filters.status);
+  if (filters.q?.trim()) params.set('q', filters.q.trim());
+  if (filters.kind) params.set('kind', filters.kind);
+  const suffix = params.toString() ? `?${params.toString()}` : '';
   const data = await requestJson<ReadingListResponse>(`/api/reading-list${suffix}`);
   return data.items;
 }

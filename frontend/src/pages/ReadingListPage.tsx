@@ -9,6 +9,8 @@ import {
   Loader2,
   MonitorPlay,
   Newspaper,
+  Search,
+  X,
   RotateCcw,
   Sparkles,
   Trash2,
@@ -53,6 +55,14 @@ const IMPORT_SOURCES: { value: ReadingListImportSource; label: string }[] = [
   { value: 'pocket', label: 'Pocket (CSV)' },
   { value: 'instapaper', label: 'Instapaper (CSV)' },
   { value: 'omnivore', label: 'Omnivore (JSON)' },
+];
+
+const KIND_FILTERS: { value: ReadingListKind | 'all'; label: string }[] = [
+  { value: 'all', label: 'All types' },
+  { value: 'article', label: 'Articles' },
+  { value: 'video', label: 'Videos' },
+  { value: 'channel', label: 'Channels' },
+  { value: 'link', label: 'Links' },
 ];
 
 const KIND_META: Record<ReadingListKind, { label: string; Icon: typeof Newspaper }> = {
@@ -218,6 +228,8 @@ export function ReadingListPage() {
   const queryClient = useQueryClient();
   const [newUrl, setNewUrl] = useState('');
   const [filter, setFilter] = useState<ReadingListStatus>('unread');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [kindFilter, setKindFilter] = useState<ReadingListKind | 'all'>('all');
   const [importSource, setImportSource] = useState<ReadingListImportSource>('pocket');
   const [importResult, setImportResult] = useState<ReadingListImportResult | null>(null);
   const [importError, setImportError] = useState<string | null>(null);
@@ -227,13 +239,19 @@ export function ReadingListPage() {
   );
 
   const { data: items = [], isLoading } = useQuery({
-    queryKey: ['reading-list', filter],
-    queryFn: () => fetchReadingList(filter),
+    queryKey: ['reading-list', filter, searchQuery.trim(), kindFilter],
+    queryFn: () =>
+      fetchReadingList({
+        status: filter,
+        q: searchQuery,
+        kind: kindFilter === 'all' ? undefined : kindFilter,
+      }),
     refetchInterval: (query) =>
       query.state.data?.some((item) => item.fetch_status === 'pending') ? 2000 : false,
   });
 
   const invalidate = () => void queryClient.invalidateQueries({ queryKey: ['reading-list'] });
+  const filtersActive = Boolean(searchQuery.trim()) || kindFilter !== 'all';
 
   const addMutation = useMutation({
     mutationFn: (url: string) => addReadingListItem(url),
@@ -410,14 +428,68 @@ export function ReadingListPage() {
         ))}
       </div>
 
+      <div className="px-4 md:px-5 pb-3 flex flex-col gap-2 sm:flex-row sm:items-center">
+        <div className="relative w-full max-w-xl">
+          <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+          <input
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search saved links"
+            className="h-9 w-full rounded-md border border-border bg-surface pl-9 pr-9 text-sm outline-none focus:border-border-strong"
+          />
+          {searchQuery ? (
+            <button
+              type="button"
+              aria-label="Clear search"
+              onClick={() => setSearchQuery('')}
+              className="absolute right-2 top-1/2 rounded-sm p-1 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+            >
+              <X className="size-4" strokeWidth={1.75} />
+            </button>
+          ) : null}
+        </div>
+        <select
+          aria-label="Filter by type"
+          value={kindFilter}
+          onChange={(e) => setKindFilter(e.target.value as ReadingListKind | 'all')}
+          className="h-9 rounded-md border border-border bg-surface px-2 text-sm outline-none focus:border-border-strong"
+        >
+          {KIND_FILTERS.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+        {filtersActive ? (
+          <button
+            type="button"
+            onClick={() => {
+              setSearchQuery('');
+              setKindFilter('all');
+            }}
+            className="h-9 rounded-md px-2 text-sm text-muted-foreground hover:text-foreground"
+          >
+            Clear filters
+          </button>
+        ) : null}
+      </div>
+
       {isLoading ? null : items.length === 0 ? (
         <EmptyState
           icon={BookmarkPlus}
-          title={filter === 'done' ? 'Nothing finished yet' : 'Your reading list is empty'}
+          title={
+            filtersActive
+              ? 'No matching saved links'
+              : filter === 'done'
+                ? 'Nothing finished yet'
+                : 'Your reading list is empty'
+          }
           subtitle={
-            filter === 'done'
-              ? 'Items you mark as done will show up here.'
-              : 'Paste a link above to save it for later.'
+            filtersActive
+              ? 'Clear search or type filters to show the full list.'
+              : filter === 'done'
+                ? 'Items you mark as done will show up here.'
+                : 'Paste a link above to save it for later.'
           }
         />
       ) : (

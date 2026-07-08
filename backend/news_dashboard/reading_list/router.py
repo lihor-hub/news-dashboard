@@ -106,8 +106,10 @@ async def import_reading_list_endpoint(
 def list_reading_list_endpoint(
     current_user: Annotated[dict[str, Any], Depends(require_auth)],
     status: Annotated[str | None, Query(pattern="^(unread|done|archived)$")] = None,
+    q: Annotated[str | None, Query(max_length=300)] = None,
+    kind: Annotated[str | None, Query(pattern="^(article|video|channel|link)$")] = None,
 ) -> dict[str, Any]:
-    return {"items": service.list_items(current_user["id"], status)}
+    return {"items": service.list_items(current_user["id"], status, q=q, kind=kind)}
 
 
 @router.post("/api/reading-list/reorder")
