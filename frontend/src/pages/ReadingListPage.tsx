@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import {
+  Archive,
   ArrowDown,
   ArrowUp,
   BookmarkPlus,
@@ -78,6 +79,7 @@ function ItemCard({
   isLast,
   onMove,
   onToggleDone,
+  onToggleArchive,
   onDelete,
 }: {
   item: ReadingListItem;
@@ -85,6 +87,7 @@ function ItemCard({
   isLast: boolean;
   onMove: (id: number, direction: -1 | 1) => void;
   onToggleDone: (item: ReadingListItem) => void;
+  onToggleArchive: (item: ReadingListItem) => void;
   onDelete: (id: number) => void;
 }) {
   const [summaryExpanded, setSummaryExpanded] = useState(false);
@@ -199,18 +202,39 @@ function ItemCard({
         >
           <ArrowDown className="size-4" strokeWidth={1.75} />
         </button>
-        <button
-          type="button"
-          aria-label={item.status === 'done' ? 'Mark as unread' : 'Mark as done'}
-          onClick={() => onToggleDone(item)}
-          className="rounded-sm p-1 hover:text-foreground"
-        >
-          {item.status === 'done' ? (
+        {item.status === 'archived' ? (
+          <button
+            type="button"
+            aria-label="Restore to unread"
+            onClick={() => onToggleArchive(item)}
+            className="rounded-sm p-1 hover:text-foreground"
+          >
             <RotateCcw className="size-4" strokeWidth={1.75} />
-          ) : (
-            <Check className="size-4" strokeWidth={1.75} />
-          )}
-        </button>
+          </button>
+        ) : (
+          <>
+            <button
+              type="button"
+              aria-label={item.status === 'done' ? 'Mark as unread' : 'Mark as done'}
+              onClick={() => onToggleDone(item)}
+              className="rounded-sm p-1 hover:text-foreground"
+            >
+              {item.status === 'done' ? (
+                <RotateCcw className="size-4" strokeWidth={1.75} />
+              ) : (
+                <Check className="size-4" strokeWidth={1.75} />
+              )}
+            </button>
+            <button
+              type="button"
+              aria-label="Archive"
+              onClick={() => onToggleArchive(item)}
+              className="rounded-sm p-1 hover:text-foreground"
+            >
+              <Archive className="size-4" strokeWidth={1.75} />
+            </button>
+          </>
+        )}
         <button
           type="button"
           aria-label="Delete"
@@ -323,6 +347,13 @@ export function ReadingListPage() {
     });
   }
 
+  function handleToggleArchive(item: ReadingListItem) {
+    updateMutation.mutate({
+      id: item.id,
+      status: item.status === 'archived' ? 'unread' : 'archived',
+    });
+  }
+
   return (
     <div>
       <div className="px-4 md:px-5 pt-4 pb-3">
@@ -412,7 +443,7 @@ export function ReadingListPage() {
       )}
 
       <div className="px-4 md:px-5 pb-3 flex items-center gap-1">
-        {(['unread', 'done'] as const).map((status) => (
+        {(['unread', 'done', 'archived'] as const).map((status) => (
           <button
             key={status}
             type="button"
@@ -482,14 +513,18 @@ export function ReadingListPage() {
               ? 'No matching saved links'
               : filter === 'done'
                 ? 'Nothing finished yet'
-                : 'Your reading list is empty'
+                : filter === 'archived'
+                  ? 'Nothing archived yet'
+                  : 'Your reading list is empty'
           }
           subtitle={
             filtersActive
               ? 'Clear search or type filters to show the full list.'
               : filter === 'done'
                 ? 'Items you mark as done will show up here.'
-                : 'Paste a link above to save it for later.'
+                : filter === 'archived'
+                  ? 'Archive items to tuck them away without deleting them.'
+                  : 'Paste a link above to save it for later.'
           }
         />
       ) : (
@@ -507,6 +542,7 @@ export function ReadingListPage() {
                   isLast={index === items.length - 1}
                   onMove={handleMove}
                   onToggleDone={handleToggleDone}
+                  onToggleArchive={handleToggleArchive}
                   onDelete={(id) => deleteMutation.mutate(id)}
                 />
               ))}

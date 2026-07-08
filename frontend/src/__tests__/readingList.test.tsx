@@ -264,6 +264,79 @@ describe('ReadingListPage', () => {
     });
   });
 
+  it('switches to the archived filter and fetches archived items', async () => {
+    const fetchSpy = vi
+      .spyOn(readingListApi, 'fetchReadingList')
+      .mockResolvedValue([makeItem({ status: 'archived' })]);
+
+    renderPage();
+    await screen.findByText('Great post');
+
+    await userEvent.click(screen.getByRole('button', { name: 'archived' }));
+
+    await waitFor(() => {
+      expect(fetchSpy).toHaveBeenLastCalledWith({
+        status: 'archived',
+        q: '',
+        kind: undefined,
+      });
+    });
+  });
+
+  it('shows an empty state tailored to the archived filter', async () => {
+    vi.spyOn(readingListApi, 'fetchReadingList').mockResolvedValue([]);
+
+    renderPage();
+    await screen.findByText('Your reading list is empty');
+    await userEvent.click(screen.getByRole('button', { name: 'archived' }));
+
+    expect(await screen.findByText('Nothing archived yet')).toBeTruthy();
+  });
+
+  it('archives an unread item', async () => {
+    vi.spyOn(readingListApi, 'fetchReadingList').mockResolvedValue([makeItem()]);
+    const updateSpy = vi
+      .spyOn(readingListApi, 'updateReadingListItem')
+      .mockResolvedValue(makeItem({ status: 'archived' }));
+
+    renderPage();
+    await screen.findByText('Great post');
+    await userEvent.click(screen.getByRole('button', { name: 'Archive' }));
+
+    await waitFor(() => {
+      expect(updateSpy).toHaveBeenCalledWith(1, { status: 'archived' });
+    });
+  });
+
+  it('restores an archived item to unread', async () => {
+    vi.spyOn(readingListApi, 'fetchReadingList').mockResolvedValue([
+      makeItem({ status: 'archived' }),
+    ]);
+    const updateSpy = vi
+      .spyOn(readingListApi, 'updateReadingListItem')
+      .mockResolvedValue(makeItem({ status: 'unread' }));
+
+    renderPage();
+    await screen.findByText('Great post');
+    await userEvent.click(screen.getByRole('button', { name: 'Restore to unread' }));
+
+    await waitFor(() => {
+      expect(updateSpy).toHaveBeenCalledWith(1, { status: 'unread' });
+    });
+  });
+
+  it('does not show an archive button for already-archived items', async () => {
+    vi.spyOn(readingListApi, 'fetchReadingList').mockResolvedValue([
+      makeItem({ status: 'archived' }),
+    ]);
+
+    renderPage();
+    await screen.findByText('Great post');
+
+    expect(screen.queryByRole('button', { name: 'Archive' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Mark as done' })).toBeNull();
+  });
+
   it('imports a Pocket export and shows the added/skipped/failed summary', async () => {
     vi.spyOn(readingListApi, 'fetchReadingList').mockResolvedValue([]);
     const importSpy = vi
