@@ -81,10 +81,10 @@ Want to back up or migrate your history? Use the built-in export:
 1. Go to Settings → Advanced
 2. Click "Download my data"
 3. Receive a JSON file containing:
-   - Export metadata (`schema_version`, `generated_at`, and whether cached
-     article bodies are included)
+   - Export metadata (`schema_version`, `generated_at`, and
+     `includes_article_bodies`, which is currently `false`)
    - Your article interactions (read/saved/starred/etc. timestamps),
-     including cached article body text where available
+     article metadata, summaries, source information, and workflow state
    - Applied tags
    - Briefings history, with cited article IDs
    - `source_subscriptions` — your enabled/disabled state for global sources,
@@ -94,10 +94,10 @@ Want to back up or migrate your history? Use the built-in export:
      interests/completion state, and notification settings (briefing
      time/timezone, push-enabled, recap, analytics opt-in)
 
-The export includes cached article body text when present, so the file can be
-large. Secrets (password hash, session tokens, push subscription keys, API
-tokens) are never included. There is currently no import tool — this export
-is for backup and personal portability only.
+The export does not include cached article body text. Secrets (password hash,
+session tokens, push subscription keys, API tokens) are never included. There
+is currently no import tool — this export is for backup and personal
+portability only.
 
 ## Auto-cleanup
 

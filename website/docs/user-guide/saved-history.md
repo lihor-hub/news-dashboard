@@ -28,5 +28,9 @@ enabled.
 ## Export and cleanup
 
 The app can export your personal state as JSON for backup or migration. The
-`user_events` table is pruned according to `ANALYTICS_RETENTION_DAYS`, which
+export includes reading workflow state, article metadata, briefings, source
+subscriptions, preferences, and other personal settings, but excludes cached
+article body text and secrets.
+
+The `user_events` table is pruned according to `ANALYTICS_RETENTION_DAYS`, which
 defaults to 180 days.

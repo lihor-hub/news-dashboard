@@ -40,7 +40,6 @@ def _export_articles(conn: Any, user_id: int) -> list[dict[str, Any]]:
             a.summary,
             a.reason,
             a.tags,
-            a.body,
             uas.state,
             uas.starred,
             uas.done_at,
@@ -240,7 +239,7 @@ def assemble_user_export(
 
     Includes:
     - articles the user has explicitly interacted with (user_article_state rows),
-      joined with article metadata (title, URL, category, summary, tags, body).
+      joined with article metadata (title, URL, category, summary, tags).
     - user-owned briefings with their cited article IDs.
     - source_subscriptions: the user's enabled/disabled state for global sources,
       plus any private sources the user owns. Other users' private sources are
@@ -270,7 +269,7 @@ def assemble_user_export(
     return {
         "schema_version": SCHEMA_VERSION,
         "generated_at": datetime.now(UTC).isoformat(),
-        "includes_article_bodies": True,
+        "includes_article_bodies": False,
         "articles": articles,
         "briefings": briefings,
         "ai_memories": memories,

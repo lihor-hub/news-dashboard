@@ -29,8 +29,8 @@ export function DataExportSection() {
         <p className="text-xs text-muted-foreground">
           Download a personal archive of your reading history, starred articles, workflow state,
           daily briefings, source subscriptions, and preferences (recommendation weights, onboarding
-          interests, notification settings) as a JSON file. Cached article body text is included
-          when available; secrets are never included.
+          interests, notification settings) as a JSON file. Cached article body text and secrets are
+          not included.
         </p>
         <button
           onClick={() => void handleExport()}
