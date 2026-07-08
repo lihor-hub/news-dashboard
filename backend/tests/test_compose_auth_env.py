@@ -72,6 +72,26 @@ def test_compose_prod_file_exists() -> None:
     assert COMPOSE_PROD_FILE.exists(), f"docker-compose.prod.yml not found at {COMPOSE_PROD_FILE}"
 
 
+def test_compose_prod_persists_app_data_dir() -> None:
+    """Production compose must persist generated audio and other app data."""
+    compose = yaml.safe_load(COMPOSE_PROD_FILE.read_text())
+    services = compose.get("services", {})
+    assert "news-dashboard" in services, "news-dashboard service missing from prod compose"
+
+    app_service = services["news-dashboard"]
+    env = app_service.get("environment", {})
+    if isinstance(env, list):
+        env = dict(item.split("=", 1) if "=" in item else (item, "") for item in env)
+
+    assert env.get("DATA_DIR") == "/data", "prod compose must set DATA_DIR=/data"
+    assert "news-dashboard-data" in compose.get("volumes", {}), (
+        "prod compose must declare news-dashboard-data volume"
+    )
+    assert "news-dashboard-data:/data" in app_service.get("volumes", []), (
+        "prod compose must mount news-dashboard-data at /data"
+    )
+
+
 def test_compose_demo_file_exists() -> None:
     assert COMPOSE_DEMO_FILE.exists(), f"docker-compose.demo.yml not found at {COMPOSE_DEMO_FILE}"
 

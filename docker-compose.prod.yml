@@ -27,10 +27,13 @@ services:
       SESSION_SECRET: ${SESSION_SECRET:?SESSION_SECRET is required}
       BOOTSTRAP_ADMIN_USERNAME: ${BOOTSTRAP_ADMIN_USERNAME:?BOOTSTRAP_ADMIN_USERNAME is required}
       BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD:?BOOTSTRAP_ADMIN_PASSWORD is required}
+      DATA_DIR: /data
       # Optional AI features (uncomment as needed)
       # OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       # FREE_LLM_API_KEY: ${FREE_LLM_API_KEY:-}
       # FREE_LLM_BASE_URL: ${FREE_LLM_BASE_URL:-}
+    volumes:
+      - news-dashboard-data:/data
     depends_on:
       postgres:
         condition: service_healthy
@@ -50,3 +53,4 @@ services:
 
 volumes:
   news-dashboard-postgres:
+  news-dashboard-data:
