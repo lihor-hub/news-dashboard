@@ -788,3 +788,16 @@ export interface OpmlImportResult {
   skipped: { url: string; reason: string }[];
   failed: { url: string; error: string }[];
 }
+
+export interface ArchiveImportCounts {
+  added: number;
+  updated: number;
+  skipped: number;
+}
+
+export interface ArchiveImportResult {
+  articles: ArchiveImportCounts;
+  briefings: ArchiveImportCounts;
+  ai_memories: ArchiveImportCounts;
+  ai_memory_events: { added: number; skipped: number };
+}

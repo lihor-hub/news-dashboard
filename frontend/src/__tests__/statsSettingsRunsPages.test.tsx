@@ -22,6 +22,7 @@ const apiMock = vi.hoisted(() => ({
   deactivateAiMemory: vi.fn(),
   learnAiMemoriesFromReading: vi.fn(),
   downloadUserExport: vi.fn(),
+  importUserArchive: vi.fn(),
   deleteOwnAccount: vi.fn(),
 }));
 vi.mock('../api', () => apiMock);
@@ -328,6 +329,39 @@ describe('SettingsPage', () => {
     renderPage(<SettingsPage />);
     fireEvent.click(screen.getByText('Download archive'));
     await waitFor(() => expect(screen.getByText('network error')).toBeTruthy());
+  });
+
+  it('shows the restore archive button', () => {
+    renderPage(<SettingsPage />);
+    expect(screen.getByText('Restore archive')).toBeTruthy();
+  });
+
+  it('restores an archive and shows the per-section counts', async () => {
+    apiMock.importUserArchive.mockResolvedValue({
+      articles: { added: 2, updated: 1, skipped: 0 },
+      briefings: { added: 1, updated: 0, skipped: 0 },
+      ai_memories: { added: 0, updated: 1, skipped: 0 },
+      ai_memory_events: { added: 3, skipped: 0 },
+    });
+    renderPage(<SettingsPage />);
+
+    const file = new File(['{"schema_version":2}'], 'archive.json', {
+      type: 'application/json',
+    });
+    fireEvent.change(screen.getByLabelText('Restore archive'), { target: { files: [file] } });
+
+    await waitFor(() => expect(screen.getByText(/Articles: 2 added/)).toBeTruthy());
+    expect(apiMock.importUserArchive).toHaveBeenCalledWith(file);
+  });
+
+  it('shows an error message when archive import fails', async () => {
+    apiMock.importUserArchive.mockRejectedValue(new Error('unsupported schema_version'));
+    renderPage(<SettingsPage />);
+
+    const file = new File(['not json'], 'archive.json', { type: 'application/json' });
+    fireEvent.change(screen.getByLabelText('Restore archive'), { target: { files: [file] } });
+
+    await waitFor(() => expect(screen.getByText('unsupported schema_version')).toBeTruthy());
   });
 
   it('requires typing the exact username before deletion is enabled', () => {

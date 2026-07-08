@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import logging
 import os
 import re
@@ -2465,6 +2466,39 @@ def export_user_data(
     from news_dashboard.export import assemble_user_export
 
     return assemble_user_export(current_user["id"])
+
+
+# Archives are JSON text; 20 MiB covers even large multi-year histories while
+# bounding memory use and per-request import time for oversized uploads.
+MAX_ARCHIVE_IMPORT_BYTES = int(os.getenv("MAX_ARCHIVE_IMPORT_BYTES", str(20 * 1024 * 1024)))
+
+
+@api.post("/api/users/me/import")
+def import_user_archive(
+    current_user: Annotated[dict[str, Any], Depends(require_auth)],
+    file: Annotated[UploadFile, File()],
+) -> dict[str, Any]:
+    """Restore a personal archive previously downloaded from /api/users/me/export."""
+    from news_dashboard.import_export import ArchiveImportError, restore_user_archive
+
+    contents = file.file.read(MAX_ARCHIVE_IMPORT_BYTES + 1)
+    if len(contents) > MAX_ARCHIVE_IMPORT_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail=f"Archive file too large (max {MAX_ARCHIVE_IMPORT_BYTES} bytes)",
+        )
+
+    try:
+        payload = json.loads(contents)
+    except json.JSONDecodeError as exc:
+        raise HTTPException(status_code=400, detail=f"Invalid archive JSON: {exc}") from exc
+
+    try:
+        result = restore_user_archive(current_user["id"], payload)
+    except ArchiveImportError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    return result
 
 
 class DeleteAccountRequest(BaseModel):
