@@ -168,10 +168,12 @@ docker run -d \
   -e SESSION_SECRET="$(python -c 'import secrets; print(secrets.token_hex(32))')" \
   -e BOOTSTRAP_ADMIN_USERNAME=admin \
   -e BOOTSTRAP_ADMIN_PASSWORD=change-me \
+  -e DATA_DIR=/data \
+  -v news-dashboard-data:/data \
   --restart unless-stopped \
   ghcr.io/lihor-hub/news-dashboard:latest
 ```
-**Note**: Replace `latest` with a specific version tag (e.g., `v1.21.0`) or commit SHA for pinned deployments. See [Configuration](#configuration) for all required environment variables.
+**Note**: Replace `latest` with a specific version tag (e.g., `v1.21.0`) or commit SHA for pinned deployments. The `news-dashboard-data:/data` volume keeps generated audio and other app data across container recreates; without it, optional TTS and podcast MP3 caches are lost during upgrades. See [Configuration](#configuration) for all required environment variables.
 
 Open [http://localhost:8080](http://localhost:8080).
 

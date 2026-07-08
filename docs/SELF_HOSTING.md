@@ -60,6 +60,13 @@ docker compose -f docker-compose.prod.yml up -d
 
 The compose file will fail fast if required secrets (`SESSION_SECRET`, `BOOTSTRAP_ADMIN_USERNAME`, `BOOTSTRAP_ADMIN_PASSWORD`, `POSTGRES_PASSWORD`) are not set.
 
+`docker-compose.prod.yml` also mounts the named `news-dashboard-data` volume at
+`/data` and sets `DATA_DIR=/data`. Generated article audio and briefing podcast
+MP3 caches live under `/data/audio`, so keep that volume backed by persistent
+storage in production. If you run the container manually with `docker run`, pass
+both `-e DATA_DIR=/data` and `-v news-dashboard-data:/data`; otherwise audio
+files are lost when the app container is recreated.
+
 ### Verifying the Deployment
 
 ```bash
@@ -364,7 +371,8 @@ Upgrade safely by following these steps in order.
 
 1. **Read the release notes** — check the [CHANGELOG](../CHANGELOG.md) for any breaking changes, config deprecations, or manual steps.
 2. **Back up your database** — a backup is your safety net for rollback. See [PostgreSQL Backup and Restore](https://docs.lihor.ro/docs/configuration/postgres-backup) for backup strategies.
-3. **Check the new image tag** — browse available tags on [GHCR](https://ghcr.io/lihor-hub/news-dashboard) or the [releases page](https://github.com/lihor-hub/news-dashboard/releases).
+3. **Back up app data** — if audio features are enabled, keep the `/data` volume (`news-dashboard-data` in Docker Compose) with your normal backup set so generated MP3 caches survive container replacement.
+4. **Check the new image tag** — browse available tags on [GHCR](https://ghcr.io/lihor-hub/news-dashboard) or the [releases page](https://github.com/lihor-hub/news-dashboard/releases).
 
 ### Docker Compose (Production)
 
