@@ -8,7 +8,7 @@ import sys
 import unittest
 
 sys.path.insert(0, os.path.dirname(__file__))
-from humanize_commits import humanize_commits
+from humanize_commits import humanize_commits, sanitize_release_notes
 
 _INTERNAL_ONLY = """- chore: make API docs exposure configurable (#646) (#817)
 - ci: generate SBOM and build provenance for releases (#814)
@@ -55,6 +55,34 @@ class TestHumanizeCommits(unittest.TestCase):
     def test_capitalizes_first_letter(self):
         out = humanize_commits("- feat: lowercase start stays readable")
         self.assertTrue(out.startswith("- Lowercase"))
+
+
+class TestSanitizeReleaseNotes(unittest.TestCase):
+    def test_clean_bullets_pass_through_unchanged(self):
+        notes = "- Add dark mode (#123)\n- [See the docs](https://example.com)"
+        self.assertEqual(sanitize_release_notes(notes), notes)
+
+    def test_strips_fenced_code_block(self):
+        notes = "```\n- Some code snippet\n```\n- Real bullet"
+        self.assertEqual(sanitize_release_notes(notes), "- Real bullet")
+
+    def test_strips_think_block_and_stray_tags(self):
+        notes = "<think>reasoning about the release</think>\n- Add feature\n</think>"
+        self.assertEqual(sanitize_release_notes(notes), "- Add feature")
+
+    def test_drops_prompt_narration_lines(self):
+        notes = (
+            "The user wants me to write release notes for this commit.\n"
+            "- Stability and performance improvements."
+        )
+        self.assertEqual(sanitize_release_notes(notes), "- Stability and performance improvements.")
+
+    def test_reasoning_only_input_returns_none(self):
+        notes = "The user wants me to summarize this release.\nI should keep it short."
+        self.assertIsNone(sanitize_release_notes(notes))
+
+    def test_empty_input_returns_none(self):
+        self.assertIsNone(sanitize_release_notes(""))
 
 
 if __name__ == "__main__":
