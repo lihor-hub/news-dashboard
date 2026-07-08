@@ -123,8 +123,13 @@ jobs:
           changelog=$(pi -e "$PI_EXTENSION" -p "$SYSTEM_PROMPT
 
           $PROMPT" || true)
-          # If inference returned nothing, fall back to a user-facing summary of
-          # the commits — never the raw "chore:/ci:" subjects a customer can't read.
+          # Strip any leaked model reasoning (<think> blocks, prompt
+          # narration, code fences) before it can reach a GitHub Release or
+          # CHANGELOG.md.
+          changelog=$(printf '%s\n' "$changelog" | python3 scripts/humanize_commits.py --sanitize)
+          # If inference returned nothing usable, fall back to a user-facing
+          # summary of the commits — never raw "chore:/ci:" subjects or model
+          # reasoning a customer can't read.
           if [ -z "$(printf '%s' "$changelog" | tr -d '[:space:]')" ]; then
             changelog=$(printf '%s\n' "$COMMITS" | python3 scripts/humanize_commits.py)
           fi

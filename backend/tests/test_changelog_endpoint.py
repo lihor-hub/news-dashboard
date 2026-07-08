@@ -59,6 +59,19 @@ def test_parse_changelog_normalizes_keep_a_changelog_headings() -> None:
     ]
 
 
+def test_parse_changelog_drops_leaked_model_reasoning() -> None:
+    md = dedent("""\
+        ## 3.0.0
+        - The user wants me to write release notes for this commit.
+        - I'll output a single bullet. </think>
+        - Real user-facing bullet
+    """)
+    with patch("news_dashboard.system.service._CHANGELOG_FILE") as cf:
+        cf.read_text.return_value = md
+        entries = parse_changelog()
+    assert entries == [{"version": "3.0.0", "date": None, "items": ["Real user-facing bullet"]}]
+
+
 def test_parse_changelog_returns_empty_on_oserror() -> None:
     with patch("news_dashboard.system.service._CHANGELOG_FILE") as cf:
         cf.read_text.side_effect = OSError("missing")

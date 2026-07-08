@@ -511,9 +511,12 @@ jobs:
           COMMITS: ${{ steps.log.outputs.commits }}
         run: |
           echo "$V" > VERSION
-          # If inference returned nothing, fall back to a user-facing summary of
-          # the commits — never the raw "chore:/ci:" subjects a customer can't read.
-          BODY="$NOTES"
+          # Strip any leaked model reasoning (<think> blocks, prompt
+          # narration, code fences) before it can reach CHANGELOG.md.
+          BODY=$(printf '%s\n' "$NOTES" | python3 scripts/humanize_commits.py --sanitize)
+          # If inference returned nothing usable, fall back to a user-facing
+          # summary of the commits — never raw "chore:/ci:" subjects or model
+          # reasoning a customer can't read.
           if [ -z "$(printf '%s' "$BODY" | tr -d '[:space:]')" ]; then
             BODY=$(printf '%s\n' "$COMMITS" | python3 scripts/humanize_commits.py)
           fi

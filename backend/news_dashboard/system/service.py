@@ -16,6 +16,14 @@ _CHANGELOG_FILE = Path(__file__).resolve().parents[3] / "CHANGELOG.md"
 # matches entry.version against the app version exactly.
 _CHANGELOG_HEADING = re.compile(r"^##\s+\[?(?P<version>[^\]\s]+)\]?(?:\s*[—-]\s*(?P<date>\S+))?")
 
+# Defense in depth: the release pipeline sanitizes generated notes before they
+# reach CHANGELOG.md, but reject any bullet that still looks like leaked model
+# reasoning rather than a genuine release note.
+_LEAKED_REASONING_RE = re.compile(
+    r"</?think>|^(the user wants|i'll |i should|i need to|let me |as an ai)",
+    re.IGNORECASE,
+)
+
 
 def check_health() -> None:
     init_db()
@@ -54,5 +62,7 @@ def parse_changelog() -> list[dict[str, object]]:
                 }
             )
         elif line.startswith("- ") and entries:
-            current_items.append(line[2:].strip())
+            item = line[2:].strip()
+            if not _LEAKED_REASONING_RE.search(item):
+                current_items.append(item)
     return entries

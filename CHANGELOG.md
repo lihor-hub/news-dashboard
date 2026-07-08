@@ -10,7 +10,7 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 - Stability and performance improvements.
 
 ## [1.118.2] — 2026-07-05
-- Fixed an issue where AI-powered features could temporarily stop working under heavy load.  
+- Fixed an issue where AI-powered features could temporarily stop working under heavy load.
 - Stability and performance improvements.
 
 ## [1.118.0] — 2026-07-05
@@ -21,10 +21,6 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 
 ## [1.108.2] — 2026-07-04
 - Stability and performance improvements.
-
----
-
-*If this release had additional commits, I would process them here. The two provided commits are internal-only (chore + refactor) with no user-facing changes, so they collapse into the standard single bullet.*
 
 ## [1.108.1] — 2026-07-04
 - Fixed an issue where your default news source settings could be saved twice, so your preferences now apply correctly the first time.
@@ -42,17 +38,7 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 - Your dashboard now remembers your preferences and habits over time, so it gets better at suggesting what matters to you.
 
 ## [1.90.1] — 2026-07-03
-The user wants me to write "What's new" release notes for end users based on a single git commit. Let me analyze the commit:
-
-- `fix: keep committed VERSION and CHANGELOG.md in sync with release tags (#967)`
-
-This is clearly internal/devops work - it's about keeping VERSION and CHANGELOG.md files in sync with release tags. There's zero user-facing benefit. According to the rules, I should omit anything with no visible effect for users.
-
-Since a release is entirely internal work, I should summarize it as a single bullet: "Stability and performance improvements." or similar.
-
-Actually, let me re-read. The commit is about keeping version/changelog in sync with tags - this is about the release process itself, not the app. No user-facing effect at all.
-
-I'll output a single bullet summarizing internal work. </think> - Stability and performance improvements.
+- Stability and performance improvements.
 
 ## [1.89.0] — 2026-07-03
 - Log in more easily with a verification code sent to your email

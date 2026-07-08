@@ -78,8 +78,75 @@ def humanize_commits(commits: str) -> str:
     return "\n".join(bullets)
 
 
+# ── Sanitizer for LLM-generated release notes ────────────────────────────────
+#
+# The release pipeline asks an LLM to write the changelog/GitHub-release
+# prose. Occasionally the model leaks its reasoning instead of (or alongside)
+# the requested bullets: <think> blocks, prompt narration ("The user wants
+# me to..."), or stray markdown code fences. That text must never reach
+# CHANGELOG.md or a published GitHub Release.
+
+_THINK_BLOCK_RE = re.compile(r"<think>.*?</think>", re.IGNORECASE | re.DOTALL)
+_THINK_TAG_RE = re.compile(r"</?think>", re.IGNORECASE)
+_FENCED_BLOCK_RE = re.compile(r"```.*?```", re.DOTALL)
+_STRAY_FENCE_RE = re.compile(r"^```.*$", re.MULTILINE)
+
+# Prefixes (checked against the start of a bullet's body, lowercased) that
+# mark model reasoning/narration rather than a genuine release note.
+_NARRATION_PREFIXES = (
+    "the user wants",
+    "i'll ",
+    "i should",
+    "i need to",
+    "let me ",
+    "as an ai",
+    "according to the rules",
+    "according to the instructions",
+)
+
+
+def _is_narration(bullet_body: str) -> bool:
+    lowered = bullet_body.strip().lower()
+    return any(lowered.startswith(prefix) for prefix in _NARRATION_PREFIXES)
+
+
+def sanitize_release_notes(text: str) -> str | None:
+    """Return ``text`` reduced to safe user-facing bullet lines, or ``None``.
+
+    Only lines that look like a genuine "- " bullet and don't open with a
+    known reasoning marker survive. ``None`` means nothing usable remained —
+    the caller should fall back to a deterministic summary rather than
+    publish raw model output.
+    """
+    if not text:
+        return None
+
+    cleaned = _THINK_BLOCK_RE.sub("", text)
+    cleaned = _THINK_TAG_RE.sub("", cleaned)
+    cleaned = _FENCED_BLOCK_RE.sub("", cleaned)
+    cleaned = _STRAY_FENCE_RE.sub("", cleaned)
+
+    bullets = []
+    for line in cleaned.splitlines():
+        stripped = line.strip()
+        if not stripped.startswith("- "):
+            continue
+        if _is_narration(stripped[2:]):
+            continue
+        bullets.append(stripped)
+
+    if not bullets:
+        return None
+    return "\n".join(bullets)
+
+
 def main() -> None:
     import sys
+
+    if "--sanitize" in sys.argv:
+        sanitized = sanitize_release_notes(sys.stdin.read())
+        print(sanitized if sanitized is not None else "")
+        return
 
     print(humanize_commits(sys.stdin.read()))
 
