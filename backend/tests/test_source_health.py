@@ -125,6 +125,28 @@ def _add_article(
     )
 
 
+def _add_ingest_result(
+    conn: Any,
+    *,
+    run_id: int,
+    source_name: str,
+    error_message: str | None,
+) -> None:
+    conn.execute(
+        "INSERT INTO ingest_runs(id, started_at) VALUES (%s, NOW() - (%s * INTERVAL '1 day'))",
+        (run_id, 10 - run_id),
+    )
+    conn.execute(
+        """
+        INSERT INTO ingest_run_sources(
+          run_id, source_name, articles_found, articles_new, error_message
+        )
+        VALUES (%s, %s, %s, %s, %s)
+        """,
+        (run_id, source_name, 0 if error_message else 5, 0 if error_message else 2, error_message),
+    )
+
+
 def test_source_columns_present(tmp_path: Path) -> None:
     sync_sources(tmp_path / "health.db")
     with connect(tmp_path / "health.db") as conn:
@@ -356,6 +378,8 @@ def test_subscription_cleanup_suggests_high_skip_rate_source(
             "archived_count": 0,
             "skip_rate": 0.92,
             "engagement_score": 0.08,
+            "error_streak": 0,
+            "last_error": None,
         }
     ]
 
@@ -383,8 +407,103 @@ def test_subscription_cleanup_suggests_stale_source(pg_clean: str, monkeypatch: 
             "archived_count": 0,
             "skip_rate": 0.0,
             "engagement_score": 0.0,
+            "error_streak": 0,
+            "last_error": None,
         }
     ]
+
+
+def test_subscription_cleanup_suggests_repeated_error_source(
+    pg_clean: str, monkeypatch: Any
+) -> None:
+    monkeypatch.setenv("DATABASE_URL", pg_clean)
+    uid = _make_user(pg_clean)
+    with connect(pg_clean) as conn:
+        _add_source(conn, "broken-feed", "Broken Feed")
+        for run_id, error in (
+            (1, None),
+            (2, "temporary outage"),
+            (3, "HTTP 500"),
+            (4, 'Traceback (most recent call last):\n  File "feed.py", line 1\nTimeoutError'),
+        ):
+            _add_ingest_result(
+                conn,
+                run_id=run_id,
+                source_name="Broken Feed",
+                error_message=error,
+            )
+
+    suggestions = generate_subscription_cleanup_suggestions(uid, database_url=pg_clean)
+
+    assert suggestions == [
+        {
+            "source_slug": "broken-feed",
+            "source_name": "Broken Feed",
+            "action": "unsubscribe",
+            "reason": "repeated_errors",
+            "message": "Unsubscribe from 'Broken Feed' (3 consecutive failures: TimeoutError)",
+            "articles_last_30_days": 0,
+            "skipped_count": 0,
+            "done_count": 0,
+            "starred_count": 0,
+            "archived_count": 0,
+            "skip_rate": 0.0,
+            "engagement_score": 0.0,
+            "error_streak": 3,
+            "last_error": "TimeoutError",
+        }
+    ]
+
+
+def test_subscription_cleanup_repeated_errors_ignore_one_off_and_reset_success(
+    pg_clean: str, monkeypatch: Any
+) -> None:
+    monkeypatch.setenv("DATABASE_URL", pg_clean)
+    uid = _make_user(pg_clean)
+    with connect(pg_clean) as conn:
+        _add_source(conn, "one-off-feed", "One Off Feed")
+        _add_source(conn, "recovered-feed", "Recovered Feed")
+        _add_ingest_result(conn, run_id=1, source_name="One Off Feed", error_message="timeout")
+        for run_id, error in ((2, "timeout"), (3, "HTTP 500"), (4, "bad xml"), (5, None)):
+            _add_ingest_result(
+                conn,
+                run_id=run_id,
+                source_name="Recovered Feed",
+                error_message=error,
+            )
+
+    suggestions = generate_subscription_cleanup_suggestions(uid, database_url=pg_clean)
+
+    assert suggestions == []
+
+
+def test_subscription_cleanup_repeated_errors_respect_source_visibility(
+    pg_clean: str, monkeypatch: Any
+) -> None:
+    monkeypatch.setenv("DATABASE_URL", pg_clean)
+    alice_id = _make_user(pg_clean, "alice")
+    bob_id = _make_user(pg_clean, "bob")
+    with connect(pg_clean) as conn:
+        _add_private_source(conn, "alice-broken", "Alice Broken Feed", alice_id)
+        _add_private_source(conn, "bob-broken", "Bob Broken Feed", bob_id)
+        for run_id in range(1, 4):
+            _add_ingest_result(
+                conn,
+                run_id=run_id,
+                source_name="Alice Broken Feed",
+                error_message="timeout",
+            )
+        for run_id in range(4, 7):
+            _add_ingest_result(
+                conn,
+                run_id=run_id,
+                source_name="Bob Broken Feed",
+                error_message="timeout",
+            )
+
+    suggestions = generate_subscription_cleanup_suggestions(alice_id, database_url=pg_clean)
+
+    assert [suggestion["source_slug"] for suggestion in suggestions] == ["alice-broken"]
 
 
 def test_subscription_cleanup_api_unsubscribes_requested_sources(

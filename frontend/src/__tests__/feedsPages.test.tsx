@@ -485,6 +485,36 @@ describe('SourcesPage', () => {
     expect(await screen.findAllByText('My Blog')).toHaveLength(2); // desktop + mobile
   });
 
+  it('renders repeated error cleanup suggestions and applies them', async () => {
+    const suggestion = {
+      source_slug: 'broken-feed',
+      source_name: 'Broken Feed',
+      action: 'unsubscribe' as const,
+      reason: 'repeated_errors' as const,
+      message: "Unsubscribe from 'Broken Feed' (3 consecutive failures: TimeoutError)",
+      articles_last_30_days: 0,
+      skip_rate: 0,
+      skipped_count: 0,
+      done_count: 0,
+      starred_count: 0,
+      archived_count: 0,
+      engagement_score: 0,
+      error_streak: 3,
+      last_error: 'TimeoutError',
+    };
+    apiMock.fetchSources.mockResolvedValue([source({ slug: 'broken-feed', name: 'Broken Feed' })]);
+    apiMock.fetchSourceCleanupSuggestions.mockResolvedValue([suggestion]);
+    apiMock.applySourceCleanup.mockResolvedValue({ updated: ['broken-feed'], skipped: [] });
+    withProviders(<SourcesPage />);
+
+    expect(await screen.findAllByText('Broken Feed')).toHaveLength(2);
+    expect(screen.getByText('3 consecutive failures · TimeoutError')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: /apply cleanup/i }));
+
+    await waitFor(() => expect(apiMock.applySourceCleanup).toHaveBeenCalledWith(['broken-feed']));
+  });
+
   it('notifies and restores the source list when cleanup fails', async () => {
     const suggestion = {
       source_slug: 'acme',

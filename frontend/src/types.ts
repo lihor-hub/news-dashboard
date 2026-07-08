@@ -158,7 +158,7 @@ export interface SourceCleanupSuggestion {
   source_slug: string;
   source_name: string;
   action: 'unsubscribe';
-  reason: 'low_signal' | 'stale';
+  reason: 'low_signal' | 'stale' | 'repeated_errors';
   message: string;
   articles_last_30_days: number;
   skipped_count: number;
@@ -167,6 +167,8 @@ export interface SourceCleanupSuggestion {
   archived_count: number;
   skip_rate: number;
   engagement_score: number;
+  error_streak?: number;
+  last_error?: string | null;
 }
 
 export interface Summary {
