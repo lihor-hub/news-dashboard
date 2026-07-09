@@ -8,20 +8,36 @@ import { RequireAuth } from './components/RequireAuth';
 import { AppShell } from './components/AppShell';
 import { LoginPage } from './pages/LoginPage';
 import { BriefPage } from './pages/BriefPage';
-import { InboxPage } from './pages/InboxPage';
-import { SharedPage } from './pages/SharedPage';
-import { SharedDetailPage } from './pages/SharedDetailPage';
-import { LaterPage } from './pages/LaterPage';
-import { StarredPage } from './pages/StarredPage';
 import { FeedsPage } from './pages/FeedsPage';
-import { SourcesPage } from './pages/SourcesPage';
-import { ArchivePage } from './pages/ArchivePage';
-import { CollectionsPage } from './pages/CollectionsPage';
-import { CollectionDetailPage } from './pages/CollectionDetailPage';
-import { ShareTargetPage } from './pages/ShareTargetPage';
 import { useAuth } from './contexts/auth';
 import { ShieldAlert } from 'lucide-react';
 
+const InboxPage = lazy(() => import('./pages/InboxPage').then((m) => ({ default: m.InboxPage })));
+const SharedPage = lazy(() =>
+  import('./pages/SharedPage').then((m) => ({ default: m.SharedPage }))
+);
+const SharedDetailPage = lazy(() =>
+  import('./pages/SharedDetailPage').then((m) => ({ default: m.SharedDetailPage }))
+);
+const LaterPage = lazy(() => import('./pages/LaterPage').then((m) => ({ default: m.LaterPage })));
+const StarredPage = lazy(() =>
+  import('./pages/StarredPage').then((m) => ({ default: m.StarredPage }))
+);
+const SourcesPage = lazy(() =>
+  import('./pages/SourcesPage').then((m) => ({ default: m.SourcesPage }))
+);
+const ArchivePage = lazy(() =>
+  import('./pages/ArchivePage').then((m) => ({ default: m.ArchivePage }))
+);
+const CollectionsPage = lazy(() =>
+  import('./pages/CollectionsPage').then((m) => ({ default: m.CollectionsPage }))
+);
+const CollectionDetailPage = lazy(() =>
+  import('./pages/CollectionDetailPage').then((m) => ({ default: m.CollectionDetailPage }))
+);
+const ShareTargetPage = lazy(() =>
+  import('./pages/ShareTargetPage').then((m) => ({ default: m.ShareTargetPage }))
+);
 const SearchPage = lazy(() =>
   import('./pages/SearchPage').then((m) => ({ default: m.SearchPage }))
 );
@@ -148,18 +164,18 @@ export const routes: RouteObject[] = [
     ),
     children: [
       { index: true, element: <BriefPage /> },
-      { path: 'today', element: <InboxPage /> },
-      { path: 'later', element: <LaterPage /> },
-      { path: 'starred', element: <StarredPage /> },
-      { path: 'shared', element: <SharedPage /> },
-      { path: 'shared/:shareId', element: <SharedDetailPage /> },
+      { path: 'today', element: withSuspense(InboxPage) },
+      { path: 'later', element: withSuspense(LaterPage) },
+      { path: 'starred', element: withSuspense(StarredPage) },
+      { path: 'shared', element: withSuspense(SharedPage) },
+      { path: 'shared/:shareId', element: withSuspense(SharedDetailPage) },
       { path: 'search', element: withSuspense(SearchPage) },
       { path: 'ask', element: withSuspense(AskPage) },
       {
         path: 'feeds',
         element: <FeedsPage />,
         children: [
-          { index: true, element: <SourcesPage /> },
+          { index: true, element: withSuspense(SourcesPage) },
           {
             path: 'schedule',
             element: (
@@ -210,11 +226,11 @@ export const routes: RouteObject[] = [
       { path: 'reading-list', element: withSuspense(ReadingListPage) },
       { path: 'offline-saved', element: withSuspense(OfflineSavedPage) },
       { path: 'recap', element: withSuspense(WeeklyRecapPage) },
-      { path: 'archive', element: <ArchivePage /> },
-      { path: 'collections', element: <CollectionsPage /> },
-      { path: 'collections/:tagId', element: <CollectionDetailPage /> },
+      { path: 'archive', element: withSuspense(ArchivePage) },
+      { path: 'collections', element: withSuspense(CollectionsPage) },
+      { path: 'collections/:tagId', element: withSuspense(CollectionDetailPage) },
       { path: 'settings', element: withSuspense(SettingsPage) },
-      { path: 'share-target', element: <ShareTargetPage /> },
+      { path: 'share-target', element: withSuspense(ShareTargetPage) },
       { path: 'admin', element: withSuspense(AdminPage) },
       {
         path: 'analytics',

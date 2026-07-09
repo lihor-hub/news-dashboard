@@ -97,6 +97,23 @@ export default defineConfig({
   build: {
     outDir: 'frontend/dist',
     emptyOutDir: true,
+    rollupOptions: {
+      output: {
+        // Stable, always-needed-on-first-paint libraries get their own chunk
+        // (independent from route/app code) so it caches across deploys and
+        // stays under Vite's per-chunk size warning instead of ballooning
+        // the app-shell "index" chunk every time application code changes.
+        manualChunks(id) {
+          if (
+            /node_modules\/(react|react-dom|react-router-dom|i18next|react-i18next|i18next-browser-languagedetector|@tanstack\/react-query|sonner)\//.test(
+              id
+            )
+          ) {
+            return 'vendor';
+          }
+        },
+      },
+    },
   },
   server: {
     proxy: {
