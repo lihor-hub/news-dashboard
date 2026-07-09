@@ -46,6 +46,15 @@ The Gradle project under `android/` was generated once via `@bubblewrap/core`
 and is committed to the repo. CI builds directly with `./gradlew assembleRelease`
 — no Bubblewrap CLI is needed at build time.
 
+`@bubblewrap/core` is intentionally **not** a repo dependency (it pulls in an
+old `googleapis`/`jimp`/`uuid` chain with unresolved moderate advisories). If
+you need to regenerate the Gradle project — e.g. after bumping
+`twa-manifest.json` — run it on demand instead:
+
+```
+npx @bubblewrap/core@latest update --directory android
+```
+
 ## Signing key
 
 **Whoever holds this keystore controls all future APK updates.** Android
