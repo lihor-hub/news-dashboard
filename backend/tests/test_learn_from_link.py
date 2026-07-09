@@ -46,12 +46,51 @@ def _safe_url_validator(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(service, "validate_server_fetch_url", fake_validate)
 
 
-def test_create_lesson_persists_pending_record(
+@pytest.fixture(autouse=True)
+def _lesson_extraction_stubs(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        service,
+        "fetch_url_metadata",
+        lambda url: {
+            "title": f"Title for {url}",
+            "site_name": "Example Source",
+            "author": "Example Author",
+            "published_at": "2026-07-09",
+        },
+        raising=False,
+    )
+    monkeypatch.setattr(
+        service,
+        "extract_body",
+        lambda url: (f"Body for {url}", "ok"),
+        raising=False,
+    )
+
+
+def test_create_lesson_completes_with_extracted_content(
     pg_clean: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setenv("DATABASE_URL", pg_clean)
-
     user_id = _make_user(pg_clean)
+
+    monkeypatch.setattr(
+        service,
+        "fetch_url_metadata",
+        lambda _url: {
+            "title": "A careful article",
+            "site_name": "Example Journal",
+            "author": "Ada Writer",
+            "published_at": "2026-07-09",
+        },
+        raising=False,
+    )
+    monkeypatch.setattr(
+        service,
+        "extract_body",
+        lambda _url: ("Paragraph one.\n\nParagraph two.", "ok"),
+        raising=False,
+    )
+
     lesson = service.create_lesson(
         user_id,
         "https://Example.com/story?b=2&a=1",
@@ -61,10 +100,69 @@ def test_create_lesson_persists_pending_record(
     assert lesson["user_id"] == user_id
     assert lesson["original_url"] == "https://Example.com/story?b=2&a=1"
     assert lesson["normalized_url"] == "https://example.com/story?a=1&b=2"
-    assert lesson["generation_status"] == "pending"
+    assert lesson["generation_status"] == "complete"
     assert lesson["generation_error"] is None
+    assert lesson["title"] == "A careful article"
+    assert lesson["source_name"] == "Example Journal"
+    assert lesson["author"] == "Ada Writer"
+    assert lesson["published_at"] == "2026-07-09"
+    assert lesson["source_content"] == "Paragraph one.\n\nParagraph two."
+
+
+def test_create_lesson_marks_failed_when_extraction_fails(
+    pg_clean: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("DATABASE_URL", pg_clean)
+    user_id = _make_user(pg_clean)
+
+    monkeypatch.setattr(
+        service,
+        "fetch_url_metadata",
+        lambda _url: {"title": "Metadata title"},
+        raising=False,
+    )
+    monkeypatch.setattr(
+        service,
+        "extract_body",
+        lambda _url: ("", "error"),
+        raising=False,
+    )
+
+    lesson = service.create_lesson(user_id, "https://example.com/a", database_url=pg_clean)
+
+    assert lesson["generation_status"] == "failed"
+    assert lesson["generation_error"] == "Could not extract readable article content."
     assert lesson["title"] is None
     assert lesson["source_content"] is None
+
+
+def test_create_lesson_ignores_metadata_failure_when_body_succeeds(
+    pg_clean: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("DATABASE_URL", pg_clean)
+    user_id = _make_user(pg_clean)
+
+    def _boom(url: str) -> dict[str, str]:
+        message = "metadata unavailable"
+        raise RuntimeError(message)
+
+    monkeypatch.setattr(service, "fetch_url_metadata", _boom, raising=False)
+    monkeypatch.setattr(
+        service,
+        "extract_body",
+        lambda _url: ("Useful body text.", "ok"),
+        raising=False,
+    )
+
+    lesson = service.create_lesson(user_id, "https://example.com/a", database_url=pg_clean)
+
+    assert lesson["generation_status"] == "complete"
+    assert lesson["generation_error"] is None
+    assert lesson["title"] == "https://example.com/a"
+    assert lesson["source_name"] is None
+    assert lesson["author"] is None
+    assert lesson["published_at"] is None
+    assert lesson["source_content"] == "Useful body text."
 
 
 def test_create_lesson_rejects_unsafe_url(pg_clean: str, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -111,17 +209,35 @@ def test_create_lesson_duplicate_resets_pending_state(
 
     assert second["id"] == first["id"]
     assert second["original_url"] == first["original_url"]
-    assert second["generation_status"] == "pending"
+    assert second["generation_status"] == "complete"
     assert second["generation_error"] is None
-    assert second["source_content"] == "old content"
+    assert second["source_content"] == "Body for https://example.com/story"
 
 
-def test_create_lesson_endpoint_persists_record(
+def test_create_lesson_endpoint_returns_completed_lesson(
     pg_clean: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setenv("DATABASE_URL", pg_clean)
     init_db(database_url=pg_clean)
     user_id = _make_user(pg_clean)
+
+    monkeypatch.setattr(
+        service,
+        "fetch_url_metadata",
+        lambda _url: {
+            "title": "API article",
+            "site_name": "API Source",
+            "author": "Robin Reporter",
+            "published_at": "2026-07-09",
+        },
+        raising=False,
+    )
+    monkeypatch.setattr(
+        service,
+        "extract_body",
+        lambda _url: ("API body text.", "ok"),
+        raising=False,
+    )
 
     with _api_client(user_id) as client:
         response = client.post(
@@ -134,8 +250,39 @@ def test_create_lesson_endpoint_persists_record(
     assert lesson["user_id"] == user_id
     assert lesson["original_url"] == "https://Example.com/story?b=2&a=1"
     assert lesson["normalized_url"] == "https://example.com/story?a=1&b=2"
-    assert lesson["generation_status"] == "pending"
+    assert lesson["generation_status"] == "complete"
     assert lesson["generation_error"] is None
+    assert lesson["title"] == "API article"
+    assert lesson["source_content"] == "API body text."
+
+
+def test_create_lesson_endpoint_returns_failed_lesson_on_extraction_error(
+    pg_clean: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("DATABASE_URL", pg_clean)
+    init_db(database_url=pg_clean)
+    user_id = _make_user(pg_clean)
+
+    monkeypatch.setattr(
+        service,
+        "fetch_url_metadata",
+        lambda _url: {"title": "Metadata title"},
+        raising=False,
+    )
+    monkeypatch.setattr(
+        service,
+        "extract_body",
+        lambda _url: ("", "error"),
+        raising=False,
+    )
+
+    with _api_client(user_id) as client:
+        response = client.post("/api/learn/lessons", json={"url": "https://example.com/story"})
+
+    assert response.status_code == 201
+    lesson = response.json()
+    assert lesson["generation_status"] == "failed"
+    assert lesson["generation_error"] == "Could not extract readable article content."
 
 
 def test_create_lesson_endpoint_rejects_unsafe_url(
