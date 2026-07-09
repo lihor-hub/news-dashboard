@@ -127,10 +127,9 @@ DEFAULT_SOURCES: list[SourceDefinition] = [
     SourceDefinition(
         "deepmind-blog",
         "Google DeepMind Blog",
-        "https://deepmind.google/blog/",
+        "https://deepmind.google/blog/rss.xml",
         "ai-llm",
-        "scraped_page",
-        85,
+        priority=85,
         interest_tags=("agents", "model-releases", "evals", "product-news"),
     ),
     SourceDefinition(
@@ -210,10 +209,9 @@ DEFAULT_SOURCES: list[SourceDefinition] = [
     SourceDefinition(
         "mistral-ai-news",
         "Mistral AI News",
-        "https://mistral.ai/news/",
+        "https://mistral.ai/rss.xml",
         "ai-llm",
-        "scraped_page",
-        80,
+        priority=80,
         interest_tags=("agents", "model-releases", "product-news"),
     ),
     SourceDefinition(
@@ -288,7 +286,9 @@ DEFAULT_SOURCES: list[SourceDefinition] = [
     SourceDefinition(
         "google-project-zero",
         "Google Project Zero",
-        "https://googleprojectzero.blogspot.com/feeds/posts/default",
+        # Summary feed with a post cap: the default feed embeds full post bodies
+        # and exceeds the 2 MiB fetch cap (~13 MiB); the summary feed is a few KB.
+        "https://googleprojectzero.blogspot.com/feeds/posts/summary?alt=rss&max-results=25",
         "security",
         priority=82,
         interest_tags=("security", "research"),

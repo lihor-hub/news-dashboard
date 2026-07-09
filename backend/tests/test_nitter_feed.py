@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import urllib.error
+from http.client import HTTPMessage
 from typing import ClassVar
 
 import pytest
@@ -11,6 +12,7 @@ from news_dashboard.ingest import (
     _FEED_AGENT,
     _NITTER_INSTANCES,
     FEED_FETCH_MAX_BYTES,
+    FEED_FETCH_MAX_RETRIES,
     FEED_FETCH_TIMEOUT_SECS,
     FeedFetchError,
     _fetch_feed_content,
@@ -140,6 +142,82 @@ def test_fetch_feed_content_converts_url_error(monkeypatch: pytest.MonkeyPatch) 
     monkeypatch.setattr("news_dashboard.ingest.open_server_fetch_url", fake_open)
     with pytest.raises(FeedFetchError, match="network error"):
         _fetch_feed_content("https://example.com/feed.xml")
+
+
+# ── 429/503 retry ─────────────────────────────────────────────────────────────
+
+
+def _http_error(code: int, retry_after: str | None = None) -> urllib.error.HTTPError:
+    headers = HTTPMessage()
+    if retry_after is not None:
+        headers["Retry-After"] = retry_after
+    return urllib.error.HTTPError("https://example.com/feed.xml", code, "err", headers, None)
+
+
+def test_fetch_feed_content_retries_429_then_succeeds(monkeypatch: pytest.MonkeyPatch) -> None:
+    body = b"<rss>ok</rss>"
+    attempts = {"n": 0}
+
+    def fake_open(_req: object, *, timeout: float) -> _SizedFakeResp:
+        attempts["n"] += 1
+        if attempts["n"] == 1:
+            raise _http_error(429)
+        return _SizedFakeResp(body)
+
+    sleeps: list[float] = []
+    monkeypatch.setattr("news_dashboard.ingest.open_server_fetch_url", fake_open)
+    monkeypatch.setattr("news_dashboard.ingest.time.sleep", sleeps.append)
+
+    assert _fetch_feed_content("https://example.com/feed.xml") == body
+    assert attempts["n"] == 2
+    assert sleeps, "expected a backoff sleep between attempts"
+
+
+def test_fetch_feed_content_gives_up_after_max_retries(monkeypatch: pytest.MonkeyPatch) -> None:
+    attempts = {"n": 0}
+
+    def fake_open(_req: object, *, timeout: float) -> None:
+        attempts["n"] += 1
+        raise _http_error(429)
+
+    monkeypatch.setattr("news_dashboard.ingest.open_server_fetch_url", fake_open)
+    monkeypatch.setattr("news_dashboard.ingest.time.sleep", lambda _s: None)
+
+    with pytest.raises(FeedFetchError, match="network error"):
+        _fetch_feed_content("https://example.com/feed.xml")
+    assert attempts["n"] == FEED_FETCH_MAX_RETRIES + 1
+
+
+def test_fetch_feed_content_honors_retry_after(monkeypatch: pytest.MonkeyPatch) -> None:
+    attempts = {"n": 0}
+
+    def fake_open(_req: object, *, timeout: float) -> _SizedFakeResp:
+        attempts["n"] += 1
+        if attempts["n"] == 1:
+            raise _http_error(429, retry_after="7")
+        return _SizedFakeResp(b"<rss/>")
+
+    sleeps: list[float] = []
+    monkeypatch.setattr("news_dashboard.ingest.open_server_fetch_url", fake_open)
+    monkeypatch.setattr("news_dashboard.ingest.time.sleep", sleeps.append)
+
+    _fetch_feed_content("https://example.com/feed.xml")
+    assert sleeps == [7.0]
+
+
+def test_fetch_feed_content_does_not_retry_404(monkeypatch: pytest.MonkeyPatch) -> None:
+    attempts = {"n": 0}
+
+    def fake_open(_req: object, *, timeout: float) -> None:
+        attempts["n"] += 1
+        raise _http_error(404)
+
+    monkeypatch.setattr("news_dashboard.ingest.open_server_fetch_url", fake_open)
+    monkeypatch.setattr("news_dashboard.ingest.time.sleep", lambda _s: None)
+
+    with pytest.raises(FeedFetchError, match="network error"):
+        _fetch_feed_content("https://example.com/feed.xml")
+    assert attempts["n"] == 1
 
 
 # ── size cap ──────────────────────────────────────────────────────────────────
@@ -290,6 +368,37 @@ def test_fetch_nitter_raises_when_all_instances_fail(monkeypatch: pytest.MonkeyP
         _fetch_nitter_feed(_make_source("ylecun"))
 
 
+def test_fetch_nitter_skips_placeholder_without_status_links(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A 'not whitelisted' placeholder (no /status/ links) is treated as a failure."""
+    calls: list[str] = []
+
+    def fake_parse_url(url: str) -> list[dict[str, object]]:
+        calls.append(url)
+        if _NITTER_INSTANCES[0] in url:
+            # xcancel-style placeholder: one item linking back to the RSS URL.
+            return _ok_entries(
+                [{"link": "https://rss.xcancel.com/xai/rss", "title": "Not whitelisted!"}]
+            )
+        return _ok_entries([{"link": "https://x.com/xai/status/9", "title": "Real tweet"}])
+
+    monkeypatch.setattr("news_dashboard.ingest._parse_feed_url", fake_parse_url)
+    entries = _fetch_nitter_feed(_make_source("xai"))
+
+    assert len(calls) == 2, "should skip the placeholder instance and try the next"
+    assert [e["title"] for e in entries] == ["Real tweet"]
+
+
+def test_fetch_nitter_raises_when_only_placeholders(monkeypatch: pytest.MonkeyPatch) -> None:
+    def fake_parse_url(url: str) -> list[dict[str, object]]:
+        return _ok_entries([{"link": url, "title": "RSS reader not yet whitelisted!"}])
+
+    monkeypatch.setattr("news_dashboard.ingest._parse_feed_url", fake_parse_url)
+    with pytest.raises(FeedFetchError, match="All Nitter instances failed for @xai"):
+        _fetch_nitter_feed(_make_source("xai"))
+
+
 def test_fetch_nitter_tries_all_instances_before_failing(monkeypatch: pytest.MonkeyPatch) -> None:
     calls: list[str] = []
 
@@ -313,6 +422,11 @@ def test_nitter_instances_has_at_least_two() -> None:
 
 def test_nitter_instances_are_unique() -> None:
     assert len(_NITTER_INSTANCES) == len(set(_NITTER_INSTANCES))
+
+
+def test_nitter_instances_include_working_xcancel() -> None:
+    """xcancel.com is the currently-reachable instance and should be tried first."""
+    assert _NITTER_INSTANCES[0] == "xcancel.com"
 
 
 # ── DEFAULT_SOURCES sanity checks ─────────────────────────────────────────────

@@ -22,9 +22,9 @@ def test_mistral_ai_news_metadata() -> None:
     """mistral-ai-news has the expected metadata fields."""
     src = next(s for s in DEFAULT_SOURCES if s.slug == "mistral-ai-news")
     assert src.name == "Mistral AI News"
-    assert src.url == "https://mistral.ai/news/"
+    assert src.url == "https://mistral.ai/rss.xml"
     assert src.category == "ai-llm"
-    assert src.kind == "scraped_page"
+    assert src.kind == "rss_feed"
     assert src.priority == 80
     assert src.enabled is True
     assert src.lang == "en"
@@ -38,10 +38,11 @@ def test_mistral_ai_news_interest_tags() -> None:
     assert "product-news" in src.interest_tags
 
 
-def test_mistral_ai_news_routes_to_scraped_page() -> None:
-    """mistral-ai-news kind is scraped_page, which ingest routes correctly."""
+def test_mistral_ai_news_routes_to_rss_feed() -> None:
+    """mistral-ai-news is served by a real RSS feed, not a scraper."""
     src = next(s for s in DEFAULT_SOURCES if s.slug == "mistral-ai-news")
-    assert src.kind == "scraped_page"
+    assert src.kind == "rss_feed"
+    assert src.url.endswith("rss.xml")
 
 
 # ── Integration tests (PostgreSQL) ────────────────────────────────────────
@@ -63,9 +64,9 @@ def test_mistral_ai_news_sync_persists_row(pg_clean: str, monkeypatch: pytest.Mo
     assert row is not None, "mistral-ai-news row missing from sources table"
     assert row["slug"] == "mistral-ai-news"
     assert row["name"] == "Mistral AI News"
-    assert row["url"] == "https://mistral.ai/news/"
+    assert row["url"] == "https://mistral.ai/rss.xml"
     assert row["category"] == "ai-llm"
-    assert row["kind"] == "scraped_page"
+    assert row["kind"] == "rss_feed"
     assert row["priority"] == 80
     assert row["enabled"] is True
 

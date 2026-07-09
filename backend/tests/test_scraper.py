@@ -11,6 +11,7 @@ from news_dashboard.scraper import (
     ScrapeFetchError,
     _AnthropicParser,
     _fetch_html,
+    _LinkListParser,
     scrape_source,
 )
 from news_dashboard.sources import SourceDefinition
@@ -97,12 +98,99 @@ def test_fetch_html_rejects_private_network_url(monkeypatch: pytest.MonkeyPatch)
     assert called is False
 
 
+# Mimics Meta AI / Cohere card layout: several anchors around one post URL
+# (badge, heading, CTA), some with a trailing byline of date + read time.
+LINK_LIST_FIXTURE = """
+<!DOCTYPE html>
+<html><body>
+  <a href="/blog?page=2">Next page</a>
+  <a href="/blog">All posts</a>
+  <div class="card">
+    <a href="/blog/muse-spark-1-1"><span>FEATURED</span></a>
+    <a href="/blog/muse-spark-1-1"><h4>Introducing Muse Spark 1.1</h4></a>
+    <a href="/blog/muse-spark-1-1">Learn More</a>
+  </div>
+  <div class="card">
+    <a href="/blog/north-mini-code?ref=home">Learn more</a>
+    <a href="/blog/north-mini-code">
+      <img src="/x.png" alt="">
+      Introducing North Mini Code: Cohere's first model Jun 09, 2026 3 min read
+    </a>
+  </div>
+  <a href="https://external.example.com/blog/other">Off-site post</a>
+  <a href="/blog/no-title-here"><img src="/y.png" alt=""></a>
+</body></html>
+"""
+
+
+def test_link_list_parser_keeps_longest_title_per_url() -> None:
+    parser = _LinkListParser("https://ai.meta.com/blog/", r"^/blog/[^/]+/?$")
+    parser.feed(LINK_LIST_FIXTURE)
+    by_url = {e["url"]: e["title"] for e in parser.entries}
+    assert by_url["https://ai.meta.com/blog/muse-spark-1-1"] == "Introducing Muse Spark 1.1"
+
+
+def test_link_list_parser_strips_card_byline() -> None:
+    parser = _LinkListParser("https://cohere.com/blog", r"^/blog/[^/]+$")
+    parser.feed(LINK_LIST_FIXTURE)
+    by_url = {e["url"]: e["title"] for e in parser.entries}
+    assert (
+        by_url["https://cohere.com/blog/north-mini-code"]
+        == "Introducing North Mini Code: Cohere's first model"
+    )
+
+
+def test_link_list_parser_dedupes_and_strips_query() -> None:
+    parser = _LinkListParser("https://cohere.com/blog", r"^/blog/[^/]+$")
+    parser.feed(LINK_LIST_FIXTURE)
+    urls = [e["url"] for e in parser.entries]
+    assert urls == sorted(set(urls), key=urls.index), "entries should be deduped by URL"
+    assert "https://cohere.com/blog/north-mini-code" in urls
+    assert all("?" not in u for u in urls), "query strings should be stripped"
+
+
+def test_link_list_parser_excludes_listing_and_offsite_links() -> None:
+    parser = _LinkListParser("https://ai.meta.com/blog/", r"^/blog/[^/]+/?$")
+    parser.feed(LINK_LIST_FIXTURE)
+    urls = {e["url"] for e in parser.entries}
+    assert "https://ai.meta.com/blog/" not in urls
+    assert not any("external.example.com" in u for u in urls)
+    assert not any(u.endswith("/blog") for u in urls)
+
+
+def test_link_list_parser_falls_back_to_slug_title() -> None:
+    parser = _LinkListParser("https://ai.meta.com/blog/", r"^/blog/[^/]+/?$")
+    parser.feed(LINK_LIST_FIXTURE)
+    by_url = {e["url"]: e["title"] for e in parser.entries}
+    assert by_url["https://ai.meta.com/blog/no-title-here"] == "No Title Here"
+
+
+@pytest.mark.parametrize("slug", ["cohere-blog", "meta-ai-blog"])
+def test_registered_scrapers_use_fetch(slug: str, monkeypatch: pytest.MonkeyPatch) -> None:
+    source = SourceDefinition(slug, slug, "https://example.com", "ai-llm", "scraped_page", 80)
+    monkeypatch.setattr("news_dashboard.scraper._fetch_html", lambda _url: LINK_LIST_FIXTURE)
+    entries = scrape_source(source)
+    assert entries, "expected at least one scraped entry"
+    assert all(e["title"] for e in entries)
+
+
 def test_scrape_source_unknown_slug_raises() -> None:
     source = SourceDefinition(
         "no-scraper", "No Scraper", "https://example.com", "python", "scraped_page", 50
     )
     with pytest.raises(NotImplementedError, match="no-scraper"):
         scrape_source(source)
+
+
+def test_every_scraped_page_source_has_a_registered_scraper() -> None:
+    """Guard against re-adding a scraped_page source with no scraper (issue #1142)."""
+    from news_dashboard.scraper import _SCRAPERS
+    from news_dashboard.sources import DEFAULT_SOURCES
+
+    missing = [
+        s.slug for s in DEFAULT_SOURCES if s.kind == "scraped_page" and s.slug not in _SCRAPERS
+    ]
+    assert not missing, f"scraped_page sources without a scraper: {missing}"
 
 
 class _FakeHeaders:

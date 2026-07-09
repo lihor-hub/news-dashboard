@@ -22,7 +22,10 @@ def test_google_project_zero_metadata() -> None:
     """google-project-zero has the expected metadata fields."""
     src = next(s for s in DEFAULT_SOURCES if s.slug == "google-project-zero")
     assert src.name == "Google Project Zero"
-    assert src.url == "https://googleprojectzero.blogspot.com/feeds/posts/default"
+    assert (
+        src.url
+        == "https://googleprojectzero.blogspot.com/feeds/posts/summary?alt=rss&max-results=25"
+    )
     assert src.category == "security"
     assert src.kind == "rss_feed"
     assert src.priority == 82
@@ -64,7 +67,10 @@ def test_google_project_zero_sync_persists_row(
     assert row is not None, "google-project-zero row missing from sources table"
     assert row["slug"] == "google-project-zero"
     assert row["name"] == "Google Project Zero"
-    assert row["url"] == "https://googleprojectzero.blogspot.com/feeds/posts/default"
+    assert (
+        row["url"]
+        == "https://googleprojectzero.blogspot.com/feeds/posts/summary?alt=rss&max-results=25"
+    )
     assert row["category"] == "security"
     assert row["kind"] == "rss_feed"
     assert row["priority"] == 82

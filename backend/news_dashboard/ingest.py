@@ -417,6 +417,7 @@ def sync_sources(db_path: Path | str | None = None) -> None:
 # community-run and can go offline — update this list if the top one breaks.
 # See https://github.com/zedeus/nitter/wiki/Instances for current options.
 _NITTER_INSTANCES: tuple[str, ...] = (
+    "xcancel.com",
     "nitter.poast.org",
     "nitter.privacydev.net",
     "nitter.net",
@@ -427,10 +428,53 @@ FEED_FETCH_TIMEOUT_SECS = 15
 # RSS/Atom feeds are rarely more than a few hundred KB; 2 MiB leaves headroom
 # for verbose feeds while bounding memory use and parse time for bad actors.
 FEED_FETCH_MAX_BYTES = 2 * 1024 * 1024
+# Some hosts (notably Reddit) rate-limit shared IPs and answer 429/503
+# transiently; a couple of backed-off retries usually clears it.
+_RETRYABLE_STATUS: frozenset[int] = frozenset({429, 503})
+FEED_FETCH_MAX_RETRIES = 2
+FEED_FETCH_RETRY_BACKOFF_SECS = 2.0
+# Cap honored Retry-After so a hostile/huge value can't stall a run.
+FEED_FETCH_RETRY_MAX_WAIT_SECS = 30.0
+
+
+def _retry_after_seconds(exc: urllib.error.HTTPError) -> float | None:
+    """Parse a numeric Retry-After header, capped; ignore HTTP-date form."""
+    headers = getattr(exc, "headers", None)
+    value = headers.get("Retry-After") if headers else None
+    if not value:
+        return None
+    try:
+        secs = float(value)
+    except (TypeError, ValueError):
+        return None
+    if secs < 0:
+        return None
+    return min(secs, FEED_FETCH_RETRY_MAX_WAIT_SECS)
+
+
+def _read_feed_response(url: str, req: urllib.request.Request) -> bytes:
+    """Perform one feed fetch, enforcing the size cap. Raises on HTTP/network errors."""
+    with open_server_fetch_url(req, timeout=FEED_FETCH_TIMEOUT_SECS) as resp:
+        content_length = resp.headers.get("Content-Length")
+        if content_length is not None:
+            # Content-Length is attacker-controlled and may be non-numeric;
+            # ignore malformed values rather than failing the fetch on them.
+            with contextlib.suppress(ValueError):
+                if int(content_length) > FEED_FETCH_MAX_BYTES:
+                    msg = (
+                        f"Feed response too large ({content_length} bytes, "
+                        f"max {FEED_FETCH_MAX_BYTES}): {url}"
+                    )
+                    raise FeedFetchError(msg)
+        content: bytes = resp.read(FEED_FETCH_MAX_BYTES + 1)
+    if len(content) > FEED_FETCH_MAX_BYTES:
+        msg = f"Feed response exceeded {FEED_FETCH_MAX_BYTES} byte limit: {url}"
+        raise FeedFetchError(msg)
+    return content
 
 
 def _fetch_feed_content(url: str) -> bytes:
-    """Fetch raw feed bytes with an explicit timeout and size cap.
+    """Fetch raw feed bytes with a timeout, size cap, and 429/503 retry.
 
     Raises FeedFetchError on failure.
     """
@@ -439,30 +483,34 @@ def _fetch_feed_content(url: str) -> bytes:
     except UnsafeUrlError as exc:
         raise FeedFetchError(str(exc)) from exc
     req = urllib.request.Request(url, headers={"User-Agent": _FEED_AGENT})  # noqa: S310
-    try:
-        with open_server_fetch_url(req, timeout=FEED_FETCH_TIMEOUT_SECS) as resp:
-            content_length = resp.headers.get("Content-Length")
-            if content_length is not None:
-                # Content-Length is attacker-controlled and may be non-numeric;
-                # ignore malformed values rather than failing the fetch on them.
-                with contextlib.suppress(ValueError):
-                    if int(content_length) > FEED_FETCH_MAX_BYTES:
-                        msg = (
-                            f"Feed response too large ({content_length} bytes, "
-                            f"max {FEED_FETCH_MAX_BYTES}): {url}"
-                        )
-                        raise FeedFetchError(msg)
-            content: bytes = resp.read(FEED_FETCH_MAX_BYTES + 1)
-    except TimeoutError as exc:
-        msg = f"Feed fetch timed out after {FEED_FETCH_TIMEOUT_SECS}s: {url}"
-        raise FeedFetchError(msg) from exc
-    except urllib.error.URLError as exc:
-        msg = f"Feed fetch network error: {exc.reason}"
-        raise FeedFetchError(msg) from exc
-    if len(content) > FEED_FETCH_MAX_BYTES:
-        msg = f"Feed response exceeded {FEED_FETCH_MAX_BYTES} byte limit: {url}"
-        raise FeedFetchError(msg)
-    return content
+    attempt = 0
+    while True:
+        try:
+            return _read_feed_response(url, req)
+        except urllib.error.HTTPError as exc:
+            if exc.code in _RETRYABLE_STATUS and attempt < FEED_FETCH_MAX_RETRIES:
+                attempt += 1
+                delay = _retry_after_seconds(exc)
+                if delay is None:
+                    delay = FEED_FETCH_RETRY_BACKOFF_SECS * attempt
+                logger.warning(
+                    "Feed %s returned HTTP %s; retry %d/%d in %.1fs",
+                    url,
+                    exc.code,
+                    attempt,
+                    FEED_FETCH_MAX_RETRIES,
+                    delay,
+                )
+                time.sleep(delay)
+                continue
+            msg = f"Feed fetch network error: {exc.reason}"
+            raise FeedFetchError(msg) from exc
+        except TimeoutError as exc:
+            msg = f"Feed fetch timed out after {FEED_FETCH_TIMEOUT_SECS}s: {url}"
+            raise FeedFetchError(msg) from exc
+        except urllib.error.URLError as exc:
+            msg = f"Feed fetch network error: {exc.reason}"
+            raise FeedFetchError(msg) from exc
 
 
 def _parse_feed_url(url: str) -> list[dict[str, Any]]:
@@ -547,10 +595,21 @@ def _fetch_nitter_feed(source: SourceDefinition) -> list[dict[str, Any]]:
     last_exc: Exception | None = None
     for instance in _NITTER_INSTANCES:
         try:
-            return _parse_feed_url(f"https://{instance}/{handle}/rss")
+            entries = _parse_feed_url(f"https://{instance}/{handle}/rss")
         except FeedFetchError as exc:
             logger.warning("Nitter %s failed for @%s: %s", instance, handle, exc)
             last_exc = exc
+            continue
+        # Nitter tweet entries always link to /<user>/status/<id>. Some instances
+        # answer with a placeholder item ("RSS reader not yet whitelisted!") or a
+        # block page instead; those carry no status links, so treat the instance
+        # as failed and try the next rather than ingesting the placeholder.
+        tweets = [e for e in entries if "/status/" in (e.get("url") or "")]
+        if tweets:
+            return tweets
+        msg = f"Nitter {instance} returned no tweets for @{handle} (placeholder or blocked)"
+        logger.warning(msg)
+        last_exc = FeedFetchError(msg)
     msg = f"All Nitter instances failed for @{handle}"
     raise FeedFetchError(msg) from last_exc
 
