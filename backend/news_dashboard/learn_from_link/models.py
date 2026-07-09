@@ -62,3 +62,34 @@ class LessonDetail(BaseModel):
     who_should_read: list[NonEmptyText] = Field(min_length=1)
     questions_to_keep_in_mind: list[NonEmptyText] = Field(min_length=1)
     citations: list[LessonCitation] = Field(min_length=1)
+
+
+class ComprehensionQuestion(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    question: NonEmptyText
+    expected_answer: NonEmptyText
+
+
+class Flashcard(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    concept: NonEmptyText
+    claim: NonEmptyText
+
+
+class QuizQuestion(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    question: NonEmptyText
+    options: list[NonEmptyText] = Field(min_length=4, max_length=4)
+    correct_index: int = Field(ge=0, le=3)
+    explanation: NonEmptyText
+
+
+class StudyArtifacts(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    comprehension_questions: list[ComprehensionQuestion] = Field(min_length=1)
+    flashcards: list[Flashcard] = Field(min_length=1)
+    quiz: list[QuizQuestion] = Field(min_length=1)

@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { LessonChat } from '@/components/LessonChat';
+import { StudyArtifactsView } from '@/components/StudyArtifactsView';
 import {
   createLessonFromLink,
   fetchLesson,
@@ -301,6 +302,10 @@ export function LearnPage() {
                 </section>
               </div>
             </div>
+          ) : null}
+
+          {hasLessonDetail && lesson.study_artifacts ? (
+            <StudyArtifactsView artifacts={lesson.study_artifacts} />
           ) : null}
 
           {hasLessonDetail ? <LessonChat lessonId={lesson.id} /> : null}

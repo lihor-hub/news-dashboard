@@ -81,6 +81,33 @@ const COMPLETE_LESSON: Lesson = {
       },
     ],
   },
+  study_artifacts: {
+    comprehension_questions: [
+      {
+        question: 'What is the primary topic of the text?',
+        expected_answer: 'Paragraph one.',
+      },
+    ],
+    flashcards: [
+      {
+        concept: 'Core Claim',
+        claim: 'Paragraph one.',
+      },
+    ],
+    quiz: [
+      {
+        question: 'Which of the following best summarizes the main point of the source?',
+        options: [
+          'Paragraph one.',
+          'A completely unrelated fact.',
+          'An incorrect assertion.',
+          'A generic fallback.',
+        ],
+        correct_index: 0,
+        explanation: 'The source content explicitly states the core claim.',
+      },
+    ],
+  },
   created_at: '2026-07-08T10:00:00Z',
   updated_at: '2026-07-08T10:01:00Z',
 };
@@ -356,5 +383,53 @@ describe('LearnPage', () => {
 
     expect(screen.getByText(/lesson generated/i)).toBeInTheDocument();
     expect(screen.getByText(/A careful article/i)).toBeInTheDocument();
+  });
+
+  it('renders study artifacts and handles tab switches/reveal/quiz actions', async () => {
+    vi.spyOn(api, 'createLessonFromLink').mockResolvedValue(COMPLETE_LESSON);
+
+    renderPage();
+    const user = userEvent.setup();
+    await user.type(screen.getByLabelText(/article url/i), 'https://example.com/article');
+    await user.click(screen.getByRole('button', { name: /generate lesson/i }));
+
+    await screen.findByText(/lesson generated/i);
+
+    // Verify Comprehension tab is active by default
+    expect(screen.getByText(/Q1: What is the primary topic of the text\?/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Paragraph one\./i)).toBeNull(); // answer hidden by default
+
+    // Click show answer
+    await user.click(screen.getByRole('button', { name: /show answer/i }));
+    expect(screen.getByText(/Paragraph one\./i)).toBeInTheDocument();
+
+    // Click hide answer
+    await user.click(screen.getByRole('button', { name: /hide answer/i }));
+    expect(screen.queryByText(/Paragraph one\./i)).toBeNull();
+
+    // Switch to Flashcards tab
+    await user.click(screen.getByRole('button', { name: /flashcards/i }));
+    expect(screen.getByText(/Core Claim/i)).toBeInTheDocument();
+    expect(screen.getByText(/Click to flip and reveal details\.\.\./i)).toBeInTheDocument();
+
+    // Click to flip
+    await user.click(screen.getByText(/Core Claim/i));
+    expect(screen.getByText(/Paragraph one\./i)).toBeInTheDocument();
+
+    // Switch to Quiz tab
+    await user.click(screen.getByRole('button', { name: /quiz/i }));
+    expect(
+      screen.getByText(
+        /Question 1: Which of the following best summarizes the main point of the source\?/i
+      )
+    ).toBeInTheDocument();
+    expect(screen.getByText(/A completely unrelated fact\./i)).toBeInTheDocument();
+
+    // Submit answer
+    await user.click(screen.getByText(/Paragraph one\./i));
+    await user.click(screen.getByRole('button', { name: /submit answer/i }));
+    expect(
+      screen.getByText(/The source content explicitly states the core claim\./i)
+    ).toBeInTheDocument();
   });
 });

@@ -641,6 +641,7 @@ POSTGRES_MULTIUSER_SCHEMA = [
       published_at TEXT,
       source_content TEXT,
       lesson_detail JSONB,
+      study_artifacts JSONB,
       generation_status TEXT NOT NULL DEFAULT 'pending'
         CHECK(generation_status IN ('pending','complete','failed')),
       generation_error TEXT,
@@ -650,6 +651,7 @@ POSTGRES_MULTIUSER_SCHEMA = [
     )
     """,
     "ALTER TABLE lessons ADD COLUMN IF NOT EXISTS lesson_detail JSONB",
+    "ALTER TABLE lessons ADD COLUMN IF NOT EXISTS study_artifacts JSONB",
     "CREATE INDEX IF NOT EXISTS idx_lessons_user_created ON lessons(user_id, created_at DESC)",
     """
     CREATE TABLE IF NOT EXISTS agent_action_runs (

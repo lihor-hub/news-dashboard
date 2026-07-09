@@ -135,6 +135,35 @@ def test_create_lesson_completes_with_extracted_content(
             }
         ],
     }
+    assert lesson["study_artifacts"] == {
+        "comprehension_questions": [
+            {
+                "question": "What is the primary topic of the text?",
+                "expected_answer": "The primary topic is: Paragraph one.",
+            }
+        ],
+        "flashcards": [
+            {
+                "concept": "Core Claim",
+                "claim": "Paragraph one.",
+            }
+        ],
+        "quiz": [
+            {
+                "question": "Which of the following best summarizes the main point of the source?",
+                "options": [
+                    "Paragraph one.",
+                    "A completely unrelated fact about the topic.",
+                    "An incorrect assertion about the author.",
+                    "A generic fallback option.",
+                ],
+                "correct_index": 0,
+                "explanation": (
+                    "The source content explicitly states the core claim: Paragraph one."
+                ),
+            }
+        ],
+    }
 
 
 def test_create_lesson_marks_failed_when_extraction_fails(
