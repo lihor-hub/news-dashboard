@@ -61,10 +61,10 @@ def test_otp_smtp_generic_env_wired_from_values() -> None:
         ]
     )
     assert "OTP_SMTP_HOST" in rendered
-    assert "smtp.example.net" in rendered
+    assert 'value: "smtp.example.net"' in rendered
     assert "OTP_SMTP_PORT" in rendered
-    assert '"2525"' in rendered
+    assert 'value: "2525"' in rendered
     assert "OTP_SMTP_FROM" in rendered
-    assert "noreply@example.net" in rendered
+    assert 'value: "noreply@example.net"' in rendered
     assert "OTP_SMTP_TLS" in rendered
-    assert "starttls" in rendered
+    assert 'value: "starttls"' in rendered
