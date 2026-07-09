@@ -122,7 +122,7 @@ export function BriefingChat({ briefingId }: { briefingId: number }) {
                 Refresh the briefing or open it from history.
               </p>
               <div className="flex gap-2 mt-3 flex-wrap">
-                <Link to="/brief">
+                <Link to="/">
                   <Button size="sm" variant="outline" onClick={() => setOpen(false)}>
                     Latest briefing
                   </Button>
