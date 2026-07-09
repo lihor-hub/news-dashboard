@@ -46,7 +46,8 @@
     "analytics": "Analityka",
     "users": "Użytkownicy",
     "offline_saved": "Offline Saved",
-    "learn": "Learn"
+    "learn": "Learn",
+    "lesson_library": "Lesson Library"
   },
   "page_title": {
     "brief": "Podsumowanie",
@@ -71,7 +72,8 @@
     "users": "Użytkownicy",
     "default": "Radar",
     "offline_saved": "Offline Saved",
-    "learn": "Learn"
+    "learn": "Learn",
+    "lesson_library": "Lesson Library"
   },
   "shell": {
     "offline": "Offline",
@@ -156,6 +158,19 @@
       "who_should_read": "Who should read",
       "questions_to_keep_in_mind": "Questions to keep in mind",
       "citations": "Citations"
+    },
+    "library": {
+      "title": "Lesson Library",
+      "description": "Browse, search, and revisit lessons you generated from articles.",
+      "search_label": "Search lessons",
+      "search_placeholder": "Search by title, URL, source, or concept",
+      "status_filter_label": "Filter by status",
+      "verdict_filter_label": "Filter by read-worthiness",
+      "back_to_library": "Back to library",
+      "not_found": "Lesson not found.",
+      "load_error": "Failed to load your lesson library.",
+      "empty": "No lessons yet. Paste a link on the Learn page.",
+      "no_matches": "No lessons match your filters."
     }
   }
 }

@@ -570,6 +570,40 @@ def generate_lesson_from_url(
     return result
 
 
+def list_lessons(
+    user_id: int,
+    *,
+    q: str | None = None,
+    status: str | None = None,
+    verdict: str | None = None,
+    database_url: str | None = None,
+) -> list[dict[str, Any]]:
+    init_db(database_url=database_url)
+    query = "SELECT * FROM lessons WHERE user_id = %s"
+    params: list[Any] = [user_id]
+    if status is not None:
+        query += " AND generation_status = %s"
+        params.append(status)
+    if verdict is not None:
+        query += " AND lesson_detail->'read_worthiness'->>'verdict' = %s"
+        params.append(verdict)
+    if q is not None and q.strip():
+        query += """
+            AND (
+                title ILIKE %s
+                OR original_url ILIKE %s
+                OR source_name ILIKE %s
+                OR lesson_detail::text ILIKE %s
+            )
+        """
+        term = f"%{q.strip()}%"
+        params.extend([term, term, term, term])
+    query += " ORDER BY created_at DESC"
+    with connect(database_url=database_url) as conn:
+        rows = conn.execute(query, params).fetchall()
+    return [_serialize_lesson(row) for row in rows]
+
+
 def get_lesson(
     lesson_id: int,
     user_id: int,

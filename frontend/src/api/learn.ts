@@ -110,6 +110,24 @@ export async function fetchLessonGenerations(id: number): Promise<LessonGenerati
   return requestJson<LessonGeneration[]>(`/api/learn/lessons/${id}/generations`);
 }
 
+export interface ListLessonsParams {
+  q?: string;
+  status?: Lesson['generation_status'];
+  verdict?: LessonReadWorthiness['verdict'];
+}
+
+export async function listLessons(params: ListLessonsParams = {}): Promise<Lesson[]> {
+  const search = new URLSearchParams();
+  if (params.q?.trim()) search.set('q', params.q.trim());
+  if (params.status) search.set('status', params.status);
+  if (params.verdict) search.set('verdict', params.verdict);
+  const query = search.toString();
+  const { lessons } = await requestJson<{ lessons: Lesson[] }>(
+    `/api/learn/lessons${query ? `?${query}` : ''}`
+  );
+  return lessons;
+}
+
 export interface LessonChatMessage {
   role: 'user' | 'assistant';
   content: string;

@@ -399,6 +399,106 @@ def test_get_lesson_is_user_scoped(pg_clean: str, monkeypatch: pytest.MonkeyPatc
     assert service.get_lesson(lesson["id"], bob, database_url=pg_clean) is None
 
 
+def test_list_lessons_orders_newest_first_and_scopes_to_user(
+    pg_clean: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("DATABASE_URL", pg_clean)
+    alice = _make_user(pg_clean, "alice")
+    bob = _make_user(pg_clean, "bob")
+
+    first = service.create_lesson(alice, "https://example.com/first", database_url=pg_clean)
+    second = service.create_lesson(alice, "https://example.com/second", database_url=pg_clean)
+    service.create_lesson(bob, "https://example.com/bobs", database_url=pg_clean)
+
+    lessons = service.list_lessons(alice, database_url=pg_clean)
+
+    assert [lesson["id"] for lesson in lessons] == [second["id"], first["id"]]
+
+
+def test_list_lessons_filters_by_status(pg_clean: str, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("DATABASE_URL", pg_clean)
+    user_id = _make_user(pg_clean)
+    completed = service.create_lesson(user_id, "https://example.com/ok", database_url=pg_clean)
+    monkeypatch.setattr(service, "extract_body", lambda _url: ("", "error"), raising=False)
+    failed = service.create_lesson(user_id, "https://example.com/bad", database_url=pg_clean)
+
+    complete_only = service.list_lessons(user_id, status="complete", database_url=pg_clean)
+    failed_only = service.list_lessons(user_id, status="failed", database_url=pg_clean)
+
+    assert [lesson["id"] for lesson in complete_only] == [completed["id"]]
+    assert [lesson["id"] for lesson in failed_only] == [failed["id"]]
+
+
+def test_list_lessons_filters_by_verdict(pg_clean: str, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("DATABASE_URL", pg_clean)
+    user_id = _make_user(pg_clean)
+    lesson = service.create_lesson(user_id, "https://example.com/short", database_url=pg_clean)
+    assert lesson["lesson_detail"]["read_worthiness"]["verdict"] == "skim"
+
+    skim_matches = service.list_lessons(user_id, verdict="skim", database_url=pg_clean)
+    study_matches = service.list_lessons(user_id, verdict="study", database_url=pg_clean)
+
+    assert [item["id"] for item in skim_matches] == [lesson["id"]]
+    assert study_matches == []
+
+
+def test_list_lessons_searches_title_url_source_and_concepts(
+    pg_clean: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("DATABASE_URL", pg_clean)
+    user_id = _make_user(pg_clean)
+    lesson = service.create_lesson(user_id, "https://example.com/story", database_url=pg_clean)
+
+    by_title = service.list_lessons(user_id, q="Title for", database_url=pg_clean)
+    by_url = service.list_lessons(user_id, q="example.com/story", database_url=pg_clean)
+    by_source = service.list_lessons(user_id, q="Example Source", database_url=pg_clean)
+    by_concept = service.list_lessons(
+        user_id, q=lesson["lesson_detail"]["prerequisite_concepts"][0], database_url=pg_clean
+    )
+    no_match = service.list_lessons(user_id, q="no such thing anywhere", database_url=pg_clean)
+
+    assert [item["id"] for item in by_title] == [lesson["id"]]
+    assert [item["id"] for item in by_url] == [lesson["id"]]
+    assert [item["id"] for item in by_source] == [lesson["id"]]
+    assert [item["id"] for item in by_concept] == [lesson["id"]]
+    assert no_match == []
+
+
+def test_list_lessons_endpoint_is_user_scoped(
+    pg_clean: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("DATABASE_URL", pg_clean)
+    init_db(database_url=pg_clean)
+    alice = _make_user(pg_clean, "alice")
+    bob = _make_user(pg_clean, "bob")
+    lesson = service.create_lesson(alice, "https://example.com/a", database_url=pg_clean)
+    service.create_lesson(bob, "https://example.com/b", database_url=pg_clean)
+
+    with _api_client(alice) as client:
+        response = client.get("/api/learn/lessons")
+
+    assert response.status_code == 200
+    body = response.json()["lessons"]
+    assert [item["id"] for item in body] == [lesson["id"]]
+
+
+def test_list_lessons_endpoint_supports_query_params(
+    pg_clean: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("DATABASE_URL", pg_clean)
+    init_db(database_url=pg_clean)
+    user_id = _make_user(pg_clean)
+    service.create_lesson(user_id, "https://example.com/a", database_url=pg_clean)
+
+    with _api_client(user_id) as client:
+        response = client.get(
+            "/api/learn/lessons", params={"status": "complete", "verdict": "skim", "q": "example"}
+        )
+
+    assert response.status_code == 200
+    assert len(response.json()["lessons"]) == 1
+
+
 def test_create_lesson_duplicate_resets_pending_state(
     pg_clean: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
