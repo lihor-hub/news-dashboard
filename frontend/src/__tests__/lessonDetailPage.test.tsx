@@ -26,6 +26,8 @@ const COMPLETE_LESSON: Lesson = {
   source_content: 'body content',
   generation_status: 'complete',
   generation_error: null,
+  depth: 'normal',
+  persona: 'developer',
   lesson_detail: {
     gist: 'gist text',
     explanation: 'explanation text',
