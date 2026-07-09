@@ -9,7 +9,6 @@
     "@fontsource-variable/inter",
     "@fontsource-variable/jetbrains-mono",
     "@fontsource-variable/source-serif-4",
-    "@bubblewrap/core",
     "@resvg/resvg-js",
     "axe-core"
   ],
