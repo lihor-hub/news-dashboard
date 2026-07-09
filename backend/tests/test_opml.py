@@ -178,6 +178,48 @@ def test_import_opml_skips_duplicates(client: TestClient, pg_clean: str) -> None
     assert data["skipped"][0]["reason"] == "duplicate"
 
 
+def test_import_opml_allows_cross_user_slug_reuse(pg_clean: str) -> None:
+    """A different user importing the same feed name should not be skipped as a
+    duplicate just because another user already owns a private source with the
+    same requested slug."""
+    from news_dashboard.auth import require_admin, require_auth
+
+    _seed_sources(pg_clean)  # owner_user_id=1 already owns slug 'arxiv' ("ArXiv AI")
+    with connect(database_url=pg_clean) as conn:
+        conn.execute(
+            "INSERT INTO users(id, username, password_hash, is_admin)"
+            " VALUES (2, 'reader2', 'x', FALSE)"
+        )
+
+    other_user = {"id": 2, "username": "reader2", "email": None, "is_admin": False}
+    app.dependency_overrides[require_auth] = lambda: other_user
+    app.dependency_overrides[require_admin] = lambda: other_user
+    try:
+        with TestClient(app, raise_server_exceptions=True) as client2:
+            opml_same_name = """\
+<?xml version="1.0" encoding="UTF-8"?>
+<opml version="2.0">
+  <head><title>User2 feeds</title></head>
+  <body>
+    <outline type="rss" text="ArXiv AI" xmlUrl="https://example.com/user2-arxiv-rss" />
+  </body>
+</opml>
+"""
+            response = client2.post(
+                "/api/sources/import",
+                files={"file": ("subs.opml", BytesIO(opml_same_name.encode()), "application/xml")},
+            )
+    finally:
+        app.dependency_overrides.pop(require_auth, None)
+        app.dependency_overrides.pop(require_admin, None)
+
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data["added"]) == 1
+    assert len(data["skipped"]) == 0
+    assert data["added"][0]["owner_user_id"] == 2
+
+
 def test_import_opml_rejects_malformed_xml(client: TestClient, pg_clean: str) -> None:
     init_db(database_url=pg_clean)
     with connect(database_url=pg_clean) as conn:

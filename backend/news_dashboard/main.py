@@ -511,6 +511,18 @@ class CreateSourceRequest(BaseModel):
         return slug
 
 
+def _private_source_slug(owner_user_id: int, slug: str) -> str:
+    """Namespace a requested slug to the owning user's private source rows.
+
+    ``sources.slug`` is a global primary key, so two users requesting the same
+    human-friendly slug (e.g. "my-blog") would otherwise collide with a 409 even
+    though each source is private to its owner. Namespacing the stored slug by
+    owner keeps the requested name available to every user while the primary
+    key stays globally unique.
+    """
+    return f"u{owner_user_id}-{slug}"[:120]
+
+
 class PreviewSourceRequest(BaseModel):
     url: str
     kind: str = "rss_feed"
@@ -1553,13 +1565,16 @@ def create_source(
     except UnsafeUrlError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-    slug = payload.validated_slug(payload.name)
+    requested_slug = payload.validated_slug(payload.name)
+    slug = _private_source_slug(uid, requested_slug)
 
     init_db()
     with connect() as conn:
         existing = conn.execute("SELECT 1 FROM sources WHERE slug = %s", (slug,)).fetchone()
         if existing:
-            raise HTTPException(status_code=409, detail=f"source slug '{slug}' already exists")
+            raise HTTPException(
+                status_code=409, detail=f"source slug '{requested_slug}' already exists"
+            )
         conn.execute(
             """
             INSERT INTO sources(slug, name, url, category, kind, priority, enabled, owner_user_id)
@@ -1809,15 +1824,16 @@ def import_opml(
                 url=xml_url, name=name, category=category, kind="rss_feed"
             )
             try:
-                slug = payload.validated_slug(name)
+                slug = _private_source_slug(uid, payload.validated_slug(name))
             except HTTPException:
                 failed.append({"url": xml_url, "error": "could not derive a valid slug"})
                 continue
 
-            # Skip duplicates: slug is globally unique (primary key), so a slug collision
-            # with anyone's source would fail the insert. For the URL, only match sources
-            # already visible to this user (their own, or a global default) — a different
-            # user's private source sharing the same URL is not a duplicate for this user.
+            # Skip duplicates: the namespaced slug is only reused if this same user already
+            # imported it, so it never collides with another user's private source. For the
+            # URL, only match sources already visible to this user (their own, or a global
+            # default) — a different user's private source sharing the same URL is not a
+            # duplicate for this user.
             existing = conn.execute(
                 """
                 SELECT 1 FROM sources
