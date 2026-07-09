@@ -61,6 +61,41 @@ class TestVultureWhitelistExists(unittest.TestCase):
         )
 
 
+class TestNoDuplicateDocusaurusSourceFiles(unittest.TestCase):
+    """A compiled/generated ``.js`` file checked in beside its ``.tsx`` source under
+    ``website/src`` makes Docusaurus register the same page or component twice
+    (e.g. a duplicate `/` route warning) because both files export a component
+    for the same route or import path. Guard against that pairing recurring.
+    """
+
+    _SOURCE_DIRS: ClassVar[list[str]] = ["pages", "components"]
+    _JS_EXTENSIONS: ClassVar[set[str]] = {".js", ".jsx"}
+    _TS_EXTENSIONS: ClassVar[set[str]] = {".ts", ".tsx"}
+
+    def test_no_js_and_ts_pair_share_a_basename(self) -> None:
+        website_src = ROOT / "website" / "src"
+        violations: list[str] = []
+        for subdir in self._SOURCE_DIRS:
+            base = website_src / subdir
+            if not base.is_dir():
+                continue
+            for path in base.rglob("*"):
+                if not path.is_file() or path.suffix not in self._JS_EXTENSIONS:
+                    continue
+                stem_dir = path.parent
+                for ts_ext in self._TS_EXTENSIONS:
+                    ts_sibling = stem_dir / f"{path.stem}{ts_ext}"
+                    if ts_sibling.is_file():
+                        violations.append(
+                            f"{path.relative_to(ROOT)} duplicates {ts_sibling.relative_to(ROOT)}"
+                        )
+        assert not violations, (
+            "Docusaurus source files must not have both a compiled .js/.jsx and a "
+            ".ts/.tsx file with the same name (causes duplicate route/component "
+            "registration):\n" + "\n".join(violations)
+        )
+
+
 class TestNoPrivatePersonalPhrases(unittest.TestCase):
     _FORBIDDEN: ClassVar[list[str]] = ["private personal", "for Ioachim"]
     _EXTENSIONS: ClassVar[set[str]] = {".py", ".md", ".toml", ".ts", ".tsx", ".txt", ".rst"}
