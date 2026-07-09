@@ -8,7 +8,11 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 
 from news_dashboard.auth import require_auth
 from news_dashboard.learn_from_link import service
-from news_dashboard.learn_from_link.models import LessonCreateRequest, LessonQuestionRequest
+from news_dashboard.learn_from_link.models import (
+    LessonCreateRequest,
+    LessonQuestionRequest,
+    LessonRegenerateRequest,
+)
 
 router = APIRouter()
 
@@ -23,6 +27,8 @@ def create_lesson_endpoint(
         lesson = service.create_lesson(
             current_user["id"],
             payload.url,
+            depth=payload.depth,
+            persona=payload.persona,
             extract=False,
         )
         background_tasks.add_task(
@@ -44,6 +50,41 @@ def get_lesson_endpoint(
     if lesson is None:
         raise HTTPException(status_code=404, detail="lesson not found")
     return lesson
+
+
+@router.post("/api/learn/lessons/{lesson_id}/regenerate")
+def regenerate_lesson_endpoint(
+    lesson_id: int,
+    payload: LessonRegenerateRequest,
+    background_tasks: BackgroundTasks,
+    current_user: Annotated[dict[str, Any], Depends(require_auth)],
+) -> dict[str, Any]:
+    try:
+        lesson = service.regenerate_lesson(
+            lesson_id,
+            current_user["id"],
+            depth=payload.depth,
+            persona=payload.persona,
+        )
+    except service.LessonNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="lesson not found") from exc
+    background_tasks.add_task(
+        service.generate_lesson_from_url,
+        lesson_id,
+        current_user["id"],
+    )
+    return lesson
+
+
+@router.get("/api/learn/lessons/{lesson_id}/generations")
+def list_lesson_generations_endpoint(
+    lesson_id: int,
+    current_user: Annotated[dict[str, Any], Depends(require_auth)],
+) -> list[dict[str, Any]]:
+    try:
+        return service.list_lesson_generations(lesson_id, current_user["id"])
+    except service.LessonNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="lesson not found") from exc
 
 
 @router.post("/api/learn/lessons/{lesson_id}/questions")

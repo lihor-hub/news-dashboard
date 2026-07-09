@@ -14,9 +14,23 @@ QuestionText = Annotated[
 
 MAX_LESSON_CHAT_HISTORY_ITEMS = 50
 
+LessonDepth = Literal["tiny", "normal", "deep", "expert"]
+LessonPersona = Literal["developer", "product_builder", "new_to_ai", "preparing_talk"]
+
 
 class LessonCreateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     url: str
+    depth: LessonDepth = "normal"
+    persona: LessonPersona = "developer"
+
+
+class LessonRegenerateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    depth: LessonDepth = "normal"
+    persona: LessonPersona = "developer"
 
 
 class LessonChatMessage(BaseModel):

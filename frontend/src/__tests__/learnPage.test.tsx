@@ -10,7 +10,7 @@ import type { Lesson } from '../api';
 import * as api from '../api';
 
 const { translationSpy } = vi.hoisted(() => ({
-  translationSpy: vi.fn((key: string) => {
+  translationSpy: vi.fn((key: string, options?: Record<string, string | number>) => {
     const translations: Record<string, string> = {
       'learn.title': 'Learn',
       'learn.description': 'Turn one article into a compact lesson you can review inside Radar.',
@@ -33,8 +33,28 @@ const { translationSpy } = vi.hoisted(() => ({
       'learn.detail.who_should_read': 'Who Should Read Translated',
       'learn.detail.questions_to_keep_in_mind': 'Questions to Keep in Mind Translated',
       'learn.detail.citations': 'Citations Translated',
+      'learn.controls.depth_label': 'Explanation depth',
+      'learn.controls.persona_label': 'Learning persona',
+      'learn.controls.depth.tiny': 'Tiny',
+      'learn.controls.depth.normal': 'Normal',
+      'learn.controls.depth.deep': 'Deep',
+      'learn.controls.depth.expert': 'Expert',
+      'learn.controls.persona.developer': 'Developer',
+      'learn.controls.persona.product_builder': 'Product builder',
+      'learn.controls.persona.new_to_ai': 'New to AI',
+      'learn.controls.persona.preparing_talk': 'Preparing a talk',
+      'learn.controls.regenerate': 'Regenerate lesson',
+      'learn.controls.regenerating': 'Regenerating...',
+      'learn.controls.regenerate_error': 'Failed to regenerate lesson',
+      'learn.controls.active_summary': 'Generated for {{persona}} at {{depth}} depth',
+      'learn.controls.history_summary': '{{count}} prior generations saved',
     };
-    return translations[key] ?? key;
+    const template = translations[key] ?? key;
+    if (!options) return template;
+    return Object.entries(options).reduce(
+      (result, [name, value]) => result.replaceAll(`{{${name}}}`, String(value)),
+      template
+    );
   }),
 }));
 
@@ -61,6 +81,8 @@ const COMPLETE_LESSON: Lesson = {
   source_content: 'A compact but useful article body preview.',
   generation_status: 'complete',
   generation_error: null,
+  depth: 'normal',
+  persona: 'developer',
   lesson_detail: {
     gist: 'The article argues that strong source selection matters more than raw volume.',
     explanation:
@@ -181,7 +203,30 @@ describe('learn API client', () => {
 
     expect(result).toEqual(COMPLETE_LESSON);
     expect(global.fetch).toHaveBeenCalledWith('/api/learn/lessons', {
-      body: JSON.stringify({ url: 'https://example.com/article' }),
+      body: JSON.stringify({
+        url: 'https://example.com/article',
+        depth: 'normal',
+        persona: 'developer',
+      }),
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      method: 'POST',
+    });
+  });
+
+  it('posts depth and persona controls when regenerating a lesson', async () => {
+    vi.mocked(global.fetch).mockResolvedValue(
+      new Response(JSON.stringify(COMPLETE_LESSON), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      })
+    );
+
+    const result = await api.regenerateLesson(7, 'deep', 'new_to_ai');
+
+    expect(result).toEqual(COMPLETE_LESSON);
+    expect(global.fetch).toHaveBeenCalledWith('/api/learn/lessons/7/regenerate', {
+      body: JSON.stringify({ depth: 'deep', persona: 'new_to_ai' }),
       credentials: 'same-origin',
       headers: { 'Content-Type': 'application/json' },
       method: 'POST',
@@ -210,6 +255,7 @@ describe('LearnPage', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
     translationSpy.mockClear();
+    vi.spyOn(api, 'fetchLessonGenerations').mockResolvedValue([]);
   });
 
   afterEach(() => {
@@ -448,5 +494,75 @@ describe('LearnPage', () => {
     expect(
       screen.getByText(/The source content explicitly states the core claim\./i)
     ).toBeInTheDocument();
+  });
+
+  it('sends the selected depth and persona when generating a lesson', async () => {
+    const createSpy = vi
+      .spyOn(api, 'createLessonFromLink')
+      .mockResolvedValue({ ...COMPLETE_LESSON, depth: 'deep', persona: 'new_to_ai' });
+
+    renderPage();
+    const user = userEvent.setup();
+    await user.type(screen.getByLabelText(/article url/i), 'https://example.com/article');
+    await user.selectOptions(screen.getByLabelText(/explanation depth/i), 'deep');
+    await user.selectOptions(screen.getByLabelText(/learning persona/i), 'new_to_ai');
+    await user.click(screen.getByRole('button', { name: /generate lesson/i }));
+
+    await screen.findByText(/lesson generated/i);
+    expect(createSpy).toHaveBeenCalledWith('https://example.com/article', 'deep', 'new_to_ai');
+    expect(screen.getByText(/generated for new to ai at deep depth/i)).toBeInTheDocument();
+  });
+
+  it('regenerates a lesson with the currently selected controls', async () => {
+    vi.spyOn(api, 'createLessonFromLink').mockResolvedValue(COMPLETE_LESSON);
+    const regenerateSpy = vi.spyOn(api, 'regenerateLesson').mockResolvedValue({
+      ...COMPLETE_LESSON,
+      depth: 'tiny',
+      persona: 'preparing_talk',
+    });
+
+    renderPage();
+    const user = userEvent.setup();
+    await user.type(screen.getByLabelText(/article url/i), 'https://example.com/article');
+    await user.click(screen.getByRole('button', { name: /generate lesson/i }));
+    await screen.findByText(/lesson generated/i);
+
+    await user.selectOptions(screen.getByLabelText(/explanation depth/i), 'tiny');
+    await user.selectOptions(screen.getByLabelText(/learning persona/i), 'preparing_talk');
+    await user.click(screen.getByRole('button', { name: /regenerate lesson/i }));
+
+    await screen.findByText(/generated for preparing a talk at tiny depth/i);
+    expect(regenerateSpy).toHaveBeenCalledWith(COMPLETE_LESSON.id, 'tiny', 'preparing_talk');
+  });
+
+  it('shows an error when regeneration fails', async () => {
+    vi.spyOn(api, 'createLessonFromLink').mockResolvedValue(COMPLETE_LESSON);
+    vi.spyOn(api, 'regenerateLesson').mockRejectedValue(new HttpError(500, 'server exploded'));
+
+    renderPage();
+    const user = userEvent.setup();
+    await user.type(screen.getByLabelText(/article url/i), 'https://example.com/article');
+    await user.click(screen.getByRole('button', { name: /generate lesson/i }));
+    await screen.findByText(/lesson generated/i);
+
+    await user.click(screen.getByRole('button', { name: /regenerate lesson/i }));
+
+    await screen.findByText(/server exploded/i);
+  });
+
+  it('shows a history summary once a lesson has more than one saved generation', async () => {
+    vi.spyOn(api, 'createLessonFromLink').mockResolvedValue(COMPLETE_LESSON);
+    vi.spyOn(api, 'fetchLessonGenerations').mockResolvedValue([
+      { ...COMPLETE_LESSON, id: 1, lesson_id: 7, generation_status: 'complete' },
+      { ...COMPLETE_LESSON, id: 2, lesson_id: 7, generation_status: 'complete' },
+    ]);
+
+    renderPage();
+    const user = userEvent.setup();
+    await user.type(screen.getByLabelText(/article url/i), 'https://example.com/article');
+    await user.click(screen.getByRole('button', { name: /generate lesson/i }));
+    await screen.findByText(/lesson generated/i);
+
+    await screen.findByText(/2 prior generations saved/i);
   });
 });

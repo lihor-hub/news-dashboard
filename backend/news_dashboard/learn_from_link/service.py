@@ -13,7 +13,12 @@ from pydantic import ValidationError
 
 from news_dashboard.body_fetch import extract_body
 from news_dashboard.db import connect, init_db, row_to_dict
-from news_dashboard.learn_from_link.models import LessonDetail, StudyArtifacts
+from news_dashboard.learn_from_link.models import (
+    LessonDepth,
+    LessonDetail,
+    LessonPersona,
+    StudyArtifacts,
+)
 from news_dashboard.reading_list.metadata import fetch_url_metadata
 from news_dashboard.reading_list.service import normalize_url
 from news_dashboard.url_safety import UnsafeUrlError, validate_server_fetch_url
@@ -26,6 +31,25 @@ class StudyArtifactsValidationError(ValueError):
 logger = logging.getLogger(__name__)
 
 DEFAULT_LESSON_CHAT_MODEL = "gpt-4o-mini"
+
+_DEPTH_EXPLANATION_LIMITS: dict[str, int] = {
+    "tiny": 150,
+    "normal": 600,
+    "deep": 1500,
+    "expert": 4000,
+}
+_DEPTH_KEY_CLAIM_COUNTS: dict[str, int] = {
+    "tiny": 1,
+    "normal": 3,
+    "deep": 5,
+    "expert": 8,
+}
+_PERSONA_FRAMING: dict[str, str] = {
+    "developer": "for developers weighing implementation details",
+    "product_builder": "for product builders assessing user impact",
+    "new_to_ai": "for readers new to AI who want a clear on-ramp",
+    "preparing_talk": "for someone preparing a talk on this topic",
+}
 
 _LESSON_CHAT_SYSTEM_PROMPT = """\
 You are the Lesson Follow-up Assistant. Answer follow-up questions about the \
@@ -85,6 +109,8 @@ def create_lesson(
     user_id: int,
     url: str,
     *,
+    depth: LessonDepth = "normal",
+    persona: LessonPersona = "developer",
     database_url: str | None = None,
     extract: bool = True,
 ) -> dict[str, Any]:
@@ -104,9 +130,11 @@ def create_lesson(
               original_url,
               normalized_url,
               generation_status,
-              generation_error
+              generation_error,
+              depth,
+              persona
             )
-            VALUES (%s, %s, %s, 'pending', NULL)
+            VALUES (%s, %s, %s, 'pending', NULL, %s, %s)
             ON CONFLICT (user_id, normalized_url) DO UPDATE
             SET generation_status = 'pending',
                 generation_error = NULL,
@@ -116,10 +144,12 @@ def create_lesson(
                 published_at = NULL,
                 source_content = NULL,
                 lesson_detail = NULL,
+                depth = %s,
+                persona = %s,
                 updated_at = NOW()
             RETURNING *
             """,
-            (user_id, cleaned, normalized),
+            (user_id, cleaned, normalized, depth, persona, depth, persona),
         ).fetchone()
     lesson = _serialize_lesson(row)
     if not extract:
@@ -129,6 +159,39 @@ def create_lesson(
         user_id,
         database_url=database_url,
     )
+
+
+def regenerate_lesson(
+    lesson_id: int,
+    user_id: int,
+    *,
+    depth: LessonDepth,
+    persona: LessonPersona,
+    database_url: str | None = None,
+) -> dict[str, Any]:
+    """Mark a lesson pending regeneration under new depth/persona controls.
+
+    Prior generations remain in ``lesson_generations`` history; only the
+    current-generation controls on the ``lessons`` row are replaced.
+    """
+    init_db(database_url=database_url)
+    with connect(database_url=database_url) as conn:
+        row = conn.execute(
+            """
+            UPDATE lessons
+            SET depth = %s,
+                persona = %s,
+                generation_status = 'pending',
+                generation_error = NULL,
+                updated_at = NOW()
+            WHERE id = %s AND user_id = %s
+            RETURNING *
+            """,
+            (depth, persona, lesson_id, user_id),
+        ).fetchone()
+    if row is None:
+        raise LessonNotFoundError
+    return _serialize_lesson(row)
 
 
 def _update_lesson_success(
@@ -203,6 +266,37 @@ def _update_lesson_failure(
     return _serialize_lesson(row)
 
 
+def _record_lesson_generation(
+    lesson_id: int,
+    *,
+    depth: str,
+    persona: str,
+    generation_status: str,
+    lesson_detail: dict[str, Any] | None,
+    generation_error: str | None,
+    database_url: str | None = None,
+) -> None:
+    """Append an immutable history row for a completed or failed generation."""
+    init_db(database_url=database_url)
+    with connect(database_url=database_url) as conn:
+        conn.execute(
+            """
+            INSERT INTO lesson_generations (
+              lesson_id, depth, persona, lesson_detail, generation_status, generation_error
+            )
+            VALUES (%s, %s, %s, %s::jsonb, %s, %s)
+            """,
+            (
+                lesson_id,
+                depth,
+                persona,
+                Jsonb(lesson_detail) if lesson_detail is not None else None,
+                generation_status,
+                generation_error,
+            ),
+        )
+
+
 def _sentences(text: str) -> list[str]:
     compact = re.sub(r"\s+", " ", text).strip()
     if not compact:
@@ -223,13 +317,19 @@ def _normalized_text(text: str) -> str:
     return re.sub(r"\s+", " ", text).strip().lower()
 
 
-def generate_structured_lesson_detail(lesson_fields: dict[str, Any]) -> dict[str, Any]:
+def generate_structured_lesson_detail(
+    lesson_fields: dict[str, Any],
+    *,
+    depth: LessonDepth = "normal",
+    persona: LessonPersona = "developer",
+) -> dict[str, Any]:
     source_content = str(lesson_fields["source_content"])
     title = str(lesson_fields["title"] or lesson_fields["original_url"])
     source_name = lesson_fields.get("source_name")
     sentence_list = _sentences(source_content)
     gist = sentence_list[0] if sentence_list else _clip(source_content, 180)
-    key_claims = sentence_list[:3] or [gist]
+    claim_count = _DEPTH_KEY_CLAIM_COUNTS[depth]
+    key_claims = sentence_list[:claim_count] or [gist]
     source_label = str(source_name or "the source")
     if len(source_content) >= 2000:
         verdict = "study"
@@ -241,17 +341,26 @@ def generate_structured_lesson_detail(lesson_fields: dict[str, Any]) -> dict[str
         verdict = "skim"
         rationale = "Start with a skim: the source is short enough to inspect quickly."
 
+    explanation_limit = _DEPTH_EXPLANATION_LIMITS[depth]
+    framing = _PERSONA_FRAMING[persona]
+
     return {
         "gist": gist,
-        "explanation": source_content if len(source_content) <= 600 else _clip(source_content, 600),
+        "explanation": source_content
+        if len(source_content) <= explanation_limit
+        else _clip(source_content, explanation_limit),
         "key_claims": key_claims,
         "prerequisite_concepts": [f"Context from {source_label}"],
-        "why_it_matters": f"It helps you decide whether {title} deserves deeper reading.",
+        "why_it_matters": (
+            f"It helps you decide whether {title} deserves deeper reading, {framing}."
+        ),
         "read_worthiness": {
             "verdict": verdict,
             "rationale": rationale,
         },
-        "who_should_read": ["Readers deciding whether to spend more time with this source."],
+        "who_should_read": [
+            f"Readers deciding whether to spend more time with this source, {framing}."
+        ],
         "questions_to_keep_in_mind": [
             "What evidence does the source provide for its central claim?"
         ],
@@ -339,6 +448,43 @@ def generate_study_artifacts(lesson_fields: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _build_lesson_detail(
+    lesson_fields: dict[str, Any],
+    depth: LessonDepth,
+    persona: LessonPersona,
+    lesson_id: int,
+) -> tuple[dict[str, Any] | None, str | None]:
+    try:
+        raw_detail = generate_structured_lesson_detail(lesson_fields, depth=depth, persona=persona)
+        detail = validate_structured_lesson_detail(raw_detail, lesson_fields=lesson_fields)
+    except LessonDetailValidationError:
+        logger.warning("lesson detail validation failed for lesson %d", lesson_id)
+        return None, "Generated lesson detail was malformed."
+    except LessonCitationValidationError:
+        logger.warning("lesson citation validation failed for lesson %d", lesson_id)
+        return None, "Generated lesson citations did not match source content."
+    except Exception as exc:
+        logger.warning("lesson detail generation failed for lesson %d: %s", lesson_id, exc)
+        return None, "Generated lesson detail was malformed."
+    return detail, None
+
+
+def _build_study_artifacts(
+    lesson_fields: dict[str, Any],
+    lesson_id: int,
+) -> tuple[dict[str, Any] | None, str | None]:
+    try:
+        raw_artifacts = generate_study_artifacts(lesson_fields)
+        artifacts = validate_study_artifacts(raw_artifacts)
+    except StudyArtifactsValidationError:
+        logger.warning("study artifacts validation failed for lesson %d", lesson_id)
+        return None, "Generated study artifacts were malformed."
+    except Exception as exc:
+        logger.warning("study artifacts generation failed for lesson %d: %s", lesson_id, exc)
+        return None, "Generated study artifacts were malformed."
+    return artifacts, None
+
+
 def generate_lesson_from_url(
     lesson_id: int,
     user_id: int,
@@ -349,6 +495,27 @@ def generate_lesson_from_url(
     if lesson is None:
         raise LessonNotFoundError
 
+    depth = lesson["depth"]
+    persona = lesson["persona"]
+
+    def _fail(error_message: str) -> dict[str, Any]:
+        result = _update_lesson_failure(
+            lesson_id,
+            user_id,
+            error_message,
+            database_url=database_url,
+        )
+        _record_lesson_generation(
+            lesson_id,
+            depth=depth,
+            persona=persona,
+            generation_status="failed",
+            lesson_detail=None,
+            generation_error=error_message,
+            database_url=database_url,
+        )
+        return result
+
     lesson_url = str(lesson["original_url"])
     metadata: dict[str, Any] = {}
     try:
@@ -356,24 +523,15 @@ def generate_lesson_from_url(
     except Exception as exc:
         logger.warning("lesson metadata fetch failed for %r: %s", lesson_url, exc)
 
-    error_msg = None
-    body_text = ""
     try:
         body, status = extract_body(lesson_url)
-        body_text = body.strip()
-        if status != "ok" or not body_text:
-            error_msg = "Could not extract readable article content."
     except Exception as exc:
         logger.warning("lesson body extraction failed for %r: %s", lesson_url, exc)
-        error_msg = "Could not extract readable article content."
+        return _fail("Could not extract readable article content.")
 
-    if error_msg:
-        return _update_lesson_failure(
-            lesson_id,
-            user_id,
-            error_msg,
-            database_url=database_url,
-        )
+    body_text = body.strip()
+    if status != "ok" or not body_text:
+        return _fail("Could not extract readable article content.")
 
     lesson_fields: dict[str, Any] = {
         "original_url": lesson_url,
@@ -383,54 +541,33 @@ def generate_lesson_from_url(
         "published_at": metadata.get("published_at"),
         "source_content": body_text,
     }
-    try:
-        raw_detail = generate_structured_lesson_detail(lesson_fields)
-        lesson_fields["lesson_detail"] = validate_structured_lesson_detail(
-            raw_detail,
-            lesson_fields=lesson_fields,
-        )
-    except LessonDetailValidationError:
-        logger.warning("lesson detail validation failed for lesson %d", lesson_id)
-        error_msg = "Generated lesson detail was malformed."
-    except LessonCitationValidationError:
-        logger.warning("lesson citation validation failed for lesson %d", lesson_id)
-        error_msg = "Generated lesson citations did not match source content."
-    except Exception as exc:
-        logger.warning("lesson detail generation failed for lesson %d: %s", lesson_id, exc)
-        error_msg = "Generated lesson detail was malformed."
 
-    if error_msg:
-        return _update_lesson_failure(
-            lesson_id,
-            user_id,
-            error_msg,
-            database_url=database_url,
-        )
+    detail, detail_error = _build_lesson_detail(lesson_fields, depth, persona, lesson_id)
+    if detail_error:
+        return _fail(detail_error)
+    lesson_fields["lesson_detail"] = detail
 
-    try:
-        raw_artifacts = generate_study_artifacts(lesson_fields)
-        lesson_fields["study_artifacts"] = validate_study_artifacts(raw_artifacts)
-    except StudyArtifactsValidationError:
-        logger.warning("study artifacts validation failed for lesson %d", lesson_id)
-        error_msg = "Generated study artifacts were malformed."
-    except Exception as exc:
-        logger.warning("study artifacts generation failed for lesson %d: %s", lesson_id, exc)
-        error_msg = "Generated study artifacts were malformed."
+    artifacts, artifacts_error = _build_study_artifacts(lesson_fields, lesson_id)
+    if artifacts_error:
+        return _fail(artifacts_error)
+    lesson_fields["study_artifacts"] = artifacts
 
-    if error_msg:
-        return _update_lesson_failure(
-            lesson_id,
-            user_id,
-            error_msg,
-            database_url=database_url,
-        )
-
-    return _update_lesson_success(
+    result = _update_lesson_success(
         lesson_id,
         user_id,
         lesson_fields=lesson_fields,
         database_url=database_url,
     )
+    _record_lesson_generation(
+        lesson_id,
+        depth=depth,
+        persona=persona,
+        generation_status="complete",
+        lesson_detail=lesson_fields["lesson_detail"],
+        generation_error=None,
+        database_url=database_url,
+    )
+    return result
 
 
 def get_lesson(
@@ -448,6 +585,39 @@ def get_lesson(
     if row is None:
         return None
     return _serialize_lesson(row)
+
+
+def list_lesson_generations(
+    lesson_id: int,
+    user_id: int,
+    *,
+    database_url: str | None = None,
+) -> list[dict[str, Any]]:
+    """Return prior generation history for a lesson, newest first.
+
+    Raises LessonNotFoundError if the lesson does not exist for this user.
+    """
+    if get_lesson(lesson_id, user_id, database_url=database_url) is None:
+        raise LessonNotFoundError
+
+    init_db(database_url=database_url)
+    with connect(database_url=database_url) as conn:
+        rows = conn.execute(
+            """
+            SELECT * FROM lesson_generations
+            WHERE lesson_id = %s
+            ORDER BY created_at DESC
+            """,
+            (lesson_id,),
+        ).fetchall()
+
+    generations = []
+    for row in rows:
+        generation = row_to_dict(row)
+        if generation.get("created_at") is not None:
+            generation["created_at"] = generation["created_at"].isoformat()
+        generations.append(generation)
+    return generations
 
 
 def _lesson_chat_ai_config() -> tuple[str, str | None]:

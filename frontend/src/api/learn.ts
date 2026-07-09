@@ -1,5 +1,8 @@
 import { requestJson } from './core';
 
+export type LessonDepth = 'tiny' | 'normal' | 'deep' | 'expert';
+export type LessonPersona = 'developer' | 'product_builder' | 'new_to_ai' | 'preparing_talk';
+
 export interface LessonReadWorthiness {
   verdict: 'skip' | 'skim' | 'read' | 'study';
   rationale: string;
@@ -60,19 +63,51 @@ export interface Lesson {
   generation_error: string | null;
   lesson_detail: LessonDetail | null;
   study_artifacts: StudyArtifacts | null;
+  depth: LessonDepth;
+  persona: LessonPersona;
   created_at: string;
   updated_at: string;
 }
 
-export async function createLessonFromLink(url: string): Promise<Lesson> {
+export interface LessonGeneration {
+  id: number;
+  lesson_id: number;
+  depth: LessonDepth;
+  persona: LessonPersona;
+  lesson_detail: LessonDetail | null;
+  generation_status: 'complete' | 'failed';
+  generation_error: string | null;
+  created_at: string;
+}
+
+export async function createLessonFromLink(
+  url: string,
+  depth: LessonDepth = 'normal',
+  persona: LessonPersona = 'developer'
+): Promise<Lesson> {
   return requestJson<Lesson>('/api/learn/lessons', {
     method: 'POST',
-    body: JSON.stringify({ url }),
+    body: JSON.stringify({ url, depth, persona }),
   });
 }
 
 export async function fetchLesson(id: number): Promise<Lesson> {
   return requestJson<Lesson>(`/api/learn/lessons/${id}`);
+}
+
+export async function regenerateLesson(
+  id: number,
+  depth: LessonDepth,
+  persona: LessonPersona
+): Promise<Lesson> {
+  return requestJson<Lesson>(`/api/learn/lessons/${id}/regenerate`, {
+    method: 'POST',
+    body: JSON.stringify({ depth, persona }),
+  });
+}
+
+export async function fetchLessonGenerations(id: number): Promise<LessonGeneration[]> {
+  return requestJson<LessonGeneration[]>(`/api/learn/lessons/${id}/generations`);
 }
 
 export interface LessonChatMessage {
