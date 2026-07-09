@@ -12,6 +12,7 @@ from news_dashboard.learn_from_link.models import (
     LessonCreateRequest,
     LessonQuestionRequest,
     LessonRegenerateRequest,
+    RelevanceFeedbackRequest,
 )
 
 router = APIRouter()
@@ -118,3 +119,19 @@ def ask_lesson_question_endpoint(
     except service.LessonChatNotConfiguredError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     return {"reply": reply}
+
+
+@router.post("/api/learn/lessons/{lesson_id}/relevance/feedback")
+def submit_relevance_feedback_endpoint(
+    lesson_id: int,
+    payload: RelevanceFeedbackRequest,
+    current_user: Annotated[dict[str, Any], Depends(require_auth)],
+) -> dict[str, Any]:
+    try:
+        return service.submit_relevance_feedback(
+            lesson_id,
+            current_user["id"],
+            payload.helpful,
+        )
+    except service.LessonNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="lesson not found") from exc

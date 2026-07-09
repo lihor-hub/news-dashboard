@@ -17,6 +17,7 @@ from news_dashboard.learn_from_link.models import (
     LessonDepth,
     LessonDetail,
     LessonPersona,
+    PersonalRelevance,
     StudyArtifacts,
 )
 from news_dashboard.reading_list.metadata import fetch_url_metadata
@@ -213,6 +214,7 @@ def _update_lesson_success(
                 source_content = %s,
                 lesson_detail = %s::jsonb,
                 study_artifacts = %s::jsonb,
+                personal_relevance = %s::jsonb,
                 generation_status = 'complete',
                 generation_error = NULL,
                 updated_at = NOW()
@@ -228,6 +230,9 @@ def _update_lesson_success(
                 Jsonb(lesson_fields["lesson_detail"]),
                 Jsonb(lesson_fields["study_artifacts"])
                 if lesson_fields.get("study_artifacts") is not None
+                else None,
+                Jsonb(lesson_fields["personal_relevance"])
+                if lesson_fields.get("personal_relevance") is not None
                 else None,
                 lesson_id,
                 user_id,
@@ -485,6 +490,27 @@ def _build_study_artifacts(
     return artifacts, None
 
 
+def _add_personal_relevance(
+    user_id: int,
+    lesson_id: int,
+    lesson_fields: dict[str, Any],
+    database_url: str | None,
+) -> None:
+    try:
+        raw_relevance = generate_personal_relevance(
+            user_id,
+            lesson_fields,
+            database_url=database_url,
+        )
+        lesson_fields["personal_relevance"] = validate_personal_relevance(raw_relevance)
+    except Exception as exc:
+        logger.warning("personal relevance generation failed for lesson %d: %s", lesson_id, exc)
+        lesson_fields["personal_relevance"] = {
+            "explanation": "This lesson might interest you based on your reading profile.",
+            "signals": [],
+        }
+
+
 def generate_lesson_from_url(
     lesson_id: int,
     user_id: int,
@@ -551,6 +577,13 @@ def generate_lesson_from_url(
     if artifacts_error:
         return _fail(artifacts_error)
     lesson_fields["study_artifacts"] = artifacts
+
+    _add_personal_relevance(
+        user_id,
+        lesson_id,
+        lesson_fields,
+        database_url=database_url,
+    )
 
     result = _update_lesson_success(
         lesson_id,
@@ -723,3 +756,164 @@ def ask_lesson_question(
         messages=messages,
     )
     return response.choices[0].message.content or ""
+
+
+def _get_relevance_data(
+    user_id: int,
+    database_url: str | None,
+) -> tuple[list[str], list[str], list[str], list[dict[str, Any]]]:
+    from news_dashboard.analytics import reading_dna
+    from news_dashboard.article_visibility import visible_article_sql
+
+    interests: list[str] = []
+    try:
+        with connect(database_url=database_url) as conn:
+            row = conn.execute(
+                "SELECT interests FROM user_interest_profiles WHERE user_id = %s",
+                (user_id,),
+            ).fetchone()
+            if row and row["interests"]:
+                interests = [str(item) for item in row["interests"]]
+    except Exception as exc:
+        logger.warning("Failed to fetch user interests for relevance: %s", exc)
+
+    dna_categories: list[str] = []
+    dna_sources: list[str] = []
+    try:
+        dna = reading_dna(user_id, days=30, database_url=database_url)
+        dna_categories = [
+            str(item["category"]) for item in dna.get("categories", []) if item.get("category")
+        ]
+        dna_sources = [str(item["source"]) for item in dna.get("sources", []) if item.get("source")]
+    except Exception as exc:
+        logger.warning("Failed to fetch reading DNA for relevance: %s", exc)
+
+    recent_articles: list[dict[str, Any]] = []
+    try:
+        with connect(database_url=database_url) as conn:
+            rows = conn.execute(
+                f"""
+                SELECT a.title, a.source_name, a.category, s.state, s.starred
+                FROM user_article_state s
+                JOIN articles a ON a.id = s.article_id
+                JOIN sources a_src ON a_src.slug = a.source_slug
+                LEFT JOIN user_sources a_us
+                  ON a_us.source_slug = a.source_slug AND a_us.user_id = %s
+                WHERE s.user_id = %s AND (s.state = 'done' OR s.starred = TRUE)
+                  AND ({visible_article_sql("a")})
+                ORDER BY s.updated_at DESC
+                LIMIT 10
+                """,
+                (user_id, user_id, user_id),
+            ).fetchall()
+            recent_articles = [row_to_dict(row) for row in rows]
+    except Exception as exc:
+        logger.warning("Failed to fetch recent reads/saves for relevance: %s", exc)
+
+    return interests, dna_categories, dna_sources, recent_articles
+
+
+def generate_personal_relevance(
+    user_id: int,
+    lesson_fields: dict[str, Any],
+    *,
+    database_url: str | None = None,
+) -> dict[str, Any]:
+    interests, dna_categories, dna_sources, recent_articles = _get_relevance_data(
+        user_id,
+        database_url,
+    )
+    if not interests and not dna_categories and not dna_sources and not recent_articles:
+        return {
+            "explanation": (
+                "No personalization data is available yet. "
+                "Start reading articles to see custom relevance explanations."
+            ),
+            "signals": [],
+        }
+
+    try:
+        api_key, base_url = _lesson_chat_ai_config()
+    except LessonChatNotConfiguredError:
+        return {"explanation": "Personalization is not configured.", "signals": []}
+
+    import json
+
+    from news_dashboard.ai_client import chat_create, get_chat_client
+
+    lesson_title = str(lesson_fields.get("title") or lesson_fields.get("original_url"))
+    lesson_detail = lesson_fields.get("lesson_detail") or {}
+    messages = [
+        {
+            "role": "system",
+            "content": (
+                "Explain why a lesson is relevant using only the user's provided reading profile. "
+                "Return JSON with non-empty explanation and a signals array."
+            ),
+        },
+        {
+            "role": "user",
+            "content": (
+                f"Lesson title: {lesson_title}\n"
+                f"Lesson gist: {lesson_detail.get('gist', '')}\n"
+                f"Interests: {interests}\n"
+                f"Reading DNA categories: {dna_categories}\n"
+                f"Reading DNA sources: {dna_sources}\n"
+                f"Recent article titles: {[item['title'] for item in recent_articles]}"
+            ),
+        },
+    ]
+    try:
+        response = chat_create(
+            get_chat_client(api_key=api_key, base_url=base_url),
+            name="lesson-relevance",
+            tags=["lesson", "relevance"],
+            user_id=user_id,
+            model=os.getenv("OPENAI_LESSON_CHAT_MODEL", DEFAULT_LESSON_CHAT_MODEL),
+            messages=messages,
+            response_format={"type": "json_object"},
+        )
+        parsed = json.loads(response.choices[0].message.content or "")
+        return {
+            "explanation": str(parsed["explanation"]),
+            "signals": [str(signal) for signal in parsed["signals"] if signal],
+        }
+    except Exception as exc:
+        logger.warning("Failed to generate relevance with LLM: %s", exc)
+        return {
+            "explanation": "This lesson might interest you based on your reading profile.",
+            "signals": [],
+        }
+
+
+def validate_personal_relevance(raw_relevance: Any) -> dict[str, Any]:
+    try:
+        relevance = PersonalRelevance.model_validate(raw_relevance)
+    except ValidationError as exc:
+        message = "Invalid personal relevance schema"
+        raise ValueError(message) from exc
+    return relevance.model_dump(mode="json")
+
+
+def submit_relevance_feedback(
+    lesson_id: int,
+    user_id: int,
+    helpful: bool,
+    *,
+    database_url: str | None = None,
+) -> dict[str, Any]:
+    init_db(database_url=database_url)
+    with connect(database_url=database_url) as conn:
+        row = conn.execute(
+            """
+            UPDATE lessons
+            SET relevance_feedback = %s,
+                updated_at = NOW()
+            WHERE id = %s AND user_id = %s
+            RETURNING *
+            """,
+            (helpful, lesson_id, user_id),
+        ).fetchone()
+    if row is None:
+        raise LessonNotFoundError
+    return _serialize_lesson(row)
