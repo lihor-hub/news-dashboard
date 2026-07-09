@@ -13,10 +13,15 @@ from pydantic import ValidationError
 
 from news_dashboard.body_fetch import extract_body
 from news_dashboard.db import connect, init_db, row_to_dict
-from news_dashboard.learn_from_link.models import LessonDetail
+from news_dashboard.learn_from_link.models import LessonDetail, StudyArtifacts
 from news_dashboard.reading_list.metadata import fetch_url_metadata
 from news_dashboard.reading_list.service import normalize_url
 from news_dashboard.url_safety import UnsafeUrlError, validate_server_fetch_url
+
+
+class StudyArtifactsValidationError(ValueError):
+    """Raised when generated study artifacts fail schema validation."""
+
 
 logger = logging.getLogger(__name__)
 
@@ -144,6 +149,7 @@ def _update_lesson_success(
                 published_at = %s,
                 source_content = %s,
                 lesson_detail = %s::jsonb,
+                study_artifacts = %s::jsonb,
                 generation_status = 'complete',
                 generation_error = NULL,
                 updated_at = NOW()
@@ -157,6 +163,9 @@ def _update_lesson_success(
                 lesson_fields["published_at"],
                 lesson_fields["source_content"],
                 Jsonb(lesson_fields["lesson_detail"]),
+                Jsonb(lesson_fields["study_artifacts"])
+                if lesson_fields.get("study_artifacts") is not None
+                else None,
                 lesson_id,
                 user_id,
             ),
@@ -184,6 +193,7 @@ def _update_lesson_failure(
                 published_at = NULL,
                 source_content = NULL,
                 lesson_detail = NULL,
+                study_artifacts = NULL,
                 updated_at = NOW()
             WHERE id = %s AND user_id = %s
             RETURNING *
@@ -288,6 +298,47 @@ def validate_structured_lesson_detail(
     return detail.model_dump(mode="json")
 
 
+def validate_study_artifacts(raw_artifacts: Any) -> dict[str, Any]:
+    try:
+        artifacts = StudyArtifacts.model_validate(raw_artifacts)
+    except ValidationError as exc:
+        raise StudyArtifactsValidationError from exc
+    return artifacts.model_dump(mode="json")
+
+
+def generate_study_artifacts(lesson_fields: dict[str, Any]) -> dict[str, Any]:
+    source_content = str(lesson_fields["source_content"])
+    sentence_list = _sentences(source_content)
+    gist = sentence_list[0] if sentence_list else _clip(source_content, 180)
+    return {
+        "comprehension_questions": [
+            {
+                "question": "What is the primary topic of the text?",
+                "expected_answer": f"The primary topic is: {gist}",
+            }
+        ],
+        "flashcards": [
+            {
+                "concept": "Core Claim",
+                "claim": f"{gist}",
+            }
+        ],
+        "quiz": [
+            {
+                "question": "Which of the following best summarizes the main point of the source?",
+                "options": [
+                    f"{gist}",
+                    "A completely unrelated fact about the topic.",
+                    "An incorrect assertion about the author.",
+                    "A generic fallback option.",
+                ],
+                "correct_index": 0,
+                "explanation": f"The source content explicitly states the core claim: {gist}",
+            }
+        ],
+    }
+
+
 def generate_lesson_from_url(
     lesson_id: int,
     user_id: int,
@@ -305,23 +356,22 @@ def generate_lesson_from_url(
     except Exception as exc:
         logger.warning("lesson metadata fetch failed for %r: %s", lesson_url, exc)
 
+    error_msg = None
+    body_text = ""
     try:
         body, status = extract_body(lesson_url)
+        body_text = body.strip()
+        if status != "ok" or not body_text:
+            error_msg = "Could not extract readable article content."
     except Exception as exc:
         logger.warning("lesson body extraction failed for %r: %s", lesson_url, exc)
-        return _update_lesson_failure(
-            lesson_id,
-            user_id,
-            "Could not extract readable article content.",
-            database_url=database_url,
-        )
+        error_msg = "Could not extract readable article content."
 
-    body_text = body.strip()
-    if status != "ok" or not body_text:
+    if error_msg:
         return _update_lesson_failure(
             lesson_id,
             user_id,
-            "Could not extract readable article content.",
+            error_msg,
             database_url=database_url,
         )
 
@@ -341,26 +391,37 @@ def generate_lesson_from_url(
         )
     except LessonDetailValidationError:
         logger.warning("lesson detail validation failed for lesson %d", lesson_id)
-        return _update_lesson_failure(
-            lesson_id,
-            user_id,
-            "Generated lesson detail was malformed.",
-            database_url=database_url,
-        )
+        error_msg = "Generated lesson detail was malformed."
     except LessonCitationValidationError:
         logger.warning("lesson citation validation failed for lesson %d", lesson_id)
-        return _update_lesson_failure(
-            lesson_id,
-            user_id,
-            "Generated lesson citations did not match source content.",
-            database_url=database_url,
-        )
+        error_msg = "Generated lesson citations did not match source content."
     except Exception as exc:
         logger.warning("lesson detail generation failed for lesson %d: %s", lesson_id, exc)
+        error_msg = "Generated lesson detail was malformed."
+
+    if error_msg:
         return _update_lesson_failure(
             lesson_id,
             user_id,
-            "Generated lesson detail was malformed.",
+            error_msg,
+            database_url=database_url,
+        )
+
+    try:
+        raw_artifacts = generate_study_artifacts(lesson_fields)
+        lesson_fields["study_artifacts"] = validate_study_artifacts(raw_artifacts)
+    except StudyArtifactsValidationError:
+        logger.warning("study artifacts validation failed for lesson %d", lesson_id)
+        error_msg = "Generated study artifacts were malformed."
+    except Exception as exc:
+        logger.warning("study artifacts generation failed for lesson %d: %s", lesson_id, exc)
+        error_msg = "Generated study artifacts were malformed."
+
+    if error_msg:
+        return _update_lesson_failure(
+            lesson_id,
+            user_id,
+            error_msg,
             database_url=database_url,
         )
 

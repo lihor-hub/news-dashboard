@@ -23,6 +23,29 @@ export interface LessonDetail {
   citations: LessonCitation[];
 }
 
+export interface ComprehensionQuestion {
+  question: string;
+  expected_answer: string;
+}
+
+export interface Flashcard {
+  concept: string;
+  claim: string;
+}
+
+export interface QuizQuestion {
+  question: string;
+  options: string[];
+  correct_index: number;
+  explanation: string;
+}
+
+export interface StudyArtifacts {
+  comprehension_questions: ComprehensionQuestion[];
+  flashcards: Flashcard[];
+  quiz: QuizQuestion[];
+}
+
 export interface Lesson {
   id: number;
   user_id: number;
@@ -36,6 +59,7 @@ export interface Lesson {
   generation_status: 'pending' | 'complete' | 'failed';
   generation_error: string | null;
   lesson_detail: LessonDetail | null;
+  study_artifacts: StudyArtifacts | null;
   created_at: string;
   updated_at: string;
 }
