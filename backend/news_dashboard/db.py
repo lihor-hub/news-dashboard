@@ -678,6 +678,14 @@ POSTGRES_MULTIUSER_SCHEMA = [
     "CREATE INDEX IF NOT EXISTS idx_lesson_generations_lesson_created"
     " ON lesson_generations(lesson_id, created_at DESC)",
     """
+    CREATE TABLE IF NOT EXISTS user_lesson_suggestion_dismissals (
+      user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      article_id  BIGINT NOT NULL REFERENCES articles(id) ON DELETE CASCADE,
+      dismissed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      PRIMARY KEY (user_id, article_id)
+    )
+    """,
+    """
     CREATE TABLE IF NOT EXISTS agent_action_runs (
       id          BIGSERIAL PRIMARY KEY,
       user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,

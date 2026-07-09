@@ -12,6 +12,7 @@ from news_dashboard.learn_from_link.models import (
     LessonCreateRequest,
     LessonQuestionRequest,
     LessonRegenerateRequest,
+    LessonSuggestionDismissRequest,
     RelevanceFeedbackRequest,
 )
 
@@ -135,3 +136,18 @@ def submit_relevance_feedback_endpoint(
         )
     except service.LessonNotFoundError as exc:
         raise HTTPException(status_code=404, detail="lesson not found") from exc
+
+
+@router.get("/api/learn/suggestions")
+def list_lesson_suggestions_endpoint(
+    current_user: Annotated[dict[str, Any], Depends(require_auth)],
+) -> dict[str, Any]:
+    return {"items": service.list_lesson_suggestions(current_user["id"])}
+
+
+@router.post("/api/learn/suggestions/dismiss")
+def dismiss_lesson_suggestion_endpoint(
+    payload: LessonSuggestionDismissRequest,
+    current_user: Annotated[dict[str, Any], Depends(require_auth)],
+) -> dict[str, Any]:
+    return service.dismiss_lesson_suggestion(current_user["id"], payload.article_id)

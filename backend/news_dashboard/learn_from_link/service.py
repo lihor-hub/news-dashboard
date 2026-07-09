@@ -895,6 +895,169 @@ def validate_personal_relevance(raw_relevance: Any) -> dict[str, Any]:
     return relevance.model_dump(mode="json")
 
 
+_SUGGESTION_LIMIT_DEFAULT = 10
+_SUGGESTION_CANDIDATE_POOL = 200
+_NOVELTY_RECENT_DAYS = 7
+_NOVELTY_MEDIUM_DAYS = 30
+
+
+def _novelty_score(age_days: float | None) -> float:
+    if age_days is None:
+        return 0.3
+    if age_days <= _NOVELTY_RECENT_DAYS:
+        return 1.0
+    if age_days <= _NOVELTY_MEDIUM_DAYS:
+        return 0.6
+    return 0.3
+
+
+def _score_suggestion_candidate(
+    article: dict[str, Any],
+    *,
+    interests: list[str],
+    dna_categories: list[str],
+    dna_sources: list[str],
+) -> dict[str, Any]:
+    url = str(article["canonical_url"])
+    category = str(article.get("category") or "")
+    source_name = str(article.get("source_name") or "")
+    title = str(article.get("title") or "")
+    starred = bool(article.get("starred"))
+    try:
+        importance = int(article.get("importance_score") or 50)
+    except (TypeError, ValueError):
+        importance = 50
+    age_days_raw = article.get("age_days")
+    age_days = float(age_days_raw) if age_days_raw is not None else None
+
+    reasons: list[str] = []
+    relevance_score = 0.0
+    if category and category in dna_categories:
+        relevance_score += 0.5
+        reasons.append(f"Matches your recent interest in {category}")
+    if source_name and source_name in dna_sources:
+        relevance_score += 0.3
+        reasons.append(f"From {source_name}, a source you read often")
+    if interests and any(interest.lower() in title.lower() for interest in interests):
+        relevance_score += 0.2
+        reasons.append("Matches topics you told us you're interested in")
+    relevance_score = min(relevance_score, 1.0)
+
+    interest_signal = 1.0 if starred else 0.6
+    if starred:
+        reasons.append("You starred this article")
+
+    novelty_score = _novelty_score(age_days)
+    if novelty_score >= 1.0:
+        reasons.append("Recently added to your reading list")
+
+    value_score = importance / 100
+    if importance >= 80:
+        reasons.append("High editorial importance score")
+
+    total = (
+        0.35 * relevance_score + 0.25 * interest_signal + 0.15 * novelty_score + 0.25 * value_score
+    )
+    if not reasons:
+        reasons.append("A good candidate based on your reading history")
+
+    return {
+        "article_id": int(article["id"]),
+        "title": title or url,
+        "url": url,
+        "source_name": source_name or None,
+        "category": category or None,
+        "score": round(total, 3),
+        "reasons": reasons,
+    }
+
+
+def list_lesson_suggestions(
+    user_id: int,
+    *,
+    database_url: str | None = None,
+    limit: int = _SUGGESTION_LIMIT_DEFAULT,
+) -> list[dict[str, Any]]:
+    """Suggest saved/read articles worth turning into a lesson.
+
+    Candidates are the user's starred or completed articles that don't already
+    have a lesson and haven't been dismissed, scored using relevance to the
+    user's reading DNA/interests, novelty, and editorial importance.
+    """
+    from news_dashboard.article_visibility import visible_article_sql
+
+    interests, dna_categories, dna_sources, _ = _get_relevance_data(user_id, database_url)
+    init_db(database_url=database_url)
+    with connect(database_url=database_url) as conn:
+        rows = conn.execute(
+            f"""
+            SELECT a.id, a.title, a.canonical_url, a.source_name, a.category,
+                   a.importance_score, s.starred,
+                   EXTRACT(EPOCH FROM (NOW() - a.discovered_at::timestamptz)) / 86400.0
+                     AS age_days
+            FROM articles a
+            JOIN user_article_state s ON s.article_id = a.id
+            JOIN sources a_src ON a_src.slug = a.source_slug
+            LEFT JOIN user_sources a_us
+              ON a_us.source_slug = a.source_slug AND a_us.user_id = %s
+            WHERE s.user_id = %s AND (s.state = 'done' OR s.starred = TRUE)
+              AND ({visible_article_sql("a")})
+            ORDER BY a.discovered_at DESC
+            LIMIT %s
+            """,
+            (user_id, user_id, user_id, _SUGGESTION_CANDIDATE_POOL),
+        ).fetchall()
+        existing_lesson_rows = conn.execute(
+            "SELECT normalized_url FROM lessons WHERE user_id = %s", (user_id,)
+        ).fetchall()
+        dismissed_rows = conn.execute(
+            "SELECT article_id FROM user_lesson_suggestion_dismissals WHERE user_id = %s",
+            (user_id,),
+        ).fetchall()
+
+    existing_lesson_urls = {str(r["normalized_url"]) for r in existing_lesson_rows}
+    dismissed_ids = {int(r["article_id"]) for r in dismissed_rows}
+
+    candidates: list[dict[str, Any]] = []
+    for row in rows:
+        article = row_to_dict(row)
+        article_id = int(article["id"])
+        if article_id in dismissed_ids:
+            continue
+        if _normalize_lesson_url(str(article["canonical_url"])) in existing_lesson_urls:
+            continue
+        candidates.append(
+            _score_suggestion_candidate(
+                article,
+                interests=interests,
+                dna_categories=dna_categories,
+                dna_sources=dna_sources,
+            )
+        )
+
+    candidates.sort(key=lambda c: c["score"], reverse=True)
+    return candidates[:limit]
+
+
+def dismiss_lesson_suggestion(
+    user_id: int,
+    article_id: int,
+    *,
+    database_url: str | None = None,
+) -> dict[str, Any]:
+    init_db(database_url=database_url)
+    with connect(database_url=database_url) as conn:
+        conn.execute(
+            """
+            INSERT INTO user_lesson_suggestion_dismissals(user_id, article_id)
+            VALUES (%s, %s)
+            ON CONFLICT (user_id, article_id) DO NOTHING
+            """,
+            (user_id, article_id),
+        )
+    return {"dismissed": True, "article_id": article_id}
+
+
 def submit_relevance_feedback(
     lesson_id: int,
     user_id: int,

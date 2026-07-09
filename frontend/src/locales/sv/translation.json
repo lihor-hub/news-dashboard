@@ -171,6 +171,12 @@
       "load_error": "Failed to load your lesson library.",
       "empty": "No lessons yet. Paste a link on the Learn page.",
       "no_matches": "No lessons match your filters."
+    },
+    "suggestions": {
+      "title": "Worth turning into a lesson",
+      "dismiss": "Dismiss",
+      "save": "Save",
+      "generate": "Generate lesson"
     }
   }
 }

@@ -143,3 +143,27 @@ export async function askLessonQuestion(
     body: JSON.stringify({ question, history }),
   });
 }
+
+export interface LessonSuggestion {
+  article_id: number;
+  title: string;
+  url: string;
+  source_name: string | null;
+  category: string | null;
+  score: number;
+  reasons: string[];
+}
+
+export async function listLessonSuggestions(): Promise<LessonSuggestion[]> {
+  const { items } = await requestJson<{ items: LessonSuggestion[] }>('/api/learn/suggestions');
+  return items;
+}
+
+export async function dismissLessonSuggestion(
+  articleId: number
+): Promise<{ dismissed: boolean; article_id: number }> {
+  return requestJson('/api/learn/suggestions/dismiss', {
+    method: 'POST',
+    body: JSON.stringify({ article_id: articleId }),
+  });
+}

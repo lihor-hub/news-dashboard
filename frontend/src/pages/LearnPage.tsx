@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { LessonDetailView } from '@/components/LessonDetailView';
+import { LessonSuggestions } from '@/components/LessonSuggestions';
 import { useLessonPolling } from '@/hooks/useLessonPolling';
 import {
   createLessonFromLink,
@@ -107,6 +108,8 @@ export function LearnPage() {
           <p className="text-sm text-muted-foreground">{t('learn.description')}</p>
         </div>
       </div>
+
+      <LessonSuggestions onGenerated={setLesson} />
 
       <form
         noValidate
