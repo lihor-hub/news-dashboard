@@ -78,10 +78,11 @@ beforeEach(() => {
 });
 
 describe('knowledge graph section', () => {
-  it('renders a node per entity and an edge per co-occurrence', async () => {
+  it('renders the graph with React Flow nodes and edges', async () => {
     const { container } = renderPage();
     await waitFor(() => {
-      expect(container.querySelectorAll('[data-testid="kg-node"]')).toHaveLength(3);
+      expect(container.querySelector('.react-flow')).toBeInTheDocument();
+      expect(container.querySelectorAll('.react-flow__node')).toHaveLength(3);
     });
     expect(container.querySelectorAll('[data-testid="kg-edge"]')).toHaveLength(2);
     expect(screen.getByText('OpenAI')).toBeInTheDocument();
@@ -126,11 +127,13 @@ describe('knowledge graph section', () => {
       expect(container.querySelectorAll('[data-testid="kg-edge"]')).toHaveLength(2);
     });
 
-    fireEvent.click(screen.getByRole('button', { name: /typed relationships/i }));
+    const typedFilter = screen.getByRole('button', { name: /typed relationships/i });
+    fireEvent.click(typedFilter);
 
     await waitFor(() => {
       expect(container.querySelectorAll('[data-testid="kg-edge"]')).toHaveLength(1);
     });
+    expect(typedFilter).toHaveAttribute('aria-pressed', 'true');
     expect(container.querySelector('[data-testid="kg-edge"]')?.getAttribute('data-kind')).toBe(
       'typed'
     );

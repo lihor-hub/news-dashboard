@@ -3,6 +3,7 @@
 @import '@fontsource-variable/inter/wght.css';
 @import '@fontsource-variable/jetbrains-mono/wght.css';
 @import '@fontsource-variable/source-serif-4/wght.css';
+@import '@xyflow/react/dist/style.css';
 
 /* Map Tailwind's dark: variant to [data-theme=dark] */
 @custom-variant dark (&:where([data-theme=dark], [data-theme=dark] *));
