@@ -4,6 +4,7 @@ import {
   BarChart3,
   Bookmark,
   Download,
+  GraduationCap,
   BrainCircuit,
   Clock,
   Flame,
@@ -58,6 +59,12 @@ export const secondaryNavigationItems: NavigationItem[] = [
     labelKey: 'nav.reading_list',
     icon: Bookmark,
     shortcut: 'r',
+  },
+  {
+    to: '/learn',
+    label: 'Learn',
+    labelKey: 'nav.learn',
+    icon: GraduationCap,
   },
   {
     to: '/offline-saved',
@@ -184,6 +191,11 @@ const pageTitleRules: { test: (pathname: string) => boolean; en: string; key: st
     test: (p) => p.startsWith('/reading-list'),
     en: 'Reading List',
     key: 'page_title.reading_list',
+  },
+  {
+    test: (p) => p.startsWith('/learn'),
+    en: 'Learn',
+    key: 'page_title.learn',
   },
   {
     test: (p) => p.startsWith('/offline-saved'),

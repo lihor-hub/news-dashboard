@@ -45,7 +45,8 @@
     "stats": "統計",
     "analytics": "分析",
     "users": "ユーザー",
-    "offline_saved": "Offline Saved"
+    "offline_saved": "Offline Saved",
+    "learn": "Learn"
   },
   "page_title": {
     "brief": "ブリーフ",
@@ -69,7 +70,8 @@
     "analytics": "分析",
     "users": "ユーザー",
     "default": "Radar",
-    "offline_saved": "Offline Saved"
+    "offline_saved": "Offline Saved",
+    "learn": "Learn"
   },
   "shell": {
     "offline": "オフライン",
@@ -88,5 +90,26 @@
       "heading": "言語",
       "description": "アプリのインターフェース言語を選択してください。"
     }
+  },
+  "learn": {
+    "title": "Learn",
+    "description": "Turn one article into a compact lesson you can review inside Radar.",
+    "form": {
+      "url_label": "Article URL",
+      "url_placeholder": "https://example.com/article",
+      "submit": "Generate lesson",
+      "submitting": "Generating lesson..."
+    },
+    "empty": "Paste a link to generate a lesson summary from a readable article.",
+    "status": {
+      "pending": "Generating lesson...",
+      "complete": "Lesson generated",
+      "failed": "Lesson generation failed"
+    },
+    "link": {
+      "open_original": "Open original article"
+    },
+    "refresh_error": "Failed to refresh lesson",
+    "request_error": "Lesson generation failed"
   }
 }

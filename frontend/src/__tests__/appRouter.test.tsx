@@ -53,6 +53,7 @@ vi.mock('../pages/StatsPage', () => ({ StatsPage: stub('stats-page') }));
 vi.mock('../pages/ArchivePage', () => ({ ArchivePage: stub('archive-page') }));
 vi.mock('../pages/SettingsPage', () => ({ SettingsPage: stub('settings-page') }));
 vi.mock('../pages/OfflineSavedPage', () => ({ OfflineSavedPage: stub('offline-saved-page') }));
+vi.mock('../pages/LearnPage', () => ({ LearnPage: stub('learn-page') }));
 vi.mock('../pages/ArticlePage', () => ({ ArticlePage: stub('article-page') }));
 vi.mock('../pages/BriefingsHistoryPage', () => ({ BriefingsHistoryPage: stub('briefs-page') }));
 vi.mock('../pages/BriefingDetailPage', () => ({ BriefingDetailPage: stub('brief-detail-page') }));
@@ -83,6 +84,11 @@ describe('AppRouter routes', () => {
   it('renders the offline saved route', async () => {
     renderAt('/offline-saved');
     expect(await screen.findByText('offline-saved-page')).toBeTruthy();
+  });
+
+  it('renders the learn route', async () => {
+    renderAt('/learn');
+    expect(await screen.findByText('learn-page')).toBeTruthy();
   });
 
   describe('admin-guarded feeds operational routes', () => {

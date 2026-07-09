@@ -45,7 +45,8 @@
     "stats": "สถิติ",
     "analytics": "การวิเคราะห์",
     "users": "ผู้ใช้",
-    "offline_saved": "Offline Saved"
+    "offline_saved": "Offline Saved",
+    "learn": "Learn"
   },
   "page_title": {
     "brief": "สรุปข่าว",
@@ -69,7 +70,8 @@
     "analytics": "การวิเคราะห์",
     "users": "ผู้ใช้",
     "default": "Radar",
-    "offline_saved": "Offline Saved"
+    "offline_saved": "Offline Saved",
+    "learn": "Learn"
   },
   "shell": {
     "offline": "ออฟไลน์",
@@ -88,5 +90,26 @@
       "heading": "ภาษา",
       "description": "เลือกภาษาของอินเทอร์เฟซแอป"
     }
+  },
+  "learn": {
+    "title": "Learn",
+    "description": "Turn one article into a compact lesson you can review inside Radar.",
+    "form": {
+      "url_label": "Article URL",
+      "url_placeholder": "https://example.com/article",
+      "submit": "Generate lesson",
+      "submitting": "Generating lesson..."
+    },
+    "empty": "Paste a link to generate a lesson summary from a readable article.",
+    "status": {
+      "pending": "Generating lesson...",
+      "complete": "Lesson generated",
+      "failed": "Lesson generation failed"
+    },
+    "link": {
+      "open_original": "Open original article"
+    },
+    "refresh_error": "Failed to refresh lesson",
+    "request_error": "Lesson generation failed"
   }
 }

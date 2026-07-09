@@ -45,7 +45,8 @@
     "stats": "Στατιστικά",
     "analytics": "Αναλυτικά",
     "users": "Χρήστες",
-    "offline_saved": "Offline Saved"
+    "offline_saved": "Offline Saved",
+    "learn": "Learn"
   },
   "page_title": {
     "brief": "Σύνοψη",
@@ -69,7 +70,8 @@
     "analytics": "Αναλυτικά",
     "users": "Χρήστες",
     "default": "Radar",
-    "offline_saved": "Offline Saved"
+    "offline_saved": "Offline Saved",
+    "learn": "Learn"
   },
   "shell": {
     "offline": "Εκτός σύνδεσης",
@@ -88,5 +90,26 @@
       "heading": "Γλώσσα",
       "description": "Επιλέξτε τη γλώσσα διεπαφής της εφαρμογής."
     }
+  },
+  "learn": {
+    "title": "Learn",
+    "description": "Turn one article into a compact lesson you can review inside Radar.",
+    "form": {
+      "url_label": "Article URL",
+      "url_placeholder": "https://example.com/article",
+      "submit": "Generate lesson",
+      "submitting": "Generating lesson..."
+    },
+    "empty": "Paste a link to generate a lesson summary from a readable article.",
+    "status": {
+      "pending": "Generating lesson...",
+      "complete": "Lesson generated",
+      "failed": "Lesson generation failed"
+    },
+    "link": {
+      "open_original": "Open original article"
+    },
+    "refresh_error": "Failed to refresh lesson",
+    "request_error": "Lesson generation failed"
   }
 }
