@@ -96,6 +96,72 @@ def test_ingest_all_records_source_errors(tmp_path: Path, monkeypatch: Any) -> N
     )
 
 
+def test_ingest_source_skips_entry_that_raises_and_keeps_the_rest(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    # A single entry that trips a DB error (e.g. a unique violation on
+    # articles_url_key) must not abort the whole source: the other entries for
+    # that source should still be committed, and the source should not report a
+    # total failure.
+    db_path = tmp_path / "resilient.db"
+    source = SourceDefinition("mixed-feed", "Mixed Feed", "https://example.com/mixed.xml", "python")
+    ingest_events.reset_for_tests()
+    monkeypatch.setattr(ingest_module, "DEFAULT_SOURCES", [source])
+
+    def fake_parse_url(_url: str) -> list[dict[str, object]]:
+        return [
+            {
+                "url": "https://example.com/good",
+                "title": "Good release notes",
+                "description": "A useful release summary.",
+                "date": None,
+            },
+            {
+                "url": "https://example.com/bad",
+                "title": "Bad release notes",
+                "description": "Another useful release summary.",
+                "date": None,
+            },
+        ]
+
+    monkeypatch.setattr(ingest_module, "_parse_feed_url", fake_parse_url)
+
+    # Reproduce a per-entry DB failure that poisons the transaction the way a
+    # real duplicate-key violation would: for the "bad" entry, insert the same
+    # url twice so the second insert raises a unique violation.
+    real_find_canonical = ingest_module._find_canonical
+
+    def flaky_find_canonical(conn: Any, url: str, title: str, owner: Any = None) -> Any:
+        if "bad" in url:
+            collide = "https://example.com/collide"
+            for _ in range(2):
+                conn.execute(
+                    "INSERT INTO articles(url, canonical_url, title, source_slug,"
+                    " source_name, category, kind)"
+                    " VALUES (%s, %s, 'dup', %s, %s, 'python', 'rss_feed')",
+                    (collide, collide, source.slug, source.name),
+                )
+        return real_find_canonical(conn, url, title, owner)
+
+    monkeypatch.setattr(ingest_module, "_find_canonical", flaky_find_canonical)
+
+    result = ingest_all(db_path)
+
+    # The good entry survives and the source is not reported as a total failure.
+    assert result.total_errors == 0
+    assert result.results == {"mixed-feed": 1}
+
+    with connect(db_path) as conn:
+        urls = {row["url"] for row in conn.execute("SELECT url FROM articles").fetchall()}
+        source_row = conn.execute("SELECT * FROM ingest_run_sources").fetchone()
+
+    assert "https://example.com/good" in urls
+    # The failing entry's rolled-back insert must leave no trace.
+    assert "https://example.com/collide" not in urls
+    assert source_row["error_message"] is None
+    assert source_row["articles_new"] == 1
+
+
 def test_ingest_stream_route_is_registered() -> None:
     # url_path_for raises NoMatchFound (KeyError) if the route isn't registered.
     # Using url_path_for is robust across FastAPI versions (0.137+ stores included

@@ -18,6 +18,7 @@ from typing import Any
 from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
 import feedparser
+import psycopg
 
 from news_dashboard.article_visibility import get_visible_article_row
 from news_dashboard.db import connect, init_db, insert_article_sql, placeholders, row_to_dict
@@ -766,6 +767,103 @@ def preview_source_entries(source: SourceDefinition) -> list[dict[str, Any]]:
     return _fetch_entries_by_kind(source)
 
 
+def _persist_entry(  # noqa: PLR0913
+    conn: Any,
+    source: SourceDefinition,
+    entry: dict[str, Any],
+    url: str,
+    translated_title: str,
+    original_title: str | None,
+    detected_lang: str | None,
+    summary: str,
+    reason: str,
+    score: int,
+    tags: str,
+) -> int:
+    """Insert one article (or its archived-duplicate form) and return rows added.
+
+    Each entry's writes run in their own savepoint so one failing entry — e.g. a
+    duplicate-key/unique violation the ``ON CONFLICT`` clauses don't cover, or
+    any other DB error — rolls back only itself and is skipped, instead of
+    aborting and losing every other article already staged for this source.
+    Returns 0 for a deduped/archived entry, a URL that already exists, or a
+    skipped entry.
+    """
+    try:
+        with conn.transaction():
+            # Deduplication: check if this article is a duplicate of an existing canonical
+            canonical_id = _find_canonical(conn, url, translated_title, source.owner_user_id)
+            if canonical_id is not None:
+                # Insert as archived duplicate pointing to canonical
+                conn.execute(
+                    """INSERT INTO articles(
+                         url, canonical_url, title, source_slug, source_name, category, kind,
+                         published_at, summary, reason, importance_score, tags,
+                         status, canonical_id, original_title, detected_lang
+                       ) VALUES (
+                         %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                         'archived', %s, %s, %s
+                       )
+                       ON CONFLICT (url) DO NOTHING""",
+                    (
+                        url,
+                        url,
+                        translated_title,
+                        source.slug,
+                        source.name,
+                        source.category,
+                        source.kind,
+                        entry.get("date"),
+                        summary,
+                        reason,
+                        score,
+                        tags,
+                        canonical_id,
+                        original_title,
+                        detected_lang,
+                    ),
+                )
+                # Tag canonical article's source list (stored in reason prefix)
+                conn.execute(
+                    """
+                    UPDATE articles
+                       SET updated_at=%s
+                     WHERE id=%s AND canonical_id IS NULL
+                    """,
+                    (now_iso(), canonical_id),
+                )
+                return 0
+            cursor = conn.execute(
+                insert_article_sql(),
+                (
+                    url,
+                    url,
+                    translated_title,
+                    source.slug,
+                    source.name,
+                    source.category,
+                    source.kind,
+                    entry.get("date"),
+                    summary,
+                    reason,
+                    score,
+                    tags,
+                    original_title,
+                    None,
+                    detected_lang,
+                ),
+            )
+            return int(cursor.rowcount)
+    except psycopg.Error as exc:
+        logger.warning(
+            "Skipping article %s for source %s after DB error: %s",
+            url,
+            source.slug,
+            exc,
+        )
+        return 0
+
+
 def _ingest_source(
     source: SourceDefinition, db_path: Path | str | None = None
 ) -> SourceIngestOutcome:
@@ -828,70 +926,19 @@ def _ingest_source(
                         translated_title, translated_desc, source
                     )
 
-                # Deduplication: check if this article is a duplicate of an existing canonical
-                canonical_id = _find_canonical(conn, url, translated_title, source.owner_user_id)
-                if canonical_id is not None:
-                    # Insert as archived duplicate pointing to canonical
-                    conn.execute(
-                        """INSERT INTO articles(
-                             url, canonical_url, title, source_slug, source_name, category, kind,
-                             published_at, summary, reason, importance_score, tags,
-                             status, canonical_id, original_title, detected_lang
-                           ) VALUES (
-                             %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
-                             'archived', %s, %s, %s
-                           )
-                           ON CONFLICT (url) DO NOTHING""",
-                        (
-                            url,
-                            url,
-                            translated_title,
-                            source.slug,
-                            source.name,
-                            source.category,
-                            source.kind,
-                            entry.get("date"),
-                            summary,
-                            reason,
-                            score,
-                            tags,
-                            canonical_id,
-                            original_title,
-                            detected_lang,
-                        ),
-                    )
-                    # Tag canonical article's source list (stored in reason prefix)
-                    conn.execute(
-                        """
-                        UPDATE articles
-                           SET updated_at=%s
-                         WHERE id=%s AND canonical_id IS NULL
-                        """,
-                        (now_iso(), canonical_id),
-                    )
-                else:
-                    sql = insert_article_sql()
-                    cursor = conn.execute(
-                        sql,
-                        (
-                            url,
-                            url,
-                            translated_title,
-                            source.slug,
-                            source.name,
-                            source.category,
-                            source.kind,
-                            entry.get("date"),
-                            summary,
-                            reason,
-                            score,
-                            tags,
-                            original_title,
-                            None,
-                            detected_lang,
-                        ),
-                    )
-                    inserted += cursor.rowcount
+                inserted += _persist_entry(
+                    conn,
+                    source,
+                    entry,
+                    url,
+                    translated_title,
+                    original_title,
+                    detected_lang,
+                    summary,
+                    reason,
+                    score,
+                    tags,
+                )
 
             conn.execute(
                 """UPDATE sources SET
