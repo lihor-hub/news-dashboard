@@ -127,10 +127,19 @@ app:
     # VAPID claims email address. Omit or leave empty to default safely.
     email: ""
   email:
-    # Optional: pre-existing Secret with Gmail SMTP creds for OTP sign-in emails.
+    # Optional: pre-existing Secret with SMTP creds for OTP sign-in emails.
+    # Legacy key names default to Gmail; point smtpUsernameKey/smtpPasswordKey
+    # at differently-named keys to reuse the same Secret for a generic relay.
     existingSecret: ""
     smtpUsernameKey: SMTP_USERNAME
     smtpPasswordKey: SMTP_PASSWORD
+    # Optional generic SMTP host/port/from/TLS mode for OTP sign-in email.
+    # Leave all empty to keep the legacy Gmail default (smtp.gmail.com:587).
+    smtpHost: ""
+    smtpPort: ""
+    smtpFrom: ""
+    # starttls (default unless port 465), ssl, or none.
+    smtpTlsMode: ""
   sentry:
     # Optional: pre-existing Secret with SENTRY_DSN and/or SENTRY_DSN_FRONTEND.
     existingSecret: ""

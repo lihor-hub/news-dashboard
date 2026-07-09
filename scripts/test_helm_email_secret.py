@@ -37,3 +37,34 @@ def test_email_env_wired_from_existing_secret() -> None:
     assert "SMTP_USERNAME" in rendered
     assert "SMTP_PASSWORD" in rendered
     assert "news-dashboard-email" in rendered
+
+
+def test_otp_smtp_generic_env_absent_by_default() -> None:
+    rendered = _helm_template([])
+    assert "OTP_SMTP_HOST" not in rendered
+    assert "OTP_SMTP_PORT" not in rendered
+    assert "OTP_SMTP_FROM" not in rendered
+    assert "OTP_SMTP_TLS" not in rendered
+
+
+def test_otp_smtp_generic_env_wired_from_values() -> None:
+    rendered = _helm_template(
+        [
+            "--set",
+            "app.email.smtpHost=smtp.example.net",
+            "--set-string",
+            "app.email.smtpPort=2525",
+            "--set",
+            "app.email.smtpFrom=noreply@example.net",
+            "--set",
+            "app.email.smtpTlsMode=starttls",
+        ]
+    )
+    assert "OTP_SMTP_HOST" in rendered
+    assert "smtp.example.net" in rendered
+    assert "OTP_SMTP_PORT" in rendered
+    assert '"2525"' in rendered
+    assert "OTP_SMTP_FROM" in rendered
+    assert "noreply@example.net" in rendered
+    assert "OTP_SMTP_TLS" in rendered
+    assert "starttls" in rendered
