@@ -54,6 +54,8 @@ def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
             item.add_marker(db_mark, append=True)
 
 
+_TESTCONTAINERS_PG_IMAGE = "pgvector/pgvector:pg16"
+
 _SCHEMA_SWEEP_LOCK_KEY = 727271
 _WORKER_SCHEMA_RE = re.compile(r"^test_[A-Za-z0-9]+_(\d+)$")
 
@@ -175,9 +177,10 @@ def pg_url() -> Generator[str]:
             pytest.skip(
                 "testcontainers package not installed (pip install testcontainers[postgres])"
             )
+            raise
 
         try:
-            container = PostgresContainer("postgres:16")
+            container = PostgresContainer(_TESTCONTAINERS_PG_IMAGE)
             container.start()
         except Exception as exc:
             pytest.skip(f"PostgreSQL container could not start (Docker unavailable?): {exc}")
