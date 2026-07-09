@@ -50,3 +50,19 @@ export async function createLessonFromLink(url: string): Promise<Lesson> {
 export async function fetchLesson(id: number): Promise<Lesson> {
   return requestJson<Lesson>(`/api/learn/lessons/${id}`);
 }
+
+export interface LessonChatMessage {
+  role: 'user' | 'assistant';
+  content: string;
+}
+
+export async function askLessonQuestion(
+  lessonId: number,
+  question: string,
+  history: LessonChatMessage[]
+): Promise<{ reply: string }> {
+  return requestJson<{ reply: string }>(`/api/learn/lessons/${lessonId}/questions`, {
+    method: 'POST',
+    body: JSON.stringify({ question, history }),
+  });
+}

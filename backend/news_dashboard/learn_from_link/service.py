@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import re
 from typing import Any
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
@@ -19,6 +20,21 @@ from news_dashboard.url_safety import UnsafeUrlError, validate_server_fetch_url
 
 logger = logging.getLogger(__name__)
 
+DEFAULT_LESSON_CHAT_MODEL = "gpt-4o-mini"
+
+_LESSON_CHAT_SYSTEM_PROMPT = """\
+You are the Lesson Follow-up Assistant. Answer follow-up questions about the \
+lesson below, grounded in the lesson detail and source article content \
+supplied. If information is not present in the provided context, say so \
+clearly rather than guessing.
+
+--- LESSON ---
+{lesson_context}
+
+--- SOURCE ARTICLE ---
+{source_context}
+"""
+
 
 class LessonUrlError(ValueError):
     """Raised when a lesson URL cannot be fetched safely."""
@@ -26,6 +42,14 @@ class LessonUrlError(ValueError):
 
 class LessonNotFoundError(LookupError):
     """Raised when a lesson row cannot be found for the given user."""
+
+
+class LessonQuestionEmptyError(ValueError):
+    """Raised when a lesson follow-up question is blank."""
+
+
+class LessonChatNotConfiguredError(RuntimeError):
+    """Raised when no AI credentials are configured for lesson follow-up chat."""
 
 
 class LessonDetailValidationError(ValueError):
@@ -363,3 +387,74 @@ def get_lesson(
     if row is None:
         return None
     return _serialize_lesson(row)
+
+
+def _lesson_chat_ai_config() -> tuple[str, str | None]:
+    from news_dashboard.ai_client import free_llm_config
+
+    api_key, base_url = free_llm_config()
+    if not api_key:
+        msg = "FREE_LLM_API_KEY (or OPENAI_API_KEY) is not configured"
+        raise LessonChatNotConfiguredError(msg)
+    return api_key, base_url
+
+
+def _lesson_chat_context(lesson: dict[str, Any]) -> tuple[str, str]:
+    detail = lesson.get("lesson_detail") or {}
+    lesson_lines = [
+        f"Title: {lesson.get('title') or lesson.get('original_url')}",
+        f"Gist: {detail.get('gist', '')}",
+        f"Explanation: {detail.get('explanation', '')}",
+        f"Why it matters: {detail.get('why_it_matters', '')}",
+    ]
+    key_claims = detail.get("key_claims") or []
+    if key_claims:
+        lesson_lines.append("Key claims:\n" + "\n".join(f"- {claim}" for claim in key_claims))
+    lesson_context = "\n".join(lesson_lines)
+    source_content = str(lesson.get("source_content") or "")[:6000]
+    source_context = source_content or "(No source content extracted.)"
+    return lesson_context, source_context
+
+
+def ask_lesson_question(
+    lesson_id: int,
+    user_id: int,
+    question: str,
+    history: list[dict[str, str]],
+    *,
+    database_url: str | None = None,
+) -> str:
+    """Answer a follow-up question grounded in a lesson's detail and source content."""
+    stripped = question.strip()
+    if not stripped:
+        raise LessonQuestionEmptyError
+
+    lesson = get_lesson(lesson_id, user_id, database_url=database_url)
+    if lesson is None:
+        raise LessonNotFoundError
+
+    api_key, base_url = _lesson_chat_ai_config()
+    model = os.getenv("OPENAI_LESSON_CHAT_MODEL", DEFAULT_LESSON_CHAT_MODEL)
+
+    lesson_context, source_context = _lesson_chat_context(lesson)
+    system = _LESSON_CHAT_SYSTEM_PROMPT.format(
+        lesson_context=lesson_context,
+        source_context=source_context,
+    )
+
+    from news_dashboard.ai_client import chat_create, get_chat_client
+
+    client = get_chat_client(api_key=api_key, base_url=base_url)
+    messages: list[dict[str, str]] = [{"role": "system", "content": system}]
+    messages.extend(history)
+    messages.append({"role": "user", "content": stripped})
+
+    response = chat_create(
+        client,
+        name="lesson-chat",
+        tags=["lesson", "chat"],
+        user_id=user_id,
+        model=model,
+        messages=messages,
+    )
+    return response.choices[0].message.content or ""

@@ -8,10 +8,31 @@ from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 
 NonEmptyText = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
 GistText = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=280)]
+QuestionText = Annotated[
+    str, StringConstraints(strip_whitespace=True, min_length=1, max_length=4_000)
+]
+
+MAX_LESSON_CHAT_HISTORY_ITEMS = 50
 
 
 class LessonCreateRequest(BaseModel):
     url: str
+
+
+class LessonChatMessage(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    role: Literal["user", "assistant"]
+    content: QuestionText
+
+
+class LessonQuestionRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    question: QuestionText
+    history: list[LessonChatMessage] = Field(
+        default_factory=list, max_length=MAX_LESSON_CHAT_HISTORY_ITEMS
+    )
 
 
 class LessonCitation(BaseModel):

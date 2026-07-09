@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
+import { LessonChat } from '@/components/LessonChat';
 import {
   createLessonFromLink,
   fetchLesson,
@@ -301,6 +302,8 @@ export function LearnPage() {
               </div>
             </div>
           ) : null}
+
+          {hasLessonDetail ? <LessonChat lessonId={lesson.id} /> : null}
 
           {isFailedLesson && lesson.generation_error ? (
             <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-4 text-sm text-foreground">

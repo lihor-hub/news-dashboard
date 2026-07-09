@@ -3,6 +3,8 @@ from __future__ import annotations
 import socket
 from collections.abc import Generator
 from contextlib import contextmanager
+from types import SimpleNamespace
+from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
@@ -619,3 +621,167 @@ def test_get_lesson_endpoint_404s_for_other_user(
 
     assert response.status_code == 404
     assert response.json()["detail"] == "lesson not found"
+
+
+def _mock_chat_reply(reply: str) -> Any:
+    captured: dict[str, Any] = {}
+
+    def _mock_chat_create(*_args: Any, messages: list[dict[str, str]], **_kwargs: Any) -> Any:
+        captured["messages"] = messages
+        message = SimpleNamespace(content=reply)
+        choice = SimpleNamespace(message=message)
+        return SimpleNamespace(choices=[choice])
+
+    return _mock_chat_create, captured
+
+
+def test_ask_lesson_question_returns_grounded_reply(
+    pg_clean: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("DATABASE_URL", pg_clean)
+    monkeypatch.setenv("FREE_LLM_API_KEY", "freellmapi-key")
+    user_id = _make_user(pg_clean)
+    lesson = service.create_lesson(user_id, "https://example.com/a", database_url=pg_clean)
+
+    import news_dashboard.ai_client as ai_client_mod
+
+    mock_chat_create, captured = _mock_chat_reply("Here is a simpler explanation.")
+    monkeypatch.setattr(ai_client_mod, "chat_create", mock_chat_create)
+
+    history = [
+        {"role": "user", "content": "What is this about?"},
+        {"role": "assistant", "content": "It's about the article."},
+    ]
+    reply = service.ask_lesson_question(
+        lesson["id"],
+        user_id,
+        "Explain this more simply.",
+        history,
+        database_url=pg_clean,
+    )
+
+    assert reply == "Here is a simpler explanation."
+    messages = captured["messages"]
+    assert messages[0]["role"] == "system"
+    assert "Body for https://example.com/a" in messages[0]["content"]
+    assert messages[-1] == {"role": "user", "content": "Explain this more simply."}
+
+
+def test_ask_lesson_question_is_user_scoped(pg_clean: str, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("DATABASE_URL", pg_clean)
+    monkeypatch.setenv("FREE_LLM_API_KEY", "freellmapi-key")
+    alice = _make_user(pg_clean, "alice")
+    bob = _make_user(pg_clean, "bob")
+    lesson = service.create_lesson(alice, "https://example.com/a", database_url=pg_clean)
+
+    with pytest.raises(service.LessonNotFoundError):
+        service.ask_lesson_question(
+            lesson["id"], bob, "What is this about?", [], database_url=pg_clean
+        )
+
+
+def test_ask_lesson_question_rejects_blank_question(
+    pg_clean: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("DATABASE_URL", pg_clean)
+    monkeypatch.setenv("FREE_LLM_API_KEY", "freellmapi-key")
+    user_id = _make_user(pg_clean)
+    lesson = service.create_lesson(user_id, "https://example.com/a", database_url=pg_clean)
+
+    with pytest.raises(service.LessonQuestionEmptyError):
+        service.ask_lesson_question(lesson["id"], user_id, "   ", [], database_url=pg_clean)
+
+
+def test_ask_lesson_question_raises_when_ai_not_configured(
+    pg_clean: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("DATABASE_URL", pg_clean)
+    monkeypatch.delenv("FREE_LLM_API_KEY", raising=False)
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    user_id = _make_user(pg_clean)
+    lesson = service.create_lesson(user_id, "https://example.com/a", database_url=pg_clean)
+
+    with pytest.raises(service.LessonChatNotConfiguredError):
+        service.ask_lesson_question(
+            lesson["id"], user_id, "What is this about?", [], database_url=pg_clean
+        )
+
+
+def test_ask_lesson_question_endpoint_returns_reply(
+    pg_clean: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("DATABASE_URL", pg_clean)
+    monkeypatch.setenv("FREE_LLM_API_KEY", "freellmapi-key")
+    init_db(database_url=pg_clean)
+    user_id = _make_user(pg_clean)
+    lesson = service.create_lesson(user_id, "https://example.com/a", database_url=pg_clean)
+
+    import news_dashboard.ai_client as ai_client_mod
+
+    mock_chat_create, _captured = _mock_chat_reply("Here's an example.")
+    monkeypatch.setattr(ai_client_mod, "chat_create", mock_chat_create)
+
+    with _api_client(user_id) as client:
+        response = client.post(
+            f"/api/learn/lessons/{lesson['id']}/questions",
+            json={"question": "Give me a concrete example.", "history": []},
+        )
+
+    assert response.status_code == 200
+    assert response.json() == {"reply": "Here's an example."}
+
+
+def test_ask_lesson_question_endpoint_404s_for_other_user(
+    pg_clean: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("DATABASE_URL", pg_clean)
+    monkeypatch.setenv("FREE_LLM_API_KEY", "freellmapi-key")
+    init_db(database_url=pg_clean)
+    alice = _make_user(pg_clean, "alice")
+    bob = _make_user(pg_clean, "bob")
+    lesson = service.create_lesson(alice, "https://example.com/a", database_url=pg_clean)
+
+    with _api_client(bob, username="bob") as client:
+        response = client.post(
+            f"/api/learn/lessons/{lesson['id']}/questions",
+            json={"question": "What is this about?", "history": []},
+        )
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "lesson not found"
+
+
+def test_ask_lesson_question_endpoint_rejects_blank_question(
+    pg_clean: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("DATABASE_URL", pg_clean)
+    init_db(database_url=pg_clean)
+    user_id = _make_user(pg_clean)
+    lesson = service.create_lesson(user_id, "https://example.com/a", database_url=pg_clean)
+
+    with _api_client(user_id) as client:
+        response = client.post(
+            f"/api/learn/lessons/{lesson['id']}/questions",
+            json={"question": "   ", "history": []},
+        )
+
+    assert response.status_code == 422
+
+
+def test_ask_lesson_question_endpoint_returns_503_when_ai_not_configured(
+    pg_clean: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("DATABASE_URL", pg_clean)
+    monkeypatch.delenv("FREE_LLM_API_KEY", raising=False)
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    init_db(database_url=pg_clean)
+    user_id = _make_user(pg_clean)
+    lesson = service.create_lesson(user_id, "https://example.com/a", database_url=pg_clean)
+
+    with _api_client(user_id) as client:
+        response = client.post(
+            f"/api/learn/lessons/{lesson['id']}/questions",
+            json={"question": "What is this about?", "history": []},
+        )
+
+    assert response.status_code == 503

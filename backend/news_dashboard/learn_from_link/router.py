@@ -8,7 +8,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 
 from news_dashboard.auth import require_auth
 from news_dashboard.learn_from_link import service
-from news_dashboard.learn_from_link.models import LessonCreateRequest
+from news_dashboard.learn_from_link.models import LessonCreateRequest, LessonQuestionRequest
 
 router = APIRouter()
 
@@ -44,3 +44,25 @@ def get_lesson_endpoint(
     if lesson is None:
         raise HTTPException(status_code=404, detail="lesson not found")
     return lesson
+
+
+@router.post("/api/learn/lessons/{lesson_id}/questions")
+def ask_lesson_question_endpoint(
+    lesson_id: int,
+    payload: LessonQuestionRequest,
+    current_user: Annotated[dict[str, Any], Depends(require_auth)],
+) -> dict[str, Any]:
+    try:
+        reply = service.ask_lesson_question(
+            lesson_id,
+            current_user["id"],
+            payload.question,
+            [{"role": message.role, "content": message.content} for message in payload.history],
+        )
+    except service.LessonNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="lesson not found") from exc
+    except service.LessonQuestionEmptyError as exc:
+        raise HTTPException(status_code=400, detail="question must not be blank") from exc
+    except service.LessonChatNotConfiguredError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    return {"reply": reply}

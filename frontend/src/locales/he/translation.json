@@ -110,6 +110,21 @@
       "open_original": "Open original article"
     },
     "refresh_error": "Failed to refresh lesson",
-    "request_error": "Lesson generation failed"
+    "request_error": "Lesson generation failed",
+    "chat": {
+      "title": "Ask a follow-up question",
+      "description": "Ask clarifying, critical, or applied questions grounded in this lesson.",
+      "presets": {
+        "explain_simpler": "Explain simpler",
+        "give_example": "Give an example",
+        "challenge_argument": "Challenge the argument",
+        "apply_to_work": "Apply this to my work"
+      },
+      "placeholder": "Ask a question...",
+      "input_label": "Lesson chat input",
+      "send": "Send",
+      "thinking": "Thinking...",
+      "error": "Failed to get an answer. Please try again."
+    }
   }
 }
