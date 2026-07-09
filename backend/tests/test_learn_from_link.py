@@ -12,6 +12,7 @@ from fastapi.testclient import TestClient
 from news_dashboard.auth import require_admin, require_auth
 from news_dashboard.db import connect, init_db
 from news_dashboard.learn_from_link import service
+from news_dashboard.learn_from_link.models import LessonDepth
 from news_dashboard.main import app
 from news_dashboard.url_safety import UnsafeUrlError
 
@@ -113,17 +114,25 @@ def test_create_lesson_completes_with_extracted_content(
     assert lesson["author"] == "Ada Writer"
     assert lesson["published_at"] == "2026-07-09"
     assert lesson["source_content"] == "Paragraph one.\n\nParagraph two."
+    assert lesson["depth"] == "normal"
+    assert lesson["persona"] == "developer"
     assert lesson["lesson_detail"] == {
         "gist": "Paragraph one.",
         "explanation": "Paragraph one.\n\nParagraph two.",
         "key_claims": ["Paragraph one.", "Paragraph two."],
         "prerequisite_concepts": ["Context from Example Journal"],
-        "why_it_matters": "It helps you decide whether A careful article deserves deeper reading.",
+        "why_it_matters": (
+            "It helps you decide whether A careful article deserves deeper reading, "
+            "for developers weighing implementation details."
+        ),
         "read_worthiness": {
             "verdict": "skim",
             "rationale": "Start with a skim: the source is short enough to inspect quickly.",
         },
-        "who_should_read": ["Readers deciding whether to spend more time with this source."],
+        "who_should_read": [
+            "Readers deciding whether to spend more time with this source, "
+            "for developers weighing implementation details."
+        ],
         "questions_to_keep_in_mind": [
             "What evidence does the source provide for its central claim?"
         ],
@@ -203,7 +212,7 @@ def test_create_lesson_marks_failed_when_structured_detail_is_malformed(
     monkeypatch.setattr(
         service,
         "generate_structured_lesson_detail",
-        lambda _fields: {"gist": "Only one field is not enough."},
+        lambda _fields, **_kwargs: {"gist": "Only one field is not enough."},
         raising=False,
     )
 
@@ -242,7 +251,7 @@ def test_create_lesson_rejects_citations_not_found_in_source_context(
     monkeypatch.setattr(
         service,
         "generate_structured_lesson_detail",
-        lambda _fields: {
+        lambda _fields, **_kwargs: {
             "gist": "A gist grounded in the article.",
             "explanation": "A short explanation grounded in the article.",
             "key_claims": ["A grounded claim."],
@@ -278,7 +287,7 @@ def test_create_lesson_rejects_citation_sources_not_found_in_source_context(
     monkeypatch.setattr(
         service,
         "generate_structured_lesson_detail",
-        lambda _fields: {
+        lambda _fields, **_kwargs: {
             "gist": "Body for https://example.com/a",
             "explanation": "Body for https://example.com/a",
             "key_claims": ["Body for https://example.com/a"],
@@ -314,7 +323,7 @@ def test_create_lesson_rejects_structured_detail_with_extra_blank_or_long_fields
     monkeypatch.setattr(
         service,
         "generate_structured_lesson_detail",
-        lambda _fields: {
+        lambda _fields, **_kwargs: {
             "gist": "x" * 281,
             "unexpected_extra_field": "not part of the contract",
             "explanation": "Body for https://example.com/a",
@@ -814,3 +823,279 @@ def test_ask_lesson_question_endpoint_returns_503_when_ai_not_configured(
         )
 
     assert response.status_code == 503
+
+
+def test_create_lesson_persists_depth_and_persona(
+    pg_clean: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("DATABASE_URL", pg_clean)
+    user_id = _make_user(pg_clean)
+
+    lesson = service.create_lesson(
+        user_id,
+        "https://example.com/a",
+        depth="deep",
+        persona="new_to_ai",
+        database_url=pg_clean,
+    )
+
+    assert lesson["depth"] == "deep"
+    assert lesson["persona"] == "new_to_ai"
+
+    persisted = service.get_lesson(int(lesson["id"]), user_id, database_url=pg_clean)
+    assert persisted is not None
+    assert persisted["depth"] == "deep"
+    assert persisted["persona"] == "new_to_ai"
+
+
+@pytest.mark.parametrize(
+    ("depth", "expected_claim_count", "max_explanation_length"),
+    [
+        ("tiny", 1, 150),
+        ("normal", 3, 600),
+        ("deep", 5, 1500),
+        ("expert", 8, 4000),
+    ],
+)
+def test_generate_structured_lesson_detail_shapes_output_by_depth(
+    depth: LessonDepth, expected_claim_count: int, max_explanation_length: int
+) -> None:
+    sentences = " ".join(f"Sentence number {i}." for i in range(1, 10))
+    lesson_fields = {
+        "original_url": "https://example.com/a",
+        "title": "A deep dive",
+        "source_name": "Example Source",
+        "source_content": sentences,
+    }
+
+    detail = service.generate_structured_lesson_detail(
+        lesson_fields,
+        depth=depth,
+        persona="developer",
+    )
+
+    assert len(detail["key_claims"]) == expected_claim_count
+    assert len(detail["explanation"]) <= max_explanation_length
+
+
+def test_generate_structured_lesson_detail_frames_content_by_persona() -> None:
+    lesson_fields = {
+        "original_url": "https://example.com/a",
+        "title": "A talk-worthy piece",
+        "source_name": "Example Source",
+        "source_content": "A single sentence to summarize.",
+    }
+
+    detail = service.generate_structured_lesson_detail(
+        lesson_fields, depth="normal", persona="preparing_talk"
+    )
+
+    assert "preparing a talk" in detail["why_it_matters"]
+    assert "preparing a talk" in detail["who_should_read"][0]
+
+
+def test_regenerate_lesson_updates_controls_and_marks_pending(
+    pg_clean: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("DATABASE_URL", pg_clean)
+    user_id = _make_user(pg_clean)
+    lesson = service.create_lesson(user_id, "https://example.com/a", database_url=pg_clean)
+    assert lesson["generation_status"] == "complete"
+
+    updated = service.regenerate_lesson(
+        int(lesson["id"]),
+        user_id,
+        depth="expert",
+        persona="product_builder",
+        database_url=pg_clean,
+    )
+
+    assert updated["generation_status"] == "pending"
+    assert updated["generation_error"] is None
+    assert updated["depth"] == "expert"
+    assert updated["persona"] == "product_builder"
+
+
+def test_regenerate_lesson_raises_not_found_for_missing_lesson(pg_clean: str) -> None:
+    user_id = _make_user(pg_clean)
+
+    with pytest.raises(service.LessonNotFoundError):
+        service.regenerate_lesson(
+            999_999,
+            user_id,
+            depth="normal",
+            persona="developer",
+            database_url=pg_clean,
+        )
+
+
+def test_regenerate_lesson_raises_not_found_for_other_users_lesson(pg_clean: str) -> None:
+    owner_id = _make_user(pg_clean, username="owner")
+    other_id = _make_user(pg_clean, username="other")
+    lesson = service.create_lesson(owner_id, "https://example.com/a", database_url=pg_clean)
+
+    with pytest.raises(service.LessonNotFoundError):
+        service.regenerate_lesson(
+            int(lesson["id"]),
+            other_id,
+            depth="normal",
+            persona="developer",
+            database_url=pg_clean,
+        )
+
+
+def test_generate_lesson_from_url_records_generation_history(
+    pg_clean: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("DATABASE_URL", pg_clean)
+    user_id = _make_user(pg_clean)
+    lesson = service.create_lesson(
+        user_id, "https://example.com/a", depth="tiny", persona="developer", database_url=pg_clean
+    )
+
+    service.regenerate_lesson(
+        int(lesson["id"]),
+        user_id,
+        depth="deep",
+        persona="preparing_talk",
+        database_url=pg_clean,
+    )
+    service.generate_lesson_from_url(int(lesson["id"]), user_id, database_url=pg_clean)
+
+    generations = service.list_lesson_generations(int(lesson["id"]), user_id, database_url=pg_clean)
+    assert len(generations) == 2
+    assert generations[0]["depth"] == "deep"
+    assert generations[0]["persona"] == "preparing_talk"
+    assert generations[0]["generation_status"] == "complete"
+    assert generations[1]["depth"] == "tiny"
+    assert generations[1]["persona"] == "developer"
+
+
+def test_generate_lesson_from_url_records_failed_generation_history(
+    pg_clean: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("DATABASE_URL", pg_clean)
+    user_id = _make_user(pg_clean)
+    monkeypatch.setattr(service, "extract_body", lambda _url: ("", "error"), raising=False)
+
+    lesson = service.create_lesson(user_id, "https://example.com/a", database_url=pg_clean)
+
+    generations = service.list_lesson_generations(int(lesson["id"]), user_id, database_url=pg_clean)
+    assert len(generations) == 1
+    assert generations[0]["generation_status"] == "failed"
+    assert generations[0]["lesson_detail"] is None
+    assert generations[0]["generation_error"] == "Could not extract readable article content."
+
+
+def test_list_lesson_generations_raises_not_found_for_other_users_lesson(pg_clean: str) -> None:
+    owner_id = _make_user(pg_clean, username="owner")
+    other_id = _make_user(pg_clean, username="other")
+    lesson = service.create_lesson(owner_id, "https://example.com/a", database_url=pg_clean)
+
+    with pytest.raises(service.LessonNotFoundError):
+        service.list_lesson_generations(int(lesson["id"]), other_id, database_url=pg_clean)
+
+
+def test_create_lesson_endpoint_accepts_depth_and_persona(
+    pg_clean: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("DATABASE_URL", pg_clean)
+    init_db(database_url=pg_clean)
+    user_id = _make_user(pg_clean)
+
+    with _api_client(user_id) as client:
+        response = client.post(
+            "/api/learn/lessons",
+            json={"url": "https://example.com/a", "depth": "expert", "persona": "product_builder"},
+        )
+
+    assert response.status_code == 201
+    lesson = response.json()
+    assert lesson["depth"] == "expert"
+    assert lesson["persona"] == "product_builder"
+
+
+def test_regenerate_lesson_endpoint_reruns_generation_with_new_controls(
+    pg_clean: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("DATABASE_URL", pg_clean)
+    init_db(database_url=pg_clean)
+    user_id = _make_user(pg_clean)
+
+    with _api_client(user_id) as client:
+        create_response = client.post("/api/learn/lessons", json={"url": "https://example.com/a"})
+        lesson_id = create_response.json()["id"]
+
+        regenerate_response = client.post(
+            f"/api/learn/lessons/{lesson_id}/regenerate",
+            json={"depth": "deep", "persona": "new_to_ai"},
+        )
+
+    assert regenerate_response.status_code == 200
+    body = regenerate_response.json()
+    assert body["depth"] == "deep"
+    assert body["persona"] == "new_to_ai"
+
+    persisted = service.get_lesson(int(lesson_id), user_id, database_url=pg_clean)
+    assert persisted is not None
+    assert persisted["generation_status"] == "complete"
+    assert persisted["depth"] == "deep"
+    assert persisted["persona"] == "new_to_ai"
+
+    generations = service.list_lesson_generations(int(lesson_id), user_id, database_url=pg_clean)
+    assert len(generations) == 2
+
+
+def test_regenerate_lesson_endpoint_404s_for_missing_lesson(
+    pg_clean: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("DATABASE_URL", pg_clean)
+    init_db(database_url=pg_clean)
+    user_id = _make_user(pg_clean)
+
+    with _api_client(user_id) as client:
+        response = client.post(
+            "/api/learn/lessons/999999/regenerate",
+            json={"depth": "normal", "persona": "developer"},
+        )
+
+    assert response.status_code == 404
+
+
+def test_list_lesson_generations_endpoint_returns_history(
+    pg_clean: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("DATABASE_URL", pg_clean)
+    init_db(database_url=pg_clean)
+    user_id = _make_user(pg_clean)
+
+    with _api_client(user_id) as client:
+        create_response = client.post("/api/learn/lessons", json={"url": "https://example.com/a"})
+        lesson_id = create_response.json()["id"]
+
+        response = client.get(f"/api/learn/lessons/{lesson_id}/generations")
+
+    assert response.status_code == 200
+    generations = response.json()
+    assert len(generations) == 1
+    assert generations[0]["depth"] == "normal"
+    assert generations[0]["persona"] == "developer"
+    assert generations[0]["generation_status"] == "complete"
+
+
+def test_list_lesson_generations_endpoint_404s_for_other_user(
+    pg_clean: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("DATABASE_URL", pg_clean)
+    init_db(database_url=pg_clean)
+    owner_id = _make_user(pg_clean, username="owner")
+    other_id = _make_user(pg_clean, username="other")
+
+    with _api_client(owner_id) as client:
+        create_response = client.post("/api/learn/lessons", json={"url": "https://example.com/a"})
+        lesson_id = create_response.json()["id"]
+
+    with _api_client(other_id, username="other") as client:
+        response = client.get(f"/api/learn/lessons/{lesson_id}/generations")
+
+    assert response.status_code == 404

@@ -100,6 +100,27 @@
       "submit": "Generate lesson",
       "submitting": "Generating lesson..."
     },
+    "controls": {
+      "depth_label": "Explanation depth",
+      "persona_label": "Learning persona",
+      "depth": {
+        "tiny": "Tiny",
+        "normal": "Normal",
+        "deep": "Deep",
+        "expert": "Expert"
+      },
+      "persona": {
+        "developer": "Developer",
+        "product_builder": "Product builder",
+        "new_to_ai": "New to AI",
+        "preparing_talk": "Preparing a talk"
+      },
+      "regenerate": "Regenerate lesson",
+      "regenerating": "Regenerating...",
+      "regenerate_error": "Failed to regenerate lesson",
+      "active_summary": "Generated for {{persona}} at {{depth}} depth",
+      "history_summary": "{{count}} prior generations saved"
+    },
     "empty": "Paste a link to generate a lesson summary from a readable article.",
     "status": {
       "pending": "Generating lesson...",

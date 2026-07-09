@@ -653,6 +653,26 @@ POSTGRES_MULTIUSER_SCHEMA = [
     "ALTER TABLE lessons ADD COLUMN IF NOT EXISTS lesson_detail JSONB",
     "ALTER TABLE lessons ADD COLUMN IF NOT EXISTS study_artifacts JSONB",
     "CREATE INDEX IF NOT EXISTS idx_lessons_user_created ON lessons(user_id, created_at DESC)",
+    "ALTER TABLE lessons ADD COLUMN IF NOT EXISTS depth TEXT NOT NULL DEFAULT 'normal'"
+    " CHECK(depth IN ('tiny','normal','deep','expert'))",
+    "ALTER TABLE lessons ADD COLUMN IF NOT EXISTS persona TEXT NOT NULL DEFAULT 'developer'"
+    " CHECK(persona IN ('developer','product_builder','new_to_ai','preparing_talk'))",
+    """
+    CREATE TABLE IF NOT EXISTS lesson_generations (
+      id BIGSERIAL PRIMARY KEY,
+      lesson_id BIGINT NOT NULL REFERENCES lessons(id) ON DELETE CASCADE,
+      depth TEXT NOT NULL CHECK(depth IN ('tiny','normal','deep','expert')),
+      persona TEXT NOT NULL
+        CHECK(persona IN ('developer','product_builder','new_to_ai','preparing_talk')),
+      lesson_detail JSONB,
+      generation_status TEXT NOT NULL
+        CHECK(generation_status IN ('complete','failed')),
+      generation_error TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_lesson_generations_lesson_created"
+    " ON lesson_generations(lesson_id, created_at DESC)",
     """
     CREATE TABLE IF NOT EXISTS agent_action_runs (
       id          BIGSERIAL PRIMARY KEY,
