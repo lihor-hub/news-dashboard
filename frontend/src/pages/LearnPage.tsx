@@ -1,21 +1,18 @@
 import { useEffect, useState } from 'react';
-import { AlertCircle, ExternalLink, GraduationCap, Loader2, RefreshCw } from 'lucide-react';
+import { AlertCircle, GraduationCap, Loader2, RefreshCw } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { Skeleton } from '@/components/ui/skeleton';
-import { LessonChat } from '@/components/LessonChat';
-import { StudyArtifactsView } from '@/components/StudyArtifactsView';
+import { LessonDetailView } from '@/components/LessonDetailView';
+import { useLessonPolling } from '@/hooks/useLessonPolling';
 import {
   createLessonFromLink,
-  fetchLesson,
   fetchLessonGenerations,
   regenerateLesson,
   HttpError,
   type Lesson,
   type LessonDepth,
-  type LessonDetail,
   type LessonPersona,
 } from '@/api';
 
@@ -26,51 +23,6 @@ const LESSON_PERSONAS: LessonPersona[] = [
   'new_to_ai',
   'preparing_talk',
 ];
-
-function formatPublishedDate(value: string | null): string | null {
-  if (!value) return null;
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return null;
-  return date.toLocaleDateString(undefined, {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-  });
-}
-
-function statusBadgeVariant(
-  status: Lesson['generation_status']
-): 'default' | 'secondary' | 'destructive' {
-  if (status === 'complete') return 'default';
-  if (status === 'failed') return 'destructive';
-  return 'secondary';
-}
-
-function verdictBadgeVariant(
-  verdict: LessonDetail['read_worthiness']['verdict']
-): 'default' | 'secondary' | 'destructive' | 'outline' {
-  if (verdict === 'study') return 'default';
-  if (verdict === 'read') return 'secondary';
-  if (verdict === 'skim') return 'outline';
-  return 'destructive';
-}
-
-function capitalizeLabel(value: string): string {
-  return value.charAt(0).toUpperCase() + value.slice(1);
-}
-
-function renderBulletList(items: string[]) {
-  return (
-    <ul className="space-y-1.5">
-      {items.map((item) => (
-        <li key={item} className="flex items-start gap-2 text-sm leading-6 text-foreground">
-          <span className="mt-0.5 shrink-0 text-accent">-</span>
-          <span>{item}</span>
-        </li>
-      ))}
-    </ul>
-  );
-}
 
 export function LearnPage() {
   const { t } = useTranslation();
@@ -100,42 +52,7 @@ export function LearnPage() {
     };
   }, [lesson?.id, lesson?.generation_status]);
 
-  useEffect(() => {
-    if (lesson?.generation_status !== 'pending') return;
-
-    const lessonId = lesson.id;
-    let isActive = true;
-    let timeoutId: number | null = null;
-
-    const schedulePoll = () => {
-      timeoutId = window.setTimeout(() => {
-        void (async () => {
-          try {
-            const nextLesson = await fetchLesson(lessonId);
-            if (!isActive) return;
-            setRequestError(null);
-            setLesson(nextLesson);
-            if (nextLesson.id === lessonId && nextLesson.generation_status === 'pending') {
-              schedulePoll();
-            }
-          } catch (error) {
-            if (!isActive) return;
-            setRequestError(error instanceof Error ? error.message : t('learn.refresh_error'));
-            schedulePoll();
-          }
-        })();
-      }, 2000);
-    };
-
-    schedulePoll();
-
-    return () => {
-      isActive = false;
-      if (timeoutId !== null) {
-        window.clearTimeout(timeoutId);
-      }
-    };
-  }, [lesson?.generation_status, lesson?.id, t]);
+  useLessonPolling(lesson, setLesson, setRequestError, t('learn.refresh_error'));
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -176,13 +93,8 @@ export function LearnPage() {
     }
   }
 
-  const publishedLabel = formatPublishedDate(lesson?.published_at ?? null);
   const hasLesson = lesson !== null;
   const isPendingLesson = lesson?.generation_status === 'pending';
-  const isFailedLesson = lesson?.generation_status === 'failed';
-  const isCompleteLesson = lesson?.generation_status === 'complete';
-  const lessonDetail = lesson?.lesson_detail ?? null;
-  const hasLessonDetail = isCompleteLesson && lessonDetail !== null;
 
   return (
     <div className="mx-auto max-w-4xl px-4 py-6">
@@ -276,26 +188,14 @@ export function LearnPage() {
         </div>
       ) : (
         <section className="space-y-4">
-          <div className="flex flex-wrap items-center gap-2">
-            <Badge variant={statusBadgeVariant(lesson.generation_status)}>
-              {isCompleteLesson
-                ? t('learn.status.complete')
-                : isFailedLesson
-                  ? t('learn.status.failed')
-                  : t('learn.status.pending')}
-            </Badge>
-            {isPendingLesson ? (
-              <Loader2 className="size-4 animate-spin text-muted-foreground" />
-            ) : null}
-            {!isPendingLesson ? (
+          {!isPendingLesson ? (
+            <div className="flex flex-wrap items-center gap-2">
               <Badge variant="outline">
                 {t('learn.controls.active_summary', {
                   persona: t(`learn.controls.persona.${lesson.persona}`),
                   depth: t(`learn.controls.depth.${lesson.depth}`).toLowerCase(),
                 })}
               </Badge>
-            ) : null}
-            {!isPendingLesson ? (
               <Button
                 type="button"
                 variant="secondary"
@@ -312,148 +212,15 @@ export function LearnPage() {
                 )}
                 {isRegenerating ? t('learn.controls.regenerating') : t('learn.controls.regenerate')}
               </Button>
-            ) : null}
-            {generationCount !== null && generationCount > 1 ? (
-              <span className="text-xs text-muted-foreground">
-                {t('learn.controls.history_summary', { count: generationCount })}
-              </span>
-            ) : null}
-          </div>
-
-          <div className="space-y-2">
-            {lesson.title ? (
-              <h2 className="text-xl font-semibold text-foreground">{lesson.title}</h2>
-            ) : isPendingLesson ? (
-              <div className="space-y-2">
-                <Skeleton className="h-7 w-64" />
-                <p className="text-sm text-muted-foreground">{t('learn.status.pending')}</p>
-              </div>
-            ) : null}
-
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
-              {lesson.source_name ? <span>{lesson.source_name}</span> : null}
-              {lesson.author ? <span>{lesson.author}</span> : null}
-              {publishedLabel ? <span>{publishedLabel}</span> : null}
-            </div>
-          </div>
-
-          <div className="text-sm">
-            <a
-              href={lesson.original_url}
-              target="_blank"
-              rel="noreferrer"
-              className="inline-flex items-center gap-1 text-accent-foreground hover:underline"
-            >
-              {t('learn.link.open_original')}
-              <ExternalLink className="size-3.5" />
-            </a>
-          </div>
-
-          {lesson.source_content ? (
-            <div className="rounded-lg border border-border bg-muted/20 p-4 text-sm leading-6 text-foreground">
-              {lesson.source_content}
-            </div>
-          ) : isPendingLesson ? (
-            <div className="space-y-2">
-              <Skeleton className="h-4 w-full" />
-              <Skeleton className="h-4 w-11/12" />
-              <Skeleton className="h-4 w-10/12" />
+              {generationCount !== null && generationCount > 1 ? (
+                <span className="text-xs text-muted-foreground">
+                  {t('learn.controls.history_summary', { count: generationCount })}
+                </span>
+              ) : null}
             </div>
           ) : null}
 
-          {hasLessonDetail && lessonDetail ? (
-            <div className="space-y-4 rounded-lg border border-border bg-background p-4">
-              <div className="flex flex-wrap items-start gap-3">
-                <Badge variant={verdictBadgeVariant(lessonDetail.read_worthiness.verdict)}>
-                  {capitalizeLabel(lessonDetail.read_worthiness.verdict)}
-                </Badge>
-                <div className="min-w-0 text-sm text-muted-foreground">
-                  {lessonDetail.read_worthiness.rationale}
-                </div>
-              </div>
-
-              <div className="grid gap-4 md:grid-cols-2">
-                <section className="space-y-2">
-                  <h3 className="text-sm font-semibold text-foreground">
-                    {t('learn.detail.gist', 'Gist')}
-                  </h3>
-                  <p className="text-sm leading-6 text-foreground">{lessonDetail.gist}</p>
-                </section>
-
-                <section className="space-y-2">
-                  <h3 className="text-sm font-semibold text-foreground">
-                    {t('learn.detail.why_it_matters', 'Why it matters')}
-                  </h3>
-                  <p className="text-sm leading-6 text-foreground">{lessonDetail.why_it_matters}</p>
-                </section>
-
-                <section className="space-y-2 md:col-span-2">
-                  <h3 className="text-sm font-semibold text-foreground">
-                    {t('learn.detail.explanation', 'Explanation')}
-                  </h3>
-                  <p className="text-sm leading-6 text-foreground">{lessonDetail.explanation}</p>
-                </section>
-
-                <section className="space-y-2">
-                  <h3 className="text-sm font-semibold text-foreground">
-                    {t('learn.detail.key_claims', 'Key claims')}
-                  </h3>
-                  {renderBulletList(lessonDetail.key_claims)}
-                </section>
-
-                <section className="space-y-2">
-                  <h3 className="text-sm font-semibold text-foreground">
-                    {t('learn.detail.prerequisite_concepts', 'Prerequisite concepts')}
-                  </h3>
-                  {renderBulletList(lessonDetail.prerequisite_concepts)}
-                </section>
-
-                <section className="space-y-2">
-                  <h3 className="text-sm font-semibold text-foreground">
-                    {t('learn.detail.who_should_read', 'Who should read')}
-                  </h3>
-                  {renderBulletList(lessonDetail.who_should_read)}
-                </section>
-
-                <section className="space-y-2">
-                  <h3 className="text-sm font-semibold text-foreground">
-                    {t('learn.detail.questions_to_keep_in_mind', 'Questions to keep in mind')}
-                  </h3>
-                  {renderBulletList(lessonDetail.questions_to_keep_in_mind)}
-                </section>
-
-                <section className="space-y-2 md:col-span-2">
-                  <h3 className="text-sm font-semibold text-foreground">
-                    {t('learn.detail.citations', 'Citations')}
-                  </h3>
-                  <ul className="space-y-3">
-                    {lessonDetail.citations.map((citation) => (
-                      <li
-                        key={`${citation.label}-${citation.source}-${citation.snippet}`}
-                        className="space-y-1"
-                      >
-                        <div className="text-sm font-medium text-foreground">{citation.label}</div>
-                        <p className="text-sm leading-6 text-foreground">{citation.snippet}</p>
-                        <div className="text-xs text-muted-foreground">{citation.source}</div>
-                      </li>
-                    ))}
-                  </ul>
-                </section>
-              </div>
-            </div>
-          ) : null}
-
-          {hasLessonDetail && lesson.study_artifacts ? (
-            <StudyArtifactsView artifacts={lesson.study_artifacts} />
-          ) : null}
-
-          {hasLessonDetail ? <LessonChat lessonId={lesson.id} /> : null}
-
-          {isFailedLesson && lesson.generation_error ? (
-            <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-4 text-sm text-foreground">
-              {lesson.generation_error}
-            </div>
-          ) : null}
+          <LessonDetailView lesson={lesson} />
         </section>
       )}
     </div>

@@ -62,6 +62,12 @@ const OfflineSavedPage = lazy(() =>
   import('./pages/OfflineSavedPage').then((m) => ({ default: m.OfflineSavedPage }))
 );
 const LearnPage = lazy(() => import('./pages/LearnPage').then((m) => ({ default: m.LearnPage })));
+const LessonLibraryPage = lazy(() =>
+  import('./pages/LessonLibraryPage').then((m) => ({ default: m.LessonLibraryPage }))
+);
+const LessonDetailPage = lazy(() =>
+  import('./pages/LessonDetailPage').then((m) => ({ default: m.LessonDetailPage }))
+);
 const WeeklyRecapPage = lazy(() =>
   import('./pages/WeeklyRecapPage').then((m) => ({ default: m.WeeklyRecapPage }))
 );
@@ -226,6 +232,8 @@ export const routes: RouteObject[] = [
       { path: 'reading-dna', element: withSuspense(ReadingDnaPage) },
       { path: 'reading-list', element: withSuspense(ReadingListPage) },
       { path: 'learn', element: withSuspense(LearnPage) },
+      { path: 'learn/library', element: withSuspense(LessonLibraryPage) },
+      { path: 'learn/:id', element: withSuspense(LessonDetailPage) },
       { path: 'offline-saved', element: withSuspense(OfflineSavedPage) },
       { path: 'recap', element: withSuspense(WeeklyRecapPage) },
       { path: 'archive', element: withSuspense(ArchivePage) },

@@ -91,3 +91,23 @@ describe('AI Stats navigation', () => {
     expect(getPageTitle('/ai-stats')).toBe('AI Stats');
   });
 });
+
+describe('Lesson Library navigation', () => {
+  it('lists /learn/library in the secondary navigation', () => {
+    const targets = secondaryNavigationItems.map((item) => item.to);
+    expect(targets).toContain('/learn/library');
+  });
+
+  it('wires /learn/library to the expected translation keys', () => {
+    expect(secondaryNavigationItems.find((item) => item.to === '/learn/library')?.labelKey).toBe(
+      'nav.lesson_library'
+    );
+    expect(getPageTitleKey('/learn/library')).toBe('page_title.lesson_library');
+    expect(getPageTitle('/learn/library')).toBe('Lesson Library');
+  });
+
+  it('does not mark /learn active when viewing the library', () => {
+    expect(isNavigationItemActive('/learn', '/learn/library')).toBe(false);
+    expect(isNavigationItemActive('/learn/library', '/learn/library')).toBe(true);
+  });
+});

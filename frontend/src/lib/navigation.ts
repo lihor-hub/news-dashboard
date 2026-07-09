@@ -10,6 +10,7 @@ import {
   Flame,
   History,
   Inbox,
+  Library,
   Network,
   Newspaper,
   Radio,
@@ -65,6 +66,12 @@ export const secondaryNavigationItems: NavigationItem[] = [
     label: 'Learn',
     labelKey: 'nav.learn',
     icon: GraduationCap,
+  },
+  {
+    to: '/learn/library',
+    label: 'Lesson Library',
+    labelKey: 'nav.lesson_library',
+    icon: Library,
   },
   {
     to: '/offline-saved',
@@ -167,7 +174,7 @@ export function getShortcutTarget(key: string): string | null {
 }
 
 export function isNavigationItemActive(to: string, pathname: string): boolean {
-  if (to === '/' || to === '/today') return pathname === to;
+  if (to === '/' || to === '/today' || to === '/learn') return pathname === to;
   return pathname.startsWith(to);
 }
 
@@ -191,6 +198,11 @@ const pageTitleRules: { test: (pathname: string) => boolean; en: string; key: st
     test: (p) => p.startsWith('/reading-list'),
     en: 'Reading List',
     key: 'page_title.reading_list',
+  },
+  {
+    test: (p) => p.startsWith('/learn/library'),
+    en: 'Lesson Library',
+    key: 'page_title.lesson_library',
   },
   {
     test: (p) => p.startsWith('/learn'),
