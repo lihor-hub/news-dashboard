@@ -10,6 +10,10 @@ and how to run with no outbound calls at all.
 - Articles, feeds, sources, users, sessions, saved/read/starred/snoozed
   state, ingest run history, and search all live in your PostgreSQL
   database and are never sent anywhere.
+- Optional Neo4j graph data also stays on your instance. It mirrors article IDs,
+  titles, URLs, source slugs, discovery timestamps, entity nodes, mention
+  edges, and extracted relationship edges for graph exploration; PostgreSQL
+  remains the application database.
 - Local usage analytics (`user_events` — page views, article opens, reading
   duration) are recorded only in your database. See
   [Local analytics](#local-analytics-user_events) below.
@@ -18,7 +22,7 @@ and how to run with no outbound calls at all.
 
 | Feature | Triggering env var | What's sent | To whom |
 | --- | --- | --- | --- |
-| Embeddings, Ask AI, briefings, insights, chat completions | `FREE_LLM_API_KEY` / `FREE_LLM_BASE_URL`, or `OPENAI_API_KEY` / `OPENAI_BASE_URL` | Article titles/bodies and your prompts/questions, as needed for the feature | The configured LLM gateway (a self-hosted gateway if you point `FREE_LLM_*` at one, otherwise OpenAI) |
+| Embeddings, Ask AI, briefings, insights, chat completions | `FREE_LLM_API_KEY` / `FREE_LLM_BASE_URL`, or `OPENAI_API_KEY` / `OPENAI_BASE_URL` | Article titles/bodies, extracted entity relationship context, and your prompts/questions, as needed for the feature | The configured LLM gateway (a self-hosted gateway if you point `FREE_LLM_*` at one, otherwise OpenAI) |
 | Text-to-speech / audio generation | `OPENAI_API_KEY` (always OpenAI; not replaceable by `FREE_LLM_*`) | Text to be synthesized into audio | OpenAI |
 | AI-fallback body fetch (Crawl4AI / deterministic extraction fallback) | Feature-internal; used when normal ingestion fails to extract article body | The article URL being fetched | The configured LLM/body-fetch backend |
 | LLM call tracing | `LANGFUSE_HOST` (or `LANGFUSE_BASE_URL`), `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY` | Full request/response payloads for every OpenAI-compatible call (embeddings, Ask AI, briefings, insights, TTS, body fetch), each tagged with a descriptive trace name | Your configured Langfuse instance (only when **both** keys are set; otherwise tracing is inactive and no data is sent) |

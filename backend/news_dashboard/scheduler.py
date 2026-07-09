@@ -340,6 +340,19 @@ def _run_entity_extraction() -> tuple[str, str | None]:
     return "success", f"extracted {extracted} article(s)"
 
 
+def _run_entity_relationship_extraction() -> tuple[str, str | None]:
+    from news_dashboard.entities import extract_missing_entity_relationships
+
+    logger.info("Extracting entity relationships for recent articles…")
+    try:
+        extracted = extract_missing_entity_relationships()
+    except Exception as exc:
+        logger.exception("Entity relationship extraction failed")
+        return "failure", str(exc)[:500]
+    logger.info("Entity relationship extraction done: %d article(s).", extracted)
+    return "success", f"extracted relationships for {extracted} article(s)"
+
+
 def _run_reading_list_fetch() -> tuple[str, str | None] | None:
     from news_dashboard.reading_list import service
 
@@ -446,6 +459,10 @@ def _job_entity_extraction() -> None:
     _run_and_record("entity_extraction", _run_entity_extraction)
 
 
+def _job_entity_relationship_extraction() -> None:
+    _run_and_record("entity_relationship_extraction", _run_entity_relationship_extraction)
+
+
 def _job_weekly_recaps() -> None:
     _run_and_record("weekly_recaps", _run_weekly_recaps)
 
@@ -516,6 +533,14 @@ def _register_recurring_jobs(scheduler: Any) -> None:
         trigger="interval",
         minutes=int(os.getenv("ENTITY_EXTRACTION_INTERVAL_MINUTES", "30")),
         id="entity_extraction",
+        replace_existing=True,
+    )
+
+    scheduler.add_job(
+        _job_entity_relationship_extraction,
+        trigger="interval",
+        minutes=int(os.getenv("ENTITY_RELATIONSHIP_EXTRACTION_INTERVAL_MINUTES", "60")),
+        id="entity_relationship_extraction",
         replace_existing=True,
     )
 

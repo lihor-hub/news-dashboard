@@ -2076,10 +2076,13 @@ def list_scheduled_job_runs() -> dict[str, Any]:
 
 @api.get("/api/health/details", dependencies=_admin_dep)
 def health_details() -> dict[str, Any]:
+    from news_dashboard.system.service import graph_status
+
     init_db()
     return {
         "status": "ok",
         "database": describe_database(),
+        "graph": graph_status(),
         "next_ingest_at": get_next_ingest_at(),
     }
 

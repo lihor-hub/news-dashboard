@@ -42,6 +42,15 @@ def _manifest_for_kind(output: str, kind: str) -> str:
     raise AssertionError(msg)
 
 
+def _manifest_for_kind_and_name(output: str, kind: str, name: str) -> str:
+    for manifest in output.split("---"):
+        normalized = f"\n{manifest}\n"
+        if f"\nkind: {kind}\n" in normalized and f"\n  name: {name}\n" in normalized:
+            return manifest
+    msg = f"Rendered chart did not include {kind}/{name}"
+    raise AssertionError(msg)
+
+
 def _env_block(manifest: str) -> str:
     lines = manifest.splitlines()
     env_index = next(index for index, line in enumerate(lines) if line.strip() == "env:")
@@ -75,6 +84,8 @@ def _env_entry(env: str, name: str) -> str:
 def test_helm_template_default() -> None:
     output = _render_chart()
     assert "NEWS_DASHBOARD_DB" not in output
+    assert "NEO4J_URI" not in output
+    assert "news-dashboard-news-dashboard-neo4j" not in output
     # Check that it renders standard postgres config
     assert "name: POSTGRES_HOST" in output
     assert 'value: "news-dashboard-news-dashboard-postgres"' in output
@@ -84,6 +95,105 @@ def test_helm_template_default() -> None:
     assert "backoffLimit: 1" in output
     assert "successfulJobsHistoryLimit: 2" in output
     assert "failedJobsHistoryLimit: 3" in output
+
+
+@pytest.mark.skipif(HELM_BIN is None, reason="helm binary not found on path")
+def test_helm_template_neo4j_can_use_existing_secret_and_claim() -> None:
+    output = _render_chart(
+        "neo4j.enabled=true",
+        "neo4j.auth.existingSecret=graph-secret",
+        "neo4j.auth.passwordKey=GRAPH_PASSWORD",
+        "neo4j.persistence.enabled=true",
+        "neo4j.persistence.existingClaim=graph-data",
+    )
+    deployment = _manifest_for_kind(output, "Deployment")
+    deployment_env = _env_block(deployment)
+    statefulset = _manifest_for_kind_and_name(
+        output,
+        "StatefulSet",
+        "news-dashboard-news-dashboard-neo4j",
+    )
+
+    assert 'claimName: "graph-data"' in statefulset
+    assert "stringData:\n  NEO4J_USER" not in output
+    assert 'name: "graph-secret"' in _env_entry(deployment_env, "NEO4J_PASSWORD")
+    assert 'key: "GRAPH_PASSWORD"' in _env_entry(deployment_env, "NEO4J_PASSWORD")
+
+
+@pytest.mark.skipif(HELM_BIN is None, reason="helm binary not found on path")
+def test_helm_template_neo4j_disabled_by_default() -> None:
+    output = _render_chart()
+    deployment_env = _env_block(_manifest_for_kind(output, "Deployment"))
+
+    assert "-neo4j" not in output
+    assert "NEO4J_URI" not in deployment_env
+    assert "NEO4J_USER" not in deployment_env
+    assert "NEO4J_PASSWORD" not in deployment_env
+    assert "NEO4J_DATABASE" not in deployment_env
+
+
+@pytest.mark.skipif(HELM_BIN is None, reason="helm binary not found on path")
+def test_helm_template_neo4j_enabled_renders_graph_service_and_app_env() -> None:
+    output = _render_chart(
+        "neo4j.enabled=true",
+        "neo4j.image.repository=neo4j",
+        "neo4j.image.tag=5-community",
+        "neo4j.image.pullPolicy=Always",
+        "neo4j.auth.user=graph_user",
+        "neo4j.auth.password=dummy-neo4j-password-for-render-only",
+        "neo4j.auth.passwordKey=GRAPH_PASSWORD",
+        "neo4j.service.port=17687",
+        "neo4j.persistence.size=8Gi",
+        "neo4j.persistence.storageClassName=fast-storage",
+        "neo4j.resources.requests.cpu=100m",
+        "neo4j.resources.limits.memory=1Gi",
+    )
+
+    deployment_env = _env_block(_manifest_for_kind(output, "Deployment"))
+    service = _manifest_for_kind_and_name(
+        output,
+        "Service",
+        "news-dashboard-news-dashboard-neo4j",
+    )
+    statefulset = _manifest_for_kind_and_name(
+        output,
+        "StatefulSet",
+        "news-dashboard-news-dashboard-neo4j",
+    )
+    secret = _manifest_for_kind_and_name(
+        output,
+        "Secret",
+        "news-dashboard-news-dashboard-neo4j",
+    )
+    pvc = _manifest_for_kind_and_name(
+        output,
+        "PersistentVolumeClaim",
+        "news-dashboard-news-dashboard-neo4j",
+    )
+
+    assert "port: 17687" in service
+    assert "targetPort: bolt" in service
+    assert 'image: "neo4j:5-community"' in statefulset
+    assert "imagePullPolicy: Always" in statefulset
+    assert "name: bolt" in statefulset
+    assert "containerPort: 17687" in statefulset
+    assert "GRAPH_PASSWORD:" in secret
+    assert "NEO4J_AUTH:" in secret
+    assert "storage: 8Gi" in pvc
+    assert 'storageClassName: "fast-storage"' in pvc
+    assert "cpu: 100m" in statefulset
+    assert "memory: 1Gi" in statefulset
+
+    assert _env_entry(deployment_env, "NEO4J_URI") == (
+        '- name: NEO4J_URI\n  value: "bolt://news-dashboard-news-dashboard-neo4j:17687"'
+    )
+    assert _env_entry(deployment_env, "NEO4J_USER") == ('- name: NEO4J_USER\n  value: "graph_user"')
+    neo4j_password = _env_entry(deployment_env, "NEO4J_PASSWORD")
+    assert 'name: "news-dashboard-news-dashboard-neo4j"' in neo4j_password
+    assert 'key: "GRAPH_PASSWORD"' in neo4j_password
+    assert _env_entry(deployment_env, "NEO4J_DATABASE") == (
+        '- name: NEO4J_DATABASE\n  value: "neo4j"'
+    )
 
 
 @pytest.mark.skipif(HELM_BIN is None, reason="helm binary not found on path")

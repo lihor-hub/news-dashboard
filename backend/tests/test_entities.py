@@ -12,10 +12,14 @@ from news_dashboard.db import connect
 from news_dashboard.entities import (
     EntitiesNotConfiguredError,
     _parse_entities,
+    _parse_relationships,
     extract_entities,
+    extract_entity_relationships,
     extract_missing_entities,
+    extract_missing_entity_relationships,
     get_or_extract_entities,
     knowledge_graph,
+    sync_cached_entities_to_graph,
 )
 
 # ── helpers ───────────────────────────────────────────────────────────────────
@@ -121,6 +125,70 @@ def test_parse_entities_returns_empty_for_garbage() -> None:
     assert _parse_entities(json.dumps({"name": "x"})) == []
 
 
+def test_parse_relationships_validates_entities_and_dedupes() -> None:
+    raw = json.dumps(
+        [
+            {
+                "source_name": "OpenAI",
+                "source_type": "org",
+                "target_name": "Sam Altman",
+                "target_type": "person",
+                "relationship_type": "led_by",
+                "label": "led by",
+                "confidence": 0.9,
+            },
+            {
+                "source_name": "openai",
+                "source_type": "org",
+                "target_name": "Sam Altman",
+                "target_type": "person",
+                "relationship_type": "led_by",
+                "label": "duplicate",
+                "confidence": 0.7,
+            },
+            {
+                "source_name": "OpenAI",
+                "source_type": "org",
+                "target_name": "Unknown",
+                "target_type": "org",
+                "relationship_type": "mentions",
+            },
+        ]
+    )
+    entities = [{"name": "OpenAI", "type": "org"}, {"name": "Sam Altman", "type": "person"}]
+
+    assert _parse_relationships(raw, entities) == [
+        {
+            "source_name": "OpenAI",
+            "source_type": "org",
+            "target_name": "Sam Altman",
+            "target_type": "person",
+            "relationship_type": "led_by",
+            "label": "led by",
+            "confidence": 0.9,
+        }
+    ]
+
+
+def test_parse_relationships_clamps_malformed_confidence() -> None:
+    raw = json.dumps(
+        [
+            {
+                "source_name": "OpenAI",
+                "source_type": "org",
+                "target_name": "Sam Altman",
+                "target_type": "person",
+                "relationship_type": "led_by",
+                "label": "led by",
+                "confidence": "not-a-number",
+            }
+        ]
+    )
+    entities = [{"name": "OpenAI", "type": "org"}, {"name": "Sam Altman", "type": "person"}]
+
+    assert _parse_relationships(raw, entities)[0]["confidence"] == 0.0
+
+
 # ── extract_entities ──────────────────────────────────────────────────────────
 
 
@@ -144,6 +212,47 @@ def test_extract_entities_calls_llm_and_returns_parsed_list() -> None:
             {"id": 1, "title": "OpenAI ships", "summary": "OpenAI news", "body": "text"}
         )
     assert result == [{"name": "OpenAI", "type": "org"}]
+    client.chat.completions.create.assert_called_once()
+
+
+def test_extract_entity_relationships_calls_llm_with_bounded_entities() -> None:
+    client = _mock_llm(
+        json.dumps(
+            [
+                {
+                    "source_name": "OpenAI",
+                    "source_type": "org",
+                    "target_name": "Sam Altman",
+                    "target_type": "person",
+                    "relationship_type": "led_by",
+                    "label": "led by",
+                    "confidence": 0.8,
+                }
+            ]
+        )
+    )
+    entities = [{"name": "OpenAI", "type": "org"}, {"name": "Sam Altman", "type": "person"}]
+
+    with (
+        patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}),
+        patch("openai.OpenAI", return_value=client),
+    ):
+        result = extract_entity_relationships(
+            {"id": 1, "title": "OpenAI", "summary": "Sam Altman leads OpenAI.", "body": None},
+            entities,
+        )
+
+    assert result == [
+        {
+            "source_name": "OpenAI",
+            "source_type": "org",
+            "target_name": "Sam Altman",
+            "target_type": "person",
+            "relationship_type": "led_by",
+            "label": "led by",
+            "confidence": 0.8,
+        }
+    ]
     client.chat.completions.create.assert_called_once()
 
 
@@ -185,6 +294,33 @@ def test_get_or_extract_entities_extracts_and_caches_when_missing(pg_clean: str)
     stored = json.loads(row["entities"])
     assert stored["v"] == 1
     assert stored["entities"] == [{"name": "OpenAI", "type": "org"}]
+
+
+def test_get_or_extract_entities_syncs_fresh_entities_to_graph_store(pg_clean: str) -> None:
+    article_id = _seed_article(pg_clean, url_slug="graph-fresh", title="OpenAI ships a model")
+    synced: list[tuple[dict[str, Any], list[dict[str, str]]]] = []
+
+    class FakeGraphStore:
+        def sync_article_entities(
+            self, *, article: dict[str, Any], entities: list[dict[str, str]]
+        ) -> None:
+            synced.append((article, entities))
+
+    client = _mock_llm('[{"name": "OpenAI", "type": "org"}]')
+    with (
+        patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}),
+        patch("openai.OpenAI", return_value=client),
+        patch("news_dashboard.entities.graph_store_from_env", return_value=FakeGraphStore()),
+    ):
+        result = get_or_extract_entities(article_id, database_url=pg_clean)
+
+    assert result == [{"name": "OpenAI", "type": "org"}]
+    assert len(synced) == 1
+    article, entities = synced[0]
+    assert article["id"] == article_id
+    assert article["title"] == "OpenAI ships a model"
+    assert article["url"] == "https://ent-src.example/graph-fresh"
+    assert entities == [{"name": "OpenAI", "type": "org"}]
 
 
 def test_get_or_extract_entities_invisible_article_returns_empty(pg_clean: str) -> None:
@@ -232,6 +368,176 @@ def test_extract_missing_entities_respects_limit_and_survives_failures(pg_clean:
             "SELECT COUNT(*) AS n FROM articles WHERE entities IS NOT NULL"
         ).fetchone()
     assert row["n"] == 2
+
+
+def test_sync_cached_entities_to_graph_backfills_valid_cached_rows(pg_clean: str) -> None:
+    cached_id = _seed_article(
+        pg_clean,
+        url_slug="graph-cached",
+        title="Cached",
+        entities=_entities_json(("OpenAI", "org")),
+    )
+    _seed_article(pg_clean, url_slug="graph-pending", title="Pending")
+    _seed_article(pg_clean, url_slug="graph-invalid", title="Invalid", entities="not json")
+    synced: list[tuple[int, list[dict[str, str]]]] = []
+
+    class FakeGraphStore:
+        def sync_article_entities(
+            self, *, article: dict[str, Any], entities: list[dict[str, str]]
+        ) -> None:
+            synced.append((int(article["id"]), entities))
+
+    with patch("news_dashboard.entities.graph_store_from_env", return_value=FakeGraphStore()):
+        count = sync_cached_entities_to_graph(limit=10, database_url=pg_clean)
+
+    assert count == 1
+    assert synced == [(cached_id, [{"name": "OpenAI", "type": "org"}])]
+
+
+def test_sync_cached_entities_to_graph_skips_when_graph_disabled(pg_clean: str) -> None:
+    _seed_article(
+        pg_clean,
+        url_slug="graph-disabled",
+        title="Cached",
+        entities=_entities_json(("OpenAI", "org")),
+    )
+
+    with patch("news_dashboard.entities.graph_store_from_env", return_value=None):
+        assert sync_cached_entities_to_graph(limit=10, database_url=pg_clean) == 0
+
+
+def test_extract_missing_entity_relationships_writes_to_graph(pg_clean: str) -> None:
+    article_id = _seed_article(
+        pg_clean,
+        url_slug="graph-rels",
+        title="Relationships",
+        entities=_entities_json(("OpenAI", "org"), ("Sam Altman", "person")),
+    )
+    synced: list[tuple[int, list[dict[str, Any]]]] = []
+
+    class FakeGraphStore:
+        def sync_entity_relationships(
+            self, *, article_id: int, relationships: list[dict[str, Any]]
+        ) -> None:
+            synced.append((article_id, relationships))
+
+    relationships = [
+        {
+            "source_name": "OpenAI",
+            "source_type": "org",
+            "target_name": "Sam Altman",
+            "target_type": "person",
+            "relationship_type": "led_by",
+            "label": "led by",
+            "confidence": 0.8,
+        }
+    ]
+    with (
+        patch("news_dashboard.entities.graph_store_from_env", return_value=FakeGraphStore()),
+        patch("news_dashboard.entities.extract_entity_relationships", return_value=relationships),
+    ):
+        count = extract_missing_entity_relationships(limit=10, database_url=pg_clean)
+
+    assert count == 1
+    assert synced == [(article_id, relationships)]
+    with connect(database_url=pg_clean) as conn:
+        row = conn.execute("SELECT entities FROM articles WHERE id = %s", (article_id,)).fetchone()
+    payload = json.loads(row["entities"])
+    assert payload["relationships_v"] == 1
+    assert payload["relationships"] == relationships
+
+
+def test_extract_missing_entity_relationships_reuses_cached_relationships(
+    pg_clean: str,
+) -> None:
+    cached_relationships = [
+        {
+            "source_name": "OpenAI",
+            "source_type": "org",
+            "target_name": "Sam Altman",
+            "target_type": "person",
+            "relationship_type": "led_by",
+            "label": "led by",
+            "confidence": 0.8,
+        }
+    ]
+    article_id = _seed_article(
+        pg_clean,
+        url_slug="graph-rels-cached",
+        title="Relationships",
+        entities=json.dumps(
+            {
+                "v": 1,
+                "entities": [
+                    {"name": "OpenAI", "type": "org"},
+                    {"name": "Sam Altman", "type": "person"},
+                ],
+                "relationships_v": 1,
+                "relationships": cached_relationships,
+            }
+        ),
+    )
+    synced: list[tuple[int, list[dict[str, Any]]]] = []
+
+    class FakeGraphStore:
+        def sync_entity_relationships(
+            self, *, article_id: int, relationships: list[dict[str, Any]]
+        ) -> None:
+            synced.append((article_id, relationships))
+
+    with (
+        patch("news_dashboard.entities.graph_store_from_env", return_value=FakeGraphStore()),
+        patch("news_dashboard.entities.extract_entity_relationships") as extracted,
+    ):
+        count = extract_missing_entity_relationships(limit=10, database_url=pg_clean)
+
+    assert count == 1
+    assert synced == [(article_id, cached_relationships)]
+    extracted.assert_not_called()
+
+
+def test_extract_missing_entity_relationships_marks_empty_results(pg_clean: str) -> None:
+    article_id = _seed_article(
+        pg_clean,
+        url_slug="graph-rels-empty",
+        title="Relationships",
+        entities=_entities_json(("OpenAI", "org"), ("Sam Altman", "person")),
+    )
+
+    class FakeGraphStore:
+        def sync_entity_relationships(
+            self, *, article_id: int, relationships: list[dict[str, Any]]
+        ) -> None:
+            assert article_id
+            assert relationships == []
+            msg = "empty relationship results should not sync"
+            raise AssertionError(msg)
+
+    with (
+        patch("news_dashboard.entities.graph_store_from_env", return_value=FakeGraphStore()),
+        patch("news_dashboard.entities.extract_entity_relationships", return_value=[]) as extracted,
+    ):
+        count = extract_missing_entity_relationships(limit=10, database_url=pg_clean)
+
+    assert count == 0
+    extracted.assert_called_once()
+    with connect(database_url=pg_clean) as conn:
+        row = conn.execute("SELECT entities FROM articles WHERE id = %s", (article_id,)).fetchone()
+    payload = json.loads(row["entities"])
+    assert payload["relationships_v"] == 1
+    assert payload["relationships"] == []
+
+
+def test_extract_missing_entity_relationships_skips_when_graph_disabled(pg_clean: str) -> None:
+    _seed_article(
+        pg_clean,
+        url_slug="graph-rels-disabled",
+        title="Relationships",
+        entities=_entities_json(("OpenAI", "org"), ("Sam Altman", "person")),
+    )
+
+    with patch("news_dashboard.entities.graph_store_from_env", return_value=None):
+        assert extract_missing_entity_relationships(limit=10, database_url=pg_clean) == 0
 
 
 # ── knowledge_graph ───────────────────────────────────────────────────────────
@@ -317,3 +623,68 @@ def test_knowledge_graph_scopes_to_user_visible_articles(pg_clean: str) -> None:
     names = {n["name"] for n in result["nodes"]}
     assert "OpenAI" in names
     assert "Secret Corp" not in names
+
+
+def test_knowledge_graph_uses_graph_store_for_visible_article_ids(pg_clean: str) -> None:
+    user_id = _seed_user(pg_clean, "kg-neo4j")
+    other_id = _seed_user(pg_clean, "kg-neo4j-other")
+    _seed_source(pg_clean, "kg-neo4j-global")
+    _seed_source(pg_clean, "kg-neo4j-private", owner_user_id=other_id)
+    visible_id = _seed_article(
+        pg_clean,
+        slug="kg-neo4j-global",
+        url_slug="visible",
+        title="Visible",
+        entities=_entities_json(("OpenAI", "org")),
+    )
+    pending_id = _seed_article(
+        pg_clean,
+        slug="kg-neo4j-global",
+        url_slug="pending",
+        title="Pending",
+    )
+    _seed_article(
+        pg_clean,
+        slug="kg-neo4j-private",
+        url_slug="hidden",
+        title="Hidden",
+        entities=_entities_json(("Secret Corp", "org")),
+    )
+    calls: list[dict[str, Any]] = []
+
+    class FakeGraphStore:
+        def knowledge_graph(
+            self,
+            *,
+            articles: list[dict[str, Any]],
+            pending_count: int,
+            days: int,
+            max_nodes: int,
+        ) -> dict[str, Any]:
+            calls.append(
+                {
+                    "articles": articles,
+                    "pending_count": pending_count,
+                    "days": days,
+                    "max_nodes": max_nodes,
+                }
+            )
+            return {
+                "nodes": [{"id": "org:openai", "name": "OpenAI", "type": "org", "count": 1}],
+                "edges": [],
+                "articles": [{"id": visible_id, "title": "Visible"}],
+                "article_count": len(articles),
+                "pending_count": pending_count,
+                "days": days,
+                "graph_store": "neo4j",
+            }
+
+    with patch("news_dashboard.entities.graph_store_from_env", return_value=FakeGraphStore()):
+        result = knowledge_graph(user_id=user_id, days=14, max_nodes=5, database_url=pg_clean)
+
+    assert result["graph_store"] == "neo4j"
+    assert result["article_count"] == 2
+    assert calls[0]["pending_count"] == 1
+    assert calls[0]["days"] == 14
+    assert calls[0]["max_nodes"] == 5
+    assert {article["id"] for article in calls[0]["articles"]} == {visible_id, pending_id}

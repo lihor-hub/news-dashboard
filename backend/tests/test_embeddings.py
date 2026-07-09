@@ -232,3 +232,78 @@ def test_ask_endpoint_returns_503_when_embedding_unavailable(
     body = response.json()
     assert "temporarily unavailable" in body["detail"]
     assert "rate limited" not in body["detail"]
+
+
+def test_ask_includes_bounded_graph_context(
+    pg_clean: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    init_db(pg_clean)
+    with connect(database_url=pg_clean) as conn:
+        conn.execute(
+            """
+            INSERT INTO sources(slug, name, url, category, kind)
+            VALUES ('ask-graph', 'AskGraph', 'https://example.test/feed.xml', 'tech', 'rss_feed')
+            ON CONFLICT(slug) DO NOTHING
+            """
+        )
+        for article_id in range(1, 6):
+            conn.execute(
+                """
+                INSERT INTO articles(
+                    id, url, canonical_url, title, source_slug, source_name,
+                    category, kind, status, importance_score, summary, reason,
+                    tags, embedding_vec
+                ) VALUES (%s, %s, %s, %s, 'ask-graph', 'AskGraph',
+                    'tech', 'rss_feed', 'saved', 0.5, %s, '', '', %s::vector)
+                """,
+                (
+                    article_id,
+                    f"https://example.test/{article_id}",
+                    f"https://example.test/{article_id}",
+                    f"Article {article_id}",
+                    f"Summary {article_id}",
+                    "[" + ",".join(["0.1"] * EMBEDDING_DIMENSIONS) + "]",
+                ),
+            )
+
+    captured: dict[str, str] = {}
+    graph_context = {
+        "entities": [{"id": "org:openai", "name": "OpenAI", "type": "org", "article_ids": [1]}],
+        "relationships": [
+            {
+                "source": "org:openai",
+                "source_name": "OpenAI",
+                "target": "person:sam-altman",
+                "target_name": "Sam Altman",
+                "label": "led by",
+                "relationship_type": "led_by",
+                "article_ids": [1],
+            }
+        ],
+    }
+
+    def fake_answer(
+        _system_prompt: str,
+        user_prompt: str,
+        **_kwargs: Any,
+    ) -> str:
+        captured["prompt"] = user_prompt
+        return "graph answer"
+
+    monkeypatch.setattr(embeddings_mod, "embed_all_eligible", lambda *_args, **_kwargs: 0)
+    monkeypatch.setattr(embeddings_mod, "_embed", lambda _query: [0.1] * EMBEDDING_DIMENSIONS)
+    monkeypatch.setattr(embeddings_mod, "_answer", fake_answer)
+    monkeypatch.setattr(
+        embeddings_mod,
+        "graph_context_for_articles",
+        lambda article_ids: graph_context if article_ids else None,
+    )
+
+    result = embeddings_mod.ask("who leads OpenAI?", pg_clean)
+
+    assert result["answer"] == "graph answer"
+    assert result["graph_context"] == graph_context
+    assert "Knowledge graph:" in captured["prompt"]
+    assert "OpenAI led by Sam Altman" in captured["prompt"]
+    assert "articles [1]" in captured["prompt"]

@@ -6,6 +6,7 @@ The system is not a large microservice platform. It is best understood as a modu
 
 - `news-dashboard`: the FastAPI backend, which also serves the built React frontend in container and Kubernetes deployments.
 - `postgres`: the durable production database.
+- `neo4j`: optional graph storage for article/entity relationships.
 - `news-dashboard-ingest`: a Kubernetes CronJob batch workload that runs ingestion on a schedule.
 - Optional external integrations: RSS/Atom feeds, a scraped Anthropic News page, SMTP, GHCR, GitHub Actions, Keycloak SSO, and host-level Caddy.
 
@@ -18,6 +19,13 @@ PostgreSQL is the application database. Runtime code should be written directly 
 - Configure the app with `DATABASE_URL` or `POSTGRES_HOST`, `POSTGRES_PORT`, `POSTGRES_DB`, `POSTGRES_USER`, and `POSTGRES_PASSWORD`.
 - SQLite is allowed only as an input format for legacy migration tooling that imports old local data into PostgreSQL.
 - PostgreSQL must have the [pgvector](https://github.com/pgvector/pgvector) extension available (the `pgvector/pgvector:pg16` image, or `CREATE EXTENSION vector` on an external instance): article embeddings live in `articles.embedding_vec`, with similarity search (Ask AI, topic map, recommendations) running as SQL `<=>` queries over an HNSW index instead of a Python cosine loop.
+
+Neo4j is optional and scoped to graph-shaped data only. PostgreSQL remains the
+source of truth for article visibility, users, sources, workflow state,
+embeddings, auth, briefings, scheduler history, and analytics. The backend
+selects visible article IDs in PostgreSQL before querying Neo4j, so graph
+features inherit the same source ownership, disabled-source, and archived-state
+rules as the rest of the app.
 
 ## Runtime Topology
 

@@ -241,6 +241,22 @@ export interface AskResponse {
   sources: AskSource[];
   /** Langfuse trace id for this answer; null when tracing is disabled. */
   trace_id: string | null;
+  graph_context?: AskGraphContext;
+}
+
+export interface AskGraphRelationship {
+  source: string;
+  source_name?: string;
+  target: string;
+  target_name?: string;
+  relationship_type: string;
+  label?: string;
+  article_ids: number[];
+}
+
+export interface AskGraphContext {
+  entities: KnowledgeGraphNode[];
+  relationships: AskGraphRelationship[];
 }
 
 export type AgentActionTool =
@@ -738,6 +754,10 @@ export interface KnowledgeGraphEdge {
   target: string;
   weight: number;
   article_ids: number[];
+  kind?: 'cooccurrence' | 'typed';
+  relationship_type?: string;
+  label?: string;
+  confidence?: number;
 }
 
 export interface KnowledgeGraphArticle {
@@ -752,6 +772,9 @@ export interface KnowledgeGraphResponse {
   article_count: number;
   pending_count: number;
   days: number;
+  graph_store?: 'postgres' | 'neo4j';
+  graph_enabled?: boolean;
+  disabled_reason?: string;
 }
 
 export interface OnboardingInterest {

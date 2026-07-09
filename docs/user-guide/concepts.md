@@ -62,6 +62,15 @@ enable, or disable them.
 
 *Don't call it*: Feed filter, source state, channel.
 
+## Knowledge Graph
+
+An **entity relationship map** built from your visible articles. Entities are
+people, organizations, products, and places extracted from article text.
+Co-occurrence edges mean two entities appeared in the same article; typed
+relationship edges are explicit article-supported relationships.
+
+*Don't call it*: Global facts database, ontology, web search graph.
+
 ## Where these terms come from
 
 This terminology is defined in [`CONTEXT.md`](../../CONTEXT.md) and is the

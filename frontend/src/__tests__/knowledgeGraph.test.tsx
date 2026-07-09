@@ -30,7 +30,25 @@ const GRAPH: KnowledgeGraphResponse = {
     { id: 'person:sam-altman', name: 'Sam Altman', type: 'person', count: 2, article_ids: [1, 2] },
     { id: 'place:paris', name: 'Paris', type: 'place', count: 1, article_ids: [3] },
   ],
-  edges: [{ source: 'org:openai', target: 'person:sam-altman', weight: 2, article_ids: [1, 2] }],
+  edges: [
+    {
+      source: 'org:openai',
+      target: 'person:sam-altman',
+      weight: 2,
+      article_ids: [1, 2],
+      kind: 'cooccurrence',
+      label: 'co-mentioned',
+    },
+    {
+      source: 'org:openai',
+      target: 'person:sam-altman',
+      weight: 1,
+      article_ids: [1],
+      kind: 'typed',
+      relationship_type: 'led_by',
+      label: 'led by',
+    },
+  ],
   articles: [
     { id: 1, title: 'OpenAI and Altman' },
     { id: 2, title: 'Altman speaks' },
@@ -65,7 +83,7 @@ describe('knowledge graph section', () => {
     await waitFor(() => {
       expect(container.querySelectorAll('[data-testid="kg-node"]')).toHaveLength(3);
     });
-    expect(container.querySelectorAll('[data-testid="kg-edge"]')).toHaveLength(1);
+    expect(container.querySelectorAll('[data-testid="kg-edge"]')).toHaveLength(2);
     expect(screen.getByText('OpenAI')).toBeInTheDocument();
     expect(screen.getByText('Sam Altman')).toBeInTheDocument();
   });
@@ -80,9 +98,42 @@ describe('knowledge graph section', () => {
     )!;
     fireEvent.click(openai);
     await waitFor(() => {
-      expect(screen.getByText('OpenAI and Altman')).toBeInTheDocument();
+      expect(screen.getAllByText('OpenAI and Altman').length).toBeGreaterThan(0);
     });
     expect(screen.getByText('OpenAI in Paris')).toBeInTheDocument();
+  });
+
+  it('shows relationship summaries for the selected entity', async () => {
+    const { container } = renderPage();
+    await waitFor(() => {
+      expect(container.querySelectorAll('[data-testid="kg-node"]')).toHaveLength(3);
+    });
+    const openai = [...container.querySelectorAll('[data-testid="kg-node"]')].find(
+      (n) => n.getAttribute('data-entity') === 'org:openai'
+    )!;
+    fireEvent.click(openai);
+
+    await waitFor(() => {
+      expect(screen.getByText('Relationships')).toBeInTheDocument();
+    });
+    expect(screen.getByText(/led by Sam Altman/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/OpenAI and Altman/i).length).toBeGreaterThan(0);
+  });
+
+  it('filters the graph to typed relationships', async () => {
+    const { container } = renderPage();
+    await waitFor(() => {
+      expect(container.querySelectorAll('[data-testid="kg-edge"]')).toHaveLength(2);
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /typed relationships/i }));
+
+    await waitFor(() => {
+      expect(container.querySelectorAll('[data-testid="kg-edge"]')).toHaveLength(1);
+    });
+    expect(container.querySelector('[data-testid="kg-edge"]')?.getAttribute('data-kind')).toBe(
+      'typed'
+    );
   });
 
   it('explains pending extraction in the empty state', async () => {

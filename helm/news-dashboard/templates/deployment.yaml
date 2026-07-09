@@ -83,6 +83,9 @@ spec:
 {{- end }}
 {{ include "news-dashboard.aiEnv" . | indent 12 }}
 {{ include "news-dashboard.sentryEnv" . | indent 12 }}
+{{- if .Values.neo4j.enabled }}
+{{ include "news-dashboard.neo4jEnv" . | indent 12 }}
+{{- end }}
 {{- if .Values.app.push }}
 {{- if .Values.app.push.existingSecret }}
             - name: VAPID_PUBLIC_KEY

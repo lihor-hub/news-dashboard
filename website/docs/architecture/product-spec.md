@@ -14,7 +14,8 @@ A self-hosted, open-source news dashboard. It combines:
 3. **Summary archive** — stores contextual summaries and "why this matters" blurbs per article card.
 4. **Search** — full-text search across titles, summaries, tags, and sources.
 5. **Source health** — each feed shows last check time, success/error state, and item counts.
-6. **Future AI question layer** — ask Clau questions over saved/read history (see AI layer section).
+6. **AI question layer** — Ask AI answers over saved/read history with citations and optional graph context.
+7. **Knowledge graph** — entity and relationship exploration over recent visible articles.
 
 ## Source taxonomy
 
@@ -113,9 +114,10 @@ After ≥ 100 saved/read articles exist:
 - Enables semantic search and similarity grouping without adding a second runtime database.
 - Configure with `FREE_LLM_API_KEY` / `FREE_LLM_BASE_URL` (or the `OPENAI_API_KEY` / `OPENAI_BASE_URL` fallback); see `README.md` and `backend/news_dashboard/embeddings.py`.
 
-### Ask Clau endpoint (v1.3)
+### Ask AI endpoint and knowledge graph
 
-Scope: questions over articles with status `saved` or `read` only (not `new`/`skipped`/`archived`).
+Scope: questions over articles visible to the user. By default this is Starred
+and Done; users can include all non-archived articles.
 
 Proposed API:
 ```
@@ -125,9 +127,12 @@ POST /api/ask
 ```
 
 Implementation:
-1. Run `/api/search?q=<question_keywords>` to retrieve candidate articles.
-2. Bundle up to N articles (title + summary + date + source) into a prompt.
-3. Call OpenAI with the bundle and question.
+1. Use pgvector in PostgreSQL to retrieve candidate articles.
+2. Bundle bounded article context into the prompt.
+3. If Neo4j is enabled, add bounded entity relationship context for those same
+   candidate article IDs.
+4. Call the configured OpenAI-compatible LLM gateway and return article
+   citations plus graph context provenance.
 4. Return answer + article IDs used as citations.
 
 Privacy/security:

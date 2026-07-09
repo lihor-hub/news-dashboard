@@ -13,6 +13,7 @@ search, briefings, and sharing.
 | [Search](search) | Finding articles across your history with PostgreSQL full-text search. |
 | [Briefings](briefings) | Current-Day Reports, scheduled delivery, and optional audio. |
 | [Recommendations](recommendations) | How personalized suggestions are scored and controlled. |
+| [Knowledge Graph](knowledge-graph) | Exploring entities, typed relationships, and Ask AI graph context. |
 | [Saved and read history](saved-history) | Later, Done, Starred, Archived, Reading DNA, and export behavior. |
 | [Sharing articles](sharing) | Sending articles to other users on the same instance. |
 

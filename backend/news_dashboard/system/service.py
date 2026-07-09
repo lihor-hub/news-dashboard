@@ -34,6 +34,28 @@ def check_readiness() -> None:
         conn.execute("SELECT 1")
 
 
+def graph_status() -> dict[str, str]:
+    """Report optional Neo4j availability without making readiness depend on it."""
+    from news_dashboard.graph_store import GraphUnavailableError, graph_store_from_env
+
+    try:
+        graph_store = graph_store_from_env()
+    except GraphUnavailableError as exc:
+        return {"status": "unavailable", "detail": str(exc)}
+    if graph_store is None:
+        return {"status": "disabled"}
+    try:
+        graph_store.verify_connectivity()
+    except Exception as exc:
+        return {"status": "unavailable", "detail": str(exc)}
+    else:
+        return {"status": "ok"}
+    finally:
+        close = getattr(graph_store, "close", None)
+        if callable(close):
+            close()
+
+
 def public_config() -> dict[str, Any]:
     """Public, non-sensitive runtime config the SPA needs before login.
 

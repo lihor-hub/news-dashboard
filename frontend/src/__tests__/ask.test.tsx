@@ -113,6 +113,38 @@ describe('AskPage — citation click opens reader', () => {
       timeout: 2000,
     });
   });
+
+  it('shows graph context provenance when Ask AI used relationships', async () => {
+    vi.spyOn(api, 'askAI').mockResolvedValueOnce({
+      answer: 'Graph-aware answer [1].',
+      sources: [{ id: 42, title: 'Test Article', url: 'https://example.com/test' }],
+      trace_id: null,
+      graph_context: {
+        entities: [],
+        relationships: [
+          {
+            source: 'org:openai',
+            source_name: 'OpenAI',
+            target: 'person:sam-altman',
+            target_name: 'Sam Altman',
+            relationship_type: 'led_by',
+            label: 'led by',
+            article_ids: [42],
+          },
+        ],
+      },
+    });
+
+    renderAskPage();
+    const ta = screen.getByPlaceholderText(/Postgres/i);
+    await userEvent.type(ta, 'test question');
+    fireEvent.submit(ta.closest('form')!);
+
+    await waitFor(() => expect(screen.getByText('Knowledge graph context')).toBeTruthy(), {
+      timeout: 2000,
+    });
+    expect(screen.getByText(/OpenAI led by Sam Altman/i)).toBeTruthy();
+  });
 });
 
 // ─── Error states ─────────────────────────────────────────────────────────────

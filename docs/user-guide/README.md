@@ -13,6 +13,7 @@ core concepts and features so you can get the most out of your reading workflow.
 | [Search](search.md)                                               | Finding articles across your history                            |
 | [Briefings](briefings.md)                                         | The Current-Day Report, scheduled delivery, and podcast audio   |
 | [Recommendations](recommendations.md)                             | How the app learns what matters to you                          |
+| [Knowledge Graph](knowledge-graph.md)                              | Exploring entities, typed relationships, and Ask AI graph context |
 | [Saved & read history](saved-history.md)                          | Your personal reading archive and Reading DNA                   |
 | [Sharing articles](sharing.md)                                    | Sending articles to other users on the same instance            |
 

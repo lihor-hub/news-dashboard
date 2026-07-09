@@ -252,6 +252,33 @@ postgresql:
         cpu: 200m
         memory: 128Mi
 
+neo4j:
+  # Optional graph storage. PostgreSQL remains the application database.
+  enabled: false
+  image:
+    repository: neo4j
+    tag: 5-community
+    pullPolicy: IfNotPresent
+  auth:
+    # Name of a pre-existing Secret containing the passwordKey below. When
+    # existingSecret is set, also include NEO4J_AUTH for the Neo4j container
+    # in the form "<user>/<password>".
+    existingSecret: ""
+    user: neo4j
+    # Required when neo4j.enabled=true and auth.existingSecret is empty.
+    password: ""
+    passwordKey: NEO4J_PASSWORD
+  service:
+    port: 7687
+  database: neo4j
+  persistence:
+    enabled: true
+    existingClaim: ""
+    size: 5Gi
+    storageClassName: ""
+    hostPath: ""
+  resources: {}
+
 ingress:
   enabled: false
   className: ""

@@ -1,0 +1,18 @@
+{{- if and .Values.neo4j.enabled .Values.neo4j.persistence.enabled (not .Values.neo4j.persistence.existingClaim) (not .Values.neo4j.persistence.hostPath) }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "news-dashboard.fullname" . }}-neo4j
+  labels:
+    app.kubernetes.io/name: {{ include "news-dashboard.name" . }}-neo4j
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: {{ .Values.neo4j.persistence.size }}
+{{- if .Values.neo4j.persistence.storageClassName }}
+  storageClassName: {{ .Values.neo4j.persistence.storageClassName | quote }}
+{{- end }}
+{{- end }}

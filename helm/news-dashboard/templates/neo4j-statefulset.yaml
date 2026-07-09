@@ -1,0 +1,73 @@
+{{- if .Values.neo4j.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "news-dashboard.fullname" . }}-neo4j
+  labels:
+    app.kubernetes.io/name: {{ include "news-dashboard.name" . }}-neo4j
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  type: ClusterIP
+  ports:
+    - port: {{ .Values.neo4j.service.port }}
+      targetPort: bolt
+      name: bolt
+  selector:
+    app.kubernetes.io/name: {{ include "news-dashboard.name" . }}-neo4j
+    app.kubernetes.io/instance: {{ .Release.Name }}
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "news-dashboard.fullname" . }}-neo4j
+  labels:
+    app.kubernetes.io/name: {{ include "news-dashboard.name" . }}-neo4j
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  serviceName: {{ include "news-dashboard.fullname" . }}-neo4j
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "news-dashboard.name" . }}-neo4j
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ include "news-dashboard.name" . }}-neo4j
+        app.kubernetes.io/instance: {{ .Release.Name }}
+    spec:
+      containers:
+        - name: neo4j
+          image: "{{ .Values.neo4j.image.repository }}:{{ .Values.neo4j.image.tag }}"
+          imagePullPolicy: {{ .Values.neo4j.image.pullPolicy }}
+          ports:
+            - name: bolt
+              containerPort: {{ .Values.neo4j.service.port }}
+          env:
+            - name: NEO4J_AUTH
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "news-dashboard.neo4jSecretName" . | quote }}
+                  key: NEO4J_AUTH
+            - name: NEO4J_server_bolt_listen__address
+              value: {{ printf ":%v" .Values.neo4j.service.port | quote }}
+          volumeMounts:
+            - name: neo4j-data
+              mountPath: /data
+          {{- with .Values.neo4j.resources }}
+          resources:
+{{ toYaml . | indent 12 }}
+          {{- end }}
+      volumes:
+        - name: neo4j-data
+{{- if .Values.neo4j.persistence.hostPath }}
+          hostPath:
+            path: {{ .Values.neo4j.persistence.hostPath | quote }}
+            type: DirectoryOrCreate
+{{- else if .Values.neo4j.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ default (printf "%s-neo4j" (include "news-dashboard.fullname" .)) .Values.neo4j.persistence.existingClaim | quote }}
+{{- else }}
+          emptyDir: {}
+{{- end }}
+{{- end }}

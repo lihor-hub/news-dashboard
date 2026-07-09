@@ -6,6 +6,30 @@
 {{- printf "%s-%s" .Release.Name (include "news-dashboard.name" .) | trunc 63 | trimSuffix "-" -}}
 {{- end -}}
 
+{{- define "news-dashboard.neo4jSecretName" -}}
+{{- default (printf "%s-neo4j" (include "news-dashboard.fullname" .)) .Values.neo4j.auth.existingSecret -}}
+{{- end -}}
+
+{{- define "news-dashboard.neo4jPasswordKey" -}}
+{{- default "NEO4J_PASSWORD" .Values.neo4j.auth.passwordKey -}}
+{{- end -}}
+
+{{- define "news-dashboard.neo4jEnv" -}}
+{{- if .Values.neo4j.enabled }}
+- name: NEO4J_URI
+  value: {{ printf "bolt://%s-neo4j:%v" (include "news-dashboard.fullname" .) .Values.neo4j.service.port | quote }}
+- name: NEO4J_USER
+  value: {{ .Values.neo4j.auth.user | quote }}
+- name: NEO4J_PASSWORD
+  valueFrom:
+    secretKeyRef:
+      name: {{ include "news-dashboard.neo4jSecretName" . | quote }}
+      key: {{ include "news-dashboard.neo4jPasswordKey" . | quote }}
+- name: NEO4J_DATABASE
+  value: {{ .Values.neo4j.database | quote }}
+{{- end }}
+{{- end -}}
+
 {{- define "news-dashboard.aiEnv" -}}
 {{- if .Values.app.ai.existingSecret }}
 - name: OPENAI_API_KEY
