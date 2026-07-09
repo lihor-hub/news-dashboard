@@ -1,10 +1,17 @@
 from __future__ import annotations
 
+import io
 import socket
+import urllib.request
+from http.client import HTTPMessage
 
 import pytest
 
-from news_dashboard.url_safety import UnsafeUrlError, validate_server_fetch_url
+from news_dashboard.url_safety import (
+    UnsafeUrlError,
+    _ValidatingRedirectHandler,
+    validate_server_fetch_url,
+)
 
 
 def _fake_getaddrinfo(addresses: list[str]) -> object:
@@ -53,3 +60,35 @@ def test_validate_server_fetch_url_rejects_any_unsafe_resolved_address(
 
     with pytest.raises(UnsafeUrlError):
         validate_server_fetch_url("https://example.com/feed.xml")
+
+
+def test_redirect_handler_follows_safe_target(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(socket, "getaddrinfo", _fake_getaddrinfo(["93.184.216.34"]))
+    handler = _ValidatingRedirectHandler()
+    req = urllib.request.Request("https://example.com/feed.xml")
+
+    result = handler.redirect_request(
+        req,
+        io.BytesIO(),
+        301,
+        "Moved Permanently",
+        HTTPMessage(),
+        "https://example.com/new-feed.xml",
+    )
+
+    assert result is not None
+    assert result.full_url == "https://example.com/new-feed.xml"
+
+
+def test_redirect_handler_blocks_redirect_to_private_host(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(socket, "getaddrinfo", _fake_getaddrinfo(["169.254.169.254"]))
+    handler = _ValidatingRedirectHandler()
+    req = urllib.request.Request("https://example.com/feed.xml")
+
+    result = handler.redirect_request(
+        req, io.BytesIO(), 302, "Found", HTTPMessage(), "http://169.254.169.254/latest/meta-data"
+    )
+
+    assert result is None

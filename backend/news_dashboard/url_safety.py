@@ -61,7 +61,17 @@ def validate_server_fetch_url(url: str) -> None:
             raise UnsafeUrlError(msg)
 
 
-class _NoRedirectHandler(urllib.request.HTTPRedirectHandler):
+class _ValidatingRedirectHandler(urllib.request.HTTPRedirectHandler):
+    """Follow redirects only after re-validating each hop against SSRF rules.
+
+    urllib validates the *initial* fetch target, but a 3xx response can point
+    anywhere — including localhost or a cloud metadata endpoint. Re-validate
+    every redirect target before following it. Returning ``None`` for an unsafe
+    hop makes urllib raise the underlying ``HTTPError`` instead of chasing the
+    redirect, so the caller sees a fetch failure rather than reaching a private
+    host. urllib's built-in redirect cap (``max_redirections``) still applies.
+    """
+
     def redirect_request(
         self,
         req: urllib.request.Request,
@@ -71,14 +81,17 @@ class _NoRedirectHandler(urllib.request.HTTPRedirectHandler):
         headers: HTTPMessage,
         newurl: str,
     ) -> urllib.request.Request | None:
-        _ = (req, fp, code, msg, headers, newurl)
-        return None
+        try:
+            validate_server_fetch_url(newurl)
+        except UnsafeUrlError:
+            return None
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
 
 
 def open_server_fetch_url(request: urllib.request.Request, *, timeout: float) -> Any:
-    """Open a prevalidated server-side fetch request without following redirects."""
+    """Open a prevalidated server-side fetch request, following only safe redirects."""
     validate_server_fetch_url(request.full_url)
-    opener = urllib.request.build_opener(_NoRedirectHandler)
+    opener = urllib.request.build_opener(_ValidatingRedirectHandler)
     return opener.open(request, timeout=timeout)
 
 

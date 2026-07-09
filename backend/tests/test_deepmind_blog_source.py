@@ -20,9 +20,9 @@ def test_deepmind_blog_metadata() -> None:
     """deepmind-blog has the expected metadata fields."""
     src = next(s for s in DEFAULT_SOURCES if s.slug == "deepmind-blog")
     assert src.name == "Google DeepMind Blog"
-    assert src.url == "https://deepmind.google/blog/"
+    assert src.url == "https://deepmind.google/blog/rss.xml"
     assert src.category == "ai-llm"
-    assert src.kind == "scraped_page"
+    assert src.kind == "rss_feed"
     assert src.priority == 85
     assert src.enabled is True
     assert src.lang == "en"
@@ -37,10 +37,11 @@ def test_deepmind_blog_interest_tags() -> None:
     assert "product-news" in src.interest_tags
 
 
-def test_deepmind_blog_routes_to_scraped_page() -> None:
-    """deepmind-blog kind is scraped_page, which ingest routes correctly."""
+def test_deepmind_blog_routes_to_rss_feed() -> None:
+    """deepmind-blog is served by a real RSS feed, not a scraper."""
     src = next(s for s in DEFAULT_SOURCES if s.slug == "deepmind-blog")
-    assert src.kind == "scraped_page"
+    assert src.kind == "rss_feed"
+    assert src.url.endswith("rss.xml")
 
 
 # ── Integration tests (PostgreSQL) ────────────────────────────────────────
@@ -62,9 +63,9 @@ def test_deepmind_blog_sync_persists_row(pg_clean: str, monkeypatch: pytest.Monk
     assert row is not None, "deepmind-blog row missing from sources table"
     assert row["slug"] == "deepmind-blog"
     assert row["name"] == "Google DeepMind Blog"
-    assert row["url"] == "https://deepmind.google/blog/"
+    assert row["url"] == "https://deepmind.google/blog/rss.xml"
     assert row["category"] == "ai-llm"
-    assert row["kind"] == "scraped_page"
+    assert row["kind"] == "rss_feed"
     assert row["priority"] == 85
     assert row["enabled"] is True
 
