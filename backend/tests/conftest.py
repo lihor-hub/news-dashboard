@@ -177,6 +177,7 @@ def pg_url() -> Generator[str]:
             pytest.skip(
                 "testcontainers package not installed (pip install testcontainers[postgres])"
             )
+            raise
 
         try:
             container = PostgresContainer(_TESTCONTAINERS_PG_IMAGE)
