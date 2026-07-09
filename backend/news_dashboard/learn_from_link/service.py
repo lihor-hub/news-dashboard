@@ -448,6 +448,43 @@ def generate_study_artifacts(lesson_fields: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _build_lesson_detail(
+    lesson_fields: dict[str, Any],
+    depth: LessonDepth,
+    persona: LessonPersona,
+    lesson_id: int,
+) -> tuple[dict[str, Any] | None, str | None]:
+    try:
+        raw_detail = generate_structured_lesson_detail(lesson_fields, depth=depth, persona=persona)
+        detail = validate_structured_lesson_detail(raw_detail, lesson_fields=lesson_fields)
+    except LessonDetailValidationError:
+        logger.warning("lesson detail validation failed for lesson %d", lesson_id)
+        return None, "Generated lesson detail was malformed."
+    except LessonCitationValidationError:
+        logger.warning("lesson citation validation failed for lesson %d", lesson_id)
+        return None, "Generated lesson citations did not match source content."
+    except Exception as exc:
+        logger.warning("lesson detail generation failed for lesson %d: %s", lesson_id, exc)
+        return None, "Generated lesson detail was malformed."
+    return detail, None
+
+
+def _build_study_artifacts(
+    lesson_fields: dict[str, Any],
+    lesson_id: int,
+) -> tuple[dict[str, Any] | None, str | None]:
+    try:
+        raw_artifacts = generate_study_artifacts(lesson_fields)
+        artifacts = validate_study_artifacts(raw_artifacts)
+    except StudyArtifactsValidationError:
+        logger.warning("study artifacts validation failed for lesson %d", lesson_id)
+        return None, "Generated study artifacts were malformed."
+    except Exception as exc:
+        logger.warning("study artifacts generation failed for lesson %d: %s", lesson_id, exc)
+        return None, "Generated study artifacts were malformed."
+    return artifacts, None
+
+
 def generate_lesson_from_url(
     lesson_id: int,
     user_id: int,
@@ -504,31 +541,16 @@ def generate_lesson_from_url(
         "published_at": metadata.get("published_at"),
         "source_content": body_text,
     }
-    try:
-        raw_detail = generate_structured_lesson_detail(lesson_fields, depth=depth, persona=persona)
-        lesson_fields["lesson_detail"] = validate_structured_lesson_detail(
-            raw_detail,
-            lesson_fields=lesson_fields,
-        )
-    except LessonDetailValidationError:
-        logger.warning("lesson detail validation failed for lesson %d", lesson_id)
-        return _fail("Generated lesson detail was malformed.")
-    except LessonCitationValidationError:
-        logger.warning("lesson citation validation failed for lesson %d", lesson_id)
-        return _fail("Generated lesson citations did not match source content.")
-    except Exception as exc:
-        logger.warning("lesson detail generation failed for lesson %d: %s", lesson_id, exc)
-        return _fail("Generated lesson detail was malformed.")
 
-    try:
-        raw_artifacts = generate_study_artifacts(lesson_fields)
-        lesson_fields["study_artifacts"] = validate_study_artifacts(raw_artifacts)
-    except StudyArtifactsValidationError:
-        logger.warning("study artifacts validation failed for lesson %d", lesson_id)
-        return _fail("Generated study artifacts were malformed.")
-    except Exception as exc:
-        logger.warning("study artifacts generation failed for lesson %d: %s", lesson_id, exc)
-        return _fail("Generated study artifacts were malformed.")
+    detail, detail_error = _build_lesson_detail(lesson_fields, depth, persona, lesson_id)
+    if detail_error:
+        return _fail(detail_error)
+    lesson_fields["lesson_detail"] = detail
+
+    artifacts, artifacts_error = _build_study_artifacts(lesson_fields, lesson_id)
+    if artifacts_error:
+        return _fail(artifacts_error)
+    lesson_fields["study_artifacts"] = artifacts
 
     result = _update_lesson_success(
         lesson_id,
