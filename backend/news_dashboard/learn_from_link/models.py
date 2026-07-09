@@ -107,3 +107,16 @@ class StudyArtifacts(BaseModel):
     comprehension_questions: list[ComprehensionQuestion] = Field(min_length=1)
     flashcards: list[Flashcard] = Field(min_length=1)
     quiz: list[QuizQuestion] = Field(min_length=1)
+
+
+class PersonalRelevance(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    explanation: NonEmptyText
+    signals: list[NonEmptyText] = Field(default_factory=list)
+
+
+class RelevanceFeedbackRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    helpful: bool

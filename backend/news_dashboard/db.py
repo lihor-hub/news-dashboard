@@ -642,6 +642,8 @@ POSTGRES_MULTIUSER_SCHEMA = [
       source_content TEXT,
       lesson_detail JSONB,
       study_artifacts JSONB,
+      personal_relevance JSONB,
+      relevance_feedback BOOLEAN,
       generation_status TEXT NOT NULL DEFAULT 'pending'
         CHECK(generation_status IN ('pending','complete','failed')),
       generation_error TEXT,
@@ -652,6 +654,8 @@ POSTGRES_MULTIUSER_SCHEMA = [
     """,
     "ALTER TABLE lessons ADD COLUMN IF NOT EXISTS lesson_detail JSONB",
     "ALTER TABLE lessons ADD COLUMN IF NOT EXISTS study_artifacts JSONB",
+    "ALTER TABLE lessons ADD COLUMN IF NOT EXISTS personal_relevance JSONB",
+    "ALTER TABLE lessons ADD COLUMN IF NOT EXISTS relevance_feedback BOOLEAN",
     "CREATE INDEX IF NOT EXISTS idx_lessons_user_created ON lessons(user_id, created_at DESC)",
     "ALTER TABLE lessons ADD COLUMN IF NOT EXISTS depth TEXT NOT NULL DEFAULT 'normal'"
     " CHECK(depth IN ('tiny','normal','deep','expert'))",

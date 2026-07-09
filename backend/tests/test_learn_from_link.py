@@ -1199,3 +1199,80 @@ def test_list_lesson_generations_endpoint_404s_for_other_user(
         response = client.get(f"/api/learn/lessons/{lesson_id}/generations")
 
     assert response.status_code == 404
+
+
+def test_lesson_includes_fallback_personal_relevance_without_profile(
+    pg_clean: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("DATABASE_URL", pg_clean)
+    user_id = _make_user(pg_clean)
+
+    lesson = service.create_lesson(user_id, "https://example.com/relevance", database_url=pg_clean)
+
+    assert lesson["personal_relevance"] == {
+        "explanation": (
+            "No personalization data is available yet. "
+            "Start reading articles to see custom relevance explanations."
+        ),
+        "signals": [],
+    }
+
+
+def test_lesson_relevance_uses_profile_and_llm_response(
+    pg_clean: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("DATABASE_URL", pg_clean)
+    monkeypatch.setenv("FREE_LLM_API_KEY", "fake-key")
+    user_id = _make_user(pg_clean)
+    with connect(database_url=pg_clean) as conn:
+        conn.execute(
+            "INSERT INTO user_interest_profiles (user_id, interests) VALUES (%s, %s::jsonb)",
+            (user_id, '["technology", "AI"]'),
+        )
+
+    class FakeChoice:
+        def __init__(self, content: str) -> None:
+            self.message = SimpleNamespace(content=content)
+
+    class FakeResponse:
+        def __init__(self, content: str) -> None:
+            self.choices = [FakeChoice(content)]
+
+    monkeypatch.setattr(
+        "news_dashboard.ai_client.chat_create",
+        lambda *_args, **_kwargs: FakeResponse(
+            '{"explanation": "Relevant to your AI interests.", "signals": ["Interest: AI"]}'
+        ),
+    )
+
+    lesson = service.create_lesson(user_id, "https://example.com/ai", database_url=pg_clean)
+
+    assert lesson["personal_relevance"] == {
+        "explanation": "Relevant to your AI interests.",
+        "signals": ["Interest: AI"],
+    }
+
+
+def test_relevance_feedback_endpoint_is_owned_by_lesson_user(
+    pg_clean: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("DATABASE_URL", pg_clean)
+    init_db(database_url=pg_clean)
+    owner_id = _make_user(pg_clean)
+    other_id = _make_user(pg_clean, username="bob")
+    lesson = service.create_lesson(owner_id, "https://example.com/a", database_url=pg_clean)
+
+    with _api_client(owner_id) as client:
+        owner_response = client.post(
+            f"/api/learn/lessons/{lesson['id']}/relevance/feedback",
+            json={"helpful": True},
+        )
+    with _api_client(other_id, username="bob") as client:
+        other_response = client.post(
+            f"/api/learn/lessons/{lesson['id']}/relevance/feedback",
+            json={"helpful": False},
+        )
+
+    assert owner_response.status_code == 200
+    assert owner_response.json()["relevance_feedback"] is True
+    assert other_response.status_code == 404
