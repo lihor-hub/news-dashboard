@@ -224,13 +224,16 @@ def test_api_create_private_source(pg_clean: str, monkeypatch: pytest.MonkeyPatc
         )
         assert resp.status_code == 200
         data = resp.json()
-        assert data["slug"] == "my-blog"
+        # The stored slug is namespaced per-owner (see _private_source_slug) so it
+        # doesn't collide with another user's source requesting the same slug.
+        assert data["slug"] != "my-blog"
+        assert data["slug"].endswith("my-blog")
         assert data["owner_user_id"] == uid
 
         # Verify it appears in the source list for this user
         resp2 = client.get("/api/sources")
         slugs = [i["slug"] for i in resp2.json()["items"]]
-        assert "my-blog" in slugs
+        assert data["slug"] in slugs
 
 
 @pytest.mark.parametrize(
@@ -259,7 +262,7 @@ def test_api_create_private_source_accepts_supported_kinds(
 
     assert resp.status_code == 200
     data = resp.json()
-    assert data["slug"] == slug
+    assert data["slug"].endswith(slug)
     assert data["kind"] == kind
     assert data["owner_user_id"] == uid
 
@@ -349,7 +352,7 @@ def test_api_delete_own_private_source(pg_clean: str, monkeypatch: pytest.Monkey
     uid = _make_user(pg_clean)
 
     with _api_client(pg_clean, uid) as client:
-        client.post(
+        create_resp = client.post(
             "/api/sources",
             json={
                 "url": "https://example.com/delete-feed.xml",
@@ -357,7 +360,8 @@ def test_api_delete_own_private_source(pg_clean: str, monkeypatch: pytest.Monkey
                 "slug": "to-delete",
             },
         )
-        resp = client.delete("/api/sources/to-delete")
+        slug = create_resp.json()["slug"]
+        resp = client.delete(f"/api/sources/{slug}")
         assert resp.status_code == 200
         assert resp.json()["status"] == "deleted"
 
@@ -406,7 +410,7 @@ def test_api_delete_private_source_no_articles_still_soft_deletes(
     uid = _make_user(pg_clean)
 
     with _api_client(pg_clean, uid) as client:
-        client.post(
+        create_resp = client.post(
             "/api/sources",
             json={
                 "url": "https://example.com/empty-feed.xml",
@@ -414,7 +418,8 @@ def test_api_delete_private_source_no_articles_still_soft_deletes(
                 "slug": "empty-src",
             },
         )
-        resp = client.delete("/api/sources/empty-src")
+        slug = create_resp.json()["slug"]
+        resp = client.delete(f"/api/sources/{slug}")
         assert resp.status_code == 200
         assert resp.json()["status"] == "deleted"
 
@@ -422,7 +427,7 @@ def test_api_delete_private_source_no_articles_still_soft_deletes(
         with connect(pg_clean) as conn:
             row = conn.execute(
                 "SELECT slug, deleted_at IS NOT NULL as is_deleted FROM sources WHERE slug = %s",
-                ("empty-src",),
+                (slug,),
             ).fetchone()
             assert row is not None
             assert row["is_deleted"] is True
@@ -430,7 +435,7 @@ def test_api_delete_private_source_no_articles_still_soft_deletes(
         # Source not in listing
         resp2 = client.get("/api/sources")
         slugs = [i["slug"] for i in resp2.json()["items"]]
-        assert "empty-src" not in slugs
+        assert slug not in slugs
 
 
 def test_api_cannot_delete_others_source(pg_clean: str, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -440,7 +445,7 @@ def test_api_cannot_delete_others_source(pg_clean: str, monkeypatch: pytest.Monk
     uid_b = _make_user(pg_clean, "bob")
 
     with _api_client(pg_clean, uid_a) as client_a:
-        client_a.post(
+        create_resp = client_a.post(
             "/api/sources",
             json={
                 "url": "https://example.com/alices-feed.xml",
@@ -448,9 +453,10 @@ def test_api_cannot_delete_others_source(pg_clean: str, monkeypatch: pytest.Monk
                 "slug": "alice-src",
             },
         )
+        slug = create_resp.json()["slug"]
 
     with _api_client(pg_clean, uid_b) as client_b:
-        resp = client_b.delete("/api/sources/alice-src")
+        resp = client_b.delete(f"/api/sources/{slug}")
         assert resp.status_code == 403
 
 
@@ -538,6 +544,70 @@ def test_api_create_source_duplicate_slug_returns_409(
         resp1 = client.post("/api/sources", json=payload)
         assert resp1.status_code == 200
         resp2 = client.post("/api/sources", json=payload)
+        assert resp2.status_code == 409
+        assert "already exists" in resp2.json()["detail"]
+
+
+def test_api_create_source_allows_cross_user_slug_reuse(
+    pg_clean: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Different users can each create a private source with the same requested slug."""
+    monkeypatch.setenv("DATABASE_URL", str(pg_clean))
+    sync_sources(pg_clean)
+    alice = _make_user(pg_clean, "alice")
+    bob = _make_user(pg_clean, "bob")
+
+    with _api_client(pg_clean, alice) as client:
+        resp = client.post(
+            "/api/sources",
+            json={"url": "https://example.com/alice-feed", "name": "My Blog", "slug": "my-blog"},
+        )
+        assert resp.status_code == 200
+        alice_slug = resp.json()["slug"]
+
+    with _api_client(pg_clean, bob) as client:
+        resp = client.post(
+            "/api/sources",
+            json={"url": "https://example.com/bob-feed", "name": "My Blog", "slug": "my-blog"},
+        )
+        assert resp.status_code == 200
+        bob_slug = resp.json()["slug"]
+
+    assert alice_slug != bob_slug
+
+    # Alice still can't see Bob's private source, and vice versa.
+    with _api_client(pg_clean, alice) as client:
+        resp = client.get("/api/sources")
+        slugs = {item["slug"] for item in resp.json()["items"]}
+        assert alice_slug in slugs
+        assert bob_slug not in slugs
+
+    with _api_client(pg_clean, bob) as client:
+        resp = client.get("/api/sources")
+        slugs = {item["slug"] for item in resp.json()["items"]}
+        assert bob_slug in slugs
+        assert alice_slug not in slugs
+
+
+def test_api_create_source_still_rejects_same_user_duplicate_slug(
+    pg_clean: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A user still gets 409 when re-using their own existing private slug."""
+    monkeypatch.setenv("DATABASE_URL", str(pg_clean))
+    sync_sources(pg_clean)
+    uid = _make_user(pg_clean)
+
+    with _api_client(pg_clean, uid) as client:
+        payload = {"url": "https://example.com/feed", "name": "My Blog", "slug": "my-blog"}
+        resp1 = client.post("/api/sources", json=payload)
+        assert resp1.status_code == 200
+
+        other_payload = {
+            "url": "https://example.com/other-feed",
+            "name": "My Blog Again",
+            "slug": "my-blog",
+        }
+        resp2 = client.post("/api/sources", json=other_payload)
         assert resp2.status_code == 409
         assert "already exists" in resp2.json()["detail"]
 
