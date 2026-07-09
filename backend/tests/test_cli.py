@@ -67,6 +67,27 @@ def test_articles_lists_rows() -> None:
     assert "[7] new Hello — Src" in result.stdout
 
 
+def test_graph_backfill_prints_synced_count() -> None:
+    with patch("news_dashboard.entities.sync_cached_entities_to_graph", return_value=12) as sync:
+        result = runner.invoke(app, ["graph-backfill", "--limit", "50", "--days", "14"])
+
+    assert result.exit_code == 0
+    sync.assert_called_once_with(limit=50, days=14)
+    assert "graph entities synced: 12" in result.stdout
+
+
+def test_graph_relationship_backfill_prints_synced_count() -> None:
+    with patch(
+        "news_dashboard.entities.extract_missing_entity_relationships",
+        return_value=4,
+    ) as sync:
+        result = runner.invoke(app, ["graph-relationship-backfill", "--limit", "25", "--days", "7"])
+
+    assert result.exit_code == 0
+    sync.assert_called_once_with(limit=25, days=7)
+    assert "graph relationships synced: 4" in result.stdout
+
+
 def test_rec_health_prints_snapshot() -> None:
     health = {
         "total_scores": 10,

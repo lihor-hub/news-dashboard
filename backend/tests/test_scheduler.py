@@ -1094,6 +1094,16 @@ def test_start_scheduler_registers_entity_extraction_job(
     assert jobs["entity_extraction"]["minutes"] == 30
 
 
+def test_start_scheduler_registers_entity_relationship_extraction_job(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    mock_sched = _start_with_env(monkeypatch)
+    jobs = {c.kwargs.get("id"): c.kwargs for c in mock_sched.add_job.call_args_list}
+    assert "entity_relationship_extraction" in jobs
+    assert jobs["entity_relationship_extraction"]["trigger"] == "interval"
+    assert jobs["entity_relationship_extraction"]["minutes"] == 60
+
+
 def test_start_scheduler_entity_extraction_interval_env_override(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -1138,6 +1148,19 @@ def test_run_entity_extraction_reports_failure() -> None:
 
     assert status == "failure"
     assert "boom" in (message or "")
+
+
+def test_run_entity_relationship_extraction_reports_count() -> None:
+    from news_dashboard.scheduler import _run_entity_relationship_extraction
+
+    with patch(
+        "news_dashboard.entities.extract_missing_entity_relationships", return_value=2
+    ) as mock_extract:
+        status, message = _run_entity_relationship_extraction()
+
+    mock_extract.assert_called_once()
+    assert status == "success"
+    assert "2" in (message or "")
 
 
 def test_start_scheduler_registers_reading_list_fetch_job(

@@ -78,9 +78,12 @@ test-full: test-nightly
 
 ## helm-validate: lint and render the Helm chart with default and production-like values
 helm-validate:
-	helm lint ./helm/news-dashboard
+	helm lint ./helm/news-dashboard \
+		--set-string "app.auth.sessionSecret=dummy-session-secret-for-render-only" \
+		--set-string "postgresql.password=dummy-postgres-password-for-render-only"
 	helm template news-dashboard ./helm/news-dashboard \
-		--set-string "app.auth.sessionSecret=dummy-session-secret-for-render-only"
+		--set-string "app.auth.sessionSecret=dummy-session-secret-for-render-only" \
+		--set-string "postgresql.password=dummy-postgres-password-for-render-only"
 	helm template news-dashboard ./helm/news-dashboard \
 		--set "image.tag=abc1234" \
 		--set "image.pullSecretName=ghcr-pull-secret" \
@@ -93,6 +96,7 @@ helm-validate:
 		--set-string "app.ai.briefingModel=gpt-4o" \
 		--set-string "app.ai.langfuse.host=http://langfuse.local" \
 		--set-string "app.push.email=test@example.com" \
+		--set-string "postgresql.password=dummy-postgres-password-for-render-only" \
 		--set "postgresql.persistence.hostPath=/home/ioachim-minipc/news-dashboard-postgres-data"
 	helm template news-dashboard ./helm/news-dashboard \
 		--set "postgresql.enabled=false" \

@@ -52,6 +52,15 @@ placeholder translation layers, or generic multi-database SQL.
 SQLite may appear only in legacy migration tooling that reads an old SQLite
 database and writes into PostgreSQL.
 
+## Optional Neo4j graph store
+
+Graph features use Neo4j only when `NEO4J_URI`, `NEO4J_USER`, and
+`NEO4J_PASSWORD` are configured. Unit tests fake the graph boundary; do not
+require a live Neo4j instance for the normal test suite. When you change graph
+behavior, add tests around `backend/news_dashboard/graph_store.py`,
+`backend/news_dashboard/entities.py`, or the relevant frontend component, then
+run the targeted backend and Vitest suites.
+
 ## Opening a PR
 
 1. Pick or create an issue with clear acceptance criteria.

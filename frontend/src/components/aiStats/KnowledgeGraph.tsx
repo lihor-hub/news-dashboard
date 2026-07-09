@@ -13,6 +13,7 @@ import { cn } from '@/lib/utils';
 
 const CANVAS_W = 800;
 const CANVAS_H = 600;
+type EdgeFilter = 'all' | 'cooccurrence' | 'typed';
 
 const TYPE_COLORS: Record<EntityType, string> = {
   person: 'var(--color-chart-1)',
@@ -32,12 +33,17 @@ function isIncident(edge: KnowledgeGraphEdge, nodeId: string): boolean {
   return edge.source === nodeId || edge.target === nodeId;
 }
 
+function edgeKind(edge: KnowledgeGraphEdge): 'cooccurrence' | 'typed' {
+  return edge.kind ?? 'cooccurrence';
+}
+
 interface KnowledgeGraphProps {
   graph: KnowledgeGraphResponse;
 }
 
 export function KnowledgeGraph({ graph }: KnowledgeGraphProps) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [edgeFilter, setEdgeFilter] = useState<EdgeFilter>('all');
 
   // Mutable positions map (starts from forceLayout, updated by drag)
   const [positions, setPositions] = useState<Map<string, ForcePoint>>(() =>
@@ -141,11 +147,34 @@ export function KnowledgeGraph({ graph }: KnowledgeGraphProps) {
     [graph.nodes, selectedId]
   );
 
+  const nodeNameById = useMemo(
+    () => new Map(graph.nodes.map((node: KnowledgeGraphNode) => [node.id, node.name])),
+    [graph.nodes]
+  );
+
+  const visibleEdges = useMemo(
+    () => graph.edges.filter((edge) => edgeFilter === 'all' || edgeKind(edge) === edgeFilter),
+    [edgeFilter, graph.edges]
+  );
+
   const selectedArticles = useMemo(() => {
     if (!selected) return [];
     const wanted = new Set(selected.article_ids);
     return graph.articles.filter((a) => wanted.has(a.id));
   }, [graph.articles, selected]);
+
+  const selectedRelationships = useMemo(() => {
+    if (!selected) return [];
+    return visibleEdges.filter((edge) => isIncident(edge, selected.id));
+  }, [selected, visibleEdges]);
+
+  if (graph.graph_enabled === false) {
+    return (
+      <p className="py-10 text-center text-sm text-muted-foreground">
+        {graph.disabled_reason ?? 'Knowledge graph storage is not enabled.'}
+      </p>
+    );
+  }
 
   if (graph.nodes.length === 0) {
     return (
@@ -165,6 +194,28 @@ export function KnowledgeGraph({ graph }: KnowledgeGraphProps) {
 
   return (
     <div className="flex flex-col gap-3">
+      <div className="flex flex-wrap items-center gap-2">
+        {[
+          ['all', 'All relationships'],
+          ['cooccurrence', 'Co-occurrence'],
+          ['typed', 'Typed relationships'],
+        ].map(([value, label]) => (
+          <button
+            key={value}
+            type="button"
+            onClick={() => setEdgeFilter(value as EdgeFilter)}
+            className={cn(
+              'rounded px-2.5 py-1 text-xs transition-colors',
+              edgeFilter === value
+                ? 'bg-primary text-primary-foreground'
+                : 'bg-surface-2 text-muted-foreground hover:text-foreground'
+            )}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
       {/* Graph canvas */}
       <div className="relative overflow-hidden rounded-lg border border-border bg-surface-2">
         <svg
@@ -183,21 +234,27 @@ export function KnowledgeGraph({ graph }: KnowledgeGraphProps) {
           <rect x={0} y={0} width={CANVAS_W} height={CANVAS_H} fill="transparent" />
 
           <g transform={transform}>
-            {graph.edges.map((edge) => {
+            {visibleEdges.map((edge, index) => {
               const a = positions.get(edge.source);
               const b = positions.get(edge.target);
               if (!a || !b) return null;
               const dimmed = selectedId !== null && !isIncident(edge, selectedId);
+              const kind = edgeKind(edge);
               return (
                 <line
-                  key={`${edge.source}--${edge.target}`}
+                  key={`${edge.source}--${edge.target}--${kind}--${edge.relationship_type ?? index}`}
                   data-testid="kg-edge"
+                  data-kind={kind}
                   x1={a.x}
                   y1={a.y}
                   x2={b.x}
                   y2={b.y}
                   strokeWidth={Math.min(1 + edge.weight, 6)}
-                  className={cn('stroke-primary/30', dimmed && 'stroke-primary/10')}
+                  strokeDasharray={kind === 'typed' ? '5 4' : undefined}
+                  className={cn(
+                    kind === 'typed' ? 'stroke-accent-foreground/50' : 'stroke-primary/30',
+                    dimmed && 'stroke-primary/10'
+                  )}
                 />
               );
             })}
@@ -272,6 +329,8 @@ export function KnowledgeGraph({ graph }: KnowledgeGraphProps) {
             {type}
           </span>
         ))}
+        <span className="text-[11px] text-muted-foreground">solid: co-occurrence</span>
+        <span className="text-[11px] text-muted-foreground">dashed: typed relationship</span>
       </div>
 
       {/* Selected node detail */}
@@ -295,6 +354,52 @@ export function KnowledgeGraph({ graph }: KnowledgeGraphProps) {
               </li>
             ))}
           </ul>
+          {selectedRelationships.length > 0 && (
+            <div className="mt-4">
+              <h4 className="text-xs font-semibold text-muted-foreground">Relationships</h4>
+              <ul className="mt-2 grid gap-1.5">
+                {selectedRelationships.map((edge, index) => {
+                  const otherId = edge.source === selected.id ? edge.target : edge.source;
+                  const otherName = nodeNameById.get(otherId) ?? otherId;
+                  const label =
+                    edge.label ??
+                    (edge.kind === 'typed'
+                      ? (edge.relationship_type ?? 'related to').replace(/_/g, ' ')
+                      : 'co-mentioned with');
+                  const articles = graph.articles.filter((article) =>
+                    edge.article_ids.includes(article.id)
+                  );
+                  return (
+                    <li
+                      key={`${edge.source}--${edge.target}--${edge.relationship_type ?? index}`}
+                      className="text-xs text-muted-foreground"
+                    >
+                      <span className="font-medium text-foreground">
+                        {label} {otherName}
+                      </span>
+                      {articles.length > 0 && (
+                        <span>
+                          {' '}
+                          ·{' '}
+                          {articles.map((article, articleIndex) => (
+                            <span key={article.id}>
+                              {articleIndex > 0 ? ', ' : ''}
+                              <Link
+                                to={`/a/${article.id}`}
+                                className="text-foreground hover:text-primary hover:underline"
+                              >
+                                {article.title}
+                              </Link>
+                            </span>
+                          ))}
+                        </span>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          )}
         </div>
       )}
     </div>

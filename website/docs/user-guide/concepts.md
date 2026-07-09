@@ -48,3 +48,10 @@ not remove it from the day's report.
 A **source subscription** is the set of feeds available to your account. A
 source can be an RSS or Atom feed, a GitHub releases feed, a trending feed, or
 a custom scraped page.
+
+## Knowledge graph
+
+A **knowledge graph** is an entity relationship map built from your visible
+articles. Entities are people, organizations, products, and places extracted
+from article text. Co-occurrence edges mean two entities appeared in the same
+article; typed relationship edges are explicit article-supported relationships.

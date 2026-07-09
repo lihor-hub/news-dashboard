@@ -55,6 +55,24 @@ def articles(status: str | None = None, limit: int = 20) -> None:
         )
 
 
+@app.command(name="graph-backfill")
+def graph_backfill(limit: int = 250, days: int = 30) -> None:
+    """Sync cached article entities from PostgreSQL into Neo4j."""
+    from news_dashboard.entities import sync_cached_entities_to_graph
+
+    synced = sync_cached_entities_to_graph(limit=limit, days=days)
+    typer.echo(f"graph entities synced: {synced}")
+
+
+@app.command(name="graph-relationship-backfill")
+def graph_relationship_backfill(limit: int = 50, days: int = 7) -> None:
+    """Extract and sync typed entity relationships into Neo4j."""
+    from news_dashboard.entities import extract_missing_entity_relationships
+
+    synced = extract_missing_entity_relationships(limit=limit, days=days)
+    typer.echo(f"graph relationships synced: {synced}")
+
+
 @app.command(name="rec-health")
 def rec_health() -> None:
     """Print a diagnostic snapshot of stale/missing recommendation scores."""

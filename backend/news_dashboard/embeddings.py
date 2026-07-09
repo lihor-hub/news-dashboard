@@ -186,6 +186,66 @@ def _answer(
     return response.choices[0].message.content or ""
 
 
+def graph_context_for_articles(article_ids: list[int]) -> dict[str, Any] | None:
+    """Fetch optional Neo4j context for article IDs already authorized by Ask retrieval."""
+    from news_dashboard.graph_store import GraphUnavailableError, graph_store_from_env
+
+    try:
+        graph_store = graph_store_from_env()
+    except GraphUnavailableError:
+        logger.exception("Neo4j graph store is configured but unavailable")
+        return None
+    if graph_store is None:
+        return None
+    try:
+        return graph_store.ask_context(article_ids=article_ids)
+    except Exception:
+        logger.exception("Failed to load Ask AI graph context")
+        return None
+    finally:
+        close = getattr(graph_store, "close", None)
+        if callable(close):
+            close()
+
+
+def _format_graph_context(context: dict[str, Any] | None) -> str:
+    if not context:
+        return ""
+    entities = context.get("entities")
+    relationships = context.get("relationships")
+    if not isinstance(entities, list) or not isinstance(relationships, list):
+        return ""
+
+    entity_names = {
+        str(entity.get("id")): str(entity.get("name"))
+        for entity in entities
+        if isinstance(entity, dict) and entity.get("id") and entity.get("name")
+    }
+    lines: list[str] = []
+    for relationship in relationships[:8]:
+        if not isinstance(relationship, dict):
+            continue
+        source_id = str(relationship.get("source") or "")
+        target_id = str(relationship.get("target") or "")
+        if not source_id or not target_id:
+            continue
+        label = str(
+            relationship.get("label")
+            or str(relationship.get("relationship_type") or "").replace("_", " ")
+        ).strip()
+        article_ids = relationship.get("article_ids")
+        if not isinstance(article_ids, list):
+            article_ids = []
+        refs = ", ".join(str(int(article_id)) for article_id in article_ids if article_id)
+        source = str(relationship.get("source_name") or entity_names.get(source_id, source_id))
+        target = str(relationship.get("target_name") or entity_names.get(target_id, target_id))
+        suffix = f" (articles [{refs}])" if refs else ""
+        lines.append(f"- {source} {label} {target}{suffix}")
+    if not lines:
+        return ""
+    return "Knowledge graph:\n" + "\n".join(lines)
+
+
 # ── Cosine similarity ──────────────────────────────────────────────────────
 
 
@@ -415,6 +475,8 @@ def ask(
             f"[{i}] Title: {row['title']}\nURL: {row['url']}\nSummary: {row['summary']}"
         )
     context_text = "\n\n".join(context_blocks)
+    graph_context = graph_context_for_articles([int(row["id"]) for row in rows])
+    graph_context_text = _format_graph_context(graph_context)
 
     from news_dashboard.ai_client import get_prompt, observe
     from news_dashboard.ai_memory.service import format_memories_for_prompt
@@ -422,7 +484,8 @@ def ask(
     prompt = get_prompt("ask-system", fallback=ASK_SYSTEM_PROMPT)
     memory_text = format_memories_for_prompt(user_id)
     memory_block = f"{memory_text}\n\n" if memory_text else ""
-    user_prompt = f"{memory_block}Articles:\n\n{context_text}\n\nQuestion: {query}"
+    graph_block = f"\n\n{graph_context_text}" if graph_context_text else ""
+    user_prompt = f"{memory_block}Articles:\n\n{context_text}{graph_block}\n\nQuestion: {query}"
 
     # 6. Call OpenAI for the answer, grouping retrieval + generation under one
     #    Langfuse trace so its id can carry user feedback (see /api/feedback).
@@ -432,4 +495,11 @@ def ask(
 
     # 7. Return answer + source list (top-k order)
     sources = [{"id": row["id"], "title": row["title"], "url": row["url"]} for row in rows]
-    return {"answer": answer_text, "sources": sources, "trace_id": trace.trace_id}
+    result: dict[str, Any] = {
+        "answer": answer_text,
+        "sources": sources,
+        "trace_id": trace.trace_id,
+    }
+    if graph_context is not None:
+        result["graph_context"] = graph_context
+    return result

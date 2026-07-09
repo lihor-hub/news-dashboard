@@ -56,3 +56,27 @@ def test_ready_returns_503_when_db_unavailable() -> None:
     with patch("news_dashboard.system.service.connect", broken_connect):
         resp = _client().get("/api/ready")
     assert resp.status_code == 503
+
+
+def test_health_details_reports_graph_status() -> None:
+    from news_dashboard.auth import require_admin, require_auth
+
+    client = _client()
+    app.dependency_overrides[require_auth] = lambda: {
+        "id": 1,
+        "username": "admin",
+        "is_admin": True,
+    }
+    app.dependency_overrides[require_admin] = lambda: None
+    with (
+        patch("news_dashboard.main.init_db"),
+        patch("news_dashboard.main.describe_database", return_value="postgresql://db"),
+        patch("news_dashboard.main.get_next_ingest_at", return_value=None),
+        patch("news_dashboard.system.service.graph_status", return_value={"status": "disabled"}),
+    ):
+        resp = client.get("/api/health/details")
+    app.dependency_overrides.pop(require_admin, None)
+    app.dependency_overrides.pop(require_auth, None)
+
+    assert resp.status_code == 200
+    assert resp.json()["graph"] == {"status": "disabled"}

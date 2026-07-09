@@ -11,5 +11,6 @@ contributing, and end-user guides are published at
 | Doc | Description |
 |-----|--------------|
 | [SELF_HOSTING.md](SELF_HOSTING.md) | Running your own instance of News Dashboard. |
+| [knowledge-graph.md](knowledge-graph.md) | Neo4j knowledge graph architecture, data flow, backfill commands, and degraded behavior. |
 | [adr/](adr/README.md) | Architecture Decision Records — context and rationale behind significant technical decisions. |
 | [user-guide/](user-guide/README.md) | Markdown mirror of the end-user guide; the published version lives at [docs.lihor.ro/docs/user-guide](https://docs.lihor.ro/docs/user-guide). |

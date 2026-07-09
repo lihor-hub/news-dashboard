@@ -18,6 +18,7 @@ This guide explains how to deploy News Dashboard for production use using the pu
 - [Upgrading](#upgrading)
 - [Rolling Back](#rolling-back)
 - [Background Jobs](#background-jobs)
+- [Optional Graph Storage](#optional-graph-storage)
 - [Sizing](#sizing)
 - [Backups](#backups)
 - [Next Steps](#next-steps)
@@ -414,6 +415,10 @@ the app's own defaults. Sentry DSNs and other secret-bearing values are
 supplied via `app.sentry.existingSecret` (a pre-existing Secret), never
 committed to `values.yaml`.
 
+Neo4j is available as an optional Helm-managed graph store. See
+[Optional Graph Storage](#optional-graph-storage) for the values and backfill
+commands.
+
 ### Migration / Schema Updates
 
 The app calls `init_db()` on every startup, which creates missing tables and
@@ -483,6 +488,60 @@ If you see duplicate ingest runs, ensure only one scheduler is active.
 - **Disable the in-process scheduler**: set `INGEST_INTERVAL_SCHEDULER_ENABLED=false`
 - **Manual ingest**: call `POST /api/ingest` or run `news-dashboard ingest` from the CLI
 - **Scheduler admin**: authenticated admin users can pause, resume, and change the ingest interval via the `/api/scheduler/*` endpoints
+
+## Optional Graph Storage
+
+Neo4j support is off by default. In Helm installs, set `neo4j.enabled=true` to
+render a Neo4j StatefulSet, ClusterIP Service, credentials Secret, and
+persistent storage. The app still requires PostgreSQL for primary data storage.
+
+The most common values are:
+
+```yaml
+neo4j:
+  enabled: true
+  auth:
+    user: neo4j
+    password: "replace-with-a-long-random-password"
+  persistence:
+    size: 10Gi
+    storageClassName: fast-storage
+```
+
+Use `neo4j.auth.existingSecret` and `neo4j.auth.passwordKey` when credentials
+are managed outside Helm. The Secret must also include `NEO4J_AUTH` in
+`<user>/<password>` form so the Neo4j container can initialize authentication.
+
+For a chart-managed Neo4j Secret, pass a password at install or upgrade time:
+
+```bash
+helm upgrade news-dashboard ./helm/news-dashboard \
+  --reuse-values \
+  --set neo4j.enabled=true \
+  --set neo4j.auth.user=neo4j \
+  --set-string neo4j.auth.password='replace-with-a-long-random-password'
+```
+
+For a pre-existing Secret, create the password key used by the app and
+`NEO4J_AUTH` used by the Neo4j container:
+
+```bash
+kubectl -n news-dashboard create secret generic news-dashboard-neo4j-auth \
+  --from-literal=NEO4J_PASSWORD='replace-with-a-long-random-password' \
+  --from-literal=NEO4J_AUTH='neo4j/replace-with-a-long-random-password'
+
+helm upgrade news-dashboard ./helm/news-dashboard \
+  --reuse-values \
+  --set neo4j.enabled=true \
+  --set neo4j.auth.existingSecret=news-dashboard-neo4j-auth \
+  --set neo4j.auth.user=neo4j \
+  --set neo4j.auth.passwordKey=NEO4J_PASSWORD
+```
+
+Persistent storage is enabled by default when Neo4j is enabled. Tune it with
+`neo4j.persistence.size`, `neo4j.persistence.storageClassName`,
+`neo4j.persistence.existingClaim`, or `neo4j.persistence.hostPath`; set
+`neo4j.persistence.enabled=false` only for disposable test installs.
 
 ## Sizing
 

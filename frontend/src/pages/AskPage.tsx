@@ -352,6 +352,31 @@ export function AskPage() {
             </p>
           )}
 
+          {result.graph_context?.relationships && result.graph_context.relationships.length > 0 && (
+            <div>
+              <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium mb-2">
+                Knowledge graph context
+              </div>
+              <ul className="space-y-1.5 rounded-md border border-border bg-surface-2 p-3">
+                {result.graph_context.relationships.slice(0, 5).map((relationship, index) => (
+                  <li
+                    key={`${relationship.source}-${relationship.target}-${relationship.relationship_type}-${index}`}
+                    className="text-xs text-muted-foreground"
+                  >
+                    <span className="font-medium text-foreground">
+                      {relationship.source_name ?? relationship.source}{' '}
+                      {relationship.label ?? relationship.relationship_type.replace(/_/g, ' ')}{' '}
+                      {relationship.target_name ?? relationship.target}
+                    </span>
+                    {relationship.article_ids.length > 0 && (
+                      <span> · articles {relationship.article_ids.join(', ')}</span>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
           {result.sources.length > 0 && (
             <div>
               <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium mb-2">
