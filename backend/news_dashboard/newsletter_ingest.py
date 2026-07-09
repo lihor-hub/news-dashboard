@@ -31,6 +31,7 @@ logger = logging.getLogger(__name__)
 
 _DEFAULT_FOLDER = "INBOX"
 _DEFAULT_POLL_MINUTES = 15
+_DEFAULT_MAX_MESSAGE_BYTES = 5 * 1024 * 1024
 _SOURCE_CATEGORY = "newsletter"
 _SOURCE_KIND = "newsletter"
 
@@ -83,6 +84,11 @@ def imap_configured() -> bool:
 
 def poll_minutes() -> int:
     return int(os.getenv("NEWSLETTER_POLL_MINUTES", str(_DEFAULT_POLL_MINUTES)))
+
+
+def max_message_bytes() -> int:
+    """Max accepted RFC822 message size before it's skipped without parsing. Default 5 MiB."""
+    return int(os.getenv("NEWSLETTER_MAX_MESSAGE_BYTES", str(_DEFAULT_MAX_MESSAGE_BYTES)))
 
 
 _PLUS_ADDRESS_RE = re.compile(r"^[^+@]+\+([^@]+)@", re.IGNORECASE)
@@ -312,14 +318,30 @@ def _connect_imap(config: ImapConfig) -> ImapClient:
     return client  # structurally satisfies ImapClient; exact stub return types differ slightly
 
 
-def _fetch_raw_message(client: ImapClient, num_str: str) -> bytes:
-    """Fetch the raw RFC822 bytes of one message. Raises NewsletterIngestError on failure."""
+_RFC822_SIZE_RE = re.compile(rb"RFC822\s*\{(\d+)\}")
+
+
+def _reported_message_size(fetch_header: Any) -> int | None:
+    """Parse the IMAP-reported RFC822 literal size (e.g. ``1 (RFC822 {12345}``), or None."""
+    if not isinstance(fetch_header, bytes):
+        return None
+    match = _RFC822_SIZE_RE.search(fetch_header)
+    if match is None:
+        return None
+    return int(match.group(1))
+
+
+def _fetch_raw_message(client: ImapClient, num_str: str) -> tuple[bytes, int | None]:
+    """Fetch the raw RFC822 bytes of one message plus its IMAP-reported size, if known.
+
+    Raises NewsletterIngestError on failure.
+    """
     fetch_status, fetch_data = client.fetch(num_str, "(RFC822)")
     if fetch_status != "OK" or not fetch_data or not fetch_data[0]:
         msg = f"IMAP fetch failed for message {num_str}: {fetch_status}"
         raise NewsletterIngestError(msg)
-    raw_bytes: bytes = fetch_data[0][1]
-    return raw_bytes
+    header, raw_bytes = fetch_data[0][0], fetch_data[0][1]
+    return raw_bytes, _reported_message_size(header)
 
 
 def poll_newsletters(
@@ -348,6 +370,7 @@ def poll_newsletters(
     factory = client_factory or _connect_imap
     client: ImapClient = factory(config)
     processed = 0
+    size_limit = max_message_bytes()
     try:
         client.select(config.folder)
         status, data = client.search(None, "UNSEEN")
@@ -360,8 +383,20 @@ def poll_newsletters(
             for num in message_numbers:
                 num_str = num.decode() if isinstance(num, bytes) else str(num)
                 try:
-                    raw_bytes = _fetch_raw_message(client, num_str)
-                    _process_message(conn, raw_bytes)
+                    raw_bytes, reported_size = _fetch_raw_message(client, num_str)
+                    actual_size = reported_size if reported_size is not None else len(raw_bytes)
+                    if actual_size > size_limit:
+                        logger.warning(
+                            "Newsletter ingest: message %s is %d bytes (max %d); "
+                            "skipping without parsing",
+                            num_str,
+                            actual_size,
+                            size_limit,
+                        )
+                    else:
+                        _process_message(conn, raw_bytes)
+                    # Oversized messages are non-retryable: mark seen so the same
+                    # message isn't re-fetched and re-rejected on every poll.
                     client.store(num_str, "+FLAGS", "\\Seen")
                     processed += 1
                 except Exception:

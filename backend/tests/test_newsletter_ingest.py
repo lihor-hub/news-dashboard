@@ -15,6 +15,7 @@ from news_dashboard.newsletter_ingest import (
     extract_plus_tag,
     imap_config,
     imap_configured,
+    max_message_bytes,
     poll_minutes,
     poll_newsletters,
 )
@@ -144,6 +145,16 @@ def test_imap_configured_true_with_full_env(monkeypatch: pytest.MonkeyPatch) -> 
 def test_poll_minutes_defaults_to_15(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("NEWSLETTER_POLL_MINUTES", raising=False)
     assert poll_minutes() == 15
+
+
+def test_max_message_bytes_defaults_to_5mib(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("NEWSLETTER_MAX_MESSAGE_BYTES", raising=False)
+    assert max_message_bytes() == 5 * 1024 * 1024
+
+
+def test_max_message_bytes_respects_env_override(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("NEWSLETTER_MAX_MESSAGE_BYTES", "1024")
+    assert max_message_bytes() == 1024
 
 
 def test_poll_newsletters_noop_without_config(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -477,3 +488,94 @@ def test_failed_message_left_unread(monkeypatch: pytest.MonkeyPatch, pg_clean: s
     processed = poll_newsletters(db_path=pg_clean, client_factory=_make_factory(client))
     assert processed == 0
     assert client.messages[1][1] is False  # left unread for retry
+
+
+# ── oversized message handling ───────────────────────────────────────────────
+
+
+def test_oversized_message_is_skipped_and_marked_seen(
+    monkeypatch: pytest.MonkeyPatch, pg_clean: str
+) -> None:
+    monkeypatch.setenv("DATABASE_URL", pg_clean)
+    _configure_imap_env(monkeypatch)
+    monkeypatch.setenv("NEWSLETTER_MAX_MESSAGE_BYTES", "100")
+    init_db(database_url=pg_clean)
+    _make_user(pg_clean, "alice")
+
+    raw = _html_message(
+        to="inbox+alice@example.com",
+        subject="Huge Newsletter",
+        sender="Sender <sender@example.com>",
+        html_body="<p>" + ("x" * 1000) + "</p>",
+        message_id="<huge-msg@example.com>",
+    )
+    assert len(raw) > 100
+    client = FakeImapClient([raw])
+
+    processed = poll_newsletters(db_path=pg_clean, client_factory=_make_factory(client))
+    assert processed == 1  # handled (marked seen), but no article created
+
+    with connect(database_url=pg_clean) as conn:
+        count = conn.execute("SELECT COUNT(*) AS n FROM articles").fetchone()
+    assert row_to_dict(count)["n"] == 0
+    # Marked seen so the same oversized message isn't retried on every poll.
+    assert client.messages[1][1] is True
+
+
+def test_oversized_message_never_reaches_message_from_bytes(
+    monkeypatch: pytest.MonkeyPatch, pg_clean: str
+) -> None:
+    """Oversized messages must be rejected by their reported size alone, before
+
+    ``message_from_bytes()`` or any body-extraction work runs on them.
+    """
+    import news_dashboard.newsletter_ingest as newsletter_ingest_module
+
+    monkeypatch.setenv("DATABASE_URL", pg_clean)
+    _configure_imap_env(monkeypatch)
+    monkeypatch.setenv("NEWSLETTER_MAX_MESSAGE_BYTES", "100")
+    init_db(database_url=pg_clean)
+    _make_user(pg_clean, "alice")
+
+    def _boom(_raw: bytes) -> Any:
+        message = "message_from_bytes should not be called for oversized messages"
+        raise AssertionError(message)
+
+    monkeypatch.setattr(newsletter_ingest_module, "message_from_bytes", _boom)
+
+    raw = _html_message(
+        to="inbox+alice@example.com",
+        subject="Huge Newsletter",
+        sender="Sender <sender@example.com>",
+        html_body="<p>" + ("x" * 1000) + "</p>",
+        message_id="<huge-msg-2@example.com>",
+    )
+    client = FakeImapClient([raw])
+
+    processed = poll_newsletters(db_path=pg_clean, client_factory=_make_factory(client))
+    assert processed == 1
+
+
+def test_message_within_limit_still_ingests(monkeypatch: pytest.MonkeyPatch, pg_clean: str) -> None:
+    """A normal-sized message is unaffected when a size limit is configured."""
+    monkeypatch.setenv("DATABASE_URL", pg_clean)
+    _configure_imap_env(monkeypatch)
+    monkeypatch.setenv("NEWSLETTER_MAX_MESSAGE_BYTES", "1000000")
+    init_db(database_url=pg_clean)
+    _make_user(pg_clean, "alice")
+
+    raw = _html_message(
+        to="inbox+alice@example.com",
+        subject="Normal Newsletter",
+        sender="Sender <sender@example.com>",
+        html_body="<p>Hello world</p>",
+        message_id="<normal-msg@example.com>",
+    )
+    client = FakeImapClient([raw])
+
+    processed = poll_newsletters(db_path=pg_clean, client_factory=_make_factory(client))
+    assert processed == 1
+
+    with connect(database_url=pg_clean) as conn:
+        count = conn.execute("SELECT COUNT(*) AS n FROM articles").fetchone()
+    assert row_to_dict(count)["n"] == 1
