@@ -214,6 +214,81 @@ def test_create_lesson_duplicate_resets_pending_state(
     assert second["source_content"] == "Body for https://example.com/story"
 
 
+def test_create_lesson_failed_retry_clears_stale_extracted_fields(
+    pg_clean: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("DATABASE_URL", pg_clean)
+    user_id = _make_user(pg_clean)
+
+    first = service.create_lesson(user_id, "https://example.com/story", database_url=pg_clean)
+
+    with connect(database_url=pg_clean) as conn:
+        conn.execute(
+            """
+            UPDATE lessons
+            SET title = %s,
+                source_name = %s,
+                author = %s,
+                published_at = %s,
+                source_content = %s
+            WHERE id = %s
+            """,
+            (
+                "Stale title",
+                "Stale source",
+                "Stale author",
+                "2024-01-02",
+                "Stale content",
+                first["id"],
+            ),
+        )
+
+    monkeypatch.setattr(
+        service,
+        "extract_body",
+        lambda _url: ("", "error"),
+        raising=False,
+    )
+
+    second = service.create_lesson(
+        user_id,
+        "https://example.com/story/",
+        database_url=pg_clean,
+    )
+
+    assert second["id"] == first["id"]
+    assert second["generation_status"] == "failed"
+    assert second["generation_error"] == "Could not extract readable article content."
+    assert second["title"] is None
+    assert second["source_name"] is None
+    assert second["author"] is None
+    assert second["published_at"] is None
+    assert second["source_content"] is None
+
+
+def test_create_lesson_marks_failed_when_extraction_raises(
+    pg_clean: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("DATABASE_URL", pg_clean)
+    user_id = _make_user(pg_clean)
+
+    def _boom(_url: str) -> tuple[str, str]:
+        message = "extract exploded"
+        raise RuntimeError(message)
+
+    monkeypatch.setattr(service, "extract_body", _boom, raising=False)
+
+    lesson = service.create_lesson(user_id, "https://example.com/a", database_url=pg_clean)
+
+    assert lesson["generation_status"] == "failed"
+    assert lesson["generation_error"] == "Could not extract readable article content."
+    assert lesson["title"] is None
+    assert lesson["source_name"] is None
+    assert lesson["author"] is None
+    assert lesson["published_at"] is None
+    assert lesson["source_content"] is None
+
+
 def test_create_lesson_endpoint_returns_completed_lesson(
     pg_clean: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:

@@ -68,6 +68,11 @@ def create_lesson(
             ON CONFLICT (user_id, normalized_url) DO UPDATE
             SET generation_status = 'pending',
                 generation_error = NULL,
+                title = NULL,
+                source_name = NULL,
+                author = NULL,
+                published_at = NULL,
+                source_content = NULL,
                 updated_at = NOW()
             RETURNING *
             """,
@@ -133,6 +138,11 @@ def _update_lesson_failure(
             UPDATE lessons
             SET generation_status = 'failed',
                 generation_error = %s,
+                title = NULL,
+                source_name = NULL,
+                author = NULL,
+                published_at = NULL,
+                source_content = NULL,
                 updated_at = NOW()
             WHERE id = %s AND user_id = %s
             RETURNING *
