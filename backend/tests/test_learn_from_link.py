@@ -111,6 +111,28 @@ def test_create_lesson_completes_with_extracted_content(
     assert lesson["author"] == "Ada Writer"
     assert lesson["published_at"] == "2026-07-09"
     assert lesson["source_content"] == "Paragraph one.\n\nParagraph two."
+    assert lesson["lesson_detail"] == {
+        "gist": "Paragraph one.",
+        "explanation": "Paragraph one.\n\nParagraph two.",
+        "key_claims": ["Paragraph one.", "Paragraph two."],
+        "prerequisite_concepts": ["Context from Example Journal"],
+        "why_it_matters": "It helps you decide whether A careful article deserves deeper reading.",
+        "read_worthiness": {
+            "verdict": "skim",
+            "rationale": "Start with a skim: the source is short enough to inspect quickly.",
+        },
+        "who_should_read": ["Readers deciding whether to spend more time with this source."],
+        "questions_to_keep_in_mind": [
+            "What evidence does the source provide for its central claim?"
+        ],
+        "citations": [
+            {
+                "label": "1",
+                "snippet": "Paragraph one.",
+                "source": "A careful article",
+            }
+        ],
+    }
 
 
 def test_create_lesson_marks_failed_when_extraction_fails(
@@ -138,6 +160,155 @@ def test_create_lesson_marks_failed_when_extraction_fails(
     assert lesson["generation_error"] == "Could not extract readable article content."
     assert lesson["title"] is None
     assert lesson["source_content"] is None
+    assert lesson["lesson_detail"] is None
+
+
+def test_create_lesson_marks_failed_when_structured_detail_is_malformed(
+    pg_clean: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("DATABASE_URL", pg_clean)
+    user_id = _make_user(pg_clean)
+
+    monkeypatch.setattr(
+        service,
+        "generate_structured_lesson_detail",
+        lambda _fields: {"gist": "Only one field is not enough."},
+        raising=False,
+    )
+
+    lesson = service.create_lesson(user_id, "https://example.com/a", database_url=pg_clean)
+
+    assert lesson["generation_status"] == "failed"
+    assert lesson["generation_error"] == "Generated lesson detail was malformed."
+    assert lesson["lesson_detail"] is None
+
+
+def test_create_lesson_marks_failed_when_structured_detail_generation_raises(
+    pg_clean: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("DATABASE_URL", pg_clean)
+    user_id = _make_user(pg_clean)
+
+    def _boom(_fields: dict[str, object]) -> dict[str, object]:
+        message = "invalid generated json"
+        raise ValueError(message)
+
+    monkeypatch.setattr(service, "generate_structured_lesson_detail", _boom, raising=False)
+
+    lesson = service.create_lesson(user_id, "https://example.com/a", database_url=pg_clean)
+
+    assert lesson["generation_status"] == "failed"
+    assert lesson["generation_error"] == "Generated lesson detail was malformed."
+    assert lesson["lesson_detail"] is None
+
+
+def test_create_lesson_rejects_citations_not_found_in_source_context(
+    pg_clean: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("DATABASE_URL", pg_clean)
+    user_id = _make_user(pg_clean)
+
+    monkeypatch.setattr(
+        service,
+        "generate_structured_lesson_detail",
+        lambda _fields: {
+            "gist": "A gist grounded in the article.",
+            "explanation": "A short explanation grounded in the article.",
+            "key_claims": ["A grounded claim."],
+            "prerequisite_concepts": ["Background context"],
+            "why_it_matters": "It matters because the source is useful.",
+            "read_worthiness": {"verdict": "read", "rationale": "The source is useful."},
+            "who_should_read": ["Curious readers"],
+            "questions_to_keep_in_mind": ["Which claims are supported?"],
+            "citations": [
+                {
+                    "label": "1",
+                    "snippet": "This invented quote is absent from the article.",
+                    "source": "Metadata title",
+                }
+            ],
+        },
+        raising=False,
+    )
+
+    lesson = service.create_lesson(user_id, "https://example.com/a", database_url=pg_clean)
+
+    assert lesson["generation_status"] == "failed"
+    assert lesson["generation_error"] == "Generated lesson citations did not match source content."
+    assert lesson["lesson_detail"] is None
+
+
+def test_create_lesson_rejects_citation_sources_not_found_in_source_context(
+    pg_clean: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("DATABASE_URL", pg_clean)
+    user_id = _make_user(pg_clean)
+
+    monkeypatch.setattr(
+        service,
+        "generate_structured_lesson_detail",
+        lambda _fields: {
+            "gist": "Body for https://example.com/a",
+            "explanation": "Body for https://example.com/a",
+            "key_claims": ["Body for https://example.com/a"],
+            "prerequisite_concepts": ["Background context"],
+            "why_it_matters": "It matters because the source is useful.",
+            "read_worthiness": {"verdict": "read", "rationale": "The source is useful."},
+            "who_should_read": ["Curious readers"],
+            "questions_to_keep_in_mind": ["Which claims are supported?"],
+            "citations": [
+                {
+                    "label": "1",
+                    "snippet": "Body for https://example.com/a",
+                    "source": "Invented Source",
+                }
+            ],
+        },
+        raising=False,
+    )
+
+    lesson = service.create_lesson(user_id, "https://example.com/a", database_url=pg_clean)
+
+    assert lesson["generation_status"] == "failed"
+    assert lesson["generation_error"] == "Generated lesson citations did not match source content."
+    assert lesson["lesson_detail"] is None
+
+
+def test_create_lesson_rejects_structured_detail_with_extra_blank_or_long_fields(
+    pg_clean: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("DATABASE_URL", pg_clean)
+    user_id = _make_user(pg_clean)
+
+    monkeypatch.setattr(
+        service,
+        "generate_structured_lesson_detail",
+        lambda _fields: {
+            "gist": "x" * 281,
+            "unexpected_extra_field": "not part of the contract",
+            "explanation": "Body for https://example.com/a",
+            "key_claims": [""],
+            "prerequisite_concepts": ["Background context"],
+            "why_it_matters": "It matters because the source is useful.",
+            "read_worthiness": {"verdict": "read", "rationale": "The source is useful."},
+            "who_should_read": ["Curious readers"],
+            "questions_to_keep_in_mind": ["Which claims are supported?"],
+            "citations": [
+                {
+                    "label": "1",
+                    "snippet": "Body for https://example.com/a",
+                    "source": "Title for https://example.com/a",
+                }
+            ],
+        },
+        raising=False,
+    )
+
+    lesson = service.create_lesson(user_id, "https://example.com/a", database_url=pg_clean)
+
+    assert lesson["generation_status"] == "failed"
+    assert lesson["generation_error"] == "Generated lesson detail was malformed."
+    assert lesson["lesson_detail"] is None
 
 
 def test_create_lesson_ignores_metadata_failure_when_body_succeeds(
@@ -313,6 +484,28 @@ def test_create_lesson_endpoint_returns_completed_lesson(
                 "author": "Robin Reporter",
                 "published_at": "2026-07-09",
                 "source_content": "API body text.",
+                "lesson_detail": {
+                    "gist": "API body text.",
+                    "explanation": "API body text.",
+                    "key_claims": ["API body text."],
+                    "prerequisite_concepts": ["Context from API Source"],
+                    "why_it_matters": (
+                        "It helps you decide whether API article deserves deeper reading."
+                    ),
+                    "read_worthiness": {
+                        "verdict": "skim",
+                        "rationale": "Start with a skim.",
+                    },
+                    "who_should_read": ["Curious readers"],
+                    "questions_to_keep_in_mind": ["Which claim is supported?"],
+                    "citations": [
+                        {
+                            "label": "1",
+                            "snippet": "API body text.",
+                            "source": "API article",
+                        }
+                    ],
+                },
             },
             database_url=pg_clean,
         )

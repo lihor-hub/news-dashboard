@@ -6,6 +6,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { LearnPage } from '../pages/LearnPage';
 import { HttpError, createLessonFromLink, fetchLesson } from '../api';
+import type { Lesson } from '../api';
 import * as api from '../api';
 
 const { translationSpy } = vi.hoisted(() => ({
@@ -40,7 +41,7 @@ vi.mock('react-i18next', () => ({
 
 vi.spyOn(console, 'error').mockImplementation(() => undefined);
 
-const COMPLETE_LESSON = {
+const COMPLETE_LESSON: Lesson = {
   id: 7,
   user_id: 1,
   original_url: 'https://example.com/article',
@@ -52,11 +53,39 @@ const COMPLETE_LESSON = {
   source_content: 'A compact but useful article body preview.',
   generation_status: 'complete',
   generation_error: null,
+  lesson_detail: {
+    gist: 'The article argues that strong source selection matters more than raw volume.',
+    explanation:
+      'It walks through how the author chose a small set of high-signal sources and why that improves review quality.',
+    key_claims: [
+      'A short reading stack can outperform a broad feed when the goal is comprehension.',
+      'Editorial filtering reduces noise and makes follow-up questions sharper.',
+    ],
+    prerequisite_concepts: ['Signal-to-noise ratio', 'Editorial curation'],
+    why_it_matters:
+      'Knowing when to skim versus study helps the reader spend attention where it compounds.',
+    read_worthiness: {
+      verdict: 'study',
+      rationale: 'It introduces a repeatable framework for deciding how deeply to read a piece.',
+    },
+    who_should_read: ['People building reading workflows', 'Editors evaluating article quality'],
+    questions_to_keep_in_mind: [
+      'What filtering rule is being applied?',
+      'Which audience is this lesson aiming at?',
+    ],
+    citations: [
+      {
+        label: 'Filtering principle',
+        snippet: 'Choose fewer, higher-signal sources when the goal is durable understanding.',
+        source: 'Example Journal',
+      },
+    ],
+  },
   created_at: '2026-07-08T10:00:00Z',
   updated_at: '2026-07-08T10:01:00Z',
-} as const;
+};
 
-const PENDING_LESSON = {
+const PENDING_LESSON: Lesson = {
   ...COMPLETE_LESSON,
   id: 8,
   title: null,
@@ -65,9 +94,10 @@ const PENDING_LESSON = {
   published_at: null,
   source_content: null,
   generation_status: 'pending',
-} as const;
+  lesson_detail: null,
+};
 
-const FAILED_LESSON = {
+const FAILED_LESSON: Lesson = {
   ...COMPLETE_LESSON,
   id: 9,
   title: null,
@@ -77,7 +107,8 @@ const FAILED_LESSON = {
   source_content: null,
   generation_status: 'failed',
   generation_error: 'Could not extract readable article content.',
-} as const;
+  lesson_detail: null,
+};
 
 function renderPage() {
   const queryClient = new QueryClient({
@@ -160,13 +191,55 @@ describe('LearnPage', () => {
 
     await screen.findByText(/lesson generated/i);
     expect(screen.getByText(/A careful article/i)).toBeInTheDocument();
-    expect(screen.getByText(/Example Journal/i)).toBeInTheDocument();
+    expect(screen.getByText(/Example Journal/i, { selector: 'span' })).toBeInTheDocument();
     expect(screen.getByText(/Jane Example/i)).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /open original article/i })).toHaveAttribute(
       'href',
       'https://example.com/article'
     );
     expect(screen.getByText(/A compact but useful article body preview\./i)).toBeInTheDocument();
+    expect(screen.getByText(/Study/i, { selector: 'div' })).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        /It introduces a repeatable framework for deciding how deeply to read a piece\./i
+      )
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        /The article argues that strong source selection matters more than raw volume\./i
+      )
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        /It walks through how the author chose a small set of high-signal sources and why that improves review quality\./i
+      )
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        /A short reading stack can outperform a broad feed when the goal is comprehension\./i
+      )
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/Editorial filtering reduces noise and makes follow-up questions sharper\./i)
+    ).toBeInTheDocument();
+    expect(screen.getByText(/Signal-to-noise ratio/i)).toBeInTheDocument();
+    expect(screen.getByText(/Editorial curation/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        /Knowing when to skim versus study helps the reader spend attention where it compounds\./i
+      )
+    ).toBeInTheDocument();
+    expect(screen.getByText(/People building reading workflows/i)).toBeInTheDocument();
+    expect(screen.getByText(/Editors evaluating article quality/i)).toBeInTheDocument();
+    expect(screen.getByText(/What filtering rule is being applied\?/i)).toBeInTheDocument();
+    expect(screen.getByText(/Which audience is this lesson aiming at\?/i)).toBeInTheDocument();
+    expect(screen.getByText(/Filtering principle/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        /Choose fewer, higher-signal sources when the goal is durable understanding\./i
+      )
+    ).toBeInTheDocument();
+    expect(screen.getByText(/Example Journal/i, { selector: 'div' })).toBeInTheDocument();
     expect(translationSpy).toHaveBeenCalledWith('learn.title');
     expect(translationSpy).toHaveBeenCalledWith('learn.description');
     expect(translationSpy).toHaveBeenCalledWith('learn.form.url_label');
