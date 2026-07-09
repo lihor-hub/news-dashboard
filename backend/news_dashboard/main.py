@@ -615,7 +615,9 @@ def mark_read_via_token(article_id: int, token: Annotated[str, Query()]) -> dict
     return {"status": "marked_read", "article": article}
 
 
-app.include_router(public_router)
+# `public_router` is included further down (see `app.include_router(public_router)`
+# near the bottom of this module), after every route that mounts on it — including
+# the token-authenticated podcast routes defined later — has been registered.
 
 
 def _embed_article_background(article_id: int) -> None:
@@ -2204,7 +2206,7 @@ def regenerate_podcast_feed_token_endpoint(
     return {"token": token, "url": feed_url(token, _request_base_origin(request))}
 
 
-@api.get("/api/briefings/podcast.rss")
+@public_router.get("/api/briefings/podcast.rss")
 def podcast_rss_feed_endpoint(request: Request, token: Annotated[str, Query()]) -> Response:
     """Serve the authenticated user's podcast feed of previously-generated briefs.
 
@@ -2317,7 +2319,7 @@ def get_podcast_audio_endpoint(
     return FileResponse(audio_path, media_type="audio/mpeg", filename=f"podcast-{briefing_id}.mp3")
 
 
-@api.get("/api/briefings/{briefing_id}/podcast-audio")
+@public_router.get("/api/briefings/{briefing_id}/podcast-audio")
 def get_podcast_audio_by_token_endpoint(
     briefing_id: int,
     token: Annotated[str, Query()],
@@ -3145,6 +3147,7 @@ api.include_router(reading_progress_router)
 api.include_router(recaps_router)
 api.include_router(saved_searches_router)
 
+app.include_router(public_router)
 app.include_router(api)
 app.include_router(admin)
 # MCP tool-calling and GReader-sync endpoints authenticate via bearer token,
