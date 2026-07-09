@@ -248,44 +248,58 @@ export function LearnPage() {
 
               <div className="grid gap-4 md:grid-cols-2">
                 <section className="space-y-2">
-                  <h3 className="text-sm font-semibold text-foreground">Gist</h3>
+                  <h3 className="text-sm font-semibold text-foreground">
+                    {t('learn.detail.gist', 'Gist')}
+                  </h3>
                   <p className="text-sm leading-6 text-foreground">{lessonDetail.gist}</p>
                 </section>
 
                 <section className="space-y-2">
-                  <h3 className="text-sm font-semibold text-foreground">Why it matters</h3>
+                  <h3 className="text-sm font-semibold text-foreground">
+                    {t('learn.detail.why_it_matters', 'Why it matters')}
+                  </h3>
                   <p className="text-sm leading-6 text-foreground">{lessonDetail.why_it_matters}</p>
                 </section>
 
                 <section className="space-y-2 md:col-span-2">
-                  <h3 className="text-sm font-semibold text-foreground">Explanation</h3>
+                  <h3 className="text-sm font-semibold text-foreground">
+                    {t('learn.detail.explanation', 'Explanation')}
+                  </h3>
                   <p className="text-sm leading-6 text-foreground">{lessonDetail.explanation}</p>
                 </section>
 
                 <section className="space-y-2">
-                  <h3 className="text-sm font-semibold text-foreground">Key claims</h3>
+                  <h3 className="text-sm font-semibold text-foreground">
+                    {t('learn.detail.key_claims', 'Key claims')}
+                  </h3>
                   {renderBulletList(lessonDetail.key_claims)}
                 </section>
 
                 <section className="space-y-2">
-                  <h3 className="text-sm font-semibold text-foreground">Prerequisite concepts</h3>
+                  <h3 className="text-sm font-semibold text-foreground">
+                    {t('learn.detail.prerequisite_concepts', 'Prerequisite concepts')}
+                  </h3>
                   {renderBulletList(lessonDetail.prerequisite_concepts)}
                 </section>
 
                 <section className="space-y-2">
-                  <h3 className="text-sm font-semibold text-foreground">Who should read</h3>
+                  <h3 className="text-sm font-semibold text-foreground">
+                    {t('learn.detail.who_should_read', 'Who should read')}
+                  </h3>
                   {renderBulletList(lessonDetail.who_should_read)}
                 </section>
 
                 <section className="space-y-2">
                   <h3 className="text-sm font-semibold text-foreground">
-                    Questions to keep in mind
+                    {t('learn.detail.questions_to_keep_in_mind', 'Questions to keep in mind')}
                   </h3>
                   {renderBulletList(lessonDetail.questions_to_keep_in_mind)}
                 </section>
 
                 <section className="space-y-2 md:col-span-2">
-                  <h3 className="text-sm font-semibold text-foreground">Citations</h3>
+                  <h3 className="text-sm font-semibold text-foreground">
+                    {t('learn.detail.citations', 'Citations')}
+                  </h3>
                   <ul className="space-y-3">
                     {lessonDetail.citations.map((citation) => (
                       <li

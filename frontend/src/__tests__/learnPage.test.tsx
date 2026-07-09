@@ -25,6 +25,14 @@ const { translationSpy } = vi.hoisted(() => ({
       'learn.link.open_original': 'Open original article',
       'learn.refresh_error': 'Failed to refresh lesson',
       'learn.request_error': 'Lesson generation failed',
+      'learn.detail.gist': 'Gist Translated',
+      'learn.detail.explanation': 'Explanation Translated',
+      'learn.detail.why_it_matters': 'Why It Matters Translated',
+      'learn.detail.key_claims': 'Key Claims Translated',
+      'learn.detail.prerequisite_concepts': 'Prerequisite Concepts Translated',
+      'learn.detail.who_should_read': 'Who Should Read Translated',
+      'learn.detail.questions_to_keep_in_mind': 'Questions to Keep in Mind Translated',
+      'learn.detail.citations': 'Citations Translated',
     };
     return translations[key] ?? key;
   }),
@@ -240,6 +248,15 @@ describe('LearnPage', () => {
       )
     ).toBeInTheDocument();
     expect(screen.getByText(/Example Journal/i, { selector: 'div' })).toBeInTheDocument();
+    expect(screen.getByText('Gist Translated')).toBeInTheDocument();
+    expect(screen.getByText('Explanation Translated')).toBeInTheDocument();
+    expect(screen.getByText('Why It Matters Translated')).toBeInTheDocument();
+    expect(screen.getByText('Key Claims Translated')).toBeInTheDocument();
+    expect(screen.getByText('Prerequisite Concepts Translated')).toBeInTheDocument();
+    expect(screen.getByText('Who Should Read Translated')).toBeInTheDocument();
+    expect(screen.getByText('Questions to Keep in Mind Translated')).toBeInTheDocument();
+    expect(screen.getByText('Citations Translated')).toBeInTheDocument();
+
     expect(translationSpy).toHaveBeenCalledWith('learn.title');
     expect(translationSpy).toHaveBeenCalledWith('learn.description');
     expect(translationSpy).toHaveBeenCalledWith('learn.form.url_label');
