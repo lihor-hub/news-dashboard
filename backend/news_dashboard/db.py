@@ -630,6 +630,26 @@ POSTGRES_MULTIUSER_SCHEMA = [
     "ALTER TABLE reading_list_items ADD COLUMN IF NOT EXISTS summary_status"
     " TEXT NOT NULL DEFAULT 'pending'",
     """
+    CREATE TABLE IF NOT EXISTS lessons (
+      id BIGSERIAL PRIMARY KEY,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      original_url TEXT NOT NULL,
+      normalized_url TEXT NOT NULL,
+      title TEXT,
+      source_name TEXT,
+      author TEXT,
+      published_at TEXT,
+      source_content TEXT,
+      generation_status TEXT NOT NULL DEFAULT 'pending'
+        CHECK(generation_status IN ('pending','complete','failed')),
+      generation_error TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE(user_id, normalized_url)
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_lessons_user_created ON lessons(user_id, created_at DESC)",
+    """
     CREATE TABLE IF NOT EXISTS agent_action_runs (
       id          BIGSERIAL PRIMARY KEY,
       user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,

@@ -3144,6 +3144,7 @@ from news_dashboard.ai_memory.router import router as ai_memory_router  # noqa: 
 from news_dashboard.ai_stats.router import router as ai_stats_router  # noqa: E402
 from news_dashboard.greader import public_greader_router  # noqa: E402
 from news_dashboard.greader import router as greader_router  # noqa: E402
+from news_dashboard.learn_from_link.router import router as learn_from_link_router  # noqa: E402
 from news_dashboard.mcp.router import public_mcp_router  # noqa: E402
 from news_dashboard.mcp.router import router as mcp_router  # noqa: E402
 from news_dashboard.personalization.router import router as personalization_router  # noqa: E402
@@ -3158,6 +3159,7 @@ api.include_router(ai_feedback_router)
 api.include_router(ai_stats_router)
 api.include_router(ai_memory_router)
 api.include_router(greader_router)
+api.include_router(learn_from_link_router)
 api.include_router(mcp_router)
 api.include_router(personalization_router)
 api.include_router(quizzes_router)
