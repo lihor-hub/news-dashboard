@@ -50,8 +50,12 @@ describe('BriefingChat', () => {
 
     await waitFor(() => expect(screen.getByTestId('briefing-unavailable')).toBeTruthy());
     expect(screen.getByText('This briefing is no longer available.')).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Latest briefing' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Briefing history' })).toBeTruthy();
+
+    const latestBriefingLink = screen.getByRole('link', { name: 'Latest briefing' });
+    expect(latestBriefingLink.getAttribute('href')).toBe('/');
+
+    const briefingHistoryLink = screen.getByRole('link', { name: 'Briefing history' });
+    expect(briefingHistoryLink.getAttribute('href')).toBe('/briefs');
   });
 
   it('shows generic fallback for non-404 errors', async () => {
