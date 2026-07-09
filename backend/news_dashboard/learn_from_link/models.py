@@ -120,3 +120,9 @@ class RelevanceFeedbackRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     helpful: bool
+
+
+class LessonSuggestionDismissRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    article_id: int
