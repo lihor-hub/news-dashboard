@@ -3,11 +3,16 @@
 from __future__ import annotations
 
 import logging
+import re
 from typing import Any
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
+from psycopg.types.json import Jsonb
+from pydantic import ValidationError
+
 from news_dashboard.body_fetch import extract_body
 from news_dashboard.db import connect, init_db, row_to_dict
+from news_dashboard.learn_from_link.models import LessonDetail
 from news_dashboard.reading_list.metadata import fetch_url_metadata
 from news_dashboard.reading_list.service import normalize_url
 from news_dashboard.url_safety import UnsafeUrlError, validate_server_fetch_url
@@ -21,6 +26,14 @@ class LessonUrlError(ValueError):
 
 class LessonNotFoundError(LookupError):
     """Raised when a lesson row cannot be found for the given user."""
+
+
+class LessonDetailValidationError(ValueError):
+    """Raised when generated lesson detail fails schema validation."""
+
+
+class LessonCitationValidationError(ValueError):
+    """Raised when lesson citations are not grounded in source content."""
 
 
 def _normalize_lesson_url(url: str) -> str:
@@ -73,6 +86,7 @@ def create_lesson(
                 author = NULL,
                 published_at = NULL,
                 source_content = NULL,
+                lesson_detail = NULL,
                 updated_at = NOW()
             RETURNING *
             """,
@@ -92,7 +106,7 @@ def _update_lesson_success(
     lesson_id: int,
     user_id: int,
     *,
-    lesson_fields: dict[str, str | None],
+    lesson_fields: dict[str, Any],
     database_url: str | None = None,
 ) -> dict[str, Any]:
     init_db(database_url=database_url)
@@ -105,6 +119,7 @@ def _update_lesson_success(
                 author = %s,
                 published_at = %s,
                 source_content = %s,
+                lesson_detail = %s::jsonb,
                 generation_status = 'complete',
                 generation_error = NULL,
                 updated_at = NOW()
@@ -117,6 +132,7 @@ def _update_lesson_success(
                 lesson_fields["author"],
                 lesson_fields["published_at"],
                 lesson_fields["source_content"],
+                Jsonb(lesson_fields["lesson_detail"]),
                 lesson_id,
                 user_id,
             ),
@@ -143,6 +159,7 @@ def _update_lesson_failure(
                 author = NULL,
                 published_at = NULL,
                 source_content = NULL,
+                lesson_detail = NULL,
                 updated_at = NOW()
             WHERE id = %s AND user_id = %s
             RETURNING *
@@ -150,6 +167,101 @@ def _update_lesson_failure(
             (error_message, lesson_id, user_id),
         ).fetchone()
     return _serialize_lesson(row)
+
+
+def _sentences(text: str) -> list[str]:
+    compact = re.sub(r"\s+", " ", text).strip()
+    if not compact:
+        return []
+    return [
+        sentence.strip() for sentence in re.split(r"(?<=[.!?])\s+", compact) if sentence.strip()
+    ]
+
+
+def _clip(text: str, limit: int) -> str:
+    compact = re.sub(r"\s+", " ", text).strip()
+    if len(compact) <= limit:
+        return compact
+    return f"{compact[: limit - 3].rstrip()}..."
+
+
+def _normalized_text(text: str) -> str:
+    return re.sub(r"\s+", " ", text).strip().lower()
+
+
+def generate_structured_lesson_detail(lesson_fields: dict[str, Any]) -> dict[str, Any]:
+    source_content = str(lesson_fields["source_content"])
+    title = str(lesson_fields["title"] or lesson_fields["original_url"])
+    source_name = lesson_fields.get("source_name")
+    sentence_list = _sentences(source_content)
+    gist = sentence_list[0] if sentence_list else _clip(source_content, 180)
+    key_claims = sentence_list[:3] or [gist]
+    source_label = str(source_name or "the source")
+    if len(source_content) >= 2000:
+        verdict = "study"
+        rationale = "Study it closely: the source is substantial enough to reward careful notes."
+    elif len(source_content) >= 600:
+        verdict = "read"
+        rationale = "Read it: the source has enough depth to justify focused attention."
+    else:
+        verdict = "skim"
+        rationale = "Start with a skim: the source is short enough to inspect quickly."
+
+    return {
+        "gist": gist,
+        "explanation": source_content if len(source_content) <= 600 else _clip(source_content, 600),
+        "key_claims": key_claims,
+        "prerequisite_concepts": [f"Context from {source_label}"],
+        "why_it_matters": f"It helps you decide whether {title} deserves deeper reading.",
+        "read_worthiness": {
+            "verdict": verdict,
+            "rationale": rationale,
+        },
+        "who_should_read": ["Readers deciding whether to spend more time with this source."],
+        "questions_to_keep_in_mind": [
+            "What evidence does the source provide for its central claim?"
+        ],
+        "citations": [
+            {
+                "label": "1",
+                "snippet": gist,
+                "source": title,
+            }
+        ],
+    }
+
+
+def validate_structured_lesson_detail(
+    raw_detail: Any,
+    *,
+    lesson_fields: dict[str, Any],
+) -> dict[str, Any]:
+    try:
+        detail = LessonDetail.model_validate(raw_detail)
+    except ValidationError as exc:
+        raise LessonDetailValidationError from exc
+
+    source_context = _normalized_text(
+        "\n".join(
+            str(value)
+            for value in (
+                lesson_fields.get("title"),
+                lesson_fields.get("source_name"),
+                lesson_fields.get("author"),
+                lesson_fields.get("published_at"),
+                lesson_fields.get("original_url"),
+                lesson_fields.get("source_content"),
+            )
+            if value
+        )
+    )
+    for citation in detail.citations:
+        citation_snippet = _normalized_text(citation.snippet)
+        citation_source = _normalized_text(citation.source)
+        if citation_snippet not in source_context or citation_source not in source_context:
+            raise LessonCitationValidationError
+
+    return detail.model_dump(mode="json")
 
 
 def generate_lesson_from_url(
@@ -189,16 +301,49 @@ def generate_lesson_from_url(
             database_url=database_url,
         )
 
+    lesson_fields: dict[str, Any] = {
+        "original_url": lesson_url,
+        "title": str(metadata.get("title") or lesson_url),
+        "source_name": metadata.get("site_name"),
+        "author": metadata.get("author"),
+        "published_at": metadata.get("published_at"),
+        "source_content": body_text,
+    }
+    try:
+        raw_detail = generate_structured_lesson_detail(lesson_fields)
+        lesson_fields["lesson_detail"] = validate_structured_lesson_detail(
+            raw_detail,
+            lesson_fields=lesson_fields,
+        )
+    except LessonDetailValidationError:
+        logger.warning("lesson detail validation failed for lesson %d", lesson_id)
+        return _update_lesson_failure(
+            lesson_id,
+            user_id,
+            "Generated lesson detail was malformed.",
+            database_url=database_url,
+        )
+    except LessonCitationValidationError:
+        logger.warning("lesson citation validation failed for lesson %d", lesson_id)
+        return _update_lesson_failure(
+            lesson_id,
+            user_id,
+            "Generated lesson citations did not match source content.",
+            database_url=database_url,
+        )
+    except Exception as exc:
+        logger.warning("lesson detail generation failed for lesson %d: %s", lesson_id, exc)
+        return _update_lesson_failure(
+            lesson_id,
+            user_id,
+            "Generated lesson detail was malformed.",
+            database_url=database_url,
+        )
+
     return _update_lesson_success(
         lesson_id,
         user_id,
-        lesson_fields={
-            "title": str(metadata.get("title") or lesson_url),
-            "source_name": metadata.get("site_name"),
-            "author": metadata.get("author"),
-            "published_at": metadata.get("published_at"),
-            "source_content": body_text,
-        },
+        lesson_fields=lesson_fields,
         database_url=database_url,
     )
 

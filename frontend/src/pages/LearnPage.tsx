@@ -5,7 +5,13 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import { createLessonFromLink, fetchLesson, HttpError, type Lesson } from '@/api';
+import {
+  createLessonFromLink,
+  fetchLesson,
+  HttpError,
+  type Lesson,
+  type LessonDetail,
+} from '@/api';
 
 function formatPublishedDate(value: string | null): string | null {
   if (!value) return null;
@@ -24,6 +30,32 @@ function statusBadgeVariant(
   if (status === 'complete') return 'default';
   if (status === 'failed') return 'destructive';
   return 'secondary';
+}
+
+function verdictBadgeVariant(
+  verdict: LessonDetail['read_worthiness']['verdict']
+): 'default' | 'secondary' | 'destructive' | 'outline' {
+  if (verdict === 'study') return 'default';
+  if (verdict === 'read') return 'secondary';
+  if (verdict === 'skim') return 'outline';
+  return 'destructive';
+}
+
+function capitalizeLabel(value: string): string {
+  return value.charAt(0).toUpperCase() + value.slice(1);
+}
+
+function renderBulletList(items: string[]) {
+  return (
+    <ul className="space-y-1.5">
+      {items.map((item) => (
+        <li key={item} className="flex items-start gap-2 text-sm leading-6 text-foreground">
+          <span className="mt-0.5 shrink-0 text-accent">-</span>
+          <span>{item}</span>
+        </li>
+      ))}
+    </ul>
+  );
 }
 
 export function LearnPage() {
@@ -95,6 +127,8 @@ export function LearnPage() {
   const isPendingLesson = lesson?.generation_status === 'pending';
   const isFailedLesson = lesson?.generation_status === 'failed';
   const isCompleteLesson = lesson?.generation_status === 'complete';
+  const lessonDetail = lesson?.lesson_detail ?? null;
+  const hasLessonDetail = isCompleteLesson && lessonDetail !== null;
 
   return (
     <div className="mx-auto max-w-4xl px-4 py-6">
@@ -197,6 +231,74 @@ export function LearnPage() {
               <Skeleton className="h-4 w-full" />
               <Skeleton className="h-4 w-11/12" />
               <Skeleton className="h-4 w-10/12" />
+            </div>
+          ) : null}
+
+          {hasLessonDetail && lessonDetail ? (
+            <div className="space-y-4 rounded-lg border border-border bg-background p-4">
+              <div className="flex flex-wrap items-start gap-3">
+                <Badge variant={verdictBadgeVariant(lessonDetail.read_worthiness.verdict)}>
+                  {capitalizeLabel(lessonDetail.read_worthiness.verdict)}
+                </Badge>
+                <div className="min-w-0 text-sm text-muted-foreground">
+                  {lessonDetail.read_worthiness.rationale}
+                </div>
+              </div>
+
+              <div className="grid gap-4 md:grid-cols-2">
+                <section className="space-y-2">
+                  <h3 className="text-sm font-semibold text-foreground">Gist</h3>
+                  <p className="text-sm leading-6 text-foreground">{lessonDetail.gist}</p>
+                </section>
+
+                <section className="space-y-2">
+                  <h3 className="text-sm font-semibold text-foreground">Why it matters</h3>
+                  <p className="text-sm leading-6 text-foreground">{lessonDetail.why_it_matters}</p>
+                </section>
+
+                <section className="space-y-2 md:col-span-2">
+                  <h3 className="text-sm font-semibold text-foreground">Explanation</h3>
+                  <p className="text-sm leading-6 text-foreground">{lessonDetail.explanation}</p>
+                </section>
+
+                <section className="space-y-2">
+                  <h3 className="text-sm font-semibold text-foreground">Key claims</h3>
+                  {renderBulletList(lessonDetail.key_claims)}
+                </section>
+
+                <section className="space-y-2">
+                  <h3 className="text-sm font-semibold text-foreground">Prerequisite concepts</h3>
+                  {renderBulletList(lessonDetail.prerequisite_concepts)}
+                </section>
+
+                <section className="space-y-2">
+                  <h3 className="text-sm font-semibold text-foreground">Who should read</h3>
+                  {renderBulletList(lessonDetail.who_should_read)}
+                </section>
+
+                <section className="space-y-2">
+                  <h3 className="text-sm font-semibold text-foreground">
+                    Questions to keep in mind
+                  </h3>
+                  {renderBulletList(lessonDetail.questions_to_keep_in_mind)}
+                </section>
+
+                <section className="space-y-2 md:col-span-2">
+                  <h3 className="text-sm font-semibold text-foreground">Citations</h3>
+                  <ul className="space-y-3">
+                    {lessonDetail.citations.map((citation) => (
+                      <li
+                        key={`${citation.label}-${citation.source}-${citation.snippet}`}
+                        className="space-y-1"
+                      >
+                        <div className="text-sm font-medium text-foreground">{citation.label}</div>
+                        <p className="text-sm leading-6 text-foreground">{citation.snippet}</p>
+                        <div className="text-xs text-muted-foreground">{citation.source}</div>
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+              </div>
             </div>
           ) : null}
 
