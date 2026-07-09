@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 
 from news_dashboard.auth import require_auth
 from news_dashboard.learn_from_link import service
@@ -16,13 +16,21 @@ router = APIRouter()
 @router.post("/api/learn/lessons", status_code=201)
 def create_lesson_endpoint(
     payload: LessonCreateRequest,
+    background_tasks: BackgroundTasks,
     current_user: Annotated[dict[str, Any], Depends(require_auth)],
 ) -> dict[str, Any]:
     try:
-        return service.create_lesson(
+        lesson = service.create_lesson(
             current_user["id"],
             payload.url,
+            extract=False,
         )
+        background_tasks.add_task(
+            service.generate_lesson_from_url,
+            int(lesson["id"]),
+            current_user["id"],
+        )
+        return lesson
     except service.LessonUrlError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 

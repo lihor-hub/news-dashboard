@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import socket
 from collections.abc import Generator
 from contextlib import contextmanager
 
@@ -37,7 +38,10 @@ def _api_client(user_id: int, username: str = "alice") -> Generator[TestClient]:
 
 
 @pytest.fixture(autouse=True)
-def _safe_url_validator(monkeypatch: pytest.MonkeyPatch) -> None:
+def _safe_url_validator(request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch) -> None:
+    if request.node.name == "test_create_lesson_endpoint_rejects_localhost_url":
+        return
+
     def fake_validate(url: str) -> None:
         if not url.strip().lower().startswith(("http://", "https://")):
             message = f"unsafe url: {url}"
@@ -296,23 +300,24 @@ def test_create_lesson_endpoint_returns_completed_lesson(
     init_db(database_url=pg_clean)
     user_id = _make_user(pg_clean)
 
-    monkeypatch.setattr(
-        service,
-        "fetch_url_metadata",
-        lambda _url: {
-            "title": "API article",
-            "site_name": "API Source",
-            "author": "Robin Reporter",
-            "published_at": "2026-07-09",
-        },
-        raising=False,
-    )
-    monkeypatch.setattr(
-        service,
-        "extract_body",
-        lambda _url: ("API body text.", "ok"),
-        raising=False,
-    )
+    calls: list[tuple[int, int]] = []
+
+    def fake_generate(lesson_id: int, task_user_id: int) -> dict[str, object]:
+        calls.append((lesson_id, task_user_id))
+        return service._update_lesson_success(
+            lesson_id,
+            task_user_id,
+            lesson_fields={
+                "title": "API article",
+                "source_name": "API Source",
+                "author": "Robin Reporter",
+                "published_at": "2026-07-09",
+                "source_content": "API body text.",
+            },
+            database_url=pg_clean,
+        )
+
+    monkeypatch.setattr(service, "generate_lesson_from_url", fake_generate, raising=False)
 
     with _api_client(user_id) as client:
         response = client.post(
@@ -325,10 +330,17 @@ def test_create_lesson_endpoint_returns_completed_lesson(
     assert lesson["user_id"] == user_id
     assert lesson["original_url"] == "https://Example.com/story?b=2&a=1"
     assert lesson["normalized_url"] == "https://example.com/story?a=1&b=2"
-    assert lesson["generation_status"] == "complete"
+    assert lesson["generation_status"] == "pending"
     assert lesson["generation_error"] is None
-    assert lesson["title"] == "API article"
-    assert lesson["source_content"] == "API body text."
+    assert lesson["title"] is None
+    assert lesson["source_content"] is None
+    assert calls == [(lesson["id"], user_id)]
+
+    persisted = service.get_lesson(int(lesson["id"]), user_id, database_url=pg_clean)
+    assert persisted is not None
+    assert persisted["generation_status"] == "complete"
+    assert persisted["title"] == "API article"
+    assert persisted["source_content"] == "API body text."
 
 
 def test_create_lesson_endpoint_returns_failed_lesson_on_extraction_error(
@@ -338,40 +350,51 @@ def test_create_lesson_endpoint_returns_failed_lesson_on_extraction_error(
     init_db(database_url=pg_clean)
     user_id = _make_user(pg_clean)
 
-    monkeypatch.setattr(
-        service,
-        "fetch_url_metadata",
-        lambda _url: {"title": "Metadata title"},
-        raising=False,
-    )
-    monkeypatch.setattr(
-        service,
-        "extract_body",
-        lambda _url: ("", "error"),
-        raising=False,
-    )
+    calls: list[tuple[int, int]] = []
+
+    def fake_generate(lesson_id: int, task_user_id: int) -> dict[str, object]:
+        calls.append((lesson_id, task_user_id))
+        return service._update_lesson_failure(
+            lesson_id,
+            task_user_id,
+            "Could not extract readable article content.",
+            database_url=pg_clean,
+        )
+
+    monkeypatch.setattr(service, "generate_lesson_from_url", fake_generate, raising=False)
 
     with _api_client(user_id) as client:
         response = client.post("/api/learn/lessons", json={"url": "https://example.com/story"})
 
     assert response.status_code == 201
     lesson = response.json()
-    assert lesson["generation_status"] == "failed"
-    assert lesson["generation_error"] == "Could not extract readable article content."
+    assert lesson["generation_status"] == "pending"
+    assert lesson["generation_error"] is None
+    assert calls == [(lesson["id"], user_id)]
+
+    persisted = service.get_lesson(int(lesson["id"]), user_id, database_url=pg_clean)
+    assert persisted is not None
+    assert persisted["generation_status"] == "failed"
+    assert persisted["generation_error"] == "Could not extract readable article content."
 
 
-def test_create_lesson_endpoint_rejects_unsafe_url(
+def test_create_lesson_endpoint_rejects_localhost_url(
     pg_clean: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setenv("DATABASE_URL", pg_clean)
     init_db(database_url=pg_clean)
     user_id = _make_user(pg_clean)
+    monkeypatch.setattr(
+        socket,
+        "getaddrinfo",
+        lambda *_args, **_kwargs: [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("127.0.0.1", 80))],
+    )
 
     with _api_client(user_id) as client:
-        response = client.post("/api/learn/lessons", json={"url": "file:///etc/passwd"})
+        response = client.post("/api/learn/lessons", json={"url": "http://localhost/article"})
 
     assert response.status_code == 400
-    assert response.json()["detail"] == "unsafe url: file:///etc/passwd"
+    assert "localhost" in response.json()["detail"]
 
 
 def test_get_lesson_endpoint_returns_user_owned_lesson(

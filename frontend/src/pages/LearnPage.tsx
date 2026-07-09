@@ -35,17 +35,40 @@ export function LearnPage() {
 
   useEffect(() => {
     if (lesson?.generation_status !== 'pending') return;
-    const timeoutId = window.setTimeout(() => {
-      void (async () => {
-        try {
-          setLesson(await fetchLesson(lesson.id));
-        } catch (error) {
-          setRequestError(error instanceof Error ? error.message : t('learn.refresh_error'));
-        }
-      })();
-    }, 2000);
-    return () => window.clearTimeout(timeoutId);
-  }, [lesson, t]);
+
+    const lessonId = lesson.id;
+    let isActive = true;
+    let timeoutId: number | null = null;
+
+    const schedulePoll = () => {
+      timeoutId = window.setTimeout(() => {
+        void (async () => {
+          try {
+            const nextLesson = await fetchLesson(lessonId);
+            if (!isActive) return;
+            setRequestError(null);
+            setLesson(nextLesson);
+            if (nextLesson.id === lessonId && nextLesson.generation_status === 'pending') {
+              schedulePoll();
+            }
+          } catch (error) {
+            if (!isActive) return;
+            setRequestError(error instanceof Error ? error.message : t('learn.refresh_error'));
+            schedulePoll();
+          }
+        })();
+      }, 2000);
+    };
+
+    schedulePoll();
+
+    return () => {
+      isActive = false;
+      if (timeoutId !== null) {
+        window.clearTimeout(timeoutId);
+      }
+    };
+  }, [lesson?.generation_status, lesson?.id, t]);
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();

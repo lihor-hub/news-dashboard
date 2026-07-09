@@ -245,4 +245,43 @@ describe('LearnPage', () => {
     expect(screen.getByText(/lesson generated/i)).toBeInTheDocument();
     expect(screen.getByText(/A careful article/i)).toBeInTheDocument();
   });
+
+  it('keeps polling after one refresh failure and later shows the completed lesson', async () => {
+    vi.useFakeTimers();
+    vi.spyOn(api, 'createLessonFromLink').mockResolvedValue(PENDING_LESSON);
+    const fetchSpy = vi
+      .spyOn(api, 'fetchLesson')
+      .mockRejectedValueOnce(new Error('temporary refresh failure'))
+      .mockResolvedValueOnce(COMPLETE_LESSON);
+
+    renderPage();
+    fireEvent.change(screen.getByLabelText(/article url/i), {
+      target: { value: 'https://example.com/article' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /generate lesson/i }));
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2000);
+    });
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(screen.getByText(/temporary refresh failure/i)).toBeInTheDocument();
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2000);
+    });
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(screen.getByText(/lesson generated/i)).toBeInTheDocument();
+    expect(screen.getByText(/A careful article/i)).toBeInTheDocument();
+  });
 });
