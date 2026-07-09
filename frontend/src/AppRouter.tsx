@@ -61,6 +61,7 @@ const ReadingListPage = lazy(() =>
 const OfflineSavedPage = lazy(() =>
   import('./pages/OfflineSavedPage').then((m) => ({ default: m.OfflineSavedPage }))
 );
+const LearnPage = lazy(() => import('./pages/LearnPage').then((m) => ({ default: m.LearnPage })));
 const WeeklyRecapPage = lazy(() =>
   import('./pages/WeeklyRecapPage').then((m) => ({ default: m.WeeklyRecapPage }))
 );
@@ -224,6 +225,7 @@ export const routes: RouteObject[] = [
       },
       { path: 'reading-dna', element: withSuspense(ReadingDnaPage) },
       { path: 'reading-list', element: withSuspense(ReadingListPage) },
+      { path: 'learn', element: withSuspense(LearnPage) },
       { path: 'offline-saved', element: withSuspense(OfflineSavedPage) },
       { path: 'recap', element: withSuspense(WeeklyRecapPage) },
       { path: 'archive', element: withSuspense(ArchivePage) },

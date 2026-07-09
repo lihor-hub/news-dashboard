@@ -45,7 +45,8 @@
     "stats": "สถิติ",
     "analytics": "การวิเคราะห์",
     "users": "ผู้ใช้",
-    "offline_saved": "Offline Saved"
+    "offline_saved": "Offline Saved",
+    "learn": "Learn"
   },
   "page_title": {
     "brief": "สรุปข่าว",
@@ -69,7 +70,8 @@
     "analytics": "การวิเคราะห์",
     "users": "ผู้ใช้",
     "default": "Radar",
-    "offline_saved": "Offline Saved"
+    "offline_saved": "Offline Saved",
+    "learn": "Learn"
   },
   "shell": {
     "offline": "ออฟไลน์",

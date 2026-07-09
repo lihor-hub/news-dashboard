@@ -45,7 +45,8 @@
     "stats": "Статистика",
     "analytics": "Аналитика",
     "users": "Пользователи",
-    "offline_saved": "Offline Saved"
+    "offline_saved": "Offline Saved",
+    "learn": "Learn"
   },
   "page_title": {
     "brief": "Сводка",
@@ -69,7 +70,8 @@
     "analytics": "Аналитика",
     "users": "Пользователи",
     "default": "Radar",
-    "offline_saved": "Offline Saved"
+    "offline_saved": "Offline Saved",
+    "learn": "Learn"
   },
   "shell": {
     "offline": "Нет сети",

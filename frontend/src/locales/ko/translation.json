@@ -45,7 +45,8 @@
     "stats": "통계",
     "analytics": "분석",
     "users": "사용자",
-    "offline_saved": "Offline Saved"
+    "offline_saved": "Offline Saved",
+    "learn": "Learn"
   },
   "page_title": {
     "brief": "브리핑",
@@ -69,7 +70,8 @@
     "analytics": "분석",
     "users": "사용자",
     "default": "Radar",
-    "offline_saved": "Offline Saved"
+    "offline_saved": "Offline Saved",
+    "learn": "Learn"
   },
   "shell": {
     "offline": "오프라인",

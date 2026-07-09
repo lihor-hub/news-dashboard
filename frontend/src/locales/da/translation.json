@@ -45,7 +45,8 @@
     "stats": "Statistik",
     "analytics": "Analyse",
     "users": "Brugere",
-    "offline_saved": "Offline Saved"
+    "offline_saved": "Offline Saved",
+    "learn": "Learn"
   },
   "page_title": {
     "brief": "Overblik",
@@ -69,7 +70,8 @@
     "analytics": "Analyse",
     "users": "Brugere",
     "default": "Radar",
-    "offline_saved": "Offline Saved"
+    "offline_saved": "Offline Saved",
+    "learn": "Learn"
   },
   "shell": {
     "offline": "Offline",

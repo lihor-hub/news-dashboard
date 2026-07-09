@@ -45,7 +45,8 @@
     "stats": "Statisztikák",
     "analytics": "Analitika",
     "users": "Felhasználók",
-    "offline_saved": "Offline Saved"
+    "offline_saved": "Offline Saved",
+    "learn": "Learn"
   },
   "page_title": {
     "brief": "Összefoglaló",
@@ -69,7 +70,8 @@
     "analytics": "Analitika",
     "users": "Felhasználók",
     "default": "Radar",
-    "offline_saved": "Offline Saved"
+    "offline_saved": "Offline Saved",
+    "learn": "Learn"
   },
   "shell": {
     "offline": "Offline",

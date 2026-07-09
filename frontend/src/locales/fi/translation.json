@@ -45,7 +45,8 @@
     "stats": "Tilastot",
     "analytics": "Analytiikka",
     "users": "Käyttäjät",
-    "offline_saved": "Offline Saved"
+    "offline_saved": "Offline Saved",
+    "learn": "Learn"
   },
   "page_title": {
     "brief": "Yhteenveto",
@@ -69,7 +70,8 @@
     "analytics": "Analytiikka",
     "users": "Käyttäjät",
     "default": "Radar",
-    "offline_saved": "Offline Saved"
+    "offline_saved": "Offline Saved",
+    "learn": "Learn"
   },
   "shell": {
     "offline": "Offline",

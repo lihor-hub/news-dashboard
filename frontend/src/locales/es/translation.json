@@ -45,7 +45,8 @@
     "stats": "Estadísticas",
     "analytics": "Analítica",
     "users": "Usuarios",
-    "offline_saved": "Offline Saved"
+    "offline_saved": "Offline Saved",
+    "learn": "Learn"
   },
   "page_title": {
     "brief": "Resumen",
@@ -69,7 +70,8 @@
     "analytics": "Analítica",
     "users": "Usuarios",
     "default": "Radar",
-    "offline_saved": "Offline Saved"
+    "offline_saved": "Offline Saved",
+    "learn": "Learn"
   },
   "shell": {
     "offline": "Sin conexión",

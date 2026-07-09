@@ -5,6 +5,7 @@ export * from './ask';
 export * from './articles';
 export * from './auth';
 export * from './briefings';
+export * from './learn';
 export * from './notifications';
 export * from './onboarding';
 export * from './personalization';

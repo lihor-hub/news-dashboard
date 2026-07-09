@@ -23,6 +23,7 @@ describe('navigation metadata', () => {
   it('derives titles for nested route families', () => {
     expect(getPageTitle('/')).toBe('Brief');
     expect(getPageTitle('/briefs/123')).toBe('Briefs');
+    expect(getPageTitle('/learn')).toBe('Learn');
     expect(getPageTitle('/feeds/runs')).toBe('Feeds');
     expect(getPageTitle('/unknown')).toBe('Radar');
   });
@@ -64,9 +65,18 @@ describe('navigation metadata', () => {
 });
 
 describe('AI Stats navigation', () => {
+  it('lists /learn in the secondary navigation', () => {
+    const targets = secondaryNavigationItems.map((item) => item.to);
+    expect(targets).toContain('/learn');
+  });
+
   it('lists /ai-stats in the secondary navigation', () => {
     const targets = secondaryNavigationItems.map((item) => item.to);
     expect(targets).toContain('/ai-stats');
+  });
+
+  it('titles the Learn page', () => {
+    expect(getPageTitle('/learn')).toBe('Learn');
   });
 
   it('titles the AI Stats page', () => {
