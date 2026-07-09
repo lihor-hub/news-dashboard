@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { AlertCircle, ExternalLink, GraduationCap, Loader2 } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -26,6 +27,7 @@ function statusBadgeVariant(
 }
 
 export function LearnPage() {
+  const { t } = useTranslation();
   const [url, setUrl] = useState('');
   const [lesson, setLesson] = useState<Lesson | null>(null);
   const [requestError, setRequestError] = useState<string | null>(null);
@@ -38,12 +40,12 @@ export function LearnPage() {
         try {
           setLesson(await fetchLesson(lesson.id));
         } catch (error) {
-          setRequestError(error instanceof Error ? error.message : 'Failed to refresh lesson');
+          setRequestError(error instanceof Error ? error.message : t('learn.refresh_error'));
         }
       })();
     }, 2000);
     return () => window.clearTimeout(timeoutId);
-  }, [lesson]);
+  }, [lesson, t]);
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -58,7 +60,7 @@ export function LearnPage() {
       if (error instanceof HttpError) {
         setRequestError(error.message);
       } else {
-        setRequestError(error instanceof Error ? error.message : 'Lesson generation failed');
+        setRequestError(error instanceof Error ? error.message : t('learn.request_error'));
       }
     } finally {
       setIsSubmitting(false);
@@ -78,10 +80,8 @@ export function LearnPage() {
           <GraduationCap className="size-5" />
         </div>
         <div>
-          <h1 className="text-lg font-semibold text-foreground">Learn</h1>
-          <p className="text-sm text-muted-foreground">
-            Turn one article into a compact lesson you can review inside Radar.
-          </p>
+          <h1 className="text-lg font-semibold text-foreground">{t('learn.title')}</h1>
+          <p className="text-sm text-muted-foreground">{t('learn.description')}</p>
         </div>
       </div>
 
@@ -94,19 +94,19 @@ export function LearnPage() {
       >
         <div className="flex-1">
           <label htmlFor="learn-url" className="mb-2 block text-sm font-medium text-foreground">
-            Article URL
+            {t('learn.form.url_label')}
           </label>
           <Input
             id="learn-url"
             type="url"
             value={url}
             onChange={(event) => setUrl(event.target.value)}
-            placeholder="https://example.com/article"
+            placeholder={t('learn.form.url_placeholder')}
           />
         </div>
         <Button type="submit" disabled={isSubmitting || !url.trim()}>
           {isSubmitting ? <Loader2 className="animate-spin" /> : null}
-          {isSubmitting ? 'Generating lesson...' : 'Generate lesson'}
+          {isSubmitting ? t('learn.form.submitting') : t('learn.form.submit')}
         </Button>
       </form>
 
@@ -119,17 +119,17 @@ export function LearnPage() {
 
       {!hasLesson ? (
         <div className="rounded-lg border border-dashed border-border px-4 py-10 text-sm text-muted-foreground">
-          Paste a link to generate a lesson summary from a readable article.
+          {t('learn.empty')}
         </div>
       ) : (
         <section className="space-y-4">
           <div className="flex flex-wrap items-center gap-2">
             <Badge variant={statusBadgeVariant(lesson.generation_status)}>
               {isCompleteLesson
-                ? 'Lesson generated'
+                ? t('learn.status.complete')
                 : isFailedLesson
-                  ? 'Lesson generation failed'
-                  : 'Generating lesson...'}
+                  ? t('learn.status.failed')
+                  : t('learn.status.pending')}
             </Badge>
             {isPendingLesson ? (
               <Loader2 className="size-4 animate-spin text-muted-foreground" />
@@ -142,7 +142,7 @@ export function LearnPage() {
             ) : isPendingLesson ? (
               <div className="space-y-2">
                 <Skeleton className="h-7 w-64" />
-                <p className="text-sm text-muted-foreground">Generating lesson...</p>
+                <p className="text-sm text-muted-foreground">{t('learn.status.pending')}</p>
               </div>
             ) : null}
 
@@ -160,7 +160,7 @@ export function LearnPage() {
               rel="noreferrer"
               className="inline-flex items-center gap-1 text-accent-foreground hover:underline"
             >
-              Open original article
+              {t('learn.link.open_original')}
               <ExternalLink className="size-3.5" />
             </a>
           </div>

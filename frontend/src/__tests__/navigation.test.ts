@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   commandNavigationItems,
   getPageTitle,
+  getPageTitleKey,
   getShortcutTarget,
   isNavigationItemActive,
   mobilePrimaryOverflowItems,
@@ -68,6 +69,13 @@ describe('AI Stats navigation', () => {
   it('lists /learn in the secondary navigation', () => {
     const targets = secondaryNavigationItems.map((item) => item.to);
     expect(targets).toContain('/learn');
+  });
+
+  it('wires /learn to the expected translation keys', () => {
+    expect(secondaryNavigationItems.find((item) => item.to === '/learn')?.labelKey).toBe(
+      'nav.learn'
+    );
+    expect(getPageTitleKey('/learn')).toBe('page_title.learn');
   });
 
   it('lists /ai-stats in the secondary navigation', () => {

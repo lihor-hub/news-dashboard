@@ -8,6 +8,36 @@ import { LearnPage } from '../pages/LearnPage';
 import { HttpError, createLessonFromLink, fetchLesson } from '../api';
 import * as api from '../api';
 
+const { translationSpy } = vi.hoisted(() => ({
+  translationSpy: vi.fn((key: string) => {
+    const translations: Record<string, string> = {
+      'learn.title': 'Learn',
+      'learn.description': 'Turn one article into a compact lesson you can review inside Radar.',
+      'learn.form.url_label': 'Article URL',
+      'learn.form.url_placeholder': 'https://example.com/article',
+      'learn.form.submit': 'Generate lesson',
+      'learn.form.submitting': 'Generating lesson...',
+      'learn.empty': 'Paste a link to generate a lesson summary from a readable article.',
+      'learn.status.pending': 'Generating lesson...',
+      'learn.status.complete': 'Lesson generated',
+      'learn.status.failed': 'Lesson generation failed',
+      'learn.link.open_original': 'Open original article',
+      'learn.refresh_error': 'Failed to refresh lesson',
+      'learn.request_error': 'Lesson generation failed',
+    };
+    return translations[key] ?? key;
+  }),
+}));
+
+vi.mock('react-i18next', () => ({
+  useTranslation: () => ({
+    t: translationSpy,
+    i18n: {
+      changeLanguage: () => Promise.resolve(),
+    },
+  }),
+}));
+
 vi.spyOn(console, 'error').mockImplementation(() => undefined);
 
 const COMPLETE_LESSON = {
@@ -113,6 +143,7 @@ describe('learn API client', () => {
 describe('LearnPage', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+    translationSpy.mockClear();
   });
 
   afterEach(() => {
@@ -136,6 +167,13 @@ describe('LearnPage', () => {
       'https://example.com/article'
     );
     expect(screen.getByText(/A compact but useful article body preview\./i)).toBeInTheDocument();
+    expect(translationSpy).toHaveBeenCalledWith('learn.title');
+    expect(translationSpy).toHaveBeenCalledWith('learn.description');
+    expect(translationSpy).toHaveBeenCalledWith('learn.form.url_label');
+    expect(translationSpy).toHaveBeenCalledWith('learn.form.url_placeholder');
+    expect(translationSpy).toHaveBeenCalledWith('learn.form.submit');
+    expect(translationSpy).toHaveBeenCalledWith('learn.status.complete');
+    expect(translationSpy).toHaveBeenCalledWith('learn.link.open_original');
   });
 
   it('shows the backend failure message when generation fails', async () => {
@@ -148,6 +186,7 @@ describe('LearnPage', () => {
 
     await screen.findByText(/lesson generation failed/i);
     expect(screen.getByText(/could not extract readable article content\./i)).toBeInTheDocument();
+    expect(translationSpy).toHaveBeenCalledWith('learn.status.failed');
   });
 
   it('shows the request error when lesson creation throws', async () => {
@@ -160,6 +199,18 @@ describe('LearnPage', () => {
 
     await screen.findByText(/unsafe url/i);
     expect(screen.queryByText(/lesson generated/i)).toBeNull();
+  });
+
+  it('uses the localized fallback when lesson creation throws a non-error value', async () => {
+    vi.spyOn(api, 'createLessonFromLink').mockRejectedValue('no structured error');
+
+    renderPage();
+    const user = userEvent.setup();
+    await user.type(screen.getByLabelText(/article url/i), 'https://example.com/article');
+    await user.click(screen.getByRole('button', { name: /generate lesson/i }));
+
+    await screen.findByText(/lesson generation failed/i);
+    expect(translationSpy).toHaveBeenCalledWith('learn.request_error');
   });
 
   it('shows a pending lesson and polls until it completes', async () => {
@@ -177,6 +228,7 @@ describe('LearnPage', () => {
       await Promise.resolve();
     });
     expect(screen.getAllByText(/generating lesson\.\.\./i).length).toBeGreaterThan(0);
+    expect(translationSpy).toHaveBeenCalledWith('learn.status.pending');
     expect(screen.getByRole('link', { name: /open original article/i })).toHaveAttribute(
       'href',
       'https://example.com/article'
