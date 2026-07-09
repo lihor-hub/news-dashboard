@@ -1,15 +1,11 @@
 import { useLocation, useNavigate, Outlet, Link } from 'react-router-dom';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, lazy, Suspense } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useQuery } from '@tanstack/react-query';
 import { LogOut, MoreHorizontal, Search, WifiOff } from 'lucide-react';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
 import { AppLogo } from './AppLogo';
 import { ErrorBoundary } from './ErrorBoundary';
-import { CommandPalette } from './CommandPalette';
-import { ShortcutOverlay } from './ShortcutOverlay';
-import { WhatsNewDialog } from './WhatsNewDialog';
-import { OnboardingWizard } from './OnboardingWizard';
 import { ListenQueuePlayer } from './ListenQueuePlayer';
 import { NavLink } from './NavLink';
 import { useWhatsNew } from '@/hooks/useWhatsNew';
@@ -30,6 +26,19 @@ import {
   secondaryNavigationItemsFor,
   type NavigationItem,
 } from '@/lib/navigation';
+
+const CommandPalette = lazy(() =>
+  import('./CommandPalette').then((m) => ({ default: m.CommandPalette }))
+);
+const ShortcutOverlay = lazy(() =>
+  import('./ShortcutOverlay').then((m) => ({ default: m.ShortcutOverlay }))
+);
+const WhatsNewDialog = lazy(() =>
+  import('./WhatsNewDialog').then((m) => ({ default: m.WhatsNewDialog }))
+);
+const OnboardingWizard = lazy(() =>
+  import('./OnboardingWizard').then((m) => ({ default: m.OnboardingWizard }))
+);
 
 function useNavCounts() {
   const { data } = useQuery({
@@ -197,15 +206,17 @@ export function AppShell() {
         <ErrorBoundary>
           <Outlet />
         </ErrorBoundary>
-        <CommandPalette
-          open={paletteOpen}
-          onOpenChange={setPaletteOpen}
-          onShortcuts={() => {
-            setPaletteOpen(false);
-            setShortcutsOpen(true);
-          }}
-        />
-        <ShortcutOverlay open={shortcutsOpen} onOpenChange={setShortcutsOpen} />
+        <Suspense fallback={null}>
+          <CommandPalette
+            open={paletteOpen}
+            onOpenChange={setPaletteOpen}
+            onShortcuts={() => {
+              setPaletteOpen(false);
+              setShortcutsOpen(true);
+            }}
+          />
+          <ShortcutOverlay open={shortcutsOpen} onOpenChange={setShortcutsOpen} />
+        </Suspense>
       </>
     );
   }
@@ -327,17 +338,19 @@ export function AppShell() {
         </div>
       </nav>
 
-      <CommandPalette
-        open={paletteOpen}
-        onOpenChange={setPaletteOpen}
-        onShortcuts={() => {
-          setPaletteOpen(false);
-          setShortcutsOpen(true);
-        }}
-      />
-      <ShortcutOverlay open={shortcutsOpen} onOpenChange={setShortcutsOpen} />
-      <WhatsNewDialog state={whatsNew} />
-      <OnboardingWizard open={onboarding.open} onClose={onboarding.skip} />
+      <Suspense fallback={null}>
+        <CommandPalette
+          open={paletteOpen}
+          onOpenChange={setPaletteOpen}
+          onShortcuts={() => {
+            setPaletteOpen(false);
+            setShortcutsOpen(true);
+          }}
+        />
+        <ShortcutOverlay open={shortcutsOpen} onOpenChange={setShortcutsOpen} />
+        <WhatsNewDialog state={whatsNew} />
+        <OnboardingWizard open={onboarding.open} onClose={onboarding.skip} />
+      </Suspense>
       <ListenQueuePlayer />
     </div>
   );
