@@ -1,30 +1,83 @@
-"""SMTP email dispatch via Gmail SMTP (STARTTLS)."""
+"""SMTP email dispatch for one-time-password sign-in emails.
+
+Supports a generic SMTP relay (host/port/user/pass/TLS mode/from) via
+``OTP_SMTP_*`` variables, falling back to the digest email's generic
+``SMTP_HOST``/``SMTP_PORT``/``SMTP_USER``/``SMTP_PASS`` variables, and finally
+to the legacy Gmail-only ``SMTP_USERNAME``/``SMTP_PASSWORD`` alias for
+backward compatibility with existing deployments.
+"""
 
 from __future__ import annotations
 
 import logging
 import os
 import smtplib
+import ssl
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+from typing import NamedTuple
 
 logger = logging.getLogger(__name__)
 
-_SMTP_HOST = "smtp.gmail.com"
-_SMTP_PORT = 587
+_GMAIL_HOST = "smtp.gmail.com"
+_DEFAULT_PORT = 587
 
 
-def _smtp_credentials() -> tuple[str, str]:
-    username = os.getenv("SMTP_USERNAME", "").strip()
-    password = os.getenv("SMTP_PASSWORD", "").strip()
-    return username, password
+class _SmtpConfig(NamedTuple):
+    host: str
+    port: int
+    username: str
+    password: str
+    tls_mode: str
+    from_addr: str
+
+
+def _smtp_config() -> _SmtpConfig:
+    """Resolve OTP SMTP settings.
+
+    Precedence for host/user/pass: ``OTP_SMTP_*`` > the digest email's generic
+    ``SMTP_HOST``/``SMTP_USER``/``SMTP_PASS`` > the legacy Gmail-only
+    ``SMTP_USERNAME``/``SMTP_PASSWORD`` compatibility alias.
+    """
+    legacy_username = os.environ.get("SMTP_USERNAME", "").strip()
+    username = (
+        os.environ.get("OTP_SMTP_USER", "").strip()
+        or legacy_username
+        or os.environ.get("SMTP_USER", "").strip()
+    )
+    password = (
+        os.environ.get("OTP_SMTP_PASS", "").strip()
+        or os.environ.get("SMTP_PASSWORD", "").strip()
+        or os.environ.get("SMTP_PASS", "").strip()
+    )
+
+    host = os.environ.get("OTP_SMTP_HOST", "").strip() or os.environ.get("SMTP_HOST", "").strip()
+    if not host and legacy_username:
+        # Legacy deployments that only set SMTP_USERNAME/SMTP_PASSWORD assumed Gmail.
+        host = _GMAIL_HOST
+
+    port_raw = (
+        os.environ.get("OTP_SMTP_PORT", "").strip() or os.environ.get("SMTP_PORT", "").strip()
+    )
+    port = int(port_raw) if port_raw else _DEFAULT_PORT
+
+    tls_raw = os.environ.get("OTP_SMTP_TLS", "").strip().lower()
+    tls_mode = tls_raw or ("ssl" if port == 465 else "starttls")
+
+    from_addr = os.environ.get("OTP_SMTP_FROM", "").strip() or username
+
+    return _SmtpConfig(host, port, username, password, tls_mode, from_addr)
 
 
 def send_otp_email(to_email: str, otp: str) -> None:
-    """Send a 6-digit OTP to *to_email* via Gmail SMTP STARTTLS."""
-    username, password = _smtp_credentials()
-    if not username or not password:
-        err = "SMTP_USERNAME and SMTP_PASSWORD must be set to send OTP emails"
+    """Send a 6-digit OTP to *to_email* via the configured SMTP relay."""
+    config = _smtp_config()
+    if not config.host or not config.username or not config.password:
+        err = (
+            "OTP SMTP is not configured. Set OTP_SMTP_HOST/OTP_SMTP_USER/OTP_SMTP_PASS "
+            "(or the digest email's SMTP_HOST/SMTP_USER/SMTP_PASS, or the legacy "
+            "Gmail-only SMTP_USERNAME/SMTP_PASSWORD alias) to send OTP emails"
+        )
         raise RuntimeError(err)
 
     html_body = f"""\
@@ -108,14 +161,25 @@ def send_otp_email(to_email: str, otp: str) -> None:
 
     msg = MIMEMultipart("alternative")
     msg["Subject"] = "Your News Dashboard sign-in code"
-    msg["From"] = username
+    msg["From"] = config.from_addr
     msg["To"] = to_email
     msg.attach(MIMEText(html_body, "html"))
 
-    with smtplib.SMTP(_SMTP_HOST, _SMTP_PORT, timeout=15) as server:
-        server.ehlo()
-        server.starttls()
-        server.login(username, password)
-        server.sendmail(username, to_email, msg.as_string())
+    if config.tls_mode == "ssl":
+        context = ssl.create_default_context()
+        with smtplib.SMTP_SSL(config.host, config.port, context=context, timeout=15) as server:
+            server.login(config.username, config.password)
+            server.sendmail(config.from_addr, to_email, msg.as_string())
+    elif config.tls_mode == "none":
+        with smtplib.SMTP(config.host, config.port, timeout=15) as server:
+            server.ehlo()
+            server.login(config.username, config.password)
+            server.sendmail(config.from_addr, to_email, msg.as_string())
+    else:
+        with smtplib.SMTP(config.host, config.port, timeout=15) as server:
+            server.ehlo()
+            server.starttls()
+            server.login(config.username, config.password)
+            server.sendmail(config.from_addr, to_email, msg.as_string())
 
     logger.info("OTP email sent to %s", to_email)

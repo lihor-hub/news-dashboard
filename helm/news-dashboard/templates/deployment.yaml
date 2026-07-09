@@ -118,6 +118,22 @@ spec:
                   key: {{ .Values.app.email.smtpPasswordKey | default "SMTP_PASSWORD" | quote }}
                   optional: true
 {{- end }}
+{{- if .Values.app.email.smtpHost }}
+            - name: OTP_SMTP_HOST
+              value: {{ .Values.app.email.smtpHost | quote }}
+{{- end }}
+{{- if .Values.app.email.smtpPort }}
+            - name: OTP_SMTP_PORT
+              value: {{ .Values.app.email.smtpPort | quote }}
+{{- end }}
+{{- if .Values.app.email.smtpFrom }}
+            - name: OTP_SMTP_FROM
+              value: {{ .Values.app.email.smtpFrom | quote }}
+{{- end }}
+{{- if .Values.app.email.smtpTlsMode }}
+            - name: OTP_SMTP_TLS
+              value: {{ .Values.app.email.smtpTlsMode | quote }}
+{{- end }}
 {{- end }}
             - name: SESSION_SECRET
               valueFrom:
