@@ -23,14 +23,6 @@ _GMAIL_HOST = "smtp.gmail.com"
 _DEFAULT_PORT = 587
 
 
-def _first_env(*names: str) -> str:
-    for name in names:
-        value = os.getenv(name, "").strip()
-        if value:
-            return value
-    return ""
-
-
 class _SmtpConfig(NamedTuple):
     host: str
     port: int
@@ -47,20 +39,32 @@ def _smtp_config() -> _SmtpConfig:
     ``SMTP_HOST``/``SMTP_USER``/``SMTP_PASS`` > the legacy Gmail-only
     ``SMTP_USERNAME``/``SMTP_PASSWORD`` compatibility alias.
     """
-    username = _first_env("OTP_SMTP_USER", "SMTP_USERNAME", "SMTP_USER")
-    password = _first_env("OTP_SMTP_PASS", "SMTP_PASSWORD", "SMTP_PASS")
+    legacy_username = os.environ.get("SMTP_USERNAME", "").strip()
+    username = (
+        os.environ.get("OTP_SMTP_USER", "").strip()
+        or legacy_username
+        or os.environ.get("SMTP_USER", "").strip()
+    )
+    password = (
+        os.environ.get("OTP_SMTP_PASS", "").strip()
+        or os.environ.get("SMTP_PASSWORD", "").strip()
+        or os.environ.get("SMTP_PASS", "").strip()
+    )
 
-    host = _first_env("OTP_SMTP_HOST", "SMTP_HOST")
-    if not host and _first_env("SMTP_USERNAME"):
+    host = os.environ.get("OTP_SMTP_HOST", "").strip() or os.environ.get("SMTP_HOST", "").strip()
+    if not host and legacy_username:
         # Legacy deployments that only set SMTP_USERNAME/SMTP_PASSWORD assumed Gmail.
         host = _GMAIL_HOST
 
-    port_raw = _first_env("OTP_SMTP_PORT", "SMTP_PORT")
+    port_raw = (
+        os.environ.get("OTP_SMTP_PORT", "").strip() or os.environ.get("SMTP_PORT", "").strip()
+    )
     port = int(port_raw) if port_raw else _DEFAULT_PORT
 
-    tls_mode = _first_env("OTP_SMTP_TLS").lower() or ("ssl" if port == 465 else "starttls")
+    tls_raw = os.environ.get("OTP_SMTP_TLS", "").strip().lower()
+    tls_mode = tls_raw or ("ssl" if port == 465 else "starttls")
 
-    from_addr = _first_env("OTP_SMTP_FROM") or username
+    from_addr = os.environ.get("OTP_SMTP_FROM", "").strip() or username
 
     return _SmtpConfig(host, port, username, password, tls_mode, from_addr)
 
