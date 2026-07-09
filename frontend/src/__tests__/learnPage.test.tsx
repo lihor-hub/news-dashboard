@@ -5,7 +5,13 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { LearnPage } from '../pages/LearnPage';
-import { HttpError, createLessonFromLink, fetchLesson } from '../api';
+import {
+  HttpError,
+  createLessonFromLink,
+  fetchLesson,
+  type Lesson,
+  type LessonContent,
+} from '../api';
 import * as api from '../api';
 
 const { translationSpy } = vi.hoisted(() => ({
@@ -24,6 +30,18 @@ const { translationSpy } = vi.hoisted(() => ({
       'learn.link.open_original': 'Open original article',
       'learn.refresh_error': 'Failed to refresh lesson',
       'learn.request_error': 'Lesson generation failed',
+      'learn.structured.gist_heading': '30-second gist',
+      'learn.structured.explanation_heading': 'Explanation',
+      'learn.structured.key_claims_heading': 'Key claims',
+      'learn.structured.prerequisites_heading': 'Prerequisites',
+      'learn.structured.why_it_matters_heading': 'Why it matters',
+      'learn.structured.intended_readers_heading': 'Who should read the full article',
+      'learn.structured.guiding_questions_heading': 'Questions to keep in mind',
+      'learn.structured.citations_heading': 'Citations',
+      'learn.structured.verdict.skip': 'Skip',
+      'learn.structured.verdict.skim': 'Skim',
+      'learn.structured.verdict.read': 'Read',
+      'learn.structured.verdict.study': 'Study',
     };
     return translations[key] ?? key;
   }),
@@ -50,11 +68,31 @@ const COMPLETE_LESSON = {
   author: 'Jane Example',
   published_at: '2026-07-08T10:00:00Z',
   source_content: 'A compact but useful article body preview.',
+  lesson_content: null,
   generation_status: 'complete',
   generation_error: null,
   created_at: '2026-07-08T10:00:00Z',
   updated_at: '2026-07-08T10:01:00Z',
 } as const;
+
+const STRUCTURED_LESSON_CONTENT: LessonContent = {
+  gist: 'A compact 30-second summary of the article.',
+  explanation: 'A short explanation of the core idea presented in the article.',
+  key_claims: ['The article claims X causes Y.', 'The article claims Z is overstated.'],
+  prerequisites: ['Basic familiarity with the topic.'],
+  why_it_matters: 'This matters because it changes how readers should think about the topic.',
+  verdict: 'skim',
+  verdict_rationale: 'The headline claim is useful but the rest is filler.',
+  intended_readers: ['Practitioners evaluating the claim.'],
+  guiding_questions: ['Is the central claim well supported?'],
+  citations: [{ text: 'a quoted snippet from the source', note: null }],
+};
+
+const STRUCTURED_COMPLETE_LESSON: Lesson = {
+  ...COMPLETE_LESSON,
+  id: 10,
+  lesson_content: STRUCTURED_LESSON_CONTENT,
+};
 
 const PENDING_LESSON = {
   ...COMPLETE_LESSON,
@@ -174,6 +212,33 @@ describe('LearnPage', () => {
     expect(translationSpy).toHaveBeenCalledWith('learn.form.submit');
     expect(translationSpy).toHaveBeenCalledWith('learn.status.complete');
     expect(translationSpy).toHaveBeenCalledWith('learn.link.open_original');
+  });
+
+  it('renders the structured lesson detail with verdict, sections, and citations', async () => {
+    vi.spyOn(api, 'createLessonFromLink').mockResolvedValue(STRUCTURED_COMPLETE_LESSON);
+
+    renderPage();
+    const user = userEvent.setup();
+    await user.type(screen.getByLabelText(/article url/i), 'https://example.com/article');
+    await user.click(screen.getByRole('button', { name: /generate lesson/i }));
+
+    await screen.findByText(/lesson generated/i);
+    expect(screen.getByText('Skim')).toBeInTheDocument();
+    expect(screen.getByText(STRUCTURED_LESSON_CONTENT.verdict_rationale)).toBeInTheDocument();
+    expect(screen.getByText(STRUCTURED_LESSON_CONTENT.gist)).toBeInTheDocument();
+    expect(screen.getByText(STRUCTURED_LESSON_CONTENT.explanation)).toBeInTheDocument();
+    expect(screen.getByText(STRUCTURED_LESSON_CONTENT.key_claims[0])).toBeInTheDocument();
+    expect(screen.getByText(STRUCTURED_LESSON_CONTENT.key_claims[1])).toBeInTheDocument();
+    expect(screen.getByText(STRUCTURED_LESSON_CONTENT.prerequisites[0])).toBeInTheDocument();
+    expect(screen.getByText(STRUCTURED_LESSON_CONTENT.why_it_matters)).toBeInTheDocument();
+    expect(screen.getByText(STRUCTURED_LESSON_CONTENT.intended_readers[0])).toBeInTheDocument();
+    expect(screen.getByText(STRUCTURED_LESSON_CONTENT.guiding_questions[0])).toBeInTheDocument();
+    expect(
+      screen.getByText(`“${STRUCTURED_LESSON_CONTENT.citations[0].text}”`)
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText(/A compact but useful article body preview\./i)
+    ).not.toBeInTheDocument();
   });
 
   it('shows the backend failure message when generation fails', async () => {

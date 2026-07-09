@@ -649,6 +649,7 @@ POSTGRES_MULTIUSER_SCHEMA = [
     )
     """,
     "CREATE INDEX IF NOT EXISTS idx_lessons_user_created ON lessons(user_id, created_at DESC)",
+    "ALTER TABLE lessons ADD COLUMN IF NOT EXISTS lesson_content JSONB",
     """
     CREATE TABLE IF NOT EXISTS agent_action_runs (
       id          BIGSERIAL PRIMARY KEY,

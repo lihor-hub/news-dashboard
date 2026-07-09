@@ -110,6 +110,22 @@
       "open_original": "Open original article"
     },
     "refresh_error": "Failed to refresh lesson",
-    "request_error": "Lesson generation failed"
+    "request_error": "Lesson generation failed",
+    "structured": {
+      "gist_heading": "30-second gist",
+      "explanation_heading": "Explanation",
+      "key_claims_heading": "Key claims",
+      "prerequisites_heading": "Prerequisites",
+      "why_it_matters_heading": "Why it matters",
+      "intended_readers_heading": "Who should read the full article",
+      "guiding_questions_heading": "Questions to keep in mind",
+      "citations_heading": "Citations",
+      "verdict": {
+        "skip": "Skip",
+        "skim": "Skim",
+        "read": "Read",
+        "study": "Study"
+      }
+    }
   }
 }

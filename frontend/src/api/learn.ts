@@ -1,5 +1,25 @@
 import { requestJson } from './core';
 
+export type LessonVerdict = 'skip' | 'skim' | 'read' | 'study';
+
+export interface LessonCitation {
+  text: string;
+  note: string | null;
+}
+
+export interface LessonContent {
+  gist: string;
+  explanation: string;
+  key_claims: string[];
+  prerequisites: string[];
+  why_it_matters: string;
+  verdict: LessonVerdict;
+  verdict_rationale: string;
+  intended_readers: string[];
+  guiding_questions: string[];
+  citations: LessonCitation[];
+}
+
 export interface Lesson {
   id: number;
   user_id: number;
@@ -10,6 +30,7 @@ export interface Lesson {
   author: string | null;
   published_at: string | null;
   source_content: string | null;
+  lesson_content: LessonContent | null;
   generation_status: 'pending' | 'complete' | 'failed';
   generation_error: string | null;
   created_at: string;

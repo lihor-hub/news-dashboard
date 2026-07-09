@@ -5,7 +5,14 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import { createLessonFromLink, fetchLesson, HttpError, type Lesson } from '@/api';
+import {
+  createLessonFromLink,
+  fetchLesson,
+  HttpError,
+  type Lesson,
+  type LessonContent,
+  type LessonVerdict,
+} from '@/api';
 
 function formatPublishedDate(value: string | null): string | null {
   if (!value) return null;
@@ -24,6 +31,98 @@ function statusBadgeVariant(
   if (status === 'complete') return 'default';
   if (status === 'failed') return 'destructive';
   return 'secondary';
+}
+
+function verdictBadgeVariant(verdict: LessonVerdict): 'default' | 'secondary' | 'destructive' {
+  if (verdict === 'study' || verdict === 'read') return 'default';
+  if (verdict === 'skip') return 'destructive';
+  return 'secondary';
+}
+
+function LessonListSection({ heading, items }: { heading: string; items: string[] }) {
+  if (items.length === 0) return null;
+  return (
+    <div className="space-y-1.5">
+      <h3 className="text-sm font-medium text-foreground">{heading}</h3>
+      <ul className="list-disc space-y-1 pl-5 text-sm text-muted-foreground">
+        {items.map((item) => (
+          <li key={item}>{item}</li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function LessonDetail({ content }: { content: LessonContent }) {
+  const { t } = useTranslation();
+
+  return (
+    <div className="space-y-5 rounded-lg border border-border bg-muted/20 p-4">
+      <div className="flex flex-wrap items-center gap-2">
+        <Badge variant={verdictBadgeVariant(content.verdict)}>
+          {t(`learn.structured.verdict.${content.verdict}`)}
+        </Badge>
+        <span className="text-sm text-muted-foreground">{content.verdict_rationale}</span>
+      </div>
+
+      <div className="space-y-1.5">
+        <h3 className="text-sm font-medium text-foreground">
+          {t('learn.structured.gist_heading')}
+        </h3>
+        <p className="text-sm leading-6 text-foreground">{content.gist}</p>
+      </div>
+
+      <div className="space-y-1.5">
+        <h3 className="text-sm font-medium text-foreground">
+          {t('learn.structured.explanation_heading')}
+        </h3>
+        <p className="text-sm leading-6 text-foreground">{content.explanation}</p>
+      </div>
+
+      <LessonListSection
+        heading={t('learn.structured.key_claims_heading')}
+        items={content.key_claims}
+      />
+      <LessonListSection
+        heading={t('learn.structured.prerequisites_heading')}
+        items={content.prerequisites}
+      />
+
+      <div className="space-y-1.5">
+        <h3 className="text-sm font-medium text-foreground">
+          {t('learn.structured.why_it_matters_heading')}
+        </h3>
+        <p className="text-sm leading-6 text-foreground">{content.why_it_matters}</p>
+      </div>
+
+      <LessonListSection
+        heading={t('learn.structured.intended_readers_heading')}
+        items={content.intended_readers}
+      />
+      <LessonListSection
+        heading={t('learn.structured.guiding_questions_heading')}
+        items={content.guiding_questions}
+      />
+
+      {content.citations.length > 0 ? (
+        <div className="space-y-1.5">
+          <h3 className="text-sm font-medium text-foreground">
+            {t('learn.structured.citations_heading')}
+          </h3>
+          <ul className="space-y-1.5">
+            {content.citations.map((citation) => (
+              <li
+                key={citation.text}
+                className="border-l-2 border-border pl-3 text-sm italic text-muted-foreground"
+              >
+                “{citation.text}”
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+    </div>
+  );
 }
 
 export function LearnPage() {
@@ -188,7 +287,9 @@ export function LearnPage() {
             </a>
           </div>
 
-          {lesson.source_content ? (
+          {lesson.lesson_content ? (
+            <LessonDetail content={lesson.lesson_content} />
+          ) : lesson.source_content ? (
             <div className="rounded-lg border border-border bg-muted/20 p-4 text-sm leading-6 text-foreground">
               {lesson.source_content}
             </div>

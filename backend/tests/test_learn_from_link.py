@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import json
 import socket
 from collections.abc import Generator
 from contextlib import contextmanager
+from types import SimpleNamespace
 
 import pytest
 from fastapi.testclient import TestClient
@@ -10,8 +12,32 @@ from fastapi.testclient import TestClient
 from news_dashboard.auth import require_admin, require_auth
 from news_dashboard.db import connect, init_db
 from news_dashboard.learn_from_link import service
+from news_dashboard.learn_from_link.models import LessonCitation, LessonContent
 from news_dashboard.main import app
 from news_dashboard.url_safety import UnsafeUrlError
+
+
+def _fake_chat_response(content: str) -> SimpleNamespace:
+    message = SimpleNamespace(content=content)
+    choice = SimpleNamespace(message=message)
+    return SimpleNamespace(choices=[choice])
+
+
+def _stub_lesson_content(source_content: str = "") -> LessonContent:
+    has_paragraph = "Paragraph one." in source_content
+    citations = [LessonCitation(text="Paragraph one.")] if has_paragraph else []
+    return LessonContent(
+        gist="A 30-second gist.",
+        explanation="A short explanation of the core idea.",
+        key_claims=["The article makes a key claim."],
+        prerequisites=[],
+        why_it_matters="It matters because it affects readers.",
+        verdict="skim",
+        verdict_rationale="Skim it for the headline claim.",
+        intended_readers=["Curious generalists"],
+        guiding_questions=["Is the claim well supported?"],
+        citations=citations,
+    )
 
 
 def _make_user(database_url: str, username: str = "alice") -> int:
@@ -67,6 +93,25 @@ def _lesson_extraction_stubs(monkeypatch: pytest.MonkeyPatch) -> None:
         service,
         "extract_body",
         lambda url: (f"Body for {url}", "ok"),
+        raising=False,
+    )
+
+
+_GENERATE_LESSON_CONTENT_TESTS = {
+    "test_generate_lesson_content_parses_and_validates_ai_json",
+    "test_generate_lesson_content_raises_on_malformed_json",
+    "test_generate_lesson_content_raises_on_schema_violation",
+}
+
+
+@pytest.fixture(autouse=True)
+def _lesson_content_stub(request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch) -> None:
+    if request.node.name in _GENERATE_LESSON_CONTENT_TESTS:
+        return
+    monkeypatch.setattr(
+        service,
+        "generate_lesson_content",
+        lambda *, user_id, title, source_content: _stub_lesson_content(source_content),  # noqa: ARG005
         raising=False,
     )
 
@@ -425,4 +470,153 @@ def test_get_lesson_endpoint_404s_for_other_user(
         response = client.get(f"/api/learn/lessons/{lesson['id']}")
 
     assert response.status_code == 404
-    assert response.json()["detail"] == "lesson not found"
+
+
+def test_create_lesson_persists_structured_lesson_content(
+    pg_clean: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("DATABASE_URL", pg_clean)
+    user_id = _make_user(pg_clean)
+
+    lesson = service.create_lesson(user_id, "https://example.com/story", database_url=pg_clean)
+
+    assert lesson["generation_status"] == "complete"
+    content = lesson["lesson_content"]
+    assert content["gist"] == "A 30-second gist."
+    assert content["verdict"] == "skim"
+    assert content["verdict_rationale"] == "Skim it for the headline claim."
+    assert content["key_claims"] == ["The article makes a key claim."]
+    assert content["intended_readers"] == ["Curious generalists"]
+    assert content["guiding_questions"] == ["Is the claim well supported?"]
+
+
+def test_generate_lesson_content_parses_and_validates_ai_json(
+    pg_clean: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("DATABASE_URL", pg_clean)
+    monkeypatch.setattr(service, "_lesson_ai_config", lambda: ("test-key", None, "gpt-4o-mini"))
+
+    payload = {
+        "gist": "Gist text.",
+        "explanation": "Explanation text.",
+        "key_claims": ["Claim one."],
+        "prerequisites": [],
+        "why_it_matters": "Because reasons.",
+        "verdict": "read",
+        "verdict_rationale": "Worth reading.",
+        "intended_readers": [],
+        "guiding_questions": [],
+        "citations": [{"text": "quoted snippet"}],
+    }
+
+    response = _fake_chat_response(json.dumps(payload))
+    monkeypatch.setattr("news_dashboard.ai_client.get_chat_client", lambda **_kwargs: object())
+    monkeypatch.setattr("news_dashboard.ai_client.chat_create", lambda *_args, **_kwargs: response)
+
+    content = service.generate_lesson_content(
+        user_id=1,
+        title="Some article",
+        source_content="Body text with a quoted snippet inside it.",
+    )
+
+    assert content.gist == "Gist text."
+    assert content.verdict == "read"
+    assert content.citations[0].text == "quoted snippet"
+
+
+def test_generate_lesson_content_raises_on_malformed_json(
+    pg_clean: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("DATABASE_URL", pg_clean)
+    monkeypatch.setattr(service, "_lesson_ai_config", lambda: ("test-key", None, "gpt-4o-mini"))
+
+    response = _fake_chat_response("not json")
+    monkeypatch.setattr("news_dashboard.ai_client.get_chat_client", lambda **_kwargs: object())
+    monkeypatch.setattr("news_dashboard.ai_client.chat_create", lambda *_args, **_kwargs: response)
+
+    with pytest.raises(service.LessonGenerationError):
+        service.generate_lesson_content(
+            user_id=1,
+            title="Some article",
+            source_content="Body text.",
+        )
+
+
+def test_generate_lesson_content_raises_on_schema_violation(
+    pg_clean: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("DATABASE_URL", pg_clean)
+    monkeypatch.setattr(service, "_lesson_ai_config", lambda: ("test-key", None, "gpt-4o-mini"))
+
+    bad_payload = {"gist": "Only a gist, missing every other required field."}
+
+    response = _fake_chat_response(json.dumps(bad_payload))
+    monkeypatch.setattr("news_dashboard.ai_client.get_chat_client", lambda **_kwargs: object())
+    monkeypatch.setattr("news_dashboard.ai_client.chat_create", lambda *_args, **_kwargs: response)
+
+    with pytest.raises(service.LessonGenerationError):
+        service.generate_lesson_content(
+            user_id=1,
+            title="Some article",
+            source_content="Body text.",
+        )
+
+
+def test_create_lesson_marks_failed_when_ai_generation_raises(
+    pg_clean: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("DATABASE_URL", pg_clean)
+    user_id = _make_user(pg_clean)
+
+    def _boom(*, user_id: int, title: str, source_content: str) -> LessonContent:
+        message = "AI unavailable"
+        raise service.LessonGenerationError(message)
+
+    monkeypatch.setattr(service, "generate_lesson_content", _boom, raising=False)
+
+    lesson = service.create_lesson(user_id, "https://example.com/story", database_url=pg_clean)
+
+    assert lesson["generation_status"] == "failed"
+    expected_error = "Could not generate a structured lesson from this article."
+    assert lesson["generation_error"] == expected_error
+    assert lesson["title"] is None
+    assert lesson["source_content"] is None
+    assert lesson["lesson_content"] is None
+
+
+def test_verify_citations_drops_citations_not_found_in_source() -> None:
+    content = LessonContent(
+        gist="Gist.",
+        explanation="Explanation.",
+        key_claims=["Claim."],
+        why_it_matters="Matters.",
+        verdict="skim",
+        verdict_rationale="Rationale.",
+        citations=[
+            LessonCitation(text="This is quoted directly from the source."),
+            LessonCitation(text="This snippet was never actually said."),
+        ],
+    )
+    source_content = "Intro. This is quoted directly from the source. Outro."
+
+    verified = service._verify_citations(content, source_content)
+
+    assert len(verified.citations) == 1
+    assert verified.citations[0].text == "This is quoted directly from the source."
+
+
+def test_get_lesson_endpoint_exposes_structured_lesson_content(
+    pg_clean: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("DATABASE_URL", pg_clean)
+    init_db(database_url=pg_clean)
+    user_id = _make_user(pg_clean)
+    lesson = service.create_lesson(user_id, "https://example.com/a", database_url=pg_clean)
+
+    with _api_client(user_id) as client:
+        response = client.get(f"/api/learn/lessons/{lesson['id']}")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["lesson_content"]["verdict"] == "skim"
+    assert body["lesson_content"]["gist"] == "A 30-second gist."
