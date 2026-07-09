@@ -125,6 +125,16 @@
       "send": "Send",
       "thinking": "Thinking...",
       "error": "Failed to get an answer. Please try again."
+    },
+    "detail": {
+      "gist": "Gist",
+      "explanation": "Explanation",
+      "why_it_matters": "Why it matters",
+      "key_claims": "Key claims",
+      "prerequisite_concepts": "Prerequisite concepts",
+      "who_should_read": "Who should read",
+      "questions_to_keep_in_mind": "Questions to keep in mind",
+      "citations": "Citations"
     }
   }
 }
