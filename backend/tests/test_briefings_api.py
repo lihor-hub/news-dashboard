@@ -538,6 +538,81 @@ def test_get_podcast_audio_by_token_endpoint_invalid_token_returns_403(
     assert resp.status_code == 403
 
 
+# ── Anonymous access to podcast token routes ──────────────────────────────────
+#
+# Podcast clients cannot perform an interactive login, so these routes must be
+# reachable without a session cookie and authenticate purely via the revocable
+# feed token. Clearing `app.dependency_overrides` here removes the autouse fake
+# session from `override_auth`, so these requests exercise the real
+# `require_auth` boundary (or lack of one) rather than the test-only bypass.
+
+
+def test_podcast_rss_feed_anonymous_valid_token_returns_episode(
+    client: TestClient, monkeypatch: Any, tmp_path: Path
+) -> None:
+    from news_dashboard.podcast_feed import make_feed_token
+
+    monkeypatch.setattr("news_dashboard.auth.get_podcast_feed_token_version", lambda _uid: 1)
+    token = make_feed_token(1, 1)
+
+    briefing = {
+        "id": 7,
+        "created_at": "2026-06-13T12:00:00+00:00",
+        "title": "AI Frameworks",
+        "summary": "New agent frameworks.",
+        "script": [{"speaker": "Alex", "voice": "onyx", "text": "hi"}],
+    }
+    monkeypatch.setattr(
+        "news_dashboard.briefings.list_briefings_with_script", lambda **_: [briefing]
+    )
+
+    audio_file = tmp_path / "podcast-7.mp3"
+    audio_file.write_bytes(b"audio-bytes")
+    monkeypatch.setattr("news_dashboard.tts._podcast_audio_path", lambda *_a, **_k: audio_file)
+
+    app.dependency_overrides.clear()
+    resp = client.get(f"/api/briefings/podcast.rss?token={token}")
+    assert resp.status_code == 200
+    assert "<title>AI Frameworks</title>" in resp.text
+
+
+def test_podcast_rss_feed_anonymous_invalid_token_returns_403_not_401(
+    client: TestClient,
+) -> None:
+    app.dependency_overrides.clear()
+    resp = client.get("/api/briefings/podcast.rss?token=bogus")
+    assert resp.status_code == 403
+
+
+def test_get_podcast_audio_by_token_endpoint_anonymous_success(
+    client: TestClient, monkeypatch: Any, tmp_path: Path
+) -> None:
+    from news_dashboard.podcast_feed import make_feed_token
+
+    monkeypatch.setattr("news_dashboard.auth.get_podcast_feed_token_version", lambda _uid: 1)
+    token = make_feed_token(1, 1)
+
+    briefing = dict(_SAMPLE_BRIEFING)
+    monkeypatch.setattr(main_mod, "get_briefing", lambda _, **__: briefing)
+
+    audio_file = tmp_path / "podcast-1.mp3"
+    audio_file.write_bytes(b"podcast-data")
+    monkeypatch.setattr("news_dashboard.tts._podcast_audio_path", lambda *_a, **_k: audio_file)
+
+    app.dependency_overrides.clear()
+    resp = client.get(f"/api/briefings/1/podcast-audio?token={token}")
+    assert resp.status_code == 200
+    assert resp.read() == b"podcast-data"
+
+
+def test_get_podcast_audio_by_token_endpoint_anonymous_invalid_token_returns_403_not_401(
+    client: TestClient,
+) -> None:
+    app.dependency_overrides.clear()
+    resp = client.get("/api/briefings/1/podcast-audio?token=bogus")
+    assert resp.status_code == 403
+
+
 # ── POST /api/briefings/{id}/chat ─────────────────────────────────────────────
 
 
