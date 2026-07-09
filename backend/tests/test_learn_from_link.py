@@ -78,12 +78,12 @@ def test_create_lesson_rejects_unsafe_url(pg_clean: str, monkeypatch: pytest.Mon
 def test_get_lesson_is_user_scoped(pg_clean: str, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("DATABASE_URL", pg_clean)
     alice = _make_user(pg_clean, "alice")
-    _make_user(pg_clean, "bob")
+    bob = _make_user(pg_clean, "bob")
 
     lesson = service.create_lesson(alice, "https://example.com/a", database_url=pg_clean)
 
     assert service.get_lesson(lesson["id"], alice, database_url=pg_clean) is not None
-    assert service.get_lesson(lesson["id"], 2, database_url=pg_clean) is None
+    assert service.get_lesson(lesson["id"], bob, database_url=pg_clean) is None
 
 
 def test_create_lesson_duplicate_resets_pending_state(
@@ -110,6 +110,7 @@ def test_create_lesson_duplicate_resets_pending_state(
     )
 
     assert second["id"] == first["id"]
+    assert second["original_url"] == first["original_url"]
     assert second["generation_status"] == "pending"
     assert second["generation_error"] is None
     assert second["source_content"] == "old content"

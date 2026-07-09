@@ -56,8 +56,7 @@ def create_lesson(
             )
             VALUES (%s, %s, %s, 'pending', NULL)
             ON CONFLICT (user_id, normalized_url) DO UPDATE
-            SET original_url = EXCLUDED.original_url,
-                generation_status = 'pending',
+            SET generation_status = 'pending',
                 generation_error = NULL,
                 updated_at = NOW()
             RETURNING *
