@@ -13,14 +13,14 @@ from typing import Any
 import feedparser
 
 import news_dashboard.body_fetch as body_fetch_module
-import news_dashboard.ingest as ingest_module
+import news_dashboard.ingest.service as ingest_module
 from news_dashboard.db import connect
-from news_dashboard.ingest import (
+from news_dashboard.ingest.service import (
     _MAX_SNIPPET_FETCHES_PER_RUN,
     _SNIPPET_FETCH_SOURCES,
     ingest_all,
 )
-from news_dashboard.sources import SourceDefinition
+from news_dashboard.sources.service import SourceDefinition
 
 
 class _ParsedFeed:

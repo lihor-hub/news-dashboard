@@ -64,7 +64,7 @@ def test_numeric_article_detail_route_still_resolves(monkeypatch: Any) -> None:
         assert user_id == 42
         return {"id": 7, "title": "Article 7"}
 
-    monkeypatch.setattr("news_dashboard.main.get_article", fake_get_article)
+    monkeypatch.setattr("news_dashboard.articles.router.get_article", fake_get_article)
 
     response = _client().get("/api/articles/7")
 

@@ -142,7 +142,7 @@ def _api_client(uid: int, username: str = "user") -> Any:
 
 def test_pg_list_articles_starred_filter(pg_env: str) -> None:
     """COALESCE(uas.starred, false) must not raise DatatypeMismatch on PostgreSQL."""
-    from news_dashboard.ingest import list_articles, set_article_starred
+    from news_dashboard.ingest.service import list_articles, set_article_starred
 
     pg_url = pg_env
     _add_global_source(pg_url, "pg-src-star")
@@ -180,7 +180,7 @@ def test_pg_user_interest_profiles_interests_is_jsonb(pg_env: str) -> None:
 
 def test_pg_list_articles_unstarred_filter(pg_env: str) -> None:
     """Starred=False filter must correctly exclude starred articles on PostgreSQL."""
-    from news_dashboard.ingest import list_articles, set_article_starred
+    from news_dashboard.ingest.service import list_articles, set_article_starred
 
     pg_url = pg_env
     _add_global_source(pg_url, "pg-src-unstar")
@@ -201,7 +201,7 @@ def test_pg_list_articles_unstarred_filter(pg_env: str) -> None:
 
 def test_pg_list_articles_exposes_recommendation_metadata(pg_env: str) -> None:
     """list_articles must surface recommendation_score/model for compact Today labels."""
-    from news_dashboard.ingest import list_articles
+    from news_dashboard.ingest.service import list_articles
     from news_dashboard.recommendations import upsert_recommendation_score
 
     pg_url = pg_env
@@ -246,7 +246,7 @@ def test_pg_list_articles_exposes_recommendation_metadata(pg_env: str) -> None:
 
 def test_pg_list_articles_today_without_uas(pg_env: str) -> None:
     """list_articles state=today must work when no UAS row exists (NULL coalesces to false)."""
-    from news_dashboard.ingest import list_articles
+    from news_dashboard.ingest.service import list_articles
 
     pg_url = pg_env
     _add_global_source(pg_url, "pg-src-today")
@@ -262,7 +262,7 @@ def test_pg_list_articles_today_without_uas(pg_env: str) -> None:
 
 def test_pg_star_then_unstar(pg_env: str) -> None:
     """set_article_starred round-trip on PostgreSQL boolean column."""
-    from news_dashboard.ingest import list_articles, set_article_starred
+    from news_dashboard.ingest.service import list_articles, set_article_starred
 
     pg_url = pg_env
     _add_global_source(pg_url, "pg-src-roundtrip")
@@ -291,7 +291,7 @@ def test_pg_list_articles_respects_source_subscription(pg_env: str) -> None:
     """COALESCE(us_src.enabled, true) must not raise DatatypeMismatch on PostgreSQL."""
     import psycopg
 
-    from news_dashboard.ingest import list_articles
+    from news_dashboard.ingest.service import list_articles
 
     pg_url = pg_env
     _add_global_source(pg_url, "pg-src-sub")
@@ -318,7 +318,7 @@ def test_pg_list_articles_resubscription(pg_env: str) -> None:
     """Flipping user_sources.enabled back to true restores article visibility."""
     import psycopg
 
-    from news_dashboard.ingest import list_articles
+    from news_dashboard.ingest.service import list_articles
 
     pg_url = pg_env
     _add_global_source(pg_url, "pg-src-resub")
@@ -421,7 +421,7 @@ def test_pg_api_toggle_subscription_writes_boolean(pg_env: str) -> None:
 
 def test_pg_state_isolation_between_users(pg_env: str) -> None:
     """State transitions on PostgreSQL must be isolated per user."""
-    from news_dashboard.ingest import list_articles, transition_article_state
+    from news_dashboard.ingest.service import list_articles, transition_article_state
 
     pg_url = pg_env
     _add_global_source(pg_url, "pg-src-iso")
@@ -438,7 +438,7 @@ def test_pg_state_isolation_between_users(pg_env: str) -> None:
 
 def test_pg_star_isolation_between_users(pg_env: str) -> None:
     """Starring an article for one user must not affect another user's view."""
-    from news_dashboard.ingest import list_articles, set_article_starred
+    from news_dashboard.ingest.service import list_articles, set_article_starred
 
     pg_url = pg_env
     _add_global_source(pg_url, "pg-src-star-iso")
@@ -457,7 +457,7 @@ def test_pg_star_isolation_between_users(pg_env: str) -> None:
 
 def test_pg_private_source_visibility(pg_env: str) -> None:
     """Private source articles must only be visible to the owner on PostgreSQL."""
-    from news_dashboard.ingest import list_articles
+    from news_dashboard.ingest.service import list_articles
 
     pg_url = pg_env
     uid_a = _make_user(pg_url, "priv-alice")

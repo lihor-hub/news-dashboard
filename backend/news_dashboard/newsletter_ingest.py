@@ -25,7 +25,7 @@ from pathlib import Path
 from typing import Any, Protocol
 
 from news_dashboard.db import connect, init_db, insert_article_sql, row_to_dict
-from news_dashboard.ingest import clean_html
+from news_dashboard.ingest.service import clean_html
 
 logger = logging.getLogger(__name__)
 

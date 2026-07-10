@@ -17,8 +17,8 @@ from typing import Any, ClassVar
 import psycopg
 import pytest
 
-import news_dashboard.briefings as briefings_mod
-from news_dashboard.briefings import (
+import news_dashboard.briefings.service as briefings_mod
+from news_dashboard.briefings.service import (
     CANDIDATE_LIMIT,
     IDEMPOTENCY_WINDOW_MINUTES,
     BriefingAINotConfiguredError,

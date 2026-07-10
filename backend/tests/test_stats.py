@@ -4,7 +4,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from news_dashboard.db import connect, init_db
-from news_dashboard.stats import (
+from news_dashboard.stats.service import (
     article_counts,
     articles_over_time,
     category_mix,

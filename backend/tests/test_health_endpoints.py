@@ -69,9 +69,9 @@ def test_health_details_reports_graph_status() -> None:
     }
     app.dependency_overrides[require_admin] = lambda: None
     with (
-        patch("news_dashboard.main.init_db"),
-        patch("news_dashboard.main.describe_database", return_value="postgresql://db"),
-        patch("news_dashboard.main.get_next_ingest_at", return_value=None),
+        patch("news_dashboard.stats.router.init_db"),
+        patch("news_dashboard.stats.router.describe_database", return_value="postgresql://db"),
+        patch("news_dashboard.stats.router.get_next_ingest_at", return_value=None),
         patch("news_dashboard.system.service.graph_status", return_value={"status": "disabled"}),
     ):
         resp = client.get("/api/health/details")
@@ -80,3 +80,20 @@ def test_health_details_reports_graph_status() -> None:
 
     assert resp.status_code == 200
     assert resp.json()["graph"] == {"status": "disabled"}
+
+
+def test_graph_status_does_not_expose_connection_error_details() -> None:
+    from news_dashboard.system.service import graph_status
+
+    class _UnavailableGraph:
+        def verify_connectivity(self) -> None:
+            msg = "neo4j://user:secret@internal.example"
+            raise RuntimeError(msg)
+
+        def close(self) -> None:
+            pass
+
+    with patch("news_dashboard.graph_store.graph_store_from_env", return_value=_UnavailableGraph()):
+        result = graph_status()
+
+    assert result == {"status": "unavailable"}

@@ -10,7 +10,7 @@ import pytest
 
 from news_dashboard.auth import create_user
 from news_dashboard.db import connect
-from news_dashboard.ingest import (
+from news_dashboard.ingest.service import (
     infer_tags,
     make_summary,
     search_articles,
@@ -20,7 +20,7 @@ from news_dashboard.source_health import (
     generate_subscription_cleanup_suggestions,
     list_source_health,
 )
-from news_dashboard.sources import SourceDefinition
+from news_dashboard.sources.service import SourceDefinition
 
 # ──────────────────────────────────────────────
 # Source health tracking
@@ -157,7 +157,7 @@ def test_source_columns_present(tmp_path: Path) -> None:
 
 
 def test_source_error_tracked(tmp_path: Path) -> None:
-    from news_dashboard.sources import SourceDefinition
+    from news_dashboard.sources.service import SourceDefinition
 
     bad = SourceDefinition("bad-feed", "Bad Feed", "http://localhost:0/nope", "python")
     db = tmp_path / "err.db"
@@ -169,7 +169,7 @@ def test_source_error_tracked(tmp_path: Path) -> None:
             (bad.slug, bad.name, bad.url, bad.category, bad.kind),
         )
 
-    from news_dashboard.ingest import ingest_source
+    from news_dashboard.ingest.service import ingest_source
 
     with contextlib.suppress(Exception):  # failure is the point of this fixture
         ingest_source(bad, db)
@@ -186,7 +186,7 @@ def test_oversized_feed_tracked_as_source_error(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """An oversized feed response should fail like any other feed error."""
-    from news_dashboard.ingest import FEED_FETCH_MAX_BYTES, _ingest_source
+    from news_dashboard.ingest.service import FEED_FETCH_MAX_BYTES, _ingest_source
 
     big = SourceDefinition("big-feed", "Big Feed", "https://example.com/big.xml", "python")
     db = tmp_path / "big.db"
@@ -213,7 +213,7 @@ def test_oversized_feed_tracked_as_source_error(
             pass
 
     monkeypatch.setattr(
-        "news_dashboard.ingest.open_server_fetch_url", lambda *_a, **_k: _OversizedResp()
+        "news_dashboard.ingest.service.open_server_fetch_url", lambda *_a, **_k: _OversizedResp()
     )
 
     outcome = _ingest_source(big, db)

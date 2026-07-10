@@ -10,7 +10,11 @@ from psycopg.types.json import Jsonb
 from news_dashboard.auth import create_user
 from news_dashboard.db import connect
 from news_dashboard.export import assemble_user_export
-from news_dashboard.ingest import set_article_starred, sync_sources, transition_article_state
+from news_dashboard.ingest.service import (
+    set_article_starred,
+    sync_sources,
+    transition_article_state,
+)
 
 
 def _insert_article(db_url: str, *, url_suffix: str = "1", body: str | None = None) -> int:

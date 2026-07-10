@@ -64,7 +64,8 @@ def _data_dir() -> Path:
     return Path(os.getenv("DATA_DIR", str(_DEFAULT_DATA_DIR)))
 
 
-def _audio_path(article_id: int, data_dir: Path | None = None) -> Path:
+def article_audio_path(article_id: int, data_dir: Path | None = None) -> Path:
+    """Return the trusted cache path for an article's generated audio."""
     base = data_dir if data_dir is not None else _data_dir()
     return base / "audio" / f"{article_id}.mp3"
 
@@ -91,7 +92,7 @@ def generate_audio(
     """
     api_key, base_url = _tts_ai_config()
 
-    path = _audio_path(article_id, data_dir)
+    path = article_audio_path(article_id, data_dir)
 
     if path.exists():
         logger.debug("TTS cache hit for article %d", article_id)

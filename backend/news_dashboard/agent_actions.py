@@ -82,7 +82,7 @@ def _candidate_articles(query: str, user_id: int) -> list[dict[str, Any]]:
     story" unless every word appears in the article), so keyword hits are
     topped up with the user's most recent visible articles.
     """
-    from news_dashboard.ingest import list_articles, search_articles
+    from news_dashboard.ingest.service import list_articles, search_articles
 
     results = search_articles(q=query, limit=_MAX_CANDIDATES, user_id=user_id)
     seen = {r["id"] for r in results}
@@ -295,7 +295,7 @@ def cancel_run(run_id: int, *, user_id: int) -> dict[str, Any]:
 
 def _execute_tool(tool: str, article_id: int | None, *, user_id: int) -> str:
     """Run one allowlisted tool. Returns a concise result summary or raises."""
-    from news_dashboard.ingest import (
+    from news_dashboard.ingest.service import (
         ingest_all,
         send_article_later,
         set_article_starred,

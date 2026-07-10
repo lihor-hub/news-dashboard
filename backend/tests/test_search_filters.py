@@ -8,7 +8,12 @@ import pytest
 from fastapi.testclient import TestClient
 
 from news_dashboard.db import connect, init_db
-from news_dashboard.ingest import list_articles, search_articles, search_articles_page, sync_sources
+from news_dashboard.ingest.service import (
+    list_articles,
+    search_articles,
+    search_articles_page,
+    sync_sources,
+)
 from news_dashboard.main import app
 
 

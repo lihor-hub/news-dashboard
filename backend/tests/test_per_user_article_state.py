@@ -9,7 +9,7 @@ import pytest
 
 from news_dashboard.auth import create_user
 from news_dashboard.db import connect
-from news_dashboard.ingest import (
+from news_dashboard.ingest.service import (
     list_articles,
     search_articles,
     send_article_later,

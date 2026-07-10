@@ -4,7 +4,7 @@ import logging
 
 import typer
 
-from news_dashboard.ingest import ingest_all, list_articles, sync_sources
+from news_dashboard.ingest.service import ingest_all, list_articles, sync_sources
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +31,7 @@ def ingest() -> None:
 
 @app.command(name="scheduled-ingest")
 def scheduled_ingest() -> None:
-    from news_dashboard.scheduler import run_scheduled_ingest
+    from news_dashboard.scheduler.service import run_scheduled_ingest
 
     try:
         results = run_scheduled_ingest(raise_on_failure=True)

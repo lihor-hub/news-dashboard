@@ -8,7 +8,7 @@ from fastapi.testclient import TestClient
 
 from news_dashboard.auth import require_auth
 from news_dashboard.db import connect, init_db
-from news_dashboard.ingest import sync_sources
+from news_dashboard.ingest.service import sync_sources
 from news_dashboard.main import app
 from news_dashboard.recommendations import upsert_recommendation_score
 

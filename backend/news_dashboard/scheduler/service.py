@@ -32,7 +32,7 @@ def _env_flag_enabled(name: str, *, default: bool) -> bool:
 
 def run_scheduled_ingest(raise_on_failure: bool = False) -> dict[str, int]:
     from news_dashboard.body_fetch import prefetch_article_bodies
-    from news_dashboard.ingest import ingest_all
+    from news_dashboard.ingest.service import ingest_all
 
     logger.info("Scheduled ingest starting…")
     results: dict[str, int] = {}
@@ -108,7 +108,7 @@ def _run_embedding_dedup() -> tuple[str, str | None]:
 
 
 def _run_briefing() -> tuple[str, str | None]:
-    from news_dashboard.briefings import (
+    from news_dashboard.briefings.service import (
         BriefingAINotConfiguredError,
         BriefingGenerationError,
         generate_briefing,
@@ -135,7 +135,7 @@ def _run_briefing() -> tuple[str, str | None]:
 
 def _generate_briefing_for_user(user_id: int, *, push_enabled: bool = True) -> bool:
     """Generate and push a briefing for one user. Returns True on success."""
-    from news_dashboard.briefings import (
+    from news_dashboard.briefings.service import (
         BriefingAINotConfiguredError,
         BriefingGenerationError,
         generate_briefing,
@@ -838,14 +838,15 @@ def set_interval(minutes: int) -> None:
     """Reschedule the ingest job with a new interval and persist it."""
     from news_dashboard.db import set_setting
 
-    _state.interval_minutes = minutes
-    set_setting("ingest_interval_minutes", str(minutes))
+    safe_minutes = int(minutes)
+    _state.interval_minutes = safe_minutes
+    set_setting("ingest_interval_minutes", str(safe_minutes))
 
     if _state.scheduler is None or not _state.ingest_interval_enabled:
         return
     try:
-        _state.scheduler.reschedule_job("ingest", trigger="interval", minutes=minutes)
-        logger.info("Ingest interval updated to %d minutes", minutes)
+        _state.scheduler.reschedule_job("ingest", trigger="interval", minutes=safe_minutes)
+        logger.info("Ingest interval updated to %d minutes", safe_minutes)
     except Exception:
         logger.exception("Failed to reschedule ingest job")
 

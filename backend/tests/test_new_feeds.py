@@ -6,14 +6,14 @@ from unittest.mock import Mock, patch
 
 import pytest
 
-from news_dashboard.ingest import (
+from news_dashboard.ingest.service import (
     FeedFetchError,
     _fetch_lobsters_feed,
     _fetch_mastodon_feed,
     _fetch_reddit_feed,
     _ingest_source,
 )
-from news_dashboard.sources import SourceDefinition
+from news_dashboard.sources.service import SourceDefinition
 
 
 def _make_source(kind: str, url: str, slug: str = "test") -> SourceDefinition:
@@ -32,14 +32,14 @@ def test_fetch_reddit_feed_converts_url() -> None:
     """Test that Reddit URL is converted to RSS format."""
     # Test URL without trailing slash
     source = _make_source("reddit_feed", "https://www.reddit.com/r/python")
-    with patch("news_dashboard.ingest._parse_feed_url") as mock_parse:
+    with patch("news_dashboard.ingest.service._parse_feed_url") as mock_parse:
         mock_parse.return_value = [{"url": "test", "title": "Test", "description": ""}]
         _fetch_reddit_feed(source)
         mock_parse.assert_called_once_with("https://www.reddit.com/r/python/.rss")
 
     # Test URL with trailing slash
     source = _make_source("reddit_feed", "https://www.reddit.com/r/python/")
-    with patch("news_dashboard.ingest._parse_feed_url") as mock_parse:
+    with patch("news_dashboard.ingest.service._parse_feed_url") as mock_parse:
         mock_parse.return_value = [{"url": "test", "title": "Test", "description": ""}]
         _fetch_reddit_feed(source)
         mock_parse.assert_called_once_with("https://www.reddit.com/r/python/.rss")
@@ -48,7 +48,7 @@ def test_fetch_reddit_feed_converts_url() -> None:
 def test_fetch_lobsters_feed_passthrough() -> None:
     """Test that Lobsters URL is passed through unchanged."""
     source = _make_source("lobsters_feed", "https://lobste.rs/rss")
-    with patch("news_dashboard.ingest._parse_feed_url") as mock_parse:
+    with patch("news_dashboard.ingest.service._parse_feed_url") as mock_parse:
         mock_parse.return_value = [{"url": "test", "title": "Test", "description": ""}]
         _fetch_lobsters_feed(source)
         mock_parse.assert_called_once_with("https://lobste.rs/rss")
@@ -60,8 +60,8 @@ def test_mastodon_feed_derives_title_from_summary() -> None:
     body_html = "<p>This is a Mastodon post about open-source software and distributed nets.</p>"
     fake_entry = {"link": "https://mastodon.social/@user/1", "title": "", "summary": body_html}
     with (
-        patch("news_dashboard.ingest._fetch_feed_content", return_value=b""),
-        patch("news_dashboard.ingest.feedparser") as mock_fp,
+        patch("news_dashboard.ingest.service._fetch_feed_content", return_value=b""),
+        patch("news_dashboard.ingest.service.feedparser") as mock_fp,
     ):
         mock_fp.parse.return_value = Mock(bozo=False, entries=[fake_entry])
         entries = _fetch_mastodon_feed(source)
@@ -74,8 +74,8 @@ def test_mastodon_feed_falls_back_to_untitled_when_no_body() -> None:
     source = _make_source("mastodon_feed", "https://mastodon.social/tags/technology.rss")
     fake_entry = {"link": "https://mastodon.social/@user/2", "title": "", "summary": ""}
     with (
-        patch("news_dashboard.ingest._fetch_feed_content", return_value=b""),
-        patch("news_dashboard.ingest.feedparser") as mock_fp,
+        patch("news_dashboard.ingest.service._fetch_feed_content", return_value=b""),
+        patch("news_dashboard.ingest.service.feedparser") as mock_fp,
     ):
         mock_fp.parse.return_value = Mock(bozo=False, entries=[fake_entry])
         entries = _fetch_mastodon_feed(source)
@@ -86,25 +86,25 @@ def test_ingest_source_routes_to_correct_function() -> None:
     """Test that _ingest_source routes to the correct fetch function based on kind."""
     # Test reddit_feed routing
     reddit_source = _make_source("reddit_feed", "https://www.reddit.com/r/test")
-    with patch("news_dashboard.ingest._fetch_reddit_feed") as mock_reddit:
+    with patch("news_dashboard.ingest.service._fetch_reddit_feed") as mock_reddit:
         mock_reddit.return_value = []
-        with patch("news_dashboard.ingest.connect"):
+        with patch("news_dashboard.ingest.service.connect"):
             _ingest_source(reddit_source)
         mock_reddit.assert_called_once()
 
     # Test lobsters_feed routing
     lobsters_source = _make_source("lobsters_feed", "https://lobste.rs/rss")
-    with patch("news_dashboard.ingest._fetch_lobsters_feed") as mock_lobsters:
+    with patch("news_dashboard.ingest.service._fetch_lobsters_feed") as mock_lobsters:
         mock_lobsters.return_value = []
-        with patch("news_dashboard.ingest.connect"):
+        with patch("news_dashboard.ingest.service.connect"):
             _ingest_source(lobsters_source)
         mock_lobsters.assert_called_once()
 
     # Test mastodon_feed routing
     mastodon_source = _make_source("mastodon_feed", "https://mastodon.social/tags/test.rss")
-    with patch("news_dashboard.ingest._fetch_mastodon_feed") as mock_mastodon:
+    with patch("news_dashboard.ingest.service._fetch_mastodon_feed") as mock_mastodon:
         mock_mastodon.return_value = []
-        with patch("news_dashboard.ingest.connect"):
+        with patch("news_dashboard.ingest.service.connect"):
             _ingest_source(mastodon_source)
         mock_mastodon.assert_called_once()
 
@@ -112,9 +112,9 @@ def test_ingest_source_routes_to_correct_function() -> None:
 def test_ingest_source_handles_fetch_errors() -> None:
     """Test that feed fetch errors are handled properly."""
     source = _make_source("reddit_feed", "https://www.reddit.com/r/nonexistent")
-    with patch("news_dashboard.ingest._fetch_reddit_feed") as mock_fetch:
+    with patch("news_dashboard.ingest.service._fetch_reddit_feed") as mock_fetch:
         mock_fetch.side_effect = FeedFetchError("Not found")
-        with patch("news_dashboard.ingest.connect") as mock_connect:
+        with patch("news_dashboard.ingest.service.connect") as mock_connect:
             mock_conn = Mock()
             mock_connect.return_value.__enter__.return_value = mock_conn
             result = _ingest_source(source)

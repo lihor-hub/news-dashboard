@@ -65,7 +65,7 @@ def test_prompt_formatter_uses_only_active_user_memories(pg_clean: str) -> None:
 
 def test_briefing_prompt_includes_memory_for_current_user(monkeypatch: pytest.MonkeyPatch) -> None:
     from news_dashboard.ai_client import ManagedPrompt
-    from news_dashboard.briefings import _call_openai
+    from news_dashboard.briefings.service import _call_openai
 
     response = MagicMock()
     response.choices = [

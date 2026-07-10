@@ -1,7 +1,7 @@
 """Pure-function unit tests for the briefing agent pipeline stages.
 
 No DB or network access — covers theme clustering and citation verification
-in isolation from ``news_dashboard.briefings``.
+in isolation from ``news_dashboard.briefings.service``.
 """
 
 from __future__ import annotations

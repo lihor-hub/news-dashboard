@@ -26,16 +26,20 @@ _EXCLUDED = {"migrate.py"}
 
 
 def _runtime_modules() -> list[Path]:
-    return sorted(path for path in PACKAGE_ROOT.glob("*.py") if path.name not in _EXCLUDED)
+    return sorted(path for path in PACKAGE_ROOT.rglob("*.py") if path.name not in _EXCLUDED)
+
+
+def _module_id(path: Path) -> str:
+    return path.relative_to(PACKAGE_ROOT).as_posix()
 
 
 def test_runtime_modules_exist() -> None:
     # Sanity check so an empty glob cannot vacuously pass the guards below.
-    names = {path.name for path in _runtime_modules()}
-    assert {"db.py", "ingest.py", "recommendations.py", "recommendation_jobs.py"} <= names
+    names = {_module_id(path) for path in _runtime_modules()}
+    assert {"db.py", "ingest/service.py", "recommendations.py", "recommendation_jobs.py"} <= names
 
 
-@pytest.mark.parametrize("module", _runtime_modules(), ids=lambda p: p.name)
+@pytest.mark.parametrize("module", _runtime_modules(), ids=_module_id)
 def test_runtime_module_does_not_use_sqlite(module: Path) -> None:
     # Detect actual SQLite *usage* (import/connect), not docstrings that merely
     # reaffirm the "no SQLite fallback" contract.
@@ -45,7 +49,7 @@ def test_runtime_module_does_not_use_sqlite(module: Path) -> None:
     assert "sqlite://" not in source, f"{module.name} builds a sqlite DSN"
 
 
-@pytest.mark.parametrize("module", _runtime_modules(), ids=lambda p: p.name)
+@pytest.mark.parametrize("module", _runtime_modules(), ids=_module_id)
 def test_runtime_module_has_no_qmark_placeholder_translation(module: Path) -> None:
     """No code rewrites psycopg ``%s`` placeholders into SQLite ``?`` style."""
     source = module.read_text(encoding="utf-8")
@@ -55,7 +59,7 @@ def test_runtime_module_has_no_qmark_placeholder_translation(module: Path) -> No
     assert "paramstyle" not in source
 
 
-@pytest.mark.parametrize("module", _runtime_modules(), ids=lambda p: p.name)
+@pytest.mark.parametrize("module", _runtime_modules(), ids=_module_id)
 def test_runtime_module_has_no_sqlite_only_sql(module: Path) -> None:
     """No SQLite-flavoured statements that imply a non-Postgres backend."""
     source = module.read_text(encoding="utf-8").upper()

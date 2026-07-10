@@ -37,8 +37,8 @@ def interest_options() -> set[str]:
 
 
 def source_recommendations(user_id: int, interests: list[str]) -> list[dict[str, Any]]:
-    from news_dashboard.ingest import sync_sources
-    from news_dashboard.sources import DEFAULT_SOURCES
+    from news_dashboard.ingest.service import sync_sources
+    from news_dashboard.sources.service import DEFAULT_SOURCES
 
     selected = set(interests)
     sync_sources()
@@ -133,7 +133,7 @@ def get_interests(user_id: int) -> list[str]:
 
 
 def save_profile(user_id: int, interest_ids: list[str], enabled_slugs: list[str]) -> None:
-    from news_dashboard.ingest import sync_sources
+    from news_dashboard.ingest.service import sync_sources
 
     sync_sources()
     with connect() as conn:
@@ -176,7 +176,7 @@ def save_interests(
     disabled_source_slugs: list[str],
     completed: bool,
 ) -> None:
-    from news_dashboard.ingest import sync_sources
+    from news_dashboard.ingest.service import sync_sources
 
     requested = list(dict.fromkeys(enabled_source_slugs + disabled_source_slugs))
     sync_sources()

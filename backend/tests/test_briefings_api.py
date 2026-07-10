@@ -3,7 +3,7 @@
 Strategy:
 - Schema tests inspect the PostgreSQL DDL constants for the saved briefing tables.
 - API-contract tests: use FastAPI's TestClient and monkeypatch the imported
-  names in news_dashboard.main (the module that actually calls them) so no
+  names in news_dashboard.briefings.router (the module that actually calls them) so no
   PostgreSQL connection is required.  Patching the *importer's* namespace is
   the standard Python pattern for ``from module import name`` style imports.
 
@@ -22,8 +22,8 @@ from urllib.parse import urlsplit
 import pytest
 from fastapi.testclient import TestClient
 
-import news_dashboard.main as main_mod
-from news_dashboard.briefings import (
+import news_dashboard.briefings.router as main_mod
+from news_dashboard.briefings.service import (
     BriefingAINotConfiguredError,
     BriefingGenerationError,
     BriefingNotFoundError,
@@ -338,7 +338,9 @@ def test_generate_podcast_endpoint_success(client: TestClient, monkeypatch: Any)
         "news_dashboard.tts.generate_podcast_script",
         lambda *_, **__: [{"speaker": "Alex", "voice": "alloy", "text": "Hi"}],
     )
-    monkeypatch.setattr("news_dashboard.briefings.update_briefing_script", lambda *_, **__: None)
+    monkeypatch.setattr(
+        "news_dashboard.briefings.service.update_briefing_script", lambda *_, **__: None
+    )
     monkeypatch.setattr("news_dashboard.tts.generate_podcast_audio", lambda *_, **__: mock_path)
 
     resp = client.post("/api/briefings/1/podcast")
@@ -441,7 +443,7 @@ def test_podcast_rss_feed_valid_token_returns_episode(
         "script": [{"speaker": "Alex", "voice": "onyx", "text": "hi"}],
     }
     monkeypatch.setattr(
-        "news_dashboard.briefings.list_briefings_with_script", lambda **_: [briefing]
+        "news_dashboard.briefings.service.list_briefings_with_script", lambda **_: [briefing]
     )
 
     audio_file = tmp_path / "podcast-7.mp3"
@@ -474,7 +476,7 @@ def test_podcast_rss_feed_skips_episode_missing_audio_and_tts_unconfigured(
         "script": [{"speaker": "Alex", "voice": "onyx", "text": "hi"}],
     }
     monkeypatch.setattr(
-        "news_dashboard.briefings.list_briefings_with_script", lambda **_: [briefing]
+        "news_dashboard.briefings.service.list_briefings_with_script", lambda **_: [briefing]
     )
 
     from pathlib import Path as PathType
@@ -563,7 +565,7 @@ def test_podcast_rss_feed_anonymous_valid_token_returns_episode(
         "script": [{"speaker": "Alex", "voice": "onyx", "text": "hi"}],
     }
     monkeypatch.setattr(
-        "news_dashboard.briefings.list_briefings_with_script", lambda **_: [briefing]
+        "news_dashboard.briefings.service.list_briefings_with_script", lambda **_: [briefing]
     )
 
     audio_file = tmp_path / "podcast-7.mp3"
@@ -697,7 +699,7 @@ def test_chat_rejects_blank_message(client: TestClient) -> None:
 
 
 def test_chat_rejects_oversized_message(client: TestClient) -> None:
-    from news_dashboard.main import MAX_BRIEFING_CHAT_MESSAGE_LENGTH
+    from news_dashboard.briefings.models import MAX_BRIEFING_CHAT_MESSAGE_LENGTH
 
     resp = client.post(
         "/api/briefings/1/chat",
@@ -707,7 +709,7 @@ def test_chat_rejects_oversized_message(client: TestClient) -> None:
 
 
 def test_chat_rejects_oversized_history(client: TestClient) -> None:
-    from news_dashboard.main import MAX_BRIEFING_CHAT_HISTORY_ITEMS
+    from news_dashboard.briefings.models import MAX_BRIEFING_CHAT_HISTORY_ITEMS
 
     history = [{"role": "user", "content": "hi"}] * (MAX_BRIEFING_CHAT_HISTORY_ITEMS + 1)
     resp = client.post("/api/briefings/1/chat", json={"message": "hello", "history": history})
@@ -715,7 +717,7 @@ def test_chat_rejects_oversized_history(client: TestClient) -> None:
 
 
 def test_chat_accepts_message_at_length_boundary(client: TestClient, monkeypatch: Any) -> None:
-    from news_dashboard.main import MAX_BRIEFING_CHAT_MESSAGE_LENGTH
+    from news_dashboard.briefings.models import MAX_BRIEFING_CHAT_MESSAGE_LENGTH
 
     monkeypatch.setattr(main_mod, "chat_with_briefing", lambda *_args, **_kwargs: "ok")
     resp = client.post(
@@ -726,7 +728,7 @@ def test_chat_accepts_message_at_length_boundary(client: TestClient, monkeypatch
 
 
 def test_create_rejects_oversized_focus_prompt(client: TestClient) -> None:
-    from news_dashboard.main import MAX_BRIEFING_FOCUS_PROMPT_LENGTH
+    from news_dashboard.briefings.models import MAX_BRIEFING_FOCUS_PROMPT_LENGTH
 
     resp = client.post(
         "/api/briefings",
@@ -764,12 +766,12 @@ def test_chat_constructs_prompt_with_article_bodies(monkeypatch: Any) -> None:
         return mock_response
 
     with (
-        patch("news_dashboard.briefings.get_briefing", return_value=sample_briefing),
-        patch("news_dashboard.briefings._briefing_ai_config", return_value=("key", None)),
+        patch("news_dashboard.briefings.service.get_briefing", return_value=sample_briefing),
+        patch("news_dashboard.briefings.service._briefing_ai_config", return_value=("key", None)),
         patch("news_dashboard.ai_client.get_openai_client", return_value=MagicMock()),
         patch("news_dashboard.ai_client.chat_create", side_effect=fake_chat_create),
         patch(
-            "news_dashboard.briefings.connect",
+            "news_dashboard.briefings.service.connect",
         ) as mock_connect,
     ):
         mock_conn = MagicMock()
@@ -778,7 +780,7 @@ def test_chat_constructs_prompt_with_article_bodies(monkeypatch: Any) -> None:
         mock_conn.execute.return_value.fetchone.return_value = {"body": article_body}
         mock_connect.return_value = mock_conn
 
-        from news_dashboard.briefings import chat_with_briefing
+        from news_dashboard.briefings.service import chat_with_briefing
 
         reply = chat_with_briefing(1, "What are the benchmarks?", [], user_id=1)
 

@@ -424,7 +424,7 @@ def keycloak_token_request_data(code: str) -> dict[str, str]:
 
 
 def subscribe_user_to_default_sources(user_id: int) -> None:
-    from news_dashboard.ingest import sync_sources
+    from news_dashboard.ingest.service import sync_sources
 
     _ = user_id
     sync_sources()

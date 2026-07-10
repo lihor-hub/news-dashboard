@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections import Counter
 
-from news_dashboard.sources import DEFAULT_SOURCES
+from news_dashboard.sources.service import DEFAULT_SOURCES
 
 
 def test_default_sources_have_unique_slugs() -> None:

@@ -299,7 +299,7 @@ def test_ai_extract_body_falls_back_to_openai_when_gateway_unset() -> None:
 
 def test_call_openai_threads_user_id_to_chat_create() -> None:
     from news_dashboard.ai_client import ManagedPrompt
-    from news_dashboard.briefings import _call_openai
+    from news_dashboard.briefings.service import _call_openai
 
     json_text = '{"title":"T","summary":"S","sections":[],"worth_opening":[]}'
     mock_cc = MagicMock(return_value=_mock_json_completion(json_text))
@@ -317,7 +317,7 @@ def test_call_openai_threads_user_id_to_chat_create() -> None:
 
 def test_call_openai_passes_none_user_id_for_system_briefings() -> None:
     from news_dashboard.ai_client import ManagedPrompt
-    from news_dashboard.briefings import _call_openai
+    from news_dashboard.briefings.service import _call_openai
 
     json_text = '{"title":"T","summary":"S","sections":[],"worth_opening":[]}'
     mock_cc = MagicMock(return_value=_mock_json_completion(json_text))

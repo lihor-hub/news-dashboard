@@ -316,7 +316,7 @@ def _to_epoch(value: Any) -> int:
 def apply_edit_tag(user_id: int, article_id: int, *, add: list[str], remove: list[str]) -> None:
     import contextlib
 
-    from news_dashboard.ingest import set_article_starred, transition_article_state
+    from news_dashboard.ingest.service import set_article_starred, transition_article_state
 
     for tag in add:
         if tag == READ_TAG:

@@ -24,7 +24,7 @@ from news_dashboard.article_visibility import get_visible_article_row
 from news_dashboard.db import connect, init_db, insert_article_sql, placeholders, row_to_dict
 from news_dashboard.ingest_events import ingest_events
 from news_dashboard.recommendations import COLD_START_MODEL_VERSION
-from news_dashboard.sources import DEFAULT_SOURCES, SourceDefinition
+from news_dashboard.sources.service import DEFAULT_SOURCES, SourceDefinition
 from news_dashboard.url_safety import (
     UnsafeUrlError,
     open_server_fetch_url,

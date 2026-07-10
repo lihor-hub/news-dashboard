@@ -365,7 +365,7 @@ def test_private_source_invisible_to_other_users(
     client = FakeImapClient([raw])
     poll_newsletters(db_path=pg_clean, client_factory=_make_factory(client))
 
-    from news_dashboard.ingest import list_articles
+    from news_dashboard.ingest.service import list_articles
 
     alice_articles = list_articles(db_path=pg_clean, user_id=alice_id)
     bob_articles = list_articles(db_path=pg_clean, user_id=bob_id)
@@ -444,7 +444,7 @@ def test_same_sender_different_users_get_separate_sources(
     processed = poll_newsletters(db_path=pg_clean, client_factory=_make_factory(client))
     assert processed == 2
 
-    from news_dashboard.ingest import list_articles
+    from news_dashboard.ingest.service import list_articles
 
     alice_articles = list_articles(db_path=pg_clean, user_id=alice_id)
     bob_articles = list_articles(db_path=pg_clean, user_id=bob_id)

@@ -10,7 +10,7 @@ from fastapi.testclient import TestClient
 
 from news_dashboard.auth import create_user
 from news_dashboard.db import connect, row_to_dict
-from news_dashboard.ingest import list_articles, sync_sources
+from news_dashboard.ingest.service import list_articles, sync_sources
 
 # ── helpers ───────────────────────────────────────────────────────────────────
 

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from news_dashboard.ingest import (
+from news_dashboard.ingest.service import (
     canonicalize_url,
     clean_html,
     infer_tags,
@@ -12,7 +12,7 @@ from news_dashboard.ingest import (
     make_summary,
     parse_date,
 )
-from news_dashboard.sources import SourceDefinition
+from news_dashboard.sources.service import SourceDefinition
 
 
 def _src(
