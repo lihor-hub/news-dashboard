@@ -937,6 +937,54 @@ POSTGRES_MULTIUSER_SCHEMA = [
     """,
     "CREATE INDEX IF NOT EXISTS idx_user_lesson_recaps_user"
     " ON user_lesson_recaps(user_id, week_start DESC)",
+    "ALTER TABLE ai_feedback DROP CONSTRAINT IF EXISTS ai_feedback_subject_type_check",
+    "ALTER TABLE ai_feedback ADD CONSTRAINT ai_feedback_subject_type_check"
+    " CHECK (subject_type IN ('briefing', 'recommendation', 'lesson'))",
+    """
+    CREATE TABLE IF NOT EXISTS learning_agent_runs (
+      id               BIGSERIAL PRIMARY KEY,
+      lesson_id        BIGINT REFERENCES lessons(id) ON DELETE CASCADE,
+      user_id          INTEGER REFERENCES users(id) ON DELETE CASCADE,
+      status           TEXT NOT NULL DEFAULT 'running'
+        CHECK(status IN ('running','complete','failed')),
+      prompt_version   TEXT NOT NULL DEFAULT 'local',
+      model_version    TEXT NOT NULL DEFAULT 'local',
+      config           JSONB NOT NULL DEFAULT '{}'::jsonb,
+      retry_count      INTEGER NOT NULL DEFAULT 0,
+      total_latency_ms INTEGER,
+      total_tokens     INTEGER,
+      cost_usd         DOUBLE PRECISION,
+      failed_step      TEXT,
+      error            TEXT,
+      created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_learning_agent_runs_lesson"
+    " ON learning_agent_runs(lesson_id, created_at DESC)",
+    "CREATE INDEX IF NOT EXISTS idx_learning_agent_runs_user"
+    " ON learning_agent_runs(user_id, created_at DESC)",
+    """
+    CREATE TABLE IF NOT EXISTS learning_agent_steps (
+      id                 BIGSERIAL PRIMARY KEY,
+      run_id             BIGINT NOT NULL REFERENCES learning_agent_runs(id) ON DELETE CASCADE,
+      step               TEXT NOT NULL
+        CHECK(step IN ('fetch','extraction','synthesis','citation_verification','persistence')),
+      ordinal            INTEGER NOT NULL,
+      status             TEXT NOT NULL DEFAULT 'running'
+        CHECK(status IN ('running','complete','failed','retry')),
+      model              TEXT,
+      latency_ms         INTEGER,
+      prompt_tokens      INTEGER,
+      completion_tokens  INTEGER,
+      cost_usd           DOUBLE PRECISION,
+      error              TEXT,
+      created_at         TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE (run_id, ordinal)
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_learning_agent_steps_run"
+    " ON learning_agent_steps(run_id, ordinal)",
 ]
 
 # Runs after POSTGRES_SCHEMA/POSTGRES_MULTIUSER_SCHEMA and the embedding_vec

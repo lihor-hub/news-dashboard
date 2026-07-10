@@ -149,6 +149,20 @@ def eval_ai(feature: str | None = None) -> None:
         raise typer.Exit(code=1)
 
 
+@app.command(name="eval-learning-agent")
+def eval_learning_agent() -> None:
+    """Run the Learn from Link lesson synthesis eval fixture set."""
+    from news_dashboard.learn_from_link.evals import run_lesson_evals
+
+    result = run_lesson_evals()
+    typer.echo(
+        f"eval run {result['run_id']}: "
+        f"{result['passed']}/{result['total']} passed, {result['failed']} failed"
+    )
+    if int(result["failed"]) > 0:
+        raise typer.Exit(code=1)
+
+
 @app.command(name="seed-demo")
 def seed_demo_cmd() -> None:
     """Seed demo data: guest user + sample articles (requires DEMO_MODE=true)."""

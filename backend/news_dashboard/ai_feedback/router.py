@@ -23,6 +23,8 @@ def _validate_subject_type(subject_type: str) -> SubjectType:
         return "briefing"
     if subject_type == "recommendation":
         return "recommendation"
+    if subject_type == "lesson":
+        return "lesson"
     raise HTTPException(status_code=400, detail="invalid subject_type")
 
 
