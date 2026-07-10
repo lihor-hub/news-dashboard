@@ -52,19 +52,28 @@ def save_shared_url(
         )
         row = conn.execute("SELECT * FROM articles WHERE url = %s", (url,)).fetchone()
         if row is None:
-            row = conn.execute(
-                """
-                INSERT INTO articles(
-                  url, canonical_url, title, source_slug, source_name, category, kind,
-                  published_at, summary, reason, importance_score, tags, discovered_at, updated_at
-                ) VALUES (
-                  %s, %s, %s, %s, %s, 'shared', 'share_target',
-                  %s, %s, 'Saved from the operating system share sheet', 50, '', %s, %s
-                )
-                RETURNING *
-                """,
-                (url, url, article_title, source_slug, source_name, ts, summary, ts, ts),
-            ).fetchone()
+            import psycopg
+
+            try:
+                with conn.transaction():
+                    row = conn.execute(
+                        """
+                        INSERT INTO articles(
+                          url, canonical_url, title, source_slug, source_name, category, kind,
+                          published_at, summary, reason, importance_score, tags,
+                          discovered_at, updated_at
+                        ) VALUES (
+                          %s, %s, %s, %s, %s, 'shared', 'share_target',
+                          %s, %s, 'Saved from the operating system share sheet', 50, '', %s, %s
+                        )
+                        RETURNING *
+                        """,
+                        (url, url, article_title, source_slug, source_name, ts, summary, ts, ts),
+                    ).fetchone()
+            except psycopg.Error:
+                row = conn.execute("SELECT * FROM articles WHERE url = %s", (url,)).fetchone()
+                if row is None:
+                    raise
         article = row_to_dict(row)
         conn.execute(
             """
