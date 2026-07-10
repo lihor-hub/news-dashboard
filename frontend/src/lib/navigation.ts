@@ -13,6 +13,7 @@ import {
   Library,
   Network,
   Newspaper,
+  Podcast,
   Radio,
   Search,
   Send,
@@ -72,6 +73,12 @@ export const secondaryNavigationItems: NavigationItem[] = [
     label: 'Lesson Library',
     labelKey: 'nav.lesson_library',
     icon: Library,
+  },
+  {
+    to: '/learn/recap',
+    label: 'Learning Recap',
+    labelKey: 'nav.learning_recap',
+    icon: Podcast,
   },
   {
     to: '/offline-saved',
@@ -203,6 +210,11 @@ const pageTitleRules: { test: (pathname: string) => boolean; en: string; key: st
     test: (p) => p.startsWith('/learn/library'),
     en: 'Lesson Library',
     key: 'page_title.lesson_library',
+  },
+  {
+    test: (p) => p.startsWith('/learn/recap'),
+    en: 'Learning Recap',
+    key: 'page_title.learning_recap',
   },
   {
     test: (p) => p.startsWith('/learn'),

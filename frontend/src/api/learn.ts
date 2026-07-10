@@ -1,3 +1,4 @@
+import type { LessonRecap } from '../types';
 import { requestJson } from './core';
 
 export type LessonDepth = 'tiny' | 'normal' | 'deep' | 'expert';
@@ -192,4 +193,23 @@ export async function dismissLessonSuggestion(
     method: 'POST',
     body: JSON.stringify({ article_id: articleId }),
   });
+}
+
+export async function fetchLessonRecaps(): Promise<LessonRecap[]> {
+  const { items } = await requestJson<{ items: LessonRecap[] }>('/api/lesson-recaps');
+  return items;
+}
+
+export async function generateLessonRecap(): Promise<LessonRecap> {
+  return requestJson<LessonRecap>('/api/lesson-recaps/generate', { method: 'POST' });
+}
+
+export async function generateLessonRecapPodcast(
+  recapId: number,
+  force = false
+): Promise<LessonRecap> {
+  return requestJson<LessonRecap>(
+    `/api/lesson-recaps/${recapId}/podcast${force ? '?force=true' : ''}`,
+    { method: 'POST' }
+  );
 }

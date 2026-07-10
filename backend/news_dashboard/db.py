@@ -921,6 +921,22 @@ POSTGRES_MULTIUSER_SCHEMA = [
     " WHERE article_id IS NOT NULL",
     "CREATE UNIQUE INDEX IF NOT EXISTS idx_ai_feedback_unique_subject"
     " ON ai_feedback(user_id, subject_type, subject_id) WHERE article_id IS NULL",
+    "ALTER TABLE users ADD COLUMN IF NOT EXISTS lesson_recap_enabled BOOLEAN NOT NULL DEFAULT TRUE",
+    """
+    CREATE TABLE IF NOT EXISTS user_lesson_recaps (
+      id            SERIAL PRIMARY KEY,
+      user_id       INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      week_start    DATE NOT NULL,
+      created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      data          JSONB NOT NULL DEFAULT '{}'::jsonb,
+      narrative     TEXT,
+      podcast_status TEXT CHECK(podcast_status IN ('complete','failed')),
+      podcast_error TEXT,
+      UNIQUE (user_id, week_start)
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_user_lesson_recaps_user"
+    " ON user_lesson_recaps(user_id, week_start DESC)",
 ]
 
 # Runs after POSTGRES_SCHEMA/POSTGRES_MULTIUSER_SCHEMA and the embedding_vec

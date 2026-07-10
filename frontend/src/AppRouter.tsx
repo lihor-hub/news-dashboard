@@ -71,6 +71,9 @@ const LessonDetailPage = lazy(() =>
 const WeeklyRecapPage = lazy(() =>
   import('./pages/WeeklyRecapPage').then((m) => ({ default: m.WeeklyRecapPage }))
 );
+const LessonRecapPage = lazy(() =>
+  import('./pages/LessonRecapPage').then((m) => ({ default: m.LessonRecapPage }))
+);
 const SettingsPage = lazy(() =>
   import('./pages/SettingsPage').then((m) => ({ default: m.SettingsPage }))
 );
@@ -233,6 +236,7 @@ export const routes: RouteObject[] = [
       { path: 'reading-list', element: withSuspense(ReadingListPage) },
       { path: 'learn', element: withSuspense(LearnPage) },
       { path: 'learn/library', element: withSuspense(LessonLibraryPage) },
+      { path: 'learn/recap', element: withSuspense(LessonRecapPage) },
       { path: 'learn/:id', element: withSuspense(LessonDetailPage) },
       { path: 'offline-saved', element: withSuspense(OfflineSavedPage) },
       { path: 'recap', element: withSuspense(WeeklyRecapPage) },

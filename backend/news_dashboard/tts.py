@@ -351,3 +351,70 @@ def generate_podcast_script(briefing_content: dict[str, Any]) -> list[dict[str, 
         )
 
     return valid_script
+
+
+def _lesson_recap_audio_path(recap_id: int, data_dir: Path | None = None) -> Path:
+    base = data_dir if data_dir is not None else _data_dir()
+    # int() coerces recap_id to a plain digit string, so it cannot carry
+    # path-traversal or separator characters into the constructed path.
+    return base / "audio" / f"lesson-recap-podcast-{int(recap_id)}.mp3"
+
+
+def _build_lesson_recap_podcast_text(narrative: str, recap_data: dict[str, Any]) -> str:
+    concepts = [str(c.get("concept")) for c in recap_data.get("key_concepts") or []]
+    notable = [str(a.get("title")) for a in recap_data.get("notable_articles") or []]
+
+    parts = [narrative]
+    if concepts:
+        parts.append("Key concepts this week: " + ", ".join(concepts))
+    if notable:
+        parts.append("Notable articles: " + ", ".join(notable))
+    return "\n\n".join(part for part in parts if part.strip())
+
+
+def generate_lesson_recap_podcast_audio(
+    recap_id: int,
+    narrative: str,
+    recap_data: dict[str, Any],
+    *,
+    force: bool = False,
+    data_dir: Path | None = None,
+) -> Path:
+    """Return path to cached lesson recap podcast MP3, generating it if needed.
+
+    Narration is built from the recap's narrative plus key concepts and
+    notable articles, so the audio stays consistent with what's shown on the
+    recap page.
+
+    Raises TTSNotConfiguredError when OPENAI_API_KEY is absent.
+    """
+    api_key, base_url = _tts_ai_config()
+
+    path = _lesson_recap_audio_path(recap_id, data_dir)
+    if force and path.exists():
+        path.unlink()
+    if path.exists():
+        logger.debug("Lesson recap podcast cache hit for recap %d", recap_id)
+        return path
+
+    text = _build_lesson_recap_podcast_text(narrative, recap_data)
+    if not text.strip():
+        msg = "recap has no readable content to narrate"
+        raise ValueError(msg)
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    from news_dashboard.ai_client import get_openai_client, tts_timeout_seconds
+
+    client = get_openai_client(
+        api_key=api_key, base_url=base_url, timeout_seconds=tts_timeout_seconds()
+    )
+    logger.info(
+        "Generating lesson recap podcast audio for recap %d (%d chars)", recap_id, len(text)
+    )
+    with client.audio.speech.with_streaming_response.create(
+        model=_PODCAST_MODEL, voice=_ALEX_VOICE, input=text[:_MAX_CHARS]
+    ) as response:
+        response.stream_to_file(path)
+    logger.info("Lesson recap podcast audio cached at %s", path)
+    return path
