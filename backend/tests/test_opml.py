@@ -8,9 +8,10 @@ from io import BytesIO
 import pytest
 from fastapi.testclient import TestClient
 
-from news_dashboard import main
+import news_dashboard.sources.router as main
 from news_dashboard.db import connect, init_db
-from news_dashboard.main import _generate_opml, app
+from news_dashboard.main import app
+from news_dashboard.sources.router import _generate_opml
 
 
 @pytest.fixture

@@ -7,7 +7,7 @@ import pytest
 
 import news_dashboard.recommendation_jobs as jobs
 from news_dashboard.db import connect, init_db
-from news_dashboard.ingest import list_articles, transition_article_state
+from news_dashboard.ingest.service import list_articles, transition_article_state
 from news_dashboard.recommendation_jobs import (
     find_recalculation_candidates,
     recalculate_all_recommendations,

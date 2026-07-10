@@ -32,7 +32,7 @@ def _env_flag_enabled(name: str, *, default: bool) -> bool:
 
 def run_scheduled_ingest(raise_on_failure: bool = False) -> dict[str, int]:
     from news_dashboard.body_fetch import prefetch_article_bodies
-    from news_dashboard.ingest import ingest_all
+    from news_dashboard.ingest.service import ingest_all
 
     logger.info("Scheduled ingest starting…")
     results: dict[str, int] = {}
@@ -108,7 +108,7 @@ def _run_embedding_dedup() -> tuple[str, str | None]:
 
 
 def _run_briefing() -> tuple[str, str | None]:
-    from news_dashboard.briefings import (
+    from news_dashboard.briefings.service import (
         BriefingAINotConfiguredError,
         BriefingGenerationError,
         generate_briefing,
@@ -135,7 +135,7 @@ def _run_briefing() -> tuple[str, str | None]:
 
 def _generate_briefing_for_user(user_id: int, *, push_enabled: bool = True) -> bool:
     """Generate and push a briefing for one user. Returns True on success."""
-    from news_dashboard.briefings import (
+    from news_dashboard.briefings.service import (
         BriefingAINotConfiguredError,
         BriefingGenerationError,
         generate_briefing,

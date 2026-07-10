@@ -429,7 +429,7 @@ def api_client() -> TestClient:
 
 
 def test_ask_endpoint_rejects_oversized_query(api_client: TestClient) -> None:
-    from news_dashboard.main import MAX_ASK_QUERY_LENGTH
+    from news_dashboard.assistant.models import MAX_ASK_QUERY_LENGTH
 
     resp = api_client.post(
         "/api/ask",

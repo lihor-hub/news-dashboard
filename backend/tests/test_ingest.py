@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from news_dashboard.ingest import list_articles, set_article_status, sync_sources
+from news_dashboard.ingest.service import list_articles, set_article_status, sync_sources
 
 
 def test_sync_sources_and_status_transition(tmp_path: Path) -> None:

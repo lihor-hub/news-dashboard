@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from news_dashboard.ingest import sync_sources
-from news_dashboard.sources import DEFAULT_SOURCES
+from news_dashboard.ingest.service import sync_sources
+from news_dashboard.sources.service import DEFAULT_SOURCES
 
 # Unit tests (no DB)
 

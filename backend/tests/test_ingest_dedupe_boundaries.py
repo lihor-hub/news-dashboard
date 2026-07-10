@@ -16,7 +16,7 @@ from __future__ import annotations
 from typing import Any
 
 from news_dashboard.db import connect
-from news_dashboard.ingest import _attach_also_from, _find_canonical
+from news_dashboard.ingest.service import _attach_also_from, _find_canonical
 
 # ── helpers ───────────────────────────────────────────────────────────────────
 

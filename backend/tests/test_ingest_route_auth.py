@@ -40,12 +40,12 @@ def test_ingest_requires_admin(client: TestClient) -> None:
 
 
 def test_ingest_succeeds_for_admin(client: TestClient) -> None:
-    from news_dashboard.ingest import IngestResult
+    from news_dashboard.ingest.service import IngestResult
 
     fake_result = IngestResult(results={"feed1": 3, "feed2": 0}, run_id=1, total_errors=0)
     with (
-        patch("news_dashboard.main.ingest_all", return_value=fake_result),
-        patch("news_dashboard.main.prefetch_article_bodies"),
+        patch("news_dashboard.ingest.router.ingest_all", return_value=fake_result),
+        patch("news_dashboard.ingest.router.prefetch_article_bodies"),
     ):
         resp = client.post("/api/ingest")
     assert resp.status_code == 200
@@ -57,12 +57,12 @@ def test_ingest_succeeds_for_admin(client: TestClient) -> None:
 
 
 def test_ingest_exposes_partial_failure_metadata(client: TestClient) -> None:
-    from news_dashboard.ingest import IngestResult
+    from news_dashboard.ingest.service import IngestResult
 
     fake_result = IngestResult(results={"good-feed": 2, "bad-feed": -1}, run_id=42, total_errors=1)
     with (
-        patch("news_dashboard.main.ingest_all", return_value=fake_result),
-        patch("news_dashboard.main.prefetch_article_bodies"),
+        patch("news_dashboard.ingest.router.ingest_all", return_value=fake_result),
+        patch("news_dashboard.ingest.router.prefetch_article_bodies"),
     ):
         resp = client.post("/api/ingest")
     assert resp.status_code == 200

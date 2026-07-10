@@ -22,7 +22,7 @@ import pytest
 from news_dashboard.db import EMBEDDING_DIMENSIONS, connect
 from news_dashboard.embedding_dedup import run_embedding_dedup
 from news_dashboard.embeddings import vector_literal
-from news_dashboard.ingest import _attach_also_from
+from news_dashboard.ingest.service import _attach_also_from
 
 # ── helpers ───────────────────────────────────────────────────────────────────
 

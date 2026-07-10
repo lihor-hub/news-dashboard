@@ -6,8 +6,8 @@ from unittest.mock import patch
 
 import pytest
 
-from news_dashboard.ingest import _fetch_feed_entries, sync_sources
-from news_dashboard.sources import DEFAULT_SOURCES
+from news_dashboard.ingest.service import _fetch_feed_entries, sync_sources
+from news_dashboard.sources.service import DEFAULT_SOURCES
 
 
 def test_berkeley_bair_blog_in_default_sources() -> None:
@@ -45,7 +45,7 @@ def test_berkeley_bair_blog_routes_to_rss_feed() -> None:
 def test_berkeley_bair_blog_feed_parse_uses_configured_url() -> None:
     """berkeley-bair-blog can be parsed through the standard RSS feed path."""
     src = next(s for s in DEFAULT_SOURCES if s.slug == "berkeley-bair-blog")
-    with patch("news_dashboard.ingest._parse_feed_url") as parse_feed:
+    with patch("news_dashboard.ingest.service._parse_feed_url") as parse_feed:
         parse_feed.return_value = [{"url": "https://bair.berkeley.edu/blog/example/"}]
 
         assert _fetch_feed_entries(src) == [{"url": "https://bair.berkeley.edu/blog/example/"}]

@@ -21,7 +21,7 @@ from news_dashboard.body_fetch import (
     prefetch_article_bodies,
 )
 from news_dashboard.db import connect, init_db
-from news_dashboard.ingest import sync_sources
+from news_dashboard.ingest.service import sync_sources
 
 
 def _db(tmp_path: Path) -> Path:

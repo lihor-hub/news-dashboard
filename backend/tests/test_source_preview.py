@@ -10,10 +10,10 @@ from typing import Any
 import pytest
 from fastapi.testclient import TestClient
 
-from news_dashboard import ingest as ingest_module
+import news_dashboard.ingest.service as ingest_module
 from news_dashboard.auth import create_user
 from news_dashboard.db import connect
-from news_dashboard.ingest import FeedFetchError, sync_sources
+from news_dashboard.ingest.service import FeedFetchError, sync_sources
 
 
 def _make_user(db_path: Path | str, username: str = "alice") -> int:

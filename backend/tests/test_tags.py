@@ -7,7 +7,7 @@ from fastapi.testclient import TestClient
 
 from news_dashboard.auth import create_user, require_auth
 from news_dashboard.db import connect
-from news_dashboard.ingest import list_articles, search_articles, sync_sources
+from news_dashboard.ingest.service import list_articles, search_articles, sync_sources
 from news_dashboard.main import app
 from news_dashboard.tags import (
     add_tag_to_article,
@@ -163,7 +163,7 @@ def test_add_tag_not_owned_by_user_fails(db: str) -> None:
 
 def test_tag_is_orthogonal_to_workflow_state(db: str) -> None:
     """An article can be `done` and tagged, independently of its workflow state."""
-    from news_dashboard.ingest import transition_article_state
+    from news_dashboard.ingest.service import transition_article_state
 
     alice = _make_user(db, "alice")
     tag = create_tag(alice, "rust", db_path=db)

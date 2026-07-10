@@ -585,7 +585,7 @@ def _load_candidates(conn: Any, user_id: int, limit: int) -> list[dict[str, Any]
     Scoped to the user's visible corpus: global sources the user has not
     disabled, and private sources owned by this user.
     """
-    from news_dashboard.ingest import _COLD_START_RECOMMENDATION_SCORE_SQL
+    from news_dashboard.ingest.service import _COLD_START_RECOMMENDATION_SCORE_SQL
 
     rows = conn.execute(
         f"""

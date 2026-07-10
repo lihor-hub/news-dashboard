@@ -10,9 +10,9 @@ from fastapi.testclient import TestClient
 from news_dashboard.auth import create_user, require_auth
 from news_dashboard.body_fetch import get_article
 from news_dashboard.db import connect
-from news_dashboard.ingest import sync_sources
+from news_dashboard.ingest.service import sync_sources
 from news_dashboard.main import app
-from news_dashboard.shares import (
+from news_dashboard.shares.service import (
     ShareError,
     add_annotation,
     add_message,
@@ -569,7 +569,7 @@ def _authed_client(user_id: int) -> TestClient:
 
 
 def test_share_endpoint_rejects_oversized_note(db: str) -> None:
-    from news_dashboard.main import MAX_SHARE_NOTE_LENGTH
+    from news_dashboard.shares.models import MAX_SHARE_NOTE_LENGTH
 
     alice = _make_user(db, "alice")
     bob = _make_user(db, "bob")
@@ -598,7 +598,7 @@ def test_annotation_endpoint_rejects_blank_highlighted_text(db: str) -> None:
 
 
 def test_annotation_endpoint_rejects_oversized_highlighted_text(db: str) -> None:
-    from news_dashboard.main import MAX_ANNOTATION_HIGHLIGHT_LENGTH
+    from news_dashboard.shares.models import MAX_ANNOTATION_HIGHLIGHT_LENGTH
 
     alice = _make_user(db, "alice")
     bob = _make_user(db, "bob")
@@ -625,7 +625,7 @@ def test_message_endpoint_rejects_blank_message(db: str) -> None:
 
 
 def test_message_endpoint_rejects_oversized_message(db: str) -> None:
-    from news_dashboard.main import MAX_SHARE_MESSAGE_LENGTH
+    from news_dashboard.shares.models import MAX_SHARE_MESSAGE_LENGTH
 
     alice = _make_user(db, "alice")
     bob = _make_user(db, "bob")
@@ -641,7 +641,7 @@ def test_message_endpoint_rejects_oversized_message(db: str) -> None:
 
 
 def test_message_endpoint_accepts_message_at_length_boundary(db: str) -> None:
-    from news_dashboard.main import MAX_SHARE_MESSAGE_LENGTH
+    from news_dashboard.shares.models import MAX_SHARE_MESSAGE_LENGTH
 
     alice = _make_user(db, "alice")
     bob = _make_user(db, "bob")

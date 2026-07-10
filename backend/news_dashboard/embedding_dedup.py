@@ -1,6 +1,6 @@
 """Post-ingest embedding-similarity dedup pass.
 
-Ingest-time dedup (``news_dashboard.ingest._find_canonical``) only catches
+Ingest-time dedup (``news_dashboard.ingest.service._find_canonical``) only catches
 exact canonical-URL matches and fuzzy *title* similarity. The same story
 covered under a different headline (vendor blog post vs. HN thread vs. news
 write-up) slips through that check and shows up as separate inbox items.

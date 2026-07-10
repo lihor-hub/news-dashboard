@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 from news_dashboard.db import connect, init_db
-from news_dashboard.ingest import (
+from news_dashboard.ingest.service import (
     list_articles,
     send_article_later,
     set_article_starred,

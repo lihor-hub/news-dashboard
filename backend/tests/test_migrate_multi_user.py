@@ -8,7 +8,7 @@ import pytest
 from typer.testing import CliRunner
 
 from news_dashboard.db import connect, init_db
-from news_dashboard.ingest import sync_sources
+from news_dashboard.ingest.service import sync_sources
 from news_dashboard.migrate import _check_prerequisites, _row_count, app
 
 runner = CliRunner()

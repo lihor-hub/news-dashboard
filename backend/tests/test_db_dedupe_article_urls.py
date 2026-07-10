@@ -14,7 +14,7 @@ from __future__ import annotations
 from news_dashboard import db as db_mod
 from news_dashboard.auth import create_user
 from news_dashboard.db import connect, init_db
-from news_dashboard.ingest import sync_sources
+from news_dashboard.ingest.service import sync_sources
 
 DUPLICATE_URL = "https://example.com/duplicate-article"
 

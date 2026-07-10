@@ -321,7 +321,7 @@ def test_evaluate_watchlists_continues_after_one_failure(pg_clean: str) -> None:
     create_watchlist(uid, "Broken", "broken query", database_url=pg_clean)
     create_watchlist(uid, "Quantum", "quantum computing", database_url=pg_clean)
 
-    from news_dashboard import ingest
+    import news_dashboard.ingest.service as ingest
 
     real_search = ingest.search_articles
     calls = {"count": 0}
@@ -334,7 +334,7 @@ def test_evaluate_watchlists_continues_after_one_failure(pg_clean: str) -> None:
         return real_search(*args, **kwargs)
 
     with (
-        patch("news_dashboard.ingest.search_articles", side_effect=flaky_search),
+        patch("news_dashboard.ingest.service.search_articles", side_effect=flaky_search),
         patch("news_dashboard.push.send_push_for_user"),
     ):
         summary = evaluate_watchlists(use_ai=False, database_url=pg_clean)

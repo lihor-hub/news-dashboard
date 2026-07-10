@@ -4,7 +4,7 @@ Splits briefing generation into named stages — candidate selection, theme
 clustering, section drafting, citation verification, and assembly — and
 records per-stage status/latency in ``briefing_agent_runs``/
 ``briefing_agent_steps`` for diagnostics. The AI-calling drafting stage
-itself still lives in ``news_dashboard.briefings`` (it needs the OpenAI
+itself still lives in ``news_dashboard.briefings.service`` (it needs the OpenAI
 client and Langfuse prompt wiring); this module holds the parts that are
 pure functions or DB bookkeeping so they can be unit tested without any
 network access.

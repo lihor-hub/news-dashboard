@@ -312,7 +312,7 @@ def test_send_push_for_user_calls_send_for_each_sub(
 
 
 def test_notify_share_recipient_routes_push_to_shared_inbox() -> None:
-    from news_dashboard.main import _notify_share_recipient
+    from news_dashboard.shares.router import _notify_share_recipient
 
     with patch("news_dashboard.push.send_push_for_user") as mock_send:
         _notify_share_recipient(
@@ -348,7 +348,7 @@ def test_get_notification_settings_returns_defaults(
         "briefing_reading_list_limit": 3,
     }
 
-    with patch("news_dashboard.main.connect") as mock_connect:
+    with patch("news_dashboard.user_settings.service.connect") as mock_connect:
         ctx = mock_connect.return_value.__enter__.return_value
         ctx.execute.return_value.fetchone.return_value = fake_row
 
@@ -380,7 +380,7 @@ def test_get_notification_settings_utc_fallback(
         "briefing_reading_list_limit": 3,
     }
 
-    with patch("news_dashboard.main.connect") as mock_connect:
+    with patch("news_dashboard.user_settings.service.connect") as mock_connect:
         ctx = mock_connect.return_value.__enter__.return_value
         ctx.execute.return_value.fetchone.return_value = fake_row
 
@@ -401,7 +401,7 @@ def test_put_notification_settings_valid_time(client: TestClient) -> None:
         "briefing_reading_list_limit": 3,
     }
 
-    with patch("news_dashboard.main.connect") as mock_connect:
+    with patch("news_dashboard.user_settings.service.connect") as mock_connect:
         ctx = mock_connect.return_value.__enter__.return_value
         ctx.execute.return_value.fetchone.return_value = fake_row
 
@@ -427,7 +427,7 @@ def test_put_notification_settings_valid_timezone(client: TestClient) -> None:
         "briefing_reading_list_limit": 3,
     }
 
-    with patch("news_dashboard.main.connect") as mock_connect:
+    with patch("news_dashboard.user_settings.service.connect") as mock_connect:
         ctx = mock_connect.return_value.__enter__.return_value
         ctx.execute.return_value.fetchone.return_value = fake_row
 
@@ -451,7 +451,7 @@ def test_put_notification_settings_valid_reading_list_opt_in(client: TestClient)
         "briefing_reading_list_limit": 5,
     }
 
-    with patch("news_dashboard.main.connect") as mock_connect:
+    with patch("news_dashboard.user_settings.service.connect") as mock_connect:
         ctx = mock_connect.return_value.__enter__.return_value
         ctx.execute.return_value.fetchone.return_value = fake_row
 

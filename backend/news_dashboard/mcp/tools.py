@@ -62,7 +62,7 @@ def call_tool(
     _require_scope(scopes, tool_name)
 
     if tool_name == "search_articles":
-        from news_dashboard.ingest import search_articles
+        from news_dashboard.ingest.service import search_articles
 
         q = _clean_query(arguments.get("q", ""))
         limit = _clamp_limit(arguments.get("limit", MAX_RESULT_LIMIT))
@@ -88,7 +88,7 @@ def call_tool(
         return {"article": article}
 
     if tool_name == "list_briefings":
-        from news_dashboard.briefings import list_briefings
+        from news_dashboard.briefings.service import list_briefings
 
         limit = _clamp_limit(arguments.get("limit", MAX_RESULT_LIMIT))
         briefings = list_briefings(limit=limit, user_id=user_id)

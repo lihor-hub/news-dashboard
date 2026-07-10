@@ -14,7 +14,7 @@ from news_dashboard.scraper import (
     _LinkListParser,
     scrape_source,
 )
-from news_dashboard.sources import SourceDefinition
+from news_dashboard.sources.service import SourceDefinition
 
 # Minimal static HTML that mimics the Anthropic news page structure
 ANTHROPIC_FIXTURE = """
@@ -185,7 +185,7 @@ def test_scrape_source_unknown_slug_raises() -> None:
 def test_every_scraped_page_source_has_a_registered_scraper() -> None:
     """Guard against re-adding a scraped_page source with no scraper (issue #1142)."""
     from news_dashboard.scraper import _SCRAPERS
-    from news_dashboard.sources import DEFAULT_SOURCES
+    from news_dashboard.sources.service import DEFAULT_SOURCES
 
     missing = [
         s.slug for s in DEFAULT_SOURCES if s.kind == "scraped_page" and s.slug not in _SCRAPERS

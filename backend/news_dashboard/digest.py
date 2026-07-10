@@ -74,7 +74,7 @@ def verify_read_token(article_id: int, token: str) -> int | None:
 
 
 def _get_top_new_articles(user_id: int, limit: int = 10) -> list[dict[str, Any]]:
-    from news_dashboard.ingest import list_articles
+    from news_dashboard.ingest.service import list_articles
 
     init_db()
     articles = list_articles(state="today", user_id=user_id, limit=max(limit * 5, limit))

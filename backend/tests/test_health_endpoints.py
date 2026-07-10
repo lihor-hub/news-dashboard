@@ -69,9 +69,9 @@ def test_health_details_reports_graph_status() -> None:
     }
     app.dependency_overrides[require_admin] = lambda: None
     with (
-        patch("news_dashboard.main.init_db"),
-        patch("news_dashboard.main.describe_database", return_value="postgresql://db"),
-        patch("news_dashboard.main.get_next_ingest_at", return_value=None),
+        patch("news_dashboard.stats.router.init_db"),
+        patch("news_dashboard.stats.router.describe_database", return_value="postgresql://db"),
+        patch("news_dashboard.stats.router.get_next_ingest_at", return_value=None),
         patch("news_dashboard.system.service.graph_status", return_value={"status": "disabled"}),
     ):
         resp = client.get("/api/health/details")

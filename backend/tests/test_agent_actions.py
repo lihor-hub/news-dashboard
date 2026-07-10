@@ -18,7 +18,7 @@ from news_dashboard.agent_actions import (
 )
 from news_dashboard.auth import create_user, require_auth
 from news_dashboard.db import connect
-from news_dashboard.ingest import sync_sources
+from news_dashboard.ingest.service import sync_sources
 from news_dashboard.main import app
 
 
@@ -139,7 +139,7 @@ def test_plan_actions_allows_admin_only_tool_for_admin(db: str) -> None:
     client = _mock_llm(_plan_json([{"tool": "refresh_feeds", "article_id": None}]))
     with (
         patch("openai.OpenAI", return_value=client),
-        patch("news_dashboard.ingest.ingest_all") as mock_ingest,
+        patch("news_dashboard.ingest.service.ingest_all") as mock_ingest,
     ):
         mock_ingest.return_value = MagicMock(results={})
         result = plan_actions("refresh my feeds", user_id=user_id, is_admin=True)

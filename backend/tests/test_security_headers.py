@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import importlib
-from unittest.mock import patch
 
 import pytest
 from fastapi.testclient import TestClient
@@ -18,8 +17,7 @@ def _client() -> TestClient:
 
 @pytest.mark.smoke
 def test_public_route_gets_baseline_headers() -> None:
-    with patch("news_dashboard.main.connect"):
-        resp = _client().get("/api/live")
+    resp = _client().get("/api/live")
 
     assert resp.headers["X-Content-Type-Options"] == "nosniff"
     assert resp.headers["X-Frame-Options"] == "DENY"
@@ -38,8 +36,7 @@ def test_404_response_still_gets_baseline_headers() -> None:
 
 @pytest.mark.smoke
 def test_hsts_absent_by_default() -> None:
-    with patch("news_dashboard.main.connect"):
-        resp = _client().get("/api/live")
+    resp = _client().get("/api/live")
 
     assert "Strict-Transport-Security" not in resp.headers
 
@@ -51,8 +48,7 @@ def test_hsts_present_when_enabled(monkeypatch: pytest.MonkeyPatch) -> None:
 
     importlib.reload(security_headers_module)
     try:
-        with patch("news_dashboard.main.connect"):
-            resp = _client().get("/api/live")
+        resp = _client().get("/api/live")
         assert resp.headers["Strict-Transport-Security"] == (
             "max-age=31536000; includeSubDomains; preload"
         )

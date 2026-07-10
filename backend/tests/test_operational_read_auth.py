@@ -51,7 +51,9 @@ def test_ingest_stream_succeeds_for_admin(client: TestClient) -> None:
         yield b"data: {}\n\n"
 
     try:
-        with patch("news_dashboard.main.stream_ingest_events", return_value=_fake_stream()):
+        with patch(
+            "news_dashboard.ingest.router.stream_ingest_events", return_value=_fake_stream()
+        ):
             resp = client.get("/api/ingest/stream")
         assert resp.status_code == 200
     finally:
@@ -82,10 +84,10 @@ def test_scheduler_status_succeeds_for_admin(client: TestClient) -> None:
     app.dependency_overrides[require_admin] = lambda: _ADMIN_USER
     try:
         with (
-            patch("news_dashboard.main.is_ingest_interval_enabled", return_value=True),
-            patch("news_dashboard.main.get_next_ingest_at", return_value=None),
-            patch("news_dashboard.main.is_paused", return_value=False),
-            patch("news_dashboard.main.get_interval_minutes", return_value=60),
+            patch("news_dashboard.scheduler.router.is_ingest_interval_enabled", return_value=True),
+            patch("news_dashboard.scheduler.router.get_next_ingest_at", return_value=None),
+            patch("news_dashboard.scheduler.router.is_paused", return_value=False),
+            patch("news_dashboard.scheduler.router.get_interval_minutes", return_value=60),
         ):
             resp = client.get("/api/scheduler/status")
         assert resp.status_code == 200

@@ -13,8 +13,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from news_dashboard.briefings import BriefingAINotConfiguredError, BriefingGenerationError
-from news_dashboard.scheduler import (
+from news_dashboard.briefings.service import BriefingAINotConfiguredError, BriefingGenerationError
+from news_dashboard.scheduler.service import (
     _run_briefing,
     _run_per_user_briefings,
     _run_weekly_lesson_recaps,
@@ -25,7 +25,7 @@ from news_dashboard.scheduler import (
 
 # _run_briefing does `from .briefings import generate_briefing` lazily,
 # so the correct patch target is the briefings module itself.
-_GEN_PATH = "news_dashboard.briefings.generate_briefing"
+_GEN_PATH = "news_dashboard.briefings.service.generate_briefing"
 
 
 class _FakeRowsConn:
@@ -59,7 +59,7 @@ def test_run_briefing_calls_generate_briefing() -> None:
 
 def test_run_briefing_logs_completion(caplog: pytest.LogCaptureFixture) -> None:
     with (
-        caplog.at_level(logging.INFO, logger="news_dashboard.scheduler"),
+        caplog.at_level(logging.INFO, logger="news_dashboard.scheduler.service"),
         patch(_GEN_PATH) as mock_gen,
     ):
         mock_gen.return_value = {"id": 42, "status": "complete", "title": "T"}
@@ -69,7 +69,7 @@ def test_run_briefing_logs_completion(caplog: pytest.LogCaptureFixture) -> None:
 
 def test_run_briefing_logs_no_candidates(caplog: pytest.LogCaptureFixture) -> None:
     with (
-        caplog.at_level(logging.INFO, logger="news_dashboard.scheduler"),
+        caplog.at_level(logging.INFO, logger="news_dashboard.scheduler.service"),
         patch(_GEN_PATH) as mock_gen,
     ):
         mock_gen.return_value = {"status": "no_candidates"}
@@ -90,7 +90,7 @@ def test_run_briefing_logs_warning_when_ai_not_configured(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     with (
-        caplog.at_level(logging.WARNING, logger="news_dashboard.scheduler"),
+        caplog.at_level(logging.WARNING, logger="news_dashboard.scheduler.service"),
         patch(_GEN_PATH) as mock_gen,
     ):
         mock_gen.side_effect = BriefingAINotConfiguredError("no key")
@@ -112,7 +112,7 @@ def test_run_briefing_suppresses_unexpected_exception() -> None:
 
 def test_run_briefing_logs_generation_error(caplog: pytest.LogCaptureFixture) -> None:
     with (
-        caplog.at_level(logging.ERROR, logger="news_dashboard.scheduler"),
+        caplog.at_level(logging.ERROR, logger="news_dashboard.scheduler.service"),
         patch(_GEN_PATH) as mock_gen,
     ):
         mock_gen.side_effect = BriefingGenerationError("bad json")
@@ -137,7 +137,7 @@ def test_run_per_user_briefings_sends_push_when_enabled() -> None:
     now = datetime(2026, 6, 29, 9, 0, 0, tzinfo=timezone.utc)
 
     with (
-        patch("news_dashboard.scheduler.datetime") as mock_dt,
+        patch("news_dashboard.scheduler.service.datetime") as mock_dt,
         patch("news_dashboard.db.connect", return_value=fake_conn),
         patch(_GEN_PATH, return_value={"id": 7, "status": "complete"}) as generate,
         patch("news_dashboard.push.generate_push_hook", return_value="Brief ready") as hook,
@@ -166,7 +166,7 @@ def test_run_per_user_briefings_generates_but_skips_push_when_disabled() -> None
     now = datetime(2026, 6, 29, 9, 0, 0, tzinfo=timezone.utc)
 
     with (
-        patch("news_dashboard.scheduler.datetime") as mock_dt,
+        patch("news_dashboard.scheduler.service.datetime") as mock_dt,
         patch("news_dashboard.db.connect", return_value=fake_conn),
         patch(_GEN_PATH, return_value={"id": 7, "status": "complete"}) as generate,
         patch("news_dashboard.push.generate_push_hook") as hook,
@@ -199,7 +199,7 @@ def test_run_weekly_recaps_sends_push_when_enabled() -> None:
     recap = {"articles_read": 5, "categories": [{"category": "science", "count": 3}]}
 
     with (
-        patch("news_dashboard.scheduler.datetime") as mock_dt,
+        patch("news_dashboard.scheduler.service.datetime") as mock_dt,
         patch("news_dashboard.db.connect", return_value=fake_conn),
         patch(
             "news_dashboard.recaps.service.assemble_weekly_recap", return_value=recap
@@ -242,7 +242,7 @@ def test_run_weekly_recaps_generates_but_skips_push_when_disabled() -> None:
     recap = {"articles_read": 5, "categories": []}
 
     with (
-        patch("news_dashboard.scheduler.datetime") as mock_dt,
+        patch("news_dashboard.scheduler.service.datetime") as mock_dt,
         patch("news_dashboard.db.connect", return_value=fake_conn),
         patch("news_dashboard.recaps.service.assemble_weekly_recap", return_value=recap),
         patch(
@@ -280,7 +280,7 @@ def test_run_weekly_recaps_returns_none_when_no_users_scheduled() -> None:
     now = datetime(2026, 6, 29, 9, 0, 0, tzinfo=timezone.utc)  # a Monday
 
     with (
-        patch("news_dashboard.scheduler.datetime") as mock_dt,
+        patch("news_dashboard.scheduler.service.datetime") as mock_dt,
         patch("news_dashboard.db.connect", return_value=fake_conn),
     ):
         mock_dt.now.return_value = now
@@ -307,7 +307,7 @@ def test_run_weekly_lesson_recaps_generates_when_enabled() -> None:
     recap = {"lessons_completed": 2, "key_concepts": []}
 
     with (
-        patch("news_dashboard.scheduler.datetime") as mock_dt,
+        patch("news_dashboard.scheduler.service.datetime") as mock_dt,
         patch("news_dashboard.db.connect", return_value=fake_conn),
         patch(
             "news_dashboard.lesson_recaps.service.assemble_weekly_lesson_recap",
@@ -345,7 +345,7 @@ def test_run_weekly_lesson_recaps_returns_none_when_no_users_scheduled() -> None
     now = datetime(2026, 6, 29, 9, 0, 0, tzinfo=timezone.utc)  # a Monday
 
     with (
-        patch("news_dashboard.scheduler.datetime") as mock_dt,
+        patch("news_dashboard.scheduler.service.datetime") as mock_dt,
         patch("news_dashboard.db.connect", return_value=fake_conn),
     ):
         mock_dt.now.return_value = now
@@ -366,7 +366,7 @@ _GET_SETTING_PATH = "news_dashboard.db.get_setting"
 
 @pytest.fixture(autouse=True)
 def _reset_scheduler_state() -> Generator[None]:
-    from news_dashboard import scheduler
+    import news_dashboard.scheduler.service as scheduler
 
     scheduler._state.scheduler = None
     scheduler._state.ingest_interval_enabled = True
@@ -400,7 +400,7 @@ def _start_with_env(
         patch(_INIT_DB_PATCH_PATH),
         patch(_GET_SETTING_PATH, return_value=None),
     ):
-        from news_dashboard import scheduler
+        import news_dashboard.scheduler.service as scheduler
 
         # Reset module-level state between tests
         scheduler._state.scheduler = None
@@ -474,7 +474,7 @@ def test_start_scheduler_registers_analytics_retention_job(
 
 
 def test_start_scheduler_briefing_fn_is_job_briefing(monkeypatch: pytest.MonkeyPatch) -> None:
-    from news_dashboard.scheduler import _job_briefing as expected_fn
+    from news_dashboard.scheduler.service import _job_briefing as expected_fn
 
     mock_sched = _start_with_env(monkeypatch, legacy_briefing=True)
     briefing_call = next(
@@ -487,12 +487,12 @@ def test_start_scheduler_briefing_fn_is_job_briefing(monkeypatch: pytest.MonkeyP
 
 
 def test_run_ingest_prefetches_when_new_articles() -> None:
-    from news_dashboard import scheduler
-    from news_dashboard.ingest import IngestResult
+    import news_dashboard.scheduler.service as scheduler
+    from news_dashboard.ingest.service import IngestResult
 
     with (
         patch(
-            "news_dashboard.ingest.ingest_all",
+            "news_dashboard.ingest.service.ingest_all",
             return_value=IngestResult(results={"a": 2, "b": -1}, run_id=1, total_errors=1),
         ) as ingest,
         patch("news_dashboard.body_fetch.prefetch_article_bodies") as prefetch,
@@ -506,12 +506,12 @@ def test_run_ingest_prefetches_when_new_articles() -> None:
 
 
 def test_run_scheduled_ingest_returns_results_and_runs_maintenance() -> None:
-    from news_dashboard import scheduler
-    from news_dashboard.ingest import IngestResult
+    import news_dashboard.scheduler.service as scheduler
+    from news_dashboard.ingest.service import IngestResult
 
     with (
         patch(
-            "news_dashboard.ingest.ingest_all",
+            "news_dashboard.ingest.service.ingest_all",
             return_value=IngestResult(results={"a": 2, "b": -1}, run_id=1, total_errors=1),
         ) as ingest,
         patch("news_dashboard.body_fetch.prefetch_article_bodies") as prefetch,
@@ -526,12 +526,12 @@ def test_run_scheduled_ingest_returns_results_and_runs_maintenance() -> None:
 
 
 def test_run_ingest_skips_prefetch_when_no_new_articles() -> None:
-    from news_dashboard import scheduler
-    from news_dashboard.ingest import IngestResult
+    import news_dashboard.scheduler.service as scheduler
+    from news_dashboard.ingest.service import IngestResult
 
     with (
         patch(
-            "news_dashboard.ingest.ingest_all",
+            "news_dashboard.ingest.service.ingest_all",
             return_value=IngestResult(results={"a": 0}, run_id=1, total_errors=0),
         ),
         patch("news_dashboard.body_fetch.prefetch_article_bodies") as prefetch,
@@ -543,10 +543,10 @@ def test_run_ingest_skips_prefetch_when_no_new_articles() -> None:
 
 
 def test_run_ingest_suppresses_ingest_failure_but_still_recalcs() -> None:
-    from news_dashboard import scheduler
+    import news_dashboard.scheduler.service as scheduler
 
     with (
-        patch("news_dashboard.ingest.ingest_all", side_effect=RuntimeError("boom")),
+        patch("news_dashboard.ingest.service.ingest_all", side_effect=RuntimeError("boom")),
         patch("news_dashboard.body_fetch.prefetch_article_bodies") as prefetch,
         patch.object(scheduler, "_run_recommendation_recalc") as recalc,
     ):
@@ -560,7 +560,7 @@ def test_run_ingest_suppresses_ingest_failure_but_still_recalcs() -> None:
 
 
 def test_run_recommendation_recalc_logs_summary() -> None:
-    from news_dashboard import scheduler
+    import news_dashboard.scheduler.service as scheduler
 
     summary = MagicMock()
     summary.as_dict.return_value = {"recomputed": 3}
@@ -573,7 +573,7 @@ def test_run_recommendation_recalc_logs_summary() -> None:
 
 
 def test_run_recommendation_recalc_suppresses_errors() -> None:
-    from news_dashboard import scheduler
+    import news_dashboard.scheduler.service as scheduler
 
     with patch(
         "news_dashboard.recommendation_jobs.recalculate_stale_recommendations",
@@ -583,7 +583,7 @@ def test_run_recommendation_recalc_suppresses_errors() -> None:
 
 
 def test_run_daily_recommendation_recalc_logs_summary() -> None:
-    from news_dashboard import scheduler
+    import news_dashboard.scheduler.service as scheduler
 
     summary = MagicMock()
     summary.as_dict.return_value = {"recomputed": 9}
@@ -596,7 +596,7 @@ def test_run_daily_recommendation_recalc_logs_summary() -> None:
 
 
 def test_run_daily_recommendation_recalc_suppresses_errors() -> None:
-    from news_dashboard import scheduler
+    import news_dashboard.scheduler.service as scheduler
 
     with patch(
         "news_dashboard.recommendation_jobs.recalculate_all_recommendations",
@@ -609,10 +609,10 @@ def test_run_daily_recommendation_recalc_suppresses_errors() -> None:
 
 
 def test_run_digest_logs_sent(caplog: pytest.LogCaptureFixture) -> None:
-    from news_dashboard import scheduler
+    import news_dashboard.scheduler.service as scheduler
 
     with (
-        caplog.at_level(logging.INFO, logger="news_dashboard.scheduler"),
+        caplog.at_level(logging.INFO, logger="news_dashboard.scheduler.service"),
         patch("news_dashboard.digest.send_digest", return_value=True),
     ):
         scheduler._run_digest()
@@ -620,10 +620,10 @@ def test_run_digest_logs_sent(caplog: pytest.LogCaptureFixture) -> None:
 
 
 def test_run_digest_logs_skip(caplog: pytest.LogCaptureFixture) -> None:
-    from news_dashboard import scheduler
+    import news_dashboard.scheduler.service as scheduler
 
     with (
-        caplog.at_level(logging.INFO, logger="news_dashboard.scheduler"),
+        caplog.at_level(logging.INFO, logger="news_dashboard.scheduler.service"),
         patch("news_dashboard.digest.send_digest", return_value=False),
     ):
         scheduler._run_digest()
@@ -631,7 +631,7 @@ def test_run_digest_logs_skip(caplog: pytest.LogCaptureFixture) -> None:
 
 
 def test_run_digest_suppresses_errors() -> None:
-    from news_dashboard import scheduler
+    import news_dashboard.scheduler.service as scheduler
 
     with patch("news_dashboard.digest.send_digest", side_effect=RuntimeError("smtp down")):
         scheduler._run_digest()  # must not raise
@@ -641,13 +641,13 @@ def test_run_digest_suppresses_errors() -> None:
 
 
 def test_parse_cron_hm_extracts_fields() -> None:
-    from news_dashboard.scheduler import _parse_cron_hm
+    from news_dashboard.scheduler.service import _parse_cron_hm
 
     assert _parse_cron_hm("15 6 * * *", "0", "8") == ("15", "6")
 
 
 def test_parse_cron_hm_falls_back_on_short_input() -> None:
-    from news_dashboard.scheduler import _parse_cron_hm
+    from news_dashboard.scheduler.service import _parse_cron_hm
 
     assert _parse_cron_hm("nonsense", "0", "8") == ("0", "8")
 
@@ -658,12 +658,12 @@ def test_parse_cron_hm_falls_back_on_short_input() -> None:
 def test_start_scheduler_handles_missing_apscheduler(
     monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
 ) -> None:
-    from news_dashboard import scheduler
+    import news_dashboard.scheduler.service as scheduler
 
     # Setting the submodule to None in sys.modules makes the lazy
     # `from apscheduler.schedulers.background import ...` raise ImportError.
     with (
-        caplog.at_level(logging.WARNING, logger="news_dashboard.scheduler"),
+        caplog.at_level(logging.WARNING, logger="news_dashboard.scheduler.service"),
         patch.dict("sys.modules", {"apscheduler.schedulers.background": None}),
     ):
         scheduler.start_scheduler()
@@ -682,7 +682,7 @@ def test_start_scheduler_pauses_when_db_flag_set(monkeypatch: pytest.MonkeyPatch
         patch(_INIT_DB_PATCH_PATH),
         patch(_GET_SETTING_PATH, side_effect=get_setting),
     ):
-        from news_dashboard import scheduler
+        import news_dashboard.scheduler.service as scheduler
 
         scheduler._state.scheduler = None
         scheduler.start_scheduler()
@@ -702,7 +702,7 @@ def test_start_scheduler_uses_db_interval(monkeypatch: pytest.MonkeyPatch) -> No
         patch(_INIT_DB_PATCH_PATH),
         patch(_GET_SETTING_PATH, side_effect=get_setting),
     ):
-        from news_dashboard import scheduler
+        import news_dashboard.scheduler.service as scheduler
 
         scheduler._state.scheduler = None
         scheduler.start_scheduler()
@@ -724,7 +724,7 @@ def test_start_scheduler_can_disable_only_interval_ingest(
     assert "ingest" not in ids
     assert {"digest", "recommendations", "per_user_briefings"} <= set(ids)
 
-    from news_dashboard import scheduler
+    import news_dashboard.scheduler.service as scheduler
 
     assert scheduler.is_ingest_interval_enabled() is False
 
@@ -744,7 +744,7 @@ def test_start_scheduler_ignores_saved_pause_when_interval_ingest_disabled(
         patch(_INIT_DB_PATCH_PATH),
         patch(_GET_SETTING_PATH, side_effect=get_setting),
     ):
-        from news_dashboard import scheduler
+        import news_dashboard.scheduler.service as scheduler
 
         scheduler._state.scheduler = None
         scheduler.start_scheduler()
@@ -756,7 +756,7 @@ def test_start_scheduler_ignores_saved_pause_when_interval_ingest_disabled(
 
 
 def test_stop_scheduler_shuts_down_and_clears() -> None:
-    from news_dashboard import scheduler
+    import news_dashboard.scheduler.service as scheduler
 
     mock_sched = MagicMock()
     scheduler._state.scheduler = mock_sched
@@ -766,14 +766,14 @@ def test_stop_scheduler_shuts_down_and_clears() -> None:
 
 
 def test_stop_scheduler_noop_when_not_running() -> None:
-    from news_dashboard import scheduler
+    import news_dashboard.scheduler.service as scheduler
 
     scheduler._state.scheduler = None
     scheduler.stop_scheduler()  # must not raise
 
 
 def test_get_next_ingest_at_none_when_not_running() -> None:
-    from news_dashboard import scheduler
+    import news_dashboard.scheduler.service as scheduler
 
     scheduler._state.scheduler = None
     assert scheduler.get_next_ingest_at() is None
@@ -782,7 +782,7 @@ def test_get_next_ingest_at_none_when_not_running() -> None:
 def test_get_next_ingest_at_returns_iso() -> None:
     from datetime import datetime, timezone
 
-    from news_dashboard import scheduler
+    import news_dashboard.scheduler.service as scheduler
 
     job = MagicMock()
     job.next_run_time = datetime(2026, 6, 23, 8, 0, 0, tzinfo=timezone.utc)
@@ -797,14 +797,14 @@ def test_get_next_ingest_at_returns_iso() -> None:
 
 
 def test_is_paused_false_when_not_running() -> None:
-    from news_dashboard import scheduler
+    import news_dashboard.scheduler.service as scheduler
 
     scheduler._state.scheduler = None
     assert scheduler.is_paused() is False
 
 
 def test_is_paused_true_when_no_next_run() -> None:
-    from news_dashboard import scheduler
+    import news_dashboard.scheduler.service as scheduler
 
     job = MagicMock()
     job.next_run_time = None
@@ -818,7 +818,7 @@ def test_is_paused_true_when_no_next_run() -> None:
 
 
 def test_is_paused_false_when_job_missing() -> None:
-    from news_dashboard import scheduler
+    import news_dashboard.scheduler.service as scheduler
 
     mock_sched = MagicMock()
     mock_sched.get_job.return_value = None
@@ -830,7 +830,7 @@ def test_is_paused_false_when_job_missing() -> None:
 
 
 def test_set_interval_persists_and_reschedules() -> None:
-    from news_dashboard import scheduler
+    import news_dashboard.scheduler.service as scheduler
 
     mock_sched = MagicMock()
     scheduler._state.scheduler = mock_sched
@@ -845,7 +845,7 @@ def test_set_interval_persists_and_reschedules() -> None:
 
 
 def test_set_interval_persists_when_scheduler_stopped() -> None:
-    from news_dashboard import scheduler
+    import news_dashboard.scheduler.service as scheduler
 
     scheduler._state.scheduler = None
     with patch("news_dashboard.db.set_setting") as set_setting:
@@ -854,7 +854,7 @@ def test_set_interval_persists_when_scheduler_stopped() -> None:
 
 
 def test_pause_scheduler_persists_and_pauses() -> None:
-    from news_dashboard import scheduler
+    import news_dashboard.scheduler.service as scheduler
 
     mock_sched = MagicMock()
     scheduler._state.scheduler = mock_sched
@@ -868,7 +868,7 @@ def test_pause_scheduler_persists_and_pauses() -> None:
 
 
 def test_pause_scheduler_persists_when_stopped() -> None:
-    from news_dashboard import scheduler
+    import news_dashboard.scheduler.service as scheduler
 
     scheduler._state.scheduler = None
     with patch("news_dashboard.db.set_setting") as set_setting:
@@ -877,7 +877,7 @@ def test_pause_scheduler_persists_when_stopped() -> None:
 
 
 def test_resume_scheduler_persists_and_resumes() -> None:
-    from news_dashboard import scheduler
+    import news_dashboard.scheduler.service as scheduler
 
     mock_sched = MagicMock()
     scheduler._state.scheduler = mock_sched
@@ -891,7 +891,7 @@ def test_resume_scheduler_persists_and_resumes() -> None:
 
 
 def test_resume_scheduler_persists_when_stopped() -> None:
-    from news_dashboard import scheduler
+    import news_dashboard.scheduler.service as scheduler
 
     scheduler._state.scheduler = None
     with patch("news_dashboard.db.set_setting") as set_setting:
@@ -915,14 +915,14 @@ def test_start_scheduler_pause_failure_is_suppressed(monkeypatch: pytest.MonkeyP
         patch(_INIT_DB_PATCH_PATH),
         patch(_GET_SETTING_PATH, side_effect=get_setting),
     ):
-        from news_dashboard import scheduler
+        import news_dashboard.scheduler.service as scheduler
 
         scheduler._state.scheduler = None
         scheduler.start_scheduler()  # must not raise
 
 
 def test_stop_scheduler_suppresses_shutdown_error() -> None:
-    from news_dashboard import scheduler
+    import news_dashboard.scheduler.service as scheduler
 
     mock_sched = MagicMock()
     mock_sched.shutdown.side_effect = RuntimeError("already down")
@@ -932,7 +932,7 @@ def test_stop_scheduler_suppresses_shutdown_error() -> None:
 
 
 def test_get_next_ingest_at_suppresses_error() -> None:
-    from news_dashboard import scheduler
+    import news_dashboard.scheduler.service as scheduler
 
     mock_sched = MagicMock()
     mock_sched.get_job.side_effect = RuntimeError("boom")
@@ -944,7 +944,7 @@ def test_get_next_ingest_at_suppresses_error() -> None:
 
 
 def test_is_paused_suppresses_error() -> None:
-    from news_dashboard import scheduler
+    import news_dashboard.scheduler.service as scheduler
 
     mock_sched = MagicMock()
     mock_sched.get_job.side_effect = RuntimeError("boom")
@@ -956,7 +956,7 @@ def test_is_paused_suppresses_error() -> None:
 
 
 def test_set_interval_suppresses_reschedule_error() -> None:
-    from news_dashboard import scheduler
+    import news_dashboard.scheduler.service as scheduler
 
     mock_sched = MagicMock()
     mock_sched.reschedule_job.side_effect = RuntimeError("boom")
@@ -969,7 +969,7 @@ def test_set_interval_suppresses_reschedule_error() -> None:
 
 
 def test_pause_scheduler_suppresses_error() -> None:
-    from news_dashboard import scheduler
+    import news_dashboard.scheduler.service as scheduler
 
     mock_sched = MagicMock()
     mock_sched.pause_job.side_effect = RuntimeError("boom")
@@ -982,7 +982,7 @@ def test_pause_scheduler_suppresses_error() -> None:
 
 
 def test_resume_scheduler_suppresses_error() -> None:
-    from news_dashboard import scheduler
+    import news_dashboard.scheduler.service as scheduler
 
     mock_sched = MagicMock()
     mock_sched.resume_job.side_effect = RuntimeError("boom")
@@ -997,7 +997,7 @@ def test_resume_scheduler_suppresses_error() -> None:
 def test_scheduler_status_reports_external_ingest_authority(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from news_dashboard import main
+    import news_dashboard.scheduler.router as main
 
     monkeypatch.setattr(main, "is_ingest_interval_enabled", lambda: False)
     monkeypatch.setattr(main, "get_interval_minutes", lambda: 30)
@@ -1018,7 +1018,7 @@ def test_scheduler_status_reports_external_ingest_authority(
 # connect/row_to_dict/generate_briefing/push helpers are lazily imported inside
 # _run_per_user_briefings, so they must be patched at their source modules.
 _CONNECT_PATH = "news_dashboard.db.connect"
-_PER_USER_GEN_PATH = "news_dashboard.briefings.generate_briefing"
+_PER_USER_GEN_PATH = "news_dashboard.briefings.service.generate_briefing"
 _SEND_PUSH_PATH = "news_dashboard.push.send_push_for_user"
 _GEN_PUSH_HOOK_PATH = "news_dashboard.push.generate_push_hook"
 
@@ -1035,7 +1035,7 @@ def test_per_user_briefings_utc_match() -> None:
     """A user with UTC timezone triggers when UTC wall clock matches briefing_time."""
     from datetime import datetime, timezone
 
-    from news_dashboard.scheduler import _run_per_user_briefings
+    from news_dashboard.scheduler.service import _run_per_user_briefings
 
     now = datetime(2026, 6, 29, 9, 0, 0, tzinfo=timezone.utc)
     user_rows = [{"id": 1, "briefing_time": "09:00", "briefing_timezone": "UTC"}]
@@ -1043,7 +1043,7 @@ def test_per_user_briefings_utc_match() -> None:
     mock_generate = MagicMock(return_value={"id": 1, "status": "complete"})
 
     with (
-        patch("news_dashboard.scheduler.datetime") as mock_dt,
+        patch("news_dashboard.scheduler.service.datetime") as mock_dt,
         patch(_CONNECT_PATH, return_value=mock_conn),
         patch(_PER_USER_GEN_PATH, mock_generate),
         patch(_SEND_PUSH_PATH),
@@ -1059,7 +1059,7 @@ def test_per_user_briefings_utc_no_match() -> None:
     """A UTC user is NOT triggered when the current UTC minute differs."""
     from datetime import datetime, timezone
 
-    from news_dashboard.scheduler import _run_per_user_briefings
+    from news_dashboard.scheduler.service import _run_per_user_briefings
 
     now = datetime(2026, 6, 29, 10, 0, 0, tzinfo=timezone.utc)
     user_rows = [{"id": 1, "briefing_time": "09:00", "briefing_timezone": "UTC"}]
@@ -1067,7 +1067,7 @@ def test_per_user_briefings_utc_no_match() -> None:
     mock_generate = MagicMock()
 
     with (
-        patch("news_dashboard.scheduler.datetime") as mock_dt,
+        patch("news_dashboard.scheduler.service.datetime") as mock_dt,
         patch(_CONNECT_PATH, return_value=mock_conn),
         patch(_PER_USER_GEN_PATH, mock_generate),
     ):
@@ -1081,7 +1081,7 @@ def test_per_user_briefings_europe_bucharest_summer() -> None:
     """Europe/Bucharest is UTC+3 in summer (EEST). 09:00 local = 06:00 UTC."""
     from datetime import datetime, timezone
 
-    from news_dashboard.scheduler import _run_per_user_briefings
+    from news_dashboard.scheduler.service import _run_per_user_briefings
 
     # 2026-06-29 06:00 UTC = 09:00 Europe/Bucharest (EEST, UTC+3)
     now = datetime(2026, 6, 29, 6, 0, 0, tzinfo=timezone.utc)
@@ -1090,7 +1090,7 @@ def test_per_user_briefings_europe_bucharest_summer() -> None:
     mock_generate = MagicMock(return_value={"id": 1, "status": "complete"})
 
     with (
-        patch("news_dashboard.scheduler.datetime") as mock_dt,
+        patch("news_dashboard.scheduler.service.datetime") as mock_dt,
         patch(_CONNECT_PATH, return_value=mock_conn),
         patch(_PER_USER_GEN_PATH, mock_generate),
         patch(_SEND_PUSH_PATH),
@@ -1106,7 +1106,7 @@ def test_per_user_briefings_europe_bucharest_winter() -> None:
     """Europe/Bucharest is UTC+2 in winter (EET). 09:00 local = 07:00 UTC."""
     from datetime import datetime, timezone
 
-    from news_dashboard.scheduler import _run_per_user_briefings
+    from news_dashboard.scheduler.service import _run_per_user_briefings
 
     # 2026-01-15 07:00 UTC = 09:00 Europe/Bucharest (EET, UTC+2)
     now = datetime(2026, 1, 15, 7, 0, 0, tzinfo=timezone.utc)
@@ -1115,7 +1115,7 @@ def test_per_user_briefings_europe_bucharest_winter() -> None:
     mock_generate = MagicMock(return_value={"id": 1, "status": "complete"})
 
     with (
-        patch("news_dashboard.scheduler.datetime") as mock_dt,
+        patch("news_dashboard.scheduler.service.datetime") as mock_dt,
         patch(_CONNECT_PATH, return_value=mock_conn),
         patch(_PER_USER_GEN_PATH, mock_generate),
         patch(_SEND_PUSH_PATH),
@@ -1131,7 +1131,7 @@ def test_per_user_briefings_null_timezone_falls_back_to_utc() -> None:
     """A user with NULL briefing_timezone is treated as UTC."""
     from datetime import datetime, timezone
 
-    from news_dashboard.scheduler import _run_per_user_briefings
+    from news_dashboard.scheduler.service import _run_per_user_briefings
 
     now = datetime(2026, 6, 29, 9, 0, 0, tzinfo=timezone.utc)
     user_rows = [{"id": 5, "briefing_time": "09:00", "briefing_timezone": None}]
@@ -1139,7 +1139,7 @@ def test_per_user_briefings_null_timezone_falls_back_to_utc() -> None:
     mock_generate = MagicMock(return_value={"id": 1, "status": "complete"})
 
     with (
-        patch("news_dashboard.scheduler.datetime") as mock_dt,
+        patch("news_dashboard.scheduler.service.datetime") as mock_dt,
         patch(_CONNECT_PATH, return_value=mock_conn),
         patch(_PER_USER_GEN_PATH, mock_generate),
         patch(_SEND_PUSH_PATH),
@@ -1184,7 +1184,7 @@ def test_start_scheduler_entity_extraction_interval_env_override(
 
 
 def test_run_entity_extraction_reports_count() -> None:
-    from news_dashboard.scheduler import _run_entity_extraction
+    from news_dashboard.scheduler.service import _run_entity_extraction
 
     with patch("news_dashboard.entities.extract_missing_entities", return_value=3) as mock_extract:
         status, message = _run_entity_extraction()
@@ -1196,7 +1196,7 @@ def test_run_entity_extraction_reports_count() -> None:
 
 def test_run_entity_extraction_skips_when_not_configured() -> None:
     from news_dashboard.entities import EntitiesNotConfiguredError
-    from news_dashboard.scheduler import _run_entity_extraction
+    from news_dashboard.scheduler.service import _run_entity_extraction
 
     with patch(
         "news_dashboard.entities.extract_missing_entities",
@@ -1208,7 +1208,7 @@ def test_run_entity_extraction_skips_when_not_configured() -> None:
 
 
 def test_run_entity_extraction_reports_failure() -> None:
-    from news_dashboard.scheduler import _run_entity_extraction
+    from news_dashboard.scheduler.service import _run_entity_extraction
 
     with patch(
         "news_dashboard.entities.extract_missing_entities",
@@ -1221,7 +1221,7 @@ def test_run_entity_extraction_reports_failure() -> None:
 
 
 def test_run_entity_relationship_extraction_reports_count() -> None:
-    from news_dashboard.scheduler import _run_entity_relationship_extraction
+    from news_dashboard.scheduler.service import _run_entity_relationship_extraction
 
     with patch(
         "news_dashboard.entities.extract_missing_entity_relationships", return_value=2
@@ -1243,7 +1243,7 @@ def test_start_scheduler_registers_reading_list_fetch_job(
 
 
 def test_run_reading_list_fetch_reports_count() -> None:
-    from news_dashboard.scheduler import _run_reading_list_fetch
+    from news_dashboard.scheduler.service import _run_reading_list_fetch
 
     with patch(
         "news_dashboard.reading_list.service.process_pending_items", return_value=2
@@ -1269,7 +1269,7 @@ def test_start_scheduler_registers_watchlist_evaluation_job(
 
 
 def test_run_watchlist_evaluation_reports_summary() -> None:
-    from news_dashboard.scheduler import _run_watchlist_evaluation
+    from news_dashboard.scheduler.service import _run_watchlist_evaluation
 
     with patch(
         "news_dashboard.watchlist_agent.evaluate_watchlists",
@@ -1284,7 +1284,7 @@ def test_run_watchlist_evaluation_reports_summary() -> None:
 
 
 def test_run_watchlist_evaluation_reports_failure() -> None:
-    from news_dashboard.scheduler import _run_watchlist_evaluation
+    from news_dashboard.scheduler.service import _run_watchlist_evaluation
 
     with patch(
         "news_dashboard.watchlist_agent.evaluate_watchlists",
@@ -1305,7 +1305,7 @@ def test_watchlist_evaluation_failure_does_not_abort_other_jobs(
     verifies the wiring: a failing evaluate_watchlists still yields a
     recorded ("failure", ...) outcome rather than propagating.
     """
-    from news_dashboard.scheduler import _job_watchlist_evaluation
+    from news_dashboard.scheduler.service import _job_watchlist_evaluation
 
     with (
         patch(
@@ -1350,7 +1350,7 @@ def test_start_scheduler_skips_newsletter_job_without_config(
 
 
 def test_run_newsletter_poll_reports_processed_count() -> None:
-    from news_dashboard.scheduler import _run_newsletter_poll
+    from news_dashboard.scheduler.service import _run_newsletter_poll
 
     with patch("news_dashboard.newsletter_ingest.poll_newsletters", return_value=3):
         result = _run_newsletter_poll()
@@ -1362,7 +1362,7 @@ def test_run_newsletter_poll_reports_processed_count() -> None:
 
 
 def test_run_newsletter_poll_returns_none_when_nothing_processed() -> None:
-    from news_dashboard.scheduler import _run_newsletter_poll
+    from news_dashboard.scheduler.service import _run_newsletter_poll
 
     with patch("news_dashboard.newsletter_ingest.poll_newsletters", return_value=0):
         result = _run_newsletter_poll()
@@ -1371,7 +1371,7 @@ def test_run_newsletter_poll_returns_none_when_nothing_processed() -> None:
 
 
 def test_run_newsletter_poll_reports_failure() -> None:
-    from news_dashboard.scheduler import _run_newsletter_poll
+    from news_dashboard.scheduler.service import _run_newsletter_poll
 
     with patch(
         "news_dashboard.newsletter_ingest.poll_newsletters",

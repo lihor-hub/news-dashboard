@@ -161,7 +161,7 @@ def test_run_and_record_persists_success(pg_clean: str, monkeypatch: Any) -> Non
     monkeypatch.setenv("DATABASE_URL", pg_clean)
     init_db(database_url=pg_clean)
 
-    from news_dashboard.scheduler import _run_and_record
+    from news_dashboard.scheduler.service import _run_and_record
 
     _run_and_record("digest", lambda: ("success", "all good"))
 
@@ -176,7 +176,7 @@ def test_run_and_record_persists_failure(pg_clean: str, monkeypatch: Any) -> Non
     monkeypatch.setenv("DATABASE_URL", pg_clean)
     init_db(database_url=pg_clean)
 
-    from news_dashboard.scheduler import _run_and_record
+    from news_dashboard.scheduler.service import _run_and_record
 
     def failing_fn() -> tuple[str, str | None]:
         msg = "something broke"
@@ -194,7 +194,7 @@ def test_run_and_record_skips_none_result(pg_clean: str, monkeypatch: Any) -> No
     monkeypatch.setenv("DATABASE_URL", pg_clean)
     init_db(database_url=pg_clean)
 
-    from news_dashboard.scheduler import _run_and_record
+    from news_dashboard.scheduler.service import _run_and_record
 
     _run_and_record("per_user_briefings", lambda: None)
 
@@ -209,7 +209,7 @@ def test_run_and_record_skips_none_result(pg_clean: str, monkeypatch: Any) -> No
 
 def test_run_digest_returns_success() -> None:
     with patch("news_dashboard.digest.send_digest", return_value=True):
-        from news_dashboard.scheduler import _run_digest
+        from news_dashboard.scheduler.service import _run_digest
 
         status, msg = _run_digest()
     assert status == "success"
@@ -218,7 +218,7 @@ def test_run_digest_returns_success() -> None:
 
 def test_run_digest_returns_skipped_when_nothing_sent() -> None:
     with patch("news_dashboard.digest.send_digest", return_value=False):
-        from news_dashboard.scheduler import _run_digest
+        from news_dashboard.scheduler.service import _run_digest
 
         status, msg = _run_digest()
     assert status == "skipped"
@@ -227,7 +227,7 @@ def test_run_digest_returns_skipped_when_nothing_sent() -> None:
 
 def test_run_digest_returns_failure_on_exception() -> None:
     with patch("news_dashboard.digest.send_digest", side_effect=RuntimeError("smtp down")):
-        from news_dashboard.scheduler import _run_digest
+        from news_dashboard.scheduler.service import _run_digest
 
         status, msg = _run_digest()
     assert status == "failure"

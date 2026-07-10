@@ -4,8 +4,8 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from news_dashboard.db import connect
-from news_dashboard.ingest import _ingest_source
-from news_dashboard.sources import SourceDefinition
+from news_dashboard.ingest.service import _ingest_source
+from news_dashboard.sources.service import SourceDefinition
 
 
 def _source(kind: str, url: str = "https://example.com/feed.xml") -> SourceDefinition:
@@ -45,7 +45,7 @@ def test_podcast_feed_ingests_enclosure_with_ai_summary(pg_clean: str) -> None:
         )
 
     with (
-        patch("news_dashboard.ingest._parse_media_feed_url", return_value=entries),
+        patch("news_dashboard.ingest.service._parse_media_feed_url", return_value=entries),
         patch("news_dashboard.ai_client.free_llm_config", return_value=("test-key", None)),
         patch("news_dashboard.ai_client.get_chat_client", return_value=object()),
         patch("news_dashboard.ai_client.chat_create", return_value=response),
@@ -97,7 +97,7 @@ def test_youtube_channel_ingests_caption_summary(pg_clean: str) -> None:
         )
 
     with (
-        patch("news_dashboard.ingest._parse_media_feed_url", return_value=entries),
+        patch("news_dashboard.ingest.service._parse_media_feed_url", return_value=entries),
         patch("news_dashboard.ai_client.free_llm_config", return_value=("test-key", None)),
         patch("news_dashboard.ai_client.get_chat_client", return_value=object()),
         patch("news_dashboard.ai_client.chat_create", return_value=response),
@@ -139,7 +139,7 @@ def test_media_ingest_falls_back_when_ai_disabled(pg_clean: str) -> None:
         )
 
     with (
-        patch("news_dashboard.ingest._parse_media_feed_url", return_value=entries),
+        patch("news_dashboard.ingest.service._parse_media_feed_url", return_value=entries),
         patch("news_dashboard.ai_client.free_llm_config", return_value=("", None)),
         patch("news_dashboard.ai_client.chat_create") as chat_create,
     ):

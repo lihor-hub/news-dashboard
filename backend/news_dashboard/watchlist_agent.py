@@ -331,7 +331,7 @@ def preview_matches(
     Used by the settings UI so a user can see what a watchlist would have
     matched before saving it.
     """
-    from news_dashboard.ingest import search_articles
+    from news_dashboard.ingest.service import search_articles
 
     init_db(db_path, database_url=database_url)
     dsn = db_path if db_path is not None else database_url
@@ -362,7 +362,7 @@ def evaluate_watchlists(
     mutates article state. A failure evaluating one watchlist does not stop
     the others.
     """
-    from news_dashboard.ingest import search_articles
+    from news_dashboard.ingest.service import search_articles
     from news_dashboard.push import send_push_for_user
 
     init_db(db_path, database_url=database_url)

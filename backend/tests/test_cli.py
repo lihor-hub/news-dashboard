@@ -24,7 +24,7 @@ def test_init_syncs_sources() -> None:
 
 
 def test_ingest_prints_per_source_counts_and_total() -> None:
-    from news_dashboard.ingest import IngestResult
+    from news_dashboard.ingest.service import IngestResult
 
     fake = IngestResult(results={"a": 2, "b": 3, "c": -1}, run_id=1, total_errors=1)
     with patch("news_dashboard.cli.ingest_all", return_value=fake):
@@ -38,7 +38,7 @@ def test_ingest_prints_per_source_counts_and_total() -> None:
 
 def test_scheduled_ingest_uses_scheduler_runner() -> None:
     with patch(
-        "news_dashboard.scheduler.run_scheduled_ingest",
+        "news_dashboard.scheduler.service.run_scheduled_ingest",
         return_value={"a": 2, "b": 0, "c": -1},
     ) as run:
         result = runner.invoke(app, ["scheduled-ingest"])
@@ -50,7 +50,7 @@ def test_scheduled_ingest_uses_scheduler_runner() -> None:
 
 def test_scheduled_ingest_exits_nonzero_when_scheduler_runner_fails() -> None:
     with patch(
-        "news_dashboard.scheduler.run_scheduled_ingest",
+        "news_dashboard.scheduler.service.run_scheduled_ingest",
         side_effect=RuntimeError("boom"),
     ) as run:
         result = runner.invoke(app, ["scheduled-ingest"])

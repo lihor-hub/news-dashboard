@@ -21,7 +21,7 @@ from fastapi.testclient import TestClient
 
 from news_dashboard.auth import create_user
 from news_dashboard.db import connect
-from news_dashboard.ingest import (
+from news_dashboard.ingest.service import (
     get_user_summary,
     set_article_starred,
     sync_sources,

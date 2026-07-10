@@ -11,7 +11,11 @@ from news_dashboard.auth import create_user
 from news_dashboard.db import connect
 from news_dashboard.export import SCHEMA_VERSION, assemble_user_export
 from news_dashboard.import_export import ArchiveImportError, restore_user_archive
-from news_dashboard.ingest import set_article_starred, sync_sources, transition_article_state
+from news_dashboard.ingest.service import (
+    set_article_starred,
+    sync_sources,
+    transition_article_state,
+)
 
 
 def _make_user(db_url: str, username: str) -> int:

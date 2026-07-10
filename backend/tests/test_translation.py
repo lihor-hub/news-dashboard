@@ -2,7 +2,7 @@ from unittest.mock import MagicMock, patch
 
 from news_dashboard.body_fetch import fetch_and_cache_body, translate_body
 from news_dashboard.db import connect
-from news_dashboard.ingest import detect_and_translate_article
+from news_dashboard.ingest.service import detect_and_translate_article
 
 
 def test_detect_and_translate_article_english() -> None:

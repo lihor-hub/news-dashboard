@@ -4,9 +4,9 @@ from collections.abc import Generator
 from pathlib import Path
 from typing import Any
 
-import news_dashboard.ingest as ingest_module
+import news_dashboard.ingest.service as ingest_module
 from news_dashboard.db import connect
-from news_dashboard.ingest import FeedFetchError, ingest_all
+from news_dashboard.ingest.service import FeedFetchError, ingest_all
 from news_dashboard.ingest_events import (
     IngestStreamEvent,
     format_sse_event,
@@ -14,7 +14,7 @@ from news_dashboard.ingest_events import (
     stream_ingest_events,
 )
 from news_dashboard.main import app
-from news_dashboard.sources import SourceDefinition
+from news_dashboard.sources.service import SourceDefinition
 
 
 def test_ingest_all_writes_run_rows_and_buffers_terminal_lines(

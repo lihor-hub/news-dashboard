@@ -8,7 +8,7 @@ from typing import ClassVar
 
 import pytest
 
-from news_dashboard.ingest import (
+from news_dashboard.ingest.service import (
     _FEED_AGENT,
     _NITTER_INSTANCES,
     FEED_FETCH_MAX_BYTES,
@@ -19,7 +19,7 @@ from news_dashboard.ingest import (
     _fetch_nitter_feed,
     _nitter_handle,
 )
-from news_dashboard.sources import DEFAULT_SOURCES, SourceDefinition
+from news_dashboard.sources.service import DEFAULT_SOURCES, SourceDefinition
 
 # ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -88,7 +88,7 @@ def test_fetch_feed_content_rejects_private_network_url(
         nonlocal called
         called = True
 
-    monkeypatch.setattr("news_dashboard.ingest.open_server_fetch_url", fake_open)
+    monkeypatch.setattr("news_dashboard.ingest.service.open_server_fetch_url", fake_open)
 
     with pytest.raises(FeedFetchError, match="unsafe host"):
         _fetch_feed_content("http://127.0.0.1/feed.xml")
@@ -119,7 +119,7 @@ def test_fetch_feed_content_sends_user_agent(monkeypatch: pytest.MonkeyPatch) ->
         assert timeout == FEED_FETCH_TIMEOUT_SECS
         return _FakeResp()
 
-    monkeypatch.setattr("news_dashboard.ingest.open_server_fetch_url", fake_open)
+    monkeypatch.setattr("news_dashboard.ingest.service.open_server_fetch_url", fake_open)
     _fetch_feed_content("https://example.com/feed.xml")
     assert captured == [_FEED_AGENT]
 
@@ -129,7 +129,7 @@ def test_fetch_feed_content_converts_timeout(monkeypatch: pytest.MonkeyPatch) ->
         msg = "timed out"
         raise TimeoutError(msg)
 
-    monkeypatch.setattr("news_dashboard.ingest.open_server_fetch_url", fake_open)
+    monkeypatch.setattr("news_dashboard.ingest.service.open_server_fetch_url", fake_open)
     with pytest.raises(FeedFetchError, match="timed out"):
         _fetch_feed_content("https://example.com/feed.xml")
 
@@ -139,7 +139,7 @@ def test_fetch_feed_content_converts_url_error(monkeypatch: pytest.MonkeyPatch) 
         msg = "Name or service not known"
         raise urllib.error.URLError(msg)
 
-    monkeypatch.setattr("news_dashboard.ingest.open_server_fetch_url", fake_open)
+    monkeypatch.setattr("news_dashboard.ingest.service.open_server_fetch_url", fake_open)
     with pytest.raises(FeedFetchError, match="network error"):
         _fetch_feed_content("https://example.com/feed.xml")
 
@@ -165,8 +165,8 @@ def test_fetch_feed_content_retries_429_then_succeeds(monkeypatch: pytest.Monkey
         return _SizedFakeResp(body)
 
     sleeps: list[float] = []
-    monkeypatch.setattr("news_dashboard.ingest.open_server_fetch_url", fake_open)
-    monkeypatch.setattr("news_dashboard.ingest.time.sleep", sleeps.append)
+    monkeypatch.setattr("news_dashboard.ingest.service.open_server_fetch_url", fake_open)
+    monkeypatch.setattr("news_dashboard.ingest.service.time.sleep", sleeps.append)
 
     assert _fetch_feed_content("https://example.com/feed.xml") == body
     assert attempts["n"] == 2
@@ -180,8 +180,8 @@ def test_fetch_feed_content_gives_up_after_max_retries(monkeypatch: pytest.Monke
         attempts["n"] += 1
         raise _http_error(429)
 
-    monkeypatch.setattr("news_dashboard.ingest.open_server_fetch_url", fake_open)
-    monkeypatch.setattr("news_dashboard.ingest.time.sleep", lambda _s: None)
+    monkeypatch.setattr("news_dashboard.ingest.service.open_server_fetch_url", fake_open)
+    monkeypatch.setattr("news_dashboard.ingest.service.time.sleep", lambda _s: None)
 
     with pytest.raises(FeedFetchError, match="network error"):
         _fetch_feed_content("https://example.com/feed.xml")
@@ -198,8 +198,8 @@ def test_fetch_feed_content_honors_retry_after(monkeypatch: pytest.MonkeyPatch) 
         return _SizedFakeResp(b"<rss/>")
 
     sleeps: list[float] = []
-    monkeypatch.setattr("news_dashboard.ingest.open_server_fetch_url", fake_open)
-    monkeypatch.setattr("news_dashboard.ingest.time.sleep", sleeps.append)
+    monkeypatch.setattr("news_dashboard.ingest.service.open_server_fetch_url", fake_open)
+    monkeypatch.setattr("news_dashboard.ingest.service.time.sleep", sleeps.append)
 
     _fetch_feed_content("https://example.com/feed.xml")
     assert sleeps == [7.0]
@@ -212,8 +212,8 @@ def test_fetch_feed_content_does_not_retry_404(monkeypatch: pytest.MonkeyPatch) 
         attempts["n"] += 1
         raise _http_error(404)
 
-    monkeypatch.setattr("news_dashboard.ingest.open_server_fetch_url", fake_open)
-    monkeypatch.setattr("news_dashboard.ingest.time.sleep", lambda _s: None)
+    monkeypatch.setattr("news_dashboard.ingest.service.open_server_fetch_url", fake_open)
+    monkeypatch.setattr("news_dashboard.ingest.service.time.sleep", lambda _s: None)
 
     with pytest.raises(FeedFetchError, match="network error"):
         _fetch_feed_content("https://example.com/feed.xml")
@@ -245,7 +245,7 @@ def test_fetch_feed_content_under_limit_parses_normally(
 ) -> None:
     body = b"<rss>" + b"x" * 100 + b"</rss>"
     monkeypatch.setattr(
-        "news_dashboard.ingest.open_server_fetch_url",
+        "news_dashboard.ingest.service.open_server_fetch_url",
         lambda *_a, **_k: _SizedFakeResp(body),
     )
     assert _fetch_feed_content("https://example.com/feed.xml") == body
@@ -254,7 +254,7 @@ def test_fetch_feed_content_under_limit_parses_normally(
 def test_fetch_feed_content_rejects_oversized_body(monkeypatch: pytest.MonkeyPatch) -> None:
     body = b"x" * (FEED_FETCH_MAX_BYTES + 1)
     monkeypatch.setattr(
-        "news_dashboard.ingest.open_server_fetch_url",
+        "news_dashboard.ingest.service.open_server_fetch_url",
         lambda *_a, **_k: _SizedFakeResp(body),
     )
     with pytest.raises(FeedFetchError, match="exceeded"):
@@ -273,7 +273,9 @@ def test_fetch_feed_content_rejects_oversized_content_length_header(
             return super().read(n)
 
     resp = _NeverReadResp(b"short body", content_length=str(FEED_FETCH_MAX_BYTES + 1))
-    monkeypatch.setattr("news_dashboard.ingest.open_server_fetch_url", lambda *_a, **_k: resp)
+    monkeypatch.setattr(
+        "news_dashboard.ingest.service.open_server_fetch_url", lambda *_a, **_k: resp
+    )
     with pytest.raises(FeedFetchError, match="too large"):
         _fetch_feed_content("https://example.com/feed.xml")
     assert called is False
@@ -284,7 +286,9 @@ def test_fetch_feed_content_ignores_invalid_content_length_header(
 ) -> None:
     body = b"<rss/>"
     resp = _SizedFakeResp(body, content_length="not-a-number")
-    monkeypatch.setattr("news_dashboard.ingest.open_server_fetch_url", lambda *_a, **_k: resp)
+    monkeypatch.setattr(
+        "news_dashboard.ingest.service.open_server_fetch_url", lambda *_a, **_k: resp
+    )
     assert _fetch_feed_content("https://example.com/feed.xml") == body
 
 
@@ -298,7 +302,7 @@ def test_fetch_nitter_succeeds_on_first_instance(monkeypatch: pytest.MonkeyPatch
         calls.append(url)
         return _ok_entries([{"link": "https://x.com/AnthropicAI/status/1", "title": "Hello AI"}])
 
-    monkeypatch.setattr("news_dashboard.ingest._parse_feed_url", fake_parse_url)
+    monkeypatch.setattr("news_dashboard.ingest.service._parse_feed_url", fake_parse_url)
     entries = _fetch_nitter_feed(_make_source("AnthropicAI"))
 
     assert len(entries) == 1
@@ -313,7 +317,7 @@ def test_fetch_nitter_normalises_missing_title(monkeypatch: pytest.MonkeyPatch) 
     def fake_parse_url(_url: str) -> list[dict[str, object]]:
         return _ok_entries([{"link": "https://x.com/sama/status/2"}])
 
-    monkeypatch.setattr("news_dashboard.ingest._parse_feed_url", fake_parse_url)
+    monkeypatch.setattr("news_dashboard.ingest.service._parse_feed_url", fake_parse_url)
     entries = _fetch_nitter_feed(_make_source("sama"))
     assert entries[0]["title"] == "Untitled"
 
@@ -331,7 +335,7 @@ def test_fetch_nitter_falls_back_on_first_failure(monkeypatch: pytest.MonkeyPatc
             raise FeedFetchError(msg)
         return _ok_entries([{"link": "https://x.com/karpathy/status/3", "title": "Post"}])
 
-    monkeypatch.setattr("news_dashboard.ingest._parse_feed_url", fake_parse_url)
+    monkeypatch.setattr("news_dashboard.ingest.service._parse_feed_url", fake_parse_url)
     entries = _fetch_nitter_feed(_make_source("karpathy"))
 
     assert len(entries) == 1
@@ -351,7 +355,7 @@ def test_fetch_nitter_falls_back_on_timeout(monkeypatch: pytest.MonkeyPatch) -> 
             raise FeedFetchError(msg)
         return _ok_entries([{"link": "https://x.com/gdb/status/1", "title": "Timeout test"}])
 
-    monkeypatch.setattr("news_dashboard.ingest._parse_feed_url", fake_parse_url)
+    monkeypatch.setattr("news_dashboard.ingest.service._parse_feed_url", fake_parse_url)
     entries = _fetch_nitter_feed(_make_source("gdb"))
 
     assert len(entries) == 1
@@ -363,7 +367,7 @@ def test_fetch_nitter_raises_when_all_instances_fail(monkeypatch: pytest.MonkeyP
         msg = "refused"
         raise FeedFetchError(msg)
 
-    monkeypatch.setattr("news_dashboard.ingest._parse_feed_url", fake_parse_url)
+    monkeypatch.setattr("news_dashboard.ingest.service._parse_feed_url", fake_parse_url)
     with pytest.raises(FeedFetchError, match="All Nitter instances failed for @ylecun"):
         _fetch_nitter_feed(_make_source("ylecun"))
 
@@ -383,7 +387,7 @@ def test_fetch_nitter_skips_placeholder_without_status_links(
             )
         return _ok_entries([{"link": "https://x.com/xai/status/9", "title": "Real tweet"}])
 
-    monkeypatch.setattr("news_dashboard.ingest._parse_feed_url", fake_parse_url)
+    monkeypatch.setattr("news_dashboard.ingest.service._parse_feed_url", fake_parse_url)
     entries = _fetch_nitter_feed(_make_source("xai"))
 
     assert len(calls) == 2, "should skip the placeholder instance and try the next"
@@ -394,7 +398,7 @@ def test_fetch_nitter_raises_when_only_placeholders(monkeypatch: pytest.MonkeyPa
     def fake_parse_url(url: str) -> list[dict[str, object]]:
         return _ok_entries([{"link": url, "title": "RSS reader not yet whitelisted!"}])
 
-    monkeypatch.setattr("news_dashboard.ingest._parse_feed_url", fake_parse_url)
+    monkeypatch.setattr("news_dashboard.ingest.service._parse_feed_url", fake_parse_url)
     with pytest.raises(FeedFetchError, match="All Nitter instances failed for @xai"):
         _fetch_nitter_feed(_make_source("xai"))
 
@@ -407,7 +411,7 @@ def test_fetch_nitter_tries_all_instances_before_failing(monkeypatch: pytest.Mon
         msg = "refused"
         raise FeedFetchError(msg)
 
-    monkeypatch.setattr("news_dashboard.ingest._parse_feed_url", fake_parse_url)
+    monkeypatch.setattr("news_dashboard.ingest.service._parse_feed_url", fake_parse_url)
     with pytest.raises(FeedFetchError):
         _fetch_nitter_feed(_make_source("gdb"))
     assert len(calls) == len(_NITTER_INSTANCES)
