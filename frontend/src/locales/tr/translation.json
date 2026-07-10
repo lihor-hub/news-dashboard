@@ -183,6 +183,13 @@
       "create": "Podcast oluştur",
       "generating": "Oluşturuluyor...",
       "regenerate": "Yeniden oluştur"
+    },
+    "slideDeck": {
+      "title": "Slayt destesi",
+      "create": "Slayt destesi oluştur",
+      "generating": "Oluşturuluyor...",
+      "regenerate": "Yeniden oluştur",
+      "slideLabel": "Slayt {{number}}"
     }
   }
 }

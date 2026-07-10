@@ -183,6 +183,13 @@
       "create": "Podcast maken",
       "generating": "Genereren...",
       "regenerate": "Opnieuw genereren"
+    },
+    "slideDeck": {
+      "title": "Diavoorstelling",
+      "create": "Diavoorstelling maken",
+      "generating": "Bezig met genereren...",
+      "regenerate": "Opnieuw genereren",
+      "slideLabel": "Dia {{number}}"
     }
   }
 }

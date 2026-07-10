@@ -183,6 +183,13 @@
       "create": "Δημιουργία podcast",
       "generating": "Δημιουργία...",
       "regenerate": "Αναδημιουργία"
+    },
+    "slideDeck": {
+      "title": "Παρουσίαση διαφανειών",
+      "create": "Δημιουργία παρουσίασης",
+      "generating": "Δημιουργία...",
+      "regenerate": "Αναδημιουργία",
+      "slideLabel": "Διαφάνεια {{number}}"
     }
   }
 }

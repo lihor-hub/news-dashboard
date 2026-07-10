@@ -183,6 +183,13 @@
       "create": "पॉडकास्ट बनाएं",
       "generating": "बनाया जा रहा है...",
       "regenerate": "फिर से बनाएं"
+    },
+    "slideDeck": {
+      "title": "स्लाइड डेक",
+      "create": "स्लाइड डेक बनाएं",
+      "generating": "उत्पन्न हो रहा है...",
+      "regenerate": "पुनः उत्पन्न करें",
+      "slideLabel": "स्लाइड {{number}}"
     }
   }
 }

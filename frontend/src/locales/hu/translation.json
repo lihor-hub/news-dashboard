@@ -183,6 +183,13 @@
       "create": "Podcast létrehozása",
       "generating": "Létrehozás...",
       "regenerate": "Újragenerálás"
+    },
+    "slideDeck": {
+      "title": "Diavetítés",
+      "create": "Diavetítés létrehozása",
+      "generating": "Létrehozás...",
+      "regenerate": "Újragenerálás",
+      "slideLabel": "Dia {{number}}"
     }
   }
 }

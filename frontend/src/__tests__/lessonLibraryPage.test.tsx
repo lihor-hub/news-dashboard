@@ -31,6 +31,9 @@ const COMPLETE_LESSON: Lesson = {
   persona: 'developer',
   podcast_status: null,
   podcast_error: null,
+  slide_deck: null,
+  slide_deck_status: null,
+  slide_deck_error: null,
   lesson_detail: {
     gist: 'The article argues that strong source selection matters more than raw volume.',
     explanation: 'explanation',

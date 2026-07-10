@@ -183,6 +183,13 @@
       "create": "Vytvořit podcast",
       "generating": "Generuje se...",
       "regenerate": "Znovu vygenerovat"
+    },
+    "slideDeck": {
+      "title": "Sada snímků",
+      "create": "Vytvořit sadu snímků",
+      "generating": "Generuje se...",
+      "regenerate": "Vygenerovat znovu",
+      "slideLabel": "Snímek {{number}}"
     }
   }
 }

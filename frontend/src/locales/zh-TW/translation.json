@@ -183,6 +183,13 @@
       "create": "建立 Podcast",
       "generating": "產生中...",
       "regenerate": "重新產生"
+    },
+    "slideDeck": {
+      "title": "投影片",
+      "create": "建立投影片",
+      "generating": "生成中...",
+      "regenerate": "重新生成",
+      "slideLabel": "投影片 {{number}}"
     }
   }
 }

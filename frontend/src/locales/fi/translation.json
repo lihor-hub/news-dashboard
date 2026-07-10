@@ -183,6 +183,13 @@
       "create": "Luo podcast",
       "generating": "Luodaan...",
       "regenerate": "Luo uudelleen"
+    },
+    "slideDeck": {
+      "title": "Diaesitys",
+      "create": "Luo diaesitys",
+      "generating": "Luodaan...",
+      "regenerate": "Luo uudelleen",
+      "slideLabel": "Dia {{number}}"
     }
   }
 }

@@ -183,6 +183,13 @@
       "create": "Tạo podcast",
       "generating": "Đang tạo...",
       "regenerate": "Tạo lại"
+    },
+    "slideDeck": {
+      "title": "Bộ slide",
+      "create": "Tạo bộ slide",
+      "generating": "Đang tạo...",
+      "regenerate": "Tạo lại",
+      "slideLabel": "Slide {{number}}"
     }
   }
 }

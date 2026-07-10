@@ -183,6 +183,13 @@
       "create": "创建播客",
       "generating": "生成中...",
       "regenerate": "重新生成"
+    },
+    "slideDeck": {
+      "title": "幻灯片",
+      "create": "创建幻灯片",
+      "generating": "生成中...",
+      "regenerate": "重新生成",
+      "slideLabel": "幻灯片 {{number}}"
     }
   }
 }

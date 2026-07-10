@@ -183,6 +183,13 @@
       "create": "Crear podcast",
       "generating": "Generando...",
       "regenerate": "Regenerar"
+    },
+    "slideDeck": {
+      "title": "Presentación de diapositivas",
+      "create": "Crear presentación",
+      "generating": "Generando...",
+      "regenerate": "Regenerar",
+      "slideLabel": "Diapositiva {{number}}"
     }
   }
 }

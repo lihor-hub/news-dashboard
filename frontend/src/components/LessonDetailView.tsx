@@ -1,12 +1,17 @@
 import { useState } from 'react';
-import { AlertCircle, ExternalLink, Headphones, Loader2 } from 'lucide-react';
+import { AlertCircle, ExternalLink, Headphones, Loader2, Presentation } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { LessonChat } from '@/components/LessonChat';
 import { StudyArtifactsView } from '@/components/StudyArtifactsView';
-import { generateLessonPodcast, type Lesson, type LessonDetail } from '@/api';
+import {
+  generateLessonPodcast,
+  generateLessonSlideDeck,
+  type Lesson,
+  type LessonDetail,
+} from '@/api';
 import { classifyGenerationError, type FriendlyError } from '@/lib/errorPresentation';
 
 function formatPublishedDate(value: string | null): string | null {
@@ -64,6 +69,8 @@ export function LessonDetailView({
   const { t } = useTranslation();
   const [isGeneratingPodcast, setIsGeneratingPodcast] = useState(false);
   const [podcastError, setPodcastError] = useState<FriendlyError | null>(null);
+  const [isGeneratingSlideDeck, setIsGeneratingSlideDeck] = useState(false);
+  const [slideDeckError, setSlideDeckError] = useState<FriendlyError | null>(null);
   const publishedLabel = formatPublishedDate(lesson.published_at);
   const isPendingLesson = lesson.generation_status === 'pending';
   const isFailedLesson = lesson.generation_status === 'failed';
@@ -81,6 +88,19 @@ export function LessonDetailView({
       setPodcastError(classifyGenerationError(error));
     } finally {
       setIsGeneratingPodcast(false);
+    }
+  }
+
+  async function handleGenerateSlideDeck(force: boolean) {
+    setIsGeneratingSlideDeck(true);
+    setSlideDeckError(null);
+    try {
+      const updated = await generateLessonSlideDeck(lesson.id, force);
+      onLessonUpdate?.(updated);
+    } catch (error: unknown) {
+      setSlideDeckError(classifyGenerationError(error));
+    } finally {
+      setIsGeneratingSlideDeck(false);
     }
   }
 
@@ -269,6 +289,65 @@ export function LessonDetailView({
             <div className="flex items-start gap-2 rounded-lg border border-destructive/20 bg-destructive/5 p-3 text-xs text-destructive">
               <AlertCircle className="mt-0.5 size-4 shrink-0" />
               <div>{lesson.podcast_error}</div>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+
+      {hasLessonDetail ? (
+        <div className="space-y-3 rounded-lg border border-border bg-card/60 p-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <Presentation className="size-4 text-muted-foreground" />
+              <h3 className="text-sm font-semibold text-foreground">
+                {t('learn.slideDeck.title', 'Slide deck')}
+              </h3>
+            </div>
+            <Button
+              size="sm"
+              variant={lesson.slide_deck_status ? 'outline' : 'default'}
+              onClick={() => {
+                void handleGenerateSlideDeck(lesson.slide_deck_status !== null);
+              }}
+              disabled={isGeneratingSlideDeck}
+            >
+              {isGeneratingSlideDeck
+                ? t('learn.slideDeck.generating', 'Generating…')
+                : lesson.slide_deck_status
+                  ? t('learn.slideDeck.regenerate', 'Regenerate')
+                  : t('learn.slideDeck.create', 'Create slide deck')}
+            </Button>
+          </div>
+
+          {lesson.slide_deck_status === 'complete' && lesson.slide_deck ? (
+            <ol className="space-y-3">
+              {lesson.slide_deck.slides.map((slide, index) => (
+                <li
+                  key={`${index}-${slide.title}`}
+                  className="rounded-lg border border-border bg-background p-3"
+                >
+                  <div className="text-xs font-semibold text-muted-foreground">
+                    {t('learn.slideDeck.slideLabel', 'Slide {{number}}', { number: index + 1 })}
+                  </div>
+                  <div className="mt-1 text-sm font-semibold text-foreground">{slide.title}</div>
+                  {renderBulletList(slide.bullets)}
+                </li>
+              ))}
+            </ol>
+          ) : null}
+
+          {slideDeckError ? (
+            <div className="flex items-start gap-2 rounded-lg border border-destructive/20 bg-destructive/5 p-3 text-xs text-destructive">
+              <AlertCircle className="mt-0.5 size-4 shrink-0" />
+              <div>
+                <div className="font-semibold">{slideDeckError.title}</div>
+                <div className="mt-0.5">{slideDeckError.message}</div>
+              </div>
+            </div>
+          ) : lesson.slide_deck_status === 'failed' && lesson.slide_deck_error ? (
+            <div className="flex items-start gap-2 rounded-lg border border-destructive/20 bg-destructive/5 p-3 text-xs text-destructive">
+              <AlertCircle className="mt-0.5 size-4 shrink-0" />
+              <div>{lesson.slide_deck_error}</div>
             </div>
           ) : null}
         </div>

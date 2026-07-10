@@ -183,6 +183,13 @@
       "create": "Opret podcast",
       "generating": "Genererer...",
       "regenerate": "Regenerer"
+    },
+    "slideDeck": {
+      "title": "Diasshow",
+      "create": "Opret diasshow",
+      "generating": "Genererer...",
+      "regenerate": "Genopret",
+      "slideLabel": "Dias {{number}}"
     }
   }
 }
