@@ -1,6 +1,6 @@
 [project]
 name = "news-dashboard"
-version = "1.122.9"
+version = "1.140.2"
 description = "Self-hosted news inbox: curated feeds, triage, search, and AI briefings"
 license = "MIT"
 license-files = ["LICENSE"]
