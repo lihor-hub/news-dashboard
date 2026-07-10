@@ -50,7 +50,7 @@ def test_truncate_all_tables_covers_every_table_the_schema_defines(pg_url: str) 
         return {
             row[0]
             for row in conn.execute(
-                "SELECT tablename FROM pg_tables WHERE schemaname = 'public'"
+                "SELECT tablename FROM pg_tables WHERE schemaname = current_schema()"
             ).fetchall()
         }
 
