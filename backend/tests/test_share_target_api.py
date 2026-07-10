@@ -53,3 +53,31 @@ def test_save_shared_url_rejects_unsafe_url(pg_clean: str) -> None:
         )
 
     assert response.status_code == 422
+
+
+def test_save_shared_url_concurrency(pg_clean: str) -> None:
+    _seed_fake_user(pg_clean)
+
+    import concurrent.futures
+
+    from news_dashboard.articles.service import save_shared_url
+
+    url = "https://example.com/concurrent-post"
+
+    # Run save_shared_url concurrently for the same URL to test the race condition
+    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+        futures = [
+            executor.submit(
+                save_shared_url,
+                1,
+                url=url,
+                title="Concurrent Post",
+                text="Some text",
+            )
+            for _ in range(2)
+        ]
+        results = [f.result() for f in futures]
+
+    assert len(results) == 2
+    assert results[0]["url"] == url
+    assert results[1]["url"] == url

@@ -354,19 +354,18 @@ def embed_all_eligible(
             continue
         try:
             vector = _embed(text)
+            from news_dashboard.db import connect as _connect
+
+            with _connect(db_path) as conn:
+                conn.execute(
+                    "UPDATE articles SET embedding_vec=%s::vector WHERE id=%s",
+                    (vector_literal(vector), row["id"]),
+                )
+            count += 1
         except Exception:
             logger.warning(
                 "failed to embed article %s during backfill; skipping", row["id"], exc_info=True
             )
-            continue
-        from news_dashboard.db import connect as _connect
-
-        with _connect(db_path) as conn:
-            conn.execute(
-                "UPDATE articles SET embedding_vec=%s::vector WHERE id=%s",
-                (vector_literal(vector), row["id"]),
-            )
-        count += 1
     return count
 
 
