@@ -32,7 +32,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from psycopg.errors import UniqueViolation
-from psycopg.types.json import Jsonb
 from pydantic import BaseModel, Field, field_validator
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.responses import Response as StarletteResponse
@@ -539,13 +538,6 @@ class PreviewSourceRequest(BaseModel):
 
 class SourceCleanupRequest(BaseModel):
     source_slugs: list[str]
-
-
-class OnboardingInterestsRequest(BaseModel):
-    interests: list[str]
-    enabled_source_slugs: list[str] = Field(default_factory=list)
-    disabled_source_slugs: list[str] = Field(default_factory=list)
-    completed: bool = True
 
 
 class IntervalUpdate(BaseModel):
@@ -1233,290 +1225,6 @@ def add_share_message(
     if get_share(share_id, current_user["id"]) is None:
         raise HTTPException(status_code=404, detail="Share not found")
     return add_message(share_id, current_user["id"], payload.message)
-
-
-INTEREST_GROUPS: tuple[dict[str, Any], ...] = (
-    {
-        "id": "ai",
-        "label": "AI",
-        "options": (
-            {"id": "agents", "label": "Agents"},
-            {"id": "model-releases", "label": "Model releases"},
-            {"id": "evals", "label": "Evals"},
-            {"id": "product-news", "label": "Product news"},
-        ),
-    },
-    {
-        "id": "engineering",
-        "label": "Engineering",
-        "options": (
-            {"id": "python", "label": "Python"},
-            {"id": "infra", "label": "Infrastructure"},
-            {"id": "cloud", "label": "Cloud"},
-            {"id": "security", "label": "Security"},
-        ),
-    },
-)
-
-
-def _interest_options() -> set[str]:
-    return {str(option["id"]) for group in INTEREST_GROUPS for option in group["options"]}
-
-
-def _source_recommendations(user_id: int, interests: list[str]) -> list[dict[str, Any]]:
-    from news_dashboard.ingest import sync_sources
-    from news_dashboard.sources import DEFAULT_SOURCES
-
-    selected = set(interests)
-    sync_sources()
-    with connect() as conn:
-        rows = conn.execute(
-            "SELECT source_slug, enabled FROM user_sources WHERE user_id = %s",
-            (user_id,),
-        ).fetchall()
-    subscriptions = {str(row["source_slug"]): bool(row["enabled"]) for row in rows}
-
-    recommendations: list[dict[str, Any]] = []
-    for source in DEFAULT_SOURCES:
-        tags = set(source.interest_tags)
-        matched = sorted(selected & (tags | {source.category}))
-        score = float((len(selected & tags) * 100) + (25 if source.category in selected else 0))
-        score += source.priority / 100
-        recommended = bool(matched)
-        if not selected:
-            score = source.priority / 100
-            recommended = False
-        reason = (
-            f"Matches {', '.join(matched)}" if matched else f"Baseline {source.category} source"
-        )
-        recommendations.append(
-            {
-                "source_slug": source.slug,
-                "source_name": source.name,
-                "kind": source.kind,
-                "url": source.url,
-                "category": source.category,
-                "matched_interests": matched,
-                "reason": reason,
-                "recommended": recommended,
-                "subscribed": subscriptions.get(source.slug, False),
-                "priority": source.priority,
-                "_score": score,
-                "_priority": source.priority,
-            }
-        )
-
-    recommendations.sort(
-        key=lambda item: (
-            float(item["_score"]),
-            bool(item["subscribed"]),
-            int(item["_priority"]),
-            str(item["source_name"]),
-        ),
-        reverse=True,
-    )
-    for item in recommendations:
-        item.pop("_score")
-        item.pop("_priority")
-    return recommendations
-
-
-@api.get("/api/onboarding/status")
-def onboarding_status(
-    current_user: Annotated[dict[str, Any], Depends(require_auth)],
-) -> dict[str, Any]:
-    uid = int(current_user["id"])
-    init_db()
-    with connect() as conn:
-        row = conn.execute(
-            "SELECT completed_at FROM user_interest_profiles WHERE user_id = %s",
-            (uid,),
-        ).fetchone()
-    completed = row is not None and row["completed_at"] is not None
-    return {"completed": completed}
-
-
-@api.get("/api/onboarding/interests")
-def onboarding_interests(
-    current_user: Annotated[dict[str, Any], Depends(require_auth)],
-) -> list[dict[str, Any]]:
-    _ = current_user
-    return [
-        {"id": option["id"], "label": option["label"], "description": option.get("description", "")}
-        for group in INTEREST_GROUPS
-        for option in group["options"]
-    ]
-
-
-class OnboardingRecommendationsRequest(BaseModel):
-    interest_ids: list[str]
-
-
-class OnboardingProfileRequest(BaseModel):
-    interest_ids: list[str]
-    enabled_slugs: list[str] = Field(default_factory=list)
-
-
-def _frontend_recommendations(user_id: int, interests: list[str]) -> list[dict[str, Any]]:
-    """Return source recommendations using the frontend field-name contract (slug, name)."""
-    raw = _source_recommendations(user_id, interests)
-    return [
-        {
-            "slug": item["source_slug"],
-            "name": item["source_name"],
-            "category": item["category"],
-            "kind": item["kind"],
-            "url": item["url"],
-            "matched_interests": item["matched_interests"],
-            "reason": item["reason"],
-            "recommended": item["recommended"],
-            "enabled": 1 if item["subscribed"] else 0,
-            "priority": item["priority"],
-        }
-        for item in raw
-    ]
-
-
-@api.post("/api/onboarding/recommendations")
-def onboarding_recommendations(
-    payload: OnboardingRecommendationsRequest,
-    current_user: Annotated[dict[str, Any], Depends(require_auth)],
-) -> list[dict[str, Any]]:
-    uid = int(current_user["id"])
-    init_db()
-    return _frontend_recommendations(uid, payload.interest_ids)
-
-
-@api.post("/api/onboarding/profile")
-def save_onboarding_profile(
-    payload: OnboardingProfileRequest,
-    current_user: Annotated[dict[str, Any], Depends(require_auth)],
-) -> dict[str, Any]:
-    from news_dashboard.ingest import sync_sources
-
-    valid_interests = _interest_options()
-    interests = list(dict.fromkeys(payload.interest_ids))
-    invalid = [i for i in interests if i not in valid_interests]
-    if invalid:
-        raise HTTPException(status_code=400, detail=f"unknown interests: {', '.join(invalid)}")
-
-    uid = int(current_user["id"])
-    enabled_slugs = list(dict.fromkeys(payload.enabled_slugs))
-    sync_sources()
-    with connect() as conn:
-        if enabled_slugs:
-            rows = conn.execute(
-                "SELECT slug FROM sources WHERE owner_user_id IS NULL AND slug = ANY(%s)",
-                (enabled_slugs,),
-            ).fetchall()
-            allowed = {str(row["slug"]) for row in rows}
-            missing = [slug for slug in enabled_slugs if slug not in allowed]
-            if missing:
-                raise HTTPException(
-                    status_code=404, detail=f"unknown global sources: {', '.join(missing)}"
-                )
-
-        conn.execute(
-            """
-            INSERT INTO user_interest_profiles(user_id, interests, completed_at, updated_at)
-            VALUES (%s, %s, NOW(), NOW())
-            ON CONFLICT(user_id) DO UPDATE SET
-              interests = excluded.interests,
-              completed_at = NOW(),
-              updated_at = NOW()
-            """,
-            (uid, Jsonb(interests)),
-        )
-        for slug in enabled_slugs:
-            conn.execute(
-                """
-                INSERT INTO user_sources(user_id, source_slug, enabled)
-                VALUES (%s, %s, TRUE)
-                ON CONFLICT(user_id, source_slug) DO UPDATE SET enabled = TRUE
-                """,
-                (uid, slug),
-            )
-
-    return {"completed": True}
-
-
-@api.get("/api/onboarding/source-recommendations")
-def onboarding_source_recommendations(
-    current_user: Annotated[dict[str, Any], Depends(require_auth)],
-) -> dict[str, Any]:
-    uid = int(current_user["id"])
-    init_db()
-    with connect() as conn:
-        row = conn.execute(
-            "SELECT interests FROM user_interest_profiles WHERE user_id = %s",
-            (uid,),
-        ).fetchone()
-    interests = list(row["interests"]) if row else []
-    return {"items": _source_recommendations(uid, [str(interest) for interest in interests])}
-
-
-@api.post("/api/onboarding/interests")
-def save_onboarding_interests(
-    payload: OnboardingInterestsRequest,
-    current_user: Annotated[dict[str, Any], Depends(require_auth)],
-) -> dict[str, Any]:
-    from news_dashboard.ingest import sync_sources
-
-    valid_interests = _interest_options()
-    interests = list(dict.fromkeys(payload.interests))
-    invalid = [interest for interest in interests if interest not in valid_interests]
-    if invalid:
-        raise HTTPException(status_code=400, detail=f"unknown interests: {', '.join(invalid)}")
-
-    uid = int(current_user["id"])
-    requested = list(dict.fromkeys(payload.enabled_source_slugs + payload.disabled_source_slugs))
-    sync_sources()
-    with connect() as conn:
-        if requested:
-            rows = conn.execute(
-                "SELECT slug FROM sources WHERE owner_user_id IS NULL AND slug = ANY(%s)",
-                (requested,),
-            ).fetchall()
-            allowed = {str(row["slug"]) for row in rows}
-            missing = [slug for slug in requested if slug not in allowed]
-            if missing:
-                detail = f"unknown global sources: {', '.join(missing)}"
-                raise HTTPException(status_code=404, detail=detail)
-
-        conn.execute(
-            """
-            INSERT INTO user_interest_profiles(user_id, interests, completed_at, updated_at)
-            VALUES (%s, %s, CASE WHEN %s THEN NOW() ELSE NULL END, NOW())
-            ON CONFLICT(user_id) DO UPDATE SET
-              interests = excluded.interests,
-              completed_at = excluded.completed_at,
-              updated_at = NOW()
-            """,
-            (uid, Jsonb(interests), payload.completed),
-        )
-        for slug in payload.enabled_source_slugs:
-            conn.execute(
-                """
-                INSERT INTO user_sources(user_id, source_slug, enabled)
-                VALUES (%s, %s, TRUE)
-                ON CONFLICT(user_id, source_slug) DO UPDATE SET enabled = TRUE
-                """,
-                (uid, slug),
-            )
-        for slug in payload.disabled_source_slugs:
-            conn.execute(
-                """
-                INSERT INTO user_sources(user_id, source_slug, enabled)
-                VALUES (%s, %s, FALSE)
-                ON CONFLICT(user_id, source_slug) DO UPDATE SET enabled = FALSE
-                """,
-                (uid, slug),
-            )
-
-    return {
-        "interests": interests,
-        "items": _source_recommendations(uid, interests),
-    }
 
 
 @api.get("/api/sources")
@@ -3148,6 +2856,7 @@ from news_dashboard.learn_from_link.router import router as learn_from_link_rout
 from news_dashboard.lesson_recaps.router import router as lesson_recaps_router  # noqa: E402
 from news_dashboard.mcp.router import public_mcp_router  # noqa: E402
 from news_dashboard.mcp.router import router as mcp_router  # noqa: E402
+from news_dashboard.onboarding.router import router as onboarding_router  # noqa: E402
 from news_dashboard.personalization.router import router as personalization_router  # noqa: E402
 from news_dashboard.quizzes.router import router as quizzes_router  # noqa: E402
 from news_dashboard.reading_list.router import router as reading_list_router  # noqa: E402
@@ -3163,6 +2872,7 @@ api.include_router(greader_router)
 api.include_router(learn_from_link_router)
 api.include_router(lesson_recaps_router)
 api.include_router(mcp_router)
+api.include_router(onboarding_router)
 api.include_router(personalization_router)
 api.include_router(quizzes_router)
 api.include_router(reading_list_router)
