@@ -1795,37 +1795,6 @@ def health_details() -> dict[str, Any]:
     }
 
 
-@api.get("/api/recommendations/health", dependencies=_admin_dep)
-def recommendations_health_endpoint() -> dict[str, Any]:
-    from news_dashboard.recommendation_jobs import recommendation_health
-
-    return recommendation_health()
-
-
-@api.post("/api/recommendations/recalculate", dependencies=_admin_dep)
-def recommendations_recalculate_endpoint() -> dict[str, Any]:
-    from news_dashboard.recommendation_jobs import recalculate_stale_recommendations
-
-    return recalculate_stale_recommendations().as_dict()
-
-
-@api.post("/api/recommendations/recalculate-mine")
-def recommendations_recalculate_mine_endpoint(
-    current_user: Annotated[dict[str, Any], Depends(require_auth)],
-) -> dict[str, int]:
-    """Recompute the calling user's own recommendation scores on demand.
-
-    Lets any authenticated user personalize their feed from the UI without the
-    admin-only stale sweep above. Returns the number of articles scored so the
-    client can tell the user whether personalization has anything to learn from
-    yet (zero means no interaction history exists).
-    """
-    from news_dashboard.recommendations import recompute_user_recommendations
-
-    scored = recompute_user_recommendations(current_user["id"])
-    return {"scored": scored}
-
-
 @api.get("/api/stats/overview", dependencies=_admin_dep)
 def stats_overview_endpoint(
     from_: Annotated[str, Query(alias="from")],
@@ -2862,6 +2831,7 @@ from news_dashboard.quizzes.router import router as quizzes_router  # noqa: E402
 from news_dashboard.reading_list.router import router as reading_list_router  # noqa: E402
 from news_dashboard.reading_progress.router import router as reading_progress_router  # noqa: E402
 from news_dashboard.recaps.router import router as recaps_router  # noqa: E402
+from news_dashboard.recommendations_routes.router import router as recs_router  # noqa: E402
 from news_dashboard.saved_searches.router import router as saved_searches_router  # noqa: E402
 from news_dashboard.system.router import router as system_router  # noqa: E402
 
@@ -2878,6 +2848,7 @@ api.include_router(quizzes_router)
 api.include_router(reading_list_router)
 api.include_router(reading_progress_router)
 api.include_router(recaps_router)
+api.include_router(recs_router)
 api.include_router(saved_searches_router)
 
 app.include_router(public_router)
