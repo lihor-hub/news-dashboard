@@ -3,6 +3,9 @@
 All notable changes to this project will be documented in this file.
 This project adheres to [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.140.2] — 2026-07-10
+- Regenerating content now fully clears out any previous versions — you'll always see the fresh result, not leftover clutter from before.
+
 ## [1.122.9] — 2026-07-06
 - Fixed a bug that could allow oversized files when importing your Reading List.
 
