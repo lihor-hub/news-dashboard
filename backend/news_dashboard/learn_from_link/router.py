@@ -105,6 +105,28 @@ def get_lesson_podcast_endpoint(
     return FileResponse(path, media_type="audio/mpeg", filename=f"lesson-{lesson_id}-podcast.mp3")
 
 
+@router.post("/api/learn/lessons/{lesson_id}/slides")
+def generate_lesson_slide_deck_endpoint(
+    lesson_id: int,
+    current_user: Annotated[dict[str, Any], Depends(require_auth)],
+    force: Annotated[bool, Query()] = False,
+) -> dict[str, Any]:
+    try:
+        return service.generate_lesson_slide_deck(lesson_id, current_user["id"], force=force)
+    except service.LessonNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="lesson not found") from exc
+    except service.LessonNotReadyError as exc:
+        raise HTTPException(
+            status_code=409, detail="lesson must finish generating before creating a slide deck"
+        ) from exc
+    except service.LessonSlideDeckNotConfiguredError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except service.LessonSlideDeckGenerationError as exc:
+        raise HTTPException(status_code=500, detail="Could not generate slide deck.") from exc
+
+
 @router.post("/api/learn/lessons/{lesson_id}/regenerate")
 def regenerate_lesson_endpoint(
     lesson_id: int,

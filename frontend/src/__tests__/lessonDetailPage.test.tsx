@@ -31,6 +31,9 @@ const COMPLETE_LESSON: Lesson = {
   persona: 'developer',
   podcast_status: null,
   podcast_error: null,
+  slide_deck: null,
+  slide_deck_status: null,
+  slide_deck_error: null,
   lesson_detail: {
     gist: 'gist text',
     explanation: 'explanation text',
@@ -188,6 +191,87 @@ describe('LessonDetailPage', () => {
 
     await waitFor(() => {
       expect(api.generateLessonPodcast).toHaveBeenCalledWith(5, true);
+    });
+  });
+
+  const SLIDE_DECK = {
+    slides: Array.from({ length: 6 }, (_, i) => ({
+      title: `Slide ${i + 1}`,
+      bullets: [`Bullet ${i + 1}.1`, `Bullet ${i + 1}.2`],
+    })),
+  };
+
+  it('shows a create-slide-deck button, then the slides once generation succeeds', async () => {
+    vi.spyOn(api, 'fetchLesson').mockResolvedValue(COMPLETE_LESSON);
+    vi.spyOn(api, 'generateLessonSlideDeck').mockResolvedValue({
+      ...COMPLETE_LESSON,
+      slide_deck: SLIDE_DECK,
+      slide_deck_status: 'complete',
+    });
+
+    renderPage(5);
+    await screen.findByText('A careful article');
+
+    const createButton = screen.getByRole('button', { name: 'Create slide deck' });
+    expect(createButton).toBeInTheDocument();
+
+    await userEvent.click(createButton);
+
+    await waitFor(() => {
+      expect(api.generateLessonSlideDeck).toHaveBeenCalledWith(5, false);
+    });
+    expect(await screen.findByRole('button', { name: 'Regenerate' })).toBeInTheDocument();
+    expect(screen.getByText('Slide 1')).toBeInTheDocument();
+    expect(screen.getByText('Bullet 1.1')).toBeInTheDocument();
+  });
+
+  it('shows a friendly error and keeps the create button when slide deck generation fails', async () => {
+    vi.spyOn(api, 'fetchLesson').mockResolvedValue(COMPLETE_LESSON);
+    vi.spyOn(api, 'generateLessonSlideDeck').mockRejectedValue(
+      new api.HttpError(503, 'AI not configured')
+    );
+
+    renderPage(5);
+    await screen.findByText('A careful article');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Create slide deck' }));
+
+    expect(await screen.findByText('AI not configured')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Create slide deck' })).toBeInTheDocument();
+  });
+
+  it('shows the failed-slide-deck banner from persisted lesson state', async () => {
+    vi.spyOn(api, 'fetchLesson').mockResolvedValue({
+      ...COMPLETE_LESSON,
+      slide_deck_status: 'failed',
+      slide_deck_error: 'Could not generate slide deck.',
+    });
+
+    renderPage(5);
+
+    expect(await screen.findByText('Could not generate slide deck.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Regenerate' })).toBeInTheDocument();
+  });
+
+  it('forces regeneration when clicking regenerate on an existing slide deck', async () => {
+    vi.spyOn(api, 'fetchLesson').mockResolvedValue({
+      ...COMPLETE_LESSON,
+      slide_deck: SLIDE_DECK,
+      slide_deck_status: 'complete',
+    });
+    vi.spyOn(api, 'generateLessonSlideDeck').mockResolvedValue({
+      ...COMPLETE_LESSON,
+      slide_deck: SLIDE_DECK,
+      slide_deck_status: 'complete',
+    });
+
+    renderPage(5);
+    await screen.findByText('A careful article');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Regenerate' }));
+
+    await waitFor(() => {
+      expect(api.generateLessonSlideDeck).toHaveBeenCalledWith(5, true);
     });
   });
 });

@@ -183,6 +183,13 @@
       "create": "สร้างพอดแคสต์",
       "generating": "กำลังสร้าง...",
       "regenerate": "สร้างใหม่"
+    },
+    "slideDeck": {
+      "title": "สไลด์",
+      "create": "สร้างสไลด์",
+      "generating": "กำลังสร้าง...",
+      "regenerate": "สร้างใหม่",
+      "slideLabel": "สไลด์ {{number}}"
     }
   }
 }

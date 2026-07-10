@@ -49,6 +49,15 @@ export interface StudyArtifacts {
   quiz: QuizQuestion[];
 }
 
+export interface Slide {
+  title: string;
+  bullets: string[];
+}
+
+export interface SlideDeck {
+  slides: Slide[];
+}
+
 export interface Lesson {
   id: number;
   user_id: number;
@@ -67,6 +76,9 @@ export interface Lesson {
   persona: LessonPersona;
   podcast_status: 'complete' | 'failed' | null;
   podcast_error: string | null;
+  slide_deck: SlideDeck | null;
+  slide_deck_status: 'complete' | 'failed' | null;
+  slide_deck_error: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -114,6 +126,12 @@ export async function fetchLessonGenerations(id: number): Promise<LessonGenerati
 
 export async function generateLessonPodcast(id: number, force = false): Promise<Lesson> {
   return requestJson<Lesson>(`/api/learn/lessons/${id}/podcast${force ? '?force=true' : ''}`, {
+    method: 'POST',
+  });
+}
+
+export async function generateLessonSlideDeck(id: number, force = false): Promise<Lesson> {
+  return requestJson<Lesson>(`/api/learn/lessons/${id}/slides${force ? '?force=true' : ''}`, {
     method: 'POST',
   });
 }

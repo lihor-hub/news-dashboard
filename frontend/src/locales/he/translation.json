@@ -183,6 +183,13 @@
       "create": "צור פודקאסט",
       "generating": "יוצר...",
       "regenerate": "צור מחדש"
+    },
+    "slideDeck": {
+      "title": "מצגת שקופיות",
+      "create": "צור מצגת שקופיות",
+      "generating": "מייצר...",
+      "regenerate": "צור מחדש",
+      "slideLabel": "שקופית {{number}}"
     }
   }
 }

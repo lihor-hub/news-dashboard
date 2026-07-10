@@ -183,6 +183,13 @@
       "create": "Buat podcast",
       "generating": "Membuat...",
       "regenerate": "Buat ulang"
+    },
+    "slideDeck": {
+      "title": "Deck slide",
+      "create": "Buat deck slide",
+      "generating": "Membuat...",
+      "regenerate": "Buat ulang",
+      "slideLabel": "Slide {{number}}"
     }
   }
 }

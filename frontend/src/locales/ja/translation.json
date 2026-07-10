@@ -183,6 +183,13 @@
       "create": "ポッドキャストを作成",
       "generating": "生成中...",
       "regenerate": "再生成"
+    },
+    "slideDeck": {
+      "title": "スライドデッキ",
+      "create": "スライドデッキを作成",
+      "generating": "生成中...",
+      "regenerate": "再生成",
+      "slideLabel": "スライド {{number}}"
     }
   }
 }

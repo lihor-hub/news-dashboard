@@ -183,6 +183,13 @@
       "create": "Podcast erstellen",
       "generating": "Wird erstellt...",
       "regenerate": "Erneut generieren"
+    },
+    "slideDeck": {
+      "title": "Foliensatz",
+      "create": "Foliensatz erstellen",
+      "generating": "Wird erstellt...",
+      "regenerate": "Erneut generieren",
+      "slideLabel": "Folie {{number}}"
     }
   }
 }

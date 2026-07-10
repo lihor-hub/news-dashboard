@@ -116,6 +116,19 @@ class PersonalRelevance(BaseModel):
     signals: list[NonEmptyText] = Field(default_factory=list)
 
 
+class Slide(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    title: NonEmptyText
+    bullets: list[NonEmptyText] = Field(min_length=1, max_length=6)
+
+
+class SlideDeck(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    slides: list[Slide] = Field(min_length=6, max_length=10)
+
+
 class RelevanceFeedbackRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

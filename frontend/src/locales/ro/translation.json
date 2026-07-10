@@ -183,6 +183,13 @@
       "create": "Creează podcast",
       "generating": "Se generează...",
       "regenerate": "Regenerează"
+    },
+    "slideDeck": {
+      "title": "Prezentare slide-uri",
+      "create": "Creează prezentare",
+      "generating": "Se generează...",
+      "regenerate": "Regenerează",
+      "slideLabel": "Diapozitiv {{number}}"
     }
   }
 }

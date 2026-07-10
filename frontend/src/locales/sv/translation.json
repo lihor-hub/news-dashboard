@@ -183,6 +183,13 @@
       "create": "Skapa podcast",
       "generating": "Genererar...",
       "regenerate": "Återskapa"
+    },
+    "slideDeck": {
+      "title": "Bildspel",
+      "create": "Skapa bildspel",
+      "generating": "Genererar...",
+      "regenerate": "Återskapa",
+      "slideLabel": "Bild {{number}}"
     }
   }
 }

@@ -183,6 +183,13 @@
       "create": "Opprett podkast",
       "generating": "Genererer...",
       "regenerate": "Regenerer"
+    },
+    "slideDeck": {
+      "title": "Lysbildefremvisning",
+      "create": "Opprett lysbildefremvisning",
+      "generating": "Genererer...",
+      "regenerate": "Regenerer",
+      "slideLabel": "Lysbilde {{number}}"
     }
   }
 }

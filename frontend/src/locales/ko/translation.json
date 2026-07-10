@@ -183,6 +183,13 @@
       "create": "팟캐스트 만들기",
       "generating": "생성 중...",
       "regenerate": "다시 생성"
+    },
+    "slideDeck": {
+      "title": "슬라이드 덱",
+      "create": "슬라이드 덱 만들기",
+      "generating": "생성 중...",
+      "regenerate": "다시 생성",
+      "slideLabel": "슬라이드 {{number}}"
     }
   }
 }

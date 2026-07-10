@@ -18,6 +18,7 @@ from news_dashboard.learn_from_link.models import (
     LessonDetail,
     LessonPersona,
     PersonalRelevance,
+    SlideDeck,
     StudyArtifacts,
 )
 from news_dashboard.reading_list.metadata import fetch_url_metadata
@@ -92,6 +93,18 @@ class LessonPodcastNotConfiguredError(RuntimeError):
 
 class LessonPodcastGenerationError(RuntimeError):
     """Raised when lesson podcast audio synthesis fails for a reason other than missing config."""
+
+
+class LessonSlideDeckNotConfiguredError(RuntimeError):
+    """Raised when no AI credentials are configured for lesson slide deck generation."""
+
+
+class LessonSlideDeckGenerationError(RuntimeError):
+    """Raised when lesson slide deck generation fails for a reason other than missing config."""
+
+
+class SlideDeckValidationError(ValueError):
+    """Raised when generated slide deck content fails schema validation."""
 
 
 class LessonDetailValidationError(ValueError):
@@ -377,6 +390,174 @@ def generate_lesson_podcast(
         raise LessonPodcastGenerationError from exc
 
     return _update_lesson_podcast_success(lesson_id, user_id, database_url=database_url)
+
+
+def _update_lesson_slide_deck_success(
+    lesson_id: int,
+    user_id: int,
+    *,
+    slide_deck: dict[str, Any],
+    database_url: str | None = None,
+) -> dict[str, Any]:
+    init_db(database_url=database_url)
+    with connect(database_url=database_url) as conn:
+        row = conn.execute(
+            """
+            UPDATE lessons
+            SET slide_deck = %s::jsonb,
+                slide_deck_status = 'complete',
+                slide_deck_error = NULL,
+                updated_at = NOW()
+            WHERE id = %s AND user_id = %s
+            RETURNING *
+            """,
+            (Jsonb(slide_deck), lesson_id, user_id),
+        ).fetchone()
+    if row is None:
+        raise LessonNotFoundError
+    return _serialize_lesson(row)
+
+
+def _update_lesson_slide_deck_failure(
+    lesson_id: int,
+    user_id: int,
+    error_message: str,
+    *,
+    database_url: str | None = None,
+) -> dict[str, Any]:
+    init_db(database_url=database_url)
+    with connect(database_url=database_url) as conn:
+        row = conn.execute(
+            """
+            UPDATE lessons
+            SET slide_deck_status = 'failed',
+                slide_deck_error = %s,
+                updated_at = NOW()
+            WHERE id = %s AND user_id = %s
+            RETURNING *
+            """,
+            (error_message, lesson_id, user_id),
+        ).fetchone()
+    if row is None:
+        raise LessonNotFoundError
+    return _serialize_lesson(row)
+
+
+_LESSON_SLIDE_DECK_SYSTEM_PROMPT = """\
+You are the Lesson Slide Deck Generator. Produce a short teaching slide deck \
+summarizing the lesson below as a shareable learning artifact. Return JSON \
+with a "slides" array of 6 to 10 slides, each with a "title" and 1-6 \
+"bullets". Ground every slide in the supplied lesson detail; do not invent \
+facts.
+"""
+
+
+def _build_slide_deck_prompt(lesson: dict[str, Any]) -> str:
+    detail = lesson.get("lesson_detail") or {}
+    lines = [
+        f"Title: {lesson.get('title') or lesson.get('original_url')}",
+        f"Gist: {detail.get('gist', '')}",
+        f"Explanation: {detail.get('explanation', '')}",
+        f"Why it matters: {detail.get('why_it_matters', '')}",
+    ]
+    key_claims = detail.get("key_claims") or []
+    if key_claims:
+        lines.append("Key claims:\n" + "\n".join(f"- {claim}" for claim in key_claims))
+    concepts = detail.get("prerequisite_concepts") or []
+    if concepts:
+        lines.append("Concepts:\n" + "\n".join(f"- {concept}" for concept in concepts))
+    citations = detail.get("citations") or []
+    if citations:
+        evidence = "\n".join(
+            f"- {citation.get('label', '')}: {citation.get('snippet', '')}"
+            for citation in citations
+        )
+        lines.append("Evidence:\n" + evidence)
+    return "\n".join(lines)
+
+
+def validate_slide_deck(raw_deck: Any) -> dict[str, Any]:
+    try:
+        deck = SlideDeck.model_validate(raw_deck)
+    except ValidationError as exc:
+        raise SlideDeckValidationError from exc
+    return deck.model_dump(mode="json")
+
+
+def generate_slide_deck_content(lesson: dict[str, Any], user_id: int) -> dict[str, Any]:
+    api_key, base_url = _lesson_chat_ai_config()
+
+    import json
+
+    from news_dashboard.ai_client import chat_create, get_chat_client
+
+    client = get_chat_client(api_key=api_key, base_url=base_url)
+    messages = [
+        {"role": "system", "content": _LESSON_SLIDE_DECK_SYSTEM_PROMPT},
+        {"role": "user", "content": _build_slide_deck_prompt(lesson)},
+    ]
+    response = chat_create(
+        client,
+        name="lesson-slide-deck",
+        tags=["lesson", "slide-deck"],
+        user_id=user_id,
+        model=os.getenv("OPENAI_LESSON_CHAT_MODEL", DEFAULT_LESSON_CHAT_MODEL),
+        messages=messages,
+        response_format={"type": "json_object"},
+    )
+    parsed = json.loads(response.choices[0].message.content or "")
+    return validate_slide_deck(parsed)
+
+
+def generate_lesson_slide_deck(
+    lesson_id: int,
+    user_id: int,
+    *,
+    force: bool = False,
+    database_url: str | None = None,
+) -> dict[str, Any]:
+    """Generate (or return cached) a teaching slide deck for a completed lesson.
+
+    Slides are built from the lesson's structured ``lesson_detail`` fields so
+    they stay consistent with what's shown on the lesson page, rather than
+    re-summarizing the raw source article independently.
+    """
+    lesson = get_lesson(lesson_id, user_id, database_url=database_url)
+    if lesson is None:
+        raise LessonNotFoundError
+    if lesson.get("generation_status") != "complete" or lesson.get("lesson_detail") is None:
+        raise LessonNotReadyError
+
+    if not force and lesson.get("slide_deck_status") == "complete" and lesson.get("slide_deck"):
+        return lesson
+
+    try:
+        deck = generate_slide_deck_content(lesson, user_id)
+    except LessonChatNotConfiguredError as exc:
+        _update_lesson_slide_deck_failure(lesson_id, user_id, str(exc), database_url=database_url)
+        raise LessonSlideDeckNotConfiguredError(str(exc)) from exc
+    except SlideDeckValidationError as exc:
+        logger.warning("lesson slide deck validation failed for lesson %d", lesson_id)
+        _update_lesson_slide_deck_failure(
+            lesson_id,
+            user_id,
+            "Generated slide deck was malformed.",
+            database_url=database_url,
+        )
+        raise LessonSlideDeckGenerationError from exc
+    except Exception as exc:
+        logger.warning("lesson slide deck generation failed for lesson %d: %s", lesson_id, exc)
+        _update_lesson_slide_deck_failure(
+            lesson_id,
+            user_id,
+            "Could not generate slide deck.",
+            database_url=database_url,
+        )
+        raise LessonSlideDeckGenerationError from exc
+
+    return _update_lesson_slide_deck_success(
+        lesson_id, user_id, slide_deck=deck, database_url=database_url
+    )
 
 
 def _record_lesson_generation(

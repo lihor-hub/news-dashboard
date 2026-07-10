@@ -183,6 +183,13 @@
       "create": "إنشاء بودكاست",
       "generating": "جارٍ الإنشاء...",
       "regenerate": "إعادة الإنشاء"
+    },
+    "slideDeck": {
+      "title": "عرض الشرائح",
+      "create": "إنشاء عرض شرائح",
+      "generating": "جارٍ الإنشاء...",
+      "regenerate": "إعادة الإنشاء",
+      "slideLabel": "الشريحة {{number}}"
     }
   }
 }
