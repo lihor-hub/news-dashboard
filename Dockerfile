@@ -3,6 +3,7 @@ WORKDIR /app
 COPY package.json package-lock.json* ./
 RUN npm ci
 COPY index.html tsconfig.json vite.config.ts ./
+COPY scripts/check-bundle-budget.mjs ./scripts/
 COPY public ./public
 COPY frontend ./frontend
 RUN npm run build
