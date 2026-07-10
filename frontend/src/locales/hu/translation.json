@@ -177,6 +177,12 @@
       "dismiss": "Dismiss",
       "save": "Save",
       "generate": "Generate lesson"
+    },
+    "podcast": {
+      "title": "Podcast hang",
+      "create": "Podcast létrehozása",
+      "generating": "Létrehozás...",
+      "regenerate": "Újragenerálás"
     }
   }
 }

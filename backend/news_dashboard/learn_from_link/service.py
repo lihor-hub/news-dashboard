@@ -82,6 +82,18 @@ class LessonChatNotConfiguredError(RuntimeError):
     """Raised when no AI credentials are configured for lesson follow-up chat."""
 
 
+class LessonNotReadyError(ValueError):
+    """Raised when podcast audio is requested before the lesson finished generating."""
+
+
+class LessonPodcastNotConfiguredError(RuntimeError):
+    """Raised when no TTS credentials are configured for lesson podcast audio."""
+
+
+class LessonPodcastGenerationError(RuntimeError):
+    """Raised when lesson podcast audio synthesis fails for a reason other than missing config."""
+
+
 class LessonDetailValidationError(ValueError):
     """Raised when generated lesson detail fails schema validation."""
 
@@ -269,6 +281,102 @@ def _update_lesson_failure(
             (error_message, lesson_id, user_id),
         ).fetchone()
     return _serialize_lesson(row)
+
+
+def _update_lesson_podcast_success(
+    lesson_id: int,
+    user_id: int,
+    *,
+    database_url: str | None = None,
+) -> dict[str, Any]:
+    init_db(database_url=database_url)
+    with connect(database_url=database_url) as conn:
+        row = conn.execute(
+            """
+            UPDATE lessons
+            SET podcast_status = 'complete',
+                podcast_error = NULL,
+                updated_at = NOW()
+            WHERE id = %s AND user_id = %s
+            RETURNING *
+            """,
+            (lesson_id, user_id),
+        ).fetchone()
+    if row is None:
+        raise LessonNotFoundError
+    return _serialize_lesson(row)
+
+
+def _update_lesson_podcast_failure(
+    lesson_id: int,
+    user_id: int,
+    error_message: str,
+    *,
+    database_url: str | None = None,
+) -> dict[str, Any]:
+    init_db(database_url=database_url)
+    with connect(database_url=database_url) as conn:
+        row = conn.execute(
+            """
+            UPDATE lessons
+            SET podcast_status = 'failed',
+                podcast_error = %s,
+                updated_at = NOW()
+            WHERE id = %s AND user_id = %s
+            RETURNING *
+            """,
+            (error_message, lesson_id, user_id),
+        ).fetchone()
+    if row is None:
+        raise LessonNotFoundError
+    return _serialize_lesson(row)
+
+
+def generate_lesson_podcast(
+    lesson_id: int,
+    user_id: int,
+    *,
+    force: bool = False,
+    database_url: str | None = None,
+) -> dict[str, Any]:
+    """Generate (or return cached) spoken narration audio for a completed lesson.
+
+    Narration is built from the lesson's structured ``lesson_detail`` fields so
+    it stays consistent with what's shown on the lesson page, rather than
+    re-summarizing the raw source article independently.
+    """
+    lesson = get_lesson(lesson_id, user_id, database_url=database_url)
+    if lesson is None:
+        raise LessonNotFoundError
+    if lesson.get("generation_status") != "complete" or lesson.get("lesson_detail") is None:
+        raise LessonNotReadyError
+
+    from news_dashboard.tts import TTSNotConfiguredError, generate_lesson_podcast_audio
+
+    title = str(lesson.get("title") or lesson["original_url"])
+    try:
+        generate_lesson_podcast_audio(
+            lesson_id,
+            title,
+            lesson["lesson_detail"],
+            force=force,
+        )
+    except TTSNotConfiguredError as exc:
+        _update_lesson_podcast_failure(lesson_id, user_id, str(exc), database_url=database_url)
+        raise LessonPodcastNotConfiguredError(str(exc)) from exc
+    except ValueError:
+        raise
+    except Exception as exc:
+        logger.warning("lesson podcast audio generation failed for lesson %d: %s", lesson_id, exc)
+        _update_lesson_podcast_failure(
+            lesson_id,
+            user_id,
+            "Could not generate podcast audio.",
+            database_url=database_url,
+        )
+        raise LessonPodcastGenerationError from exc
+
+    return _update_lesson_podcast_success(lesson_id, user_id, database_url=database_url)
 
 
 def _record_lesson_generation(

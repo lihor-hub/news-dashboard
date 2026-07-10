@@ -177,6 +177,12 @@
       "dismiss": "Dismiss",
       "save": "Save",
       "generate": "Generate lesson"
+    },
+    "podcast": {
+      "title": "Ήχος podcast",
+      "create": "Δημιουργία podcast",
+      "generating": "Δημιουργία...",
+      "regenerate": "Αναδημιουργία"
     }
   }
 }

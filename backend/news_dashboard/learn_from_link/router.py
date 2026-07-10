@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Annotated, Any
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
+from fastapi.responses import FileResponse
 
 from news_dashboard.auth import require_auth
 from news_dashboard.learn_from_link import service
@@ -63,6 +64,45 @@ def get_lesson_endpoint(
     if lesson is None:
         raise HTTPException(status_code=404, detail="lesson not found")
     return lesson
+
+
+@router.post("/api/learn/lessons/{lesson_id}/podcast")
+def generate_lesson_podcast_endpoint(
+    lesson_id: int,
+    current_user: Annotated[dict[str, Any], Depends(require_auth)],
+    force: Annotated[bool, Query()] = False,
+) -> dict[str, Any]:
+    try:
+        return service.generate_lesson_podcast(lesson_id, current_user["id"], force=force)
+    except service.LessonNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="lesson not found") from exc
+    except service.LessonNotReadyError as exc:
+        raise HTTPException(
+            status_code=409, detail="lesson must finish generating before creating audio"
+        ) from exc
+    except service.LessonPodcastNotConfiguredError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except service.LessonPodcastGenerationError as exc:
+        raise HTTPException(status_code=500, detail="Could not generate podcast audio.") from exc
+
+
+@router.get("/api/learn/lessons/{lesson_id}/podcast")
+def get_lesson_podcast_endpoint(
+    lesson_id: int,
+    current_user: Annotated[dict[str, Any], Depends(require_auth)],
+) -> FileResponse:
+    from news_dashboard.tts import _lesson_podcast_audio_path
+
+    lesson = service.get_lesson(lesson_id, current_user["id"])
+    if lesson is None:
+        raise HTTPException(status_code=404, detail="lesson not found")
+
+    path = _lesson_podcast_audio_path(lesson_id)
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="podcast audio not generated")
+    return FileResponse(path, media_type="audio/mpeg", filename=f"lesson-{lesson_id}-podcast.mp3")
 
 
 @router.post("/api/learn/lessons/{lesson_id}/regenerate")

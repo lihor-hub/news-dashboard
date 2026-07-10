@@ -661,6 +661,9 @@ POSTGRES_MULTIUSER_SCHEMA = [
     " CHECK(depth IN ('tiny','normal','deep','expert'))",
     "ALTER TABLE lessons ADD COLUMN IF NOT EXISTS persona TEXT NOT NULL DEFAULT 'developer'"
     " CHECK(persona IN ('developer','product_builder','new_to_ai','preparing_talk'))",
+    "ALTER TABLE lessons ADD COLUMN IF NOT EXISTS podcast_status TEXT"
+    " CHECK(podcast_status IN ('complete','failed'))",
+    "ALTER TABLE lessons ADD COLUMN IF NOT EXISTS podcast_error TEXT",
     """
     CREATE TABLE IF NOT EXISTS lesson_generations (
       id BIGSERIAL PRIMARY KEY,

@@ -177,6 +177,12 @@
       "dismiss": "Dismiss",
       "save": "Save",
       "generate": "Generate lesson"
+    },
+    "podcast": {
+      "title": "Âm thanh podcast",
+      "create": "Tạo podcast",
+      "generating": "Đang tạo...",
+      "regenerate": "Tạo lại"
     }
   }
 }

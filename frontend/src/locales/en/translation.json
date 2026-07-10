@@ -177,6 +177,12 @@
       "dismiss": "Dismiss",
       "save": "Save",
       "generate": "Generate lesson"
+    },
+    "podcast": {
+      "title": "Podcast audio",
+      "create": "Create podcast",
+      "generating": "Generating...",
+      "regenerate": "Regenerate"
     }
   }
 }

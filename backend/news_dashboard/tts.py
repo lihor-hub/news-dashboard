@@ -186,6 +186,74 @@ def generate_podcast_audio(
     return path
 
 
+def _lesson_podcast_audio_path(lesson_id: int, data_dir: Path | None = None) -> Path:
+    base = data_dir if data_dir is not None else _data_dir()
+    # int() coerces lesson_id to a plain digit string, so it cannot carry
+    # path-traversal or separator characters into the constructed path.
+    return base / "audio" / f"lesson-podcast-{int(lesson_id)}.mp3"
+
+
+def _build_lesson_podcast_text(title: str, lesson_detail: dict[str, Any]) -> str:
+    gist = str(lesson_detail.get("gist") or "")
+    explanation = str(lesson_detail.get("explanation") or "")
+    why_it_matters = str(lesson_detail.get("why_it_matters") or "")
+    key_claims = [str(claim) for claim in lesson_detail.get("key_claims") or []]
+
+    parts = [title, gist, explanation]
+    if key_claims:
+        parts.append("Key takeaways: " + " ".join(key_claims))
+    if why_it_matters:
+        parts.append(f"Why it matters: {why_it_matters}")
+    return "\n\n".join(part for part in parts if part.strip())
+
+
+def generate_lesson_podcast_audio(
+    lesson_id: int,
+    title: str,
+    lesson_detail: dict[str, Any],
+    *,
+    force: bool = False,
+    data_dir: Path | None = None,
+) -> Path:
+    """Return path to cached lesson podcast MP3, generating it via OpenAI TTS if needed.
+
+    Narration is built from the lesson's structured ``lesson_detail`` fields
+    (gist, explanation, key claims, why it matters) so the audio stays
+    consistent with what's shown on the lesson page, rather than
+    re-summarizing the raw source article independently.
+
+    Raises TTSNotConfiguredError when OPENAI_API_KEY is absent.
+    """
+    api_key, base_url = _tts_ai_config()
+
+    path = _lesson_podcast_audio_path(lesson_id, data_dir)
+    if force and path.exists():
+        path.unlink()
+    if path.exists():
+        logger.debug("Lesson podcast cache hit for lesson %d", lesson_id)
+        return path
+
+    text = _build_lesson_podcast_text(title, lesson_detail)
+    if not text.strip():
+        msg = "lesson has no readable detail to narrate"
+        raise ValueError(msg)
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    from news_dashboard.ai_client import get_openai_client, tts_timeout_seconds
+
+    client = get_openai_client(
+        api_key=api_key, base_url=base_url, timeout_seconds=tts_timeout_seconds()
+    )
+    logger.info("Generating lesson podcast audio for lesson %d (%d chars)", lesson_id, len(text))
+    with client.audio.speech.with_streaming_response.create(
+        model=_PODCAST_MODEL, voice=_ALEX_VOICE, input=text[:_MAX_CHARS]
+    ) as response:
+        response.stream_to_file(path)
+    logger.info("Lesson podcast audio cached at %s", path)
+    return path
+
+
 _PODCAST_SYSTEM_PROMPT = (
     "You are a podcast script writer. Given a news briefing containing a title, summary, "
     "and several sections, rewrite the content into a natural, conversational dialogue script "

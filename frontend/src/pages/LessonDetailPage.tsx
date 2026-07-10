@@ -54,7 +54,7 @@ export function LessonDetailPage() {
           <Loader2 className="size-6 animate-spin text-muted-foreground" />
         </div>
       ) : lesson ? (
-        <LessonDetailView lesson={lesson} />
+        <LessonDetailView lesson={lesson} onLessonUpdate={setLesson} />
       ) : (
         <div className="flex items-start gap-3 rounded-lg border border-destructive/30 bg-destructive/5 p-4">
           <AlertCircle className="mt-0.5 size-4 shrink-0 text-destructive" />
