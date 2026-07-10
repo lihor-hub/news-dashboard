@@ -177,6 +177,12 @@
       "dismiss": "Dismiss",
       "save": "Save",
       "generate": "Generate lesson"
+    },
+    "podcast": {
+      "title": "صوت البودكاست",
+      "create": "إنشاء بودكاست",
+      "generating": "جارٍ الإنشاء...",
+      "regenerate": "إعادة الإنشاء"
     }
   }
 }

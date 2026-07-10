@@ -49,6 +49,8 @@ const GENERATED_LESSON: Lesson = {
   generation_error: null,
   depth: 'normal',
   persona: 'developer',
+  podcast_status: null,
+  podcast_error: null,
   lesson_detail: null,
   study_artifacts: null,
   created_at: '2026-07-08T10:00:00Z',

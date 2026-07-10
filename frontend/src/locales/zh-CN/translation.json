@@ -177,6 +177,12 @@
       "dismiss": "Dismiss",
       "save": "Save",
       "generate": "Generate lesson"
+    },
+    "podcast": {
+      "title": "播客音频",
+      "create": "创建播客",
+      "generating": "生成中...",
+      "regenerate": "重新生成"
     }
   }
 }

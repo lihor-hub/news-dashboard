@@ -1,10 +1,13 @@
-import { ExternalLink, Loader2 } from 'lucide-react';
+import { useState } from 'react';
+import { AlertCircle, ExternalLink, Headphones, Loader2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { LessonChat } from '@/components/LessonChat';
 import { StudyArtifactsView } from '@/components/StudyArtifactsView';
-import type { Lesson, LessonDetail } from '@/api';
+import { generateLessonPodcast, type Lesson, type LessonDetail } from '@/api';
+import { classifyGenerationError, type FriendlyError } from '@/lib/errorPresentation';
 
 function formatPublishedDate(value: string | null): string | null {
   if (!value) return null;
@@ -51,14 +54,35 @@ function renderBulletList(items: string[]) {
   );
 }
 
-export function LessonDetailView({ lesson }: { lesson: Lesson }) {
+export function LessonDetailView({
+  lesson,
+  onLessonUpdate,
+}: {
+  lesson: Lesson;
+  onLessonUpdate?: (lesson: Lesson) => void;
+}) {
   const { t } = useTranslation();
+  const [isGeneratingPodcast, setIsGeneratingPodcast] = useState(false);
+  const [podcastError, setPodcastError] = useState<FriendlyError | null>(null);
   const publishedLabel = formatPublishedDate(lesson.published_at);
   const isPendingLesson = lesson.generation_status === 'pending';
   const isFailedLesson = lesson.generation_status === 'failed';
   const isCompleteLesson = lesson.generation_status === 'complete';
   const lessonDetail = lesson.lesson_detail ?? null;
   const hasLessonDetail = isCompleteLesson && lessonDetail !== null;
+
+  async function handleGeneratePodcast(force: boolean) {
+    setIsGeneratingPodcast(true);
+    setPodcastError(null);
+    try {
+      const updated = await generateLessonPodcast(lesson.id, force);
+      onLessonUpdate?.(updated);
+    } catch (error: unknown) {
+      setPodcastError(classifyGenerationError(error));
+    } finally {
+      setIsGeneratingPodcast(false);
+    }
+  }
 
   return (
     <section className="space-y-4">
@@ -198,6 +222,56 @@ export function LessonDetailView({ lesson }: { lesson: Lesson }) {
 
       {hasLessonDetail && lesson.study_artifacts ? (
         <StudyArtifactsView artifacts={lesson.study_artifacts} />
+      ) : null}
+
+      {hasLessonDetail ? (
+        <div className="space-y-3 rounded-lg border border-border bg-card/60 p-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <Headphones className="size-4 text-muted-foreground" />
+              <h3 className="text-sm font-semibold text-foreground">
+                {t('learn.podcast.title', 'Podcast audio')}
+              </h3>
+            </div>
+            <Button
+              size="sm"
+              variant={lesson.podcast_status ? 'outline' : 'default'}
+              onClick={() => {
+                void handleGeneratePodcast(lesson.podcast_status !== null);
+              }}
+              disabled={isGeneratingPodcast}
+            >
+              {isGeneratingPodcast
+                ? t('learn.podcast.generating', 'Generating…')
+                : lesson.podcast_status
+                  ? t('learn.podcast.regenerate', 'Regenerate')
+                  : t('learn.podcast.create', 'Create podcast')}
+            </Button>
+          </div>
+
+          {lesson.podcast_status === 'complete' ? (
+            <audio
+              src={`/api/learn/lessons/${lesson.id}/podcast`}
+              controls
+              className="h-9 w-full"
+            />
+          ) : null}
+
+          {podcastError ? (
+            <div className="flex items-start gap-2 rounded-lg border border-destructive/20 bg-destructive/5 p-3 text-xs text-destructive">
+              <AlertCircle className="mt-0.5 size-4 shrink-0" />
+              <div>
+                <div className="font-semibold">{podcastError.title}</div>
+                <div className="mt-0.5">{podcastError.message}</div>
+              </div>
+            </div>
+          ) : lesson.podcast_status === 'failed' && lesson.podcast_error ? (
+            <div className="flex items-start gap-2 rounded-lg border border-destructive/20 bg-destructive/5 p-3 text-xs text-destructive">
+              <AlertCircle className="mt-0.5 size-4 shrink-0" />
+              <div>{lesson.podcast_error}</div>
+            </div>
+          ) : null}
+        </div>
       ) : null}
 
       {hasLessonDetail ? <LessonChat lessonId={lesson.id} /> : null}

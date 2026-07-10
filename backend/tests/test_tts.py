@@ -13,13 +13,23 @@ import pytest
 
 from news_dashboard.tts import (
     TTSNotConfiguredError,
+    _build_lesson_podcast_text,
     _build_text,
+    _lesson_podcast_audio_path,
     _script_ai_config,
     _tts_ai_config,
     generate_audio,
+    generate_lesson_podcast_audio,
     generate_podcast_audio,
     generate_podcast_script,
 )
+
+_LESSON_DETAIL: dict[str, Any] = {
+    "gist": "The gist of the lesson.",
+    "explanation": "A longer explanation of the source article.",
+    "key_claims": ["Claim one.", "Claim two."],
+    "why_it_matters": "It matters because of reasons.",
+}
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────
 
@@ -401,3 +411,127 @@ def test_generate_podcast_script_fallback_uses_alex_onyx() -> None:
     assert len(script) == 1
     assert script[0]["speaker"] == "Alex"
     assert script[0]["voice"] == "onyx"
+
+
+# ── _build_lesson_podcast_text ────────────────────────────────────────────────
+
+
+def test_build_lesson_podcast_text_uses_structured_fields_not_raw_source() -> None:
+    text = _build_lesson_podcast_text("Lesson Title", _LESSON_DETAIL)
+    assert "Lesson Title" in text
+    assert "The gist of the lesson." in text
+    assert "A longer explanation of the source article." in text
+    assert "Claim one." in text
+    assert "Claim two." in text
+    assert "It matters because of reasons." in text
+
+
+def test_build_lesson_podcast_text_skips_missing_key_claims() -> None:
+    detail = {**_LESSON_DETAIL, "key_claims": []}
+    text = _build_lesson_podcast_text("Lesson Title", detail)
+    assert "Key takeaways" not in text
+
+
+# ── generate_lesson_podcast_audio — no API key ────────────────────────────────
+
+
+def test_generate_lesson_podcast_audio_raises_when_no_api_key(tmp_path: Path) -> None:
+    with patch.dict("os.environ", {}, clear=False):
+        import os
+
+        os.environ.pop("OPENAI_API_KEY", None)
+        with pytest.raises(TTSNotConfiguredError):
+            generate_lesson_podcast_audio(1, "Lesson Title", _LESSON_DETAIL, data_dir=tmp_path)
+
+
+# ── generate_lesson_podcast_audio — cache miss (calls API) ───────────────────
+
+
+def test_generate_lesson_podcast_audio_calls_openai_and_writes_file(tmp_path: Path) -> None:
+    mock_response = MagicMock()
+
+    def fake_stream(path: Path) -> None:
+        path.write_bytes(b"fake-mp3-data")
+
+    mock_response.stream_to_file.side_effect = fake_stream
+    mock_response.__enter__ = MagicMock(return_value=mock_response)
+    mock_response.__exit__ = MagicMock(return_value=False)
+
+    mock_client = MagicMock()
+    mock_client.audio.speech.with_streaming_response.create.return_value = mock_response
+
+    with (
+        patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}),
+        patch("openai.OpenAI", return_value=mock_client),
+    ):
+        path = generate_lesson_podcast_audio(7, "Lesson Title", _LESSON_DETAIL, data_dir=tmp_path)
+
+    assert path.exists()
+    assert path.read_bytes() == b"fake-mp3-data"
+    assert path == _lesson_podcast_audio_path(7, tmp_path)
+    call_kwargs = mock_client.audio.speech.with_streaming_response.create.call_args
+    assert call_kwargs.kwargs["model"] == "gpt-4o-mini-tts"
+    assert call_kwargs.kwargs["voice"] == "onyx"
+    assert "The gist of the lesson." in call_kwargs.kwargs["input"]
+
+
+# ── generate_lesson_podcast_audio — cache hit (skips API) ─────────────────────
+
+
+def test_generate_lesson_podcast_audio_returns_cached_file_without_api_call(
+    tmp_path: Path,
+) -> None:
+    audio_dir = tmp_path / "audio"
+    audio_dir.mkdir()
+    cached = audio_dir / "lesson-podcast-7.mp3"
+    cached.write_bytes(b"cached-mp3")
+
+    mock_client = MagicMock()
+
+    with (
+        patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}),
+        patch("openai.OpenAI", return_value=mock_client),
+    ):
+        path = generate_lesson_podcast_audio(7, "Lesson Title", _LESSON_DETAIL, data_dir=tmp_path)
+
+    assert path == cached
+    assert path.read_bytes() == b"cached-mp3"
+    mock_client.audio.speech.with_streaming_response.create.assert_not_called()
+
+
+def test_generate_lesson_podcast_audio_force_regenerates_cached_file(tmp_path: Path) -> None:
+    audio_dir = tmp_path / "audio"
+    audio_dir.mkdir()
+    cached = audio_dir / "lesson-podcast-7.mp3"
+    cached.write_bytes(b"stale-mp3")
+
+    mock_response = MagicMock()
+
+    def fake_stream(path: Path) -> None:
+        path.write_bytes(b"fresh-mp3-data")
+
+    mock_response.stream_to_file.side_effect = fake_stream
+    mock_response.__enter__ = MagicMock(return_value=mock_response)
+    mock_response.__exit__ = MagicMock(return_value=False)
+
+    mock_client = MagicMock()
+    mock_client.audio.speech.with_streaming_response.create.return_value = mock_response
+
+    with (
+        patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}),
+        patch("openai.OpenAI", return_value=mock_client),
+    ):
+        path = generate_lesson_podcast_audio(
+            7, "Lesson Title", _LESSON_DETAIL, force=True, data_dir=tmp_path
+        )
+
+    assert path.read_bytes() == b"fresh-mp3-data"
+    mock_client.audio.speech.with_streaming_response.create.assert_called_once()
+
+
+def test_generate_lesson_podcast_audio_raises_on_empty_detail(tmp_path: Path) -> None:
+    with (
+        patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}),
+        pytest.raises(ValueError, match="no readable detail"),
+    ):
+        generate_lesson_podcast_audio(7, "", {}, data_dir=tmp_path)

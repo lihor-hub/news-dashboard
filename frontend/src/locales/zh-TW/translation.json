@@ -177,6 +177,12 @@
       "dismiss": "Dismiss",
       "save": "Save",
       "generate": "Generate lesson"
+    },
+    "podcast": {
+      "title": "Podcast 音訊",
+      "create": "建立 Podcast",
+      "generating": "產生中...",
+      "regenerate": "重新產生"
     }
   }
 }

@@ -177,6 +177,12 @@
       "dismiss": "Dismiss",
       "save": "Save",
       "generate": "Generate lesson"
+    },
+    "podcast": {
+      "title": "שמע פודקאסט",
+      "create": "צור פודקאסט",
+      "generating": "יוצר...",
+      "regenerate": "צור מחדש"
     }
   }
 }

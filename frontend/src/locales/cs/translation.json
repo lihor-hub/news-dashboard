@@ -177,6 +177,12 @@
       "dismiss": "Dismiss",
       "save": "Save",
       "generate": "Generate lesson"
+    },
+    "podcast": {
+      "title": "Zvuk podcastu",
+      "create": "Vytvořit podcast",
+      "generating": "Generuje se...",
+      "regenerate": "Znovu vygenerovat"
     }
   }
 }

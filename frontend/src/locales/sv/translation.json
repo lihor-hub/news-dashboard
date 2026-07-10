@@ -177,6 +177,12 @@
       "dismiss": "Dismiss",
       "save": "Save",
       "generate": "Generate lesson"
+    },
+    "podcast": {
+      "title": "Podcastljud",
+      "create": "Skapa podcast",
+      "generating": "Genererar...",
+      "regenerate": "Återskapa"
     }
   }
 }

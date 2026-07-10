@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen, act } from '@testing-library/react';
+import { render, screen, act, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { LessonDetailPage } from '../pages/LessonDetailPage';
@@ -28,6 +29,8 @@ const COMPLETE_LESSON: Lesson = {
   generation_error: null,
   depth: 'normal',
   persona: 'developer',
+  podcast_status: null,
+  podcast_error: null,
   lesson_detail: {
     gist: 'gist text',
     explanation: 'explanation text',
@@ -115,5 +118,76 @@ describe('LessonDetailPage', () => {
     });
 
     expect(screen.getByText('A careful article')).toBeInTheDocument();
+  });
+
+  it('shows a create-podcast button, then the player once generation succeeds', async () => {
+    vi.spyOn(api, 'fetchLesson').mockResolvedValue(COMPLETE_LESSON);
+    vi.spyOn(api, 'generateLessonPodcast').mockResolvedValue({
+      ...COMPLETE_LESSON,
+      podcast_status: 'complete',
+    });
+
+    renderPage(5);
+    await screen.findByText('A careful article');
+
+    const createButton = screen.getByRole('button', { name: 'Create podcast' });
+    expect(createButton).toBeInTheDocument();
+
+    await userEvent.click(createButton);
+
+    await waitFor(() => {
+      expect(api.generateLessonPodcast).toHaveBeenCalledWith(5, false);
+    });
+    expect(await screen.findByRole('button', { name: 'Regenerate' })).toBeInTheDocument();
+    const player = document.querySelector('audio');
+    expect(player).toHaveAttribute('src', '/api/learn/lessons/5/podcast');
+  });
+
+  it('shows a friendly error and keeps the create button when podcast generation fails', async () => {
+    vi.spyOn(api, 'fetchLesson').mockResolvedValue(COMPLETE_LESSON);
+    vi.spyOn(api, 'generateLessonPodcast').mockRejectedValue(
+      new api.HttpError(503, 'AI not configured')
+    );
+
+    renderPage(5);
+    await screen.findByText('A careful article');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Create podcast' }));
+
+    expect(await screen.findByText('AI not configured')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Create podcast' })).toBeInTheDocument();
+  });
+
+  it('shows the failed-podcast banner from persisted lesson state', async () => {
+    vi.spyOn(api, 'fetchLesson').mockResolvedValue({
+      ...COMPLETE_LESSON,
+      podcast_status: 'failed',
+      podcast_error: 'Could not generate podcast audio.',
+    });
+
+    renderPage(5);
+
+    expect(await screen.findByText('Could not generate podcast audio.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Regenerate' })).toBeInTheDocument();
+  });
+
+  it('forces regeneration when clicking regenerate on an existing podcast', async () => {
+    vi.spyOn(api, 'fetchLesson').mockResolvedValue({
+      ...COMPLETE_LESSON,
+      podcast_status: 'complete',
+    });
+    vi.spyOn(api, 'generateLessonPodcast').mockResolvedValue({
+      ...COMPLETE_LESSON,
+      podcast_status: 'complete',
+    });
+
+    renderPage(5);
+    await screen.findByText('A careful article');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Regenerate' }));
+
+    await waitFor(() => {
+      expect(api.generateLessonPodcast).toHaveBeenCalledWith(5, true);
+    });
   });
 });

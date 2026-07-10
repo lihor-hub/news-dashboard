@@ -223,7 +223,7 @@ export function LearnPage() {
             </div>
           ) : null}
 
-          <LessonDetailView lesson={lesson} />
+          <LessonDetailView lesson={lesson} onLessonUpdate={setLesson} />
         </section>
       )}
     </div>

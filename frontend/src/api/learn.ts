@@ -65,6 +65,8 @@ export interface Lesson {
   study_artifacts: StudyArtifacts | null;
   depth: LessonDepth;
   persona: LessonPersona;
+  podcast_status: 'complete' | 'failed' | null;
+  podcast_error: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -108,6 +110,12 @@ export async function regenerateLesson(
 
 export async function fetchLessonGenerations(id: number): Promise<LessonGeneration[]> {
   return requestJson<LessonGeneration[]>(`/api/learn/lessons/${id}/generations`);
+}
+
+export async function generateLessonPodcast(id: number, force = false): Promise<Lesson> {
+  return requestJson<Lesson>(`/api/learn/lessons/${id}/podcast${force ? '?force=true' : ''}`, {
+    method: 'POST',
+  });
 }
 
 export interface ListLessonsParams {

@@ -177,6 +177,12 @@
       "dismiss": "Dismiss",
       "save": "Save",
       "generate": "Generate lesson"
+    },
+    "podcast": {
+      "title": "ポッドキャスト音声",
+      "create": "ポッドキャストを作成",
+      "generating": "生成中...",
+      "regenerate": "再生成"
     }
   }
 }
