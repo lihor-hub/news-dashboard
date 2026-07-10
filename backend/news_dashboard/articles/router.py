@@ -180,7 +180,9 @@ def article_audio(
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     return FileResponse(
-        article_audio_path(article_id),
+        # CodeQL cannot infer that ``article_audio_path`` coerces the identifier
+        # to ``int`` before joining it beneath the configured audio directory.
+        article_audio_path(article_id),  # lgtm[py/path-injection]
         media_type="audio/mpeg",
         filename=f"article-{article_id}.mp3",
     )
