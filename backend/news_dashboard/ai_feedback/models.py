@@ -6,7 +6,7 @@ from typing import Literal
 
 from pydantic import BaseModel
 
-SubjectType = Literal["briefing", "recommendation"]
+SubjectType = Literal["briefing", "recommendation", "lesson"]
 Verdict = Literal[-1, 1]
 
 

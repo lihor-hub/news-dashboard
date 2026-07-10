@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import os
 import re
+import time
 from typing import Any
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
@@ -13,6 +14,7 @@ from pydantic import ValidationError
 
 from news_dashboard.body_fetch import extract_body
 from news_dashboard.db import connect, init_db, row_to_dict
+from news_dashboard.learn_from_link import agent_runs
 from news_dashboard.learn_from_link.models import (
     LessonDepth,
     LessonDetail,
@@ -668,16 +670,25 @@ def generate_structured_lesson_detail(
     }
 
 
-def validate_structured_lesson_detail(
-    raw_detail: Any,
-    *,
-    lesson_fields: dict[str, Any],
-) -> dict[str, Any]:
+def validate_structured_lesson_detail(raw_detail: Any) -> LessonDetail:
+    """Validate a raw synthesis payload against the LessonDetail schema.
+
+    This is the structured-output boundary check: it runs immediately after
+    generation and before any downstream code (including citation
+    verification) touches the payload.
+    """
     try:
-        detail = LessonDetail.model_validate(raw_detail)
+        return LessonDetail.model_validate(raw_detail)
     except ValidationError as exc:
         raise LessonDetailValidationError from exc
 
+
+def verify_lesson_citations(detail: LessonDetail, lesson_fields: dict[str, Any]) -> dict[str, Any]:
+    """Verify every citation is grounded in the source content, as its own pipeline step.
+
+    Raises LessonCitationValidationError if any citation snippet or source
+    label cannot be found in the lesson's fetched metadata/content.
+    """
     source_context = _normalized_text(
         "\n".join(
             str(value)
@@ -747,16 +758,18 @@ def _build_lesson_detail(
     depth: LessonDepth,
     persona: LessonPersona,
     lesson_id: int,
-) -> tuple[dict[str, Any] | None, str | None]:
+) -> tuple[LessonDetail | None, str | None]:
+    """Generate + schema-validate a lesson detail (the "synthesis" step).
+
+    Citation grounding is verified separately by :func:`verify_lesson_citations`
+    so it can be tracked as its own pipeline step.
+    """
     try:
         raw_detail = generate_structured_lesson_detail(lesson_fields, depth=depth, persona=persona)
-        detail = validate_structured_lesson_detail(raw_detail, lesson_fields=lesson_fields)
+        detail = validate_structured_lesson_detail(raw_detail)
     except LessonDetailValidationError:
         logger.warning("lesson detail validation failed for lesson %d", lesson_id)
         return None, "Generated lesson detail was malformed."
-    except LessonCitationValidationError:
-        logger.warning("lesson citation validation failed for lesson %d", lesson_id)
-        return None, "Generated lesson citations did not match source content."
     except Exception as exc:
         logger.warning("lesson detail generation failed for lesson %d: %s", lesson_id, exc)
         return None, "Generated lesson detail was malformed."
@@ -800,6 +813,129 @@ def _add_personal_relevance(
         }
 
 
+def _timed(func: Any, *args: Any, **kwargs: Any) -> tuple[Any, int]:
+    """Call ``func`` and return ``(result, elapsed_ms)``."""
+    start = time.monotonic()
+    result = func(*args, **kwargs)
+    return result, int((time.monotonic() - start) * 1000)
+
+
+def _run_fetch_step(database_url: str | None, run_id: int, lesson_url: str) -> dict[str, Any]:
+    """Fetch article metadata. Non-fatal: failures are logged and the pipeline continues."""
+    try:
+        metadata, latency_ms = _timed(fetch_url_metadata, lesson_url)
+    except Exception as exc:
+        logger.warning("lesson metadata fetch failed for %r: %s", lesson_url, exc)
+        agent_runs.record_step(
+            database_url, run_id, agent_runs.STEP_FETCH, 1, status="failed", error=str(exc)[:2000]
+        )
+        return {}
+    agent_runs.record_step(
+        database_url, run_id, agent_runs.STEP_FETCH, 1, status="complete", latency_ms=latency_ms
+    )
+    return dict(metadata)
+
+
+def _run_extraction_step(
+    database_url: str | None, run_id: int, lesson_url: str
+) -> tuple[str | None, str | None]:
+    """Extract article body text. Returns ``(body_text, error_message)``."""
+    try:
+        (body, status), latency_ms = _timed(extract_body, lesson_url)
+    except Exception as exc:
+        logger.warning("lesson body extraction failed for %r: %s", lesson_url, exc)
+        agent_runs.record_step(
+            database_url,
+            run_id,
+            agent_runs.STEP_EXTRACTION,
+            2,
+            status="failed",
+            error=str(exc)[:2000],
+        )
+        return None, "Could not extract readable article content."
+
+    body_text = body.strip()
+    if status != "ok" or not body_text:
+        agent_runs.record_step(
+            database_url,
+            run_id,
+            agent_runs.STEP_EXTRACTION,
+            2,
+            status="failed",
+            latency_ms=latency_ms,
+            error=f"extract_body returned status={status!r}",
+        )
+        return None, "Could not extract readable article content."
+
+    agent_runs.record_step(
+        database_url,
+        run_id,
+        agent_runs.STEP_EXTRACTION,
+        2,
+        status="complete",
+        latency_ms=latency_ms,
+    )
+    return body_text, None
+
+
+def _run_synthesis_step(
+    database_url: str | None,
+    run_id: int,
+    lesson_fields: dict[str, Any],
+    depth: LessonDepth,
+    persona: LessonPersona,
+    lesson_id: int,
+) -> tuple[LessonDetail | None, dict[str, Any] | None, str | None]:
+    """Generate the lesson detail + study artifacts. Returns ``(detail, artifacts, error)``."""
+    start = time.monotonic()
+    detail_model, detail_error = _build_lesson_detail(lesson_fields, depth, persona, lesson_id)
+    artifacts: dict[str, Any] | None = None
+    error = detail_error
+    if error is None:
+        artifacts, artifacts_error = _build_study_artifacts(lesson_fields, lesson_id)
+        error = artifacts_error
+    agent_runs.record_step(
+        database_url,
+        run_id,
+        agent_runs.STEP_SYNTHESIS,
+        3,
+        status="failed" if error else "complete",
+        latency_ms=int((time.monotonic() - start) * 1000),
+        error=error,
+    )
+    if error or detail_model is None:
+        return None, None, error or "Generated lesson detail was malformed."
+    return detail_model, artifacts, None
+
+
+def _run_citation_verification_step(
+    database_url: str | None,
+    run_id: int,
+    detail_model: LessonDetail,
+    lesson_fields: dict[str, Any],
+    lesson_id: int,
+) -> tuple[dict[str, Any] | None, str | None]:
+    """Verify citations are grounded in source content. Returns ``(detail, error)``."""
+    start = time.monotonic()
+    error: str | None = None
+    detail: dict[str, Any] | None = None
+    try:
+        detail = verify_lesson_citations(detail_model, lesson_fields)
+    except LessonCitationValidationError:
+        logger.warning("lesson citation validation failed for lesson %d", lesson_id)
+        error = "Generated lesson citations did not match source content."
+    agent_runs.record_step(
+        database_url,
+        run_id,
+        agent_runs.STEP_CITATION_VERIFICATION,
+        4,
+        status="failed" if error else "complete",
+        latency_ms=int((time.monotonic() - start) * 1000),
+        error=error,
+    )
+    return detail, error
+
+
 def generate_lesson_from_url(
     lesson_id: int,
     user_id: int,
@@ -812,8 +948,17 @@ def generate_lesson_from_url(
 
     depth = lesson["depth"]
     persona = lesson["persona"]
+    chat_model = os.getenv("OPENAI_LESSON_CHAT_MODEL", DEFAULT_LESSON_CHAT_MODEL)
+    run_id = agent_runs.start_run(
+        database_url,
+        lesson_id=lesson_id,
+        user_id=user_id,
+        prompt_version=agent_runs.SYNTHESIS_PROMPT_VERSION,
+        model_version=chat_model,
+        config={"depth": depth, "persona": persona},
+    )
 
-    def _fail(error_message: str) -> dict[str, Any]:
+    def _fail(error_message: str, *, failed_step: str) -> dict[str, Any]:
         result = _update_lesson_failure(
             lesson_id,
             user_id,
@@ -829,24 +974,24 @@ def generate_lesson_from_url(
             generation_error=error_message,
             database_url=database_url,
         )
+        agent_runs.finish_run(
+            database_url,
+            run_id,
+            status="failed",
+            failed_step=failed_step,
+            error=error_message,
+        )
         return result
 
     lesson_url = str(lesson["original_url"])
-    metadata: dict[str, Any] = {}
-    try:
-        metadata = fetch_url_metadata(lesson_url)
-    except Exception as exc:
-        logger.warning("lesson metadata fetch failed for %r: %s", lesson_url, exc)
+    metadata = _run_fetch_step(database_url, run_id, lesson_url)
 
-    try:
-        body, status = extract_body(lesson_url)
-    except Exception as exc:
-        logger.warning("lesson body extraction failed for %r: %s", lesson_url, exc)
-        return _fail("Could not extract readable article content.")
-
-    body_text = body.strip()
-    if status != "ok" or not body_text:
-        return _fail("Could not extract readable article content.")
+    body_text, extraction_error = _run_extraction_step(database_url, run_id, lesson_url)
+    if extraction_error or body_text is None:
+        return _fail(
+            extraction_error or "Could not extract readable article content.",
+            failed_step=agent_runs.STEP_EXTRACTION,
+        )
 
     lesson_fields: dict[str, Any] = {
         "original_url": lesson_url,
@@ -857,15 +1002,25 @@ def generate_lesson_from_url(
         "source_content": body_text,
     }
 
-    detail, detail_error = _build_lesson_detail(lesson_fields, depth, persona, lesson_id)
-    if detail_error:
-        return _fail(detail_error)
-    lesson_fields["lesson_detail"] = detail
-
-    artifacts, artifacts_error = _build_study_artifacts(lesson_fields, lesson_id)
-    if artifacts_error:
-        return _fail(artifacts_error)
+    detail_model, artifacts, synthesis_error = _run_synthesis_step(
+        database_url, run_id, lesson_fields, depth, persona, lesson_id
+    )
+    if synthesis_error or detail_model is None:
+        return _fail(
+            synthesis_error or "Generated lesson detail was malformed.",
+            failed_step=agent_runs.STEP_SYNTHESIS,
+        )
     lesson_fields["study_artifacts"] = artifacts
+
+    detail, citation_error = _run_citation_verification_step(
+        database_url, run_id, detail_model, lesson_fields, lesson_id
+    )
+    if citation_error or detail is None:
+        return _fail(
+            citation_error or "Generated lesson citations did not match source content.",
+            failed_step=agent_runs.STEP_CITATION_VERIFICATION,
+        )
+    lesson_fields["lesson_detail"] = detail
 
     _add_personal_relevance(
         user_id,
@@ -874,21 +1029,50 @@ def generate_lesson_from_url(
         database_url=database_url,
     )
 
-    result = _update_lesson_success(
-        lesson_id,
-        user_id,
-        lesson_fields=lesson_fields,
-        database_url=database_url,
+    persistence_start = time.monotonic()
+    try:
+        result = _update_lesson_success(
+            lesson_id,
+            user_id,
+            lesson_fields=lesson_fields,
+            database_url=database_url,
+        )
+        _record_lesson_generation(
+            lesson_id,
+            depth=depth,
+            persona=persona,
+            generation_status="complete",
+            lesson_detail=lesson_fields["lesson_detail"],
+            generation_error=None,
+            database_url=database_url,
+        )
+    except Exception as exc:
+        agent_runs.record_step(
+            database_url,
+            run_id,
+            agent_runs.STEP_PERSISTENCE,
+            5,
+            status="failed",
+            latency_ms=int((time.monotonic() - persistence_start) * 1000),
+            error=str(exc)[:2000],
+        )
+        agent_runs.finish_run(
+            database_url,
+            run_id,
+            status="failed",
+            failed_step=agent_runs.STEP_PERSISTENCE,
+            error=str(exc)[:2000],
+        )
+        raise
+    agent_runs.record_step(
+        database_url,
+        run_id,
+        agent_runs.STEP_PERSISTENCE,
+        5,
+        status="complete",
+        latency_ms=int((time.monotonic() - persistence_start) * 1000),
     )
-    _record_lesson_generation(
-        lesson_id,
-        depth=depth,
-        persona=persona,
-        generation_status="complete",
-        lesson_detail=lesson_fields["lesson_detail"],
-        generation_error=None,
-        database_url=database_url,
-    )
+    agent_runs.finish_run(database_url, run_id, status="complete")
     return result
 
 

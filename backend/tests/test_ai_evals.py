@@ -48,6 +48,17 @@ def test_run_local_evals_records_pass_and_failure(pg_clean: str) -> None:
     assert summary["recent_failures"][0]["failure_reason"] == "unknown briefing citations"
 
 
+def test_eval_learning_agent_cli_runs_and_exits_zero(
+    monkeypatch: pytest.MonkeyPatch, pg_clean: str
+) -> None:
+    monkeypatch.setenv("DATABASE_URL", pg_clean)
+
+    result = CliRunner().invoke(app, ["eval-learning-agent"])
+
+    assert result.exit_code == 0
+    assert "passed, 0 failed" in result.output
+
+
 def test_eval_ai_cli_exits_nonzero_on_failed_eval(
     monkeypatch: pytest.MonkeyPatch, pg_clean: str
 ) -> None:

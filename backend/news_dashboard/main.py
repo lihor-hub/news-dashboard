@@ -2727,6 +2727,17 @@ def admin_ai_quality(days: Annotated[int, Query(ge=1, le=365)] = 30) -> dict[str
     return admin_quality_summary(days=days)
 
 
+@admin.get("/learning-agent/runs")
+def admin_learning_agent_runs(limit: Annotated[int, Query(ge=1, le=200)] = 50) -> dict[str, Any]:
+    """Recent Learn from Link generation runs with per-step status/latency/cost/retry.
+
+    For debug workflows: shows what happened in a run without reading logs.
+    """
+    from news_dashboard.learn_from_link.agent_runs import admin_run_summary
+
+    return admin_run_summary(limit=limit)
+
+
 @admin.get("/users")
 def admin_list_users() -> dict[str, Any]:
     return {"items": list_users()}
