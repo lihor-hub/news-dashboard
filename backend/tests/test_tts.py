@@ -97,6 +97,12 @@ def test_generate_audio_raises_when_no_api_key(tmp_path: Path) -> None:
             generate_audio(42, _ARTICLE, data_dir=tmp_path)
 
 
+def test_article_audio_path_uses_integer_identifier(tmp_path: Path) -> None:
+    from news_dashboard.tts import article_audio_path
+
+    assert article_audio_path(42, tmp_path) == tmp_path / "audio" / "42.mp3"
+
+
 def test_tts_ai_config_uses_openai_api_key(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("OPENAI_API_KEY", "sk-openai")
     monkeypatch.setenv("OPENAI_BASE_URL", "http://openai-base/v1")

@@ -838,14 +838,15 @@ def set_interval(minutes: int) -> None:
     """Reschedule the ingest job with a new interval and persist it."""
     from news_dashboard.db import set_setting
 
-    _state.interval_minutes = minutes
-    set_setting("ingest_interval_minutes", str(minutes))
+    safe_minutes = int(minutes)
+    _state.interval_minutes = safe_minutes
+    set_setting("ingest_interval_minutes", str(safe_minutes))
 
     if _state.scheduler is None or not _state.ingest_interval_enabled:
         return
     try:
-        _state.scheduler.reschedule_job("ingest", trigger="interval", minutes=minutes)
-        logger.info("Ingest interval updated to %d minutes", minutes)
+        _state.scheduler.reschedule_job("ingest", trigger="interval", minutes=safe_minutes)
+        logger.info("Ingest interval updated to %d minutes", safe_minutes)
     except Exception:
         logger.exception("Failed to reschedule ingest job")
 

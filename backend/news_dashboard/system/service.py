@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import logging
 import re
 from pathlib import Path
 from typing import Any
 
 from news_dashboard.db import connect, init_db
 from news_dashboard.error_tracking import frontend_error_tracking_dsn
+
+logger = logging.getLogger(__name__)
 
 _CHANGELOG_FILE = Path(__file__).resolve().parents[3] / "CHANGELOG.md"
 
@@ -41,13 +44,15 @@ def graph_status() -> dict[str, str]:
     try:
         graph_store = graph_store_from_env()
     except GraphUnavailableError as exc:
-        return {"status": "unavailable", "detail": str(exc)}
+        logger.warning("Graph store unavailable: %s", exc)
+        return {"status": "unavailable"}
     if graph_store is None:
         return {"status": "disabled"}
     try:
         graph_store.verify_connectivity()
     except Exception as exc:
-        return {"status": "unavailable", "detail": str(exc)}
+        logger.warning("Graph store connectivity check failed: %s", exc)
+        return {"status": "unavailable"}
     else:
         return {"status": "ok"}
     finally:

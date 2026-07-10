@@ -168,18 +168,22 @@ def article_audio(
     article_id: int,
     current_user: Annotated[dict[str, Any], Depends(require_auth)],
 ) -> FileResponse:
-    from news_dashboard.tts import TTSNotConfiguredError, generate_audio
+    from news_dashboard.tts import TTSNotConfiguredError, article_audio_path, generate_audio
 
     article = get_article(article_id, user_id=current_user["id"])
     if not article:
         raise HTTPException(status_code=404, detail="article not found")
     try:
-        path = generate_audio(article_id, article)
+        generate_audio(article_id, article)
     except TTSNotConfiguredError as exc:
         raise HTTPException(status_code=501, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
-    return FileResponse(path, media_type="audio/mpeg", filename=f"article-{article_id}.mp3")
+    return FileResponse(
+        article_audio_path(article_id),
+        media_type="audio/mpeg",
+        filename=f"article-{article_id}.mp3",
+    )
 
 
 @router.get("/api/articles/{article_id}/highlights")
