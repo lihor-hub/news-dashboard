@@ -482,6 +482,48 @@ export interface WeeklyRecap {
   narrative: string | null;
 }
 
+export interface LessonRecapConcept {
+  concept: string;
+  count: number;
+}
+
+export interface LessonRecapUnfinishedLesson {
+  id: number;
+  title: string;
+  original_url: string;
+  generation_status: 'pending' | 'failed';
+}
+
+export interface LessonRecapNotableArticle {
+  id: number;
+  title: string;
+  source_name: string | null;
+  verdict: 'skip' | 'skim' | 'read' | 'study' | null;
+}
+
+export interface LessonRecapData {
+  week_start: string;
+  week_end: string;
+  generated_at: string;
+  lessons_touched: number;
+  lessons_completed: number;
+  key_concepts: LessonRecapConcept[];
+  repeated_themes: LessonRecapConcept[];
+  unfinished_lessons: LessonRecapUnfinishedLesson[];
+  notable_articles: LessonRecapNotableArticle[];
+}
+
+export interface LessonRecap {
+  id: number;
+  user_id: number;
+  week_start: string;
+  created_at: string;
+  data: LessonRecapData;
+  narrative: string | null;
+  podcast_status: 'complete' | 'failed' | null;
+  podcast_error: string | null;
+}
+
 export interface Achievement {
   key: string;
   title: string;

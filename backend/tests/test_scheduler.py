@@ -14,7 +14,12 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from news_dashboard.briefings import BriefingAINotConfiguredError, BriefingGenerationError
-from news_dashboard.scheduler import _run_briefing, _run_per_user_briefings, _run_weekly_recaps
+from news_dashboard.scheduler import (
+    _run_briefing,
+    _run_per_user_briefings,
+    _run_weekly_lesson_recaps,
+    _run_weekly_recaps,
+)
 
 # ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -280,6 +285,71 @@ def test_run_weekly_recaps_returns_none_when_no_users_scheduled() -> None:
     ):
         mock_dt.now.return_value = now
         result = _run_weekly_recaps()
+
+    assert result is None
+
+
+# ── _run_weekly_lesson_recaps ─────────────────────────────────────────────────
+
+
+def test_run_weekly_lesson_recaps_generates_when_enabled() -> None:
+    fake_conn = _FakeRowsConn(
+        [
+            {
+                "id": 42,
+                "recap_day": "mon",
+                "briefing_time": "09:00",
+                "briefing_timezone": "UTC",
+            }
+        ]
+    )
+    now = datetime(2026, 6, 29, 9, 0, 0, tzinfo=timezone.utc)
+    recap = {"lessons_completed": 2, "key_concepts": []}
+
+    with (
+        patch("news_dashboard.scheduler.datetime") as mock_dt,
+        patch("news_dashboard.db.connect", return_value=fake_conn),
+        patch(
+            "news_dashboard.lesson_recaps.service.assemble_weekly_lesson_recap",
+            return_value=recap,
+        ) as assemble,
+        patch(
+            "news_dashboard.lesson_recaps.service.save_weekly_lesson_recap",
+            return_value={"id": 1, **recap},
+        ) as save,
+        patch(
+            "news_dashboard.lesson_recaps.narrative.generate_lesson_recap_narrative",
+            return_value="You learned things...",
+        ) as narrative,
+    ):
+        mock_dt.now.return_value = now
+        _run_weekly_lesson_recaps()
+
+    assert "lesson_recap_enabled" in fake_conn.sql
+    assemble.assert_called_once_with(42)
+    narrative.assert_called_once_with(recap)
+    save.assert_called_once_with(42, recap, "You learned things...")
+
+
+def test_run_weekly_lesson_recaps_returns_none_when_no_users_scheduled() -> None:
+    fake_conn = _FakeRowsConn(
+        [
+            {
+                "id": 42,
+                "recap_day": "tue",
+                "briefing_time": "09:00",
+                "briefing_timezone": "UTC",
+            }
+        ]
+    )
+    now = datetime(2026, 6, 29, 9, 0, 0, tzinfo=timezone.utc)  # a Monday
+
+    with (
+        patch("news_dashboard.scheduler.datetime") as mock_dt,
+        patch("news_dashboard.db.connect", return_value=fake_conn),
+    ):
+        mock_dt.now.return_value = now
+        result = _run_weekly_lesson_recaps()
 
     assert result is None
 

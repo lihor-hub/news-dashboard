@@ -47,7 +47,8 @@
     "users": "משתמשים",
     "offline_saved": "Offline Saved",
     "learn": "Learn",
-    "lesson_library": "Lesson Library"
+    "lesson_library": "Lesson Library",
+    "learning_recap": "Learning Recap"
   },
   "page_title": {
     "brief": "תקציר",
@@ -73,7 +74,8 @@
     "default": "Radar",
     "offline_saved": "Offline Saved",
     "learn": "Learn",
-    "lesson_library": "Lesson Library"
+    "lesson_library": "Lesson Library",
+    "learning_recap": "Learning Recap"
   },
   "shell": {
     "offline": "לא מקוון",

@@ -308,6 +308,80 @@ def _run_weekly_recaps() -> tuple[str, str | None] | None:
     return status, msg
 
 
+def _generate_lesson_recap_for_user(user_id: int) -> bool:
+    """Assemble and persist a weekly learning recap for one user."""
+    from news_dashboard.lesson_recaps.narrative import generate_lesson_recap_narrative
+    from news_dashboard.lesson_recaps.service import (
+        assemble_weekly_lesson_recap,
+        save_weekly_lesson_recap,
+    )
+
+    logger.info("Weekly lesson recap: generating for user_id=%s", user_id)
+    try:
+        recap = assemble_weekly_lesson_recap(user_id)
+        narrative = generate_lesson_recap_narrative(recap)
+        saved = save_weekly_lesson_recap(user_id, recap, narrative)
+        logger.info("Weekly lesson recap: complete for user_id=%s id=%s", user_id, saved.get("id"))
+        return True
+    except Exception:
+        logger.exception("Weekly lesson recap: unexpected error for user_id=%s", user_id)
+        return False
+
+
+def _run_weekly_lesson_recaps() -> tuple[str, str | None] | None:
+    """Generate weekly lesson recaps for users whose local scheduled day/time matches now.
+
+    Reuses each user's ``recap_day``/``briefing_time``/``briefing_timezone``
+    cadence settings, gated by the separate ``lesson_recap_enabled`` flag, so
+    learning recaps land alongside reading recaps without adding a second set
+    of scheduling controls. Returns None when no users are scheduled this
+    minute so the run is not recorded.
+    """
+    from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
+    from news_dashboard.db import connect, row_to_dict
+
+    now = datetime.now(timezone.utc)
+
+    try:
+        with connect() as conn:
+            rows = conn.execute(
+                "SELECT id, recap_day, briefing_time, briefing_timezone"
+                " FROM users WHERE lesson_recap_enabled = TRUE",
+            ).fetchall()
+        user_rows = [row_to_dict(r) for r in rows]
+    except Exception as exc:
+        logger.exception("Weekly lesson recap: failed to query users")
+        return "failure", str(exc)[:500]
+
+    scheduled_users: list[int] = []
+    for row in user_rows:
+        tz_name: str = row.get("briefing_timezone") or "UTC"
+        recap_time: str = row.get("briefing_time") or "09:00"
+        recap_day: str = row.get("recap_day") or "mon"
+        try:
+            tz = ZoneInfo(tz_name)
+        except (ZoneInfoNotFoundError, KeyError):
+            tz = ZoneInfo("UTC")
+        local_now = now.astimezone(tz)
+        day_matches = local_now.strftime("%a").lower() == recap_day
+        time_matches = local_now.strftime("%H:%M") == recap_time
+        if day_matches and time_matches:
+            scheduled_users.append(int(row["id"]))
+
+    if not scheduled_users:
+        return None  # nothing scheduled this minute — skip recording
+
+    results = [_generate_lesson_recap_for_user(uid) for uid in scheduled_users]
+    succeeded = sum(1 for ok in results if ok)
+    failed = len(results) - succeeded
+    total = len(scheduled_users)
+    noun = "user" if total == 1 else "users"
+    msg = f"{total} {noun} targeted, {succeeded} succeeded, {failed} failed"
+    status = "failure" if failed == total else "success"
+    return status, msg
+
+
 def _run_digest() -> tuple[str, str | None]:
     from news_dashboard.digest import send_digest
 
@@ -467,6 +541,10 @@ def _job_weekly_recaps() -> None:
     _run_and_record("weekly_recaps", _run_weekly_recaps)
 
 
+def _job_weekly_lesson_recaps() -> None:
+    _run_and_record("weekly_lesson_recaps", _run_weekly_lesson_recaps)
+
+
 def _job_reading_list_fetch() -> None:
     _run_and_record("reading_list_fetch", _run_reading_list_fetch)
 
@@ -549,6 +627,14 @@ def _register_recurring_jobs(scheduler: Any) -> None:
         trigger="interval",
         minutes=1,
         id="weekly_recaps",
+        replace_existing=True,
+    )
+
+    scheduler.add_job(
+        _job_weekly_lesson_recaps,
+        trigger="interval",
+        minutes=1,
+        id="weekly_lesson_recaps",
         replace_existing=True,
     )
 
