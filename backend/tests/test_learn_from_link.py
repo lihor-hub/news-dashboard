@@ -510,10 +510,32 @@ def test_create_lesson_duplicate_resets_pending_state(
         conn.execute(
             """
             UPDATE lessons
-            SET generation_status = 'failed', generation_error = %s, source_content = %s
+            SET generation_status = 'failed',
+                generation_error = %s,
+                source_content = %s,
+                podcast_status = 'complete',
+                podcast_error = %s,
+                slide_deck = %s::jsonb,
+                slide_deck_status = 'complete',
+                slide_deck_error = %s,
+                study_artifacts = %s::jsonb,
+                personal_relevance = %s::jsonb,
+                relevance_feedback = true
             WHERE id = %s
             """,
-            ("boom", "old content", first["id"]),
+            (
+                "boom",
+                "old content",
+                "old podcast error",
+                '{"slides":[{"title":"Old slide","bullets":["Old bullet"]}]}',
+                "old slide error",
+                '{"flashcards":[{"concept":"Old","claim":"Old claim"}]}',
+                (
+                    '{"summary":"Old relevance","reasons":["Old reason"],'
+                    '"suggested_actions":["Old action"]}'
+                ),
+                first["id"],
+            ),
         )
 
     second = service.create_lesson(
@@ -527,6 +549,12 @@ def test_create_lesson_duplicate_resets_pending_state(
     assert second["generation_status"] == "complete"
     assert second["generation_error"] is None
     assert second["source_content"] == "Body for https://example.com/story"
+    assert second["podcast_status"] is None
+    assert second["podcast_error"] is None
+    assert second["slide_deck"] is None
+    assert second["slide_deck_status"] is None
+    assert second["slide_deck_error"] is None
+    assert second["relevance_feedback"] is None
 
 
 def test_create_lesson_failed_retry_clears_stale_extracted_fields(
@@ -1001,6 +1029,32 @@ def test_regenerate_lesson_updates_controls_and_marks_pending(
     user_id = _make_user(pg_clean)
     lesson = service.create_lesson(user_id, "https://example.com/a", database_url=pg_clean)
     assert lesson["generation_status"] == "complete"
+    with connect(database_url=pg_clean) as conn:
+        conn.execute(
+            """
+            UPDATE lessons
+            SET podcast_status = 'complete',
+                podcast_error = %s,
+                slide_deck = %s::jsonb,
+                slide_deck_status = 'complete',
+                slide_deck_error = %s,
+                study_artifacts = %s::jsonb,
+                personal_relevance = %s::jsonb,
+                relevance_feedback = false
+            WHERE id = %s
+            """,
+            (
+                "old podcast error",
+                '{"slides":[{"title":"Old slide","bullets":["Old bullet"]}]}',
+                "old slide error",
+                '{"flashcards":[{"concept":"Old","claim":"Old claim"}]}',
+                (
+                    '{"summary":"Old relevance","reasons":["Old reason"],'
+                    '"suggested_actions":["Old action"]}'
+                ),
+                lesson["id"],
+            ),
+        )
 
     updated = service.regenerate_lesson(
         int(lesson["id"]),
@@ -1014,6 +1068,14 @@ def test_regenerate_lesson_updates_controls_and_marks_pending(
     assert updated["generation_error"] is None
     assert updated["depth"] == "expert"
     assert updated["persona"] == "product_builder"
+    assert updated["podcast_status"] is None
+    assert updated["podcast_error"] is None
+    assert updated["slide_deck"] is None
+    assert updated["slide_deck_status"] is None
+    assert updated["slide_deck_error"] is None
+    assert updated["study_artifacts"] is None
+    assert updated["personal_relevance"] is None
+    assert updated["relevance_feedback"] is None
 
 
 def test_regenerate_lesson_raises_not_found_for_missing_lesson(pg_clean: str) -> None:

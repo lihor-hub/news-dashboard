@@ -274,4 +274,24 @@ describe('LessonDetailPage', () => {
       expect(api.generateLessonSlideDeck).toHaveBeenCalledWith(5, true);
     });
   });
+
+  it('shows create actions after regenerated artifacts are cleared', async () => {
+    vi.spyOn(api, 'fetchLesson').mockResolvedValue({
+      ...COMPLETE_LESSON,
+      podcast_status: null,
+      slide_deck: null,
+      slide_deck_status: null,
+      study_artifacts: null,
+    });
+
+    renderPage(5);
+    await screen.findByText('A careful article');
+
+    expect(screen.getByRole('button', { name: 'Create podcast' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Create slide deck' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Regenerate' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Flashcards' })).not.toBeInTheDocument();
+    expect(document.querySelector('audio')).not.toBeInTheDocument();
+    expect(screen.queryByText('Slide 1')).not.toBeInTheDocument();
+  });
 });

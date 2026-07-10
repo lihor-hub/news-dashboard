@@ -68,6 +68,17 @@ clearly rather than guessing.
 {source_context}
 """
 
+_LESSON_ARTIFACT_RESET_ASSIGNMENTS = """\
+podcast_status = NULL,
+                podcast_error = NULL,
+                slide_deck = NULL,
+                slide_deck_status = NULL,
+                slide_deck_error = NULL,
+                study_artifacts = NULL,
+                personal_relevance = NULL,
+                relevance_feedback = NULL,
+"""
+
 
 class LessonUrlError(ValueError):
     """Raised when a lesson URL cannot be fetched safely."""
@@ -152,7 +163,7 @@ def create_lesson(
     init_db(database_url=database_url)
     with connect(database_url=database_url) as conn:
         row = conn.execute(
-            """
+            f"""
             INSERT INTO lessons (
               user_id,
               original_url,
@@ -172,6 +183,7 @@ def create_lesson(
                 published_at = NULL,
                 source_content = NULL,
                 lesson_detail = NULL,
+                {_LESSON_ARTIFACT_RESET_ASSIGNMENTS}
                 depth = %s,
                 persona = %s,
                 updated_at = NOW()
@@ -205,12 +217,13 @@ def regenerate_lesson(
     init_db(database_url=database_url)
     with connect(database_url=database_url) as conn:
         row = conn.execute(
-            """
+            f"""
             UPDATE lessons
             SET depth = %s,
                 persona = %s,
                 generation_status = 'pending',
                 generation_error = NULL,
+                {_LESSON_ARTIFACT_RESET_ASSIGNMENTS}
                 updated_at = NOW()
             WHERE id = %s AND user_id = %s
             RETURNING *
