@@ -173,18 +173,17 @@ def article_audio(
     article = get_article(article_id, user_id=current_user["id"])
     if not article:
         raise HTTPException(status_code=404, detail="article not found")
+    canonical_article_id = int(article["id"])
     try:
-        generate_audio(article_id, article)
+        generate_audio(canonical_article_id, article)
     except TTSNotConfiguredError as exc:
         raise HTTPException(status_code=501, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     return FileResponse(
-        # CodeQL cannot infer that ``article_audio_path`` coerces the identifier
-        # to ``int`` before joining it beneath the configured audio directory.
-        article_audio_path(article_id),  # lgtm[py/path-injection]
+        article_audio_path(canonical_article_id),
         media_type="audio/mpeg",
-        filename=f"article-{article_id}.mp3",
+        filename=f"article-{canonical_article_id}.mp3",
     )
 
 
