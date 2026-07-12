@@ -865,4 +865,6 @@ export interface ArchiveImportResult {
   briefings: ArchiveImportCounts;
   ai_memories: ArchiveImportCounts;
   ai_memory_events: { added: number; skipped: number };
+  source_subscriptions: ArchiveImportCounts;
+  preferences: ArchiveImportCounts;
 }

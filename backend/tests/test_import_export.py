@@ -465,6 +465,232 @@ def test_import_endpoint_restores_archive(pg_clean: str, monkeypatch: pytest.Mon
         app.dependency_overrides.pop(require_auth, None)
 
 
+# ── source subscription restore ─────────────────────────────────────────────
+
+
+def test_restores_global_source_subscription(pg_clean: str) -> None:
+    sync_sources(pg_clean)
+    uid = _make_user(pg_clean, "import_source_global")
+
+    archive = _base_archive(
+        source_subscriptions=[{"slug": "python-insider", "private": False, "subscribed": False}]
+    )
+
+    result = restore_user_archive(uid, archive, database_url=pg_clean)
+    assert result["source_subscriptions"] == {"added": 1, "updated": 0, "skipped": 0}
+
+    with connect(database_url=pg_clean) as conn:
+        row = conn.execute(
+            "SELECT enabled FROM user_sources WHERE user_id = %s AND source_slug = %s",
+            (uid, "python-insider"),
+        ).fetchone()
+    assert row is not None
+    assert row["enabled"] is False
+
+
+def test_skips_global_source_subscription_for_unknown_slug(pg_clean: str) -> None:
+    sync_sources(pg_clean)
+    uid = _make_user(pg_clean, "import_source_unknown")
+
+    archive = _base_archive(
+        source_subscriptions=[{"slug": "does-not-exist", "private": False, "subscribed": True}]
+    )
+
+    result = restore_user_archive(uid, archive, database_url=pg_clean)
+    assert result["source_subscriptions"] == {"added": 0, "updated": 0, "skipped": 1}
+
+
+def test_restores_private_source(pg_clean: str) -> None:
+    sync_sources(pg_clean)
+    uid = _make_user(pg_clean, "import_source_private")
+
+    archive = _base_archive(
+        source_subscriptions=[
+            {
+                "slug": "u42-my-blog",
+                "name": "My Blog",
+                "url": "https://example.com/feed.xml",
+                "category": "tech",
+                "kind": "rss_feed",
+                "private": True,
+                "subscribed": True,
+            }
+        ]
+    )
+
+    result = restore_user_archive(uid, archive, database_url=pg_clean)
+    assert result["source_subscriptions"] == {"added": 1, "updated": 0, "skipped": 0}
+
+    with connect(database_url=pg_clean) as conn:
+        row = conn.execute(
+            "SELECT owner_user_id, enabled FROM sources WHERE slug = %s", ("u42-my-blog",)
+        ).fetchone()
+    assert row is not None
+    assert row["owner_user_id"] == uid
+    assert row["enabled"] is True
+
+
+def test_reimporting_private_source_updates_not_duplicates(pg_clean: str) -> None:
+    sync_sources(pg_clean)
+    uid = _make_user(pg_clean, "import_source_private_idem")
+
+    archive = _base_archive(
+        source_subscriptions=[
+            {
+                "slug": "u1-my-blog",
+                "name": "My Blog",
+                "url": "https://example.com/feed.xml",
+                "category": "tech",
+                "kind": "rss_feed",
+                "private": True,
+                "subscribed": True,
+            }
+        ]
+    )
+    restore_user_archive(uid, archive, database_url=pg_clean)
+
+    archive["source_subscriptions"][0]["subscribed"] = False
+    second = restore_user_archive(uid, archive, database_url=pg_clean)
+
+    assert second["source_subscriptions"] == {"added": 0, "updated": 1, "skipped": 0}
+    with connect(database_url=pg_clean) as conn:
+        rows = conn.execute(
+            "SELECT enabled FROM sources WHERE slug = %s", ("u1-my-blog",)
+        ).fetchall()
+    assert len(rows) == 1
+    assert rows[0]["enabled"] is False
+
+
+def test_private_source_never_takes_over_another_users_source(pg_clean: str) -> None:
+    sync_sources(pg_clean)
+    uid_alice = _make_user(pg_clean, "import_source_owner_alice")
+    uid_bob = _make_user(pg_clean, "import_source_owner_bob")
+
+    with connect(database_url=pg_clean) as conn:
+        conn.execute(
+            """
+            INSERT INTO sources(slug, name, url, category, kind, priority, enabled, owner_user_id)
+            VALUES ('u1-taken', 'Alice Blog', 'https://alice.example.com/feed.xml',
+                    'tech', 'rss_feed', 0, TRUE, %s)
+            """,
+            (uid_alice,),
+        )
+
+    archive = _base_archive(
+        source_subscriptions=[
+            {
+                "slug": "u1-taken",
+                "name": "Bob Hijack",
+                "url": "https://bob.example.com/feed.xml",
+                "category": "tech",
+                "kind": "rss_feed",
+                "private": True,
+                "subscribed": True,
+            }
+        ]
+    )
+    result = restore_user_archive(uid_bob, archive, database_url=pg_clean)
+    assert result["source_subscriptions"] == {"added": 0, "updated": 0, "skipped": 1}
+
+    with connect(database_url=pg_clean) as conn:
+        row = conn.execute(
+            "SELECT owner_user_id, name FROM sources WHERE slug = %s", ("u1-taken",)
+        ).fetchone()
+    assert row is not None
+    assert row["owner_user_id"] == uid_alice
+    assert row["name"] == "Alice Blog"
+
+
+# ── preferences restore ──────────────────────────────────────────────────────
+
+
+def test_restores_preferences(pg_clean: str) -> None:
+    sync_sources(pg_clean)
+    uid = _make_user(pg_clean, "import_preferences")
+
+    archive = _base_archive(
+        preferences={
+            "recommendations": {"category_weights": {"python": 2.0}, "novelty_weight": 1.5},
+            "onboarding": {
+                "interests": ["python", "infra"],
+                "completed_at": "2026-01-01T00:00:00+00:00",
+            },
+            "notifications": {
+                "briefing_time": "07:30",
+                "briefing_timezone": "America/New_York",
+                "push_enabled": True,
+                "recap_enabled": False,
+                "recap_day": "fri",
+                "analytics_enabled": False,
+            },
+        }
+    )
+
+    result = restore_user_archive(uid, archive, database_url=pg_clean)
+    assert result["preferences"] == {"added": 0, "updated": 3, "skipped": 0}
+
+    with connect(database_url=pg_clean) as conn:
+        settings_row = conn.execute(
+            "SELECT category_weights, novelty_weight FROM user_settings WHERE user_id = %s",
+            (uid,),
+        ).fetchone()
+        profile_row = conn.execute(
+            "SELECT interests, completed_at FROM user_interest_profiles WHERE user_id = %s",
+            (uid,),
+        ).fetchone()
+        user_row = conn.execute(
+            """
+            SELECT briefing_time, briefing_timezone, briefing_push_enabled,
+                   recap_enabled, recap_day, analytics_enabled
+            FROM users WHERE id = %s
+            """,
+            (uid,),
+        ).fetchone()
+
+    assert settings_row is not None
+    assert settings_row["category_weights"] == {"python": 2.0}
+    assert settings_row["novelty_weight"] == 1.5
+    assert profile_row is not None
+    assert list(profile_row["interests"]) == ["python", "infra"]
+    assert profile_row["completed_at"] is not None
+    assert user_row is not None
+    assert user_row["briefing_time"] == "07:30"
+    assert user_row["briefing_timezone"] == "America/New_York"
+    assert user_row["briefing_push_enabled"] is True
+    assert user_row["recap_enabled"] is False
+    assert user_row["recap_day"] == "fri"
+    assert user_row["analytics_enabled"] is False
+
+
+def test_restore_preferences_skips_missing_sections(pg_clean: str) -> None:
+    sync_sources(pg_clean)
+    uid = _make_user(pg_clean, "import_preferences_empty")
+
+    archive = _base_archive(preferences={})
+
+    result = restore_user_archive(uid, archive, database_url=pg_clean)
+    assert result["preferences"] == {"added": 0, "updated": 0, "skipped": 3}
+
+
+def test_import_never_restores_preferences_for_another_user(pg_clean: str) -> None:
+    sync_sources(pg_clean)
+    uid_alice = _make_user(pg_clean, "import_pref_scope_alice")
+    uid_bob = _make_user(pg_clean, "import_pref_scope_bob")
+
+    archive = _base_archive(
+        preferences={
+            "recommendations": {"category_weights": {"python": 3.0}, "novelty_weight": 2.0},
+        }
+    )
+    restore_user_archive(uid_alice, archive, database_url=pg_clean)
+
+    with connect(database_url=pg_clean) as conn:
+        bob_row = conn.execute(
+            "SELECT 1 FROM user_settings WHERE user_id = %s", (uid_bob,)
+        ).fetchone()
+    assert bob_row is None
+
+
 def test_import_endpoint_rejects_invalid_json(
     pg_clean: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:

@@ -342,6 +342,8 @@ describe('SettingsPage', () => {
       briefings: { added: 1, updated: 0, skipped: 0 },
       ai_memories: { added: 0, updated: 1, skipped: 0 },
       ai_memory_events: { added: 3, skipped: 0 },
+      source_subscriptions: { added: 1, updated: 0, skipped: 0 },
+      preferences: { added: 0, updated: 3, skipped: 0 },
     });
     renderPage(<SettingsPage />);
 
@@ -351,6 +353,8 @@ describe('SettingsPage', () => {
     fireEvent.change(screen.getByLabelText('Restore archive'), { target: { files: [file] } });
 
     await waitFor(() => expect(screen.getByText(/Articles: 2 added/)).toBeTruthy());
+    expect(screen.getByText(/Source subscriptions: 1 added/)).toBeTruthy();
+    expect(screen.getByText(/Preferences: 0 added, 3 updated/)).toBeTruthy();
     expect(apiMock.importUserArchive).toHaveBeenCalledWith(file);
   });
 

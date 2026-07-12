@@ -7,11 +7,18 @@ user: this is a personal restore, not a cross-instance sync tool.
 
 from __future__ import annotations
 
+import json
 import logging
-from typing import Any
+import re
+from typing import Any, cast
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
+from psycopg.types.json import Jsonb
 
 from news_dashboard.db import connect
 from news_dashboard.export import SCHEMA_VERSION
+from news_dashboard.sources.models import USER_CREATED_SOURCE_KINDS
+from news_dashboard.url_safety import UnsafeUrlError, validate_server_fetch_url
 
 logger = logging.getLogger(__name__)
 
@@ -21,8 +28,10 @@ MAX_IMPORT_ARTICLES = 20_000
 MAX_IMPORT_BRIEFINGS = 5_000
 MAX_IMPORT_AI_MEMORIES = 5_000
 MAX_IMPORT_AI_MEMORY_EVENTS = 20_000
+MAX_IMPORT_SOURCE_SUBSCRIPTIONS = 2_000
 
 _VALID_ARTICLE_STATES = frozenset({"today", "done", "skipped", "archived", "later"})
+_VALID_RECAP_DAYS = frozenset({"mon", "tue", "wed", "thu", "fri", "sat", "sun"})
 
 
 class ArchiveImportError(ValueError):
@@ -45,6 +54,7 @@ def validate_archive(payload: Any) -> None:
         ("briefings", MAX_IMPORT_BRIEFINGS),
         ("ai_memories", MAX_IMPORT_AI_MEMORIES),
         ("ai_memory_events", MAX_IMPORT_AI_MEMORY_EVENTS),
+        ("source_subscriptions", MAX_IMPORT_SOURCE_SUBSCRIPTIONS),
     ):
         value = payload.get(key, [])
         if value is None:
@@ -55,6 +65,11 @@ def validate_archive(payload: Any) -> None:
         if len(value) > limit:
             msg = f"archive has too many {key} entries (max {limit})"
             raise ArchiveImportError(msg)
+
+    preferences = payload.get("preferences")
+    if preferences is not None and not isinstance(preferences, dict):
+        msg = "'preferences' must be an object"
+        raise ArchiveImportError(msg)
 
 
 def _upsert_article_state(  # noqa: PLR0913
@@ -388,6 +403,214 @@ def _restore_ai_memory_events(conn: Any, user_id: int, events: list[Any]) -> dic
     return counts
 
 
+def _restore_global_source_subscription(
+    conn: Any, user_id: int, slug: str, *, enabled: bool
+) -> str | None:
+    """Restore subscribed/unsubscribed state for a global source. Returns 'added'/'updated'/None."""
+    exists = conn.execute(
+        "SELECT 1 FROM sources WHERE slug = %s AND owner_user_id IS NULL", (slug,)
+    ).fetchone()
+    if exists is None:
+        return None
+
+    existing = conn.execute(
+        "SELECT 1 FROM user_sources WHERE user_id = %s AND source_slug = %s",
+        (user_id, slug),
+    ).fetchone()
+    conn.execute(
+        """
+        INSERT INTO user_sources(user_id, source_slug, enabled)
+        VALUES (%s, %s, %s)
+        ON CONFLICT(user_id, source_slug) DO UPDATE SET enabled = excluded.enabled
+        """,
+        (user_id, slug, enabled),
+    )
+    return "updated" if existing is not None else "added"
+
+
+def _validate_private_source_fields(item: dict[str, Any]) -> tuple[str, str, str, str, str] | None:
+    slug = item.get("slug")
+    name = item.get("name")
+    url = item.get("url")
+    category = item.get("category")
+    kind = item.get("kind")
+    required = (slug, name, url, category, kind)
+    if not all(isinstance(v, str) and v.strip() for v in required):
+        return None
+    slug, name, url, category, kind = cast("tuple[str, str, str, str, str]", required)
+    if kind not in USER_CREATED_SOURCE_KINDS:
+        return None
+    try:
+        validate_server_fetch_url(url)
+    except UnsafeUrlError:
+        return None
+    return slug, name, url, category, kind
+
+
+def _restore_private_source(conn: Any, user_id: int, item: dict[str, Any]) -> str | None:
+    """Restore a user-owned private source. Returns 'added'/'updated'/None (skipped)."""
+    fields = _validate_private_source_fields(item)
+    if fields is None:
+        return None
+    slug, name, url, category, kind = fields
+    enabled = bool(item.get("subscribed", True))
+
+    existing = conn.execute("SELECT owner_user_id FROM sources WHERE slug = %s", (slug,)).fetchone()
+    if existing is None:
+        conn.execute(
+            """
+            INSERT INTO sources(slug, name, url, category, kind, priority, enabled, owner_user_id)
+            VALUES (%s, %s, %s, %s, %s, 0, %s, %s)
+            """,
+            (slug, name, url, category, kind, enabled, user_id),
+        )
+        return "added"
+    if existing["owner_user_id"] != user_id:
+        # Never overwrite a global source or another user's private source.
+        return None
+    conn.execute(
+        """
+        UPDATE sources SET name = %s, url = %s, category = %s, kind = %s, enabled = %s
+        WHERE slug = %s
+        """,
+        (name, url, category, kind, enabled, slug),
+    )
+    return "updated"
+
+
+def _restore_source_subscriptions(
+    conn: Any, user_id: int, subscriptions: list[Any]
+) -> dict[str, int]:
+    counts = {"added": 0, "updated": 0, "skipped": 0}
+    for item in subscriptions:
+        if not isinstance(item, dict):
+            counts["skipped"] += 1
+            continue
+        try:
+            with conn.transaction():
+                if item.get("private"):
+                    outcome = _restore_private_source(conn, user_id, item)
+                else:
+                    slug = item.get("slug")
+                    if not isinstance(slug, str) or not slug.strip():
+                        outcome = None
+                    else:
+                        outcome = _restore_global_source_subscription(
+                            conn, user_id, slug, enabled=bool(item.get("subscribed", True))
+                        )
+                counts[outcome or "skipped"] += 1
+        except Exception:
+            logger.exception("Failed to restore archived source subscription")
+            counts["skipped"] += 1
+    return counts
+
+
+def _restore_recommendation_preferences(conn: Any, user_id: int, data: Any) -> bool:
+    if not isinstance(data, dict):
+        return False
+    raw_weights = data.get("category_weights")
+    if not isinstance(raw_weights, dict):
+        raw_weights = {}
+    weights = {
+        str(category).strip().lower(): min(3.0, max(0.0, float(weight)))
+        for category, weight in raw_weights.items()
+        if str(category).strip() and isinstance(weight, (int, float))
+    }
+    novelty = data.get("novelty_weight")
+    novelty = min(3.0, max(0.0, float(novelty))) if isinstance(novelty, (int, float)) else 1.0
+
+    conn.execute(
+        """
+        INSERT INTO user_settings(user_id, category_weights, novelty_weight)
+        VALUES (%s, %s::jsonb, %s)
+        ON CONFLICT(user_id) DO UPDATE SET
+          category_weights = excluded.category_weights,
+          novelty_weight = excluded.novelty_weight,
+          updated_at = NOW()
+        """,
+        (user_id, json.dumps(weights), novelty),
+    )
+    conn.execute(
+        "UPDATE user_article_recommendations SET stale = TRUE WHERE user_id = %s",
+        (user_id,),
+    )
+    return True
+
+
+def _restore_onboarding(conn: Any, user_id: int, data: Any) -> bool:
+    if not isinstance(data, dict):
+        return False
+    raw_interests = data.get("interests")
+    interests = [str(i) for i in raw_interests] if isinstance(raw_interests, list) else []
+    completed_at = data.get("completed_at")
+    completed = isinstance(completed_at, str) and bool(completed_at.strip())
+
+    conn.execute(
+        """
+        INSERT INTO user_interest_profiles(user_id, interests, completed_at, updated_at)
+        VALUES (%s, %s, CASE WHEN %s THEN NOW() ELSE NULL END, NOW())
+        ON CONFLICT(user_id) DO UPDATE SET
+          interests = excluded.interests,
+          completed_at = excluded.completed_at,
+          updated_at = NOW()
+        """,
+        (user_id, Jsonb(interests), completed),
+    )
+    return True
+
+
+def _restore_notification_settings(conn: Any, user_id: int, data: Any) -> bool:
+    if not isinstance(data, dict):
+        return False
+
+    updates: dict[str, Any] = {}
+    briefing_time = data.get("briefing_time")
+    if isinstance(briefing_time, str) and re.fullmatch(r"([01]\d|2[0-3]):[0-5]\d", briefing_time):
+        updates["briefing_time"] = briefing_time
+    briefing_timezone = data.get("briefing_timezone")
+    if isinstance(briefing_timezone, str) and briefing_timezone.strip():
+        try:
+            ZoneInfo(briefing_timezone)
+        except (ZoneInfoNotFoundError, KeyError):
+            pass
+        else:
+            updates["briefing_timezone"] = briefing_timezone
+    if isinstance(data.get("push_enabled"), bool):
+        updates["briefing_push_enabled"] = data["push_enabled"]
+    if isinstance(data.get("recap_enabled"), bool):
+        updates["recap_enabled"] = data["recap_enabled"]
+    recap_day = data.get("recap_day")
+    if isinstance(recap_day, str) and recap_day in _VALID_RECAP_DAYS:
+        updates["recap_day"] = recap_day
+    if isinstance(data.get("analytics_enabled"), bool):
+        updates["analytics_enabled"] = data["analytics_enabled"]
+
+    if not updates:
+        return False
+
+    set_clauses = ", ".join(f"{key} = %s" for key in updates)
+    conn.execute(
+        f"UPDATE users SET {set_clauses} WHERE id = %s",
+        [*updates.values(), user_id],
+    )
+    return True
+
+
+def _restore_preferences(conn: Any, user_id: int, preferences: Any) -> dict[str, int]:
+    counts = {"added": 0, "updated": 0, "skipped": 0}
+    if not isinstance(preferences, dict):
+        return counts
+
+    sections = (
+        _restore_recommendation_preferences(conn, user_id, preferences.get("recommendations")),
+        _restore_onboarding(conn, user_id, preferences.get("onboarding")),
+        _restore_notification_settings(conn, user_id, preferences.get("notifications")),
+    )
+    for restored in sections:
+        counts["updated" if restored else "skipped"] += 1
+    return counts
+
+
 def restore_user_archive(
     user_id: int,
     payload: dict[str, Any],
@@ -398,7 +621,8 @@ def restore_user_archive(
     Idempotent: re-importing the same archive updates/keeps existing restored
     state rather than duplicating rows, for object types with a stable
     identity (article canonical_url, briefing created_at+title, AI memory
-    content+source). Only ever writes data scoped to `user_id`.
+    content+source, source subscription slug, preferences per user). Only
+    ever writes data scoped to `user_id`.
     """
     validate_archive(payload)
 
@@ -409,10 +633,16 @@ def restore_user_archive(
         ai_memory_events = _restore_ai_memory_events(
             conn, user_id, payload.get("ai_memory_events") or []
         )
+        source_subscriptions = _restore_source_subscriptions(
+            conn, user_id, payload.get("source_subscriptions") or []
+        )
+        preferences = _restore_preferences(conn, user_id, payload.get("preferences"))
 
     return {
         "articles": articles,
         "briefings": briefings,
         "ai_memories": ai_memories,
         "ai_memory_events": ai_memory_events,
+        "source_subscriptions": source_subscriptions,
+        "preferences": preferences,
     }
