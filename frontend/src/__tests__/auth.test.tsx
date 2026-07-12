@@ -15,7 +15,7 @@ import * as api from '../api';
 
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
-    t: (key: string) => {
+    t: (key: string, options?: Record<string, unknown>) => {
       const translations: Record<string, string> = {
         'auth.username': 'Username',
         'auth.password': 'Password',
@@ -33,13 +33,32 @@ vi.mock('react-i18next', () => ({
         'auth.invalid_username_or_password': 'Invalid username or password.',
         'auth.failed_to_send_code': 'Failed to send code. Please try again.',
         'auth.invalid_or_expired_code': 'Invalid or expired code. Please try again.',
+        'auth.loading_options': 'Checking sign-in options…',
+        'auth.config_error':
+          'Sign-in is temporarily unavailable. Check your connection and try again.',
+        'auth.retry': 'Retry',
+        'auth.error_password_disabled':
+          'Password sign-in is disabled. Use email code or Keycloak instead.',
+        'auth.error_throttled': 'Too many attempts. Wait a moment before trying again.',
+        'auth.error_network':
+          'Unable to reach the auth service. Check your connection and try again.',
+        'auth.error_server': 'The auth service is having trouble. Try again shortly.',
+        'auth.code_expires_in': 'Codes expire after 10 minutes.',
+        'auth.resend_available_soon': 'Resend in {{seconds}}s',
+        'auth.change_email': 'Change email',
         'auth.signing_in': 'Signing in…',
         'auth.sign_in_with_keycloak': 'Sign in with Keycloak',
         'auth.create_account': 'Create Account',
         'app.name': 'News Dashboard',
         'app.tagline': 'Your private news platform',
       };
-      return translations[key] ?? key;
+      let value = translations[key] ?? key;
+      if (options && typeof options === 'object') {
+        Object.entries(options).forEach(([name, replacement]) => {
+          value = value.replace(`{{${name}}}`, String(replacement));
+        });
+      }
+      return value;
     },
     i18n: {
       changeLanguage: () => Promise.resolve(),
@@ -317,6 +336,7 @@ function SessionExpiryTrigger() {
 describe('LoginPage', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+    vi.useRealTimers();
     vi.spyOn(api, 'fetchAuthConfig').mockResolvedValue({
       provider: 'password',
       keycloak_enabled: false,
@@ -325,18 +345,18 @@ describe('LoginPage', () => {
     });
   });
 
-  it('renders username and password fields', () => {
+  it('renders username and password fields', async () => {
     renderWithRouter(
       <Routes>
         <Route path="/" element={<LoginPage />} />
       </Routes>
     );
-    expect(screen.getByLabelText(/username/i)).toBeTruthy();
+    expect(await screen.findByLabelText(/username/i)).toBeTruthy();
     expect(screen.getByLabelText(/password/i)).toBeTruthy();
   });
 
-  it('shows error message on 401', async () => {
-    vi.spyOn(api, 'loginUser').mockRejectedValue(new Error('401 Unauthorized'));
+  it('does not show the password form while auth config is loading', () => {
+    vi.spyOn(api, 'fetchAuthConfig').mockReturnValue(new Promise(() => undefined));
 
     renderWithRouter(
       <Routes>
@@ -344,13 +364,92 @@ describe('LoginPage', () => {
       </Routes>
     );
 
-    await userEvent.type(screen.getByLabelText(/username/i), 'alice');
+    expect(screen.getByRole('status').textContent).toContain('Checking sign-in options');
+    expect(screen.queryByLabelText(/username/i)).toBeNull();
+    expect(screen.queryByLabelText(/^password$/i)).toBeNull();
+  });
+
+  it('shows a retryable config error when auth config fails', async () => {
+    const fetchAuthConfig = vi
+      .spyOn(api, 'fetchAuthConfig')
+      .mockRejectedValueOnce(new TypeError('network down'))
+      .mockResolvedValueOnce({
+        provider: 'password',
+        keycloak_enabled: false,
+        login_url: null,
+        logout_url: '/api/auth/logout',
+      });
+
+    renderWithRouter(
+      <Routes>
+        <Route path="/" element={<LoginPage />} />
+      </Routes>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole('alert').textContent).toMatch(/temporarily unavailable/i);
+    });
+
+    await userEvent.click(screen.getByRole('button', { name: /retry/i }));
+
+    await waitFor(() => {
+      expect(screen.getByLabelText(/username/i)).toBeTruthy();
+    });
+    expect(fetchAuthConfig).toHaveBeenCalledTimes(2);
+  });
+
+  it('shows error message on 401', async () => {
+    vi.spyOn(api, 'loginUser').mockRejectedValue(new api.HttpError(401, 'Unauthorized'));
+
+    renderWithRouter(
+      <Routes>
+        <Route path="/" element={<LoginPage />} />
+      </Routes>
+    );
+
+    await userEvent.type(await screen.findByLabelText(/username/i), 'alice');
     await userEvent.type(screen.getByLabelText(/password/i), 'wrong');
     await userEvent.click(screen.getByRole('button', { name: /sign in/i }));
 
     await waitFor(() => {
       expect(screen.getByRole('alert')).toBeTruthy();
       expect(screen.getByRole('alert').textContent).toMatch(/invalid/i);
+    });
+  });
+
+  it('shows password-disabled copy on 409', async () => {
+    vi.spyOn(api, 'loginUser').mockRejectedValue(new api.HttpError(409, 'Keycloak required'));
+
+    renderWithRouter(
+      <Routes>
+        <Route path="/" element={<LoginPage />} />
+      </Routes>
+    );
+
+    await userEvent.type(await screen.findByLabelText(/username/i), 'alice');
+    await userEvent.type(screen.getByLabelText(/password/i), 'wrong');
+    await userEvent.click(screen.getByRole('button', { name: /sign in/i }));
+
+    await waitFor(() => {
+      expect(screen.getByRole('alert').textContent).toMatch(/password sign-in is disabled/i);
+    });
+  });
+
+  it('shows throttling copy on password 429', async () => {
+    vi.spyOn(api, 'loginUser').mockRejectedValue(new api.HttpError(429, 'Too Many Requests'));
+
+    renderWithRouter(
+      <Routes>
+        <Route path="/" element={<LoginPage />} />
+      </Routes>
+    );
+
+    await userEvent.type(await screen.findByLabelText(/username/i), 'alice');
+    await userEvent.type(screen.getByLabelText(/password/i), 'wrong');
+    await userEvent.click(screen.getByRole('button', { name: /sign in/i }));
+
+    await waitFor(() => {
+      expect(screen.getByRole('alert').textContent).toMatch(/too many attempts/i);
     });
   });
 
@@ -364,7 +463,7 @@ describe('LoginPage', () => {
       </Routes>
     );
 
-    await userEvent.type(screen.getByLabelText(/username/i), 'alice');
+    await userEvent.type(await screen.findByLabelText(/username/i), 'alice');
     await userEvent.type(screen.getByLabelText(/password/i), 'wrong');
     await userEvent.click(screen.getByRole('button', { name: /sign in/i }));
 
@@ -383,7 +482,7 @@ describe('LoginPage', () => {
     );
 
     // '/' is the default redirect destination when there's no from state
-    await userEvent.type(screen.getByLabelText(/username/i), 'alice');
+    await userEvent.type(await screen.findByLabelText(/username/i), 'alice');
     await userEvent.type(screen.getByLabelText(/password/i), 'correcthorse');
     await userEvent.click(screen.getByRole('button', { name: /sign in/i }));
 
@@ -409,7 +508,7 @@ describe('LoginPage', () => {
     // Simulate location state with from='/today'
     // We can't easily set state on MemoryRouter initial entry, so we test
     // via the component by verifying loginUser is called correctly.
-    await userEvent.type(screen.getByLabelText(/username/i), 'alice');
+    await userEvent.type(await screen.findByLabelText(/username/i), 'alice');
     await userEvent.type(screen.getByLabelText(/password/i), 'correct');
     await userEvent.click(screen.getByRole('button', { name: /sign in/i }));
 
@@ -469,5 +568,89 @@ describe('LoginPage', () => {
     expect(loginLink.getAttribute('href')).toBe('/auth/login');
     // No password fields in Keycloak mode (password login is disabled server-side).
     expect(screen.queryByLabelText(/^password$/i)).toBeNull();
+  });
+
+  it('shows throttling copy when OTP request is rate limited', async () => {
+    vi.spyOn(api, 'requestOtp').mockRejectedValue(new api.HttpError(429, 'Too Many Requests'));
+
+    renderWithRouter(
+      <Routes>
+        <Route path="/" element={<LoginPage />} />
+      </Routes>
+    );
+
+    await userEvent.click(await screen.findByRole('button', { name: /use email code/i }));
+    await userEvent.type(screen.getByLabelText(/email address/i), 'alice@example.com');
+    await userEvent.click(screen.getByRole('button', { name: /send code/i }));
+
+    await waitFor(() => {
+      expect(screen.getByRole('alert').textContent).toMatch(/too many attempts/i);
+    });
+  });
+
+  it('shows throttling copy when OTP verification is rate limited', async () => {
+    vi.spyOn(api, 'requestOtp').mockResolvedValue(undefined);
+    vi.spyOn(api, 'loginWithOtp').mockRejectedValue(new api.HttpError(429, 'Too Many Requests'));
+
+    renderWithRouter(
+      <Routes>
+        <Route path="/" element={<LoginPage />} />
+      </Routes>
+    );
+
+    await userEvent.click(await screen.findByRole('button', { name: /use email code/i }));
+    await userEvent.type(screen.getByLabelText(/email address/i), 'alice@example.com');
+    await userEvent.click(screen.getByRole('button', { name: /send code/i }));
+    await userEvent.type(await screen.findByLabelText(/6-digit code/i), '123456');
+    await userEvent.click(screen.getByRole('button', { name: /verify code/i }));
+
+    await waitFor(() => {
+      expect(screen.getByRole('alert').textContent).toMatch(/too many attempts/i);
+    });
+  });
+
+  it('resends an OTP from the code step and clears the stale code', async () => {
+    vi.spyOn(api, 'requestOtp').mockResolvedValue(undefined);
+
+    renderWithRouter(
+      <Routes>
+        <Route path="/" element={<LoginPage />} />
+      </Routes>
+    );
+
+    await userEvent.click(await screen.findByRole('button', { name: /use email code/i }));
+    await userEvent.type(screen.getByLabelText(/email address/i), 'alice@example.com');
+    await userEvent.click(screen.getByRole('button', { name: /send code/i }));
+    await userEvent.type(await screen.findByLabelText(/6-digit code/i), '123456');
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /resend code/i })).toBeEnabled();
+    });
+    await userEvent.click(screen.getByRole('button', { name: /resend code/i }));
+
+    await waitFor(() => {
+      expect(api.requestOtp).toHaveBeenCalledTimes(2);
+    });
+    expect(screen.getByLabelText(/6-digit code/i)).toHaveValue('');
+    expect(screen.getByText(/codes expire after 10 minutes/i)).toBeTruthy();
+  });
+
+  it('lets OTP users change the email address from the code step', async () => {
+    vi.spyOn(api, 'requestOtp').mockResolvedValue(undefined);
+
+    renderWithRouter(
+      <Routes>
+        <Route path="/" element={<LoginPage />} />
+      </Routes>
+    );
+
+    await userEvent.click(await screen.findByRole('button', { name: /use email code/i }));
+    await userEvent.type(screen.getByLabelText(/email address/i), 'alice@example.com');
+    await userEvent.click(screen.getByRole('button', { name: /send code/i }));
+    await userEvent.type(await screen.findByLabelText(/6-digit code/i), '123456');
+    await userEvent.click(screen.getByRole('button', { name: /change email/i }));
+
+    expect(screen.getByLabelText(/email address/i)).toHaveValue('alice@example.com');
+    expect(screen.queryByLabelText(/6-digit code/i)).toBeNull();
   });
 });
