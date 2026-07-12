@@ -110,6 +110,36 @@ describe('requestJson', () => {
     const headers = calls[0].init?.headers as Record<string, string>;
     expect(headers['X-Custom']).toBe('v');
   });
+
+  it('emits a session-expired event for non-auth API 401 responses', async () => {
+    const listener = vi.fn();
+    window.addEventListener(api.sessionExpiredEvent, listener);
+    stubFetch(() => ({
+      ok: false,
+      status: 401,
+      statusText: 'Unauthorized',
+      json: () => Promise.resolve({ detail: 'Not authenticated' }),
+    }));
+
+    await expect(api.requestJson('/api/articles')).rejects.toThrow('Not authenticated');
+    expect(listener).toHaveBeenCalledOnce();
+    window.removeEventListener(api.sessionExpiredEvent, listener);
+  });
+
+  it('does not emit session-expired events for auth endpoint 401 responses', async () => {
+    const listener = vi.fn();
+    window.addEventListener(api.sessionExpiredEvent, listener);
+    stubFetch(() => ({
+      ok: false,
+      status: 401,
+      statusText: 'Unauthorized',
+      json: () => Promise.resolve({ detail: 'Invalid credentials' }),
+    }));
+
+    await expect(api.requestJson('/api/auth/login')).rejects.toThrow('Invalid credentials');
+    expect(listener).not.toHaveBeenCalled();
+    window.removeEventListener(api.sessionExpiredEvent, listener);
+  });
 });
 
 describe('article list endpoints', () => {
