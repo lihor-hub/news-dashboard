@@ -69,7 +69,8 @@ export function DataExportSection() {
         <div className="border-t border-border pt-3">
           <p className="text-xs text-muted-foreground mb-2">
             Restore a previously downloaded archive into this account. Existing articles, briefings,
-            and AI memories are matched and updated rather than duplicated.
+            AI memories, source subscriptions, and preferences are matched and updated rather than
+            duplicated.
           </p>
           <button
             onClick={() => document.getElementById('archive-import-input')?.click()}
@@ -116,6 +117,8 @@ export function DataExportSection() {
               <li>Articles: {formatCounts(importResult.articles)}</li>
               <li>Briefings: {formatCounts(importResult.briefings)}</li>
               <li>AI memories: {formatCounts(importResult.ai_memories)}</li>
+              <li>Source subscriptions: {formatCounts(importResult.source_subscriptions)}</li>
+              <li>Preferences: {formatCounts(importResult.preferences)}</li>
             </ul>
           )}
           {importState === 'error' && (

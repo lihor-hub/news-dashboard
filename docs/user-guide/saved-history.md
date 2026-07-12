@@ -99,11 +99,20 @@ session tokens, push subscription keys, API tokens) are never included.
 
 To restore an archive, click "Restore archive" next to the download button
 and pick a previously downloaded JSON file. Re-importing the same file is
-safe: existing articles, briefings, and AI memories are matched and updated
-in place rather than duplicated. Only the same major archive schema version
-produced by this instance can be restored (an older or newer
-`schema_version` is rejected), and restoring only ever writes data for your
-own account.
+safe: existing articles, briefings, AI memories, source subscriptions, and
+preferences are matched and updated in place rather than duplicated. Only
+the same major archive schema version produced by this instance can be
+restored (an older or newer `schema_version` is rejected), and restoring
+only ever writes data for your own account.
+
+Restore covers your global source enabled/disabled state, private sources
+you own (recreated if missing, never taking over someone else's source or a
+global one), recommendation weights, onboarding interests/completion state,
+and notification settings (briefing time/timezone, push-enabled, recap day,
+analytics opt-in). It intentionally skips anything that isn't safe to
+restore automatically, such as push subscription keys, reading-list digest
+preferences not present in the archive, and any private source whose slug
+already belongs to a different account.
 
 ## Auto-cleanup
 
