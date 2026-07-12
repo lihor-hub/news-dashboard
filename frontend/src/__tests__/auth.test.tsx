@@ -3,11 +3,12 @@
  * Tests for #130 — auth guard (RequireAuth) and login page.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { useEffect } from 'react';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Routes, Route, useLocation } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { AuthProvider } from '../contexts/auth';
+import { AuthProvider, useAuth } from '../contexts/auth';
 import { RequireAuth } from '../components/RequireAuth';
 import { LoginPage } from '../pages/LoginPage';
 import * as api from '../api';
@@ -99,7 +100,7 @@ describe('RequireAuth', () => {
   });
 
   it('redirects to /login when /api/auth/me returns 401', async () => {
-    vi.spyOn(api, 'fetchMe').mockRejectedValue(new Error('401 Unauthorized'));
+    vi.spyOn(api, 'fetchMe').mockRejectedValue(new api.HttpError(401, 'Unauthorized'));
     vi.spyOn(api, 'fetchAuthConfig').mockResolvedValue({
       provider: 'password',
       keycloak_enabled: false,
@@ -128,7 +129,7 @@ describe('RequireAuth', () => {
   });
 
   it('shows the in-app login page (not an immediate Keycloak redirect) on 401 when Keycloak is enabled', async () => {
-    vi.spyOn(api, 'fetchMe').mockRejectedValue(new Error('401 Unauthorized'));
+    vi.spyOn(api, 'fetchMe').mockRejectedValue(new api.HttpError(401, 'Unauthorized'));
     vi.spyOn(api, 'fetchAuthConfig').mockResolvedValue({
       provider: 'keycloak',
       keycloak_enabled: true,
@@ -170,8 +171,27 @@ describe('RequireAuth', () => {
     }
   });
 
-  it('passes the original path via location state when redirecting', async () => {
-    vi.spyOn(api, 'fetchMe').mockRejectedValue(new Error('401 Unauthorized'));
+  it('shows a visible branded checking state while /api/auth/me is pending', () => {
+    vi.spyOn(api, 'fetchMe').mockReturnValue(new Promise(() => undefined));
+
+    renderWithRouter(
+      <Routes>
+        <Route
+          path="/"
+          element={
+            <RequireAuth>
+              <div>Protected content</div>
+            </RequireAuth>
+          }
+        />
+      </Routes>
+    );
+
+    expect(screen.getByText('Checking your session')).toBeTruthy();
+  });
+
+  it('passes the original full app URL via location state when redirecting', async () => {
+    vi.spyOn(api, 'fetchMe').mockRejectedValue(new api.HttpError(401, 'Unauthorized'));
     vi.spyOn(api, 'fetchAuthConfig').mockResolvedValue({
       provider: 'password',
       keycloak_enabled: false,
@@ -202,13 +222,76 @@ describe('RequireAuth', () => {
           }
         />
       </Routes>,
-      { initialPath: '/today' }
+      { initialPath: '/today?q=ai#results' }
     );
 
     await waitFor(() => {
       expect(capturedState).toBeTruthy();
     });
-    expect((capturedState as { from?: string }).from).toBe('/today');
+    expect((capturedState as { from?: string }).from).toBe('/today?q=ai#results');
+  });
+
+  it('shows a retryable service problem for startup 5xx failures', async () => {
+    vi.spyOn(api, 'fetchMe').mockRejectedValue(new api.HttpError(503, 'Service Unavailable'));
+
+    renderWithRouter(
+      <Routes>
+        <Route
+          path="/"
+          element={
+            <RequireAuth>
+              <div>Protected content</div>
+            </RequireAuth>
+          }
+        />
+        <Route path="/login" element={<div>Login page</div>} />
+      </Routes>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('We could not verify your session')).toBeTruthy();
+    });
+    expect(screen.getByRole('button', { name: /retry/i })).toBeTruthy();
+    expect(screen.queryByText('Login page')).toBeNull();
+  });
+
+  it('routes to login once with session-expired state after an authenticated API 401', async () => {
+    vi.spyOn(api, 'fetchMe').mockResolvedValue({
+      id: 1,
+      username: 'alice',
+      is_admin: false,
+    });
+
+    let capturedState: unknown = undefined;
+
+    renderWithRouter(
+      <Routes>
+        <Route
+          path="/today"
+          element={
+            <RequireAuth>
+              <SessionExpiryTrigger />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/login"
+          element={
+            <RouteStateCapture
+              onState={(s) => {
+                capturedState = s;
+              }}
+            />
+          }
+        />
+      </Routes>,
+      { initialPath: '/today?q=ai#results' }
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('Login page')).toBeTruthy();
+    });
+    expect(capturedState).toEqual({ from: '/today?q=ai#results', sessionExpired: true });
   });
 });
 
@@ -216,6 +299,17 @@ function RouteStateCapture({ onState }: { onState: (s: unknown) => void }) {
   const loc = useLocation();
   onState(loc.state);
   return <div>Login page</div>;
+}
+
+function SessionExpiryTrigger() {
+  const { setUser } = useAuth();
+
+  useEffect(() => {
+    setUser({ id: 1, username: 'alice', is_admin: false });
+    window.dispatchEvent(new CustomEvent(api.sessionExpiredEvent, { detail: { url: '/api/me' } }));
+  }, [setUser]);
+
+  return <div>Protected content</div>;
 }
 
 // ── LoginPage ─────────────────────────────────────────────────────────────────

@@ -28,6 +28,12 @@ export class HttpError extends Error {
   }
 }
 
+export const sessionExpiredEvent = 'news-dashboard:session-expired';
+
+function shouldEmitSessionExpired(url: string): boolean {
+  return url.startsWith('/api/') && !url.startsWith('/api/auth/');
+}
+
 export async function requestJson<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, {
     headers: { 'Content-Type': 'application/json', ...(init?.headers ?? {}) },
@@ -35,7 +41,11 @@ export async function requestJson<T>(url: string, init?: RequestInit): Promise<T
     ...init,
   });
   if (!response.ok) {
-    throw new HttpError(response.status, await readErrorMessage(response));
+    const error = new HttpError(response.status, await readErrorMessage(response));
+    if (response.status === 401 && shouldEmitSessionExpired(url)) {
+      window.dispatchEvent(new CustomEvent(sessionExpiredEvent, { detail: { url } }));
+    }
+    throw error;
   }
   return response.json() as Promise<T>;
 }

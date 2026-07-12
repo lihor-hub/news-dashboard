@@ -13,7 +13,8 @@ export function LoginPage() {
   const { setUser } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  const from = (location.state as { from?: string } | null)?.from ?? '/';
+  const locationState = location.state as { from?: string; sessionExpired?: boolean } | null;
+  const from = locationState?.from ?? '/';
 
   const [authConfig, setAuthConfig] = useState<AuthConfig | null>(null);
   const [mode, setMode] = useState<LoginMode>('password');
@@ -23,7 +24,9 @@ export function LoginPage() {
   const [password, setPassword] = useState('');
   const [otpEmail, setOtpEmail] = useState('');
   const [otpCode, setOtpCode] = useState('');
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(
+    locationState?.sessionExpired ? 'Your session expired. Sign in again to continue.' : null
+  );
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
