@@ -308,7 +308,7 @@ export function AppShell() {
         <div className="md:flex md:max-w-6xl md:mx-auto md:gap-0">
           <DesktopRail pathname={pathname} />
           <div className="flex-1 min-w-0">
-            <ErrorBoundary>
+            <ErrorBoundary resetKey={pathname} compact>
               <Outlet />
             </ErrorBoundary>
           </div>
@@ -338,19 +338,21 @@ export function AppShell() {
         </div>
       </nav>
 
-      <Suspense fallback={null}>
-        <CommandPalette
-          open={paletteOpen}
-          onOpenChange={setPaletteOpen}
-          onShortcuts={() => {
-            setPaletteOpen(false);
-            setShortcutsOpen(true);
-          }}
-        />
-        <ShortcutOverlay open={shortcutsOpen} onOpenChange={setShortcutsOpen} />
-        <WhatsNewDialog state={whatsNew} />
-        <OnboardingWizard open={onboarding.open} onClose={onboarding.skip} />
-      </Suspense>
+      <ErrorBoundary silent resetKey={pathname}>
+        <Suspense fallback={null}>
+          <CommandPalette
+            open={paletteOpen}
+            onOpenChange={setPaletteOpen}
+            onShortcuts={() => {
+              setPaletteOpen(false);
+              setShortcutsOpen(true);
+            }}
+          />
+          <ShortcutOverlay open={shortcutsOpen} onOpenChange={setShortcutsOpen} />
+          <WhatsNewDialog state={whatsNew} />
+          <OnboardingWizard open={onboarding.open} onClose={onboarding.skip} />
+        </Suspense>
+      </ErrorBoundary>
       <ListenQueuePlayer />
     </div>
   );
