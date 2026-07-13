@@ -78,6 +78,17 @@ describe('ErrorBoundary', () => {
     }
   });
 
+  it('renders inline instead of filling the viewport when compact is set', () => {
+    const { container } = render(
+      <ErrorBoundary compact>
+        <Bomb />
+      </ErrorBoundary>
+    );
+
+    expect(container.querySelector('.min-h-screen')).toBeNull();
+    expect(screen.getByText('Something went wrong')).toBeInTheDocument();
+  });
+
   it('shows chunk-load-specific copy and hides Try again for stale chunk failures', () => {
     render(
       <ErrorBoundary>
