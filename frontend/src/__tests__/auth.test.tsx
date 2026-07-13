@@ -609,6 +609,50 @@ describe('LoginPage', () => {
     });
   });
 
+  it('returns from email OTP mode to password sign in', async () => {
+    renderWithRouter(
+      <Routes>
+        <Route path="/" element={<LoginPage />} />
+      </Routes>
+    );
+
+    await userEvent.click(await screen.findByRole('button', { name: /use email code/i }));
+    expect(screen.getByLabelText(/email address/i)).toBeTruthy();
+
+    await userEvent.click(screen.getByRole('button', { name: /back to password sign in/i }));
+
+    expect(screen.getByLabelText(/username/i)).toBeTruthy();
+    expect(screen.getByLabelText(/^password$/i)).toBeTruthy();
+  });
+
+  it('redirects after successful OTP verification', async () => {
+    vi.spyOn(api, 'requestOtp').mockResolvedValue(undefined);
+    vi.spyOn(api, 'loginWithOtp').mockResolvedValue({
+      id: 1,
+      username: 'alice',
+      is_admin: false,
+    });
+
+    renderWithRouter(
+      <Routes>
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="/" element={<div>Home</div>} />
+      </Routes>,
+      { initialPath: '/login' }
+    );
+
+    await userEvent.click(await screen.findByRole('button', { name: /use email code/i }));
+    await userEvent.type(screen.getByLabelText(/email address/i), 'alice@example.com');
+    await userEvent.click(screen.getByRole('button', { name: /send code/i }));
+    await userEvent.type(await screen.findByLabelText(/6-digit code/i), '123456');
+    await userEvent.click(screen.getByRole('button', { name: /verify code/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText('Home')).toBeTruthy();
+    });
+    expect(api.loginWithOtp).toHaveBeenCalledWith('alice@example.com', '123456');
+  });
+
   it('resends an OTP from the code step and clears the stale code', async () => {
     vi.spyOn(api, 'requestOtp').mockResolvedValue(undefined);
 
