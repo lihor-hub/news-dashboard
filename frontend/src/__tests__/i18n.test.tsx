@@ -27,6 +27,12 @@ function renderWithI18n(ui: React.ReactNode) {
 describe('i18n integration', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+    vi.spyOn(api, 'fetchAuthConfig').mockResolvedValue({
+      provider: 'password',
+      keycloak_enabled: false,
+      login_url: null,
+      logout_url: '/api/auth/logout',
+    });
   });
 
   it('renders LoginPage with translated English strings', async () => {
@@ -56,7 +62,7 @@ describe('i18n integration', () => {
     renderWithI18n(<LoginPage />);
 
     // Fill in the form and submit
-    await userEvent.type(screen.getByLabelText('Username'), 'testuser');
+    await userEvent.type(await screen.findByLabelText('Username'), 'testuser');
     await userEvent.type(screen.getByLabelText('Password'), 'wrongpass');
     await userEvent.click(screen.getByRole('button', { name: /sign in/i }));
 

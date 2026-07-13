@@ -22,7 +22,17 @@
     "verify_code": "Vahvista koodi",
     "signing_in": "Kirjaudutaan sisään…",
     "sign_in_with_keycloak": "Kirjaudu Keycloakilla",
-    "create_account": "Luo tili"
+    "create_account": "Luo tili",
+    "loading_options": "Checking sign-in options…",
+    "config_error": "Sign-in is temporarily unavailable. Check your connection and try again.",
+    "retry": "Retry",
+    "error_password_disabled": "Password sign-in is disabled. Use email code or Keycloak instead.",
+    "error_throttled": "Too many attempts. Wait a moment before trying again.",
+    "error_network": "Unable to reach the auth service. Check your connection and try again.",
+    "error_server": "The auth service is having trouble. Try again shortly.",
+    "code_expires_in": "Codes expire after 10 minutes.",
+    "resend_available_soon": "Resend in {{seconds}}s",
+    "change_email": "Change email"
   },
   "nav": {
     "brief": "Yhteenveto",

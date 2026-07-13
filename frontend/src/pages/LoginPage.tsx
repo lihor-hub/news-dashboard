@@ -1,12 +1,47 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { fetchAuthConfig, loginUser, requestOtp, loginWithOtp, type AuthConfig } from '@/api';
+import {
+  HttpError,
+  fetchAuthConfig,
+  loginUser,
+  requestOtp,
+  loginWithOtp,
+  type AuthConfig,
+} from '@/api';
 import { useAuth } from '@/contexts/auth';
 import { AppLogo } from '@/components/AppLogo';
 
 type OtpStep = 'email' | 'code';
 type LoginMode = 'password' | 'otp';
+type AuthConfigStatus = 'loading' | 'ready' | 'error';
+type AuthAction = 'password' | 'otp-request' | 'otp-verify';
+
+const OTP_RESEND_COOLDOWN_SECONDS = 1;
+
+function isNetworkError(error: unknown) {
+  return error instanceof TypeError;
+}
+
+function authErrorKey(action: AuthAction, error: unknown) {
+  if (isNetworkError(error)) return 'auth.error_network';
+
+  if (error instanceof HttpError) {
+    if (error.status === 429) return 'auth.error_throttled';
+    if (error.status >= 500) return 'auth.error_server';
+    if (action === 'password' && error.status === 409) return 'auth.error_password_disabled';
+    if (action === 'password' && error.status === 401) {
+      return 'auth.invalid_username_or_password';
+    }
+    if (action === 'otp-verify' && error.status === 401) {
+      return 'auth.invalid_or_expired_code';
+    }
+  }
+
+  if (action === 'otp-request') return 'auth.failed_to_send_code';
+  if (action === 'otp-verify') return 'auth.invalid_or_expired_code';
+  return 'auth.invalid_username_or_password';
+}
 
 export function LoginPage() {
   const { t } = useTranslation();
@@ -17,6 +52,7 @@ export function LoginPage() {
   const from = locationState?.from ?? '/';
 
   const [authConfig, setAuthConfig] = useState<AuthConfig | null>(null);
+  const [authConfigStatus, setAuthConfigStatus] = useState<AuthConfigStatus>('loading');
   const [mode, setMode] = useState<LoginMode>('password');
   const [otpStep, setOtpStep] = useState<OtpStep>('email');
 
@@ -28,26 +64,41 @@ export function LoginPage() {
     locationState?.sessionExpired ? 'Your session expired. Sign in again to continue.' : null
   );
   const [loading, setLoading] = useState(false);
+  const [resendCooldown, setResendCooldown] = useState(0);
 
   useEffect(() => {
+    setAuthConfigStatus('loading');
     void fetchAuthConfig()
       .then((config) => {
         setAuthConfig(config);
+        setAuthConfigStatus('ready');
         // When Keycloak SSO is enabled, password login is disabled server-side,
         // so default to the email OTP flow (Keycloak stays as a secondary option).
         if (config.provider === 'keycloak') {
           setMode('otp');
         }
       })
-      .catch(() =>
-        setAuthConfig({
-          provider: 'password',
-          keycloak_enabled: false,
-          login_url: null,
-          logout_url: '/api/auth/logout',
-        })
-      );
+      .catch(() => setAuthConfigStatus('error'));
   }, []);
+
+  useEffect(() => {
+    if (resendCooldown <= 0) return;
+    const timer = window.setTimeout(() => setResendCooldown((value) => value - 1), 1000);
+    return () => window.clearTimeout(timer);
+  }, [resendCooldown]);
+
+  async function loadAuthConfig() {
+    setError(null);
+    setAuthConfigStatus('loading');
+    try {
+      const config = await fetchAuthConfig();
+      setAuthConfig(config);
+      setAuthConfigStatus('ready');
+      setMode(config.provider === 'keycloak' ? 'otp' : 'password');
+    } catch {
+      setAuthConfigStatus('error');
+    }
+  }
 
   async function handlePasswordSubmit(e: FormEvent) {
     e.preventDefault();
@@ -57,11 +108,18 @@ export function LoginPage() {
       const user = await loginUser(username, password);
       setUser(user);
       void navigate(from, { replace: true });
-    } catch {
-      setError(t('auth.invalid_username_or_password'));
+    } catch (err) {
+      setError(t(authErrorKey('password', err)));
     } finally {
       setLoading(false);
     }
+  }
+
+  async function sendOtpCode() {
+    await requestOtp(otpEmail);
+    setOtpCode('');
+    setOtpStep('code');
+    setResendCooldown(OTP_RESEND_COOLDOWN_SECONDS);
   }
 
   async function handleOtpEmailSubmit(e: FormEvent) {
@@ -69,10 +127,21 @@ export function LoginPage() {
     setError(null);
     setLoading(true);
     try {
-      await requestOtp(otpEmail);
-      setOtpStep('code');
-    } catch {
-      setError(t('auth.failed_to_send_code'));
+      await sendOtpCode();
+    } catch (err) {
+      setError(t(authErrorKey('otp-request', err)));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleOtpResend() {
+    setError(null);
+    setLoading(true);
+    try {
+      await sendOtpCode();
+    } catch (err) {
+      setError(t(authErrorKey('otp-request', err)));
     } finally {
       setLoading(false);
     }
@@ -86,8 +155,8 @@ export function LoginPage() {
       const user = await loginWithOtp(otpEmail, otpCode);
       setUser(user);
       void navigate(from, { replace: true });
-    } catch {
-      setError(t('auth.invalid_or_expired_code'));
+    } catch (err) {
+      setError(t(authErrorKey('otp-verify', err)));
     } finally {
       setLoading(false);
     }
@@ -107,7 +176,24 @@ export function LoginPage() {
           </div>
         </div>
 
-        {mode === 'password' ? (
+        {authConfigStatus === 'loading' ? (
+          <div role="status" className="text-center text-sm text-muted-foreground">
+            {t('auth.loading_options')}
+          </div>
+        ) : authConfigStatus === 'error' ? (
+          <div className="space-y-4">
+            <p role="alert" className="text-sm text-[color:var(--err)]">
+              {t('auth.config_error')}
+            </p>
+            <button
+              type="button"
+              onClick={() => void loadAuthConfig()}
+              className="w-full rounded-md bg-foreground px-4 py-2 text-sm font-medium text-background transition-opacity disabled:opacity-50"
+            >
+              {t('auth.retry')}
+            </button>
+          </div>
+        ) : mode === 'password' ? (
           <div className="space-y-4">
             <form onSubmit={(e) => void handlePasswordSubmit(e)} className="space-y-4">
               <div className="space-y-1">
@@ -250,6 +336,7 @@ export function LoginPage() {
               {t('auth.a_6_digit_code_was_sent_to')}{' '}
               <span className="font-medium text-foreground">{otpEmail}</span>.
             </p>
+            <p className="text-xs text-muted-foreground text-center">{t('auth.code_expires_in')}</p>
 
             <form onSubmit={(e) => void handleOtpCodeSubmit(e)} className="space-y-4">
               <div className="space-y-1">
@@ -289,7 +376,17 @@ export function LoginPage() {
               </button>
             </form>
 
-            <div className="text-center">
+            <div className="flex items-center justify-center gap-3 text-center">
+              <button
+                type="button"
+                onClick={() => void handleOtpResend()}
+                disabled={loading || resendCooldown > 0}
+                className="text-sm text-muted-foreground transition-colors underline underline-offset-4 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {resendCooldown > 0
+                  ? t('auth.resend_available_soon', { seconds: resendCooldown })
+                  : t('auth.resend_code')}
+              </button>
               <button
                 type="button"
                 onClick={() => {
@@ -299,7 +396,7 @@ export function LoginPage() {
                 }}
                 className="text-sm text-muted-foreground hover:text-foreground transition-colors underline underline-offset-4"
               >
-                {t('auth.resend_code')}
+                {t('auth.change_email')}
               </button>
             </div>
           </div>
