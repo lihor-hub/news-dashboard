@@ -1,10 +1,12 @@
 import { useEffect, useMemo } from 'react';
+import type { ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useInfiniteQuery, type QueryKey } from '@tanstack/react-query';
 import { Headphones, type LucideIcon } from 'lucide-react';
 import { ArticleRow } from '@/components/article/ArticleRow';
 import { CategoryFilter } from '@/components/CategoryFilter';
 import { EmptyState } from '@/components/EmptyState';
+import { InlineError, RetryableErrorState } from '@/components/PageState';
 import { useFocusedArticle } from '@/contexts/focusedArticle';
 import { useListenQueue } from '@/contexts/listenQueue';
 import { useArticleListNav } from '@/hooks/useArticleListNav';
@@ -22,7 +24,7 @@ interface ArticleListViewProps {
     loadedCount: number;
     hasMore: boolean;
     isLoading: boolean;
-  }) => React.ReactNode;
+  }) => ReactNode;
   queryKey: QueryKey;
   queryFn: (params: { limit: number; offset: number }) => Promise<TriageArticlePage>;
   empty: {
@@ -33,8 +35,8 @@ interface ArticleListViewProps {
   showCategoryFilter?: boolean;
   showLaterUntil?: boolean;
   sortArticles?: (articles: WorkflowArticle[]) => WorkflowArticle[];
-  banner?: React.ReactNode;
-  action?: (state: { articles: WorkflowArticle[] }) => React.ReactNode;
+  banner?: ReactNode;
+  action?: (state: { articles: WorkflowArticle[] }) => ReactNode;
 }
 
 export function ArticleListView({
@@ -50,7 +52,17 @@ export function ArticleListView({
   action,
 }: ArticleListViewProps) {
   const navigate = useNavigate();
-  const { data, fetchNextPage, hasNextPage, isFetchingNextPage, isLoading } = useInfiniteQuery({
+  const {
+    data,
+    fetchNextPage,
+    hasNextPage,
+    isFetching,
+    isFetchingNextPage,
+    isLoading,
+    isError,
+    isFetchNextPageError,
+    refetch,
+  } = useInfiniteQuery({
     queryKey,
     queryFn: ({ pageParam }) => queryFn({ limit: ARTICLE_PAGE_SIZE, offset: pageParam }),
     initialPageParam: 0,
@@ -115,6 +127,13 @@ export function ArticleListView({
       {banner}
       {isLoading ? (
         <ArticleListSkeleton />
+      ) : isError && list.length === 0 ? (
+        <RetryableErrorState
+          title="Could not load articles"
+          message="The feed request failed. Retry to keep this list distinct from an empty queue."
+          onRetry={() => void refetch()}
+          isRetrying={isFetching}
+        />
       ) : list.length === 0 ? (
         <EmptyState icon={empty.icon} title={empty.title} subtitle={empty.subtitle} />
       ) : (
@@ -129,6 +148,11 @@ export function ArticleListView({
           ))}
           {hasMore && (
             <div className="px-4 py-4 md:px-5">
+              {isFetchNextPageError ? (
+                <div className="mb-2">
+                  <InlineError message="Could not load more articles. Try again." />
+                </div>
+              ) : null}
               <button
                 type="button"
                 className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm font-medium text-foreground hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"

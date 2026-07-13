@@ -20,6 +20,7 @@ import {
   Users,
 } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
 import {
   DndContext,
   KeyboardSensor,
@@ -51,6 +52,7 @@ import {
   type ReadingListStatus,
 } from '@/api/readingListApi';
 import { EmptyState } from '@/components/EmptyState';
+import { ListSkeleton, RetryableErrorState } from '@/components/PageState';
 
 const IMPORT_SOURCES: { value: ReadingListImportSource; label: string }[] = [
   { value: 'pocket', label: 'Pocket (CSV)' },
@@ -262,7 +264,13 @@ export function ReadingListPage() {
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
   );
 
-  const { data: items = [], isLoading } = useQuery({
+  const {
+    data: items = [],
+    isLoading,
+    isError,
+    isFetching,
+    refetch,
+  } = useQuery({
     queryKey: ['reading-list', filter, searchQuery.trim(), kindFilter],
     queryFn: () =>
       fetchReadingList({
@@ -289,16 +297,19 @@ export function ReadingListPage() {
     mutationFn: ({ id, status }: { id: number; status: ReadingListStatus }) =>
       updateReadingListItem(id, { status }),
     onSuccess: invalidate,
+    onError: () => toast.error('Could not update reading-list item'),
   });
 
   const reorderMutation = useMutation({
     mutationFn: (orderedIds: number[]) => reorderReadingList(orderedIds),
     onSuccess: invalidate,
+    onError: () => toast.error('Could not reorder reading list'),
   });
 
   const deleteMutation = useMutation({
     mutationFn: (id: number) => deleteReadingListItem(id),
     onSuccess: invalidate,
+    onError: () => toast.error('Could not delete reading-list item'),
   });
 
   const importMutation = useMutation({
@@ -505,7 +516,16 @@ export function ReadingListPage() {
         ) : null}
       </div>
 
-      {isLoading ? null : items.length === 0 ? (
+      {isLoading ? (
+        <ListSkeleton rows={5} />
+      ) : isError ? (
+        <RetryableErrorState
+          title="Could not load reading list"
+          message="The reading-list request failed. Retry before treating this list as empty."
+          onRetry={() => void refetch()}
+          isRetrying={isFetching}
+        />
+      ) : items.length === 0 ? (
         <EmptyState
           icon={BookmarkPlus}
           title={

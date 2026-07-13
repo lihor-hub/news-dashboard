@@ -131,6 +131,18 @@ describe('BriefPage — empty state', () => {
   });
 });
 
+describe('BriefPage — load failure', () => {
+  it('shows a retryable load error instead of the empty state', async () => {
+    vi.spyOn(api, 'fetchLatestBriefing').mockRejectedValue(new Error('offline'));
+
+    renderBriefPage();
+
+    expect(await screen.findByRole('alert')).toBeTruthy();
+    expect(screen.getByText('Could not load the latest briefing')).toBeTruthy();
+    expect(screen.queryByText('No briefing yet')).toBeNull();
+  });
+});
+
 describe('BriefPage — latest briefing', () => {
   beforeEach(() => {
     vi.spyOn(api, 'fetchLatestBriefing').mockResolvedValue(COMPLETE_BRIEFING);

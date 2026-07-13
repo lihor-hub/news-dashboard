@@ -130,6 +130,31 @@ describe('ArticleListView', () => {
     await waitFor(() => expect(screen.getByText('Queue clear')).toBeTruthy());
   });
 
+  it('renders a retryable error state instead of the empty state when the initial load fails', async () => {
+    renderArticleList(() => Promise.reject(new Error('offline')));
+
+    await waitFor(() => expect(screen.getByText('Could not load articles')).toBeTruthy());
+    expect(screen.getByText(/feed request failed/i)).toBeTruthy();
+    expect(screen.queryByText('Queue clear')).toBeNull();
+  });
+
+  it('renders a retryable error state instead of the empty state when the initial load fails', async () => {
+    const queryFn = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('network down'))
+      .mockResolvedValueOnce(page([makeArticle()]));
+
+    renderArticleList(queryFn);
+
+    await screen.findByRole('alert');
+    expect(screen.getByText('Could not load articles')).toBeTruthy();
+    expect(screen.queryByText('Queue clear')).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+
+    await screen.findByText('Readable article');
+  });
+
   it('loads and appends another page when more articles are available', async () => {
     const queryFn = vi
       .fn()

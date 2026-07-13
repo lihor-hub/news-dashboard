@@ -97,6 +97,23 @@ describe('SharedPage', () => {
     await waitFor(() => expect(screen.getByText('Nothing shared yet')).toBeTruthy());
   });
 
+  it('shows received-share failures separately from an empty inbox', async () => {
+    apiMock.fetchReceivedShares.mockRejectedValue(new Error('offline'));
+    renderWithRouter(<SharedPage />, { path: '/shared', route: '/shared' });
+
+    await waitFor(() => expect(screen.getByText('Could not load received shares')).toBeTruthy());
+    expect(screen.queryByText('Nothing shared yet')).toBeNull();
+  });
+
+  it('shows a retryable received-shares error instead of the empty state', async () => {
+    apiMock.fetchReceivedShares.mockRejectedValue(new Error('offline'));
+    renderWithRouter(<SharedPage />, { path: '/shared', route: '/shared' });
+
+    expect(await screen.findByRole('alert')).toBeTruthy();
+    expect(screen.getByText('Could not load received shares')).toBeTruthy();
+    expect(screen.queryByText('Nothing shared yet')).toBeNull();
+  });
+
   it('renders a share item with title linking to the detail view', async () => {
     apiMock.fetchReceivedShares.mockResolvedValue({ items: [makeShare()] });
     renderWithRouter(<SharedPage />, { path: '/shared', route: '/shared' });
@@ -127,6 +144,18 @@ describe('SharedPage', () => {
 
     await waitFor(() => expect(screen.getByText('Rust vs Go in 2026')).toBeTruthy());
     expect(screen.getByText('charlie')).toBeTruthy();
+  });
+
+  it('shows sent-share failures separately from an empty sent list', async () => {
+    apiMock.fetchReceivedShares.mockResolvedValue({ items: [] });
+    apiMock.fetchSentShares.mockRejectedValue(new Error('offline'));
+    renderWithRouter(<SharedPage />, { path: '/shared', route: '/shared' });
+    await waitFor(() => expect(screen.getByText('Nothing shared yet')).toBeTruthy());
+
+    fireEvent.click(screen.getByRole('button', { name: 'Sent' }));
+
+    await waitFor(() => expect(screen.getByText('Could not load sent shares')).toBeTruthy());
+    expect(screen.queryByText('Nothing sent yet')).toBeNull();
   });
 
   it('revokes a sent share', async () => {

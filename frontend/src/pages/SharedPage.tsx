@@ -2,7 +2,9 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 import { Send, ExternalLink, Ban } from 'lucide-react';
+import { toast } from 'sonner';
 import { EmptyState } from '@/components/EmptyState';
+import { ListSkeleton, RetryableErrorState } from '@/components/PageState';
 import { fetchReceivedShares, fetchSentShares, markShareRead, revokeShare } from '@/api';
 import { relativeTime } from '@/lib/format';
 import { cn } from '@/lib/utils';
@@ -15,7 +17,7 @@ type Tab = 'received' | 'sent';
 
 function ReceivedTab() {
   const queryClient = useQueryClient();
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, isFetching, refetch } = useQuery({
     queryKey: SHARES_KEY,
     queryFn: fetchReceivedShares,
     staleTime: 15_000,
@@ -40,7 +42,20 @@ function ReceivedTab() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [shares.map((s) => (s.read_at ? '' : s.id)).join(',')]);
 
-  if (!isLoading && shares.length === 0) {
+  if (isLoading) return <ListSkeleton rows={3} />;
+
+  if (isError) {
+    return (
+      <RetryableErrorState
+        title="Could not load received shares"
+        message="The received shares request failed. Retry before treating the inbox as empty."
+        onRetry={() => void refetch()}
+        isRetrying={isFetching}
+      />
+    );
+  }
+
+  if (shares.length === 0) {
     return (
       <EmptyState
         icon={Send}
@@ -100,7 +115,7 @@ function ReceivedTab() {
 
 function SentTab() {
   const queryClient = useQueryClient();
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, isFetching, refetch } = useQuery({
     queryKey: SENT_SHARES_KEY,
     queryFn: fetchSentShares,
     staleTime: 15_000,
@@ -113,9 +128,23 @@ function SentTab() {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: SENT_SHARES_KEY });
     },
+    onError: () => toast.error('Could not revoke share'),
   });
 
-  if (!isLoading && shares.length === 0) {
+  if (isLoading) return <ListSkeleton rows={3} />;
+
+  if (isError) {
+    return (
+      <RetryableErrorState
+        title="Could not load sent shares"
+        message="The sent shares request failed. Retry before treating the list as empty."
+        onRetry={() => void refetch()}
+        isRetrying={isFetching}
+      />
+    );
+  }
+
+  if (shares.length === 0) {
     return (
       <EmptyState
         icon={Send}
