@@ -16,7 +16,7 @@ jobs:
         uses: actions/checkout@v7
 
       - name: Dependency Review
-        uses: actions/dependency-review-action@v4
+        uses: actions/dependency-review-action@v5
         with:
           fail-on-severity: high
           # Explicitly left permissive for licenses to allow any open-source license compatible with MIT.
