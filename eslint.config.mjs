@@ -1,10 +1,11 @@
 import js from '@eslint/js';
+import babelParser from '@babel/eslint-parser';
+import babelPresetTypescript from '@babel/preset-typescript';
 import reactHooks from 'eslint-plugin-react-hooks';
 import reactRefresh from 'eslint-plugin-react-refresh';
-import tseslint from 'typescript-eslint';
 import prettier from 'eslint-config-prettier';
 
-export default tseslint.config(
+export default [
   {
     ignores: [
       'frontend/dist',
@@ -21,25 +22,29 @@ export default tseslint.config(
   },
   {
     files: ['frontend/src/**/*.{ts,tsx}'],
-    extends: [
-      js.configs.recommended,
-      ...tseslint.configs.recommendedTypeChecked,
-      ...tseslint.configs.stylisticTypeChecked,
-      reactHooks.configs.flat.recommended,
-      reactRefresh.configs.vite,
-      prettier,
-    ],
     languageOptions: {
+      parser: babelParser,
       parserOptions: {
-        projectService: true,
-        tsconfigRootDir: import.meta.dirname,
+        requireConfigFile: false,
+        babelOptions: {
+          presets: [[babelPresetTypescript, { allExtensions: true, isTSX: true }]],
+        },
       },
     },
+    plugins: {
+      'react-hooks': reactHooks,
+      'react-refresh': reactRefresh,
+    },
     rules: {
-      '@typescript-eslint/no-unused-vars': [
-        'error',
-        { argsIgnorePattern: '^_', varsIgnorePattern: '^_' },
-      ],
+      ...js.configs.recommended.rules,
+      ...reactHooks.configs.flat.recommended.rules,
+      ...reactRefresh.configs.vite.rules,
+      ...prettier.rules,
+      // typescript-eslint 8.63.0 crashes while loading against TypeScript 7.
+      // Use Babel for TS syntax linting and rely on `npm run typecheck` for
+      // type-aware validation until upstream publishes TS 7 support.
+      'no-undef': 'off',
+      'no-unused-vars': 'off',
       // The app uses the classic fetch-in-effect pattern throughout; migrating
       // to a data-fetching library is out of scope for lint adoption.
       'react-hooks/set-state-in-effect': 'off',
@@ -47,6 +52,20 @@ export default tseslint.config(
   },
   {
     files: ['vite.config.ts'],
-    extends: [js.configs.recommended, ...tseslint.configs.recommended, prettier],
-  }
-);
+    languageOptions: {
+      parser: babelParser,
+      parserOptions: {
+        requireConfigFile: false,
+        babelOptions: {
+          presets: [[babelPresetTypescript, { allExtensions: true }]],
+        },
+      },
+    },
+    rules: {
+      ...js.configs.recommended.rules,
+      ...prettier.rules,
+      'no-undef': 'off',
+      'no-unused-vars': 'off',
+    },
+  },
+];

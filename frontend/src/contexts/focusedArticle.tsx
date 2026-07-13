@@ -6,7 +6,6 @@ interface FocusedArticleCtx {
   set: (a: WorkflowArticle | null) => void;
 }
 
-// eslint-disable-next-line @typescript-eslint/no-empty-function
 const Ctx = createContext<FocusedArticleCtx>({ article: null, set: (_a) => {} });
 
 export function FocusedArticleProvider({ children }: { children: ReactNode }) {
