@@ -1,11 +1,18 @@
 import { lazy, Suspense } from 'react';
-import { createBrowserRouter, RouterProvider, Navigate, type RouteObject } from 'react-router-dom';
+import {
+  createBrowserRouter,
+  RouterProvider,
+  Navigate,
+  Link,
+  type RouteObject,
+} from 'react-router-dom';
 import { Loader2 } from 'lucide-react';
 import { FocusedArticleProvider } from './contexts/focusedArticle';
 import { AuthProvider } from './contexts/auth';
 import { ListenQueueProvider } from './contexts/listenQueue';
 import { RequireAuth } from './components/RequireAuth';
 import { AppShell } from './components/AppShell';
+import { RouteErrorRecovery } from './components/RouteErrorRecovery';
 import { LoginPage } from './pages/LoginPage';
 import { BriefPage } from './pages/BriefPage';
 import { FeedsPage } from './pages/FeedsPage';
@@ -99,8 +106,13 @@ const AiStatsPage = lazy(() =>
 
 function PageLoader() {
   return (
-    <div className="flex min-h-[50vh] flex-1 items-center justify-center p-8">
-      <Loader2 className="text-muted-foreground size-6 animate-spin" />
+    <div
+      role="status"
+      aria-live="polite"
+      className="flex min-h-[50vh] flex-1 items-center justify-center p-8"
+    >
+      <Loader2 className="text-muted-foreground size-6 animate-spin" aria-hidden="true" />
+      <span className="sr-only">Loading page…</span>
     </div>
   );
 }
@@ -139,12 +151,12 @@ export function NotFound() {
           The page you're looking for doesn't exist or has been moved.
         </p>
         <div className="mt-6">
-          <a
-            href="/"
+          <Link
+            to="/"
             className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
           >
             Go home
-          </a>
+          </Link>
         </div>
       </div>
     </div>
@@ -156,14 +168,17 @@ export const routes: RouteObject[] = [
   {
     path: '/login',
     element: <LoginPage />,
+    errorElement: <RouteErrorRecovery />,
   },
   {
     path: '/a/:id',
     element: <RequireAuth>{withSuspense(ArticlePage)}</RequireAuth>,
+    errorElement: <RouteErrorRecovery />,
   },
   {
     path: '/shared/:shareId/article',
     element: <RequireAuth>{withSuspense(ArticlePage)}</RequireAuth>,
+    errorElement: <RouteErrorRecovery />,
   },
   {
     path: '/',
@@ -172,6 +187,7 @@ export const routes: RouteObject[] = [
         <AppShell />
       </RequireAuth>
     ),
+    errorElement: <RouteErrorRecovery />,
     children: [
       { index: true, element: <BriefPage /> },
       { path: 'today', element: withSuspense(InboxPage) },
