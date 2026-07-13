@@ -32,7 +32,14 @@
     "verify_code": "Verify code",
     "signing_in": "Signing in…",
     "sign_in_with_keycloak": "Sign in with Keycloak",
-    "create_account": "Create Account"
+    "create_account": "Create Account",
+    "error_oauth_state": "Your sign-in link expired or was already used. Try signing in again.",
+    "error_oauth_code": "Sign-in didn't complete. Try signing in again.",
+    "error_oauth_denied": "Sign-in was cancelled or denied. Try again, or use an email code instead.",
+    "error_oauth_exchange_failed": "We couldn't finish signing you in with Keycloak. Try again, or use an email code instead.",
+    "error_oauth_generic": "Something went wrong signing you in. Try again, or use an email code instead.",
+    "retry_keycloak": "Try Keycloak again",
+    "return_home": "Return home"
   },
   "nav": {
     "brief": "Brief",

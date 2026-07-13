@@ -1,5 +1,10 @@
-/* Keycloak login theme for the Radar Dashboard application. */
+/* Keycloak login theme for the Radar Dashboard application.
+ * Brand mark and tagline are configured once below via CSS custom
+ * properties; update --nd-brand-mark / --nd-brand-tagline here rather
+ * than editing the #kc-page-title::before/::after selectors. */
 :root {
+  --nd-brand-mark: 'RD';
+  --nd-brand-tagline: 'Private radar dashboard for news.lihor.ro';
   --nd-radius: 0.5rem;
   --nd-background: oklch(0.985 0.003 80);
   --nd-foreground: oklch(0.2 0.012 70);
@@ -84,7 +89,7 @@ body.login-pf {
 }
 
 #kc-page-title::before {
-  content: 'RD';
+  content: var(--nd-brand-mark);
   display: grid;
   place-items: center;
   width: 2.5rem;
@@ -99,7 +104,7 @@ body.login-pf {
 }
 
 #kc-page-title::after {
-  content: 'Private radar dashboard for news.lihor.ro';
+  content: var(--nd-brand-tagline);
   display: block;
   margin-top: 0.25rem;
   color: var(--nd-muted-foreground);

@@ -23,6 +23,23 @@ function isNetworkError(error: unknown) {
   return error instanceof TypeError;
 }
 
+const OAUTH_ERROR_KEYS: Record<string, string> = {
+  oauth_state: 'auth.error_oauth_state',
+  oauth_code: 'auth.error_oauth_code',
+  oauth_denied: 'auth.error_oauth_denied',
+  oauth_exchange_failed: 'auth.error_oauth_exchange_failed',
+};
+
+function oauthErrorKey(authError: string) {
+  return OAUTH_ERROR_KEYS[authError] ?? 'auth.error_oauth_generic';
+}
+
+function withNextParam(url: string, from: string) {
+  if (from === '/') return url;
+  const separator = url.includes('?') ? '&' : '?';
+  return `${url}${separator}next=${encodeURIComponent(from)}`;
+}
+
 function authErrorKey(action: AuthAction, error: unknown) {
   if (isNetworkError(error)) return 'auth.error_network';
 
@@ -50,6 +67,7 @@ export function LoginPage() {
   const location = useLocation();
   const locationState = location.state as { from?: string; sessionExpired?: boolean } | null;
   const from = locationState?.from ?? '/';
+  const oauthError = new URLSearchParams(location.search).get('auth_error');
 
   const [authConfig, setAuthConfig] = useState<AuthConfig | null>(null);
   const [authConfigStatus, setAuthConfigStatus] = useState<AuthConfigStatus>('loading');
@@ -163,7 +181,9 @@ export function LoginPage() {
   }
 
   const keycloakEnabled = authConfig?.provider === 'keycloak';
-  const keycloakLoginUrl = keycloakEnabled ? (authConfig.login_url ?? '/auth/login') : null;
+  const keycloakLoginUrl = keycloakEnabled
+    ? withNextParam(authConfig.login_url ?? '/auth/login', from)
+    : null;
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background px-4">
@@ -175,6 +195,21 @@ export function LoginPage() {
             <p className="mt-1 text-sm text-muted-foreground">{t('app.tagline')}</p>
           </div>
         </div>
+
+        {oauthError && (
+          <div className="mb-4 space-y-2 rounded-md border border-border bg-surface p-3 text-center">
+            <p role="alert" className="text-xs text-[color:var(--err)]">
+              {t(oauthErrorKey(oauthError))}
+            </p>
+            <button
+              type="button"
+              onClick={() => void navigate('/', { replace: true })}
+              className="text-xs text-muted-foreground hover:text-foreground transition-colors underline underline-offset-4"
+            >
+              {t('auth.return_home')}
+            </button>
+          </div>
+        )}
 
         {authConfigStatus === 'loading' ? (
           <div role="status" className="text-center text-sm text-muted-foreground">

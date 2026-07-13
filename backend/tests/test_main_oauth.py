@@ -12,6 +12,7 @@ from __future__ import annotations
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
 from news_dashboard import main as main_module
@@ -59,23 +60,43 @@ def test_keycloak_login_redirects_to_provider_and_sets_state_cookie() -> None:
 
 def test_keycloak_callback_rejects_missing_state() -> None:
     resp = _client().get("/auth/callback?code=abc")
-    assert resp.status_code == 400
-    assert "state" in resp.json()["detail"].lower()
+    assert resp.status_code == 307
+    assert resp.headers["location"] == "/login?auth_error=oauth_state"
 
 
 def test_keycloak_callback_rejects_mismatched_state() -> None:
     client = _client()
     client.cookies.set("nd_oauth_state", "expected")
     resp = client.get("/auth/callback?state=different&code=abc")
-    assert resp.status_code == 400
+    assert resp.status_code == 307
+    assert resp.headers["location"] == "/login?auth_error=oauth_state"
 
 
 def test_keycloak_callback_rejects_missing_code() -> None:
     client = _client()
     client.cookies.set("nd_oauth_state", "match")
     resp = client.get("/auth/callback?state=match")
-    assert resp.status_code == 400
-    assert "code" in resp.json()["detail"].lower()
+    assert resp.status_code == 307
+    assert resp.headers["location"] == "/login?auth_error=oauth_code"
+
+
+def test_keycloak_callback_redirects_on_provider_denial() -> None:
+    resp = _client().get("/auth/callback?error=access_denied&state=match")
+    assert resp.status_code == 307
+    assert resp.headers["location"] == "/login?auth_error=oauth_denied"
+
+
+def test_keycloak_callback_redirects_on_token_exchange_failure() -> None:
+    client = _client()
+    client.cookies.set("nd_oauth_state", "match")
+    exchange_error = HTTPException(status_code=401, detail="Keycloak token exchange failed")
+    with patch(
+        "news_dashboard.auth_routes.router.exchange_keycloak_code",
+        new=AsyncMock(side_effect=exchange_error),
+    ):
+        resp = client.get("/auth/callback?state=match&code=bad")
+    assert resp.status_code == 307
+    assert resp.headers["location"] == "/login?auth_error=oauth_exchange_failed"
 
 
 def test_keycloak_callback_success_sets_session_and_redirects() -> None:
@@ -92,6 +113,68 @@ def test_keycloak_callback_success_sets_session_and_redirects() -> None:
     assert resp.status_code == 307
     assert resp.headers["location"] == "/"
     assert resp.cookies.get("nd_session") == "sess-token"
+
+
+def test_keycloak_callback_success_returns_to_next_path() -> None:
+    client = _client()
+    client.cookies.set("nd_oauth_state", "match")
+    client.cookies.set("nd_oauth_next", "/articles/42")
+    with (
+        patch(
+            "news_dashboard.auth_routes.router.exchange_keycloak_code",
+            new=AsyncMock(return_value={"id": 7, "is_admin": False}),
+        ),
+        patch("news_dashboard.auth_routes.router.create_session_token", return_value="sess-token"),
+    ):
+        resp = client.get("/auth/callback?state=match&code=good")
+    assert resp.status_code == 307
+    assert resp.headers["location"] == "/articles/42"
+
+
+def test_keycloak_callback_ignores_unsafe_next_path() -> None:
+    client = _client()
+    client.cookies.set("nd_oauth_state", "match")
+    client.cookies.set("nd_oauth_next", "https://evil.example/steal")
+    with (
+        patch(
+            "news_dashboard.auth_routes.router.exchange_keycloak_code",
+            new=AsyncMock(return_value={"id": 7, "is_admin": False}),
+        ),
+        patch("news_dashboard.auth_routes.router.create_session_token", return_value="sess-token"),
+    ):
+        resp = client.get("/auth/callback?state=match&code=good")
+    assert resp.status_code == 307
+    assert resp.headers["location"] == "/"
+
+
+def test_keycloak_login_sets_next_cookie_for_safe_relative_path() -> None:
+    with (
+        patch(
+            "news_dashboard.auth_routes.router.keycloak_config",
+            return_value=SimpleNamespace(enabled=True),
+        ),
+        patch(
+            "news_dashboard.auth_routes.router.keycloak_authorization_url",
+            return_value="https://idp.example/auth?state=x",
+        ),
+    ):
+        resp = _client().get("/auth/login?next=/articles/42")
+    assert "/articles/42" in (resp.cookies.get("nd_oauth_next") or "")
+
+
+def test_keycloak_login_ignores_unsafe_next_path() -> None:
+    with (
+        patch(
+            "news_dashboard.auth_routes.router.keycloak_config",
+            return_value=SimpleNamespace(enabled=True),
+        ),
+        patch(
+            "news_dashboard.auth_routes.router.keycloak_authorization_url",
+            return_value="https://idp.example/auth?state=x",
+        ),
+    ):
+        resp = _client().get("/auth/login?next=https://evil.example")
+    assert "nd_oauth_next" not in resp.cookies
 
 
 # ── /auth/logout ──────────────────────────────────────────────────────────────
