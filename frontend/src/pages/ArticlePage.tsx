@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { fetchArticle, fetchArticleBody, fetchSharedArticle, fetchSharedArticleBody } from '@/api';
+import { HttpError } from '@/api/core';
 import { adaptArticle, patchArticleState, patchArticleStar } from '@/api/workflowApi';
 import type { WorkflowState } from '@/lib/workflowTypes';
 import { getReaderList } from '@/lib/readerList';
@@ -24,6 +25,19 @@ import { ArticleMetaHeader } from '@/components/article/ArticleMetaHeader';
 import { ArticleBody } from '@/components/article/ArticleBody';
 import { ArticleSelectionActions } from '@/components/article/ArticleSelectionActions';
 
+function articleErrorCopy(error: unknown) {
+  if (error instanceof HttpError && error.status === 404) {
+    return {
+      title: 'Article not found',
+      message: 'This article may have been removed or the shared link is no longer available.',
+    };
+  }
+  return {
+    title: 'Could not load article',
+    message: 'The article request failed. Check your connection and try again.',
+  };
+}
+
 export function ArticlePage() {
   const { id, shareId } = useParams<{ id?: string; shareId?: string }>();
   const navigate = useNavigate();
@@ -34,7 +48,14 @@ export function ArticlePage() {
     [id, shareId]
   );
 
-  const { data: rawArticle, isLoading } = useQuery({
+  const {
+    data: rawArticle,
+    error: articleError,
+    isError,
+    isLoading,
+    isFetching,
+    refetch,
+  } = useQuery({
     queryKey: articleQueryKey,
     queryFn: () => (shareId ? fetchSharedArticle(shareId) : fetchArticle(id!)),
     enabled: !!articleKey,
@@ -191,7 +212,8 @@ export function ArticlePage() {
     doStar: () => void doStar(),
   });
 
-  if (isLoading || !article) {
+  if (isLoading || isError || !article) {
+    const copy = isError ? articleErrorCopy(articleError) : null;
     return (
       <div className="min-h-screen bg-background flex flex-col">
         <header className="sticky top-0 z-20 border-b border-border bg-background/90 backdrop-blur">
@@ -207,6 +229,21 @@ export function ArticlePage() {
         <div className="flex-1 flex items-center justify-center">
           {isLoading ? (
             <Loader2 className="size-5 animate-spin text-muted-foreground" />
+          ) : copy ? (
+            <div role="alert" className="max-w-sm px-5 text-center">
+              <p className="text-sm font-medium text-foreground">{copy.title}</p>
+              <p className="mt-1 text-xs text-muted-foreground">{copy.message}</p>
+              {!(articleError instanceof HttpError && articleError.status === 404) ? (
+                <button
+                  type="button"
+                  onClick={() => void refetch()}
+                  disabled={isFetching}
+                  className="mt-4 rounded-md border border-border px-3 py-1.5 text-xs font-medium text-foreground hover:bg-surface disabled:opacity-50"
+                >
+                  {isFetching ? 'Retrying...' : 'Retry'}
+                </button>
+              ) : null}
+            </div>
           ) : (
             <p className="text-sm text-muted-foreground">Article not found.</p>
           )}

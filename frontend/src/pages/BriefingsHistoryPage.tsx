@@ -5,6 +5,7 @@ import { Newspaper, AlertCircle, ChevronRight, Check, Copy, RefreshCw, Rss } fro
 import { toast } from 'sonner';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
+import { RetryableErrorState } from '@/components/PageState';
 import { fetchBriefings, fetchPodcastFeedToken, regeneratePodcastFeedToken } from '@/api';
 import { formatDate, formatWindow } from '@/lib/briefingUtils';
 import type { Briefing } from '@/types';
@@ -61,7 +62,7 @@ function BriefingRow({ briefing }: { briefing: Briefing }) {
 function PodcastFeedCard() {
   const queryClient = useQueryClient();
   const [copied, setCopied] = useState(false);
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, isFetching, refetch } = useQuery({
     queryKey: ['briefings', 'podcast-feed-token'],
     queryFn: fetchPodcastFeedToken,
   });
@@ -136,7 +137,7 @@ function HistorySkeleton() {
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export function BriefingsHistoryPage() {
-  const { data, isLoading } = useQuery({
+  const { data, isError, isFetching, isLoading, refetch } = useQuery({
     queryKey: ['briefings', 'list'],
     queryFn: () => fetchBriefings(50, 0),
   });
@@ -154,6 +155,13 @@ export function BriefingsHistoryPage() {
 
       {isLoading ? (
         <HistorySkeleton />
+      ) : isError ? (
+        <RetryableErrorState
+          title="Could not load briefing history"
+          message="The briefing history request failed. Retry before treating the history as empty."
+          onRetry={() => void refetch()}
+          isRetrying={isFetching}
+        />
       ) : briefings.length === 0 ? (
         <div className="flex flex-col items-center justify-center text-center py-20 text-muted-foreground px-4">
           <Newspaper className="size-10 text-subtle mb-3" strokeWidth={1.25} />

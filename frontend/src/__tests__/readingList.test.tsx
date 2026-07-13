@@ -86,6 +86,16 @@ describe('ReadingListPage', () => {
     expect(screen.getByText('A very insightful post.')).toBeTruthy();
   });
 
+  it('shows a retryable load error instead of the empty state', async () => {
+    vi.spyOn(readingListApi, 'fetchReadingList').mockRejectedValue(new Error('offline'));
+
+    renderPage();
+
+    expect(await screen.findByRole('alert')).toBeTruthy();
+    expect(screen.getByText('Could not load reading list')).toBeTruthy();
+    expect(screen.queryByText('Your reading list is empty')).toBeNull();
+  });
+
   it('sends search and type filters to the reading list API', async () => {
     const fetchSpy = vi.spyOn(readingListApi, 'fetchReadingList').mockResolvedValue([makeItem()]);
 

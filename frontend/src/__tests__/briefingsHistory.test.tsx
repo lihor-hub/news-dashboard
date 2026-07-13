@@ -122,6 +122,18 @@ describe('BriefingsHistoryPage — empty state', () => {
   });
 });
 
+describe('BriefingsHistoryPage — load failure', () => {
+  it('shows a retryable load error instead of the empty history state', async () => {
+    vi.spyOn(api, 'fetchBriefings').mockRejectedValue(new Error('offline'));
+
+    renderHistory();
+
+    expect(await screen.findByRole('alert')).toBeTruthy();
+    expect(screen.getByText('Could not load briefing history')).toBeTruthy();
+    expect(screen.queryByText('No briefings yet')).toBeNull();
+  });
+});
+
 describe('BriefingsHistoryPage — list state', () => {
   beforeEach(() => {
     vi.spyOn(api, 'fetchBriefings').mockResolvedValue({

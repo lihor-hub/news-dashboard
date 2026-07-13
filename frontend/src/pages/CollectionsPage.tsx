@@ -2,14 +2,22 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Tag as TagIcon, Trash2 } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
 import { createTag, deleteTag, fetchTags } from '@/api/tagsApi';
 import { EmptyState } from '@/components/EmptyState';
+import { ListSkeleton, RetryableErrorState } from '@/components/PageState';
 
 export function CollectionsPage() {
   const queryClient = useQueryClient();
   const [newTagName, setNewTagName] = useState('');
 
-  const { data: tags = [], isLoading } = useQuery({
+  const {
+    data: tags = [],
+    isLoading,
+    isError,
+    isFetching,
+    refetch,
+  } = useQuery({
     queryKey: ['tags'],
     queryFn: fetchTags,
   });
@@ -20,11 +28,13 @@ export function CollectionsPage() {
       void queryClient.invalidateQueries({ queryKey: ['tags'] });
       setNewTagName('');
     },
+    onError: () => toast.error('Could not create collection'),
   });
 
   const deleteMutation = useMutation({
     mutationFn: (tagId: number) => deleteTag(tagId),
     onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['tags'] }),
+    onError: () => toast.error('Could not delete collection'),
   });
 
   function handleCreate() {
@@ -62,7 +72,16 @@ export function CollectionsPage() {
         </button>
       </div>
 
-      {isLoading ? null : tags.length === 0 ? (
+      {isLoading ? (
+        <ListSkeleton rows={4} />
+      ) : isError ? (
+        <RetryableErrorState
+          title="Could not load collections"
+          message="The collections request failed. Retry before assuming there are no collections."
+          onRetry={() => void refetch()}
+          isRetrying={isFetching}
+        />
+      ) : tags.length === 0 ? (
         <EmptyState
           icon={TagIcon}
           title="No collections yet"

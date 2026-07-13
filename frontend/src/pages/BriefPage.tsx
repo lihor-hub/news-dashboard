@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Newspaper, RefreshCw, AlertCircle, Inbox, History, Wand2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { RetryableErrorState } from '@/components/PageState';
 import { fetchLatestBriefing, createBriefing } from '@/api';
 import { BriefingView, BriefSkeleton } from '@/components/BriefingView';
 import { BriefingChat } from '@/components/BriefingChat';
@@ -27,7 +28,7 @@ export function BriefPage() {
   const [noCandidates, setNoCandidates] = useState<NoCandidates>({ shown: false });
   const [focusInput, setFocusInput] = useState('');
 
-  const { data, isLoading, refetch } = useQuery({
+  const { data, isLoading, isError, isFetching, refetch } = useQuery({
     queryKey: ['briefings', 'latest'],
     queryFn: fetchLatestBriefing,
   });
@@ -61,6 +62,17 @@ export function BriefPage() {
 
   if (isLoading) {
     return <BriefSkeleton />;
+  }
+
+  if (isError) {
+    return (
+      <RetryableErrorState
+        title="Could not load the latest briefing"
+        message="The latest briefing request failed. Retry before generating a new brief."
+        onRetry={() => void refetch()}
+        isRetrying={isFetching}
+      />
+    );
   }
 
   // Error states (after attempted generation)
