@@ -9,6 +9,7 @@ WORKFLOWS = [
     ROOT / ".github" / "workflows" / "ci.yml",
     ROOT / ".github" / "workflows" / "trivy-scan.yml",
 ]
+DOCKERFILE = ROOT / "Dockerfile"
 
 
 class TestTrivyWorkflows(unittest.TestCase):
@@ -38,6 +39,18 @@ class TestTrivyWorkflows(unittest.TestCase):
             ):
                 if expected_policy not in workflow:
                     self.fail(f"{path.relative_to(ROOT)} is missing {expected_policy}")
+
+    def test_runtime_image_applies_os_security_updates(self) -> None:
+        dockerfile = DOCKERFILE.read_text()
+        runtime_stage = dockerfile.split("FROM python:3.14-slim AS runtime", maxsplit=1)[1]
+
+        for expected_command in (
+            "apt-get update",
+            "apt-get upgrade -y",
+            "rm -rf /var/lib/apt/lists/*",
+        ):
+            if expected_command not in runtime_stage:
+                self.fail(f"Runtime image is missing `{expected_command}`")
 
 
 if __name__ == "__main__":

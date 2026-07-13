@@ -12,7 +12,12 @@ FROM python:3.14-slim AS runtime
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
 WORKDIR /app
-RUN adduser --disabled-password --gecos '' appuser && mkdir -p /data && chown -R appuser:appuser /data
+RUN apt-get update \
+    && apt-get upgrade -y \
+    && rm -rf /var/lib/apt/lists/* \
+    && adduser --disabled-password --gecos '' appuser \
+    && mkdir -p /data \
+    && chown -R appuser:appuser /data
 COPY pyproject.toml VERSION CHANGELOG.md ./
 COPY backend ./backend
 COPY --from=frontend /app/frontend/dist ./frontend/dist
