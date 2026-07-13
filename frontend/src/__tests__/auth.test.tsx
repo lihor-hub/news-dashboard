@@ -398,6 +398,30 @@ describe('LoginPage', () => {
     expect(fetchAuthConfig).toHaveBeenCalledTimes(2);
   });
 
+  it('keeps the config error visible when retry also fails', async () => {
+    const fetchAuthConfig = vi
+      .spyOn(api, 'fetchAuthConfig')
+      .mockRejectedValueOnce(new TypeError('network down'))
+      .mockRejectedValueOnce(new TypeError('still down'));
+
+    renderWithRouter(
+      <Routes>
+        <Route path="/" element={<LoginPage />} />
+      </Routes>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole('alert').textContent).toMatch(/temporarily unavailable/i);
+    });
+
+    await userEvent.click(screen.getByRole('button', { name: /retry/i }));
+
+    await waitFor(() => {
+      expect(screen.getByRole('alert').textContent).toMatch(/temporarily unavailable/i);
+    });
+    expect(fetchAuthConfig).toHaveBeenCalledTimes(2);
+  });
+
   it('shows error message on 401', async () => {
     vi.spyOn(api, 'loginUser').mockRejectedValue(new api.HttpError(401, 'Unauthorized'));
 
@@ -609,6 +633,27 @@ describe('LoginPage', () => {
     });
   });
 
+  it('shows invalid-code copy when OTP verification returns 401', async () => {
+    vi.spyOn(api, 'requestOtp').mockResolvedValue(undefined);
+    vi.spyOn(api, 'loginWithOtp').mockRejectedValue(new api.HttpError(401, 'Unauthorized'));
+
+    renderWithRouter(
+      <Routes>
+        <Route path="/" element={<LoginPage />} />
+      </Routes>
+    );
+
+    await userEvent.click(await screen.findByRole('button', { name: /use email code/i }));
+    await userEvent.type(screen.getByLabelText(/email address/i), 'alice@example.com');
+    await userEvent.click(screen.getByRole('button', { name: /send code/i }));
+    await userEvent.type(await screen.findByLabelText(/6-digit code/i), '123456');
+    await userEvent.click(screen.getByRole('button', { name: /verify code/i }));
+
+    await waitFor(() => {
+      expect(screen.getByRole('alert').textContent).toMatch(/invalid or expired code/i);
+    });
+  });
+
   it('returns from email OTP mode to password sign in', async () => {
     renderWithRouter(
       <Routes>
@@ -667,9 +712,12 @@ describe('LoginPage', () => {
     await userEvent.click(screen.getByRole('button', { name: /send code/i }));
     await userEvent.type(await screen.findByLabelText(/6-digit code/i), '123456');
 
-    await waitFor(() => {
-      expect(screen.getByRole('button', { name: /resend code/i })).toBeEnabled();
-    });
+    await waitFor(
+      () => {
+        expect(screen.getByRole('button', { name: /resend code/i })).toBeEnabled();
+      },
+      { timeout: 2000 }
+    );
     await userEvent.click(screen.getByRole('button', { name: /resend code/i }));
 
     await waitFor(() => {
@@ -677,6 +725,36 @@ describe('LoginPage', () => {
     });
     expect(screen.getByLabelText(/6-digit code/i)).toHaveValue('');
     expect(screen.getByText(/codes expire after 10 minutes/i)).toBeTruthy();
+  });
+
+  it('shows an error when resending an OTP fails', async () => {
+    const requestOtp = vi
+      .spyOn(api, 'requestOtp')
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(new TypeError('network down'));
+
+    renderWithRouter(
+      <Routes>
+        <Route path="/" element={<LoginPage />} />
+      </Routes>
+    );
+
+    await userEvent.click(await screen.findByRole('button', { name: /use email code/i }));
+    await userEvent.type(screen.getByLabelText(/email address/i), 'alice@example.com');
+    await userEvent.click(screen.getByRole('button', { name: /send code/i }));
+
+    await waitFor(
+      () => {
+        expect(screen.getByRole('button', { name: /resend code/i })).toBeEnabled();
+      },
+      { timeout: 2000 }
+    );
+    await userEvent.click(screen.getByRole('button', { name: /resend code/i }));
+
+    await waitFor(() => {
+      expect(screen.getByRole('alert').textContent).toMatch(/unable to reach the auth service/i);
+    });
+    expect(requestOtp).toHaveBeenCalledTimes(2);
   });
 
   it('lets OTP users change the email address from the code step', async () => {
