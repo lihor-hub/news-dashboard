@@ -668,6 +668,10 @@ POSTGRES_MULTIUSER_SCHEMA = [
     "ALTER TABLE lessons ADD COLUMN IF NOT EXISTS slide_deck_status TEXT"
     " CHECK(slide_deck_status IN ('complete','failed'))",
     "ALTER TABLE lessons ADD COLUMN IF NOT EXISTS slide_deck_error TEXT",
+    "ALTER TABLE lessons ADD COLUMN IF NOT EXISTS infographic JSONB",
+    "ALTER TABLE lessons ADD COLUMN IF NOT EXISTS infographic_status TEXT"
+    " CHECK(infographic_status IN ('complete','failed'))",
+    "ALTER TABLE lessons ADD COLUMN IF NOT EXISTS infographic_error TEXT",
     """
     CREATE TABLE IF NOT EXISTS lesson_generations (
       id BIGSERIAL PRIMARY KEY,

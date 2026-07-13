@@ -34,6 +34,9 @@ const COMPLETE_LESSON: Lesson = {
   slide_deck: null,
   slide_deck_status: null,
   slide_deck_error: null,
+  infographic: null,
+  infographic_status: null,
+  infographic_error: null,
   lesson_detail: {
     gist: 'gist text',
     explanation: 'explanation text',

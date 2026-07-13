@@ -16,6 +16,7 @@ from news_dashboard.body_fetch import extract_body
 from news_dashboard.db import connect, init_db, row_to_dict
 from news_dashboard.learn_from_link import agent_runs
 from news_dashboard.learn_from_link.models import (
+    InfographicArtifact,
     LessonDepth,
     LessonDetail,
     LessonPersona,
@@ -71,9 +72,12 @@ clearly rather than guessing.
 _LESSON_ARTIFACT_RESET_ASSIGNMENTS = """\
 podcast_status = NULL,
                 podcast_error = NULL,
-                slide_deck = NULL,
+slide_deck = NULL,
                 slide_deck_status = NULL,
                 slide_deck_error = NULL,
+                infographic = NULL,
+                infographic_status = NULL,
+                infographic_error = NULL,
                 study_artifacts = NULL,
                 personal_relevance = NULL,
                 relevance_feedback = NULL,
@@ -118,6 +122,18 @@ class LessonSlideDeckGenerationError(RuntimeError):
 
 class SlideDeckValidationError(ValueError):
     """Raised when generated slide deck content fails schema validation."""
+
+
+class LessonInfographicNotConfiguredError(RuntimeError):
+    """Raised when no AI credentials are configured for lesson infographic generation."""
+
+
+class LessonInfographicGenerationError(RuntimeError):
+    """Raised when lesson infographic generation fails for a reason other than missing config."""
+
+
+class InfographicValidationError(ValueError):
+    """Raised when generated infographic content fails schema validation."""
 
 
 class LessonDetailValidationError(ValueError):
@@ -572,6 +588,165 @@ def generate_lesson_slide_deck(
 
     return _update_lesson_slide_deck_success(
         lesson_id, user_id, slide_deck=deck, database_url=database_url
+    )
+
+
+def _update_lesson_infographic_success(
+    lesson_id: int,
+    user_id: int,
+    *,
+    infographic: dict[str, Any],
+    database_url: str | None = None,
+) -> dict[str, Any]:
+    init_db(database_url=database_url)
+    with connect(database_url=database_url) as conn:
+        row = conn.execute(
+            """
+            UPDATE lessons
+            SET infographic = %s::jsonb,
+                infographic_status = 'complete',
+                infographic_error = NULL,
+                updated_at = NOW()
+            WHERE id = %s AND user_id = %s
+            RETURNING *
+            """,
+            (Jsonb(infographic), lesson_id, user_id),
+        ).fetchone()
+    if row is None:
+        raise LessonNotFoundError
+    return _serialize_lesson(row)
+
+
+def _update_lesson_infographic_failure(
+    lesson_id: int,
+    user_id: int,
+    error_message: str,
+    *,
+    database_url: str | None = None,
+) -> dict[str, Any]:
+    init_db(database_url=database_url)
+    with connect(database_url=database_url) as conn:
+        row = conn.execute(
+            """
+            UPDATE lessons
+            SET infographic_status = 'failed',
+                infographic_error = %s,
+                updated_at = NOW()
+            WHERE id = %s AND user_id = %s
+            RETURNING *
+            """,
+            (error_message, lesson_id, user_id),
+        ).fetchone()
+    if row is None:
+        raise LessonNotFoundError
+    return _serialize_lesson(row)
+
+
+_LESSON_INFOGRAPHIC_SYSTEM_PROMPT = """\
+You are the Lesson Infographic Generator. Produce a deterministic, text-first \
+infographic artifact from the lesson below. Return JSON with title, subtitle, \
+sections, and footer fields. Each section needs a heading and body. Ground the \
+artifact only in the supplied lesson detail; do not invent facts, image URLs, \
+or external assets.
+"""
+
+
+def _build_infographic_prompt(lesson: dict[str, Any]) -> str:
+    detail = lesson.get("lesson_detail") or {}
+    lines = [
+        f"Title: {lesson.get('title') or lesson.get('original_url')}",
+        f"Gist: {detail.get('gist', '')}",
+        f"Read-worthiness: {(detail.get('read_worthiness') or {}).get('verdict', '')}",
+        f"Rationale: {(detail.get('read_worthiness') or {}).get('rationale', '')}",
+        f"Why it matters: {detail.get('why_it_matters', '')}",
+    ]
+    for label, key in (
+        ("Key claims", "key_claims"),
+        ("Prerequisite concepts", "prerequisite_concepts"),
+        ("Questions", "questions_to_keep_in_mind"),
+    ):
+        values = detail.get(key) or []
+        if values:
+            lines.append(f"{label}:\n" + "\n".join(f"- {value}" for value in values))
+    return "\n".join(lines)
+
+
+def validate_infographic(raw_infographic: Any) -> dict[str, Any]:
+    try:
+        infographic = InfographicArtifact.model_validate(raw_infographic)
+    except ValidationError as exc:
+        raise InfographicValidationError from exc
+    return infographic.model_dump(mode="json")
+
+
+def generate_infographic_content(lesson: dict[str, Any], user_id: int) -> dict[str, Any]:
+    api_key, base_url = _lesson_chat_ai_config()
+
+    import json
+
+    from news_dashboard.ai_client import chat_create, get_chat_client
+
+    client = get_chat_client(api_key=api_key, base_url=base_url)
+    messages = [
+        {"role": "system", "content": _LESSON_INFOGRAPHIC_SYSTEM_PROMPT},
+        {"role": "user", "content": _build_infographic_prompt(lesson)},
+    ]
+    response = chat_create(
+        client,
+        name="lesson-infographic",
+        tags=["lesson", "infographic"],
+        user_id=user_id,
+        model=os.getenv("OPENAI_LESSON_CHAT_MODEL", DEFAULT_LESSON_CHAT_MODEL),
+        messages=messages,
+        response_format={"type": "json_object"},
+    )
+    parsed = json.loads(response.choices[0].message.content or "")
+    return validate_infographic(parsed)
+
+
+def generate_lesson_infographic(
+    lesson_id: int,
+    user_id: int,
+    *,
+    force: bool = False,
+    database_url: str | None = None,
+) -> dict[str, Any]:
+    """Generate (or return cached) a text-first infographic for a completed lesson."""
+    lesson = get_lesson(lesson_id, user_id, database_url=database_url)
+    if lesson is None:
+        raise LessonNotFoundError
+    if lesson.get("generation_status") != "complete" or lesson.get("lesson_detail") is None:
+        raise LessonNotReadyError
+
+    if not force and lesson.get("infographic_status") == "complete" and lesson.get("infographic"):
+        return lesson
+
+    try:
+        infographic = generate_infographic_content(lesson, user_id)
+    except LessonChatNotConfiguredError as exc:
+        _update_lesson_infographic_failure(lesson_id, user_id, str(exc), database_url=database_url)
+        raise LessonInfographicNotConfiguredError(str(exc)) from exc
+    except InfographicValidationError as exc:
+        logger.warning("lesson infographic validation failed for lesson %d", lesson_id)
+        _update_lesson_infographic_failure(
+            lesson_id,
+            user_id,
+            "Generated infographic was malformed.",
+            database_url=database_url,
+        )
+        raise LessonInfographicGenerationError from exc
+    except Exception as exc:
+        logger.warning("lesson infographic generation failed for lesson %d: %s", lesson_id, exc)
+        _update_lesson_infographic_failure(
+            lesson_id,
+            user_id,
+            "Could not generate infographic.",
+            database_url=database_url,
+        )
+        raise LessonInfographicGenerationError from exc
+
+    return _update_lesson_infographic_success(
+        lesson_id, user_id, infographic=infographic, database_url=database_url
     )
 
 
