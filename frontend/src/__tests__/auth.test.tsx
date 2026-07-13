@@ -49,6 +49,17 @@ vi.mock('react-i18next', () => ({
         'auth.signing_in': 'Signing in…',
         'auth.sign_in_with_keycloak': 'Sign in with Keycloak',
         'auth.create_account': 'Create Account',
+        'auth.error_oauth_state':
+          'Your sign-in link expired or was already used. Try signing in again.',
+        'auth.error_oauth_code': "Sign-in didn't complete. Try signing in again.",
+        'auth.error_oauth_denied':
+          'Sign-in was cancelled or denied. Try again, or use an email code instead.',
+        'auth.error_oauth_exchange_failed':
+          "We couldn't finish signing you in with Keycloak. Try again, or use an email code instead.",
+        'auth.error_oauth_generic':
+          'Something went wrong signing you in. Try again, or use an email code instead.',
+        'auth.retry_keycloak': 'Try Keycloak again',
+        'auth.return_home': 'Return home',
         'app.name': 'News Dashboard',
         'app.tagline': 'Your private news platform',
       };
@@ -564,6 +575,53 @@ describe('LoginPage', () => {
       const registerLink = screen.getByRole('link', { name: /create account/i });
       expect(registerLink).toBeTruthy();
       expect(registerLink.getAttribute('href')).toBe('/auth/register');
+    });
+  });
+
+  it.each([
+    ['oauth_state', /sign-in link expired/i],
+    ['oauth_code', /didn't complete/i],
+    ['oauth_denied', /cancelled or denied/i],
+    ['oauth_exchange_failed', /couldn't finish signing you in/i],
+    ['some_unknown_code', /something went wrong signing you in/i],
+  ])('renders branded recovery copy for auth_error=%s', async (authError, expected) => {
+    renderWithRouter(
+      <Routes>
+        <Route path="/login" element={<LoginPage />} />
+      </Routes>,
+      { initialPath: `/login?auth_error=${authError}` }
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole('alert').textContent).toMatch(expected);
+    });
+    expect(screen.getByRole('button', { name: /return home/i })).toBeTruthy();
+  });
+
+  it('appends the original path as a next param to the Keycloak login link', async () => {
+    vi.spyOn(api, 'fetchAuthConfig').mockResolvedValue({
+      provider: 'keycloak',
+      keycloak_enabled: true,
+      login_url: '/auth/login',
+      logout_url: '/auth/logout',
+      registration_url: '/auth/register',
+    });
+
+    render(
+      <QueryClientProvider client={makeQc()}>
+        <AuthProvider>
+          <MemoryRouter initialEntries={[{ pathname: '/login', state: { from: '/articles/42' } }]}>
+            <Routes>
+              <Route path="/login" element={<LoginPage />} />
+            </Routes>
+          </MemoryRouter>
+        </AuthProvider>
+      </QueryClientProvider>
+    );
+
+    await waitFor(() => {
+      const loginLink = screen.getByRole('link', { name: /sign in with keycloak/i });
+      expect(loginLink.getAttribute('href')).toBe('/auth/login?next=%2Farticles%2F42');
     });
   });
 

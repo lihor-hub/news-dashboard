@@ -32,7 +32,14 @@
     "error_server": "The auth service is having trouble. Try again shortly.",
     "code_expires_in": "Codes expire after 10 minutes.",
     "resend_available_soon": "Resend in {{seconds}}s",
-    "change_email": "Change email"
+    "change_email": "Change email",
+    "error_oauth_state": "Your sign-in link expired or was already used. Try signing in again.",
+    "error_oauth_code": "Sign-in didn't complete. Try signing in again.",
+    "error_oauth_denied": "Sign-in was cancelled or denied. Try again, or use an email code instead.",
+    "error_oauth_exchange_failed": "We couldn't finish signing you in with Keycloak. Try again, or use an email code instead.",
+    "error_oauth_generic": "Something went wrong signing you in. Try again, or use an email code instead.",
+    "retry_keycloak": "Try Keycloak again",
+    "return_home": "Return home"
   },
   "nav": {
     "brief": "תקציר",
