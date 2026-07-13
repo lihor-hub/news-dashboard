@@ -74,6 +74,28 @@ def test_record_lesson_feedback_seeds_eval_example(pg_clean: str) -> None:
     assert row["expected_properties"]["comment"] == "Very useful"
 
 
+def test_record_lesson_feedback_with_none_comment_seeds_eval_example(pg_clean: str) -> None:
+    init_db(database_url=pg_clean)
+    user_id = _make_user(pg_clean)
+    lesson_id = _seed_lesson(pg_clean, user_id=user_id)
+
+    saved = service.record_feedback(
+        user_id, "lesson", lesson_id, 1, comment=None, database_url=pg_clean
+    )
+
+    assert saved["verdict"] == 1
+    with connect(database_url=pg_clean) as conn:
+        row = conn.execute(
+            "SELECT * FROM ai_eval_examples WHERE feature = 'lesson-feedback'"
+            " AND input->>'lesson_id' = %s",
+            (str(lesson_id),),
+        ).fetchone()
+    assert row is not None
+    assert row["feedback_helpful"] is True
+    assert "comment" in row["expected_properties"]
+    assert row["expected_properties"]["comment"] is None
+
+
 def test_record_negative_lesson_feedback_seeds_unhelpful_eval_example(pg_clean: str) -> None:
     init_db(database_url=pg_clean)
     user_id = _make_user(pg_clean)
