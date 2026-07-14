@@ -3,6 +3,9 @@
 All notable changes to this project will be documented in this file.
 This project adheres to [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.143.5] — 2026-07-14
+- Stability and performance improvements.
+
 ## [1.143.2] — 2026-07-14
 - You'll see fewer duplicate articles in your feeds.
 
