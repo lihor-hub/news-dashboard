@@ -140,6 +140,20 @@ app:
     smtpFrom: ""
     # starttls (default unless port 465), ssl, or none.
     smtpTlsMode: ""
+  newsletter:
+    # Optional IMAP mailbox used to ingest newsletters via plus-addressed
+    # recipients. Leave imapHost empty to keep the newsletter poller inert.
+    imapHost: ""
+    imapPort: 993
+    imapFolder: INBOX
+    pollMinutes: 15
+    # Max accepted size in bytes for one RFC822 newsletter message. Leave empty
+    # to use the app default.
+    maxMessageBytes: ""
+    # Name of a pre-existing Secret with the IMAP username/password keys below.
+    existingSecret: ""
+    usernameKey: NEWSLETTER_IMAP_USERNAME
+    passwordKey: NEWSLETTER_IMAP_PASSWORD
   sentry:
     # Optional: pre-existing Secret with SENTRY_DSN and/or SENTRY_DSN_FRONTEND.
     existingSecret: ""

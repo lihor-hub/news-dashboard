@@ -415,6 +415,28 @@ the app's own defaults. Sentry DSNs and other secret-bearing values are
 supplied via `app.sentry.existingSecret` (a pre-existing Secret), never
 committed to `values.yaml`.
 
+Newsletter IMAP ingest can also be enabled through structured Helm values.
+Create a Secret for mailbox credentials, then set the non-secret mailbox
+options on `app.newsletter`:
+
+```bash
+kubectl -n news-dashboard create secret generic newsletter-imap \
+  --from-literal=NEWSLETTER_IMAP_USERNAME='inbox@example.com' \
+  --from-literal=NEWSLETTER_IMAP_PASSWORD='replace-with-real-password'
+
+helm upgrade news-dashboard ./helm/news-dashboard \
+  --reuse-values \
+  --set app.newsletter.imapHost=imap.example.com \
+  --set app.newsletter.imapPort=993 \
+  --set app.newsletter.imapFolder=INBOX \
+  --set app.newsletter.pollMinutes=15 \
+  --set app.newsletter.maxMessageBytes=10485760 \
+  --set app.newsletter.existingSecret=newsletter-imap
+```
+
+When `app.newsletter.imapHost` is empty, the chart does not render newsletter
+IMAP env vars and the scheduler does not start the mailbox poller.
+
 Neo4j is available as an optional Helm-managed graph store. See
 [Optional Graph Storage](#optional-graph-storage) for the values and backfill
 commands.

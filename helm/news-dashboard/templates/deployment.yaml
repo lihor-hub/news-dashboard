@@ -83,6 +83,9 @@ spec:
 {{- end }}
 {{ include "news-dashboard.aiEnv" . | indent 12 }}
 {{ include "news-dashboard.sentryEnv" . | indent 12 }}
+{{- if .Values.app.newsletter.imapHost }}
+{{ include "news-dashboard.newsletterEnv" . | indent 12 }}
+{{- end }}
 {{- if .Values.neo4j.enabled }}
 {{ include "news-dashboard.neo4jEnv" . | indent 12 }}
 {{- end }}
