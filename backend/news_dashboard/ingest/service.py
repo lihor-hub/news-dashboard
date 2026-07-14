@@ -104,15 +104,15 @@ class IngestResult:
 
 
 TRACKING_PARAMS = {
-    "utm_source",
-    "utm_medium",
-    "utm_campaign",
-    "utm_term",
-    "utm_content",
     "ref",
     "fbclid",
     "gclid",
     "yclid",
+    "mc_cid",
+    "mc_eid",
+    "igshid",
+    "spm",
+    "ck_subscriber_id",
 }
 
 KEYWORD_TAGS = {
@@ -219,12 +219,25 @@ def clean_html(value: str | None) -> str:
 
 def canonicalize_url(url: str) -> str:
     parsed = urlparse(url.strip())
-    query = [
+    query = sorted(
         (k, v)
         for k, v in parse_qsl(parsed.query, keep_blank_values=True)
-        if k.lower() not in TRACKING_PARAMS
-    ]
-    parsed = parsed._replace(fragment="", query=urlencode(query, doseq=True))
+        if k.lower() not in TRACKING_PARAMS and not k.lower().startswith("utm_")
+    )
+    path = parsed.path
+    if len(path) > 1 and path.endswith("/"):
+        path = path.rstrip("/")
+    # Note: canonical_url is also used to actually fetch/cite the article
+    # (learn_from_link, export), so we only normalize scheme/host casing here
+    # — never rewrite the scheme itself (e.g. http->https), which could break
+    # real requests to an http-only source.
+    parsed = parsed._replace(
+        scheme=parsed.scheme.lower(),
+        netloc=parsed.netloc.lower(),
+        path=path,
+        fragment="",
+        query=urlencode(query, doseq=True),
+    )
     return urlunparse(parsed)
 
 

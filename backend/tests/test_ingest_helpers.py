@@ -55,6 +55,31 @@ def test_canonicalize_url_strips_tracking_and_fragment() -> None:
     assert "#frag" not in out
 
 
+def test_canonicalize_url_normalizes_scheme_and_host_case() -> None:
+    assert canonicalize_url("HTTP://X.test/p") == canonicalize_url("http://x.test/p")
+
+
+def test_canonicalize_url_strips_trailing_slash() -> None:
+    assert canonicalize_url("https://x.test/p/") == canonicalize_url("https://x.test/p")
+
+
+def test_canonicalize_url_keeps_root_slash() -> None:
+    assert canonicalize_url("https://x.test/") == "https://x.test/"
+
+
+def test_canonicalize_url_sorts_query_params() -> None:
+    assert canonicalize_url("https://x.test/p?b=2&a=1") == canonicalize_url(
+        "https://x.test/p?a=1&b=2"
+    )
+
+
+def test_canonicalize_url_strips_additional_tracking_params() -> None:
+    out = canonicalize_url(
+        "https://x.test/p?id=5&mc_cid=abc&mc_eid=def&igshid=ghi&ck_subscriber_id=jkl"
+    )
+    assert out == canonicalize_url("https://x.test/p?id=5")
+
+
 # ── parse_date ────────────────────────────────────────────────────────────────
 
 

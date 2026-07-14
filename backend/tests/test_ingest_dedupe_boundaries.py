@@ -13,10 +13,17 @@ Covers:
 
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
+import news_dashboard.ingest.service as ingest_module
 from news_dashboard.db import connect
-from news_dashboard.ingest.service import _attach_also_from, _find_canonical
+from news_dashboard.ingest.service import (
+    _attach_also_from,
+    _find_canonical,
+    canonicalize_url,
+)
+from news_dashboard.sources.service import SourceDefinition
 
 # ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -234,3 +241,92 @@ def test_also_from_no_user_includes_all_sources(pg_clean: str) -> None:
 
     # Admin path sees private source name too
     assert "judy-private" in article["also_from"]
+
+
+# ── URL-variant reappearance regression (issue #1215) ─────────────────────────
+
+
+def _age_article(pg_url: str, article_id: int, days: int) -> None:
+    """Push discovered_at into the past so the 7-day fuzzy-title fallback in
+    _find_canonical can no longer rescue a URL-match miss — isolating the
+    URL-normalization path from the title-fallback path."""
+    with connect(database_url=pg_url) as conn:
+        conn.execute(
+            "UPDATE articles SET discovered_at = %s WHERE id = %s",
+            ((datetime.now(timezone.utc) - timedelta(days=days)).isoformat(), article_id),
+        )
+
+
+def test_find_canonical_matches_scheme_and_trailing_slash_variant(pg_clean: str) -> None:
+    """A URL that differs only by scheme/case/trailing-slash must still match
+    the existing canonical once both sides are canonicalized — otherwise a
+    re-ingested article gets a brand-new id with no user_article_state row,
+    making it reappear in the Today feed after the user already triaged it.
+
+    The canonical is aged past the 7-day fuzzy-title fallback window so this
+    test exercises URL matching specifically, not the title fallback."""
+    _insert_source(pg_clean, "global-src")
+    canonical_url = canonicalize_url("https://Example.test/story/")
+    canonical_id = _insert_canonical(pg_clean, canonical_url, "Big Story", "global-src")
+    _age_article(pg_clean, canonical_id, days=10)
+
+    variant_url = canonicalize_url("HTTPS://example.TEST/story")
+
+    with connect(database_url=pg_clean) as conn:
+        found = _find_canonical(conn, variant_url, "Big Story", owner_user_id=None)
+
+    assert found == canonical_id
+
+
+def test_ingest_all_does_not_duplicate_url_variant_across_runs(
+    tmp_path: Any, monkeypatch: Any
+) -> None:
+    """Two ingest runs serving the same article as a scheme/trailing-slash/
+    tracking-param variant must not create two distinct (non-archived)
+    articles rows — a second row would have no user_article_state and would
+    reappear in the Today feed even after the first was triaged.
+
+    The first run's article is aged past the fuzzy-title fallback window so
+    this test exercises URL matching specifically, not the title fallback."""
+
+    db_path = tmp_path / "reingest.db"
+    source = SourceDefinition("test-feed", "Test Feed", "https://example.com/feed.xml", "python")
+    monkeypatch.setattr(ingest_module, "DEFAULT_SOURCES", [source])
+
+    urls = iter(
+        [
+            "https://example.com/article/",
+            "HTTPS://Example.com/article?utm_source=rss",
+        ]
+    )
+
+    def fake_parse_url(url: str) -> list[dict[str, object]]:
+        return [
+            {
+                "url": next(urls),
+                "title": "Same Story Twice",
+                "description": "A summary.",
+                "date": None,
+            }
+        ]
+
+    monkeypatch.setattr(ingest_module, "_parse_feed_url", fake_parse_url)
+
+    ingest_module.ingest_all(db_path)
+    with connect(db_path) as conn:
+        first = conn.execute("SELECT id FROM articles WHERE canonical_id IS NULL").fetchone()
+        assert first is not None
+        conn.execute(
+            "UPDATE articles SET discovered_at = %s WHERE id = %s",
+            (
+                (datetime.now(timezone.utc) - timedelta(days=10)).isoformat(),
+                first["id"] if isinstance(first, dict) else first[0],
+            ),
+        )
+
+    ingest_module.ingest_all(db_path)
+
+    with connect(db_path) as conn:
+        rows = conn.execute("SELECT id FROM articles WHERE canonical_id IS NULL").fetchall()
+
+    assert len(rows) == 1
