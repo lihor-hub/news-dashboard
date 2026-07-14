@@ -382,6 +382,44 @@ def test_own_private_source_is_scored(tmp_path: Path, monkeypatch: Any, pg_clean
     assert _rec_row(db_path, owner, own_article) is not None
 
 
+def test_recompute_batches_score_persistence_connections(
+    tmp_path: Path, monkeypatch: Any, pg_clean: str
+) -> None:
+    """Multiple candidates should use a constant number of DB writes/connections."""
+    db_path = _setup_db(monkeypatch, pg_clean)
+    user_id = _make_user(db_path, "alice")
+    _insert_source(db_path, "src")
+    for idx in range(5):
+        _insert_article(db_path, "src", f"batch-{idx}")
+
+    from news_dashboard import recommendations
+
+    connection_count = 0
+
+    def counted_connect(*args: Any, **kwargs: Any) -> Any:
+        nonlocal connection_count
+        connection_count += 1
+        return connect(*args, **kwargs)
+
+    monkeypatch.setattr(recommendations, "connect", counted_connect)
+
+    def no_explanation(
+        _user_id: int,
+        _article_id: int,
+        *,
+        db_path: Path | str | None = None,
+        database_url: str | None = None,
+    ) -> None:
+        return None
+
+    monkeypatch.setattr(recommendations, "generate_recommendation_explanation", no_explanation)
+
+    scored = recommendations.recompute_user_recommendations(user_id, db_path=db_path)
+
+    assert scored == 5
+    assert connection_count == 2
+
+
 def test_health_missing_scores_excludes_invisible_articles(
     tmp_path: Path, monkeypatch: Any, pg_clean: str
 ) -> None:

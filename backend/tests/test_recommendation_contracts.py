@@ -21,12 +21,17 @@ from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
+from psycopg import errors
 
 from news_dashboard.auth import require_auth
 from news_dashboard.db import EMBEDDING_DIMENSIONS, connect, init_db
 from news_dashboard.embeddings import vector_literal
 from news_dashboard.main import app
-from news_dashboard.recommendations import upsert_recommendation_score
+from news_dashboard.recommendations import (
+    RecommendationScoreRecord,
+    upsert_recommendation_score,
+    upsert_recommendation_scores,
+)
 
 pytestmark = pytest.mark.postgres
 
@@ -272,6 +277,104 @@ def test_single_article_read_exposes_recommendation_metadata(
     payload = response.json()
     assert payload["recommendation_score"] == pytest.approx(88.0)
     assert payload["recommendation_signals"] == signals
+
+
+def test_batch_recommendation_score_upsert_matches_single_row_contract(
+    tmp_path: Path, monkeypatch: Any, pg_clean: str
+) -> None:
+    """Batch writes preserve score columns, JSON signals, stale reset, and explanation rules."""
+    db_path = _setup_db(monkeypatch, pg_clean)
+    _insert_source(db_path, "src", category="ai", priority=80)
+    user_id = _make_user(db_path, "alice")
+    first = _insert_article(db_path, "src", "batch-first", category="ai", importance=70)
+    second = _insert_article(db_path, "src", "batch-second", category="ai", importance=70)
+
+    upsert_recommendation_score(
+        user_id,
+        first,
+        10.0,
+        db_path=db_path,
+        explanation="Existing explanation.",
+    )
+    with connect(db_path) as conn:
+        conn.execute(
+            "UPDATE user_article_recommendations SET stale = TRUE"
+            " WHERE user_id = %s AND article_id = %s",
+            (user_id, first),
+        )
+
+    upsert_recommendation_scores(
+        [
+            RecommendationScoreRecord(
+                user_id=user_id,
+                article_id=first,
+                recommendation_score=91.25,
+                cold_start_score=44.5,
+                signals={"source_slug": "src", "weights": {"ai": 1.2}},
+                model_version="behavioral-affinity-v1",
+            ),
+            RecommendationScoreRecord(
+                user_id=user_id,
+                article_id=second,
+                recommendation_score=72.0,
+                cold_start_score=50.0,
+                signals={"freshness_adjustment": 3.5},
+                model_version="novelty-freshness-v1",
+                explanation="New explanation.",
+            ),
+        ],
+        db_path=db_path,
+    )
+
+    with connect(db_path) as conn:
+        rows = conn.execute(
+            """
+            SELECT article_id, recommendation_score, cold_start_score, signals,
+              model_version, stale, explanation
+            FROM user_article_recommendations
+            WHERE user_id = %s
+            ORDER BY article_id
+            """,
+            (user_id,),
+        ).fetchall()
+
+    by_article = {int(row["article_id"]): dict(row) for row in rows}
+    assert by_article[first]["recommendation_score"] == pytest.approx(91.25)
+    assert by_article[first]["cold_start_score"] == pytest.approx(44.5)
+    assert by_article[first]["signals"] == {"source_slug": "src", "weights": {"ai": 1.2}}
+    assert by_article[first]["model_version"] == "behavioral-affinity-v1"
+    assert by_article[first]["stale"] is False
+    assert by_article[first]["explanation"] == "Existing explanation."
+    assert by_article[second]["signals"] == {"freshness_adjustment": 3.5}
+    assert by_article[second]["explanation"] == "New explanation."
+
+
+def test_batch_recommendation_score_upsert_rolls_back_on_error(
+    tmp_path: Path, monkeypatch: Any, pg_clean: str
+) -> None:
+    """One invalid score aborts the whole batch transaction for that user."""
+    db_path = _setup_db(monkeypatch, pg_clean)
+    _insert_source(db_path, "src", category="ai", priority=80)
+    user_id = _make_user(db_path, "alice")
+    first = _insert_article(db_path, "src", "rollback-first", category="ai", importance=70)
+    second = _insert_article(db_path, "src", "rollback-second", category="ai", importance=70)
+
+    with pytest.raises(errors.CheckViolation):
+        upsert_recommendation_scores(
+            [
+                RecommendationScoreRecord(user_id, first, 70.0),
+                RecommendationScoreRecord(user_id, second, 101.0),
+            ],
+            db_path=db_path,
+        )
+
+    with connect(db_path) as conn:
+        count = conn.execute(
+            "SELECT COUNT(*) AS n FROM user_article_recommendations WHERE user_id = %s",
+            (user_id,),
+        ).fetchone()
+    assert count is not None
+    assert count["n"] == 0
 
 
 def test_single_article_read_returns_null_score_when_unranked(
