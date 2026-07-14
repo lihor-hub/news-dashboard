@@ -31,6 +31,7 @@ from news_dashboard.auth import (
 from news_dashboard.auth_routes.router import SESSION_COOKIE as _SESSION_COOKIE
 from news_dashboard.auth_routes.router import public_router as auth_public_router
 from news_dashboard.auth_routes.router import router as auth_router
+from news_dashboard.db import close_connection_pool, open_connection_pool
 from news_dashboard.error_tracking import init_error_tracking
 from news_dashboard.ingest.service import (
     sync_sources,
@@ -70,6 +71,7 @@ class SPAStaticFiles(StaticFiles):
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     init_error_tracking()
+    open_connection_pool()
     init_auth()
     sync_sources()
     # Seed demo data when DEMO_MODE is enabled.
@@ -78,8 +80,11 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
 
         seed_demo()
     start_scheduler()
-    yield
-    stop_scheduler()
+    try:
+        yield
+    finally:
+        stop_scheduler()
+        close_connection_pool()
 
 
 app = FastAPI(title="News Dashboard", version=_read_app_version(), lifespan=lifespan)
