@@ -112,3 +112,39 @@ jobs:
           name: playwright-test-results
           path: test-results/
           if-no-files-found: ignore
+
+  visual:
+    name: Playwright visual states
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref || 'main' }}
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '26'
+          cache: npm
+      - run: npm ci
+
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Run Playwright visual state suite
+        run: npm run test:visual --silent
+
+      - name: Upload Playwright visual report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-visual-report
+          path: playwright-report/
+          if-no-files-found: ignore
+
+      - name: Upload Playwright visual results
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-visual-test-results
+          path: test-results/
+          if-no-files-found: ignore
