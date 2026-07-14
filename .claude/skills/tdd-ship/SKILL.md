@@ -11,6 +11,11 @@ description: >-
 This is how tracked changes ship in this repo: issue -> branch -> red/green
 TDD -> review -> PR -> CI -> auto-merge.
 
+**REQUIRED SUB-SKILL:** Use agent-delivery-contract. Normalize the target,
+scope, authority, terminal state, verification, and failure policy before the
+first mutation. This repo authorizes the default auto-merge path below unless
+the user requests a different terminal state.
+
 ## When this applies
 
 Apply the full pipeline when the request modifies a tracked file: code, config,
@@ -141,6 +146,9 @@ After merge, give the user a one-line summary with links: the issue, the PR, and
 confirmation that CI passed and the branch was deleted. If anything blocked the
 pipeline (flaky CI, a check that needs secrets, a merge conflict), surface it
 instead of silently stopping.
+
+During execution, report only state transitions defined by
+`agent-delivery-contract`; do not narrate unchanged test or CI polling.
 
 ## Guardrails
 
