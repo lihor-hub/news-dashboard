@@ -18,21 +18,21 @@ router = APIRouter()
 _admin_dep = [Depends(require_admin)]
 
 
-@router.get("/recommendations/health", dependencies=_admin_dep)
+@router.get("/api/recommendations/health", dependencies=_admin_dep)
 def recommendations_health_endpoint() -> dict[str, Any]:
     from news_dashboard.recommendation_jobs import recommendation_health
 
     return recommendation_health()
 
 
-@router.post("/recommendations/recalculate", dependencies=_admin_dep)
+@router.post("/api/recommendations/recalculate", dependencies=_admin_dep)
 def recommendations_recalculate_endpoint() -> dict[str, Any]:
     from news_dashboard.recommendation_jobs import recalculate_stale_recommendations
 
     return recalculate_stale_recommendations().as_dict()
 
 
-@router.post("/recommendations/recalculate-mine")
+@router.post("/api/recommendations/recalculate-mine")
 def recommendations_recalculate_mine_endpoint(
     current_user: Annotated[dict[str, Any], Depends(require_auth)],
 ) -> dict[str, int]:
