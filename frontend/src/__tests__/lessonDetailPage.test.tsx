@@ -204,6 +204,16 @@ describe('LessonDetailPage', () => {
     })),
   };
 
+  const INFOGRAPHIC = {
+    title: 'Infographic title',
+    subtitle: 'Infographic subtitle',
+    sections: [
+      { heading: 'Context', body: 'Why the lesson matters.' },
+      { heading: 'Takeaway', body: 'What to remember next.' },
+    ],
+    footer: 'Generated from the lesson.',
+  };
+
   it('shows a create-slide-deck button, then the slides once generation succeeds', async () => {
     vi.spyOn(api, 'fetchLesson').mockResolvedValue(COMPLETE_LESSON);
     vi.spyOn(api, 'generateLessonSlideDeck').mockResolvedValue({
@@ -280,12 +290,90 @@ describe('LessonDetailPage', () => {
     });
   });
 
+  it('shows a create-infographic button, then the artifact once generation succeeds', async () => {
+    vi.spyOn(api, 'fetchLesson').mockResolvedValue(COMPLETE_LESSON);
+    vi.spyOn(api, 'generateLessonInfographic').mockResolvedValue({
+      ...COMPLETE_LESSON,
+      infographic: INFOGRAPHIC,
+      infographic_status: 'complete',
+    });
+
+    renderPage(5);
+    await screen.findByText('A careful article');
+
+    const createButton = screen.getByRole('button', { name: 'Create infographic' });
+    expect(createButton).toBeInTheDocument();
+
+    await userEvent.click(createButton);
+
+    await waitFor(() => {
+      expect(api.generateLessonInfographic).toHaveBeenCalledWith(5, false);
+    });
+    expect(await screen.findByText('Infographic title')).toBeInTheDocument();
+    expect(screen.getByText('Infographic subtitle')).toBeInTheDocument();
+    expect(screen.getByText('Context')).toBeInTheDocument();
+    expect(screen.getByText('Why the lesson matters.')).toBeInTheDocument();
+    expect(screen.getByText('Generated from the lesson.')).toBeInTheDocument();
+  });
+
+  it('shows a friendly error and keeps the create button when infographic generation fails', async () => {
+    vi.spyOn(api, 'fetchLesson').mockResolvedValue(COMPLETE_LESSON);
+    vi.spyOn(api, 'generateLessonInfographic').mockRejectedValue(
+      new api.HttpError(503, 'AI not configured')
+    );
+
+    renderPage(5);
+    await screen.findByText('A careful article');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Create infographic' }));
+
+    expect(await screen.findByText('AI not configured')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Create infographic' })).toBeInTheDocument();
+  });
+
+  it('shows the failed-infographic banner from persisted lesson state', async () => {
+    vi.spyOn(api, 'fetchLesson').mockResolvedValue({
+      ...COMPLETE_LESSON,
+      infographic_status: 'failed',
+      infographic_error: 'Could not generate infographic.',
+    });
+
+    renderPage(5);
+
+    expect(await screen.findByText('Could not generate infographic.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Regenerate' })).toBeInTheDocument();
+  });
+
+  it('forces regeneration when clicking regenerate on an existing infographic', async () => {
+    vi.spyOn(api, 'fetchLesson').mockResolvedValue({
+      ...COMPLETE_LESSON,
+      infographic: INFOGRAPHIC,
+      infographic_status: 'complete',
+    });
+    vi.spyOn(api, 'generateLessonInfographic').mockResolvedValue({
+      ...COMPLETE_LESSON,
+      infographic: INFOGRAPHIC,
+      infographic_status: 'complete',
+    });
+
+    renderPage(5);
+    await screen.findByText('A careful article');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Regenerate' }));
+
+    await waitFor(() => {
+      expect(api.generateLessonInfographic).toHaveBeenCalledWith(5, true);
+    });
+  });
+
   it('shows create actions after regenerated artifacts are cleared', async () => {
     vi.spyOn(api, 'fetchLesson').mockResolvedValue({
       ...COMPLETE_LESSON,
       podcast_status: null,
       slide_deck: null,
       slide_deck_status: null,
+      infographic: null,
+      infographic_status: null,
       study_artifacts: null,
     });
 
@@ -294,9 +382,11 @@ describe('LessonDetailPage', () => {
 
     expect(screen.getByRole('button', { name: 'Create podcast' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Create slide deck' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Create infographic' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Regenerate' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Flashcards' })).not.toBeInTheDocument();
     expect(document.querySelector('audio')).not.toBeInTheDocument();
     expect(screen.queryByText('Slide 1')).not.toBeInTheDocument();
+    expect(screen.queryByText('Infographic title')).not.toBeInTheDocument();
   });
 });
