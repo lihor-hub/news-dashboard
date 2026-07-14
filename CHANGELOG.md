@@ -3,6 +3,9 @@
 All notable changes to this project will be documented in this file.
 This project adheres to [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.143.2] — 2026-07-14
+- You'll see fewer duplicate articles in your feeds.
+
 ## [1.140.2] — 2026-07-10
 - Regenerating content now fully clears out any previous versions — you'll always see the fresh result, not leftover clutter from before.
 
