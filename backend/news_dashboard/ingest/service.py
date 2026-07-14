@@ -1291,6 +1291,11 @@ def _article_order_clause(*, state: str | None) -> str:
     return "ORDER BY a.discovered_at DESC, a.id DESC"
 
 
+def _bounded_today_candidate_limit(*, limit: int, offset: int) -> int:
+    requested = max(limit, 0) + max(offset, 0)
+    return max(requested, limit * 5, 100)
+
+
 def _article_dict(row: Any) -> dict[str, Any]:
     """Convert a DB row to a dict, stripping internal-only columns.
 
@@ -1557,6 +1562,16 @@ def _list_articles_for_user(  # noqa: PLR0913
 
     where = f"WHERE {' AND '.join(art_clauses)}"
 
+    if state == "today":
+        return _list_today_articles_for_user(
+            user_id=user_id,
+            where=where,
+            where_params=where_params,
+            limit=limit,
+            offset=offset,
+            db_path=db_path,
+        )
+
     # Final param order matches SQL left-to-right:
     # 1. us_src JOIN: user_id
     # 2. uas JOIN:    user_id
@@ -1602,6 +1617,132 @@ def _list_articles_for_user(  # noqa: PLR0913
         for row in rows:
             d = _article_dict(row)
             # Apply UAS overrides from the prefixed columns
+            d["state"] = d.pop("_uas_state", "today")
+            d["starred"] = bool(d.pop("_uas_starred", 0))
+            d["done_at"] = d.pop("_uas_done_at", None)
+            d["starred_at"] = d.pop("_uas_starred_at", None)
+            d["skipped_at"] = d.pop("_uas_skipped_at", None)
+            d["archived_at"] = d.pop("_uas_archived_at", None)
+            d["later_until"] = d.pop("_uas_later_until", None)
+            d["restored_at"] = d.pop("_uas_restored_at", None)
+            _apply_recommendation_fields(d)
+            articles.append(d)
+        _attach_also_from(conn, articles, user_id=user_id)
+        return articles
+
+
+def _list_today_articles_for_user(
+    *,
+    user_id: int,
+    where: str,
+    where_params: list[object],
+    limit: int,
+    offset: int,
+    db_path: Path | str | None,
+) -> list[dict[str, Any]]:
+    candidate_limit = _bounded_today_candidate_limit(limit=limit, offset=offset)
+    branch_params: list[object] = [
+        user_id,
+        user_id,
+        *where_params,
+        user_id,
+        user_id,
+        candidate_limit,
+        user_id,
+        user_id,
+        user_id,
+        *where_params,
+        user_id,
+        candidate_limit,
+        user_id,
+        limit,
+        offset,
+    ]
+    sql = f"""
+        WITH persisted_candidates AS (
+          SELECT {_article_list_select("a")},
+            COALESCE(uas.state, 'today') AS _uas_state,
+            COALESCE(uas.starred, false)  AS _uas_starred,
+            uas.done_at     AS _uas_done_at,
+            uas.starred_at  AS _uas_starred_at,
+            uas.skipped_at  AS _uas_skipped_at,
+            uas.archived_at AS _uas_archived_at,
+            uas.later_until AS _uas_later_until,
+            uas.restored_at AS _uas_restored_at,
+            uar.recommendation_score AS _uar_recommendation_score,
+            uar.model_version        AS _uar_recommendation_model,
+            uar.signals              AS _uar_recommendation_signals,
+            uar.explanation          AS _uar_recommendation_explanation,
+            NULL::double precision AS _cold_start_score
+          FROM user_article_recommendations uar
+          JOIN articles a ON a.id = uar.article_id
+          LEFT JOIN sources src ON src.slug = a.source_slug
+          LEFT JOIN user_sources us_src
+            ON us_src.user_id = %s AND us_src.source_slug = a.source_slug
+          LEFT JOIN user_article_state uas ON uas.article_id = a.id AND uas.user_id = %s
+          {where}
+            AND uar.user_id = %s
+            AND (
+              (src.owner_user_id IS NULL AND COALESCE(us_src.enabled, true))
+              OR src.owner_user_id = %s
+            )
+          ORDER BY uar.recommendation_score DESC, a.discovered_at DESC, a.id DESC
+          LIMIT %s
+        ),
+        cold_candidate_ids AS (
+          SELECT a.id
+          FROM articles a
+          LEFT JOIN sources src ON src.slug = a.source_slug
+          LEFT JOIN user_sources us_src
+            ON us_src.user_id = %s AND us_src.source_slug = a.source_slug
+          LEFT JOIN user_article_state uas ON uas.article_id = a.id AND uas.user_id = %s
+          LEFT JOIN user_article_recommendations uar
+            ON uar.article_id = a.id AND uar.user_id = %s
+          {where}
+            AND uar.article_id IS NULL
+            AND (
+              (src.owner_user_id IS NULL AND COALESCE(us_src.enabled, true))
+              OR src.owner_user_id = %s
+            )
+          ORDER BY a.discovered_at DESC, a.id DESC
+          LIMIT %s
+        ),
+        cold_candidates AS (
+          SELECT {_article_list_select("a")},
+            COALESCE(uas.state, 'today') AS _uas_state,
+            COALESCE(uas.starred, false)  AS _uas_starred,
+            uas.done_at     AS _uas_done_at,
+            uas.starred_at  AS _uas_starred_at,
+            uas.skipped_at  AS _uas_skipped_at,
+            uas.archived_at AS _uas_archived_at,
+            uas.later_until AS _uas_later_until,
+            uas.restored_at AS _uas_restored_at,
+            NULL::double precision AS _uar_recommendation_score,
+            NULL::text             AS _uar_recommendation_model,
+            NULL::jsonb            AS _uar_recommendation_signals,
+            NULL::text             AS _uar_recommendation_explanation,
+            {_COLD_START_RECOMMENDATION_SCORE_SQL} AS _cold_start_score
+          FROM cold_candidate_ids c
+          JOIN articles a ON a.id = c.id
+          LEFT JOIN sources src ON src.slug = a.source_slug
+          LEFT JOIN user_article_state uas ON uas.article_id = a.id AND uas.user_id = %s
+        ),
+        ranked_candidates AS (
+          SELECT * FROM persisted_candidates
+          UNION ALL
+          SELECT * FROM cold_candidates
+        )
+        SELECT *
+        FROM ranked_candidates
+        ORDER BY COALESCE(_uar_recommendation_score, _cold_start_score) DESC,
+          discovered_at DESC, id DESC
+        LIMIT %s OFFSET %s
+    """
+    with connect(db_path) as conn:
+        rows = conn.execute(sql, branch_params).fetchall()
+        articles = []
+        for row in rows:
+            d = _article_dict(row)
             d["state"] = d.pop("_uas_state", "today")
             d["starred"] = bool(d.pop("_uas_starred", 0))
             d["done_at"] = d.pop("_uas_done_at", None)
