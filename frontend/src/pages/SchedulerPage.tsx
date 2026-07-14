@@ -11,6 +11,7 @@ import {
   pauseScheduler,
   resumeScheduler,
   ingestNow,
+  runEmbeddingDedup,
   type SchedulerStatus,
   type ScheduledJobRun,
 } from '../api';
@@ -22,6 +23,7 @@ const JOB_LABELS: Record<string, string> = {
   analytics_retention: 'Analytics retention',
   per_user_briefings: 'Per-user briefings',
   briefing: 'Global briefing',
+  embedding_dedup: 'Duplicate cleanup',
 };
 
 const INTERVAL_PRESETS = [
@@ -38,6 +40,7 @@ export function SchedulerPage() {
   const [customMinutes, setCustomMinutes] = useState('');
   const [actionPending, setActionPending] = useState(false);
   const [ingesting, setIngesting] = useState(false);
+  const [deduplicating, setDeduplicating] = useState(false);
   const [countdown, setCountdown] = useState<string>('—');
   const [jobRuns, setJobRuns] = useState<ScheduledJobRun[]>([]);
 
@@ -152,6 +155,23 @@ export function SchedulerPage() {
       toast.error('Ingest failed', { id });
     } finally {
       setIngesting(false);
+    }
+  }
+
+  async function handleRemoveDuplicates() {
+    setDeduplicating(true);
+    const id = toast.loading('Removing duplicate articles...');
+    try {
+      const result = await runEmbeddingDedup();
+      toast.success(
+        `Done - ${result.merged} duplicate article${result.merged !== 1 ? 's' : ''} archived, ${result.embedded} article${result.embedded !== 1 ? 's' : ''} embedded`,
+        { id }
+      );
+      await loadJobRuns();
+    } catch {
+      toast.error('Duplicate cleanup failed', { id });
+    } finally {
+      setDeduplicating(false);
     }
   }
 
@@ -273,6 +293,13 @@ export function SchedulerPage() {
             disabled={ingesting || actionPending}
           >
             {ingesting ? '⟳ Fetching…' : '↻ Fetch now'}
+          </Button>
+          <Button
+            variant="outline"
+            onClick={() => void handleRemoveDuplicates()}
+            disabled={deduplicating || actionPending}
+          >
+            {deduplicating ? 'Removing duplicates...' : 'Remove duplicates'}
           </Button>
         </div>
       </div>

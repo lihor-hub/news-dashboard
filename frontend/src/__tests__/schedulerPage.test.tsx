@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 
 const apiMock = vi.hoisted(() => ({
   fetchSchedulerStatus: vi.fn(),
@@ -9,6 +10,7 @@ const apiMock = vi.hoisted(() => ({
   pauseScheduler: vi.fn(),
   resumeScheduler: vi.fn(),
   ingestNow: vi.fn(),
+  runEmbeddingDedup: vi.fn(),
 }));
 vi.mock('../api', () => apiMock);
 
@@ -32,6 +34,7 @@ beforeEach(() => {
   );
   apiMock.fetchSchedulerStatus.mockResolvedValue(defaultStatus);
   apiMock.fetchLatestJobRuns.mockResolvedValue([]);
+  apiMock.runEmbeddingDedup.mockResolvedValue({ status: 'success', embedded: 0, merged: 0 });
 });
 
 afterEach(() => {
@@ -125,5 +128,42 @@ describe('SchedulerPage — job outcomes section', () => {
     await waitFor(() => expect(screen.getByText('Daily digest')).toBeTruthy());
     expect(screen.getByText('Analytics retention')).toBeTruthy();
     expect(screen.getByText('pruned 42 events older than 90 days')).toBeTruthy();
+  });
+});
+
+describe('SchedulerPage — manual duplicate cleanup', () => {
+  it('runs duplicate cleanup and refreshes job history', async () => {
+    apiMock.runEmbeddingDedup.mockResolvedValue({ status: 'success', embedded: 4, merged: 2 });
+    render(<SchedulerPage />);
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Remove duplicates' }));
+
+    await waitFor(() => expect(apiMock.runEmbeddingDedup).toHaveBeenCalledOnce());
+    expect(apiMock.fetchLatestJobRuns).toHaveBeenCalledTimes(2);
+    expect(await screen.findByText('Remove duplicates')).toBeTruthy();
+  });
+
+  it('shows a pending label while duplicate cleanup is running', async () => {
+    let resolveRun: (value: { status: 'success'; embedded: number; merged: number }) => void;
+    apiMock.runEmbeddingDedup.mockReturnValue(
+      new Promise((resolve) => {
+        resolveRun = resolve;
+      })
+    );
+    render(<SchedulerPage />);
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Remove duplicates' }));
+
+    expect(screen.getByRole('button', { name: 'Removing duplicates...' })).toBeDisabled();
+    resolveRun!({ status: 'success', embedded: 0, merged: 0 });
+  });
+
+  it('keeps duplicate cleanup available while ingest is running', async () => {
+    apiMock.ingestNow.mockReturnValue(new Promise(() => undefined));
+    render(<SchedulerPage />);
+
+    await userEvent.click(await screen.findByRole('button', { name: '↻ Fetch now' }));
+
+    expect(screen.getByRole('button', { name: 'Remove duplicates' })).not.toBeDisabled();
   });
 });

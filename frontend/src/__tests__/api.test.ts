@@ -425,6 +425,14 @@ describe('scheduler endpoints', () => {
     expect((await api.resumeScheduler()).paused).toBe(false);
     expect(calls[0].init?.method).toBe('POST');
   });
+
+  it('runEmbeddingDedup POSTs to the manual duplicate cleanup endpoint', async () => {
+    const { calls } = stubFetch(() => jsonOk({ status: 'success', embedded: 4, merged: 2 }));
+    const result = await api.runEmbeddingDedup();
+    expect(calls[0].url).toBe('/api/scheduler/jobs/embedding-dedup/run');
+    expect(calls[0].init?.method).toBe('POST');
+    expect(result).toEqual({ status: 'success', embedded: 4, merged: 2 });
+  });
 });
 
 describe('stats endpoints', () => {

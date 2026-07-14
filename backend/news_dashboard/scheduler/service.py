@@ -493,7 +493,9 @@ def _run_watchlist_evaluation() -> tuple[str, str | None]:
 def _run_and_record(
     job_name: str,
     fn: Callable[[], tuple[str, str | None] | None],
-) -> None:
+    *,
+    raise_on_failure: bool = False,
+) -> tuple[str, str | None] | None:
     """Call fn(), then persist the outcome to scheduled_job_runs.
 
     If fn returns None the run is not recorded (used by per_user_briefings
@@ -506,9 +508,12 @@ def _run_and_record(
     try:
         result = fn()
     except Exception as exc:
+        captured_exc: Exception | None = exc
         result = ("failure", str(exc)[:500])
+    else:
+        captured_exc = None
     if result is None:
-        return
+        return None
     status, message = result
     scheduler_job_runs_total.labels(job_name=job_name, status=status).inc()
     finished_at = datetime.now(timezone.utc)
@@ -522,6 +527,26 @@ def _run_and_record(
         )
     except Exception:
         logger.exception("Failed to record outcome for scheduled job %r", job_name)
+    if captured_exc is not None and raise_on_failure:
+        raise captured_exc
+    return result
+
+
+def run_embedding_dedup_now() -> dict[str, int | str]:
+    status, message = _run_and_record(
+        "embedding_dedup",
+        _run_embedding_dedup,
+        raise_on_failure=True,
+    ) or ("success", "embedded=0 merged=0")
+    if status == "failure":
+        raise RuntimeError(message or "duplicate cleanup failed")
+    embedded = 0
+    merged = 0
+    if message:
+        parts = dict(part.split("=", 1) for part in message.split() if "=" in part)
+        embedded = int(parts.get("embedded", "0"))
+        merged = int(parts.get("merged", "0"))
+    return {"status": status, "embedded": embedded, "merged": merged}
 
 
 def _job_digest() -> None:
