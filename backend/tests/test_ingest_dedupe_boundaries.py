@@ -18,12 +18,11 @@ from typing import Any
 
 import news_dashboard.ingest.service as ingest_module
 from news_dashboard.db import connect
-from news_dashboard.ingest.service import (
-    _attach_also_from,
-    _find_canonical,
-    canonicalize_url,
-)
 from news_dashboard.sources.service import SourceDefinition
+
+_attach_also_from = ingest_module._attach_also_from
+_find_canonical = ingest_module._find_canonical
+canonicalize_url = ingest_module.canonicalize_url
 
 # ── helpers ───────────────────────────────────────────────────────────────────
 

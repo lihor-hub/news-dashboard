@@ -16,6 +16,7 @@ from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
 from news_dashboard import main as main_module
+from news_dashboard.auth_routes.router import _safe_next_path
 from news_dashboard.main import app
 
 
@@ -56,6 +57,23 @@ def test_keycloak_login_redirects_to_provider_and_sets_state_cookie() -> None:
 
 
 # ── /auth/callback ────────────────────────────────────────────────────────────
+
+
+def test_safe_next_path_accepts_app_relative_path() -> None:
+    assert _safe_next_path("/articles/42?from=briefs") == "/articles/42?from=briefs"
+
+
+def test_safe_next_path_rejects_missing_or_non_rooted_path() -> None:
+    assert _safe_next_path(None) is None
+    assert _safe_next_path("") is None
+    assert _safe_next_path("articles/42") is None
+
+
+def test_safe_next_path_rejects_network_or_external_path() -> None:
+    assert _safe_next_path("//evil.example/steal") is None
+    assert _safe_next_path("https://evil.example/steal") is None
+    assert _safe_next_path("https:/evil.example/steal") is None
+    assert _safe_next_path("\\\\evil.example\\steal") is None
 
 
 def test_keycloak_callback_rejects_missing_state() -> None:
@@ -131,10 +149,42 @@ def test_keycloak_callback_success_returns_to_next_path() -> None:
     assert resp.headers["location"] == "/articles/42"
 
 
-def test_keycloak_callback_ignores_unsafe_next_path() -> None:
+def test_keycloak_callback_ignores_absolute_next_path() -> None:
     client = _client()
     client.cookies.set("nd_oauth_state", "match")
     client.cookies.set("nd_oauth_next", "https://evil.example/steal")
+    with (
+        patch(
+            "news_dashboard.auth_routes.router.exchange_keycloak_code",
+            new=AsyncMock(return_value={"id": 7, "is_admin": False}),
+        ),
+        patch("news_dashboard.auth_routes.router.create_session_token", return_value="sess-token"),
+    ):
+        resp = client.get("/auth/callback?state=match&code=good")
+    assert resp.status_code == 307
+    assert resp.headers["location"] == "/"
+
+
+def test_keycloak_callback_ignores_backslash_host_next_path() -> None:
+    client = _client()
+    client.cookies.set("nd_oauth_state", "match")
+    client.cookies.set("nd_oauth_next", "\\\\evil.example\\steal")
+    with (
+        patch(
+            "news_dashboard.auth_routes.router.exchange_keycloak_code",
+            new=AsyncMock(return_value={"id": 7, "is_admin": False}),
+        ),
+        patch("news_dashboard.auth_routes.router.create_session_token", return_value="sess-token"),
+    ):
+        resp = client.get("/auth/callback?state=match&code=good")
+    assert resp.status_code == 307
+    assert resp.headers["location"] == "/"
+
+
+def test_keycloak_callback_ignores_malformed_scheme_next_path() -> None:
+    client = _client()
+    client.cookies.set("nd_oauth_state", "match")
+    client.cookies.set("nd_oauth_next", "https:/evil.example/steal")
     with (
         patch(
             "news_dashboard.auth_routes.router.exchange_keycloak_code",

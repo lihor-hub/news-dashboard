@@ -139,6 +139,10 @@ describe('BriefingsHistoryPage — list state', () => {
     vi.spyOn(api, 'fetchBriefings').mockResolvedValue({
       items: [COMPLETE_BRIEFING, FAILED_BRIEFING],
     });
+    vi.spyOn(api, 'fetchPodcastFeedToken').mockResolvedValue({
+      token: 'feed-token',
+      url: 'https://example.com/podcast.xml?token=feed-token',
+    });
   });
 
   it('renders briefing title', async () => {
@@ -172,6 +176,13 @@ describe('BriefingsHistoryPage — list state', () => {
       const briefingLinks = links.filter((l) => l.getAttribute('href')?.startsWith('/briefs/'));
       expect(briefingLinks.length).toBe(2);
     });
+  });
+
+  it('enables copying the podcast feed URL after the token loads', async () => {
+    renderHistory();
+    const copyButton = await screen.findByRole('button', { name: /copy feed url/i });
+    expect(copyButton).toBeTruthy();
+    await waitFor(() => expect(copyButton.hasAttribute('disabled')).toBe(false));
   });
 });
 
