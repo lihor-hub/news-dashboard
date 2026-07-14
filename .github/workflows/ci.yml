@@ -103,6 +103,8 @@ jobs:
         run: ty check backend
       - name: pyrefly
         run: pyrefly check backend
+      - name: vulture (dead code)
+        run: vulture backend backend/vulture_whitelist.py --min-confidence 80
 
       - uses: actions/setup-node@v6
         with:
@@ -115,6 +117,8 @@ jobs:
         run: npm run format:check --silent
       - name: TypeScript
         run: npm run typecheck --silent
+      - name: knip (dead exports & deps)
+        run: npm run dead-code --silent
 
   # ── 2. SMOKE ───────────────────────────────────────────────────────────────
   # Always runs on PRs and manual dispatches. Fast: no Postgres, no coverage.
