@@ -93,6 +93,7 @@ EXPECTED_METHOD_PATHS = {
     ("POST", "/api/learn/lessons"),
     ("GET", "/api/learn/lessons/{lesson_id}"),
     ("GET", "/api/learn/lessons/{lesson_id}/generations"),
+    ("POST", "/api/learn/lessons/{lesson_id}/infographic"),
     ("GET", "/api/learn/lessons/{lesson_id}/podcast"),
     ("POST", "/api/learn/lessons/{lesson_id}/podcast"),
     ("POST", "/api/learn/lessons/{lesson_id}/questions"),
