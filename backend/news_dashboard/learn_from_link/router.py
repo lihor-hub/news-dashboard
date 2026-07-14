@@ -127,6 +127,28 @@ def generate_lesson_slide_deck_endpoint(
         raise HTTPException(status_code=500, detail="Could not generate slide deck.") from exc
 
 
+@router.post("/api/learn/lessons/{lesson_id}/infographic")
+def generate_lesson_infographic_endpoint(
+    lesson_id: int,
+    current_user: Annotated[dict[str, Any], Depends(require_auth)],
+    force: Annotated[bool, Query()] = False,
+) -> dict[str, Any]:
+    try:
+        return service.generate_lesson_infographic(lesson_id, current_user["id"], force=force)
+    except service.LessonNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="lesson not found") from exc
+    except service.LessonNotReadyError as exc:
+        raise HTTPException(
+            status_code=409, detail="lesson must finish generating before creating an infographic"
+        ) from exc
+    except service.LessonInfographicNotConfiguredError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except service.LessonInfographicGenerationError as exc:
+        raise HTTPException(status_code=500, detail="Could not generate infographic.") from exc
+
+
 @router.post("/api/learn/lessons/{lesson_id}/regenerate")
 def regenerate_lesson_endpoint(
     lesson_id: int,

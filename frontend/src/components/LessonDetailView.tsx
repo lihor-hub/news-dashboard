@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { AlertCircle, ExternalLink, Headphones, Loader2, Presentation } from 'lucide-react';
+import { AlertCircle, ExternalLink, Headphones, Image, Loader2, Presentation } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -7,6 +7,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { LessonChat } from '@/components/LessonChat';
 import { StudyArtifactsView } from '@/components/StudyArtifactsView';
 import {
+  generateLessonInfographic,
   generateLessonPodcast,
   generateLessonSlideDeck,
   type Lesson,
@@ -71,6 +72,8 @@ export function LessonDetailView({
   const [podcastError, setPodcastError] = useState<FriendlyError | null>(null);
   const [isGeneratingSlideDeck, setIsGeneratingSlideDeck] = useState(false);
   const [slideDeckError, setSlideDeckError] = useState<FriendlyError | null>(null);
+  const [isGeneratingInfographic, setIsGeneratingInfographic] = useState(false);
+  const [infographicError, setInfographicError] = useState<FriendlyError | null>(null);
   const publishedLabel = formatPublishedDate(lesson.published_at);
   const isPendingLesson = lesson.generation_status === 'pending';
   const isFailedLesson = lesson.generation_status === 'failed';
@@ -101,6 +104,19 @@ export function LessonDetailView({
       setSlideDeckError(classifyGenerationError(error));
     } finally {
       setIsGeneratingSlideDeck(false);
+    }
+  }
+
+  async function handleGenerateInfographic(force: boolean) {
+    setIsGeneratingInfographic(true);
+    setInfographicError(null);
+    try {
+      const updated = await generateLessonInfographic(lesson.id, force);
+      onLessonUpdate?.(updated);
+    } catch (error: unknown) {
+      setInfographicError(classifyGenerationError(error));
+    } finally {
+      setIsGeneratingInfographic(false);
     }
   }
 
@@ -242,6 +258,83 @@ export function LessonDetailView({
 
       {hasLessonDetail && lesson.study_artifacts ? (
         <StudyArtifactsView artifacts={lesson.study_artifacts} />
+      ) : null}
+
+      {hasLessonDetail ? (
+        <div className="space-y-3 rounded-lg border border-border bg-card/60 p-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <Image className="size-4 text-muted-foreground" />
+              <h3 className="text-sm font-semibold text-foreground">
+                {t('learn.infographic.title', 'Infographic')}
+              </h3>
+            </div>
+            <Button
+              size="sm"
+              variant={lesson.infographic_status ? 'outline' : 'default'}
+              onClick={() => {
+                void handleGenerateInfographic(lesson.infographic_status !== null);
+              }}
+              disabled={isGeneratingInfographic}
+            >
+              {isGeneratingInfographic
+                ? t('learn.infographic.generating', 'Generating…')
+                : lesson.infographic_status
+                  ? t('learn.infographic.regenerate', 'Regenerate')
+                  : t('learn.infographic.create', 'Create infographic')}
+            </Button>
+          </div>
+
+          {lesson.infographic_status ? null : (
+            <p className="text-xs leading-5 text-muted-foreground">
+              {t(
+                'learn.infographic.costNotice',
+                'Uses one AI generation and usually returns in under a minute.'
+              )}
+            </p>
+          )}
+
+          {lesson.infographic_status === 'complete' && lesson.infographic ? (
+            <div className="overflow-hidden rounded-lg border border-border bg-background">
+              <div className="border-b border-border bg-muted/30 p-4">
+                <div className="text-base font-semibold text-foreground">
+                  {lesson.infographic.title}
+                </div>
+                <div className="mt-1 text-sm text-muted-foreground">
+                  {lesson.infographic.subtitle}
+                </div>
+              </div>
+              <div className="grid gap-px bg-border sm:grid-cols-2">
+                {lesson.infographic.sections.map((section) => (
+                  <section key={`${section.heading}-${section.body}`} className="bg-background p-4">
+                    <h4 className="text-xs font-semibold uppercase text-muted-foreground">
+                      {section.heading}
+                    </h4>
+                    <p className="mt-2 text-sm leading-6 text-foreground">{section.body}</p>
+                  </section>
+                ))}
+              </div>
+              <div className="border-t border-border p-3 text-xs text-muted-foreground">
+                {lesson.infographic.footer}
+              </div>
+            </div>
+          ) : null}
+
+          {infographicError ? (
+            <div className="flex items-start gap-2 rounded-lg border border-destructive/20 bg-destructive/5 p-3 text-xs text-destructive">
+              <AlertCircle className="mt-0.5 size-4 shrink-0" />
+              <div>
+                <div className="font-semibold">{infographicError.title}</div>
+                <div className="mt-0.5">{infographicError.message}</div>
+              </div>
+            </div>
+          ) : lesson.infographic_status === 'failed' && lesson.infographic_error ? (
+            <div className="flex items-start gap-2 rounded-lg border border-destructive/20 bg-destructive/5 p-3 text-xs text-destructive">
+              <AlertCircle className="mt-0.5 size-4 shrink-0" />
+              <div>{lesson.infographic_error}</div>
+            </div>
+          ) : null}
+        </div>
       ) : null}
 
       {hasLessonDetail ? (

@@ -59,6 +59,18 @@ export interface SlideDeck {
   slides: Slide[];
 }
 
+export interface InfographicSection {
+  heading: string;
+  body: string;
+}
+
+export interface InfographicArtifact {
+  title: string;
+  subtitle: string;
+  sections: InfographicSection[];
+  footer: string;
+}
+
 export interface Lesson {
   id: number;
   user_id: number;
@@ -80,6 +92,9 @@ export interface Lesson {
   slide_deck: SlideDeck | null;
   slide_deck_status: 'complete' | 'failed' | null;
   slide_deck_error: string | null;
+  infographic: InfographicArtifact | null;
+  infographic_status: 'complete' | 'failed' | null;
+  infographic_error: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -133,6 +148,12 @@ export async function generateLessonPodcast(id: number, force = false): Promise<
 
 export async function generateLessonSlideDeck(id: number, force = false): Promise<Lesson> {
   return requestJson<Lesson>(`/api/learn/lessons/${id}/slides${force ? '?force=true' : ''}`, {
+    method: 'POST',
+  });
+}
+
+export async function generateLessonInfographic(id: number, force = false): Promise<Lesson> {
+  return requestJson<Lesson>(`/api/learn/lessons/${id}/infographic${force ? '?force=true' : ''}`, {
     method: 'POST',
   });
 }

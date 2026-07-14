@@ -129,6 +129,22 @@ class SlideDeck(BaseModel):
     slides: list[Slide] = Field(min_length=6, max_length=10)
 
 
+class InfographicSection(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    heading: NonEmptyText
+    body: NonEmptyText
+
+
+class InfographicArtifact(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    title: NonEmptyText
+    subtitle: NonEmptyText
+    sections: list[InfographicSection] = Field(min_length=3, max_length=6)
+    footer: NonEmptyText
+
+
 class RelevanceFeedbackRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
