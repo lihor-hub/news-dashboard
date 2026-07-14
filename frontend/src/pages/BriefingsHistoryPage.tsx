@@ -62,7 +62,7 @@ function BriefingRow({ briefing }: { briefing: Briefing }) {
 function PodcastFeedCard() {
   const queryClient = useQueryClient();
   const [copied, setCopied] = useState(false);
-  const { data, isLoading, isError, isFetching, refetch } = useQuery({
+  const { data, isLoading } = useQuery({
     queryKey: ['briefings', 'podcast-feed-token'],
     queryFn: fetchPodcastFeedToken,
   });

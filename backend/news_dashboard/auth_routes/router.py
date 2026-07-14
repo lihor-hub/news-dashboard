@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import secrets
 from typing import Annotated, Any
+from urllib.parse import urlsplit
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, Response
 from fastapi.responses import RedirectResponse
@@ -43,11 +44,15 @@ router = APIRouter()
 
 def _safe_next_path(next_path: str | None) -> str | None:
     """Only accept an app-relative path so Keycloak can't be used as an open redirect."""
-    if not next_path or not next_path.startswith("/") or next_path.startswith("//"):
+    if not next_path:
         return None
-    if "://" in next_path:
+    normalized_path = next_path.replace("\\", "/")
+    parsed = urlsplit(normalized_path)
+    if parsed.scheme or parsed.netloc:
         return None
-    return next_path
+    if not normalized_path.startswith("/") or normalized_path.startswith("//"):
+        return None
+    return normalized_path
 
 
 def _login_error_redirect(error_code: str) -> RedirectResponse:
