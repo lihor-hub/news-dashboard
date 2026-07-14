@@ -36,6 +36,10 @@ class StudyArtifactsValidationError(ValueError):
 logger = logging.getLogger(__name__)
 
 DEFAULT_LESSON_CHAT_MODEL = "gpt-4o-mini"
+DEFAULT_STALE_PENDING_LESSON_MINUTES = 15
+STALE_PENDING_LESSON_ERROR = (
+    "Lesson generation was interrupted before it could finish. Please retry generation."
+)
 
 _DEPTH_EXPLANATION_LIMITS: dict[str, int] = {
     "tiny": 150,
@@ -325,6 +329,59 @@ def _update_lesson_failure(
             (error_message, lesson_id, user_id),
         ).fetchone()
     return _serialize_lesson(row)
+
+
+def recover_stale_pending_lessons(
+    *,
+    stale_after_minutes: int = DEFAULT_STALE_PENDING_LESSON_MINUTES,
+    batch_limit: int = 50,
+    database_url: str | None = None,
+) -> int:
+    """Mark stale pending lesson generations failed so users can retry them.
+
+    Uses PostgreSQL row locking so multiple app workers can run recovery without
+    processing the same pending lessons.
+    """
+    safe_minutes = max(1, stale_after_minutes)
+    safe_limit = max(1, min(batch_limit, 500))
+    init_db(database_url=database_url)
+    with connect(database_url=database_url) as conn:
+        row = conn.execute(
+            """
+            WITH stale AS (
+                SELECT id
+                FROM lessons
+                WHERE generation_status = 'pending'
+                  AND updated_at < NOW() - (%s * INTERVAL '1 minute')
+                ORDER BY updated_at ASC
+                LIMIT %s
+                FOR UPDATE SKIP LOCKED
+            ),
+            recovered AS (
+                UPDATE lessons
+                SET generation_status = 'failed',
+                    generation_error = %s,
+                    updated_at = NOW()
+                WHERE id IN (SELECT id FROM stale)
+                RETURNING id
+            ),
+            failed_runs AS (
+                UPDATE learning_agent_runs
+                SET status = 'failed',
+                    failed_step = COALESCE(failed_step, 'recovery'),
+                    error = COALESCE(error, %s),
+                    updated_at = NOW()
+                WHERE status = 'running'
+                  AND lesson_id IN (SELECT id FROM recovered)
+                RETURNING id
+            )
+            SELECT COUNT(*) AS recovered_count FROM recovered
+            """,
+            (safe_minutes, safe_limit, STALE_PENDING_LESSON_ERROR, STALE_PENDING_LESSON_ERROR),
+        ).fetchone()
+    if row is None:
+        return 0
+    return int(row_to_dict(row)["recovered_count"])
 
 
 def _update_lesson_podcast_success(

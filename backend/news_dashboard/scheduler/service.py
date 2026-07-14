@@ -443,6 +443,21 @@ def _run_reading_list_fetch() -> tuple[str, str | None] | None:
     return "success", f"fetched {processed} item(s)"
 
 
+def _run_lesson_generation_recovery() -> tuple[str, str | None] | None:
+    from news_dashboard.learn_from_link import service
+
+    stale_minutes = int(os.getenv("LESSON_GENERATION_STALE_MINUTES", "15"))
+    try:
+        recovered = service.recover_stale_pending_lessons(stale_after_minutes=stale_minutes)
+    except Exception as exc:
+        logger.exception("Stale lesson generation recovery failed")
+        return "failure", str(exc)[:500]
+    if recovered == 0:
+        return None
+    logger.info("Stale lesson generation recovery marked %d lesson(s) failed.", recovered)
+    return "success", f"recovered {recovered} stale lesson generation(s)"
+
+
 def _run_newsletter_poll() -> tuple[str, str | None] | None:
     from news_dashboard.newsletter_ingest import poll_newsletters
 
@@ -549,6 +564,10 @@ def _job_reading_list_fetch() -> None:
     _run_and_record("reading_list_fetch", _run_reading_list_fetch)
 
 
+def _job_lesson_generation_recovery() -> None:
+    _run_and_record("lesson_generation_recovery", _run_lesson_generation_recovery)
+
+
 def _job_watchlist_evaluation() -> None:
     _run_and_record("watchlist_evaluation", _run_watchlist_evaluation)
 
@@ -643,6 +662,14 @@ def _register_recurring_jobs(scheduler: Any) -> None:
         trigger="interval",
         minutes=int(os.getenv("READING_LIST_FETCH_INTERVAL_MINUTES", "5")),
         id="reading_list_fetch",
+        replace_existing=True,
+    )
+
+    scheduler.add_job(
+        _job_lesson_generation_recovery,
+        trigger="interval",
+        minutes=int(os.getenv("LESSON_GENERATION_RECOVERY_INTERVAL_MINUTES", "5")),
+        id="lesson_generation_recovery",
         replace_existing=True,
     )
 
