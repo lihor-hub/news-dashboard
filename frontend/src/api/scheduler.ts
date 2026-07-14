@@ -40,6 +40,18 @@ export async function resumeScheduler(): Promise<{ paused: boolean; next_run_at:
   return requestJson('/api/scheduler/resume', { method: 'POST' });
 }
 
+export interface EmbeddingDedupResult {
+  status: 'success';
+  embedded: number;
+  merged: number;
+}
+
+export async function runEmbeddingDedup(): Promise<EmbeddingDedupResult> {
+  return requestJson<EmbeddingDedupResult>('/api/scheduler/jobs/embedding-dedup/run', {
+    method: 'POST',
+  });
+}
+
 export interface ScheduledJobRun {
   id: number;
   job_name: string;

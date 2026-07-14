@@ -139,6 +139,7 @@ EXPECTED_METHOD_PATHS = {
     ("POST", "/api/recommendations/recalculate"),
     ("POST", "/api/recommendations/recalculate-mine"),
     ("POST", "/api/scheduler/interval"),
+    ("POST", "/api/scheduler/jobs/embedding-dedup/run"),
     ("GET", "/api/scheduler/job-runs"),
     ("POST", "/api/scheduler/pause"),
     ("POST", "/api/scheduler/resume"),

@@ -154,6 +154,33 @@ def test_api_job_runs_empty(client: TestClient, pg_clean: str, monkeypatch: Any)
     assert resp.json() == {"items": []}
 
 
+def test_manual_embedding_dedup_route_runs_for_admin(client: TestClient) -> None:
+    with patch(
+        "news_dashboard.scheduler.router.run_embedding_dedup_now",
+        return_value={"status": "success", "embedded": 4, "merged": 2},
+    ) as run:
+        resp = client.post("/api/scheduler/jobs/embedding-dedup/run")
+
+    assert resp.status_code == 200
+    assert resp.json() == {"status": "success", "embedded": 4, "merged": 2}
+    run.assert_called_once_with()
+
+
+def test_manual_embedding_dedup_route_surfaces_failure(client: TestClient) -> None:
+    with patch(
+        "news_dashboard.scheduler.router.run_embedding_dedup_now",
+        side_effect=RuntimeError("embedding service unavailable"),
+    ):
+        resp = client.post("/api/scheduler/jobs/embedding-dedup/run")
+
+    assert resp.status_code == 500
+    assert resp.json()["detail"] == "duplicate cleanup failed"
+
+
+def test_manual_embedding_dedup_route_is_in_openapi() -> None:
+    assert "/api/scheduler/jobs/embedding-dedup/run" in app.openapi()["paths"]
+
+
 # ── _run_and_record wrapper ───────────────────────────────────────────────────
 
 

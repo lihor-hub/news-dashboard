@@ -26,6 +26,7 @@ from news_dashboard.scheduler.service import (
     is_paused,
     pause_scheduler,
     resume_scheduler,
+    run_embedding_dedup_now,
     set_interval,
 )
 
@@ -90,3 +91,11 @@ def list_scheduled_job_runs() -> dict[str, Any]:
     from news_dashboard.scheduled_job_history import list_latest_job_runs
 
     return {"items": list_latest_job_runs()}
+
+
+@router.post("/api/scheduler/jobs/embedding-dedup/run", dependencies=_admin_dep)
+def scheduler_run_embedding_dedup() -> dict[str, int | str]:
+    try:
+        return run_embedding_dedup_now()
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail="duplicate cleanup failed") from exc

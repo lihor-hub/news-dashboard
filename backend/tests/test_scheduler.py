@@ -19,6 +19,7 @@ from news_dashboard.scheduler.service import (
     _run_per_user_briefings,
     _run_weekly_lesson_recaps,
     _run_weekly_recaps,
+    run_embedding_dedup_now,
 )
 
 # ── helpers ───────────────────────────────────────────────────────────────────
@@ -118,6 +119,42 @@ def test_run_briefing_logs_generation_error(caplog: pytest.LogCaptureFixture) ->
         mock_gen.side_effect = BriefingGenerationError("bad json")
         _run_briefing()
     assert any(r.levelno >= logging.ERROR for r in caplog.records)
+
+
+# ── manual embedding dedup ───────────────────────────────────────────────────
+
+
+def test_run_embedding_dedup_now_records_history_and_returns_counts() -> None:
+    summary = {"embedded": 4, "merged": 2}
+
+    with (
+        patch("news_dashboard.embedding_dedup.run_embedding_dedup", return_value=summary),
+        patch("news_dashboard.scheduled_job_history.save_job_run") as save_job_run,
+    ):
+        result = run_embedding_dedup_now()
+
+    assert result == {"status": "success", "embedded": 4, "merged": 2}
+    save_job_run.assert_called_once()
+    assert save_job_run.call_args.kwargs["job_name"] == "embedding_dedup"
+    assert save_job_run.call_args.kwargs["status"] == "success"
+    assert save_job_run.call_args.kwargs["message"] == "embedded=4 merged=2"
+
+
+def test_run_embedding_dedup_now_records_failure_and_raises() -> None:
+    with (
+        patch(
+            "news_dashboard.embedding_dedup.run_embedding_dedup",
+            side_effect=RuntimeError("embedding service unavailable"),
+        ),
+        patch("news_dashboard.scheduled_job_history.save_job_run") as save_job_run,
+        pytest.raises(RuntimeError, match="embedding service unavailable"),
+    ):
+        run_embedding_dedup_now()
+
+    save_job_run.assert_called_once()
+    assert save_job_run.call_args.kwargs["job_name"] == "embedding_dedup"
+    assert save_job_run.call_args.kwargs["status"] == "failure"
+    assert save_job_run.call_args.kwargs["message"] == "embedding service unavailable"
 
 
 # ── _run_per_user_briefings ──────────────────────────────────────────────────
