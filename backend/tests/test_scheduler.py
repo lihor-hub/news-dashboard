@@ -1257,6 +1257,34 @@ def test_run_reading_list_fetch_reports_count() -> None:
     assert "2" in (message or "")
 
 
+def test_start_scheduler_registers_lesson_generation_recovery_job(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("LESSON_GENERATION_RECOVERY_INTERVAL_MINUTES", "7")
+    mock_sched = _start_with_env(monkeypatch)
+    jobs = {c.kwargs.get("id"): c.kwargs for c in mock_sched.add_job.call_args_list}
+    assert "lesson_generation_recovery" in jobs
+    assert jobs["lesson_generation_recovery"]["trigger"] == "interval"
+    assert jobs["lesson_generation_recovery"]["minutes"] == 7
+
+
+def test_run_lesson_generation_recovery_reports_count(monkeypatch: pytest.MonkeyPatch) -> None:
+    from news_dashboard.scheduler.service import _run_lesson_generation_recovery
+
+    monkeypatch.setenv("LESSON_GENERATION_STALE_MINUTES", "22")
+    with patch(
+        "news_dashboard.learn_from_link.service.recover_stale_pending_lessons",
+        return_value=3,
+    ) as mock_recover:
+        result = _run_lesson_generation_recovery()
+
+    mock_recover.assert_called_once_with(stale_after_minutes=22)
+    assert result is not None
+    status, message = result
+    assert status == "success"
+    assert "3" in (message or "")
+
+
 def test_start_scheduler_registers_watchlist_evaluation_job(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

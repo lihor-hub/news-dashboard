@@ -11,7 +11,7 @@ from fastapi.testclient import TestClient
 
 from news_dashboard.auth import require_admin, require_auth
 from news_dashboard.db import connect, init_db
-from news_dashboard.learn_from_link import service
+from news_dashboard.learn_from_link import agent_runs, service
 from news_dashboard.learn_from_link.models import LessonDepth
 from news_dashboard.main import app
 from news_dashboard.url_safety import UnsafeUrlError
@@ -1104,6 +1104,74 @@ def test_regenerate_lesson_raises_not_found_for_other_users_lesson(pg_clean: str
             persona="developer",
             database_url=pg_clean,
         )
+
+
+def test_recover_stale_pending_lessons_marks_old_pending_failed(pg_clean: str) -> None:
+    user_id = _make_user(pg_clean)
+    stale = service.create_lesson(
+        user_id, "https://example.com/stale", database_url=pg_clean, extract=False
+    )
+    fresh = service.create_lesson(
+        user_id, "https://example.com/fresh", database_url=pg_clean, extract=False
+    )
+    with connect(database_url=pg_clean) as conn:
+        conn.execute(
+            """
+            UPDATE lessons
+            SET updated_at = NOW() - INTERVAL '20 minutes'
+            WHERE id = %s
+            """,
+            (stale["id"],),
+        )
+
+    recovered = service.recover_stale_pending_lessons(stale_after_minutes=15, database_url=pg_clean)
+
+    assert recovered == 1
+    stale_after = service.get_lesson(int(stale["id"]), user_id, database_url=pg_clean)
+    fresh_after = service.get_lesson(int(fresh["id"]), user_id, database_url=pg_clean)
+    assert stale_after is not None
+    assert stale_after["generation_status"] == "failed"
+    assert stale_after["generation_error"] == service.STALE_PENDING_LESSON_ERROR
+    assert fresh_after is not None
+    assert fresh_after["generation_status"] == "pending"
+    assert fresh_after["generation_error"] is None
+
+
+def test_recover_stale_pending_lessons_fails_interrupted_agent_run(pg_clean: str) -> None:
+    user_id = _make_user(pg_clean)
+    lesson = service.create_lesson(
+        user_id, "https://example.com/interrupted", database_url=pg_clean, extract=False
+    )
+    run_id = agent_runs.start_run(
+        pg_clean,
+        lesson_id=int(lesson["id"]),
+        user_id=user_id,
+        prompt_version=agent_runs.SYNTHESIS_PROMPT_VERSION,
+        model_version=service.DEFAULT_LESSON_CHAT_MODEL,
+        config={"depth": lesson["depth"], "persona": lesson["persona"]},
+    )
+    with connect(database_url=pg_clean) as conn:
+        conn.execute(
+            """
+            UPDATE lessons
+            SET updated_at = NOW() - INTERVAL '16 minutes'
+            WHERE id = %s
+            """,
+            (lesson["id"],),
+        )
+
+    recovered = service.recover_stale_pending_lessons(stale_after_minutes=15, database_url=pg_clean)
+
+    assert recovered == 1
+    with connect(database_url=pg_clean) as conn:
+        run = conn.execute(
+            "SELECT status, failed_step, error FROM learning_agent_runs WHERE id = %s",
+            (run_id,),
+        ).fetchone()
+    assert run is not None
+    assert run["status"] == "failed"
+    assert run["failed_step"] == "recovery"
+    assert run["error"] == service.STALE_PENDING_LESSON_ERROR
 
 
 def test_generate_lesson_from_url_records_generation_history(
