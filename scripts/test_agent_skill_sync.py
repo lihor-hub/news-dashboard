@@ -1,6 +1,16 @@
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+SKILLS = ROOT / ".claude" / "skills"
+
+
+def _skill_text(name: str) -> str:
+    return (SKILLS / name / "SKILL.md").read_text()
+
+
+def _assert_contains_all(text: str, required: tuple[str, ...]) -> None:
+    missing = [value for value in required if value not in text]
+    assert not missing, f"missing required skill guidance: {missing}"
 
 
 def test_codex_agent_skills_link_to_claude_skills() -> None:
@@ -40,3 +50,66 @@ def test_worktree_bootstrap_script_is_executable() -> None:
 
     assert bootstrap.is_file()
     assert bootstrap.stat().st_mode & 0o111, "bootstrap-worktree.sh must be executable"
+
+
+def test_agent_delivery_contract_covers_pressure_scenarios() -> None:
+    text = _skill_text("agent-delivery-contract")
+
+    _assert_contains_all(
+        text,
+        (
+            "Use when",
+            "Authority",
+            "Terminal state",
+            "Failure policy",
+            "proportional verification",
+            "required checks",
+            "state transitions",
+            "unchanged polling",
+            "fresh evidence",
+            "infrastructure",
+        ),
+    )
+
+
+def test_repair_pr_handles_rebase_ci_and_merge_pressure() -> None:
+    text = _skill_text("repair-pr")
+
+    _assert_contains_all(
+        text,
+        (
+            "Use when",
+            "agent-delivery-contract",
+            "--force-with-lease",
+            "caused by the PR",
+            "required checks",
+            "merge queue",
+            "infrastructure",
+            "mergedAt",
+        ),
+    )
+
+
+def test_tdd_ship_requires_the_shared_delivery_contract() -> None:
+    text = _skill_text("tdd-ship")
+
+    assert "**REQUIRED SUB-SKILL:** Use agent-delivery-contract" in text
+
+
+def test_orchestrate_prs_avoids_stale_ci_and_conflicting_merges() -> None:
+    text = _skill_text("orchestrate-prs")
+
+    _assert_contains_all(
+        text,
+        (
+            "Use when",
+            "agent-delivery-contract",
+            "repair-pr",
+            "overlapping files",
+            "serialize",
+            "bounded concurrency",
+            "Re-evaluate",
+            "status table",
+            "origin/main",
+        ),
+    )
