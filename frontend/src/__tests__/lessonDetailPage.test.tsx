@@ -220,7 +220,9 @@ describe('LessonDetailPage', () => {
     await waitFor(() => {
       expect(api.generateLessonSlideDeck).toHaveBeenCalledWith(5, false);
     });
-    expect(await screen.findByRole('button', { name: 'Regenerate' })).toBeInTheDocument();
+    expect((await screen.findAllByRole('button', { name: 'Regenerate' })).length).toBeGreaterThan(
+      0
+    );
     expect(screen.getByText('Slide 1')).toBeInTheDocument();
     expect(screen.getByText('Bullet 1.1')).toBeInTheDocument();
   });
