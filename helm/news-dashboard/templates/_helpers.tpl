@@ -98,6 +98,37 @@
 {{- end }}
 {{- end -}}
 
+{{- define "news-dashboard.newsletterEnv" -}}
+{{- if .Values.app.newsletter.imapHost }}
+- name: NEWSLETTER_IMAP_HOST
+  value: {{ .Values.app.newsletter.imapHost | quote }}
+- name: NEWSLETTER_IMAP_PORT
+  value: {{ .Values.app.newsletter.imapPort | default 993 | quote }}
+- name: NEWSLETTER_IMAP_FOLDER
+  value: {{ .Values.app.newsletter.imapFolder | default "INBOX" | quote }}
+- name: NEWSLETTER_POLL_MINUTES
+  value: {{ .Values.app.newsletter.pollMinutes | default 15 | quote }}
+{{- if .Values.app.newsletter.maxMessageBytes }}
+- name: NEWSLETTER_MAX_MESSAGE_BYTES
+  value: {{ .Values.app.newsletter.maxMessageBytes | quote }}
+{{- end }}
+{{- if .Values.app.newsletter.existingSecret }}
+- name: NEWSLETTER_IMAP_USERNAME
+  valueFrom:
+    secretKeyRef:
+      name: {{ .Values.app.newsletter.existingSecret | quote }}
+      key: {{ .Values.app.newsletter.usernameKey | default "NEWSLETTER_IMAP_USERNAME" | quote }}
+      optional: true
+- name: NEWSLETTER_IMAP_PASSWORD
+  valueFrom:
+    secretKeyRef:
+      name: {{ .Values.app.newsletter.existingSecret | quote }}
+      key: {{ .Values.app.newsletter.passwordKey | default "NEWSLETTER_IMAP_PASSWORD" | quote }}
+      optional: true
+{{- end }}
+{{- end }}
+{{- end -}}
+
 {{- define "news-dashboard.configEnv" -}}
 {{- if .Values.app.config.metricsEnabled }}
 - name: METRICS_ENABLED

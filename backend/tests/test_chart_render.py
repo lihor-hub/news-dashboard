@@ -397,6 +397,57 @@ def test_helm_template_app_and_ingest_receive_sentry_env() -> None:
 
 
 @pytest.mark.skipif(HELM_BIN is None, reason="helm binary not found on path")
+def test_helm_template_newsletter_env_defaults_off() -> None:
+    output = _render_chart()
+    deployment_env = _env_block(_manifest_for_kind(output, "Deployment"))
+
+    assert "NEWSLETTER_IMAP_HOST" not in deployment_env
+    assert "NEWSLETTER_IMAP_PORT" not in deployment_env
+    assert "NEWSLETTER_IMAP_USERNAME" not in deployment_env
+    assert "NEWSLETTER_IMAP_PASSWORD" not in deployment_env
+    assert "NEWSLETTER_IMAP_FOLDER" not in deployment_env
+    assert "NEWSLETTER_POLL_MINUTES" not in deployment_env
+    assert "NEWSLETTER_MAX_MESSAGE_BYTES" not in deployment_env
+
+
+@pytest.mark.skipif(HELM_BIN is None, reason="helm binary not found on path")
+def test_helm_template_newsletter_env_uses_existing_secret() -> None:
+    output = _render_chart(
+        "app.newsletter.imapHost=imap.example.test",
+        "app.newsletter.imapPort=1993",
+        "app.newsletter.imapFolder=Newsletters",
+        "app.newsletter.pollMinutes=7",
+        "app.newsletter.maxMessageBytes=1048576",
+        "app.newsletter.existingSecret=newsletter-credentials",
+        "app.newsletter.usernameKey=CUSTOM_IMAP_USERNAME",
+        "app.newsletter.passwordKey=CUSTOM_IMAP_PASSWORD",
+    )
+    deployment_env = _env_block(_manifest_for_kind(output, "Deployment"))
+
+    assert _env_entry(deployment_env, "NEWSLETTER_IMAP_HOST") == (
+        '- name: NEWSLETTER_IMAP_HOST\n  value: "imap.example.test"'
+    )
+    assert _env_entry(deployment_env, "NEWSLETTER_IMAP_PORT") == (
+        '- name: NEWSLETTER_IMAP_PORT\n  value: "1993"'
+    )
+    assert _env_entry(deployment_env, "NEWSLETTER_IMAP_FOLDER") == (
+        '- name: NEWSLETTER_IMAP_FOLDER\n  value: "Newsletters"'
+    )
+    assert _env_entry(deployment_env, "NEWSLETTER_POLL_MINUTES") == (
+        '- name: NEWSLETTER_POLL_MINUTES\n  value: "7"'
+    )
+    assert _env_entry(deployment_env, "NEWSLETTER_MAX_MESSAGE_BYTES") == (
+        '- name: NEWSLETTER_MAX_MESSAGE_BYTES\n  value: "1048576"'
+    )
+    username = _env_entry(deployment_env, "NEWSLETTER_IMAP_USERNAME")
+    assert 'name: "newsletter-credentials"' in username
+    assert 'key: "CUSTOM_IMAP_USERNAME"' in username
+    password = _env_entry(deployment_env, "NEWSLETTER_IMAP_PASSWORD")
+    assert 'name: "newsletter-credentials"' in password
+    assert 'key: "CUSTOM_IMAP_PASSWORD"' in password
+
+
+@pytest.mark.skipif(HELM_BIN is None, reason="helm binary not found on path")
 def test_helm_template_app_config_defaults_off() -> None:
     output = _render_chart()
     deployment_env = _env_block(_manifest_for_kind(output, "Deployment"))
