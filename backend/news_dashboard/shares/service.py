@@ -16,6 +16,7 @@ from typing import Any
 from news_dashboard.article_visibility import get_visible_article_row
 from news_dashboard.body_fetch import fetch_and_cache_body
 from news_dashboard.db import connect, row_to_dict
+from news_dashboard.prompt_catalog import get_text_prompt
 
 logger = logging.getLogger(__name__)
 
@@ -389,21 +390,12 @@ def generate_share_context(share_id: int) -> str | None:
         "annotation_text": annotation_text,
         "recipient_interests": recipient_interests,
     }
-    fallback = (
-        'Article: "{{article_title}}"\nSummary: {{article_summary}}\n\n'
-        "Sender's note: {{sender_note}}\nHighlighted sections:\n{{annotation_text}}\n\n"
-        "Recipient's main reading interests: {{recipient_interests}}\n\n"
-        "Write exactly 2 sentences explaining why the sender highlighted these specific "
-        "sections and why they are directly relevant to the recipient's interests. "
-        "Be specific and personal, not generic."
-    )
-
     from news_dashboard.ai_client import chat_create, get_chat_client, get_prompt
 
     client = get_chat_client(api_key=api_key, base_url=base_url)
     prompt = get_prompt(
         "share-context",
-        fallback=fallback,
+        fallback=get_text_prompt("share-context"),
         label="production",
         prompt_type="text",
         variables=variables,

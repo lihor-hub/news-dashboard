@@ -171,6 +171,9 @@ ban-relative-imports = "all"
 "scripts/ensure_demo_database.py" = [
   "T201",    # print is the intended CLI output for shell consumption
 ]
+"scripts/sync_langfuse_prompts.py" = [
+  "T201",    # print is the intended CLI output for operator-visible sync status
+]
 "scripts/optimize_screenshots.py" = [
   "T201",    # print is the intended CLI output for shell consumption
 ]

@@ -7,6 +7,8 @@ import logging
 import os
 from typing import Any
 
+from news_dashboard.prompt_catalog import get_text_prompt
+
 logger = logging.getLogger(__name__)
 
 
@@ -59,18 +61,7 @@ def generate_recap_narrative(recap: dict[str, Any]) -> str:
             "weekly-recap-narrative",
             label="production",
             prompt_type="text",
-            fallback=(
-                "Write a weekly reading review in the voice of 'here's your week in "
-                "reading', addressed directly to the reader (second person). "
-                "Write exactly 2 short paragraphs, roughly 60-120 words total. "
-                "Ground everything strictly in the metrics below — do not invent "
-                "facts, activity, or numbers that are not present in the data. "
-                "If 'saved' or 'dwell' data is present, mention their reading "
-                "backlog and skim-vs-read balance.\n\n"
-                "Recap metrics (JSON):\n{{recap_json}}\n\n"
-                "Reply with only the narrative text, as plain paragraphs separated "
-                "by a blank line."
-            ),
+            fallback=get_text_prompt("weekly-recap-narrative"),
             variables={"recap_json": recap_json},
         )
 

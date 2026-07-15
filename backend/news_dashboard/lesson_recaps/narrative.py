@@ -7,6 +7,8 @@ import logging
 import os
 from typing import Any
 
+from news_dashboard.prompt_catalog import get_text_prompt
+
 logger = logging.getLogger(__name__)
 
 
@@ -58,17 +60,7 @@ def generate_lesson_recap_narrative(recap: dict[str, Any]) -> str:
             "weekly-lesson-recap-narrative",
             label="production",
             prompt_type="text",
-            fallback=(
-                "Write a weekly learning review in the voice of 'here's what you "
-                "learned this week', addressed directly to the reader (second "
-                "person). Write exactly 2 short paragraphs, roughly 60-120 words "
-                "total. Ground everything strictly in the metrics below — do not "
-                "invent lessons, concepts, or numbers that are not present in the "
-                "data. Mention repeated themes and unfinished lessons when present.\n\n"
-                "Recap metrics (JSON):\n{{recap_json}}\n\n"
-                "Reply with only the narrative text, as plain paragraphs separated "
-                "by a blank line."
-            ),
+            fallback=get_text_prompt("weekly-lesson-recap-narrative"),
             variables={"recap_json": recap_json},
         )
 

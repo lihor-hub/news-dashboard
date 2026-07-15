@@ -10,6 +10,8 @@ import re
 from typing import Any, Literal
 from urllib.parse import urlparse
 
+from news_dashboard.prompt_catalog import get_text_prompt
+
 logger = logging.getLogger(__name__)
 
 # Maximum lengths for push subscription fields
@@ -115,12 +117,7 @@ def generate_push_hook(briefing: dict[str, Any]) -> str:
             "briefing-push-hook",
             label="production",
             prompt_type="text",
-            fallback=(
-                "Write a single punchy mobile push notification hook (max 15 words) "
-                "that entices the user to open their news briefing. "
-                "Top headlines:\n{{headline_block}}\n\n"
-                "Reply with only the hook text, no quotes or punctuation at the end."
-            ),
+            fallback=get_text_prompt("briefing-push-hook"),
             variables={"headline_block": headline_block},
         )
 
@@ -189,13 +186,7 @@ def generate_recap_push_hook(recap: dict[str, Any]) -> str:
             "recap-push-hook",
             label="production",
             prompt_type="text",
-            fallback=(
-                "Write a single encouraging mobile push notification hook (max 20 words) "
-                "summarizing this user's weekly reading recap. "
-                "Articles read: {{articles_read}}. Top category: {{top_category}}. "
-                "Current streak: {{current_streak_days}} day(s).\n\n"
-                "Reply with only the hook text, no quotes or punctuation at the end."
-            ),
+            fallback=get_text_prompt("recap-push-hook"),
             variables=variables,
         )
 

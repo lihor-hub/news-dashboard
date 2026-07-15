@@ -23,6 +23,7 @@ import psycopg
 from news_dashboard.article_visibility import get_visible_article_row
 from news_dashboard.db import connect, init_db, insert_article_sql, placeholders, row_to_dict
 from news_dashboard.ingest_events import ingest_events
+from news_dashboard.prompt_catalog import get_chat_prompt
 from news_dashboard.recommendations import COLD_START_MODEL_VERSION
 from news_dashboard.sources.service import DEFAULT_SOURCES, SourceDefinition
 from news_dashboard.url_safety import (
@@ -203,35 +204,8 @@ _MEDIA_SOURCE_KINDS: frozenset[str] = frozenset({"youtube_channel", "podcast_fee
 
 # Cap the number of page fetches per ingest run to keep ingest fast.
 _MAX_SNIPPET_FETCHES_PER_RUN: int = 10
-_MEDIA_SUMMARY_PROMPT = [
-    {
-        "role": "system",
-        "content": (
-            "Summarize this podcast or video transcript as a concise readable "
-            "article summary for a news reader."
-        ),
-    },
-    {
-        "role": "user",
-        "content": "Title: {{title}}\nDescription: {{description}}\nTranscript:\n{{transcript}}",
-    },
-]
-_TRANSLATE_ARTICLE_PROMPT = [
-    {
-        "role": "system",
-        "content": (
-            "You are a translation assistant. Detect the language of the following text. "
-            "If it is not English, translate both the title and the summary/description to "
-            "English. Return a JSON object with the following keys:\n"
-            '- "detected_lang": the 2-letter ISO 639-1 language code '
-            '(e.g. "ja", "zh", "ru", "fr", "de", "en")\n'
-            '- "translated_title": the translated title in English\n'
-            '- "translated_summary": the translated summary/description in English\n'
-            '- "needs_translation": boolean indicating if it was translated\n'
-        ),
-    },
-    {"role": "user", "content": "Title: {{title}}\nSummary: {{summary}}"},
-]
+_MEDIA_SUMMARY_PROMPT = get_chat_prompt("summarize-media-article")
+_TRANSLATE_ARTICLE_PROMPT = get_chat_prompt("translate-article")
 
 
 def now_iso() -> str:
@@ -732,7 +706,7 @@ def _media_summary(title: str, description: str, entry: dict[str, Any]) -> str:
             client = get_chat_client(api_key=api_key, base_url=base_url)
             prompt = get_prompt(
                 "summarize-media-article",
-                fallback=_MEDIA_SUMMARY_PROMPT,
+                fallback=get_chat_prompt("summarize-media-article"),
                 prompt_type="chat",
                 label="production",
                 variables={
@@ -800,7 +774,7 @@ def detect_and_translate_article(
         client = get_chat_client(api_key=api_key, base_url=base_url)
         prompt = get_prompt(
             "translate-article",
-            fallback=_TRANSLATE_ARTICLE_PROMPT,
+            fallback=get_chat_prompt("translate-article"),
             prompt_type="chat",
             label="production",
             variables={"title": title, "summary": summary},

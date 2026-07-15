@@ -24,6 +24,7 @@ from news_dashboard.learn_from_link.models import (
     SlideDeck,
     StudyArtifacts,
 )
+from news_dashboard.prompt_catalog import get_chat_prompt
 from news_dashboard.reading_list.metadata import fetch_url_metadata
 from news_dashboard.reading_list.service import normalize_url
 from news_dashboard.url_safety import UnsafeUrlError, validate_server_fetch_url
@@ -60,18 +61,11 @@ _PERSONA_FRAMING: dict[str, str] = {
     "preparing_talk": "for someone preparing a talk on this topic",
 }
 
-_LESSON_CHAT_SYSTEM_PROMPT = """\
-You are the Lesson Follow-up Assistant. Answer follow-up questions about the \
-lesson below, grounded in the lesson detail and source article content \
-supplied. If information is not present in the provided context, say so \
-clearly rather than guessing.
-
---- LESSON ---
-{lesson_context}
-
---- SOURCE ARTICLE ---
-{source_context}
-"""
+_LESSON_CHAT_SYSTEM_PROMPT = (
+    get_chat_prompt("lesson-chat")[0]["content"]
+    .replace("{{lesson_context}}", "{lesson_context}")
+    .replace("{{source_context}}", "{source_context}")
+)
 
 _LESSON_ARTIFACT_RESET_ASSIGNMENTS = """\
 podcast_status = NULL,
@@ -531,13 +525,7 @@ def _update_lesson_slide_deck_failure(
     return _serialize_lesson(row)
 
 
-_LESSON_SLIDE_DECK_SYSTEM_PROMPT = """\
-You are the Lesson Slide Deck Generator. Produce a short teaching slide deck \
-summarizing the lesson below as a shareable learning artifact. Return JSON \
-with a "slides" array of 6 to 10 slides, each with a "title" and 1-6 \
-"bullets". Ground every slide in the supplied lesson detail; do not invent \
-facts.
-"""
+_LESSON_SLIDE_DECK_SYSTEM_PROMPT = get_chat_prompt("lesson-slide-deck")[0]["content"]
 
 
 def _build_slide_deck_prompt(lesson: dict[str, Any]) -> str:
@@ -583,10 +571,7 @@ def generate_slide_deck_content(lesson: dict[str, Any], user_id: int) -> dict[st
     lesson_content = _build_slide_deck_prompt(lesson)
     prompt = get_prompt(
         "lesson-slide-deck",
-        fallback=[
-            {"role": "system", "content": _LESSON_SLIDE_DECK_SYSTEM_PROMPT},
-            {"role": "user", "content": "{{lesson_content}}"},
-        ],
+        fallback=get_chat_prompt("lesson-slide-deck"),
         prompt_type="chat",
         variables={"lesson_content": lesson_content},
     )
@@ -706,13 +691,7 @@ def _update_lesson_infographic_failure(
     return _serialize_lesson(row)
 
 
-_LESSON_INFOGRAPHIC_SYSTEM_PROMPT = """\
-You are the Lesson Infographic Generator. Produce a deterministic, text-first \
-infographic artifact from the lesson below. Return JSON with title, subtitle, \
-sections, and footer fields. Each section needs a heading and body. Ground the \
-artifact only in the supplied lesson detail; do not invent facts, image URLs, \
-or external assets.
-"""
+_LESSON_INFOGRAPHIC_SYSTEM_PROMPT = get_chat_prompt("lesson-infographic")[0]["content"]
 
 
 def _build_infographic_prompt(lesson: dict[str, Any]) -> str:
@@ -754,10 +733,7 @@ def generate_infographic_content(lesson: dict[str, Any], user_id: int) -> dict[s
     lesson_content = _build_infographic_prompt(lesson)
     prompt = get_prompt(
         "lesson-infographic",
-        fallback=[
-            {"role": "system", "content": _LESSON_INFOGRAPHIC_SYSTEM_PROMPT},
-            {"role": "user", "content": "{{lesson_content}}"},
-        ],
+        fallback=get_chat_prompt("lesson-infographic"),
         prompt_type="chat",
         variables={"lesson_content": lesson_content},
     )
@@ -1470,15 +1446,9 @@ def ask_lesson_question(
     from news_dashboard.ai_client import get_prompt
     from news_dashboard.ai_orchestration import invoke_chat_chain
 
-    fallback_system = _LESSON_CHAT_SYSTEM_PROMPT.replace(
-        "{lesson_context}", "{{lesson_context}}"
-    ).replace("{source_context}", "{{source_context}}")
     prompt = get_prompt(
         "lesson-chat",
-        fallback=[
-            {"role": "system", "content": fallback_system},
-            {"role": "user", "content": "{{question}}"},
-        ],
+        fallback=get_chat_prompt("lesson-chat"),
         prompt_type="chat",
         variables={
             "lesson_context": lesson_context,
@@ -1584,19 +1554,6 @@ def generate_personal_relevance(
 
     lesson_title = str(lesson_fields.get("title") or lesson_fields.get("original_url"))
     lesson_detail = lesson_fields.get("lesson_detail") or {}
-    fallback = [
-        {
-            "role": "system",
-            "content": (
-                "Explain why a lesson is relevant using only the user's provided reading profile. "
-                "Return JSON with non-empty explanation and a signals array."
-            ),
-        },
-        {
-            "role": "user",
-            "content": ("{{lesson_context}}\n{{profile_context}}"),
-        },
-    ]
     lesson_context = f"Lesson title: {lesson_title}\nLesson gist: {lesson_detail.get('gist', '')}"
     profile_context = (
         f"Interests: {interests}\nReading DNA categories: {dna_categories}\n"
@@ -1606,7 +1563,7 @@ def generate_personal_relevance(
     try:
         prompt = get_prompt(
             "lesson-relevance",
-            fallback=fallback,
+            fallback=get_chat_prompt("lesson-relevance"),
             prompt_type="chat",
             variables={"lesson_context": lesson_context, "profile_context": profile_context},
         )

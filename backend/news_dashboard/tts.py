@@ -13,6 +13,8 @@ import os
 from pathlib import Path
 from typing import Any
 
+from news_dashboard.prompt_catalog import get_chat_prompt
+
 logger = logging.getLogger(__name__)
 
 _DEFAULT_DATA_DIR = Path("/data")
@@ -255,20 +257,7 @@ def generate_lesson_podcast_audio(
     return path
 
 
-_PODCAST_SYSTEM_PROMPT = (
-    "You are a podcast script writer. Given a news briefing containing a title, summary, "
-    "and several sections, rewrite the content into a natural, conversational dialogue script "
-    "between two co-hosts, Alex and Taylor. Alex is a friendly and curious host, and "
-    "Taylor is an insightful co-host. They alternate talking, explaining the news "
-    "in an engaging and lively way.\n"
-    "Produce a JSON object with a single key 'script' containing a list of dialogue turns. "
-    "Each turn MUST be an object with these exact keys:\n"
-    "  speaker — either 'Alex' or 'Taylor'\n"
-    "  voice   — 'onyx' for Alex, 'nova' for Taylor\n"
-    "  text    — the spoken text for this turn\n"
-    "Ensure they talk about all the main topics in the sections. "
-    "Return valid JSON only, no markdown wrapper."
-)
+_PODCAST_SYSTEM_PROMPT = get_chat_prompt("podcast-script-generation")[0]["content"]
 
 
 def generate_podcast_script(briefing_content: dict[str, Any]) -> list[dict[str, str]]:
@@ -295,15 +284,7 @@ def generate_podcast_script(briefing_content: dict[str, Any]) -> list[dict[str, 
 
     prompt = get_prompt(
         "podcast-script-generation",
-        fallback=[
-            {"role": "system", "content": _PODCAST_SYSTEM_PROMPT},
-            {
-                "role": "user",
-                "content": (
-                    "Please generate a podcast script for the following news:\n\n{{content}}"
-                ),
-            },
-        ],
+        fallback=get_chat_prompt("podcast-script-generation"),
         prompt_type="chat",
         variables={"content": content_str},
     )

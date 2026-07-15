@@ -17,6 +17,7 @@ from typing import Any
 
 from news_dashboard.article_visibility import get_visible_article_row
 from news_dashboard.db import connect, init_db, row_to_dict
+from news_dashboard.prompt_catalog import get_chat_prompt, get_text_prompt
 from news_dashboard.scraper import TIMEOUT_SECS, USER_AGENT
 from news_dashboard.url_safety import (
     UnsafeUrlError,
@@ -31,21 +32,8 @@ _AI_HTML_LIMIT = 15_000
 # to tolerate multi-byte charsets while still bounding worst-case memory/network use.
 _AI_FETCH_BYTE_CAP = 200_000
 _AI_MODEL = "gpt-4o-mini"
-_AI_PROMPT = (
-    "Extract the main article text from this HTML. "
-    "Return only the article body as plain text, no HTML tags.\n\n{{html}}"
-)
-_TRANSLATE_BODY_PROMPT = [
-    {
-        "role": "system",
-        "content": (
-            "You are a translation assistant. Translate the following body text from "
-            "language code '{{from_lang}}' to English. Return only the translated plain text, "
-            "preserving paragraph breaks, and no additional commentary."
-        ),
-    },
-    {"role": "user", "content": "{{body}}"},
-]
+_AI_PROMPT = get_text_prompt("ai-body-fetch")
+_TRANSLATE_BODY_PROMPT = get_chat_prompt("translate-body")
 
 
 def _fetch_capped_html(url: str, *, byte_cap: int) -> str:
@@ -107,7 +95,7 @@ def _ai_extract_body(url: str, *, user_id: int | None = None) -> tuple[str, str]
         client = get_chat_client(api_key=api_key, base_url=base_url)
         prompt = get_prompt(
             "ai-body-fetch",
-            fallback=_AI_PROMPT,
+            fallback=get_text_prompt("ai-body-fetch"),
             prompt_type="text",
             label="production",
             variables={"html": html},
@@ -485,7 +473,7 @@ def translate_body(body: str, from_lang: str) -> str:
         client = get_chat_client(api_key=api_key, base_url=base_url)
         prompt = get_prompt(
             "translate-body",
-            fallback=_TRANSLATE_BODY_PROMPT,
+            fallback=get_chat_prompt("translate-body"),
             prompt_type="chat",
             label="production",
             variables={"from_lang": from_lang, "body": body},

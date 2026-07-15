@@ -15,23 +15,14 @@ from pathlib import Path
 from typing import Any
 
 from news_dashboard.db import connect, init_db
+from news_dashboard.prompt_catalog import get_text_prompt
 
 logger = logging.getLogger(__name__)
 
 DEFAULT_QUIZ_MODEL = "gpt-4o-mini"
 GOAL_ALIGNMENT_ADJUSTMENT = 4.0  # points added to recommendation score per matching goal
 _MAX_ARTICLE_CHARS = 3_000
-_QUIZ_PROMPT = (
-    "You are a study-aid assistant. Based ONLY on the articles listed below, generate exactly 3 "
-    "multiple-choice questions that test the reader's understanding of key facts or arguments. "
-    "For each question provide:\n"
-    "- question: the question text\n"
-    "- options: a JSON array of exactly 4 answer strings\n"
-    "- correct_index: 0-based index of the correct answer\n"
-    "- explanation: one sentence explaining why that answer is correct, citing the article\n"
-    "- article_id: the integer id of the article the question is drawn from\n\n"
-    "Return ONLY a JSON array of 3 objects with those exact keys. No other text."
-)
+_QUIZ_PROMPT = get_text_prompt("weekly-quiz").removesuffix("\n\nArticles:\n{{article_blurbs}}")
 
 
 # ── Goal CRUD helpers ─────────────────────────────────────────────────────────
@@ -299,7 +290,7 @@ def generate_weekly_quiz(
         "weekly-quiz",
         label="production",
         prompt_type="text",
-        fallback=f"{_QUIZ_PROMPT}\n\nArticles:\n{{{{article_blurbs}}}}",
+        fallback=get_text_prompt("weekly-quiz"),
         variables={"article_blurbs": blurbs},
     )
     logger.info("Generating weekly quiz for user %s from %d articles", user_id, len(articles))

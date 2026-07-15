@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from news_dashboard.db import connect, init_db, row_to_dict
+from news_dashboard.prompt_catalog import get_text_prompt
 
 COLD_START_MODEL_VERSION = "cold-start-v1"
 BEHAVIORAL_MODEL_VERSION = "behavioral-affinity-v1"
@@ -440,14 +441,7 @@ def generate_recommendation_explanation(
         "recommendation-explanation",
         label="production",
         prompt_type="text",
-        fallback=(
-            "You are a personalized news assistant. Explain in one short sentence "
-            "(under 20 words) why this article matches the user's reading interests.\n\n"
-            'Article: "{{article_title}}"\nSource: {{article_source}}\n'
-            "Category: {{article_category}}\nTags: {{article_tags}}\n\n"
-            "User's recent reading history:\n{{history_text}}\n\n"
-            "Reply with just the explanation sentence, no preamble."
-        ),
+        fallback=get_text_prompt("recommendation-explanation"),
         variables=variables,
     )
 

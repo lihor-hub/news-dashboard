@@ -17,6 +17,7 @@ from typing import Any
 
 from news_dashboard import briefing_agent
 from news_dashboard.db import connect, row_to_dict
+from news_dashboard.prompt_catalog import get_chat_prompt
 from news_dashboard.reading_list import service as reading_list_service
 
 CANDIDATE_LIMIT = 40
@@ -882,18 +883,11 @@ def list_briefings_with_script(
         return briefings
 
 
-_CHAT_SYSTEM_PROMPT = """\
-You are the Briefing Q&A Assistant. Your job is to answer follow-up questions \
-about the daily briefing provided below. Ground every answer in the briefing \
-summary and the full article texts supplied. If information is not present in \
-the provided context, say so clearly rather than guessing.
-
---- BRIEFING ---
-{briefing_context}
-
---- CITED ARTICLES ---
-{articles_context}
-"""
+_CHAT_SYSTEM_PROMPT = (
+    get_chat_prompt("briefing-chat")[0]["content"]
+    .replace("{{briefing_context}}", "{briefing_context}")
+    .replace("{{articles_context}}", "{articles_context}")
+)
 
 
 def chat_with_briefing(
@@ -932,15 +926,9 @@ def chat_with_briefing(
     from news_dashboard.ai_client import get_prompt
     from news_dashboard.ai_orchestration import invoke_chat_chain
 
-    fallback_system = _CHAT_SYSTEM_PROMPT.replace(
-        "{briefing_context}", "{{briefing_context}}"
-    ).replace("{articles_context}", "{{articles_context}}")
     prompt = get_prompt(
         "briefing-chat",
-        fallback=[
-            {"role": "system", "content": fallback_system},
-            {"role": "user", "content": "{{question}}"},
-        ],
+        fallback=get_chat_prompt("briefing-chat"),
         prompt_type="chat",
         variables={
             "briefing_context": briefing_context,

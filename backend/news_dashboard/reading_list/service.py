@@ -8,6 +8,7 @@ from typing import Any
 from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
 from news_dashboard.db import connect, init_db
+from news_dashboard.prompt_catalog import get_text_prompt
 from news_dashboard.reading_list.importers import ImportedItem
 from news_dashboard.reading_list.metadata import detect_kind, fetch_url_metadata
 
@@ -17,12 +18,7 @@ _TRACKING_PARAM_PREFIXES = ("utm_",)
 _TRACKING_PARAMS = {"fbclid", "gclid", "mc_cid", "mc_eid"}
 
 DEFAULT_SUMMARY_MODEL = "gpt-4o-mini"
-_SUMMARY_PROMPT = (
-    "You are helping a reader triage their reading list. Based ONLY on the title and "
-    "description below, write one concise sentence (max 40 words) describing what this "
-    "item is about, so the reader can decide whether to open it without reading further. "
-    "Do not invent details that are not present in the text. Return only the sentence."
-)
+_SUMMARY_PROMPT = get_text_prompt("reading-list-summary").removesuffix("\n\n{{reading_list_text}}")
 
 
 class ReadingListSummaryNotConfiguredError(Exception):
@@ -272,7 +268,7 @@ def _call_summary_model(api_key: str, base_url: str | None, model: str, text: st
         "reading-list-summary",
         label="production",
         prompt_type="text",
-        fallback=f"{_SUMMARY_PROMPT}\n\n{{{{reading_list_text}}}}",
+        fallback=get_text_prompt("reading-list-summary"),
         variables={"reading_list_text": text},
     )
     result = chat_create(
