@@ -3,6 +3,9 @@
 All notable changes to this project will be documented in this file.
 This project adheres to [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.150.0] — 2026-07-15
+- Smarter AI suggestions and faster responses, giving you more relevant news instantly.
+
 ## [1.143.5] — 2026-07-14
 - Stability and performance improvements.
 
