@@ -45,13 +45,21 @@ def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
 
     Any test that requests ``pg_url`` or ``pg_clean`` is tagged ``db`` so
     ``pytest -m "not db"`` reliably excludes all Postgres-dependent tests
-    without requiring manual marker decoration in every test file.
+    without requiring manual marker decoration in every test file. Timing-only
+    PostgreSQL benchmarks are skipped in xdist workers because concurrent test
+    load makes latency ratios noisy; run them without xdist for signal.
     """
     db_mark = pytest.mark.db
+    skip_parallel_perf = pytest.mark.skip(
+        reason="performance benchmark is only stable without xdist worker load"
+    )
+    is_xdist_worker = bool(os.environ.get("PYTEST_XDIST_WORKER"))
     for item in items:
         fixtures: list[str] = getattr(item, "fixturenames", [])
         if "pg_url" in fixtures or "pg_clean" in fixtures:
             item.add_marker(db_mark, append=True)
+        if is_xdist_worker and item.get_closest_marker("perf_serial") is not None:
+            item.add_marker(skip_parallel_perf, append=True)
 
 
 _TESTCONTAINERS_PG_IMAGE = "pgvector/pgvector:pg16"

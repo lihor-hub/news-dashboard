@@ -15,6 +15,7 @@ from urllib.parse import quote, urlsplit, urlunsplit
 import psycopg
 from psycopg import sql
 from psycopg.rows import dict_row
+from psycopg_pool import ConnectionPool, PoolTimeout
 
 POSTGRES_PREFIXES = ("postgres:" + "//", "postgresql:" + "//")
 
@@ -25,10 +26,17 @@ EMBEDDING_DIMENSIONS = 1536
 logger = logging.getLogger(__name__)
 _INIT_DB_LOCK = threading.Lock()
 _INITIALIZED_DATABASES: set[tuple[str, str | None, str]] = set()
+_POOL_LOCK = threading.Lock()
+_POOL: ConnectionPool[Any] | None = None
+_POOL_DSN: str | None = None
 
 
 class SchemaInitializationError(RuntimeError):
     """Raised when PostgreSQL schema initialization cannot complete."""
+
+
+class DatabasePoolConfigError(RuntimeError):
+    """Raised when PostgreSQL pool settings are invalid."""
 
 
 POSTGRES_SCHEMA = [
@@ -1077,6 +1085,130 @@ def describe_database(database_url: str | None = None) -> str:
     return url
 
 
+def _pool_int_setting(name: str, default: int, *, minimum: int) -> int:
+    raw = os.getenv(name)
+    if raw is None or raw.strip() == "":
+        return default
+    try:
+        value = int(raw)
+    except ValueError as exc:
+        message = f"{name} must be an integer"
+        raise DatabasePoolConfigError(message) from exc
+    if value < minimum:
+        message = f"{name} must be at least {minimum}"
+        raise DatabasePoolConfigError(message)
+    return value
+
+
+def _pool_float_setting(name: str, default: float, *, minimum: float) -> float:
+    raw = os.getenv(name)
+    if raw is None or raw.strip() == "":
+        return default
+    try:
+        value = float(raw)
+    except ValueError as exc:
+        message = f"{name} must be a number"
+        raise DatabasePoolConfigError(message) from exc
+    if value < minimum:
+        message = f"{name} must be at least {minimum:g}"
+        raise DatabasePoolConfigError(message)
+    return value
+
+
+def _pool_settings() -> tuple[int, int, float, float]:
+    min_size = _pool_int_setting("DB_POOL_MIN_SIZE", 1, minimum=0)
+    max_size = _pool_int_setting("DB_POOL_MAX_SIZE", 8, minimum=1)
+    if min_size > max_size:
+        message = "DB_POOL_MIN_SIZE must be less than or equal to DB_POOL_MAX_SIZE"
+        raise DatabasePoolConfigError(message)
+    timeout = _pool_float_setting("DB_POOL_TIMEOUT_SECONDS", 5.0, minimum=0.1)
+    max_lifetime = _pool_float_setting("DB_POOL_MAX_LIFETIME_SECONDS", 1800.0, minimum=1.0)
+    return min_size, max_size, timeout, max_lifetime
+
+
+def _connect_retry_window_seconds() -> float:
+    try:
+        max_attempts = max(1, int(os.getenv("DB_CONNECT_MAX_ATTEMPTS", "30")))
+    except ValueError:
+        max_attempts = 30
+    try:
+        delay = max(0.0, float(os.getenv("DB_CONNECT_RETRY_DELAY_SECONDS", "2.0")))
+    except ValueError:
+        delay = 2.0
+    return max(1.0, max_attempts * delay)
+
+
+def open_connection_pool(database_url: str | None = None) -> None:
+    """Open the process-local runtime PostgreSQL connection pool."""
+    global _POOL, _POOL_DSN  # noqa: PLW0603
+    dsn = active_database_url(database_url)
+    min_size, max_size, timeout, max_lifetime = _pool_settings()
+    with _POOL_LOCK:
+        if _POOL is not None and dsn == _POOL_DSN:
+            return
+        if _POOL is not None:
+            _POOL.close(timeout=timeout)
+        pool: ConnectionPool[Any] = ConnectionPool(
+            dsn,
+            min_size=min_size,
+            max_size=max_size,
+            timeout=timeout,
+            max_lifetime=max_lifetime,
+            kwargs={"row_factory": dict_row, "prepare_threshold": None},
+            open=False,
+        )
+        pool.open(wait=True, timeout=_connect_retry_window_seconds())
+        _POOL = pool
+        _POOL_DSN = dsn
+
+
+def close_connection_pool() -> None:
+    """Close the process-local runtime PostgreSQL connection pool."""
+    global _POOL, _POOL_DSN  # noqa: PLW0603
+    with _POOL_LOCK:
+        pool = _POOL
+        _POOL = None
+        _POOL_DSN = None
+    if pool is not None:
+        _timeout = _pool_float_setting("DB_POOL_CLOSE_TIMEOUT_SECONDS", 5.0, minimum=0.1)
+        pool.close(timeout=_timeout)
+
+
+def _runtime_pool(database_url: str | None) -> ConnectionPool[Any]:
+    dsn = active_database_url(database_url)
+    with _POOL_LOCK:
+        pool = _POOL
+        pool_dsn = _POOL_DSN
+    if pool is None or pool_dsn != dsn:
+        open_connection_pool(database_url)
+        with _POOL_LOCK:
+            pool = _POOL
+    if pool is None:  # pragma: no cover
+        message = "PostgreSQL connection pool was not opened"
+        raise RuntimeError(message)
+    return pool
+
+
+def _reset_connection(conn: Any) -> None:
+    conn.rollback()
+    previous_autocommit = conn.autocommit
+    conn.autocommit = True
+    try:
+        conn.execute(
+            "RESET ALL; "
+            "SET SESSION AUTHORIZATION DEFAULT; "
+            "RESET ROLE; "
+            "UNLISTEN *; "
+            "SELECT pg_advisory_unlock_all()"
+        )
+    finally:
+        conn.autocommit = previous_autocommit
+
+
+def _direct_connection_required(db_path: Path | str | None, database_url: str | None) -> bool:
+    return isinstance(db_path, Path) or database_url is not None
+
+
 def _open_connection(database_url: str | None) -> Any:
     """Open a psycopg connection, retrying transient connection failures.
 
@@ -1128,7 +1260,17 @@ def connect(
     if isinstance(db_path, str) and db_path.startswith(POSTGRES_PREFIXES):
         database_url = db_path
         db_path = None
-    conn = _open_connection(database_url)
+    use_direct_connection = _direct_connection_required(db_path, database_url)
+    pool: ConnectionPool[Any] | None = None
+    if use_direct_connection:
+        conn = _open_connection(database_url)
+    else:
+        pool = _runtime_pool(database_url)
+        try:
+            conn = pool.getconn(timeout=_pool_settings()[2])
+        except PoolTimeout:
+            logger.exception("Timed out acquiring PostgreSQL connection from runtime pool")
+            raise
     try:
         if isinstance(db_path, Path):
             schema = _schema_name(db_path)
@@ -1144,7 +1286,13 @@ def connect(
         conn.rollback()
         raise
     finally:
-        conn.close()
+        if pool is None:
+            conn.close()
+        else:
+            try:
+                _reset_connection(conn)
+            finally:
+                pool.putconn(conn)
 
 
 def _unpack_embedding_blob(blob: bytes) -> list[float]:
