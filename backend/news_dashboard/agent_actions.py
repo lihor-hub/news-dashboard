@@ -179,29 +179,25 @@ def _validate_steps(
     return steps
 
 
-def _plan_with_model(state: _PlanningState) -> dict[str, Any]:
+def _plan_with_model(state: _PlanningState, config: RunnableConfig) -> dict[str, Any]:
     api_key, base_url, model = _agent_actions_ai_config()
-    from news_dashboard.ai_client import chat_create, get_chat_client, get_prompt
+    from news_dashboard.ai_client import get_chat_model, get_prompt, response_text
 
-    client = get_chat_client(api_key=api_key, base_url=base_url)
     prompt = get_prompt("agent-action-planning", fallback=_PROMPT)
     user_content = (
         f"User request: {state['query']}\n\nCandidate articles: {json.dumps(state['candidates'])}"
     )
-    result = chat_create(
-        client,
-        name="agent-action-planning",
-        tags=["agent-actions"],
-        user_id=state["user_id"],
-        session_id=f"agent-action:{state['run_id']}",
-        prompt=prompt,
+    chat_model = get_chat_model(
+        api_key=api_key,
+        base_url=base_url,
         model=model,
-        messages=[{"role": "user", "content": f"{prompt.text}\n\n{user_content}"}],
         max_tokens=800,
         response_format={"type": "json_object"},
     )
-    response_text = (result.choices[0].message.content or "").strip()
-    parsed = _parse_plan_response(response_text)
+    result = chat_model.invoke(
+        [{"role": "user", "content": f"{prompt.text}\n\n{user_content}"}], config=config
+    )
+    parsed = _parse_plan_response(response_text(result).strip())
     if parsed is None:
         msg = "planner returned malformed JSON"
         raise AgentActionError(msg)
@@ -301,14 +297,17 @@ def _graph_observability(
 ) -> tuple[RunnableConfig, Any]:
     from news_dashboard.ai_client import langfuse_enabled
 
+    session_id = f"agent-action:{run_id}"
+    config: RunnableConfig = {
+        "metadata": {"langfuse_session_id": session_id, "langfuse_user_id": str(user_id)}
+    }
     if not langfuse_enabled():
-        return {}, nullcontext()
+        return config, nullcontext()
 
     from langfuse import propagate_attributes
     from langfuse.langchain import CallbackHandler
 
-    session_id = f"agent-action:{run_id}"
-    config: RunnableConfig = {"callbacks": [CallbackHandler()]}
+    config["callbacks"] = [CallbackHandler()]
     context = propagate_attributes(
         session_id=session_id,
         user_id=str(user_id),

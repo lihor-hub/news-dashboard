@@ -12,6 +12,7 @@ Implemented vanilla typed LangGraph orchestration for the agent-action lifecycle
 - Step failures remain isolated: later steps continue, and the final run status is `failed` if any step failed.
 - Cancellation, owner authorization, admin-only tools, allowlists, statuses, and tool implementations are unchanged.
 - Langfuse uses a direct `CallbackHandler` on graph invocation plus propagated user/session/tag/trace attributes; no wrapper or checkpointer was added.
+- Planning uses the LangChain `get_chat_model` runnable and forwards the graph's callback and stable session metadata through `RunnableConfig`; tests no longer patch the process-global `openai.OpenAI` constructor.
 
 ## Verification
 
@@ -20,5 +21,4 @@ Implemented vanilla typed LangGraph orchestration for the agent-action lifecycle
 - Focused mypy: passed.
 - Focused ty: passed.
 - Focused pyrefly: passed.
-- Repository-wide `make lint` is blocked by concurrent, out-of-scope formatting changes in `backend/news_dashboard/briefings/service.py` and `backend/tests/test_briefings_db.py`.
-- Repository-wide `make typecheck` is blocked by two concurrent, out-of-scope mypy errors in `backend/news_dashboard/briefings/service.py`.
+- Order regression `pytest -q backend/tests/test_agent_actions.py backend/tests/test_ai_client.py::test_returns_langfuse_client_when_enabled`: 19 passed.
