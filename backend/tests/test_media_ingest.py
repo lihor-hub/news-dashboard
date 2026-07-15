@@ -1,12 +1,22 @@
 from __future__ import annotations
 
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
+
+from langchain_core.messages import AIMessage
 
 from news_dashboard.ai_client import ManagedPrompt
 from news_dashboard.db import connect
 from news_dashboard.ingest.service import _ingest_source
 from news_dashboard.sources.service import SourceDefinition
+
+
+def _chat_model(response: SimpleNamespace) -> MagicMock:
+    model = MagicMock()
+    model.bind.return_value.invoke.return_value = AIMessage(
+        content=response.choices[0].message.content
+    )
+    return model
 
 
 def _source(kind: str, url: str = "https://example.com/feed.xml") -> SourceDefinition:
@@ -48,8 +58,7 @@ def test_podcast_feed_ingests_enclosure_with_ai_summary(pg_clean: str) -> None:
     with (
         patch("news_dashboard.ingest.service._parse_media_feed_url", return_value=entries),
         patch("news_dashboard.ai_client.free_llm_config", return_value=("test-key", None)),
-        patch("news_dashboard.ai_client.get_chat_client", return_value=object()),
-        patch("news_dashboard.ai_client.chat_create", return_value=response),
+        patch("news_dashboard.ai_client.get_chat_model", return_value=_chat_model(response)),
     ):
         outcome = _ingest_source(source, pg_clean)
 
@@ -100,8 +109,7 @@ def test_youtube_channel_ingests_caption_summary(pg_clean: str) -> None:
     with (
         patch("news_dashboard.ingest.service._parse_media_feed_url", return_value=entries),
         patch("news_dashboard.ai_client.free_llm_config", return_value=("test-key", None)),
-        patch("news_dashboard.ai_client.get_chat_client", return_value=object()),
-        patch("news_dashboard.ai_client.chat_create", return_value=response),
+        patch("news_dashboard.ai_client.get_chat_model", return_value=_chat_model(response)),
     ):
         outcome = _ingest_source(source, pg_clean)
 
@@ -179,12 +187,12 @@ def test_media_ingest_falls_back_when_ai_disabled(pg_clean: str) -> None:
     with (
         patch("news_dashboard.ingest.service._parse_media_feed_url", return_value=entries),
         patch("news_dashboard.ai_client.free_llm_config", return_value=("", None)),
-        patch("news_dashboard.ai_client.chat_create") as chat_create,
+        patch("news_dashboard.ai_client.get_chat_model") as get_chat_model,
     ):
         outcome = _ingest_source(source, pg_clean)
 
     assert outcome.articles_new == 1
-    chat_create.assert_not_called()
+    get_chat_model.assert_not_called()
     with connect(pg_clean) as conn:
         row = conn.execute(
             "SELECT summary, tags FROM articles WHERE source_slug=%s",
