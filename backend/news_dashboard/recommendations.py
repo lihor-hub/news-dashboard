@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from news_dashboard.db import connect, init_db, row_to_dict
+from news_dashboard.prompt_catalog import get_text_prompt
 
 COLD_START_MODEL_VERSION = "cold-start-v1"
 BEHAVIORAL_MODEL_VERSION = "behavioral-affinity-v1"
@@ -383,7 +384,7 @@ def generate_recommendation_explanation(
     """
     import os
 
-    from news_dashboard.ai_client import chat_create, free_llm_config, get_chat_client
+    from news_dashboard.ai_client import chat_create, free_llm_config, get_chat_client, get_prompt
 
     api_key, base_url = free_llm_config()
     if not api_key:
@@ -429,15 +430,19 @@ def generate_recommendation_explanation(
         history_text = "\n".join(lines)
 
     tags = article.get("tags") or ""
-    prompt = (
-        f"You are a personalized news assistant. Explain in one short sentence (under 20 words) "
-        f"why this article matches the user's reading interests.\n\n"
-        f'Article: "{article.get("title", "")}"\n'
-        f"Source: {article.get('source_name', '')}\n"
-        f"Category: {article.get('category', '')}\n"
-        f"Tags: {tags}\n\n"
-        f"User's recent reading history:\n{history_text}\n\n"
-        f"Reply with just the explanation sentence, no preamble."
+    variables = {
+        "article_title": article.get("title", ""),
+        "article_source": article.get("source_name", ""),
+        "article_category": article.get("category", ""),
+        "article_tags": tags,
+        "history_text": history_text,
+    }
+    prompt = get_prompt(
+        "recommendation-explanation",
+        label="production",
+        prompt_type="text",
+        fallback=get_text_prompt("recommendation-explanation"),
+        variables=variables,
     )
 
     try:
@@ -447,8 +452,9 @@ def generate_recommendation_explanation(
             name="recommendation-explanation",
             tags=["recommendation", "explanation"],
             user_id=user_id,
+            prompt=prompt,
             model=model,
-            messages=[{"role": "user", "content": prompt}],
+            messages=[{"role": "user", "content": prompt.text}],
             max_tokens=60,
             temperature=0.3,
         )

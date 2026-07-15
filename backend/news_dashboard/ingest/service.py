@@ -23,6 +23,7 @@ import psycopg
 from news_dashboard.article_visibility import get_visible_article_row
 from news_dashboard.db import connect, init_db, insert_article_sql, placeholders, row_to_dict
 from news_dashboard.ingest_events import ingest_events
+from news_dashboard.prompt_catalog import get_chat_prompt
 from news_dashboard.recommendations import COLD_START_MODEL_VERSION
 from news_dashboard.sources.service import DEFAULT_SOURCES, SourceDefinition
 from news_dashboard.url_safety import (
@@ -203,6 +204,8 @@ _MEDIA_SOURCE_KINDS: frozenset[str] = frozenset({"youtube_channel", "podcast_fee
 
 # Cap the number of page fetches per ingest run to keep ingest fast.
 _MAX_SNIPPET_FETCHES_PER_RUN: int = 10
+_MEDIA_SUMMARY_PROMPT = get_chat_prompt("summarize-media-article")
+_TRANSLATE_ARTICLE_PROMPT = get_chat_prompt("translate-article")
 
 
 def now_iso() -> str:
@@ -698,29 +701,27 @@ def _media_summary(title: str, description: str, entry: dict[str, Any]) -> str:
     api_key, base_url = free_llm_config()
     if api_key and transcript:
         try:
-            from news_dashboard.ai_client import chat_create, get_chat_client
+            from news_dashboard.ai_client import chat_create, get_chat_client, get_prompt
 
             client = get_chat_client(api_key=api_key, base_url=base_url)
+            prompt = get_prompt(
+                "summarize-media-article",
+                fallback=get_chat_prompt("summarize-media-article"),
+                prompt_type="chat",
+                label="production",
+                variables={
+                    "title": title,
+                    "description": description,
+                    "transcript": transcript,
+                },
+            )
             response = chat_create(
                 client,
                 name="summarize-media-article",
                 tags=["ingest", "media"],
+                prompt=prompt,
                 model=os.getenv("OPENAI_BRIEFING_MODEL", "gpt-4o-mini"),
-                messages=[
-                    {
-                        "role": "system",
-                        "content": (
-                            "Summarize this podcast or video transcript as a concise readable "
-                            "article summary for a news reader."
-                        ),
-                    },
-                    {
-                        "role": "user",
-                        "content": (
-                            f"Title: {title}\nDescription: {description}\nTranscript:\n{transcript}"
-                        ),
-                    },
-                ],
+                messages=prompt.messages,
                 max_tokens=500,
                 temperature=0.2,
             )
@@ -744,7 +745,7 @@ def detect_and_translate_article(
     """Detect language and translate title and summary to English if needed."""
     import json
 
-    from news_dashboard.ai_client import chat_create, get_chat_client
+    from news_dashboard.ai_client import chat_create, get_chat_client, get_prompt
 
     is_non_eng = source_lang != "en"
     if not is_non_eng:
@@ -771,28 +772,22 @@ def detect_and_translate_article(
 
     try:
         client = get_chat_client(api_key=api_key, base_url=base_url)
-        prompt = (
-            "You are a translation assistant. Detect the language of the following text. "
-            "If it is not English, translate both the title and the "
-            "summary/description to English. "
-            "Return a JSON object with the following keys:\n"
-            '- "detected_lang": the 2-letter ISO 639-1 language code '
-            '(e.g. "ja", "zh", "ru", "fr", "de", "en")\n'
-            '- "translated_title": the translated title in English\n'
-            '- "translated_summary": the translated summary/description in English\n'
-            '- "needs_translation": boolean indicating if it was translated\n'
+        prompt = get_prompt(
+            "translate-article",
+            fallback=get_chat_prompt("translate-article"),
+            prompt_type="chat",
+            label="production",
+            variables={"title": title, "summary": summary},
         )
 
         result = chat_create(
             client,
             name="translate-article",
             tags=["translation"],
+            prompt=prompt,
             model="gpt-4o-mini",
             response_format={"type": "json_object"},
-            messages=[
-                {"role": "system", "content": prompt},
-                {"role": "user", "content": f"Title: {title}\nSummary: {summary}"},
-            ],
+            messages=prompt.messages,
             max_tokens=1024,
             temperature=0.0,
         )

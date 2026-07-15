@@ -21,7 +21,7 @@ import os
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, Literal, cast
+from typing import TYPE_CHECKING, Any, Literal, TypeGuard, cast, overload
 
 if TYPE_CHECKING:
     from openai import OpenAI
@@ -30,6 +30,9 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 ScoreDataType = Literal["NUMERIC", "CATEGORICAL", "BOOLEAN"]
+type PromptMessage = dict[str, str]
+type PromptFallback = str | list[PromptMessage]
+type PromptType = Literal["text", "chat"]
 _DEFAULT_AI_REQUEST_TIMEOUT_SECONDS = 30.0
 _DEFAULT_AI_TTS_TIMEOUT_SECONDS = 120.0
 
@@ -416,53 +419,152 @@ def get_trace_url(trace_id: str) -> str | None:
 class ManagedPrompt:
     """A prompt resolved from Langfuse, or a local fallback.
 
-    ``text`` is the compiled prompt string ready to use. ``langfuse_prompt`` is
-    the underlying Langfuse prompt object when the prompt was fetched from
-    Langfuse (used to link generations to the prompt version), or ``None`` for
-    the local fallback.
+    Exactly one of ``text`` and ``messages`` contains compiled prompt content.
+    ``langfuse_prompt`` is the exact underlying SDK object when the prompt was
+    fetched from Langfuse (used to link generations to the prompt version), or
+    ``None`` for a local fallback.
     """
 
-    text: str
+    text: str | None
+    messages: list[PromptMessage] | None = None
     langfuse_prompt: Any | None = None
+
+    def __post_init__(self) -> None:
+        if (self.text is None) == (self.messages is None):
+            message = "exactly one of text and messages must be populated"
+            raise ValueError(message)
+
+
+@dataclass(frozen=True)
+class _ManagedTextPrompt(ManagedPrompt):
+    text: str
+    messages: None = None
+
+
+@dataclass(frozen=True)
+class _ManagedChatPrompt(ManagedPrompt):
+    text: None = None
+    messages: list[PromptMessage] = field(default_factory=list)
+
+
+@overload
+def get_prompt(
+    name: str,
+    *,
+    fallback: str,
+    prompt_type: Literal["text"] = "text",
+    label: str = "production",
+    variables: dict[str, Any] | None = None,
+) -> _ManagedTextPrompt: ...
+
+
+@overload
+def get_prompt(
+    name: str,
+    *,
+    fallback: list[PromptMessage],
+    prompt_type: Literal["chat"],
+    label: str = "production",
+    variables: dict[str, Any] | None = None,
+) -> _ManagedChatPrompt: ...
 
 
 def get_prompt(
     name: str,
     *,
-    fallback: str,
+    fallback: PromptFallback,
+    prompt_type: PromptType = "text",
     label: str = "production",
     variables: dict[str, Any] | None = None,
-) -> ManagedPrompt:
-    """Fetch a managed text prompt from Langfuse, falling back to *fallback*.
+) -> _ManagedTextPrompt | _ManagedChatPrompt:
+    """Fetch a managed text or chat prompt, falling back to *fallback*.
 
-    Prompts live in Langfuse (type ``text``) so they can be edited and
-    versioned without redeploying. When tracing is disabled, the prompt is
-    missing, or the fetch fails, the hardcoded *fallback* is used so behaviour
-    is never blocked on Langfuse availability. ``{{variable}}`` placeholders are
-    substituted from *variables* (Langfuse's ``compile`` for fetched prompts; a
-    simple local substitution for the fallback).
+    The default remains ``text`` for source compatibility with existing callers.
+    Langfuse output is validated before it crosses this boundary; unavailable or
+    malformed SDK output logs a warning and uses the locally compiled fallback.
     """
     variables = variables or {}
+    fallback_prompt = _managed_fallback(fallback, prompt_type, variables)
     if not langfuse_enabled():
-        return ManagedPrompt(_compile_fallback(fallback, variables))
+        return fallback_prompt
     try:
         client = _client()
-        prompt = client.get_prompt(name, label=label, type="text", fallback=fallback)
-        compiled = prompt.compile(**variables) if variables else prompt.prompt
+        prompt = client.get_prompt(name, label=label, type=prompt_type, fallback=fallback)
+        compiled = prompt.compile(**variables)
         # A fallback-resolved prompt has no real version to link against.
         is_fallback = getattr(prompt, "is_fallback", False)
-        return ManagedPrompt(str(compiled), None if is_fallback else prompt)
+        langfuse_prompt = None if is_fallback else prompt
+        if prompt_type == "text":
+            return _managed_text_prompt(compiled, langfuse_prompt)
+        return _managed_chat_prompt(compiled, langfuse_prompt)
     except Exception as exc:
         logger.warning("langfuse get_prompt(%s) failed, using fallback: %s", name, exc)
-        return ManagedPrompt(_compile_fallback(fallback, variables))
+        return fallback_prompt
+
+
+def _managed_fallback(
+    fallback: PromptFallback,
+    prompt_type: PromptType,
+    variables: dict[str, Any],
+) -> _ManagedTextPrompt | _ManagedChatPrompt:
+    if prompt_type == "text":
+        if not isinstance(fallback, str):
+            message = "text prompts require a string fallback"
+            raise TypeError(message)
+        return _ManagedTextPrompt(text=_compile_fallback(fallback, variables))
+    if isinstance(fallback, str):
+        message = "chat prompts require a message-list fallback"
+        raise TypeError(message)
+    messages = [
+        {key: _compile_fallback(value, variables) for key, value in message.items()}
+        for message in fallback
+    ]
+    return _ManagedChatPrompt(messages=messages)
+
+
+def _is_prompt_messages(value: object) -> TypeGuard[list[PromptMessage]]:
+    return isinstance(value, list) and all(
+        isinstance(message, dict)
+        and isinstance(message.get("role"), str)
+        and isinstance(message.get("content"), str)
+        and all(isinstance(key, str) and isinstance(item, str) for key, item in message.items())
+        for message in value
+    )
+
+
+def _managed_text_prompt(compiled: object, langfuse_prompt: Any | None) -> _ManagedTextPrompt:
+    if not isinstance(compiled, str):
+        message = "compiled text prompt must be a string"
+        raise TypeError(message)
+    return _ManagedTextPrompt(text=compiled, langfuse_prompt=langfuse_prompt)
+
+
+def _managed_chat_prompt(compiled: object, langfuse_prompt: Any | None) -> _ManagedChatPrompt:
+    if not _is_prompt_messages(compiled):
+        message = "compiled chat prompt must contain role/content string messages"
+        raise TypeError(message)
+    return _ManagedChatPrompt(messages=compiled, langfuse_prompt=langfuse_prompt)
 
 
 def _compile_fallback(template: str, variables: dict[str, Any]) -> str:
     """Substitute ``{{var}}`` placeholders locally (Langfuse-compatible syntax)."""
-    text = template
-    for key, val in variables.items():
-        text = text.replace("{{" + key + "}}", str(val))
-    return text
+    parts: list[str] = []
+    cursor = 0
+    while (start := template.find("{{", cursor)) != -1:
+        end = template.find("}}", start + 2)
+        if end == -1:
+            break
+        placeholder_end = end + 2
+        name = template[start + 2 : end].strip()
+        parts.append(template[cursor:start])
+        if name in variables:
+            value = variables[name]
+            parts.append("" if value is None else str(value))
+        else:
+            parts.append(template[start:placeholder_end])
+        cursor = placeholder_end
+    parts.append(template[cursor:])
+    return "".join(parts)
 
 
 # ── Metrics ────────────────────────────────────────────────────────────────

@@ -17,6 +17,50 @@ from news_dashboard.learn_from_link import service
 from news_dashboard.main import app
 
 
+def test_generate_slide_deck_content_uses_native_chat_prompt(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("FREE_LLM_API_KEY", "fake-key")
+    import news_dashboard.ai_client as ai_client_mod
+
+    managed = SimpleNamespace(
+        messages=[{"role": "system", "content": "managed"}], langfuse_prompt=object()
+    )
+    captured: dict[str, Any] = {}
+    chat_captured: dict[str, Any] = {}
+    monkeypatch.setattr(
+        ai_client_mod,
+        "get_prompt",
+        lambda *args, **kwargs: captured.update(args=args, kwargs=kwargs) or managed,
+    )
+    monkeypatch.setattr(
+        ai_client_mod,
+        "chat_create",
+        lambda *_args, **kwargs: (
+            chat_captured.update(kwargs)
+            or SimpleNamespace(
+                choices=[
+                    SimpleNamespace(message=SimpleNamespace(content=json.dumps(_VALID_SLIDE_DECK)))
+                ]
+            )
+        ),
+    )
+
+    lesson = {"title": "Lesson", "lesson_detail": {"gist": "A gist"}}
+    service.generate_slide_deck_content(lesson, 7)
+
+    assert captured["args"] == ("lesson-slide-deck",)
+    assert captured["kwargs"]["prompt_type"] == "chat"
+    assert captured["kwargs"]["fallback"] == [
+        {"role": "system", "content": service._LESSON_SLIDE_DECK_SYSTEM_PROMPT},
+        {"role": "user", "content": "{{lesson_content}}"},
+    ]
+    assert captured["kwargs"]["variables"] == {
+        "lesson_content": service._build_slide_deck_prompt(lesson)
+    }
+    assert chat_captured["messages"] is managed.messages
+
+
 def _make_user(database_url: str, username: str = "alice") -> int:
     with connect(database_url=database_url) as conn:
         row = conn.execute(

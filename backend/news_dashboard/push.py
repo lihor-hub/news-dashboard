@@ -10,6 +10,8 @@ import re
 from typing import Any, Literal
 from urllib.parse import urlparse
 
+from news_dashboard.prompt_catalog import get_text_prompt
+
 logger = logging.getLogger(__name__)
 
 # Maximum lengths for push subscription fields
@@ -92,7 +94,12 @@ def generate_push_hook(briefing: dict[str, Any]) -> str:
     fallback = f"Your daily brief: {title}" if title else _DEFAULT_PUSH_TITLE
 
     try:
-        from news_dashboard.ai_client import free_llm_config, get_chat_client
+        from news_dashboard.ai_client import (
+            chat_create,
+            free_llm_config,
+            get_chat_client,
+            get_prompt,
+        )
 
         api_key, base_url = free_llm_config()
         if not api_key:
@@ -106,16 +113,21 @@ def generate_push_hook(briefing: dict[str, Any]) -> str:
         else:
             headline_block = f"- {title}" if title else "(no headlines)"
 
-        prompt = (
-            "Write a single punchy mobile push notification hook (max 15 words) "
-            "that entices the user to open their news briefing. "
-            f"Top headlines:\n{headline_block}\n\n"
-            "Reply with only the hook text, no quotes or punctuation at the end."
+        prompt = get_prompt(
+            "briefing-push-hook",
+            label="production",
+            prompt_type="text",
+            fallback=get_text_prompt("briefing-push-hook"),
+            variables={"headline_block": headline_block},
         )
 
-        response = client.chat.completions.create(
+        response = chat_create(
+            client,
+            name="briefing-push-hook",
+            tags=["push", "briefing"],
+            prompt=prompt,
             model=model,
-            messages=[{"role": "user", "content": prompt}],
+            messages=[{"role": "user", "content": prompt.text}],
             max_tokens=40,
             temperature=0.7,
         )
@@ -151,7 +163,12 @@ def generate_recap_push_hook(recap: dict[str, Any]) -> str:
         fallback = f"You read {articles_read} articles this week."
 
     try:
-        from news_dashboard.ai_client import free_llm_config, get_chat_client
+        from news_dashboard.ai_client import (
+            chat_create,
+            free_llm_config,
+            get_chat_client,
+            get_prompt,
+        )
 
         api_key, base_url = free_llm_config()
         if not api_key:
@@ -160,18 +177,26 @@ def generate_recap_push_hook(recap: dict[str, Any]) -> str:
         client = get_chat_client(api_key=api_key, base_url=base_url)
         model = os.getenv("OPENAI_BRIEFING_MODEL", "gpt-4o-mini")
 
-        prompt = (
-            "Write a single encouraging mobile push notification hook (max 20 words) "
-            "summarizing this user's weekly reading recap. "
-            f"Articles read: {articles_read}. "
-            f"Top category: {top_category or 'n/a'}. "
-            f"Current streak: {recap.get('current_streak_days', 0)} day(s).\n\n"
-            "Reply with only the hook text, no quotes or punctuation at the end."
+        variables = {
+            "articles_read": articles_read,
+            "top_category": top_category or "n/a",
+            "current_streak_days": recap.get("current_streak_days", 0),
+        }
+        prompt = get_prompt(
+            "recap-push-hook",
+            label="production",
+            prompt_type="text",
+            fallback=get_text_prompt("recap-push-hook"),
+            variables=variables,
         )
 
-        response = client.chat.completions.create(
+        response = chat_create(
+            client,
+            name="recap-push-hook",
+            tags=["push", "recap"],
+            prompt=prompt,
             model=model,
-            messages=[{"role": "user", "content": prompt}],
+            messages=[{"role": "user", "content": prompt.text}],
             max_tokens=40,
             temperature=0.7,
         )

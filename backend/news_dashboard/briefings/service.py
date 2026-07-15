@@ -17,6 +17,7 @@ from typing import Any
 
 from news_dashboard import briefing_agent
 from news_dashboard.db import connect, row_to_dict
+from news_dashboard.prompt_catalog import get_chat_prompt
 from news_dashboard.reading_list import service as reading_list_service
 
 CANDIDATE_LIMIT = 40
@@ -882,18 +883,11 @@ def list_briefings_with_script(
         return briefings
 
 
-_CHAT_SYSTEM_PROMPT = """\
-You are the Briefing Q&A Assistant. Your job is to answer follow-up questions \
-about the daily briefing provided below. Ground every answer in the briefing \
-summary and the full article texts supplied. If information is not present in \
-the provided context, say so clearly rather than guessing.
-
---- BRIEFING ---
-{briefing_context}
-
---- CITED ARTICLES ---
-{articles_context}
-"""
+_CHAT_SYSTEM_PROMPT = (
+    get_chat_prompt("briefing-chat")[0]["content"]
+    .replace("{{briefing_context}}", "{briefing_context}")
+    .replace("{{articles_context}}", "{articles_context}")
+)
 
 
 def chat_with_briefing(
@@ -929,16 +923,20 @@ def chat_with_briefing(
     else:
         articles_context = "(No articles cited — answer from the briefing summary only.)"
 
-    system = _CHAT_SYSTEM_PROMPT.format(
-        briefing_context=briefing_context,
-        articles_context=articles_context,
-    )
-
+    from news_dashboard.ai_client import get_prompt
     from news_dashboard.ai_orchestration import invoke_chat_chain
 
-    messages: list[dict[str, str]] = [{"role": "system", "content": system}]
-    messages.extend(history)
-    messages.append({"role": "user", "content": message})
+    prompt = get_prompt(
+        "briefing-chat",
+        fallback=get_chat_prompt("briefing-chat"),
+        prompt_type="chat",
+        variables={
+            "briefing_context": briefing_context,
+            "articles_context": articles_context,
+            "question": message,
+        },
+    )
+    messages = [*prompt.messages[:-1], *history, prompt.messages[-1]]
 
     return invoke_chat_chain(
         name="briefing-chat",
@@ -947,4 +945,5 @@ def chat_with_briefing(
         session_id=f"briefing:{briefing_id}:user:{user_id}" if user_id is not None else None,
         model=model,
         messages=messages,
+        prompt=prompt,
     )

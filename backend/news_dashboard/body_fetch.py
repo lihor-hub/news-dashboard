@@ -17,6 +17,7 @@ from typing import Any
 
 from news_dashboard.article_visibility import get_visible_article_row
 from news_dashboard.db import connect, init_db, row_to_dict
+from news_dashboard.prompt_catalog import get_chat_prompt, get_text_prompt
 from news_dashboard.scraper import TIMEOUT_SECS, USER_AGENT
 from news_dashboard.url_safety import (
     UnsafeUrlError,
@@ -31,10 +32,8 @@ _AI_HTML_LIMIT = 15_000
 # to tolerate multi-byte charsets while still bounding worst-case memory/network use.
 _AI_FETCH_BYTE_CAP = 200_000
 _AI_MODEL = "gpt-4o-mini"
-_AI_PROMPT = (
-    "Extract the main article text from this HTML. "
-    "Return only the article body as plain text, no HTML tags."
-)
+_AI_PROMPT = get_text_prompt("ai-body-fetch")
+_TRANSLATE_BODY_PROMPT = get_chat_prompt("translate-body")
 
 
 def _fetch_capped_html(url: str, *, byte_cap: int) -> str:
@@ -91,16 +90,24 @@ def _ai_extract_body(url: str, *, user_id: int | None = None) -> tuple[str, str]
         return "", "error"
 
     try:
-        from news_dashboard.ai_client import chat_create, get_chat_client
+        from news_dashboard.ai_client import chat_create, get_chat_client, get_prompt
 
         client = get_chat_client(api_key=api_key, base_url=base_url)
+        prompt = get_prompt(
+            "ai-body-fetch",
+            fallback=get_text_prompt("ai-body-fetch"),
+            prompt_type="text",
+            label="production",
+            variables={"html": html},
+        )
         result = chat_create(
             client,
             name="ai-body-fetch",
             tags=["body-fetch"],
             user_id=user_id,
+            prompt=prompt,
             model=model,
-            messages=[{"role": "user", "content": f"{_AI_PROMPT}\n\n{html}"}],
+            messages=[{"role": "user", "content": prompt.text}],
             max_tokens=2048,
         )
         text = (result.choices[0].message.content or "").strip()
@@ -461,24 +468,24 @@ def translate_body(body: str, from_lang: str) -> str:
         return body
 
     try:
-        from news_dashboard.ai_client import chat_create, get_chat_client
+        from news_dashboard.ai_client import chat_create, get_chat_client, get_prompt
 
         client = get_chat_client(api_key=api_key, base_url=base_url)
-        prompt = (
-            f"You are a translation assistant. Translate the following body text from "
-            f"language code '{from_lang}' to English. Return only the translated plain text, "
-            f"preserving paragraph breaks, and no additional commentary."
+        prompt = get_prompt(
+            "translate-body",
+            fallback=get_chat_prompt("translate-body"),
+            prompt_type="chat",
+            label="production",
+            variables={"from_lang": from_lang, "body": body},
         )
 
         result = chat_create(
             client,
             name="translate-body",
             tags=["translation"],
+            prompt=prompt,
             model="gpt-4o-mini",
-            messages=[
-                {"role": "system", "content": prompt},
-                {"role": "user", "content": body},
-            ],
+            messages=prompt.messages,
             max_tokens=2048,
             temperature=0.0,
         )

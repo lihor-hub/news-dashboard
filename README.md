@@ -330,6 +330,34 @@ For technical documentation (architecture, deployment, authentication), see the
 
 To preview the docs site locally: `cd website && npm install && npm run start`.
 
+## Synchronizing managed prompts
+
+The application keeps its 19 managed-prompt fallbacks in
+`backend/news_dashboard/prompt_catalog.py`. To verify catalog shape and sync behavior without
+contacting Langfuse, run:
+
+```bash
+dotenv run -- pytest backend/tests/test_prompt_catalog.py -q
+```
+
+To publish changed prompts, provide credentials only through your environment or secret manager:
+
+```bash
+export LANGFUSE_HOST="https://your-langfuse-host.example"
+export LANGFUSE_PUBLIC_KEY="<public-key>"
+export LANGFUSE_SECRET_KEY="<secret-key>"
+python scripts/sync_langfuse_prompts.py
+```
+
+The command compares every catalog entry with its current `production` version. Matching entries
+are left unchanged; changed or missing entries get one new version labeled `production`. Output is
+limited to prompt names, versions, and status and never prints credentials or prompt content.
+
+To roll back, open the prompt in Langfuse and move the `production` label from the new version to
+the previously known-good version. To disable Langfuse entirely and use the catalog fallbacks,
+remove `LANGFUSE_PUBLIC_KEY` and `LANGFUSE_SECRET_KEY` from the application environment and restart
+the application.
+
 ## Deployment
 
 The production image serves the built frontend through FastAPI on port `8080`.

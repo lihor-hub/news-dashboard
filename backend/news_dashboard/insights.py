@@ -18,6 +18,7 @@ from typing import Any
 from news_dashboard.body_fetch import get_article
 from news_dashboard.db import connect, init_db
 from news_dashboard.embeddings import parse_vector
+from news_dashboard.prompt_catalog import get_text_prompt
 
 logger = logging.getLogger(__name__)
 
@@ -178,16 +179,7 @@ def get_or_generate_insights(
 _CLUSTER_THRESHOLD = 0.72  # cosine similarity threshold for same-cluster assignment
 _MIN_CLUSTER_SIZE = 3  # minimum articles per cluster to surface
 _MAX_ARTICLES = 300  # cap to keep computation bounded
-_CLUSTER_LABEL_PROMPT = (
-    "You are analyzing a group of related news articles that cover the same story or topic arc. "
-    "Based ONLY on the article titles and summaries provided below, generate:\n"
-    "1. A concise Story Headline (max 8 words) capturing the central theme.\n"
-    "2. A one-sentence Trend Summary explaining the story arc or why these "
-    "articles are connected.\n\n"
-    "Respond in this exact format:\n"
-    "HEADLINE: <headline here>\n"
-    "SUMMARY: <one-sentence summary here>"
-)
+_CLUSTER_LABEL_PROMPT = get_text_prompt("topic-cluster-label")
 
 DEFAULT_CLUSTER_MODEL = "gpt-4o-mini"
 
@@ -324,20 +316,27 @@ def _generate_cluster_label(
         f"- Title: {a.get('title', '')}\n  Summary: {a.get('summary', '')}" for a in articles[:10]
     )
 
-    from news_dashboard.ai_client import chat_create, get_chat_client
+    from news_dashboard.ai_client import chat_create, get_chat_client, get_prompt
 
     client = get_chat_client(api_key=api_key, base_url=base_url)
+    prompt = get_prompt(
+        "topic-cluster-label",
+        fallback=get_text_prompt("topic-cluster-label"),
+        prompt_type="text",
+        label="production",
+        variables={"articles_text": articles_text},
+    )
     result = chat_create(
         client,
         name="topic-cluster-label",
         tags=["clustering"],
         user_id=user_id,
-        prompt=None,
+        prompt=prompt,
         model=model,
         messages=[
             {
                 "role": "user",
-                "content": f"{_CLUSTER_LABEL_PROMPT}\n\nArticles:\n{articles_text}",
+                "content": prompt.text,
             },
         ],
         max_tokens=200,

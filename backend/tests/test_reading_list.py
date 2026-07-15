@@ -5,11 +5,12 @@ metadata fetch, prioritization, and mark-as-done.
 from __future__ import annotations
 
 from typing import Any
-from unittest.mock import MagicMock, patch
+from unittest.mock import ANY, MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
 
+from news_dashboard.ai_client import ManagedPrompt
 from news_dashboard.auth import require_auth
 from news_dashboard.db import connect, init_db
 from news_dashboard.main import app
@@ -443,18 +444,29 @@ def test_generate_summary_for_item_success(monkeypatch: pytest.MonkeyPatch, pg_c
     mock_completion.choices[0].message.content = "A concise take on why this post matters."
     mock_client = MagicMock()
     mock_client.chat.completions.create.return_value = mock_completion
+    managed_prompt = ManagedPrompt(text="compiled prompt for A great post")
 
     with (
         patch.dict("os.environ", {"FREE_LLM_API_KEY": "test-key"}),
         patch("openai.OpenAI", return_value=mock_client),
+        patch("news_dashboard.ai_client.chat_create", return_value=mock_completion) as chat_create,
+        patch("news_dashboard.ai_client.get_prompt", return_value=managed_prompt) as get_prompt,
     ):
         service.generate_summary_for_item(item["id"], database_url=database_url)
 
     items = service.list_items(user_id, database_url=database_url)
     assert items[0]["summary_status"] == "ok"
     assert items[0]["summary"] == "A concise take on why this post matters."
-    call_kwargs = mock_client.chat.completions.create.call_args.kwargs
+    call_kwargs = chat_create.call_args.kwargs
     assert "A great post" in call_kwargs["messages"][0]["content"]
+    get_prompt.assert_called_once_with(
+        "reading-list-summary",
+        fallback=ANY,
+        label="production",
+        prompt_type="text",
+        variables={"reading_list_text": "Title: A great post\nDescription: It explains things"},
+    )
+    assert chat_create.call_args.kwargs["prompt"] is managed_prompt
 
 
 def test_generate_summary_for_item_records_error_on_ai_failure(

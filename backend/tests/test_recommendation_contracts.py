@@ -18,15 +18,20 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Any
+from unittest.mock import ANY, MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
 
+from news_dashboard.ai_client import ManagedPrompt
 from news_dashboard.auth import require_auth
 from news_dashboard.db import EMBEDDING_DIMENSIONS, connect, init_db
 from news_dashboard.embeddings import vector_literal
 from news_dashboard.main import app
-from news_dashboard.recommendations import upsert_recommendation_score
+from news_dashboard.recommendations import (
+    generate_recommendation_explanation,
+    upsert_recommendation_score,
+)
 
 pytestmark = pytest.mark.postgres
 
@@ -110,6 +115,47 @@ def _today_items(client: TestClient) -> list[dict[str, Any]]:
     response = client.get("/api/articles", params={"state": "today", "limit": 50})
     assert response.status_code == 200
     return list(response.json()["items"])
+
+
+def test_recommendation_explanation_resolves_article_and_history_variables(
+    monkeypatch: Any, pg_clean: str
+) -> None:
+    db = _setup_db(monkeypatch, pg_clean)
+    _insert_source(db, "science-source", category="science")
+    user_id = _make_user(db, "reader")
+    article_id = _insert_article(db, "science-source", "target", category="science")
+    history_id = _insert_article(db, "science-source", "history", category="science")
+    with connect(db) as conn:
+        conn.execute(
+            "INSERT INTO user_article_state(user_id, article_id, state) VALUES (%s, %s, 'done')",
+            (user_id, history_id),
+        )
+    completion = MagicMock(choices=[MagicMock(message=MagicMock(content="A match."))])
+    managed_prompt = ManagedPrompt(text="compiled recommendation prompt")
+    with (
+        patch("news_dashboard.ai_client.free_llm_config", return_value=("fake-key", None)),
+        patch("news_dashboard.ai_client.get_chat_client", return_value=MagicMock()),
+        patch("news_dashboard.ai_client.chat_create", return_value=completion) as chat_create,
+        patch("news_dashboard.ai_client.get_prompt", return_value=managed_prompt) as get_prompt,
+    ):
+        generate_recommendation_explanation(user_id, article_id, database_url=db)
+
+    variables = get_prompt.call_args.kwargs["variables"]
+    get_prompt.assert_called_once_with(
+        "recommendation-explanation",
+        fallback=ANY,
+        label="production",
+        prompt_type="text",
+        variables=variables,
+    )
+    assert variables == {
+        "article_title": "Article target",
+        "article_source": "Science-Source",
+        "article_category": "science",
+        "article_tags": "",
+        "history_text": '- read: "Article history" (Science-Source / science)',
+    }
+    assert chat_create.call_args.kwargs["prompt"] is managed_prompt
 
 
 # ── Ranking preserves every eligible article ──────────────────────────────────

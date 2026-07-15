@@ -3,6 +3,7 @@ from __future__ import annotations
 from types import SimpleNamespace
 from unittest.mock import patch
 
+from news_dashboard.ai_client import ManagedPrompt
 from news_dashboard.db import connect
 from news_dashboard.ingest.service import _ingest_source
 from news_dashboard.sources.service import SourceDefinition
@@ -115,6 +116,43 @@ def test_youtube_channel_ingests_caption_summary(pg_clean: str) -> None:
         == "A summarized video.\n\nSource media: https://www.youtube.com/watch?v=abc123"
     )
     assert row["tags"] == "media,video"
+
+
+def test_media_summary_uses_managed_chat_prompt() -> None:
+    from news_dashboard.ingest.service import _MEDIA_SUMMARY_PROMPT, _media_summary
+
+    managed = ManagedPrompt(
+        text=None,
+        messages=[{"role": "user", "content": "compiled media prompt"}],
+        langfuse_prompt=object(),
+    )
+    response = SimpleNamespace(
+        choices=[SimpleNamespace(message=SimpleNamespace(content="Managed summary"))]
+    )
+    entry = {"transcript": "Transcript", "media_url": "https://example.com/media"}
+
+    with (
+        patch("news_dashboard.ai_client.free_llm_config", return_value=("key", None)),
+        patch("news_dashboard.ai_client.get_chat_client", return_value=object()),
+        patch("news_dashboard.ai_client.get_prompt", return_value=managed) as get_prompt,
+        patch("news_dashboard.ai_client.chat_create", return_value=response) as chat_create,
+    ):
+        summary = _media_summary("Title", "Description", entry)
+
+    assert summary == "Managed summary\n\nSource media: https://example.com/media"
+    get_prompt.assert_called_once_with(
+        "summarize-media-article",
+        fallback=_MEDIA_SUMMARY_PROMPT,
+        prompt_type="chat",
+        label="production",
+        variables={
+            "title": "Title",
+            "description": "Description",
+            "transcript": "Transcript",
+        },
+    )
+    assert chat_create.call_args.kwargs["prompt"] is managed
+    assert chat_create.call_args.kwargs["messages"] == managed.messages
 
 
 def test_media_ingest_falls_back_when_ai_disabled(pg_clean: str) -> None:

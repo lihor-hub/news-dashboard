@@ -1,0 +1,103 @@
+#!/usr/bin/env python3
+"""Synchronize the canonical local prompt catalog to Langfuse production."""
+
+from __future__ import annotations
+
+import os
+import sys
+from collections.abc import Mapping
+from pathlib import Path
+from typing import Any
+
+from langfuse.api.commons.errors.not_found_error import NotFoundError
+
+BACKEND_DIR = Path(__file__).resolve().parents[1] / "backend"
+if str(BACKEND_DIR) not in sys.path:
+    sys.path.insert(0, str(BACKEND_DIR))
+
+from news_dashboard.prompt_catalog import (  # noqa: E402 - backend path is configured above
+    PROMPT_CATALOG,
+    PromptCatalogEntry,
+)
+
+_ENVIRONMENT_VARIABLES = ("LANGFUSE_PUBLIC_KEY", "LANGFUSE_SECRET_KEY", "LANGFUSE_HOST")
+
+
+def _sdk_prompt(entry: PromptCatalogEntry) -> str | list[dict[str, str]]:
+    return entry.fallback()
+
+
+def _normalize_chat_messages(prompt: Any) -> list[dict[str, str]] | None:
+    if not isinstance(prompt, list):
+        return None
+
+    normalized: list[dict[str, str]] = []
+    for message in prompt:
+        if not isinstance(message, Mapping) or not set(message) <= {"role", "content", "type"}:
+            return None
+        role = message.get("role")
+        content = message.get("content")
+        message_type = message.get("type", "text")
+        if (
+            not isinstance(role, str)
+            or not isinstance(content, str)
+            or message_type not in {"message", "text"}
+        ):
+            return None
+        normalized.append({"role": role, "content": content})
+    return normalized
+
+
+def _matches(current: Any, entry: PromptCatalogEntry) -> bool:
+    if getattr(current, "type", entry.type) != entry.type:
+        return False
+
+    current_prompt = getattr(current, "prompt", None)
+    expected_prompt = _sdk_prompt(entry)
+    if entry.type == "chat":
+        return _normalize_chat_messages(current_prompt) == expected_prompt
+    return current_prompt == expected_prompt
+
+
+def _sync(client: Any) -> None:
+    for entry in PROMPT_CATALOG:
+        try:
+            current = client.get_prompt(entry.name, label="production", type=entry.type)
+        except NotFoundError:
+            current = None
+
+        if current is not None and _matches(current, entry):
+            print(f"unchanged {entry.name} v{getattr(current, 'version', 'unknown')}")
+            continue
+
+        create_kwargs: dict[str, Any] = {
+            "name": entry.name,
+            "type": entry.type,
+            "prompt": _sdk_prompt(entry),
+            "labels": ["production"],
+        }
+        if entry.commit_message is not None:
+            create_kwargs["commit_message"] = entry.commit_message
+        created = client.create_prompt(**create_kwargs)
+        print(f"synced {entry.name} v{getattr(created, 'version', 'unknown')}")
+
+
+def main() -> int:
+    missing = [name for name in _ENVIRONMENT_VARIABLES if not os.getenv(name)]
+    if missing:
+        print(f"missing required environment variables: {', '.join(missing)}", file=sys.stderr)
+        return 2
+
+    from langfuse import Langfuse
+
+    client = Langfuse(
+        public_key=os.environ["LANGFUSE_PUBLIC_KEY"],
+        secret_key=os.environ["LANGFUSE_SECRET_KEY"],
+        host=os.environ["LANGFUSE_HOST"],
+    )
+    _sync(client)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
