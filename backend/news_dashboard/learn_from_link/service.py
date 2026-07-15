@@ -40,6 +40,8 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_LESSON_CHAT_MODEL = "gpt-4o-mini"
 DEFAULT_STALE_PENDING_LESSON_MINUTES = 15
+DEFAULT_LESSON_SUMMARY_LIMIT = 20
+MAX_LESSON_SUMMARY_LIMIT = 100
 STALE_PENDING_LESSON_ERROR = (
     "Lesson generation was interrupted before it could finish. Please retry generation."
 )
@@ -1733,6 +1735,92 @@ def list_lessons(
     with connect(database_url=database_url) as conn:
         rows = conn.execute(query, params).fetchall()
     return [_serialize_lesson(row) for row in rows]
+
+
+def list_lesson_summaries(
+    user_id: int,
+    *,
+    q: str | None = None,
+    status: str | None = None,
+    verdict: str | None = None,
+    limit: int = DEFAULT_LESSON_SUMMARY_LIMIT,
+    offset: int = 0,
+    database_url: str | None = None,
+) -> dict[str, Any]:
+    init_db(database_url=database_url)
+    bounded_limit = max(1, min(limit, MAX_LESSON_SUMMARY_LIMIT))
+    bounded_offset = max(0, offset)
+    where_sql = "WHERE user_id = %s"
+    params: list[Any] = [user_id]
+    if status is not None:
+        where_sql += " AND generation_status = %s"
+        params.append(status)
+    if verdict is not None:
+        where_sql += " AND lesson_detail->'read_worthiness'->>'verdict' = %s"
+        params.append(verdict)
+    if q is not None and q.strip():
+        where_sql += """
+            AND (
+                title ILIKE %s
+                OR original_url ILIKE %s
+                OR source_name ILIKE %s
+                OR lesson_detail::text ILIKE %s
+            )
+        """
+        term = f"%{q.strip()}%"
+        params.extend([term, term, term, term])
+
+    count_query = f"SELECT COUNT(*) AS total_count FROM lessons {where_sql}"
+    query = f"""
+        SELECT id,
+               user_id,
+               original_url,
+               normalized_url,
+               title,
+               source_name,
+               author,
+               published_at,
+               generation_status,
+               generation_error,
+               jsonb_build_object(
+                 'gist', lesson_detail->>'gist',
+                 'read_worthiness', lesson_detail->'read_worthiness'
+               ) AS lesson_detail,
+               depth,
+               persona,
+               podcast_status,
+               podcast_error,
+               slide_deck_status,
+               slide_deck_error,
+               infographic_status,
+               infographic_error,
+               EXISTS(
+                 SELECT 1 FROM lesson_graph_nodes
+                 WHERE lesson_graph_nodes.lesson_id = lessons.id
+               ) AS graph_context_available,
+               created_at,
+               updated_at
+        FROM lessons
+        {where_sql}
+        ORDER BY created_at DESC
+        LIMIT %s OFFSET %s
+    """
+    with connect(database_url=database_url) as conn:
+        total_row = conn.execute(count_query, params).fetchone()
+        rows = conn.execute(query, [*params, bounded_limit, bounded_offset]).fetchall()
+    lessons = [_serialize_lesson(row) for row in rows]
+    total = int(total_row["total_count"]) if total_row is not None else 0
+    for lesson in lessons:
+        if lesson.get("lesson_detail", {}).get("gist") is None:
+            lesson["lesson_detail"] = None
+    next_offset = bounded_offset + bounded_limit if bounded_offset + bounded_limit < total else None
+    return {
+        "lessons": lessons,
+        "total": total,
+        "limit": bounded_limit,
+        "offset": bounded_offset,
+        "next_offset": next_offset,
+    }
 
 
 def get_lesson(

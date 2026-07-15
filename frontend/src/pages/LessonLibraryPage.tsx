@@ -1,12 +1,15 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useInfiniteQuery } from '@tanstack/react-query';
 import { AlertCircle, ExternalLink, GraduationCap, Loader2, Search } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { EmptyState } from '@/components/EmptyState';
-import { listLessons, type Lesson, type LessonReadWorthiness } from '@/api';
+import { listLessons, type Lesson, type LessonReadWorthiness, type LessonSummary } from '@/api';
+
+const LESSON_PAGE_SIZE = 20;
 
 const STATUS_FILTERS: { value: Lesson['generation_status'] | 'all'; label: string }[] = [
   { value: 'all', label: 'All statuses' },
@@ -37,7 +40,7 @@ function formatDate(value: string): string {
   return date.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
 }
 
-function LessonCard({ lesson }: { lesson: Lesson }) {
+function LessonCard({ lesson }: { lesson: LessonSummary }) {
   const verdict = lesson.lesson_detail?.read_worthiness.verdict;
   const isFailed = lesson.generation_status === 'failed';
   const isPending = lesson.generation_status === 'pending';
@@ -109,17 +112,22 @@ export function LessonLibraryPage() {
     };
   }, [searchInput]);
 
-  const { data, isLoading, isError } = useQuery({
-    queryKey: ['lessons', q, status, verdict],
-    queryFn: () =>
-      listLessons({
-        q: q || undefined,
-        status: status === 'all' ? undefined : status,
-        verdict: verdict === 'all' ? undefined : verdict,
-      }),
-  });
+  const { data, isLoading, isError, fetchNextPage, hasNextPage, isFetchingNextPage } =
+    useInfiniteQuery({
+      queryKey: ['lessons', q, status, verdict],
+      initialPageParam: 0,
+      queryFn: ({ pageParam }) =>
+        listLessons({
+          q: q || undefined,
+          status: status === 'all' ? undefined : status,
+          verdict: verdict === 'all' ? undefined : verdict,
+          limit: LESSON_PAGE_SIZE,
+          offset: pageParam,
+        }),
+      getNextPageParam: (lastPage) => lastPage.next_offset ?? undefined,
+    });
 
-  const lessons = data ?? [];
+  const lessons = data?.pages.flatMap((page) => page.lessons) ?? [];
 
   return (
     <div className="mx-auto max-w-4xl px-4 py-6">
@@ -207,6 +215,25 @@ export function LessonLibraryPage() {
           {lessons.map((lesson) => (
             <LessonCard key={lesson.id} lesson={lesson} />
           ))}
+          {hasNextPage ? (
+            <div className="flex justify-center pt-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => void fetchNextPage()}
+                disabled={isFetchingNextPage}
+              >
+                {isFetchingNextPage ? (
+                  <span className="inline-flex items-center gap-2">
+                    <Loader2 className="size-4 animate-spin" />
+                    {t('learn.library.loading_more', 'Loading more')}
+                  </span>
+                ) : (
+                  t('learn.library.load_more', 'Load more lessons')
+                )}
+              </Button>
+            </div>
+          ) : null}
         </div>
       )}
     </div>

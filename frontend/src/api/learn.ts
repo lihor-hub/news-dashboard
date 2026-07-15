@@ -85,6 +85,7 @@ export interface Lesson {
   generation_error: string | null;
   lesson_detail: LessonDetail | null;
   study_artifacts: StudyArtifacts | null;
+  personal_relevance?: unknown | null;
   depth: LessonDepth;
   persona: LessonPersona;
   podcast_status: 'complete' | 'failed' | null;
@@ -98,6 +99,21 @@ export interface Lesson {
   graph_context_available: boolean;
   created_at: string;
   updated_at: string;
+}
+
+export type LessonSummary = Omit<
+  Lesson,
+  'source_content' | 'study_artifacts' | 'personal_relevance' | 'slide_deck'
+> & {
+  lesson_detail: Pick<LessonDetail, 'gist' | 'read_worthiness'> | null;
+};
+
+export interface ListLessonsResponse {
+  lessons: LessonSummary[];
+  total: number;
+  limit: number;
+  offset: number;
+  next_offset: number | null;
 }
 
 export interface LessonGeneration {
@@ -163,18 +179,19 @@ export interface ListLessonsParams {
   q?: string;
   status?: Lesson['generation_status'];
   verdict?: LessonReadWorthiness['verdict'];
+  limit?: number;
+  offset?: number;
 }
 
-export async function listLessons(params: ListLessonsParams = {}): Promise<Lesson[]> {
+export async function listLessons(params: ListLessonsParams = {}): Promise<ListLessonsResponse> {
   const search = new URLSearchParams();
   if (params.q?.trim()) search.set('q', params.q.trim());
   if (params.status) search.set('status', params.status);
   if (params.verdict) search.set('verdict', params.verdict);
+  if (params.limit !== undefined) search.set('limit', String(params.limit));
+  if (params.offset !== undefined) search.set('offset', String(params.offset));
   const query = search.toString();
-  const { lessons } = await requestJson<{ lessons: Lesson[] }>(
-    `/api/learn/lessons${query ? `?${query}` : ''}`
-  );
-  return lessons;
+  return requestJson<ListLessonsResponse>(`/api/learn/lessons${query ? `?${query}` : ''}`);
 }
 
 export interface LessonChatMessage {
