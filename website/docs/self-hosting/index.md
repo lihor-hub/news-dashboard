@@ -19,7 +19,7 @@ insecure local defaults.
 
 1. Copy `.env.example` to `.env`.
 2. Set strong values for `SESSION_SECRET`, `BOOTSTRAP_ADMIN_USERNAME`,
-   `BOOTSTRAP_ADMIN_PASSWORD`, and `POSTGRES_PASSWORD`.
+   `BOOTSTRAP_ADMIN_PASSWORD`, `POSTGRES_PASSWORD`, and `NEO4J_PASSWORD`.
 3. Start the stack:
 
    ```bash
@@ -31,6 +31,17 @@ insecure local defaults.
    ```bash
    curl http://localhost:8080/api/health
    ```
+
+The production Compose stack includes a bundled Neo4j container and wires the
+app to it with `NEO4J_*`, so the knowledge graph is enabled as soon as the
+stack is up. Backfill existing entities after first start:
+
+```bash
+docker compose -f docker-compose.prod.yml exec news-dashboard \
+  news-dashboard graph-backfill --limit 250 --days 30
+docker compose -f docker-compose.prod.yml exec news-dashboard \
+  news-dashboard graph-relationship-backfill --limit 50 --days 7
+```
 
 The application image is published as:
 
@@ -56,6 +67,7 @@ At minimum, a production instance also needs:
 | `BOOTSTRAP_ADMIN_USERNAME` | First admin username when no users exist. |
 | `BOOTSTRAP_ADMIN_PASSWORD` | First admin password when no users exist. |
 | `POSTGRES_PASSWORD` | Password for the bundled or configured PostgreSQL user. |
+| `NEO4J_PASSWORD` | Password for the bundled Neo4j graph store. |
 
 See [Configuration](/docs/configuration) for authentication, HTTPS, backup, and
 integration guides.
@@ -84,5 +96,6 @@ same pull/up commands.
 
 - [CI Runner Setup](ci-runner-setup)
 - [Authentication](/docs/configuration/authentication)
+- [Neo4j Knowledge Graph](/docs/configuration/neo4j-knowledge-graph)
 - [HTTPS with Caddy](/docs/configuration/https-caddy)
 - [PostgreSQL Backup and Restore](/docs/configuration/postgres-backup)

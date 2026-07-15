@@ -14,6 +14,14 @@ services:
       retries: 5
     restart: unless-stopped
 
+  neo4j:
+    image: neo4j:5-community
+    environment:
+      NEO4J_AUTH: neo4j/${NEO4J_PASSWORD:?NEO4J_PASSWORD is required}
+    volumes:
+      - news-dashboard-neo4j:/data
+    restart: unless-stopped
+
   news-dashboard:
     image: ghcr.io/lihor-hub/news-dashboard:latest
     ports:
@@ -27,6 +35,10 @@ services:
       SESSION_SECRET: ${SESSION_SECRET:?SESSION_SECRET is required}
       BOOTSTRAP_ADMIN_USERNAME: ${BOOTSTRAP_ADMIN_USERNAME:?BOOTSTRAP_ADMIN_USERNAME is required}
       BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD:?BOOTSTRAP_ADMIN_PASSWORD is required}
+      NEO4J_URI: bolt://neo4j:7687
+      NEO4J_USER: neo4j
+      NEO4J_PASSWORD: ${NEO4J_PASSWORD:?NEO4J_PASSWORD is required}
+      NEO4J_DATABASE: neo4j
       DATA_DIR: /data
       # Optional AI features (uncomment as needed)
       # OPENAI_API_KEY: ${OPENAI_API_KEY:-}
@@ -37,6 +49,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      neo4j:
+        condition: service_started
     healthcheck:
       test:
         [
@@ -53,4 +67,5 @@ services:
 
 volumes:
   news-dashboard-postgres:
+  news-dashboard-neo4j:
   news-dashboard-data:

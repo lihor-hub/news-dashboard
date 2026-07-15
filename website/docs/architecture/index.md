@@ -230,7 +230,7 @@ flowchart LR
 - `backend/news_dashboard/digest.py`: daily digest email and signed mark-read links.
 - `backend/news_dashboard/cli.py`: maintenance commands.
 - `Dockerfile`: multi-stage build, React frontend first, Python runtime second.
-- `docker-compose.yml`: local container topology with app plus Postgres.
+- `docker-compose.yml`: local container topology with app plus Postgres and Neo4j.
 - `helm/news-dashboard`: Kubernetes Deployment, Service, CronJob, Postgres StatefulSet, secrets, and storage.
 - `.github/workflows/ci.yml`: tests, frontend build, image publish, and mini PC deployment.
 

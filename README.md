@@ -141,6 +141,9 @@ You can run News Dashboard in two ways:
 docker compose up --build
 ```
 
+This stack now brings up PostgreSQL, Neo4j, and the app together, so the
+knowledge graph is enabled locally by default.
+
 ### Option 2: Run the published image (recommended for production)
 
 First, start PostgreSQL:
@@ -175,6 +178,10 @@ docker run -d \
   ghcr.io/lihor-hub/news-dashboard:latest
 ```
 **Note**: Replace `latest` with a specific version tag (e.g., `v1.21.0`) or commit SHA for pinned deployments. The `news-dashboard-data:/data` volume keeps generated audio and other app data across container recreates; without it, optional TTS and podcast MP3 caches are lost during upgrades. See [Configuration](#configuration) for all required environment variables.
+
+If you also want the knowledge graph enabled in a manual `docker run`
+deployment, run a Neo4j container and pass `NEO4J_URI`, `NEO4J_USER`,
+`NEO4J_PASSWORD`, and optionally `NEO4J_DATABASE=neo4j` to the app container.
 
 Open [http://localhost:8080](http://localhost:8080).
 

@@ -24,6 +24,13 @@ _REQUIRED_AUTH_VARS = {
     "BOOTSTRAP_ADMIN_PASSWORD",
 }
 
+_REQUIRED_GRAPH_VARS = {
+    "NEO4J_URI",
+    "NEO4J_USER",
+    "NEO4J_PASSWORD",
+    "NEO4J_DATABASE",
+}
+
 _COMPOSE_OVERRIDE_PATTERN = re.compile(r"^\$\{[A-Z_]+:-(.+)\}$")
 
 
@@ -90,6 +97,44 @@ def test_compose_prod_persists_app_data_dir() -> None:
     assert "news-dashboard-data:/data" in app_service.get("volumes", []), (
         "prod compose must mount news-dashboard-data at /data"
     )
+
+
+def _compose_env_map(compose_path: Path) -> dict[str, object]:
+    compose = yaml.safe_load(compose_path.read_text())
+    services = compose.get("services", {})
+    assert "news-dashboard" in services, f"news-dashboard service missing from {compose_path.name}"
+    env = services["news-dashboard"].get("environment", {})
+    if isinstance(env, list):
+        env = dict(item.split("=", 1) if "=" in item else (item, "") for item in env)
+    return env
+
+
+def test_compose_file_enables_neo4j_for_app() -> None:
+    compose = yaml.safe_load(COMPOSE_FILE.read_text())
+    services = compose.get("services", {})
+
+    assert "neo4j" in services, "neo4j service missing from local compose"
+    env = _compose_env_map(COMPOSE_FILE)
+    missing = _REQUIRED_GRAPH_VARS - set(env)
+    assert not missing, f"Neo4j env vars not declared in local compose: {sorted(missing)}"
+    assert env["NEO4J_URI"] == "bolt://neo4j:7687"
+    assert env["NEO4J_USER"] == "neo4j"
+    assert _resolve_default(env["NEO4J_PASSWORD"]), "NEO4J_PASSWORD must have a local default"
+    assert env["NEO4J_DATABASE"] == "neo4j"
+
+
+def test_compose_prod_file_enables_neo4j_for_app() -> None:
+    compose = yaml.safe_load(COMPOSE_PROD_FILE.read_text())
+    services = compose.get("services", {})
+
+    assert "neo4j" in services, "neo4j service missing from prod compose"
+    env = _compose_env_map(COMPOSE_PROD_FILE)
+    missing = _REQUIRED_GRAPH_VARS - set(env)
+    assert not missing, f"Neo4j env vars not declared in prod compose: {sorted(missing)}"
+    assert env["NEO4J_URI"] == "bolt://neo4j:7687"
+    assert env["NEO4J_USER"] == "neo4j"
+    assert env["NEO4J_PASSWORD"] == "${NEO4J_PASSWORD:?NEO4J_PASSWORD is required}"
+    assert env["NEO4J_DATABASE"] == "neo4j"
 
 
 def test_compose_demo_file_exists() -> None:
