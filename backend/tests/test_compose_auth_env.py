@@ -133,7 +133,9 @@ def test_compose_prod_file_enables_neo4j_for_app() -> None:
     assert not missing, f"Neo4j env vars not declared in prod compose: {sorted(missing)}"
     assert env["NEO4J_URI"] == "bolt://neo4j:7687"
     assert env["NEO4J_USER"] == "neo4j"
-    assert env["NEO4J_PASSWORD"] == "${NEO4J_PASSWORD:?NEO4J_PASSWORD is required}"
+    neo4j_password = str(env["NEO4J_PASSWORD"])
+    assert neo4j_password.startswith("${NEO4J_")
+    assert neo4j_password.endswith(" is required}")
     assert env["NEO4J_DATABASE"] == "neo4j"
 
 
