@@ -11,6 +11,7 @@ import pytest
 from fastapi.testclient import TestClient
 from langchain_core.messages import AIMessage
 from langchain_core.runnables import RunnableLambda
+from psycopg.types.json import Jsonb
 
 from news_dashboard.auth import require_admin, require_auth
 from news_dashboard.db import connect, init_db
@@ -516,6 +517,87 @@ def test_list_lessons_searches_title_url_source_and_concepts(
     assert no_match == []
 
 
+def test_list_lesson_summaries_paginates_and_omits_heavy_fields(
+    pg_clean: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("DATABASE_URL", pg_clean)
+    user_id = _make_user(pg_clean)
+    first = service.create_lesson(user_id, "https://example.com/first", database_url=pg_clean)
+    second = service.create_lesson(user_id, "https://example.com/second", database_url=pg_clean)
+    third = service.create_lesson(user_id, "https://example.com/third", database_url=pg_clean)
+    with connect(database_url=pg_clean) as conn:
+        conn.execute(
+            """
+            UPDATE lessons
+            SET source_content = %s,
+                study_artifacts = %s::jsonb,
+                personal_relevance = %s::jsonb,
+                slide_deck = %s::jsonb
+            WHERE id = %s
+            """,
+            (
+                "large source body",
+                Jsonb({"flashcards": [{"concept": "heavy", "claim": "payload"}]}),
+                Jsonb({"summary": "private relevance"}),
+                Jsonb({"slides": [{"title": "Heavy", "bullets": ["payload"]}]}),
+                third["id"],
+            ),
+        )
+
+    page = service.list_lesson_summaries(user_id, limit=2, offset=0, database_url=pg_clean)
+
+    assert page["total"] == 3
+    assert page["limit"] == 2
+    assert page["offset"] == 0
+    assert page["next_offset"] == 2
+    assert [lesson["id"] for lesson in page["lessons"]] == [third["id"], second["id"]]
+    assert "source_content" not in page["lessons"][0]
+    assert "study_artifacts" not in page["lessons"][0]
+    assert "personal_relevance" not in page["lessons"][0]
+    assert "slide_deck" not in page["lessons"][0]
+    full_lesson = service.get_lesson(first["id"], user_id, database_url=pg_clean)
+    assert full_lesson is not None
+    assert full_lesson["source_content"]
+
+
+def test_list_lesson_summaries_keeps_filters_with_pagination(
+    pg_clean: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("DATABASE_URL", pg_clean)
+    user_id = _make_user(pg_clean)
+    service.create_lesson(user_id, "https://example.com/first", database_url=pg_clean)
+    service.create_lesson(user_id, "https://example.com/second", database_url=pg_clean)
+    monkeypatch.setattr(service, "extract_body", lambda _url: ("", "error"), raising=False)
+    service.create_lesson(user_id, "https://example.com/failed", database_url=pg_clean)
+
+    page = service.list_lesson_summaries(
+        user_id,
+        q="example",
+        status="complete",
+        verdict="skim",
+        limit=1,
+        offset=1,
+        database_url=pg_clean,
+    )
+
+    assert page["total"] == 2
+    assert page["next_offset"] is None
+    assert len(page["lessons"]) == 1
+    assert page["lessons"][0]["generation_status"] == "complete"
+    assert page["lessons"][0]["lesson_detail"]["read_worthiness"]["verdict"] == "skim"
+
+    empty_page = service.list_lesson_summaries(
+        user_id,
+        status="complete",
+        limit=1,
+        offset=10,
+        database_url=pg_clean,
+    )
+    assert empty_page["lessons"] == []
+    assert empty_page["total"] == 2
+    assert empty_page["next_offset"] is None
+
+
 def test_list_lessons_endpoint_is_user_scoped(
     pg_clean: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -530,8 +612,10 @@ def test_list_lessons_endpoint_is_user_scoped(
         response = client.get("/api/learn/lessons")
 
     assert response.status_code == 200
-    body = response.json()["lessons"]
-    assert [item["id"] for item in body] == [lesson["id"]]
+    body = response.json()
+    assert [item["id"] for item in body["lessons"]] == [lesson["id"]]
+    assert body["total"] == 1
+    assert body["next_offset"] is None
 
 
 def test_list_lessons_endpoint_supports_query_params(
@@ -544,11 +628,22 @@ def test_list_lessons_endpoint_supports_query_params(
 
     with _api_client(user_id) as client:
         response = client.get(
-            "/api/learn/lessons", params={"status": "complete", "verdict": "skim", "q": "example"}
+            "/api/learn/lessons",
+            params={
+                "status": "complete",
+                "verdict": "skim",
+                "q": "example",
+                "limit": 1,
+                "offset": 0,
+            },
         )
 
     assert response.status_code == 200
-    assert len(response.json()["lessons"]) == 1
+    body = response.json()
+    assert len(body["lessons"]) == 1
+    assert body["total"] == 1
+    assert body["limit"] == 1
+    assert body["offset"] == 0
 
 
 def test_create_lesson_duplicate_resets_pending_state(

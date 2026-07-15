@@ -50,9 +50,14 @@ def list_lessons_endpoint(
     q: Annotated[str | None, Query(max_length=300)] = None,
     status: Annotated[str | None, Query(pattern="^(pending|complete|failed)$")] = None,
     verdict: Annotated[str | None, Query(pattern="^(skip|skim|read|study)$")] = None,
+    limit: Annotated[int, Query(ge=1, le=service.MAX_LESSON_SUMMARY_LIMIT)] = (
+        service.DEFAULT_LESSON_SUMMARY_LIMIT
+    ),
+    offset: Annotated[int, Query(ge=0)] = 0,
 ) -> dict[str, Any]:
-    lessons = service.list_lessons(current_user["id"], q=q, status=status, verdict=verdict)
-    return {"lessons": lessons}
+    return service.list_lesson_summaries(
+        current_user["id"], q=q, status=status, verdict=verdict, limit=limit, offset=offset
+    )
 
 
 @router.get("/api/learn/lessons/{lesson_id}")

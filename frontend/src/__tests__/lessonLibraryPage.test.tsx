@@ -50,6 +50,7 @@ const COMPLETE_LESSON: Lesson = {
     citations: [{ label: '1', snippet: 'snippet', source: 'source' }],
   },
   study_artifacts: null,
+  personal_relevance: null,
   created_at: '2026-07-08T10:00:00Z',
   updated_at: '2026-07-08T10:01:00Z',
 };
@@ -87,7 +88,13 @@ describe('LessonLibraryPage', () => {
   });
 
   it('lists lessons with links to their detail page', async () => {
-    vi.spyOn(api, 'listLessons').mockResolvedValue([COMPLETE_LESSON, FAILED_LESSON]);
+    vi.spyOn(api, 'listLessons').mockResolvedValue({
+      lessons: [COMPLETE_LESSON, FAILED_LESSON],
+      total: 2,
+      limit: 20,
+      offset: 0,
+      next_offset: null,
+    });
 
     renderPage();
 
@@ -100,7 +107,13 @@ describe('LessonLibraryPage', () => {
   });
 
   it('shows an empty state when there are no lessons', async () => {
-    vi.spyOn(api, 'listLessons').mockResolvedValue([]);
+    vi.spyOn(api, 'listLessons').mockResolvedValue({
+      lessons: [],
+      total: 0,
+      limit: 20,
+      offset: 0,
+      next_offset: null,
+    });
 
     renderPage();
 
@@ -109,12 +122,24 @@ describe('LessonLibraryPage', () => {
 
   it('re-queries with search text after debounce', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
-    const listSpy = vi.spyOn(api, 'listLessons').mockResolvedValue([COMPLETE_LESSON]);
+    const listSpy = vi.spyOn(api, 'listLessons').mockResolvedValue({
+      lessons: [COMPLETE_LESSON],
+      total: 1,
+      limit: 20,
+      offset: 0,
+      next_offset: null,
+    });
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
 
     renderPage();
     await waitFor(() =>
-      expect(listSpy).toHaveBeenCalledWith({ q: undefined, status: undefined, verdict: undefined })
+      expect(listSpy).toHaveBeenCalledWith({
+        q: undefined,
+        status: undefined,
+        verdict: undefined,
+        limit: 20,
+        offset: 0,
+      })
     );
 
     await user.type(screen.getByLabelText(/search lessons/i), 'signal');
@@ -122,12 +147,24 @@ describe('LessonLibraryPage', () => {
     await vi.advanceTimersByTimeAsync(300);
 
     await waitFor(() =>
-      expect(listSpy).toHaveBeenCalledWith({ q: 'signal', status: undefined, verdict: undefined })
+      expect(listSpy).toHaveBeenCalledWith({
+        q: 'signal',
+        status: undefined,
+        verdict: undefined,
+        limit: 20,
+        offset: 0,
+      })
     );
   });
 
   it('filters by status and verdict', async () => {
-    const listSpy = vi.spyOn(api, 'listLessons').mockResolvedValue([COMPLETE_LESSON]);
+    const listSpy = vi.spyOn(api, 'listLessons').mockResolvedValue({
+      lessons: [COMPLETE_LESSON],
+      total: 1,
+      limit: 20,
+      offset: 0,
+      next_offset: null,
+    });
     const user = userEvent.setup();
 
     renderPage();
@@ -135,13 +172,60 @@ describe('LessonLibraryPage', () => {
 
     await user.selectOptions(screen.getByLabelText(/filter by status/i), 'complete');
     await waitFor(() =>
-      expect(listSpy).toHaveBeenCalledWith({ q: undefined, status: 'complete', verdict: undefined })
+      expect(listSpy).toHaveBeenCalledWith({
+        q: undefined,
+        status: 'complete',
+        verdict: undefined,
+        limit: 20,
+        offset: 0,
+      })
     );
 
     await user.selectOptions(screen.getByLabelText(/filter by read-worthiness/i), 'study');
     await waitFor(() =>
-      expect(listSpy).toHaveBeenCalledWith({ q: undefined, status: 'complete', verdict: 'study' })
+      expect(listSpy).toHaveBeenCalledWith({
+        q: undefined,
+        status: 'complete',
+        verdict: 'study',
+        limit: 20,
+        offset: 0,
+      })
     );
+  });
+
+  it('loads another page without losing filters', async () => {
+    const secondPageLesson = { ...COMPLETE_LESSON, id: 3, title: 'Another careful article' };
+    const listSpy = vi
+      .spyOn(api, 'listLessons')
+      .mockResolvedValueOnce({
+        lessons: [COMPLETE_LESSON],
+        total: 2,
+        limit: 20,
+        offset: 0,
+        next_offset: 20,
+      })
+      .mockResolvedValueOnce({
+        lessons: [secondPageLesson],
+        total: 2,
+        limit: 20,
+        offset: 20,
+        next_offset: null,
+      });
+    const user = userEvent.setup();
+
+    renderPage();
+    expect(await screen.findByText('A careful article')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /load more lessons/i }));
+
+    expect(await screen.findByText('Another careful article')).toBeInTheDocument();
+    expect(listSpy).toHaveBeenLastCalledWith({
+      q: undefined,
+      status: undefined,
+      verdict: undefined,
+      limit: 20,
+      offset: 20,
+    });
   });
 
   it('shows an error state when loading fails', async () => {
