@@ -120,3 +120,34 @@ def test_generate_recap_narrative_mentions_saved_and_dwell(monkeypatch: pytest.M
     assert "backlog_total" in prompt
     assert "average_seconds" in prompt
     assert "generated_at" not in prompt
+
+
+def test_generate_recap_narrative_traces_callback_attribution_and_literal_braces(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from langchain_core.callbacks import BaseCallbackHandler
+
+    monkeypatch.setenv("FREE_LLM_API_KEY", "fake-key")
+    callback = BaseCallbackHandler()
+    captured: dict[str, Any] = {}
+
+    def invoke(prompt: Any, config: Any) -> AIMessage:
+        captured.update(prompt=prompt, config=config)
+        return AIMessage(content="Narrative.")
+
+    with (
+        patch(
+            "news_dashboard.ai_client.get_chat_model",
+            return_value=RunnableLambda(invoke),
+        ),
+        patch("news_dashboard.ai_client.free_llm_config", return_value=("fake-key", None)),
+        patch("news_dashboard.ai_client.langfuse_enabled", return_value=True),
+        patch("langfuse.langchain.CallbackHandler", return_value=callback),
+        patch("langfuse.propagate_attributes") as attributes,
+    ):
+        result = generate_recap_narrative(_make_recap(categories=[{"category": "{science}"}]))
+
+    assert result == "Narrative."
+    assert callback in captured["config"]["callbacks"].handlers
+    attributes.assert_called_once_with(tags=["recap", "narrative"], trace_name="recap-narrative")
+    assert "{science}" in captured["prompt"].messages[0].content
