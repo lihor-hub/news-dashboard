@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import os
 from collections.abc import Generator
+from datetime import datetime, timezone
 from typing import Any
 
 import pytest
@@ -492,6 +493,180 @@ def test_pg_boolean_column_is_boolean(pg_clean: str, table_name: str, column_nam
         ).fetchone()
     assert row is not None
     assert row[0] == "boolean"
+
+
+def test_pg_articles_discovered_at_is_timestamptz(pg_clean: str) -> None:
+    """Fresh PostgreSQL schema must store articles.discovered_at natively."""
+    import psycopg
+
+    with psycopg.connect(pg_clean) as conn:
+        row = conn.execute(
+            """
+            SELECT data_type
+            FROM information_schema.columns
+            WHERE table_schema = current_schema()
+              AND table_name = 'articles'
+              AND column_name = 'discovered_at'
+            """
+        ).fetchone()
+
+    assert row is not None
+    assert row[0] == "timestamp with time zone"
+
+
+def test_pg_init_db_converts_legacy_discovered_at_text(pg_url: str, tmp_path: Any) -> None:
+    """init_db must upgrade existing TEXT discovered_at values in place."""
+    from news_dashboard.db import connect, init_db
+
+    db_path = tmp_path / "legacy-discovered-at-text"
+    with connect(db_path, database_url=pg_url) as conn:
+        conn.execute(
+            """
+            CREATE TABLE sources (
+              slug TEXT PRIMARY KEY,
+              name TEXT NOT NULL,
+              url TEXT NOT NULL,
+              category TEXT NOT NULL,
+              kind TEXT NOT NULL,
+              priority INTEGER NOT NULL DEFAULT 50,
+              enabled BOOLEAN NOT NULL DEFAULT TRUE
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE articles (
+              id BIGSERIAL PRIMARY KEY,
+              url TEXT NOT NULL UNIQUE,
+              canonical_url TEXT NOT NULL,
+              title TEXT NOT NULL,
+              source_slug TEXT NOT NULL REFERENCES sources(slug),
+              source_name TEXT NOT NULL,
+              category TEXT NOT NULL,
+              kind TEXT NOT NULL,
+              published_at TEXT,
+              discovered_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+              status TEXT NOT NULL DEFAULT 'new',
+              importance_score INTEGER NOT NULL DEFAULT 50,
+              summary TEXT NOT NULL DEFAULT '',
+              reason TEXT NOT NULL DEFAULT '',
+              tags TEXT NOT NULL DEFAULT '',
+              read_at TEXT,
+              saved_at TEXT,
+              skipped_at TEXT,
+              archived_at TEXT,
+              updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+              starred BOOLEAN NOT NULL DEFAULT FALSE,
+              starred_at TEXT,
+              body TEXT
+            )
+            """
+        )
+        conn.execute(
+            "INSERT INTO sources(slug, name, url, category, kind) VALUES"
+            " ('legacy-src', 'Legacy', 'https://example.com/feed', 'tech', 'rss_feed')"
+        )
+        conn.execute(
+            """
+            INSERT INTO articles(
+              url, canonical_url, title, source_slug, source_name, category, kind, discovered_at
+            )
+            VALUES (
+              'https://example.com/offset',
+              'https://example.com/offset',
+              'Offset',
+              'legacy-src',
+              'Legacy',
+              'tech',
+              'rss_feed',
+              '2026-07-12T15:30:00+03:00'
+            )
+            """
+        )
+        conn.commit()
+
+    init_db(db_path, database_url=pg_url)
+
+    with connect(db_path, database_url=pg_url) as conn:
+        row = conn.execute(
+            """
+            SELECT c.data_type, a.discovered_at
+            FROM information_schema.columns c
+            CROSS JOIN articles a
+            WHERE c.table_schema = current_schema()
+              AND c.table_name = 'articles'
+              AND c.column_name = 'discovered_at'
+            """
+        ).fetchone()
+
+    assert row is not None
+    assert row["data_type"] == "timestamp with time zone"
+    assert row["discovered_at"] == datetime(2026, 7, 12, 12, 30, tzinfo=timezone.utc)
+
+
+def test_pg_init_db_rejects_invalid_legacy_discovered_at(pg_url: str, tmp_path: Any) -> None:
+    """Malformed legacy timestamps must fail with article context."""
+    from news_dashboard.db import SchemaInitializationError, connect, init_db
+
+    db_path = tmp_path / "invalid-discovered-at-text"
+    with connect(db_path, database_url=pg_url) as conn:
+        conn.execute(
+            """
+            CREATE TABLE sources (
+              slug TEXT PRIMARY KEY,
+              name TEXT NOT NULL,
+              url TEXT NOT NULL,
+              category TEXT NOT NULL,
+              kind TEXT NOT NULL
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE articles (
+              id BIGSERIAL PRIMARY KEY,
+              url TEXT NOT NULL UNIQUE,
+              canonical_url TEXT NOT NULL,
+              title TEXT NOT NULL,
+              source_slug TEXT NOT NULL REFERENCES sources(slug),
+              source_name TEXT NOT NULL,
+              category TEXT NOT NULL,
+              kind TEXT NOT NULL,
+              discovered_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+              status TEXT NOT NULL DEFAULT 'new'
+            )
+            """
+        )
+        conn.execute(
+            "INSERT INTO sources(slug, name, url, category, kind) VALUES"
+            " ('bad-src', 'Bad', 'https://example.com/feed', 'tech', 'rss_feed')"
+        )
+        conn.execute(
+            """
+            INSERT INTO articles(
+              url, canonical_url, title, source_slug, source_name, category, kind, discovered_at
+            )
+            VALUES (
+              'https://example.com/bad',
+              'https://example.com/bad',
+              'Bad',
+              'bad-src',
+              'Bad',
+              'tech',
+              'rss_feed',
+              'not-a-timestamp'
+            )
+            """
+        )
+        conn.commit()
+
+    with pytest.raises(SchemaInitializationError) as exc_info:
+        init_db(db_path, database_url=pg_url)
+
+    cause = exc_info.value.__cause__
+    assert cause is not None
+    assert "Cannot migrate articles.discovered_at to TIMESTAMPTZ" in str(cause)
+    assert "https://example.com/bad" in str(cause)
 
 
 def test_pg_init_db_converts_legacy_integer_booleans(pg_url: str, tmp_path: Any) -> None:

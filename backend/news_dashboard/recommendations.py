@@ -679,7 +679,7 @@ def _load_candidates(conn: Any, user_id: int, limit: int) -> list[dict[str, Any]
         f"""
         SELECT a.id, a.title, a.source_slug, a.category, a.tags, a.embedding_vec,
           a.importance_score,
-          EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - a.discovered_at::timestamptz))
+          EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - a.discovered_at))
             / 3600.0 AS age_hours,
           {_COLD_START_RECOMMENDATION_SCORE_SQL} AS base_score
         FROM articles a

@@ -394,7 +394,7 @@ def load_recent_embedded_articles(
                 """
                 SELECT id, title, url, summary, category, embedding_vec
                 FROM articles
-                WHERE discovered_at::timestamptz >= NOW() - INTERVAL '1 day' * %s
+                WHERE discovered_at >= NOW() - INTERVAL '1 day' * %s
                   AND embedding_vec IS NOT NULL
                 ORDER BY discovered_at DESC
                 LIMIT %s
@@ -411,7 +411,7 @@ def load_recent_embedded_articles(
                   ON us.source_slug = src.slug AND us.user_id = %s
                 LEFT JOIN user_article_state uas
                   ON uas.article_id = a.id AND uas.user_id = %s
-                WHERE a.discovered_at::timestamptz >= NOW() - INTERVAL '1 day' * %s
+                WHERE a.discovered_at >= NOW() - INTERVAL '1 day' * %s
                   AND a.embedding_vec IS NOT NULL
                   AND COALESCE(uas.state, 'today') != 'archived'
                   AND (

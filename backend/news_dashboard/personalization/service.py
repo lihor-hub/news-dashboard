@@ -65,10 +65,10 @@ def generate_nudges(
                 uvs.slug,
                 uvs.name,
                 COUNT(a.id) FILTER (
-                  WHERE a.discovered_at::timestamptz >= NOW() - INTERVAL '30 days'
+                  WHERE a.discovered_at >= NOW() - INTERVAL '30 days'
                 ) AS articles_last_30_days,
                 COUNT(uas.article_id) FILTER (
-                  WHERE a.discovered_at::timestamptz >= NOW() - INTERVAL '30 days'
+                  WHERE a.discovered_at >= NOW() - INTERVAL '30 days'
                     AND uas.state = 'skipped'
                 ) AS skipped_count
               FROM user_visible_sources uvs
@@ -97,10 +97,10 @@ def generate_nudges(
               SELECT
                 a.category,
                 COUNT(a.id) FILTER (
-                  WHERE a.discovered_at::timestamptz >= NOW() - INTERVAL '30 days'
+                  WHERE a.discovered_at >= NOW() - INTERVAL '30 days'
                 ) AS articles_last_30_days,
                 COUNT(uas.article_id) FILTER (
-                  WHERE a.discovered_at::timestamptz >= NOW() - INTERVAL '30 days'
+                  WHERE a.discovered_at >= NOW() - INTERVAL '30 days'
                     AND uas.state = 'skipped'
                 ) AS skipped_count
               FROM articles a

@@ -190,22 +190,22 @@ def generate_subscription_cleanup_suggestions(
                 uvs.slug,
                 uvs.name,
                 COUNT(a.id) FILTER (
-                  WHERE a.discovered_at::timestamptz >= NOW() - INTERVAL '30 days'
+                  WHERE a.discovered_at >= NOW() - INTERVAL '30 days'
                 ) AS articles_last_30_days,
                 COUNT(uas.article_id) FILTER (
-                  WHERE a.discovered_at::timestamptz >= NOW() - INTERVAL '30 days'
+                  WHERE a.discovered_at >= NOW() - INTERVAL '30 days'
                     AND uas.state = 'skipped'
                 ) AS skipped_count,
                 COUNT(uas.article_id) FILTER (
-                  WHERE a.discovered_at::timestamptz >= NOW() - INTERVAL '30 days'
+                  WHERE a.discovered_at >= NOW() - INTERVAL '30 days'
                     AND uas.state = 'done'
                 ) AS done_count,
                 COUNT(uas.article_id) FILTER (
-                  WHERE a.discovered_at::timestamptz >= NOW() - INTERVAL '30 days'
+                  WHERE a.discovered_at >= NOW() - INTERVAL '30 days'
                     AND uas.starred IS TRUE
                 ) AS starred_count,
                 COUNT(uas.article_id) FILTER (
-                  WHERE a.discovered_at::timestamptz >= NOW() - INTERVAL '30 days'
+                  WHERE a.discovered_at >= NOW() - INTERVAL '30 days'
                     AND uas.state = 'archived'
                 ) AS archived_count,
                 COUNT(a.id) AS lifetime_articles

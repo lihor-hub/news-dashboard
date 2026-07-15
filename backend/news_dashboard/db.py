@@ -78,7 +78,7 @@ POSTGRES_SCHEMA = [
       category TEXT NOT NULL,
       kind TEXT NOT NULL,
       published_at TEXT,
-      discovered_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      discovered_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
       status TEXT NOT NULL DEFAULT 'new'
         CHECK(status IN ('new','read','saved','skipped','archived')),
       importance_score INTEGER NOT NULL DEFAULT 50,
@@ -92,6 +92,46 @@ POSTGRES_SCHEMA = [
       embedding BYTEA,
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     )
+    """,
+    """
+    DO $$
+    DECLARE
+      legacy_article RECORD;
+      parsed_discovered_at TIMESTAMPTZ;
+    BEGIN
+      IF EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = current_schema()
+          AND table_name = 'articles'
+          AND column_name = 'discovered_at'
+          AND data_type = 'text'
+      ) THEN
+        FOR legacy_article IN
+          SELECT id, url, discovered_at
+          FROM articles
+          ORDER BY id
+        LOOP
+          BEGIN
+            parsed_discovered_at := CAST(legacy_article.discovered_at AS TIMESTAMPTZ);
+          EXCEPTION
+            WHEN invalid_datetime_format OR datetime_field_overflow THEN
+              RAISE EXCEPTION
+                'Cannot migrate articles.discovered_at to TIMESTAMPTZ: '
+                'article id %, url %, value % is not a valid timestamp',
+                legacy_article.id,
+                legacy_article.url,
+                legacy_article.discovered_at
+                USING ERRCODE = '22007';
+          END;
+        END LOOP;
+
+        ALTER TABLE articles
+          ALTER COLUMN discovered_at DROP DEFAULT,
+          ALTER COLUMN discovered_at TYPE TIMESTAMPTZ
+            USING CAST(discovered_at AS TIMESTAMPTZ),
+          ALTER COLUMN discovered_at SET DEFAULT CURRENT_TIMESTAMP;
+      END IF;
+    END $$;
     """,
     "CREATE INDEX IF NOT EXISTS idx_articles_status ON articles(status)",
     "CREATE INDEX IF NOT EXISTS idx_articles_category ON articles(category)",

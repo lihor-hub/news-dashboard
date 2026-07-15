@@ -142,8 +142,8 @@ _CITED_ARTICLES_SQL = """
 _CANDIDATES_SQL = """
     SELECT id, title, url, source_name, category, summary, importance_score, discovered_at
     FROM articles
-    WHERE discovered_at::timestamptz >= %s
-      AND discovered_at::timestamptz < %s
+    WHERE discovered_at >= %s
+      AND discovered_at < %s
       AND (canonical_id IS NULL OR state != 'archived')
     ORDER BY importance_score DESC NULLS LAST, discovered_at DESC
     LIMIT %s
@@ -156,8 +156,8 @@ _CANDIDATES_SQL_USER = """
     LEFT JOIN user_article_state uas ON uas.article_id = a.id AND uas.user_id = %s
     LEFT JOIN sources src ON src.slug = a.source_slug
     LEFT JOIN user_sources us_src ON us_src.user_id = %s AND us_src.source_slug = a.source_slug
-    WHERE a.discovered_at::timestamptz >= %s
-      AND a.discovered_at::timestamptz < %s
+    WHERE a.discovered_at >= %s
+      AND a.discovered_at < %s
       AND (a.canonical_id IS NULL OR a.state != 'archived')
       AND (
         (src.owner_user_id IS NULL AND COALESCE(us_src.enabled, TRUE) IS TRUE)

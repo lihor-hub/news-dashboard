@@ -1300,9 +1300,9 @@ _COLD_START_RECOMMENDATION_SCORE_SQL = """
           ELSE 0.0
         END
       + CASE
-          WHEN a.discovered_at::timestamptz >= CURRENT_TIMESTAMP - INTERVAL '36 hours' THEN 12.0
-          WHEN a.discovered_at::timestamptz >= CURRENT_TIMESTAMP - INTERVAL '7 days' THEN 7.0
-          WHEN a.discovered_at::timestamptz >= CURRENT_TIMESTAMP - INTERVAL '30 days' THEN 3.0
+          WHEN a.discovered_at >= CURRENT_TIMESTAMP - INTERVAL '36 hours' THEN 12.0
+          WHEN a.discovered_at >= CURRENT_TIMESTAMP - INTERVAL '7 days' THEN 7.0
+          WHEN a.discovered_at >= CURRENT_TIMESTAMP - INTERVAL '30 days' THEN 3.0
           ELSE 0.0
         END
     )
@@ -1876,13 +1876,13 @@ def _build_user_search_query(  # noqa: PLR0912, PLR0913
         clauses.append("COALESCE(uas.starred, false) = true")
 
     if date_range == "today":
-        clauses.append("a.discovered_at::timestamptz >= %s::timestamptz - interval '1 day'")
+        clauses.append("a.discovered_at >= %s::timestamptz - interval '1 day'")
         where_params.append(now_ts)
     elif date_range == "week":
-        clauses.append("a.discovered_at::timestamptz >= %s::timestamptz - interval '7 days'")
+        clauses.append("a.discovered_at >= %s::timestamptz - interval '7 days'")
         where_params.append(now_ts)
     elif date_range == "month":
-        clauses.append("a.discovered_at::timestamptz >= %s::timestamptz - interval '30 days'")
+        clauses.append("a.discovered_at >= %s::timestamptz - interval '30 days'")
         where_params.append(now_ts)
 
     if tag_id is not None:
@@ -2003,13 +2003,13 @@ def search_articles(  # noqa: PLR0912, PLR0913
 
     # Date range filter
     if date_range == "today":
-        clauses.append("discovered_at::timestamptz >= %s::timestamptz - interval '1 day'")
+        clauses.append("discovered_at >= %s::timestamptz - interval '1 day'")
         params.append(now_ts)
     elif date_range == "week":
-        clauses.append("discovered_at::timestamptz >= %s::timestamptz - interval '7 days'")
+        clauses.append("discovered_at >= %s::timestamptz - interval '7 days'")
         params.append(now_ts)
     elif date_range == "month":
-        clauses.append("discovered_at::timestamptz >= %s::timestamptz - interval '30 days'")
+        clauses.append("discovered_at >= %s::timestamptz - interval '30 days'")
         params.append(now_ts)
 
     where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
@@ -2269,13 +2269,13 @@ def count_search_articles(  # noqa: PLR0913
         clauses.append("starred IS TRUE")
 
     if date_range == "today":
-        clauses.append("discovered_at::timestamptz >= %s::timestamptz - interval '1 day'")
+        clauses.append("discovered_at >= %s::timestamptz - interval '1 day'")
         params.append(now_ts)
     elif date_range == "week":
-        clauses.append("discovered_at::timestamptz >= %s::timestamptz - interval '7 days'")
+        clauses.append("discovered_at >= %s::timestamptz - interval '7 days'")
         params.append(now_ts)
     elif date_range == "month":
-        clauses.append("discovered_at::timestamptz >= %s::timestamptz - interval '30 days'")
+        clauses.append("discovered_at >= %s::timestamptz - interval '30 days'")
         params.append(now_ts)
 
     where = f"WHERE {' AND '.join(clauses)}" if clauses else ""

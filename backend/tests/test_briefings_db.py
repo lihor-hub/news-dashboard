@@ -491,8 +491,8 @@ def test_select_candidates_sql_ignores_global_workflow_state(monkeypatch: Any) -
 
     query, params = fake_conn.calls[0]
     assert "state = 'today'" not in query
-    assert "discovered_at::timestamptz >= %s" in query
-    assert "discovered_at::timestamptz < %s" in query
+    assert "discovered_at >= %s" in query
+    assert "discovered_at < %s" in query
     assert params == (since_at, until_at, CANDIDATE_LIMIT)
     assert candidates[0]["title"] == "Done article"
 
