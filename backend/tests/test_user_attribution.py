@@ -180,7 +180,7 @@ def test_embed_falls_back_to_openai_when_no_gateway_configured() -> None:
 # ── embeddings: ask-ai answer threads real user_id ────────────────────────────
 
 
-def test_answer_builds_langchain_prompt_and_returns_text() -> None:
+def test_answer_treats_managed_system_prompt_braces_as_literal_text() -> None:
     from langchain_core.messages import AIMessage
     from langchain_core.runnables import RunnableLambda
 
@@ -197,10 +197,13 @@ def test_answer_builds_langchain_prompt_and_returns_text() -> None:
         patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}),
         patch("news_dashboard.ai_client.get_chat_model", return_value=model) as factory,
     ):
-        result = _answer("system prompt", "user prompt")
+        result = _answer('system prompt with JSON {"answer": true}', "user prompt")
 
     assert result == "The answer."
-    assert [message.content for message in captured] == ["system prompt", "user prompt"]
+    assert [message.content for message in captured] == [
+        'system prompt with JSON {"answer": true}',
+        "user prompt",
+    ]
     factory.assert_called_once_with(api_key="sk-test", base_url=None, model="gpt-4o-mini")
 
 

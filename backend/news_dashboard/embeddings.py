@@ -158,6 +158,7 @@ def _answer(
     user_prompt: str,
 ) -> str:
     """Generate an answer with a vanilla LangChain prompt/model/parser pipeline."""
+    from langchain_core.messages import SystemMessage
     from langchain_core.output_parsers import StrOutputParser
     from langchain_core.prompts import ChatPromptTemplate
 
@@ -172,7 +173,9 @@ def _answer(
         model=os.getenv("OPENAI_ANSWER_MODEL", DEFAULT_ANSWER_MODEL),
     )
     chain = (
-        ChatPromptTemplate.from_messages([("system", system_prompt), ("human", "{user_prompt}")])
+        ChatPromptTemplate.from_messages(
+            [SystemMessage(content=system_prompt), ("human", "{user_prompt}")]
+        )
         | model
         | StrOutputParser()
     )

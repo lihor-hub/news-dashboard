@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from typing import Any
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -32,43 +32,16 @@ def test_require_env_raises_clear_error_when_missing(
 def test_answer_uses_openai_api_key_and_default_model(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    calls: list[dict[str, object]] = []
-
-    class FakeMessage:
-        content = "answer text"
-
-    class FakeChoice:
-        message = FakeMessage()
-
-    class FakeResponse:
-        choices = (FakeChoice(),)
-
-    class FakeCompletions:
-        def create(self, **kwargs: object) -> FakeResponse:
-            calls.append(kwargs)
-            return FakeResponse()
-
-    class FakeChat:
-        completions = FakeCompletions()
-
-    class FakeOpenAI:
-        def __init__(self, api_key: str, **kwargs: Any) -> None:
-            calls.append({"api_key": api_key, **kwargs})
-            self.chat = FakeChat()
-
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")
     monkeypatch.delenv("FREE_LLM_API_KEY", raising=False)
     monkeypatch.delenv("FREE_LLM_BASE_URL", raising=False)
     monkeypatch.delenv("OPENAI_ANSWER_MODEL", raising=False)
     monkeypatch.delenv("OPENAI_BASE_URL", raising=False)
-    import sys
-    from types import SimpleNamespace
-
-    monkeypatch.setitem(sys.modules, "openai", SimpleNamespace(OpenAI=FakeOpenAI))
-
-    assert _answer("system", "user") == "answer text"
-    assert calls[0] == {"api_key": "test-key", "timeout": 30.0}
-    assert calls[1]["model"] == DEFAULT_ANSWER_MODEL
+    with patch(
+        "news_dashboard.ai_client.get_chat_model", return_value=_make_fake_model("answer text")
+    ) as factory:
+        assert _answer("system", "user") == "answer text"
+    factory.assert_called_once_with(api_key="test-key", base_url=None, model=DEFAULT_ANSWER_MODEL)
 
 
 # ── _embeddings_ai_config tests ───────────────────────────────────────────────
@@ -162,12 +135,11 @@ def test_embeddings_ai_config_uses_model_override(
 # ── _answer gateway tests ─────────────────────────────────────────────────────
 
 
-def _make_fake_client() -> MagicMock:
-    fake_response = MagicMock()
-    fake_response.choices[0].message.content = "answer"
-    fake_client = MagicMock()
-    fake_client.chat.completions.create.return_value = fake_response
-    return fake_client
+def _make_fake_model(answer: str = "answer") -> Any:
+    from langchain_core.messages import AIMessage
+    from langchain_core.runnables import RunnableLambda
+
+    return RunnableLambda(lambda _messages: AIMessage(content=answer))
 
 
 def test_answer_uses_no_base_url_when_gateway_not_configured(
@@ -178,10 +150,12 @@ def test_answer_uses_no_base_url_when_gateway_not_configured(
     monkeypatch.delenv("FREE_LLM_BASE_URL", raising=False)
     monkeypatch.delenv("OPENAI_BASE_URL", raising=False)
 
-    patch_target = "news_dashboard.ai_client.get_openai_client"
-    with patch(patch_target, return_value=_make_fake_client()) as mock_factory:
+    patch_target = "news_dashboard.ai_client.get_chat_model"
+    with patch(patch_target, return_value=_make_fake_model()) as mock_factory:
         _answer("sys", "usr")
-    mock_factory.assert_called_once_with(api_key="sk-default", base_url=None)
+    mock_factory.assert_called_once_with(
+        api_key="sk-default", base_url=None, model=DEFAULT_ANSWER_MODEL
+    )
 
 
 def test_answer_uses_shared_base_url_when_set(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -190,10 +164,14 @@ def test_answer_uses_shared_base_url_when_set(monkeypatch: pytest.MonkeyPatch) -
     monkeypatch.delenv("FREE_LLM_BASE_URL", raising=False)
     monkeypatch.setenv("OPENAI_BASE_URL", "http://gateway:9130/v1")
 
-    patch_target = "news_dashboard.ai_client.get_openai_client"
-    with patch(patch_target, return_value=_make_fake_client()) as mock_factory:
+    patch_target = "news_dashboard.ai_client.get_chat_model"
+    with patch(patch_target, return_value=_make_fake_model()) as mock_factory:
         _answer("sys", "usr")
-    mock_factory.assert_called_once_with(api_key="sk-default", base_url="http://gateway:9130/v1")
+    mock_factory.assert_called_once_with(
+        api_key="sk-default",
+        base_url="http://gateway:9130/v1",
+        model=DEFAULT_ANSWER_MODEL,
+    )
 
 
 def test_answer_uses_free_llm_key_and_base_url(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -202,10 +180,14 @@ def test_answer_uses_free_llm_key_and_base_url(monkeypatch: pytest.MonkeyPatch) 
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     monkeypatch.delenv("OPENAI_BASE_URL", raising=False)
 
-    patch_target = "news_dashboard.ai_client.get_openai_client"
-    with patch(patch_target, return_value=_make_fake_client()) as mock_factory:
+    patch_target = "news_dashboard.ai_client.get_chat_model"
+    with patch(patch_target, return_value=_make_fake_model()) as mock_factory:
         _answer("sys", "usr")
-    mock_factory.assert_called_once_with(api_key="sk-free-llm", base_url="http://free-gw:9130/v1")
+    mock_factory.assert_called_once_with(
+        api_key="sk-free-llm",
+        base_url="http://free-gw:9130/v1",
+        model=DEFAULT_ANSWER_MODEL,
+    )
 
 
 def test_answer_free_llm_key_takes_precedence_over_openai_key(
@@ -216,7 +198,9 @@ def test_answer_free_llm_key_takes_precedence_over_openai_key(
     monkeypatch.delenv("FREE_LLM_BASE_URL", raising=False)
     monkeypatch.delenv("OPENAI_BASE_URL", raising=False)
 
-    patch_target = "news_dashboard.ai_client.get_openai_client"
-    with patch(patch_target, return_value=_make_fake_client()) as mock_factory:
+    patch_target = "news_dashboard.ai_client.get_chat_model"
+    with patch(patch_target, return_value=_make_fake_model()) as mock_factory:
         _answer("sys", "usr")
-    mock_factory.assert_called_once_with(api_key="sk-free-llm", base_url=None)
+    mock_factory.assert_called_once_with(
+        api_key="sk-free-llm", base_url=None, model=DEFAULT_ANSWER_MODEL
+    )
