@@ -119,7 +119,7 @@ def test_youtube_channel_ingests_caption_summary(pg_clean: str) -> None:
 
 
 def test_media_summary_uses_managed_chat_prompt() -> None:
-    from news_dashboard.ingest.service import _media_summary
+    from news_dashboard.ingest.service import _MEDIA_SUMMARY_PROMPT, _media_summary
 
     managed = ManagedPrompt(
         text=None,
@@ -140,14 +140,17 @@ def test_media_summary_uses_managed_chat_prompt() -> None:
         summary = _media_summary("Title", "Description", entry)
 
     assert summary == "Managed summary\n\nSource media: https://example.com/media"
-    get_prompt.assert_called_once()
-    assert get_prompt.call_args.args == ("summarize-media-article",)
-    assert get_prompt.call_args.kwargs["prompt_type"] == "chat"
-    assert get_prompt.call_args.kwargs["variables"] == {
-        "title": "Title",
-        "description": "Description",
-        "transcript": "Transcript",
-    }
+    get_prompt.assert_called_once_with(
+        "summarize-media-article",
+        fallback=_MEDIA_SUMMARY_PROMPT,
+        prompt_type="chat",
+        label="production",
+        variables={
+            "title": "Title",
+            "description": "Description",
+            "transcript": "Transcript",
+        },
+    )
     assert chat_create.call_args.kwargs["prompt"] is managed
     assert chat_create.call_args.kwargs["messages"] == managed.messages
 

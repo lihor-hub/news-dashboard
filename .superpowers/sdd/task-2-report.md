@@ -32,3 +32,15 @@ Implemented and committed-ready.
 
 - `.env` cannot safely be sourced as shell because an existing value is interpreted as a command; verification used the repository-supported `dotenv run --` loader without exposing or changing credentials.
 - Full-suite failures are not caused by Task 2; the focused Task 2 suite is green after the full-suite attempt.
+
+## Review fix verification
+
+- Added an explicit `label="production"` to all five Task 2 `get_prompt()` calls.
+- Added an explicit `prompt_type="text"` to `ai-body-fetch` and `topic-cluster-label`; the three chat prompts retain explicit `prompt_type="chat"`.
+- Strengthened all five regression tests to assert the exact prompt name, fallback, type, label, and variables.
+- Red: the five exact-call tests failed because the new explicit arguments were absent.
+- Green: the five exact-call tests passed.
+- Focused Task 2 pytest: 104 passed, 1 pre-existing Starlette deprecation warning.
+- Owned-file Ruff check: pass.
+- Owned-file Ruff format check: pass (7 files already formatted).
+- Owned-source strict mypy: pass (3 source files).

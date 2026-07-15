@@ -585,7 +585,11 @@ def test_ai_extract_body_uses_managed_prompt() -> None:
 
     assert (body, status) == ("Managed body", "ok")
     get_prompt.assert_called_once_with(
-        "ai-body-fetch", fallback=_AI_PROMPT, variables={"html": html}
+        "ai-body-fetch",
+        fallback=_AI_PROMPT,
+        prompt_type="text",
+        label="production",
+        variables={"html": html},
     )
     assert chat_create.call_args.kwargs["prompt"] is managed
     assert chat_create.call_args.kwargs["messages"] == [

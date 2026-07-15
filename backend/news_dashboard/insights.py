@@ -331,6 +331,8 @@ def _generate_cluster_label(
     prompt = get_prompt(
         "topic-cluster-label",
         fallback=_CLUSTER_LABEL_PROMPT,
+        prompt_type="text",
+        label="production",
         variables={"articles_text": articles_text},
     )
     result = chat_create(

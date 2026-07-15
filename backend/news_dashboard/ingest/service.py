@@ -734,6 +734,7 @@ def _media_summary(title: str, description: str, entry: dict[str, Any]) -> str:
                 "summarize-media-article",
                 fallback=_MEDIA_SUMMARY_PROMPT,
                 prompt_type="chat",
+                label="production",
                 variables={
                     "title": title,
                     "description": description,
@@ -801,6 +802,7 @@ def detect_and_translate_article(
             "translate-article",
             fallback=_TRANSLATE_ARTICLE_PROMPT,
             prompt_type="chat",
+            label="production",
             variables={"title": title, "summary": summary},
         )
 

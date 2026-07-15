@@ -314,6 +314,8 @@ def test_generate_cluster_label_uses_managed_prompt() -> None:
     get_prompt.assert_called_once_with(
         "topic-cluster-label",
         fallback=_CLUSTER_LABEL_PROMPT,
+        prompt_type="text",
+        label="production",
         variables={"articles_text": articles_text},
     )
     assert chat_create.call_args.kwargs["prompt"] is managed

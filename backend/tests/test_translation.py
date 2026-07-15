@@ -63,6 +63,8 @@ def test_translate_body_japanese() -> None:
 
 
 def test_translate_body_uses_managed_chat_prompt() -> None:
+    from news_dashboard.body_fetch import _TRANSLATE_BODY_PROMPT
+
     managed = ManagedPrompt(
         text=None,
         messages=[{"role": "system", "content": "compiled"}, {"role": "user", "content": "本文"}],
@@ -79,15 +81,20 @@ def test_translate_body_uses_managed_chat_prompt() -> None:
     ):
         assert translate_body("本文", "ja") == "Translated"
 
-    get_prompt.assert_called_once()
-    assert get_prompt.call_args.args == ("translate-body",)
-    assert get_prompt.call_args.kwargs["prompt_type"] == "chat"
-    assert get_prompt.call_args.kwargs["variables"] == {"from_lang": "ja", "body": "本文"}
+    get_prompt.assert_called_once_with(
+        "translate-body",
+        fallback=_TRANSLATE_BODY_PROMPT,
+        prompt_type="chat",
+        label="production",
+        variables={"from_lang": "ja", "body": "本文"},
+    )
     assert chat_create.call_args.kwargs["prompt"] is managed
     assert chat_create.call_args.kwargs["messages"] == managed.messages
 
 
 def test_detect_and_translate_article_uses_managed_chat_prompt() -> None:
+    from news_dashboard.ingest.service import _TRANSLATE_ARTICLE_PROMPT
+
     managed = ManagedPrompt(
         text=None,
         messages=[{"role": "system", "content": "compiled translation"}],
@@ -108,13 +115,13 @@ def test_detect_and_translate_article_uses_managed_chat_prompt() -> None:
         result = detect_and_translate_article("日本語タイトル", "日本語要約", "ja")
 
     assert result == ("English title", "English summary", "ja", "日本語タイトル")
-    get_prompt.assert_called_once()
-    assert get_prompt.call_args.args == ("translate-article",)
-    assert get_prompt.call_args.kwargs["prompt_type"] == "chat"
-    assert get_prompt.call_args.kwargs["variables"] == {
-        "title": "日本語タイトル",
-        "summary": "日本語要約",
-    }
+    get_prompt.assert_called_once_with(
+        "translate-article",
+        fallback=_TRANSLATE_ARTICLE_PROMPT,
+        prompt_type="chat",
+        label="production",
+        variables={"title": "日本語タイトル", "summary": "日本語要約"},
+    )
     assert chat_create.call_args.kwargs["prompt"] is managed
     assert chat_create.call_args.kwargs["messages"] == managed.messages
 

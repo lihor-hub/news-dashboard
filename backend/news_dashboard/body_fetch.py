@@ -105,7 +105,13 @@ def _ai_extract_body(url: str, *, user_id: int | None = None) -> tuple[str, str]
         from news_dashboard.ai_client import chat_create, get_chat_client, get_prompt
 
         client = get_chat_client(api_key=api_key, base_url=base_url)
-        prompt = get_prompt("ai-body-fetch", fallback=_AI_PROMPT, variables={"html": html})
+        prompt = get_prompt(
+            "ai-body-fetch",
+            fallback=_AI_PROMPT,
+            prompt_type="text",
+            label="production",
+            variables={"html": html},
+        )
         result = chat_create(
             client,
             name="ai-body-fetch",
@@ -481,6 +487,7 @@ def translate_body(body: str, from_lang: str) -> str:
             "translate-body",
             fallback=_TRANSLATE_BODY_PROMPT,
             prompt_type="chat",
+            label="production",
             variables={"from_lang": from_lang, "body": body},
         )
 
