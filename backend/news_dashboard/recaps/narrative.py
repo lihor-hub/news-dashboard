@@ -38,7 +38,12 @@ def generate_recap_narrative(recap: dict[str, Any]) -> str:
     fallback = _fallback_narrative(recap)
 
     try:
-        from news_dashboard.ai_client import free_llm_config, get_chat_client
+        from news_dashboard.ai_client import (
+            chat_create,
+            free_llm_config,
+            get_chat_client,
+            get_prompt,
+        )
 
         api_key, base_url = free_llm_config()
         if not api_key:
@@ -49,22 +54,31 @@ def generate_recap_narrative(recap: dict[str, Any]) -> str:
 
         metrics = {k: v for k, v in recap.items() if k != "generated_at"}
 
-        prompt = (
-            "Write a weekly reading review in the voice of 'here's your week in "
-            "reading', addressed directly to the reader (second person). "
-            "Write exactly 2 short paragraphs, roughly 60-120 words total. "
-            "Ground everything strictly in the metrics below — do not invent "
-            "facts, activity, or numbers that are not present in the data. "
-            "If 'saved' or 'dwell' data is present, mention their reading "
-            "backlog and skim-vs-read balance.\n\n"
-            f"Recap metrics (JSON):\n{json.dumps(metrics, default=str)}\n\n"
-            "Reply with only the narrative text, as plain paragraphs separated "
-            "by a blank line."
+        recap_json = json.dumps(metrics, default=str)
+        prompt = get_prompt(
+            "weekly-recap-narrative",
+            fallback=(
+                "Write a weekly reading review in the voice of 'here's your week in "
+                "reading', addressed directly to the reader (second person). "
+                "Write exactly 2 short paragraphs, roughly 60-120 words total. "
+                "Ground everything strictly in the metrics below — do not invent "
+                "facts, activity, or numbers that are not present in the data. "
+                "If 'saved' or 'dwell' data is present, mention their reading "
+                "backlog and skim-vs-read balance.\n\n"
+                "Recap metrics (JSON):\n{{recap_json}}\n\n"
+                "Reply with only the narrative text, as plain paragraphs separated "
+                "by a blank line."
+            ),
+            variables={"recap_json": recap_json},
         )
 
-        response = client.chat.completions.create(
+        response = chat_create(
+            client,
+            name="weekly-recap-narrative",
+            tags=["recap"],
+            prompt=prompt,
             model=model,
-            messages=[{"role": "user", "content": prompt}],
+            messages=[{"role": "user", "content": prompt.text}],
             max_tokens=300,
             temperature=0.7,
         )

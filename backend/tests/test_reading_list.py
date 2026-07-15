@@ -447,6 +447,10 @@ def test_generate_summary_for_item_success(monkeypatch: pytest.MonkeyPatch, pg_c
     with (
         patch.dict("os.environ", {"FREE_LLM_API_KEY": "test-key"}),
         patch("openai.OpenAI", return_value=mock_client),
+        patch(
+            "news_dashboard.ai_client.get_prompt",
+            wraps=__import__("news_dashboard.ai_client", fromlist=["get_prompt"]).get_prompt,
+        ) as get_prompt,
     ):
         service.generate_summary_for_item(item["id"], database_url=database_url)
 
@@ -455,6 +459,10 @@ def test_generate_summary_for_item_success(monkeypatch: pytest.MonkeyPatch, pg_c
     assert items[0]["summary"] == "A concise take on why this post matters."
     call_kwargs = mock_client.chat.completions.create.call_args.kwargs
     assert "A great post" in call_kwargs["messages"][0]["content"]
+    assert get_prompt.call_args.args == ("reading-list-summary",)
+    assert get_prompt.call_args.kwargs["variables"] == {
+        "reading_list_text": "Title: A great post\nDescription: It explains things"
+    }
 
 
 def test_generate_summary_for_item_records_error_on_ai_failure(

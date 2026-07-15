@@ -14,6 +14,7 @@ from news_dashboard.main import app
 from news_dashboard.push import (
     delete_push_subscriptions,
     generate_push_hook,
+    generate_recap_push_hook,
     get_user_push_subscriptions,
     save_push_subscription,
     send_push_for_user,
@@ -701,6 +702,32 @@ def test_generate_push_hook_returns_llm_hook(monkeypatch: pytest.MonkeyPatch) ->
     assert "Claude 4 released" in call_kwargs["messages"][0]["content"]
 
 
+def test_generate_recap_push_hook_resolves_bounded_prompt_variables(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("FREE_LLM_API_KEY", "fake-key")
+    completion = MagicMock(choices=[MagicMock(message=MagicMock(content="Keep reading"))])
+    with (
+        patch("news_dashboard.ai_client.get_chat_client", return_value=MagicMock()),
+        patch("news_dashboard.ai_client.chat_create", return_value=completion),
+        patch("news_dashboard.ai_client.free_llm_config", return_value=("fake-key", None)),
+        patch(
+            "news_dashboard.ai_client.get_prompt",
+            wraps=__import__("news_dashboard.ai_client", fromlist=["get_prompt"]).get_prompt,
+        ) as get_prompt,
+    ):
+        generate_recap_push_hook(
+            {"articles_read": 7, "categories": [{"category": "science"}], "current_streak_days": 4}
+        )
+
+    assert get_prompt.call_args.args == ("recap-push-hook",)
+    assert get_prompt.call_args.kwargs["variables"] == {
+        "articles_read": 7,
+        "top_category": "science",
+        "current_streak_days": 4,
+    }
+
+
 def test_generate_push_hook_falls_back_on_llm_error(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("FREE_LLM_API_KEY", "fake-key")
 
@@ -757,6 +784,10 @@ def test_generate_push_hook_uses_section_titles_in_prompt(monkeypatch: pytest.Mo
     with (
         patch("news_dashboard.ai_client.get_chat_client", return_value=mock_client),
         patch("news_dashboard.ai_client.free_llm_config", return_value=("fake-key", None)),
+        patch(
+            "news_dashboard.ai_client.get_prompt",
+            wraps=__import__("news_dashboard.ai_client", fromlist=["get_prompt"]).get_prompt,
+        ) as get_prompt,
     ):
         generate_push_hook(_make_briefing(sections=sections))
 
@@ -765,3 +796,7 @@ def test_generate_push_hook_uses_section_titles_in_prompt(monkeypatch: pytest.Mo
     assert "Economy grows 3%" in prompt
     assert "Sports finals tonight" in prompt
     assert "This one should be excluded" not in prompt
+    assert get_prompt.call_args.args == ("briefing-push-hook",)
+    assert get_prompt.call_args.kwargs["variables"] == {
+        "headline_block": "- AI milestone achieved\n- Economy grows 3%\n- Sports finals tonight"
+    }

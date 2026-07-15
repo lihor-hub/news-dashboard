@@ -265,15 +265,21 @@ def _summary_ai_config() -> tuple[str, str | None, str]:
 
 
 def _call_summary_model(api_key: str, base_url: str | None, model: str, text: str) -> str:
-    from news_dashboard.ai_client import chat_create, get_chat_client
+    from news_dashboard.ai_client import chat_create, get_chat_client, get_prompt
 
     client = get_chat_client(api_key=api_key, base_url=base_url)
+    prompt = get_prompt(
+        "reading-list-summary",
+        fallback=f"{_SUMMARY_PROMPT}\n\n{{{{reading_list_text}}}}",
+        variables={"reading_list_text": text},
+    )
     result = chat_create(
         client,
         name="reading-list-summary",
         tags=["reading-list"],
+        prompt=prompt,
         model=model,
-        messages=[{"role": "user", "content": f"{_SUMMARY_PROMPT}\n\n{text}"}],
+        messages=[{"role": "user", "content": prompt.text}],
         max_tokens=120,
     )
     summary = (result.choices[0].message.content or "").strip()

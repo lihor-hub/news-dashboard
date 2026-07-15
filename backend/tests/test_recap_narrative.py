@@ -55,6 +55,10 @@ def test_generate_recap_narrative_returns_llm_text(monkeypatch: pytest.MonkeyPat
     with (
         patch("news_dashboard.ai_client.get_chat_client", return_value=mock_client),
         patch("news_dashboard.ai_client.free_llm_config", return_value=("fake-key", None)),
+        patch(
+            "news_dashboard.ai_client.get_prompt",
+            wraps=__import__("news_dashboard.ai_client", fromlist=["get_prompt"]).get_prompt,
+        ) as get_prompt,
     ):
         result = generate_recap_narrative(_make_recap())
 
@@ -62,6 +66,8 @@ def test_generate_recap_narrative_returns_llm_text(monkeypatch: pytest.MonkeyPat
     mock_client.chat.completions.create.assert_called_once()
     call_kwargs = mock_client.chat.completions.create.call_args.kwargs
     assert "12" in call_kwargs["messages"][0]["content"]
+    assert get_prompt.call_args.args == ("weekly-recap-narrative",)
+    assert set(get_prompt.call_args.kwargs["variables"]) == {"recap_json"}
 
 
 def test_generate_recap_narrative_falls_back_on_llm_error(monkeypatch: pytest.MonkeyPatch) -> None:

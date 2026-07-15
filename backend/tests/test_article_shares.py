@@ -543,6 +543,10 @@ def test_generate_share_context_stores_summary(db: str, monkeypatch: pytest.Monk
     with (
         patch("news_dashboard.ai_client.get_openai_client") as mock_client_factory,
         patch("news_dashboard.ai_client.chat_create", return_value=mock_completion),
+        patch(
+            "news_dashboard.ai_client.get_prompt",
+            wraps=__import__("news_dashboard.ai_client", fromlist=["get_prompt"]).get_prompt,
+        ) as get_prompt,
     ):
         mock_client_factory.return_value = MagicMock()
         result = generate_share_context(share_id)
@@ -552,6 +556,14 @@ def test_generate_share_context_stores_summary(db: str, monkeypatch: pytest.Monk
     detail = get_share(share_id, bob)
     assert detail is not None
     assert detail["context_summary"] == result
+    assert get_prompt.call_args.args == ("share-context",)
+    assert set(get_prompt.call_args.kwargs["variables"]) == {
+        "article_title",
+        "article_summary",
+        "sender_note",
+        "annotation_text",
+        "recipient_interests",
+    }
 
 
 # ── Payload bounds (#602) ─────────────────────────────────────────────────────

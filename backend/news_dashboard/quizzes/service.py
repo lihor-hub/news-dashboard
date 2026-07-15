@@ -292,19 +292,23 @@ def generate_weekly_quiz(
 
     api_key, base_url, model = _quiz_ai_config()
     blurbs = "\n\n---\n\n".join(_build_article_blurb(a) for a in articles)
-    messages = [{"role": "user", "content": f"{_QUIZ_PROMPT}\n\nArticles:\n{blurbs}"}]
-
-    from news_dashboard.ai_client import chat_create, get_chat_client
+    from news_dashboard.ai_client import chat_create, get_chat_client, get_prompt
 
     client = get_chat_client(api_key=api_key, base_url=base_url)
+    prompt = get_prompt(
+        "weekly-quiz",
+        fallback=f"{_QUIZ_PROMPT}\n\nArticles:\n{{{{article_blurbs}}}}",
+        variables={"article_blurbs": blurbs},
+    )
     logger.info("Generating weekly quiz for user %s from %d articles", user_id, len(articles))
     result = chat_create(
         client,
         name="weekly-quiz",
         tags=["quiz"],
         user_id=user_id,
+        prompt=prompt,
         model=model,
-        messages=messages,
+        messages=[{"role": "user", "content": prompt.text}],
         max_tokens=1024,
     )
     response_text = (result.choices[0].message.content or "").strip()

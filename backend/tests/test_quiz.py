@@ -238,6 +238,10 @@ def test_generate_weekly_quiz_with_articles(tmp_path: Path) -> None:
         patch.dict("os.environ", {"OPENAI_API_KEY": "test-key"}),
         patch("news_dashboard.ai_client.get_openai_client") as mock_client_factory,
         patch("news_dashboard.ai_client.chat_create", return_value=mock_response),
+        patch(
+            "news_dashboard.ai_client.get_prompt",
+            wraps=__import__("news_dashboard.ai_client", fromlist=["get_prompt"]).get_prompt,
+        ) as get_prompt,
     ):
         mock_client_factory.return_value = MagicMock()
         quiz = generate_weekly_quiz(user_id, db_path=db_path)
@@ -246,6 +250,11 @@ def test_generate_weekly_quiz_with_articles(tmp_path: Path) -> None:
     assert quiz["user_id"] == user_id
     assert len(quiz["questions"]) == 3
     assert quiz["score"] is None
+    assert get_prompt.call_args.args == ("weekly-quiz",)
+    assert get_prompt.call_args.kwargs["variables"] == {
+        "article_blurbs": get_prompt.call_args.kwargs["variables"]["article_blurbs"]
+    }
+    assert "AI Transformer Deep Dive" in get_prompt.call_args.kwargs["variables"]["article_blurbs"]
 
 
 def test_get_latest_quiz_empty(tmp_path: Path) -> None:
