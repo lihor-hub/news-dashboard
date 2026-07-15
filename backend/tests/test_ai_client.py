@@ -303,6 +303,35 @@ def test_get_chat_prompt_fetches_compiles_and_retains_sdk_prompt(
     assert prompt.langfuse_prompt is sdk_prompt
 
 
+def test_get_prompt_does_not_link_sdk_resolved_fallback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from unittest.mock import patch
+
+    monkeypatch.setenv("LANGFUSE_PUBLIC_KEY", "pk")
+    monkeypatch.setenv("LANGFUSE_SECRET_KEY", "sk")
+    sdk_prompt = MagicMock()
+    sdk_prompt.is_fallback = True
+    sdk_prompt.compile.return_value = "Local Postgres"
+    client = MagicMock()
+    client.get_prompt.return_value = sdk_prompt
+
+    with patch("news_dashboard.ai_client._client", return_value=client):
+        prompt = get_prompt("managed", fallback="Local {{topic}}", variables={"topic": "Postgres"})
+
+    assert prompt.text == "Local Postgres"
+    assert prompt.langfuse_prompt is None
+
+    chat_create(
+        client,
+        name="resolved-fallback",
+        prompt=prompt,
+        model="model",
+        messages=[{"role": "user", "content": prompt.text}],
+    )
+    assert "langfuse_prompt" not in client.chat.completions.create.call_args.kwargs
+
+
 @pytest.mark.parametrize(
     ("prompt_type", "fallback", "expected_text", "expected_messages"),
     [
@@ -371,6 +400,27 @@ def test_get_prompt_warns_and_falls_back_for_invalid_compiled_chat(
     assert "using fallback" in caplog.text
 
 
+def test_get_prompt_warns_and_falls_back_for_invalid_compiled_text(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    from unittest.mock import patch
+
+    monkeypatch.setenv("LANGFUSE_PUBLIC_KEY", "pk")
+    monkeypatch.setenv("LANGFUSE_SECRET_KEY", "sk")
+    sdk_prompt = MagicMock()
+    sdk_prompt.compile.return_value = [{"role": "system", "content": "wrong type"}]
+    client = MagicMock()
+    client.get_prompt.return_value = sdk_prompt
+
+    with patch("news_dashboard.ai_client._client", return_value=client):
+        prompt = get_prompt("managed", fallback="Local {{topic}}", variables={"topic": "copy"})
+
+    assert prompt.text == "Local copy"
+    assert prompt.langfuse_prompt is None
+    assert "using fallback" in caplog.text
+
+
 def test_chat_create_forwards_only_real_langfuse_prompt(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -407,7 +457,14 @@ def test_fetch_metrics_disabled_returns_enabled_false() -> None:
 
 def test_compile_fallback_substitutes_double_brace_vars() -> None:
     assert _compile_fallback("Hi {{name}}, {{name}}!", {"name": "Sam"}) == "Hi Sam, Sam!"
+    assert _compile_fallback("Hi {{ name }}!", {"name": None}) == "Hi !"
     assert _compile_fallback("no vars here", {}) == "no vars here"
+
+
+def test_compile_fallback_does_not_compile_placeholders_inside_values() -> None:
+    variables = {"first": "{{second}}", "second": "unexpected"}
+
+    assert _compile_fallback("{{first}} / {{missing}}", variables) == "{{second}} / {{missing}}"
 
 
 # ── get_chat_client runtime free-LLM→OpenAI fallback ───────────────────────

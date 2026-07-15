@@ -548,10 +548,23 @@ def _managed_chat_prompt(compiled: object, langfuse_prompt: Any | None) -> _Mana
 
 def _compile_fallback(template: str, variables: dict[str, Any]) -> str:
     """Substitute ``{{var}}`` placeholders locally (Langfuse-compatible syntax)."""
-    text = template
-    for key, val in variables.items():
-        text = text.replace("{{" + key + "}}", str(val))
-    return text
+    parts: list[str] = []
+    cursor = 0
+    while (start := template.find("{{", cursor)) != -1:
+        end = template.find("}}", start + 2)
+        if end == -1:
+            break
+        placeholder_end = end + 2
+        name = template[start + 2 : end].strip()
+        parts.append(template[cursor:start])
+        if name in variables:
+            value = variables[name]
+            parts.append("" if value is None else str(value))
+        else:
+            parts.append(template[start:placeholder_end])
+        cursor = placeholder_end
+    parts.append(template[cursor:])
+    return "".join(parts)
 
 
 # ── Metrics ────────────────────────────────────────────────────────────────
