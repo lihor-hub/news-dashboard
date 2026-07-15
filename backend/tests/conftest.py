@@ -23,7 +23,6 @@ from pathlib import Path
 
 import pytest
 
-import news_dashboard.db as db_module
 from news_dashboard.db import init_db
 
 # Load .env from the repo root when running locally (no-op in CI where the
@@ -67,19 +66,6 @@ _TESTCONTAINERS_PG_IMAGE = "pgvector/pgvector:pg16"
 
 _SCHEMA_SWEEP_LOCK_KEY = 727271
 _WORKER_SCHEMA_RE = re.compile(r"^test_[A-Za-z0-9]+_(\d+)$")
-_HASH_SCHEMA_RE = re.compile(r"^test_[0-9a-f]{16}$")
-_SESSION_HASH_SCHEMAS: set[str] = set()
-_ORIGINAL_SCHEMA_NAME = db_module._schema_name
-
-
-def _tracking_schema_name(token: Path) -> str:
-    schema_name = _ORIGINAL_SCHEMA_NAME(token)
-    if _HASH_SCHEMA_RE.match(schema_name):
-        _SESSION_HASH_SCHEMAS.add(schema_name)
-    return schema_name
-
-
-db_module._schema_name = _tracking_schema_name  # ty: ignore[invalid-assignment]
 
 
 def _pid_is_alive(pid: int) -> bool:
@@ -136,24 +122,6 @@ def sweep_stale_test_schemas(dsn: str) -> None:
             conn.execute("SELECT pg_advisory_unlock(%s)", (_SCHEMA_SWEEP_LOCK_KEY,))
 
 
-def drop_session_hash_schemas(dsn: str, schema_names: set[str] | None = None) -> None:
-    """Drop hash-style schemas created from Path-backed tests in this session."""
-    import psycopg
-    from psycopg import sql
-
-    names = sorted(schema_names if schema_names is not None else _SESSION_HASH_SCHEMAS)
-    if not names:
-        return
-
-    with psycopg.connect(dsn, autocommit=True) as conn:
-        for schema_name in names:
-            if not _HASH_SCHEMA_RE.match(schema_name):
-                continue
-            conn.execute(
-                sql.SQL("DROP SCHEMA IF EXISTS {} CASCADE").format(sql.Identifier(schema_name))
-            )
-
-
 def pytest_configure(config: pytest.Config) -> None:
     """Sweep leaked test_% schemas once, before any xdist worker spawns.
 
@@ -165,17 +133,36 @@ def pytest_configure(config: pytest.Config) -> None:
     del config
     if os.environ.get("PYTEST_XDIST_WORKER"):
         return
+    registry_file = Path(".pytest_cache") / f"path-test-schemas-{os.getpid()}.tsv"
+    registry_file.parent.mkdir(exist_ok=True)
+    registry_file.write_text("", encoding="utf-8")
+    os.environ["NEWS_DASHBOARD_PATH_TEST_SCHEMA_REGISTRY"] = str(registry_file)
     service_url = os.environ.get("TEST_DATABASE_URL")
     if service_url:
         sweep_stale_test_schemas(service_url)
 
 
 def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
-    """Drop hash-style schemas created by successful Path-backed test helpers."""
+    """Drop Path-backed hash schemas created by this pytest process."""
     del session, exitstatus
-    service_url = os.environ.get("TEST_DATABASE_URL") or os.environ.get("DATABASE_URL")
-    if service_url:
-        drop_session_hash_schemas(service_url)
+    if os.environ.get("PYTEST_XDIST_WORKER"):
+        return
+    from news_dashboard.db import drop_path_test_schemas, drop_registered_path_test_schemas
+
+    database_url = os.environ.get("DATABASE_URL") or os.environ.get("TEST_DATABASE_URL")
+    if database_url:
+        drop_registered_path_test_schemas(database_url)
+        registry_file = os.environ.get("NEWS_DASHBOARD_PATH_TEST_SCHEMA_REGISTRY")
+        if registry_file:
+            path = Path(registry_file)
+            if path.exists():
+                schemas = {
+                    line.split("\t", 1)[1].strip()
+                    for line in path.read_text(encoding="utf-8").splitlines()
+                    if "\t" in line
+                }
+                drop_path_test_schemas(sorted(schemas), database_url)
+                path.unlink(missing_ok=True)
 
 
 _FAKE_ADMIN = {

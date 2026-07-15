@@ -6,9 +6,26 @@ import os
 import subprocess
 import sys
 import uuid
+from hashlib import sha256
 from pathlib import Path
+from unittest.mock import MagicMock
 
 import pytest
+
+
+def test_path_schema_cleanup_commits_each_drop(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Each schema drop releases PostgreSQL locks before the next drop."""
+    import news_dashboard.db as db_module
+
+    connection = MagicMock()
+    connection_context = MagicMock()
+    connection_context.__enter__.return_value = connection
+    monkeypatch.setattr(db_module, "_open_connection", lambda _dsn: connection_context)
+
+    db_module.drop_path_test_schemas(["test_a", "test_b"], "postgresql://example/test")
+
+    assert connection.execute.call_count == 2
+    assert connection.commit.call_count == 2
 
 
 def test_sweep_stale_test_schemas() -> None:
@@ -174,18 +191,19 @@ def test_sweep_drops_schemas_owned_by_a_dead_process() -> None:
             )
 
 
-def test_session_hash_schema_cleanup_drops_only_registered_schemas() -> None:
-    """Session-end cleanup removes only hash schemas registered by this run."""
+def test_session_cleanup_drops_only_registered_path_schemas() -> None:
+    """Successful sessions drop their own hash schemas without sweeping live workers."""
     import psycopg
-    from conftest import drop_session_hash_schemas
     from psycopg import sql
+
+    from news_dashboard.db import connect, drop_registered_path_test_schemas
 
     service_url = os.environ.get("TEST_DATABASE_URL")
     if not service_url:
         pytest.skip("TEST_DATABASE_URL not set")
 
     base_url, _, _dbname = service_url.rpartition("/")
-    scratch_db = f"schema_cleanup_scratch_{uuid.uuid4().hex[:12]}"
+    scratch_db = f"schema_sweep_scratch_{uuid.uuid4().hex[:12]}"
     scratch_url = f"{base_url}/{scratch_db}"
     admin_url = f"{base_url}/postgres"
 
@@ -195,29 +213,30 @@ def test_session_hash_schema_cleanup_drops_only_registered_schemas() -> None:
         except psycopg.errors.InsufficientPrivilege:
             pytest.skip("connected role lacks CREATEDB; cannot build an isolated scratch database")
     try:
-        registered_schema = f"test_{uuid.uuid4().hex[:16]}"
-        live_other_session_schema = f"test_{uuid.uuid4().hex[:16]}"
-        non_hash_schema = "test_not_a_hash_schema"
+        token = Path("news-dashboard-test-schemas") / uuid.uuid4().hex / "test.db"
+        path_schema = f"test_{sha256(str(token).encode('utf-8')).hexdigest()[:16]}"
+        live_worker_schema = f"test_gw0_{os.getpid()}"
 
         with psycopg.connect(scratch_url, autocommit=True) as conn:
-            for schema_name in (registered_schema, live_other_session_schema, non_hash_schema):
-                conn.execute(sql.SQL("CREATE SCHEMA {}").format(sql.Identifier(schema_name)))
+            conn.execute(sql.SQL("CREATE SCHEMA {}").format(sql.Identifier(live_worker_schema)))
 
-            drop_session_hash_schemas(scratch_url, {registered_schema, non_hash_schema})
+        with connect(token, database_url=scratch_url):
+            pass
 
-            rows = conn.execute(
-                """
-                SELECT schema_name FROM information_schema.schemata
-                WHERE schema_name = ANY(%s)
-                ORDER BY schema_name
-                """,
-                ([registered_schema, live_other_session_schema, non_hash_schema],),
-            ).fetchall()
+        drop_registered_path_test_schemas(scratch_url)
 
-        assert [row[0] for row in rows] == [
-            live_other_session_schema,
-            non_hash_schema,
-        ]
+        with psycopg.connect(scratch_url, autocommit=True) as conn:
+            path_row = conn.execute(
+                "SELECT 1 FROM information_schema.schemata WHERE schema_name = %s",
+                (path_schema,),
+            ).fetchone()
+            live_worker_row = conn.execute(
+                "SELECT 1 FROM information_schema.schemata WHERE schema_name = %s",
+                (live_worker_schema,),
+            ).fetchone()
+
+        assert path_row is None
+        assert live_worker_row is not None
     finally:
         with psycopg.connect(admin_url, autocommit=True) as admin_conn:
             admin_conn.execute(
@@ -251,6 +270,7 @@ def test_successful_pytest_session_leaves_no_hash_schemas() -> None:
         env["DATABASE_URL"] = scratch_url
         env["TEST_DATABASE_URL"] = scratch_url
         env["PYTEST_ADDOPTS"] = ""
+        env.pop("PYTEST_XDIST_WORKER", None)
         subprocess.run(
             [
                 sys.executable,
