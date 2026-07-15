@@ -44,6 +44,8 @@ def test_generate_lesson_recap_narrative_falls_back_with_zero_lessons() -> None:
 
 
 def test_generate_lesson_recap_narrative_returns_llm_text(monkeypatch: pytest.MonkeyPatch) -> None:
+    from langchain_core.callbacks import BaseCallbackHandler
+
     monkeypatch.setenv("FREE_LLM_API_KEY", "fake-key")
     monkeypatch.setenv("OPENAI_BRIEFING_MODEL", "gpt-4o-mini")
 
@@ -52,6 +54,7 @@ def test_generate_lesson_recap_narrative_returns_llm_text(monkeypatch: pytest.Mo
         "Consider finishing your remaining lesson to close out the trail."
     )
     captured: dict[str, Any] = {}
+    callback = BaseCallbackHandler()
 
     def fake_invoke(messages: Any, config: Any, **_kwargs: Any) -> AIMessage:
         captured.update(messages=messages, config=config)
@@ -63,6 +66,9 @@ def test_generate_lesson_recap_narrative_returns_llm_text(monkeypatch: pytest.Mo
             return_value=RunnableLambda(fake_invoke),
         ) as factory,
         patch("news_dashboard.ai_client.free_llm_config", return_value=("fake-key", None)),
+        patch("news_dashboard.ai_client.langfuse_enabled", return_value=True),
+        patch("langfuse.langchain.CallbackHandler", return_value=callback),
+        patch("langfuse.propagate_attributes") as attributes,
     ):
         result = generate_lesson_recap_narrative(_make_recap())
 
@@ -75,7 +81,10 @@ def test_generate_lesson_recap_narrative_returns_llm_text(monkeypatch: pytest.Mo
         temperature=0.7,
     )
     assert "gradient descent" in captured["messages"].messages[0].content
-    assert captured["config"]["callbacks"] is not None
+    assert callback in captured["config"]["callbacks"].handlers
+    attributes.assert_called_once_with(
+        tags=["lesson", "recap", "narrative"], trace_name="lesson-recap-narrative"
+    )
 
 
 def test_generate_lesson_recap_narrative_falls_back_on_llm_error(

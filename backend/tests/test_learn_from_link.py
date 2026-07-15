@@ -5,6 +5,7 @@ from collections.abc import Generator
 from contextlib import contextmanager
 from types import SimpleNamespace
 from typing import Any
+from unittest.mock import patch
 
 import pytest
 from fastapi.testclient import TestClient
@@ -1433,6 +1434,8 @@ def test_lesson_includes_fallback_personal_relevance_without_profile(
 def test_lesson_relevance_uses_profile_and_llm_response(
     pg_clean: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    from langchain_core.callbacks import BaseCallbackHandler
+
     monkeypatch.setenv("DATABASE_URL", pg_clean)
     monkeypatch.setenv("FREE_LLM_API_KEY", "fake-key")
     user_id = _make_user(pg_clean)
@@ -1442,23 +1445,37 @@ def test_lesson_relevance_uses_profile_and_llm_response(
             (user_id, '["technology", "AI"]'),
         )
 
-    monkeypatch.setattr(
-        "news_dashboard.ai_client.get_chat_model",
-        lambda **_kwargs: RunnableLambda(
-            lambda _prompt, **_kwargs: AIMessage(
-                content=(
-                    '{"explanation": "Relevant to your AI interests.", "signals": ["Interest: AI"]}'
-                )
-            )
-        ),
-    )
+    callback = BaseCallbackHandler()
+    captured: dict[str, Any] = {}
 
-    lesson = service.create_lesson(user_id, "https://example.com/ai", database_url=pg_clean)
+    def invoke(_prompt: Any, config: Any) -> AIMessage:
+        captured["config"] = config
+        return AIMessage(
+            content=(
+                '{"explanation": "Relevant to your AI interests.", "signals": ["Interest: AI"]}'
+            )
+        )
+
+    def factory(**kwargs: Any) -> Any:
+        captured["factory"] = kwargs
+        return RunnableLambda(invoke)
+
+    monkeypatch.setattr("news_dashboard.ai_client.get_chat_model", factory)
+    monkeypatch.setattr("news_dashboard.ai_client.langfuse_enabled", lambda: True)
+    monkeypatch.setattr("langfuse.langchain.CallbackHandler", lambda: callback)
+
+    with patch("langfuse.propagate_attributes") as attributes:
+        lesson = service.create_lesson(user_id, "https://example.com/ai", database_url=pg_clean)
 
     assert lesson["personal_relevance"] == {
         "explanation": "Relevant to your AI interests.",
         "signals": ["Interest: AI"],
     }
+    assert captured["factory"]["response_format"] == {"type": "json_object"}
+    assert callback in captured["config"]["callbacks"].handlers
+    attributes.assert_called_once_with(
+        user_id=str(user_id), tags=["lesson", "relevance"], trace_name="lesson-relevance"
+    )
 
 
 def test_lesson_relevance_uses_native_chat_prompt(

@@ -6,6 +6,7 @@ import json
 from collections.abc import Generator
 from contextlib import contextmanager
 from typing import Any
+from unittest.mock import patch
 
 import pytest
 from fastapi.testclient import TestClient
@@ -135,6 +136,45 @@ def _mock_chat_create(content: str) -> Any:
         return RunnableLambda(_invoke)
 
     return _fake, captured
+
+
+def test_generate_infographic_content_preserves_json_settings_and_tracing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from langchain_core.callbacks import BaseCallbackHandler
+
+    monkeypatch.setenv("FREE_LLM_API_KEY", "fake-key")
+    monkeypatch.setenv("OPENAI_LESSON_CHAT_MODEL", "lesson-model")
+    callback = BaseCallbackHandler()
+    captured: dict[str, Any] = {}
+
+    def invoke(_prompt: Any, config: Any) -> AIMessage:
+        captured["config"] = config
+        return AIMessage(content=json.dumps(_VALID_INFOGRAPHIC))
+
+    def factory(**kwargs: Any) -> Any:
+        captured["factory"] = kwargs
+        return RunnableLambda(invoke)
+
+    monkeypatch.setattr("news_dashboard.ai_client.get_chat_model", factory)
+    monkeypatch.setattr("news_dashboard.ai_client.langfuse_enabled", lambda: True)
+    monkeypatch.setattr("langfuse.langchain.CallbackHandler", lambda: callback)
+    with patch("langfuse.propagate_attributes") as attributes:
+        result = service.generate_infographic_content(
+            {"title": "T", "lesson_detail": {"gist": "G"}}, 42
+        )
+
+    assert len(result["sections"]) == 3
+    assert captured["factory"] == {
+        "api_key": "fake-key",
+        "base_url": None,
+        "model": "lesson-model",
+        "response_format": {"type": "json_object"},
+    }
+    assert callback in captured["config"]["callbacks"].handlers
+    attributes.assert_called_once_with(
+        user_id="42", tags=["lesson", "infographic"], trace_name="lesson-infographic"
+    )
 
 
 def test_generate_lesson_infographic_raises_not_found(pg_clean: str) -> None:

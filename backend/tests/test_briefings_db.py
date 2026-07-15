@@ -805,6 +805,68 @@ def test_call_openai_wraps_upstream_error(monkeypatch: pytest.MonkeyPatch) -> No
         _call_openai([{"id": 1, "title": "A"}], model="auto")
 
 
+def test_call_openai_preserves_settings_callback_prompt_linkage_and_root_trace(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from contextlib import contextmanager
+    from unittest.mock import patch
+
+    from langchain_core.callbacks import BaseCallbackHandler
+    from langchain_core.messages import AIMessage
+    from langchain_core.runnables import RunnableLambda
+
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
+    callback = BaseCallbackHandler()
+    managed_prompt = object()
+    captured: dict[str, Any] = {}
+    trace = SimpleNamespace(trace_id="trace-123", update_output=lambda _output: None)
+
+    def invoke(prompt: Any, config: Any) -> AIMessage:
+        captured.update(prompt=prompt, config=config)
+        return AIMessage(content='{"title": "T", "sections": []}')
+
+    def factory(**kwargs: Any) -> Any:
+        captured["factory"] = kwargs
+        return RunnableLambda(invoke)
+
+    @contextmanager
+    def observe(name: str, **kwargs: Any) -> Any:
+        captured.update(root_name=name, root_kwargs=kwargs)
+        yield trace
+
+    monkeypatch.setattr("news_dashboard.ai_client.get_chat_model", factory)
+    monkeypatch.setattr(
+        "news_dashboard.ai_client.get_prompt",
+        lambda *_a, **_k: SimpleNamespace(
+            text="Use {literal} braces", langfuse_prompt=managed_prompt
+        ),
+    )
+    monkeypatch.setattr("news_dashboard.ai_client.langfuse_enabled", lambda: True)
+    monkeypatch.setattr("news_dashboard.ai_client.observe", observe)
+    monkeypatch.setattr("langfuse.langchain.CallbackHandler", lambda: callback)
+
+    with patch("langfuse.propagate_attributes") as attributes:
+        result = _call_openai([{"id": 1, "title": "A"}], model="briefing-model", user_id=7)
+
+    assert captured["factory"] == {
+        "api_key": "sk-test",
+        "base_url": None,
+        "model": "briefing-model",
+        "max_tokens": 2048,
+        "response_format": {"type": "json_object"},
+    }
+    assert callback in captured["config"]["callbacks"].handlers
+    assert "Use {literal} braces" in captured["prompt"].messages[0].content
+    attributes.assert_called_once_with(
+        user_id="7",
+        tags=["briefing"],
+        trace_name="briefing-generation",
+        prompt=managed_prompt,
+    )
+    assert captured["root_name"] == "briefing-generation"
+    assert result["_trace_id"] == "trace-123"
+
+
 # ── generate_briefing (end-to-end with fake AI) ───────────────────────────────
 
 
