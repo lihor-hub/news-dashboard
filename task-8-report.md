@@ -24,3 +24,10 @@ migration.
 - `prettier --check README.md task-8-report.md`: passed.
 - `git diff --check`: passed.
 - The full test suite was intentionally left to the root Task 8 verification.
+
+## Review follow-up
+
+- Narrowed `lesson:{user_id}:{lesson_id}` to lesson conversation traces; lesson
+  generation retains its separate `lesson-run:{run_id}` session.
+- Qualified PostgreSQL persistence wording so idempotency and stale-run
+  recovery are claimed only for workflows where those behaviors apply.

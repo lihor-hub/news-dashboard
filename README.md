@@ -111,7 +111,8 @@ shape of each AI operation:
 - LangGraph orchestrates briefing generation, lesson generation, and agent
   action planning and execution. These graphs are compiled without a
   checkpointer. PostgreSQL run and step records remain the source of truth for
-  workflow status, history, idempotency, and stale-run recovery.
+  workflow status and history, including idempotency and stale-run recovery
+  where those behaviors apply.
 - Native provider clients remain in use for embeddings, TTS, image generation,
   and isolated calls that do not need chain or graph orchestration.
 
@@ -121,14 +122,14 @@ framework call sites use `langfuse.langchain.CallbackHandler` and
 has its own trace; a Langfuse session groups related traces without replacing
 the trace IDs used for feedback.
 
-| Operation                                   | Langfuse session ID                                                                |
-| ------------------------------------------- | ---------------------------------------------------------------------------------- |
-| Ask AI                                      | Optional client-provided `session_id`; omitted requests remain independent traces. |
-| Briefing conversation                       | `briefing:{user_id}:{briefing_id}`                                                 |
-| Lesson conversation and related lesson work | `lesson:{user_id}:{lesson_id}`                                                     |
-| Briefing generation                         | `briefing-run:{run_id}`                                                            |
-| Lesson generation                           | `lesson-run:{run_id}`                                                              |
-| Agent action lifecycle                      | `agent-action:{run_id}`                                                            |
+| Operation              | Langfuse session ID                                                                |
+| ---------------------- | ---------------------------------------------------------------------------------- |
+| Ask AI                 | Optional client-provided `session_id`; omitted requests remain independent traces. |
+| Briefing conversation  | `briefing:{user_id}:{briefing_id}`                                                 |
+| Lesson conversation    | `lesson:{user_id}:{lesson_id}`                                                     |
+| Briefing generation    | `briefing-run:{run_id}`                                                            |
+| Lesson generation      | `lesson-run:{run_id}`                                                              |
+| Agent action lifecycle | `agent-action:{run_id}`                                                            |
 
 `POST /api/ask` accepts the optional field alongside its existing inputs:
 
