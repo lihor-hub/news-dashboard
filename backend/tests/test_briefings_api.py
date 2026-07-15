@@ -763,7 +763,7 @@ def test_chat_constructs_langchain_prompt_with_session(
     from langchain_core.runnables import RunnableLambda
 
     sample_briefing = dict(_SAMPLE_BRIEFING)
-    article_body = "Detailed article body text about the announcement."
+    article_body = 'Benchmark payload: {"score": 97, "status": "ready"}'
 
     captured: dict[str, Any] = {}
 

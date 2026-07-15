@@ -1458,6 +1458,7 @@ def ask_lesson_question(
         source_context=source_context,
     )
 
+    from langchain_core.messages import SystemMessage
     from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
     from langfuse import propagate_attributes
 
@@ -1470,7 +1471,7 @@ def ask_lesson_question(
     chat_model = get_chat_model(api_key=api_key, base_url=base_url, model=model)
     prompt = ChatPromptTemplate.from_messages(
         [
-            ("system", system),
+            SystemMessage(content=system),
             MessagesPlaceholder("history"),
             ("human", "{question}"),
         ]

@@ -934,6 +934,7 @@ def chat_with_briefing(
         articles_context=articles_context,
     )
 
+    from langchain_core.messages import SystemMessage
     from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
     from langfuse import propagate_attributes
 
@@ -946,7 +947,7 @@ def chat_with_briefing(
     chat_model = get_chat_model(api_key=api_key, base_url=base_url, model=model)
     prompt = ChatPromptTemplate.from_messages(
         [
-            ("system", system),
+            SystemMessage(content=system),
             MessagesPlaceholder("history"),
             ("human", "{message}"),
         ]

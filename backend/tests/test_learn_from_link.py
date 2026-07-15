@@ -810,6 +810,8 @@ def test_ask_lesson_question_returns_grounded_reply(
 
     monkeypatch.setenv("DATABASE_URL", pg_clean)
     monkeypatch.setenv("FREE_LLM_API_KEY", "freellmapi-key")
+    source_body = 'Example JSON: {"framework": "LangChain", "ready": true}'
+    monkeypatch.setattr(service, "extract_body", lambda _url: (source_body, "ok"))
     user_id = _make_user(pg_clean)
     lesson = service.create_lesson(user_id, "https://example.com/a", database_url=pg_clean)
 
@@ -850,7 +852,7 @@ def test_ask_lesson_question_returns_grounded_reply(
     assert reply == "Here is a simpler explanation."
     messages = captured["messages"]
     assert [message.type for message in messages] == ["system", "human", "ai", "human"]
-    assert "Body for https://example.com/a" in messages[0].content
+    assert source_body in messages[0].content
     assert [message.content for message in messages[1:]] == [
         "What is this about?",
         "It's about the article.",
