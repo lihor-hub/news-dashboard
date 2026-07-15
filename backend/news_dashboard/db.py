@@ -1154,7 +1154,7 @@ def open_connection_pool(database_url: str | None = None) -> None:
             max_size=max_size,
             timeout=timeout,
             max_lifetime=max_lifetime,
-            kwargs={"row_factory": dict_row},
+            kwargs={"row_factory": dict_row, "prepare_threshold": None},
             open=False,
         )
         pool.open(wait=True, timeout=_connect_retry_window_seconds())
@@ -1194,7 +1194,13 @@ def _reset_connection(conn: Any) -> None:
     previous_autocommit = conn.autocommit
     conn.autocommit = True
     try:
-        conn.execute("DISCARD ALL")
+        conn.execute(
+            "RESET ALL; "
+            "SET SESSION AUTHORIZATION DEFAULT; "
+            "RESET ROLE; "
+            "UNLISTEN *; "
+            "SELECT pg_advisory_unlock_all()"
+        )
     finally:
         conn.autocommit = previous_autocommit
 

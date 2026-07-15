@@ -87,6 +87,7 @@ filterwarnings = ["error::DeprecationWarning:news_dashboard.*"]
 markers = [
   "smoke: fast, high-signal tests covering app boot, health, and core API paths (no external services required)",
   "db: tests requiring a live PostgreSQL instance (testcontainers or CI service container)",
+  "perf_serial: timing-sensitive integration benchmarks that should run without xdist worker load",
   "slow: expensive or long-running tests reserved for the nightly suite",
   "postgres: alias for db — marks tests that require a live PostgreSQL instance",
 ]

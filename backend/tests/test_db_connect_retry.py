@@ -171,7 +171,9 @@ def test_default_runtime_connect_reuses_pool_connection(monkeypatch: pytest.Monk
     assert first_backend == second_backend
     assert pool.conn.commits == 2
     assert pool.conn.closed is False
-    assert "DISCARD ALL" in pool.conn.statements
+    reset_statement = str(pool.conn.statements[-1])
+    assert "RESET ALL" in reset_statement
+    assert "UNLISTEN *" in reset_statement
 
 
 def test_default_runtime_connect_rolls_back_and_resets_pool_connection(
@@ -196,7 +198,9 @@ def test_default_runtime_connect_rolls_back_and_resets_pool_connection(
     assert fake_pool.conn.rollbacks >= 1
     assert fake_pool.returned == [fake_pool.conn]
     assert fake_pool.conn.autocommit is False
-    assert "DISCARD ALL" in fake_pool.conn.statements
+    reset_statement = str(fake_pool.conn.statements[-1])
+    assert "RESET ALL" in reset_statement
+    assert "SELECT pg_advisory_unlock_all()" in reset_statement
 
 
 def test_default_runtime_connect_logs_pool_acquire_timeout(
@@ -259,10 +263,12 @@ def test_open_connection_pool_uses_existing_startup_retry_window(
     from news_dashboard import db
 
     opened_with: dict[str, float] = {}
+    created_with: dict[str, Any] = {}
 
     class StartupPool(_FakePool):
-        def __init__(self, *_args: Any, **_kwargs: Any) -> None:
+        def __init__(self, *_args: Any, **kwargs: Any) -> None:
             super().__init__()
+            created_with.update(kwargs)
 
         def open(self, *, wait: bool, timeout: float) -> None:
             opened_with["timeout"] = timeout
@@ -279,6 +285,7 @@ def test_open_connection_pool_uses_existing_startup_retry_window(
     db.close_connection_pool()
 
     assert opened_with == {"timeout": 6.0, "wait": 1.0}
+    assert created_with["kwargs"]["prepare_threshold"] is None
 
 
 def test_postgres_runtime_pool_reuses_backend_and_resets_session_state(
@@ -295,6 +302,9 @@ def test_postgres_runtime_pool_reuses_backend_and_resets_session_state(
     try:
         with db.connect() as conn:
             first_pid = conn.execute("SELECT pg_backend_pid() AS pid").fetchone()["pid"]
+            original_search_path = conn.execute(
+                "SELECT current_setting('search_path') AS path"
+            ).fetchone()["path"]
             conn.execute("SET search_path TO pg_catalog")
 
         with db.connect() as conn:
@@ -306,9 +316,11 @@ def test_postgres_runtime_pool_reuses_backend_and_resets_session_state(
         db.close_connection_pool()
 
     assert second_pid == first_pid
-    assert search_path == '"$user", public'
+    assert search_path == original_search_path
+    assert search_path != "pg_catalog"
 
 
+@pytest.mark.perf_serial
 def test_postgres_runtime_pool_reduces_repeated_select_overhead(
     pg_clean: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
