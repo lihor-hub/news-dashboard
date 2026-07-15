@@ -1,3 +1,5 @@
+from collections.abc import Generator
+from contextlib import contextmanager
 from typing import Any
 from unittest.mock import patch
 
@@ -74,6 +76,39 @@ def test_translate_body_japanese() -> None:
         max_tokens=2048,
         temperature=0.0,
     )
+
+
+def test_translate_body_attaches_langfuse_callback_and_trace_attributes() -> None:
+    from langchain_core.callbacks import BaseCallbackHandler
+
+    captured: dict[str, Any] = {}
+
+    def answer(prompt_value: Any, config: Any) -> AIMessage:
+        captured["config"] = config
+        return AIMessage(content="Translated Body")
+
+    @contextmanager
+    def attributes(**kwargs: Any) -> Generator[None]:
+        captured["attributes"] = kwargs
+        yield
+
+    callback = BaseCallbackHandler()
+    model: RunnableLambda[Any, AIMessage] = RunnableLambda(answer)
+    with (
+        patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}),
+        patch("news_dashboard.ai_client.get_chat_model", return_value=model),
+        patch("news_dashboard.ai_client.langfuse_enabled", return_value=True),
+        patch("langfuse.langchain.CallbackHandler", return_value=callback),
+        patch("langfuse.propagate_attributes", side_effect=attributes),
+    ):
+        translated = translate_body("日本語の本文", "ja")
+
+    assert translated == "Translated Body"
+    assert captured["attributes"] == {
+        "tags": ["translation"],
+        "trace_name": "translate-body",
+    }
+    assert captured["config"]["callbacks"].handlers == [callback]
 
 
 def test_fetch_and_cache_body_translates_non_english(pg_clean: str) -> None:

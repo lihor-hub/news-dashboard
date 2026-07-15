@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Generator
+from contextlib import contextmanager
 from typing import Any
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from langchain_core.messages import AIMessage
@@ -225,6 +227,51 @@ def test_extract_entities_calls_llm_and_returns_parsed_list() -> None:
     factory.assert_called_once_with(
         api_key="sk-test", base_url=None, model="gpt-4o-mini", max_tokens=512
     )
+
+
+def test_extract_entities_attaches_langfuse_callback_and_managed_prompt() -> None:
+    from langchain_core.callbacks import BaseCallbackHandler
+
+    from news_dashboard.ai_client import ManagedPrompt
+
+    captured: dict[str, Any] = {}
+
+    def answer(prompt_value: Any, config: Any) -> AIMessage:
+        captured["config"] = config
+        return AIMessage(content='[{"name": "OpenAI", "type": "org"}]')
+
+    @contextmanager
+    def attributes(**kwargs: Any) -> Generator[None]:
+        captured["attributes"] = kwargs
+        yield
+
+    callback = BaseCallbackHandler()
+    managed = MagicMock(name="managed-prompt")
+    model: RunnableLambda[Any, AIMessage] = RunnableLambda(answer)
+    with (
+        patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}),
+        patch("news_dashboard.ai_client.get_chat_model", return_value=model),
+        patch("news_dashboard.ai_client.langfuse_enabled", return_value=True),
+        patch(
+            "news_dashboard.ai_client.get_prompt",
+            return_value=ManagedPrompt("Extract entities", managed),
+        ),
+        patch("langfuse.langchain.CallbackHandler", return_value=callback),
+        patch("langfuse.propagate_attributes", side_effect=attributes),
+    ):
+        result = extract_entities(
+            {"id": 1, "title": "OpenAI ships", "summary": "News", "body": "Body"},
+            user_id=17,
+        )
+
+    assert result == [{"name": "OpenAI", "type": "org"}]
+    assert captured["attributes"] == {
+        "user_id": "17",
+        "tags": ["entities"],
+        "trace_name": "entity-extraction",
+        "prompt": managed,
+    }
+    assert captured["config"]["callbacks"].handlers == [callback]
 
 
 def test_extract_entity_relationships_calls_llm_with_bounded_entities() -> None:

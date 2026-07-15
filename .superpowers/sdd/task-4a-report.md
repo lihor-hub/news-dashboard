@@ -34,8 +34,6 @@ still cannot connect to the absent test database.
 ## Residual risk
 
 The focused database-backed suites must be rerun once `nd-test-pg` is available.
-Legacy tests that patch the native OpenAI client will also need their in-flight
-Task 4 test migration completed before the combined branch is green.
 
 ## Reviewer follow-up
 
@@ -54,10 +52,6 @@ Red/green evidence:
 - `make lint`: passed.
 - Focused Ruff and mypy checks: passed (the commit hook additionally runs ty,
   pyrefly, and vulture).
-
-The database-backed legacy tests still cannot run while PostgreSQL on port
-55432 is unavailable. Their native-client mocks remain follow-up work for the
-combined Task 4 test migration.
 
 ## Legacy test migration completion
 
@@ -79,3 +73,17 @@ Evidence:
 - Scoped Ruff format/check and mypy for all five migrated files passed.
 - The cluster-label and cache tests are migrated but remain unexecutable until
   PostgreSQL on port 55432 is restored.
+
+## Langfuse attribution contract coverage
+
+Added focused official-integration tests for both group-A call patterns:
+
+- managed prompts assert `CallbackHandler` reaches the LangChain invocation and
+  `propagate_attributes` receives `trace_name`, tags, string user ID, and the
+  exact managed Langfuse prompt object;
+- unmanaged atomic text calls assert the callback reaches the invocation and
+  the expected trace name and tags are propagated without synthetic sessions.
+
+Both DB-independent observability tests passed in the isolated Python runner.
+Scoped Ruff and mypy passed, and commit hooks additionally verified ty,
+pyrefly, and vulture.
