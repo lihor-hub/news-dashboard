@@ -6,6 +6,7 @@ from typing import Any
 import pytest
 
 import news_dashboard.recommendation_jobs as jobs
+from news_dashboard import recommendations
 from news_dashboard.db import connect, init_db
 from news_dashboard.ingest.service import list_articles, transition_article_state
 from news_dashboard.recommendation_jobs import (
@@ -184,6 +185,50 @@ def test_missing_score_is_created(tmp_path: Path, monkeypatch: Any, pg_clean: st
     summary = recalculate_stale_recommendations(db_path=db_path)
     assert summary.scores_written >= 1
     assert _rec_row(db_path, user_id, article) is not None
+
+
+def test_recompute_batches_score_and_explanation_persistence_connections(
+    tmp_path: Path, monkeypatch: Any, pg_clean: str
+) -> None:
+    db_path = _setup_db(monkeypatch, pg_clean)
+    _insert_source(db_path, "src", category="ai")
+    user_id = _make_user(db_path, "alice")
+    for index in range(5):
+        _insert_article(db_path, "src", f"batch-{index}", category="ai")
+
+    real_connect = connect
+    calls = 0
+
+    def counted_connect(*args: Any, **kwargs: Any) -> Any:
+        nonlocal calls
+        calls += 1
+        return real_connect(*args, **kwargs)
+
+    monkeypatch.setattr(recommendations, "connect", counted_connect)
+
+    def generated_reason(
+        user_id: int,
+        article_id: int,
+        *,
+        db_path: Path | str | None = None,
+        database_url: str | None = None,
+    ) -> str:
+        return "Generated reason"
+
+    monkeypatch.setattr(recommendations, "generate_recommendation_explanation", generated_reason)
+
+    scored = recommendations.recompute_user_recommendations(user_id, db_path=db_path)
+
+    assert scored == 5
+    # Load scoring inputs, load preferences, batch score UPSERT, batch explanation update.
+    assert calls == 4
+    with connect(db_path) as conn:
+        rows = conn.execute(
+            "SELECT explanation FROM user_article_recommendations WHERE user_id = %s",
+            (user_id,),
+        ).fetchall()
+    assert len(rows) == 5
+    assert {row["explanation"] for row in rows} == {"Generated reason"}
 
 
 def test_superseded_model_version_is_repaired(
