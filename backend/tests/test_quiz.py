@@ -234,6 +234,8 @@ def test_generate_weekly_quiz_no_articles(tmp_path: Path) -> None:
 
 
 def test_generate_weekly_quiz_with_articles(tmp_path: Path) -> None:
+    from langchain_core.callbacks import BaseCallbackHandler
+
     db_path = tmp_path / "q.db"
     user_id, article_id = _seed(db_path)
     _seed_done_article(db_path, user_id, article_id)
@@ -241,12 +243,15 @@ def test_generate_weekly_quiz_with_articles(tmp_path: Path) -> None:
     mock_response = MagicMock()
     mock_response.choices[0].message.content = json.dumps(_MOCK_QUESTIONS)
 
+    callback = BaseCallbackHandler()
     with (
         patch.dict("os.environ", {"OPENAI_API_KEY": "test-key"}),
         patch(
             "news_dashboard.ai_client.get_chat_model",
             return_value=_chat_model_response(mock_response),
         ) as get_model,
+        patch("news_dashboard.ai_client.langfuse_enabled", return_value=True),
+        patch("langfuse.langchain.CallbackHandler", return_value=callback),
         patch("langfuse.propagate_attributes") as attributes,
     ):
         quiz = generate_weekly_quiz(user_id, db_path=db_path)
@@ -257,7 +262,7 @@ def test_generate_weekly_quiz_with_articles(tmp_path: Path) -> None:
     assert quiz["score"] is None
     assert get_model.call_args.kwargs["max_tokens"] == 1024
     model = get_model.return_value
-    assert "callbacks" in model.invoke.call_args.kwargs["config"]
+    assert callback in model.invoke.call_args.kwargs["config"]["callbacks"]
     attributes.assert_called_once_with(
         user_id=str(user_id), tags=["quiz"], trace_name="weekly-quiz"
     )

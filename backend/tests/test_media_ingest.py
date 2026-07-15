@@ -29,6 +29,8 @@ def _source(kind: str, url: str = "https://example.com/feed.xml") -> SourceDefin
 
 
 def test_podcast_feed_ingests_enclosure_with_ai_summary(pg_clean: str) -> None:
+    from langchain_core.callbacks import BaseCallbackHandler
+
     source = _source("podcast_feed")
     entries = [
         {
@@ -53,19 +55,26 @@ def test_podcast_feed_ingests_enclosure_with_ai_summary(pg_clean: str) -> None:
             (source.slug, source.name, source.url, source.category, source.kind, source.priority),
         )
 
+    callback = BaseCallbackHandler()
     with (
         patch("news_dashboard.ingest.service._parse_media_feed_url", return_value=entries),
         patch("news_dashboard.ai_client.free_llm_config", return_value=("test-key", None)),
         patch(
             "news_dashboard.ai_client.get_chat_model", return_value=_chat_model(response)
         ) as get_model,
+        patch("news_dashboard.ai_client.langfuse_enabled", return_value=True),
+        patch("langfuse.langchain.CallbackHandler", return_value=callback),
+        patch("langfuse.propagate_attributes") as attributes,
     ):
         outcome = _ingest_source(source, pg_clean)
 
     assert outcome.articles_new == 1
     assert get_model.call_args.kwargs["max_tokens"] == 500
     assert get_model.call_args.kwargs["temperature"] == 0.2
-    assert "callbacks" in get_model.return_value.invoke.call_args.kwargs["config"]
+    assert callback in get_model.return_value.invoke.call_args.kwargs["config"]["callbacks"]
+    attributes.assert_called_once_with(
+        tags=["ingest", "media"], trace_name="summarize-media-article"
+    )
     with connect(pg_clean) as conn:
         row = conn.execute(
             "SELECT url, summary, reason, tags, kind FROM articles WHERE source_slug=%s",

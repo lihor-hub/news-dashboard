@@ -527,6 +527,8 @@ def test_generate_share_context_no_api_key(db: str, monkeypatch: pytest.MonkeyPa
 
 
 def test_generate_share_context_stores_summary(db: str, monkeypatch: pytest.MonkeyPatch) -> None:
+    from langchain_core.callbacks import BaseCallbackHandler
+
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")
 
     alice = _make_user(db, "alice")
@@ -538,8 +540,11 @@ def test_generate_share_context_stores_summary(db: str, monkeypatch: pytest.Monk
 
     summary = "Alice highlighted this because it matters. You will find it useful."
 
+    callback = BaseCallbackHandler()
     with (
         patch("news_dashboard.ai_client.get_chat_model") as get_model,
+        patch("news_dashboard.ai_client.langfuse_enabled", return_value=True),
+        patch("langfuse.langchain.CallbackHandler", return_value=callback),
         patch("langfuse.propagate_attributes") as attributes,
     ):
         from langchain_core.messages import AIMessage
@@ -550,7 +555,7 @@ def test_generate_share_context_stores_summary(db: str, monkeypatch: pytest.Monk
     assert result == summary
     assert get_model.call_args.kwargs["max_tokens"] == 120
     assert get_model.call_args.kwargs["temperature"] == 0.7
-    assert "callbacks" in get_model.return_value.invoke.call_args.kwargs["config"]
+    assert callback in get_model.return_value.invoke.call_args.kwargs["config"]["callbacks"]
     attributes.assert_called_once_with(
         user_id=str(alice), tags=["shares"], trace_name="share-context"
     )

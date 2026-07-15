@@ -681,6 +681,7 @@ def _make_briefing(
 
 
 def test_generate_push_hook_returns_llm_hook(monkeypatch: pytest.MonkeyPatch) -> None:
+    from langchain_core.callbacks import BaseCallbackHandler
     from langchain_core.messages import AIMessage
 
     monkeypatch.setenv("FREE_LLM_API_KEY", "fake-key")
@@ -688,10 +689,14 @@ def test_generate_push_hook_returns_llm_hook(monkeypatch: pytest.MonkeyPatch) ->
     hook_text = "Claude 4 drops; markets soar — your brief awaits"
     model = MagicMock()
     model.invoke.return_value = AIMessage(content=hook_text)
+    callback = BaseCallbackHandler()
 
     with (
         patch("news_dashboard.ai_client.get_chat_model", return_value=model) as get_model,
         patch("news_dashboard.ai_client.free_llm_config", return_value=("fake-key", None)),
+        patch("news_dashboard.ai_client.langfuse_enabled", return_value=True),
+        patch("langfuse.langchain.CallbackHandler", return_value=callback),
+        patch("langfuse.propagate_attributes") as attributes,
     ):
         result = generate_push_hook(_make_briefing())
 
@@ -703,14 +708,17 @@ def test_generate_push_hook_returns_llm_hook(monkeypatch: pytest.MonkeyPatch) ->
         "max_tokens": 40,
         "temperature": 0.7,
     }
-    assert "callbacks" in model.invoke.call_args.kwargs["config"]
+    assert callback in model.invoke.call_args.kwargs["config"]["callbacks"]
+    attributes.assert_called_once_with(tags=["push"], trace_name="push-hook")
 
 
 def test_generate_recap_push_hook_uses_langchain_settings_and_trace_config() -> None:
+    from langchain_core.callbacks import BaseCallbackHandler
     from langchain_core.messages import AIMessage
 
     model = MagicMock()
     model.invoke.return_value = AIMessage(content="Seven thoughtful reads made your week")
+    callback = BaseCallbackHandler()
     recap = {
         "articles_read": 7,
         "categories": [{"category": "AI"}],
@@ -720,13 +728,17 @@ def test_generate_recap_push_hook_uses_langchain_settings_and_trace_config() -> 
     with (
         patch("news_dashboard.ai_client.get_chat_model", return_value=model) as get_model,
         patch("news_dashboard.ai_client.free_llm_config", return_value=("fake-key", None)),
+        patch("news_dashboard.ai_client.langfuse_enabled", return_value=True),
+        patch("langfuse.langchain.CallbackHandler", return_value=callback),
+        patch("langfuse.propagate_attributes") as attributes,
     ):
         result = generate_recap_push_hook(recap)
 
     assert result == "Seven thoughtful reads made your week"
     assert get_model.call_args.kwargs["max_tokens"] == 40
     assert get_model.call_args.kwargs["temperature"] == 0.7
-    assert "callbacks" in model.invoke.call_args.kwargs["config"]
+    assert callback in model.invoke.call_args.kwargs["config"]["callbacks"]
+    attributes.assert_called_once_with(tags=["push", "recap"], trace_name="recap-push-hook")
 
 
 def test_generate_push_hook_falls_back_on_llm_error(monkeypatch: pytest.MonkeyPatch) -> None:

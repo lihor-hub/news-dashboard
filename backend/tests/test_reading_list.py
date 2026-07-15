@@ -430,6 +430,7 @@ def test_fetch_metadata_for_item_records_error(
 
 
 def test_generate_summary_for_item_success(monkeypatch: pytest.MonkeyPatch, pg_clean: str) -> None:
+    from langchain_core.callbacks import BaseCallbackHandler
     from langchain_core.messages import AIMessage
 
     database_url = _setup_db(monkeypatch, pg_clean)
@@ -441,9 +442,13 @@ def test_generate_summary_for_item_success(monkeypatch: pytest.MonkeyPatch, pg_c
             ("A great post", "It explains things", item["id"]),
         )
 
+    callback = BaseCallbackHandler()
     with (
         patch.dict("os.environ", {"FREE_LLM_API_KEY": "test-key"}),
         patch("news_dashboard.ai_client.get_chat_model") as get_model,
+        patch("news_dashboard.ai_client.langfuse_enabled", return_value=True),
+        patch("langfuse.langchain.CallbackHandler", return_value=callback),
+        patch("langfuse.propagate_attributes") as attributes,
     ):
         get_model.return_value.invoke.return_value = AIMessage(
             content="A concise take on why this post matters."
@@ -456,7 +461,8 @@ def test_generate_summary_for_item_success(monkeypatch: pytest.MonkeyPatch, pg_c
     assert get_model.call_args.kwargs["max_tokens"] == 120
     messages = get_model.return_value.invoke.call_args.args[0]
     assert "A great post" in messages[0]["content"]
-    assert "callbacks" in get_model.return_value.invoke.call_args.kwargs["config"]
+    assert callback in get_model.return_value.invoke.call_args.kwargs["config"]["callbacks"]
+    attributes.assert_called_once_with(tags=["reading-list"], trace_name="reading-list-summary")
 
 
 def test_generate_summary_for_item_records_error_on_ai_failure(
