@@ -1175,17 +1175,22 @@ def _run_schema_statements(
     Isolating each statement in its own transaction means one failure doesn't
     leave later attempts in an aborted transaction.
     """
+    if not statements:
+        return 0
+
     applied = 0
-    for statement in statements:
-        try:
-            with connect(db_path, database_url=database_url) as conn:
+    with connect(db_path, database_url=database_url) as conn:
+        for statement in statements:
+            try:
                 conn.execute(statement)
+                conn.commit()
                 applied += 1
-        except Exception as exc:
-            statement_preview = " ".join(statement.split())[:240]
-            logger.exception("Schema initialization failed on statement: %s", statement_preview)
-            message = f"Schema initialization failed on statement: {statement_preview}"
-            raise SchemaInitializationError(message) from exc
+            except Exception as exc:
+                conn.rollback()
+                statement_preview = " ".join(statement.split())[:240]
+                logger.exception("Schema initialization failed on statement: %s", statement_preview)
+                message = f"Schema initialization failed on statement: {statement_preview}"
+                raise SchemaInitializationError(message) from exc
     return applied
 
 
