@@ -293,6 +293,9 @@ def test_script_ai_config_raises_when_no_key(monkeypatch: pytest.MonkeyPatch) ->
 
 
 def test_generate_podcast_script() -> None:
+    from langchain_core.messages import AIMessage
+    from langchain_core.runnables import RunnableLambda
+
     mock_response = MagicMock()
     mock_response.choices = [
         MagicMock(
@@ -308,7 +311,12 @@ def test_generate_podcast_script() -> None:
     ]
     with (
         patch.dict("os.environ", {"FREE_LLM_API_KEY": "sk-free-llm"}),
-        patch("news_dashboard.ai_client.chat_create", return_value=mock_response),
+        patch(
+            "news_dashboard.ai_client.get_chat_model",
+            return_value=RunnableLambda(
+                lambda _messages: AIMessage(content=mock_response.choices[0].message.content)
+            ),
+        ),
     ):
         script = generate_podcast_script(
             {
@@ -373,8 +381,11 @@ def test_generate_podcast_script_strips_markdown_fence() -> None:
     ]
     with (
         patch.dict("os.environ", {"FREE_LLM_API_KEY": "sk-free-llm"}),
-        patch("news_dashboard.ai_client.chat_create", return_value=mock_response),
+        patch("news_dashboard.ai_client.get_chat_model") as get_model,
     ):
+        get_model.return_value.bind.return_value.invoke.return_value = __import__(
+            "langchain_core.messages", fromlist=["AIMessage"]
+        ).AIMessage(content=mock_response.choices[0].message.content)
         script = generate_podcast_script(
             {
                 "title": "Briefing",
@@ -443,8 +454,11 @@ def test_generate_podcast_script_fallback_uses_alex_onyx() -> None:
     mock_response.choices = [MagicMock(message=MagicMock(content='{"script": []}'))]
     with (
         patch.dict("os.environ", {"FREE_LLM_API_KEY": "sk-free-llm"}),
-        patch("news_dashboard.ai_client.chat_create", return_value=mock_response),
+        patch("news_dashboard.ai_client.get_chat_model") as get_model,
     ):
+        get_model.return_value.bind.return_value.invoke.return_value = __import__(
+            "langchain_core.messages", fromlist=["AIMessage"]
+        ).AIMessage(content=mock_response.choices[0].message.content)
         script = generate_podcast_script({"title": "T", "summary": "Summary text", "sections": []})
     assert len(script) == 1
     assert script[0]["speaker"] == "Alex"

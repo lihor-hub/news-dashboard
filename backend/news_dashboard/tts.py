@@ -13,8 +13,6 @@ import os
 from pathlib import Path
 from typing import Any
 
-from news_dashboard.prompt_catalog import get_chat_prompt
-
 logger = logging.getLogger(__name__)
 
 _DEFAULT_DATA_DIR = Path("/data")
@@ -257,22 +255,30 @@ def generate_lesson_podcast_audio(
     return path
 
 
-_PODCAST_SYSTEM_PROMPT = get_chat_prompt("podcast-script-generation")[0]["content"]
+_PODCAST_SYSTEM_PROMPT = (
+    "You are a podcast script writer. Given a news briefing containing a title, summary, "
+    "and several sections, rewrite the content into a natural, conversational dialogue script "
+    "between two co-hosts, Alex and Taylor. Alex is a friendly and curious host, and "
+    "Taylor is an insightful co-host. They alternate talking, explaining the news "
+    "in an engaging and lively way.\n"
+    "Produce a JSON object with a single key 'script' containing a list of dialogue turns. "
+    "Each turn MUST be an object with these exact keys:\n"
+    "  speaker — either 'Alex' or 'Taylor'\n"
+    "  voice   — 'onyx' for Alex, 'nova' for Taylor\n"
+    "  text    — the spoken text for this turn\n"
+    "Ensure they talk about all the main topics in the sections. "
+    "Return valid JSON only, no markdown wrapper."
+)
 
 
 def generate_podcast_script(briefing_content: dict[str, Any]) -> list[dict[str, str]]:
     """Generate a conversational podcast script from briefing content using LLM."""
     api_key, base_url = _script_ai_config()
 
-    from news_dashboard.ai_client import (
-        chat_create,
-        get_chat_client,
-        get_prompt,
-        strip_markdown_fence,
-    )
+    from news_dashboard.ai_client import get_chat_model, response_text, strip_markdown_fence
 
     model = os.getenv("OPENAI_BRIEFING_MODEL", "gpt-4o-mini")
-    client = get_chat_client(api_key=api_key, base_url=base_url)
+    chat_model = get_chat_model(api_key=api_key, base_url=base_url, model=model)
 
     title = briefing_content.get("title", "")
     summary = briefing_content.get("summary", "")
@@ -282,25 +288,20 @@ def generate_podcast_script(briefing_content: dict[str, Any]) -> list[dict[str, 
     for idx, sec in enumerate(sections):
         content_str += f"\nSegment {idx + 1}: {sec.get('title', '')}\n{sec.get('body', '')}\n"
 
-    prompt = get_prompt(
-        "podcast-script-generation",
-        fallback=get_chat_prompt("podcast-script-generation"),
-        prompt_type="chat",
-        variables={"content": content_str},
+    messages = [
+        {"role": "system", "content": _PODCAST_SYSTEM_PROMPT},
+        {
+            "role": "user",
+            "content": f"Please generate a podcast script for the following news:\n\n{content_str}",
+        },
+    ]
+
+    response = chat_model.bind(response_format={"type": "json_object"}, max_tokens=2048).invoke(
+        messages,
+        config={"run_name": "podcast-script-generation", "tags": ["podcast"]},
     )
 
-    response = chat_create(
-        client,
-        name="podcast-script-generation",
-        tags=["podcast"],
-        model=model,
-        messages=prompt.messages,
-        langfuse_prompt=prompt.langfuse_prompt,
-        response_format={"type": "json_object"},
-        max_tokens=2048,
-    )
-
-    text = strip_markdown_fence(response.choices[0].message.content or "{}")
+    text = strip_markdown_fence(response_text(response) or "{}")
     try:
         data = json.loads(text)
     except json.JSONDecodeError as exc:
