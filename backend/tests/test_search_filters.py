@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
 
+import news_dashboard.ingest.service as ingest_service
 from news_dashboard.db import connect, init_db
 from news_dashboard.ingest.service import (
     list_articles,
@@ -362,6 +364,134 @@ def test_search_page_reports_total_and_second_page(db: Path) -> None:
     ]
 
 
+def test_user_search_page_uses_one_statement_for_non_empty_page(
+    db: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    user_id = _make_user(db, "paged_user")
+    matching = _insert_with_score(
+        db,
+        title="Python Concepts",
+        summary="python testing",
+        category="python",
+        source_slug="python-insider",
+        importance_score=90,
+        url_suffix="-one-pass",
+    )
+    _insert_with_score(
+        db,
+        title="Rust Concepts",
+        summary="systems testing",
+        category="engineering",
+        source_slug="rust-blog",
+        source_name="Rust Blog",
+        importance_score=95,
+        url_suffix="-one-pass",
+    )
+    tag_id = _create_tag(db, user_id, "python")
+    with connect(db) as conn:
+        conn.execute(
+            "INSERT INTO article_tags(user_id, article_id, tag_id) VALUES (%s, %s, %s)",
+            (user_id, matching, tag_id),
+        )
+        conn.execute(
+            """
+            INSERT INTO user_article_state(user_id, article_id, state, starred)
+            VALUES (%s, %s, 'today', TRUE)
+            """,
+            (user_id, matching),
+        )
+
+    calls = {"connect": 0, "execute": 0}
+    real_connect = connect
+
+    class CountingConnection:
+        def __init__(self, inner: Any) -> None:
+            self._context = inner
+            self._conn: Any = None
+
+        def __enter__(self) -> CountingConnection:
+            self._conn = self._context.__enter__()
+            return self
+
+        def __exit__(self, *args: object) -> object:
+            return self._context.__exit__(*args)
+
+        def execute(self, *args: object, **kwargs: object) -> object:
+            calls["execute"] += 1
+            return self._conn.execute(*args, **kwargs)
+
+        def __getattr__(self, name: str) -> object:
+            return getattr(self._conn, name)
+
+    def counting_connect(db_path: Path | str | None = None) -> CountingConnection:
+        calls["connect"] += 1
+        return CountingConnection(real_connect(db_path))
+
+    monkeypatch.setattr(ingest_service, "connect", counting_connect)
+
+    page = search_articles_page(
+        "python",
+        limit=10,
+        offset=0,
+        db_path=db,
+        user_id=user_id,
+        categories=["python"],
+        sources=["python-insider"],
+        states=["today"],
+        starred_only=True,
+        date_range="month",
+        tag_id=tag_id,
+    )
+
+    assert page["total"] == 1
+    assert page["has_more"] is False
+    assert [item["id"] for item in page["items"]] == [matching]
+    assert calls == {"connect": 1, "execute": 1}
+
+
+def test_user_search_page_returns_total_beyond_end(db: Path) -> None:
+    user_id = _make_user(db, "beyond_end_user")
+    for index in range(5):
+        _insert_with_score(
+            db,
+            title=f"Beyond Page {index}",
+            importance_score=50,
+            url_suffix=f"-beyond-{index}",
+        )
+
+    page = search_articles_page("", limit=2, offset=10, db_path=db, user_id=user_id)
+
+    assert page["items"] == []
+    assert page["total"] == 5
+    assert page["has_more"] is False
+
+
+@pytest.mark.parametrize(
+    ("offset", "expected_len", "expected_has_more"),
+    [(0, 2, True), (2, 2, True), (4, 1, False), (10, 0, False)],
+    ids=["first", "middle", "last", "beyond-end"],
+)
+def test_user_search_page_preserves_pagination_totals(
+    db: Path, offset: int, expected_len: int, expected_has_more: bool
+) -> None:
+    user_id = _make_user(db, f"pagination_user_{offset}")
+    for index in range(5):
+        _insert_with_score(
+            db,
+            title=f"User Page {index}",
+            importance_score=50,
+            url_suffix=f"-user-page-{index}",
+        )
+
+    page = search_articles_page("", limit=2, offset=offset, db_path=db, user_id=user_id)
+
+    assert page["total"] == 5
+    assert page["limit"] == 2
+    assert page["offset"] == offset
+    assert page["has_more"] is expected_has_more
+    assert len(page["items"]) == expected_len
+
+
 def test_search_empty_query_uses_id_tiebreaker_for_stable_pages(db: Path) -> None:
     older_id = _insert_with_score(
         db,
@@ -464,6 +594,16 @@ def _make_user(db_path: Path, username: str) -> int:
         row = conn.execute(
             "INSERT INTO users(username, password_hash) VALUES (%s, %s) RETURNING id",
             (username, "test-hash"),
+        ).fetchone()
+    assert row is not None
+    return int(row["id"] if isinstance(row, dict) else row[0])
+
+
+def _create_tag(db_path: Path, user_id: int, name: str) -> int:
+    with connect(db_path) as conn:
+        row = conn.execute(
+            "INSERT INTO user_tags(user_id, name) VALUES (%s, %s) RETURNING id",
+            (user_id, name),
         ).fetchone()
     assert row is not None
     return int(row["id"] if isinstance(row, dict) else row[0])

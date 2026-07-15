@@ -1795,6 +1795,112 @@ def _attach_also_from(
         article["also_from"] = dupes_by_canonical.get(article["id"], [])
 
 
+@dataclass(frozen=True)
+class _UserSearchQuery:
+    where: str
+    where_params: list[Any]
+    order_by: str
+    rank_params: list[Any]
+
+
+def _build_user_search_query(  # noqa: PLR0912, PLR0913
+    *,
+    user_id: int,
+    q: str,
+    states: list[str] | None,
+    categories: list[str] | None,
+    sources: list[str] | None,
+    starred_only: bool,
+    include_archived: bool,
+    date_range: str,
+    now_ts: str,
+    tag_id: int | None = None,
+) -> _UserSearchQuery:
+    tsquery = _search_tsquery(q)
+    clauses: list[str] = []
+    where_params: list[Any] = []
+
+    if tsquery:
+        clauses.append("a.search_vector @@ to_tsquery('english', %s)")
+        where_params.append(tsquery)
+
+    if not include_archived:
+        clauses.append("COALESCE(uas.state, 'today') != 'archived'")
+
+    if states:
+        state_placeholders = placeholders(states)
+        clauses.append(f"COALESCE(uas.state, 'today') IN ({state_placeholders})")
+        where_params.extend(states)
+        if include_archived is False and "archived" in states:
+            clauses.remove("COALESCE(uas.state, 'today') != 'archived'")
+
+    if categories:
+        category_placeholders = placeholders(categories)
+        clauses.append(f"a.category IN ({category_placeholders})")
+        where_params.extend(categories)
+
+    if sources:
+        source_placeholders = placeholders(sources)
+        clauses.append(f"a.source_slug IN ({source_placeholders})")
+        where_params.extend(sources)
+
+    if starred_only:
+        clauses.append("COALESCE(uas.starred, false) = true")
+
+    if date_range == "today":
+        clauses.append("a.discovered_at::timestamptz >= %s::timestamptz - interval '1 day'")
+        where_params.append(now_ts)
+    elif date_range == "week":
+        clauses.append("a.discovered_at::timestamptz >= %s::timestamptz - interval '7 days'")
+        where_params.append(now_ts)
+    elif date_range == "month":
+        clauses.append("a.discovered_at::timestamptz >= %s::timestamptz - interval '30 days'")
+        where_params.append(now_ts)
+
+    if tag_id is not None:
+        clauses.append(
+            "EXISTS (SELECT 1 FROM article_tags at"
+            " WHERE at.article_id = a.id AND at.user_id = %s AND at.tag_id = %s)"
+        )
+        where_params.extend([user_id, tag_id])
+
+    clauses.append(
+        "((src.owner_user_id IS NULL AND COALESCE(us_src.enabled, true)) OR src.owner_user_id = %s)"
+    )
+    where = f"WHERE {' AND '.join(clauses)}"
+
+    if tsquery:
+        order_by = (
+            "ts_rank_cd(a.search_vector, to_tsquery('english', %s)) DESC,"
+            " a.importance_score DESC, a.discovered_at DESC, a.id DESC"
+        )
+        rank_params: list[Any] = [tsquery]
+    else:
+        order_by = "a.importance_score DESC, a.discovered_at DESC, a.id DESC"
+        rank_params = []
+
+    return _UserSearchQuery(
+        where=where,
+        where_params=[*where_params, user_id],
+        order_by=order_by,
+        rank_params=rank_params,
+    )
+
+
+def _user_article_from_row(row: Any) -> dict[str, Any]:
+    article = _article_dict(row)
+    article.pop("_total", None)
+    article["state"] = article.pop("_uas_state", "today")
+    article["starred"] = bool(article.pop("_uas_starred", 0))
+    article["done_at"] = article.pop("_uas_done_at", None)
+    article["starred_at"] = article.pop("_uas_starred_at", None)
+    article["skipped_at"] = article.pop("_uas_skipped_at", None)
+    article["archived_at"] = article.pop("_uas_archived_at", None)
+    article["later_until"] = article.pop("_uas_later_until", None)
+    article["restored_at"] = article.pop("_uas_restored_at", None)
+    return article
+
+
 def search_articles(  # noqa: PLR0912, PLR0913
     q: str = "",
     limit: int = 50,
@@ -1918,6 +2024,25 @@ def search_articles_page(  # noqa: PLR0913
     user_id: int | None = None,
     tag_id: int | None = None,
 ) -> dict[str, Any]:
+    init_db(db_path)
+    now_ts = now_iso()
+    if user_id is not None:
+        return _search_articles_page_for_user(
+            user_id=user_id,
+            q=q,
+            limit=limit,
+            offset=offset,
+            db_path=db_path,
+            states=states,
+            categories=categories,
+            sources=sources,
+            starred_only=starred_only,
+            include_archived=include_archived,
+            date_range=date_range,
+            now_ts=now_ts,
+            tag_id=tag_id,
+        )
+
     items = search_articles(
         q=q,
         limit=limit,
@@ -1944,6 +2069,107 @@ def search_articles_page(  # noqa: PLR0913
         user_id=user_id,
         tag_id=tag_id,
     )
+    return {
+        "items": items,
+        "total": total,
+        "limit": limit,
+        "offset": offset,
+        "has_more": offset + len(items) < total,
+    }
+
+
+def _search_articles_page_for_user(  # noqa: PLR0913
+    *,
+    user_id: int,
+    q: str,
+    limit: int,
+    offset: int,
+    db_path: Path | str | None,
+    states: list[str] | None,
+    categories: list[str] | None,
+    sources: list[str] | None,
+    starred_only: bool,
+    include_archived: bool,
+    date_range: str,
+    now_ts: str,
+    tag_id: int | None = None,
+) -> dict[str, Any]:
+    query = _build_user_search_query(
+        user_id=user_id,
+        q=q,
+        states=states,
+        categories=categories,
+        sources=sources,
+        starred_only=starred_only,
+        include_archived=include_archived,
+        date_range=date_range,
+        now_ts=now_ts,
+        tag_id=tag_id,
+    )
+    params: list[Any] = [
+        *query.rank_params,
+        user_id,
+        user_id,
+        *query.where_params,
+        limit,
+        offset,
+    ]
+    sql = f"""
+        WITH filtered AS MATERIALIZED (
+          SELECT
+            a.id,
+            COALESCE(uas.state, 'today') AS _uas_state,
+            COALESCE(uas.starred, false) AS _uas_starred,
+            uas.done_at AS _uas_done_at,
+            uas.starred_at AS _uas_starred_at,
+            uas.skipped_at AS _uas_skipped_at,
+            uas.archived_at AS _uas_archived_at,
+            uas.later_until AS _uas_later_until,
+            uas.restored_at AS _uas_restored_at,
+            ROW_NUMBER() OVER (ORDER BY {query.order_by}) AS _page_order,
+            COUNT(*) OVER() AS _total
+          FROM articles a
+          LEFT JOIN sources src ON src.slug = a.source_slug
+          LEFT JOIN user_sources us_src
+            ON us_src.user_id = %s AND us_src.source_slug = a.source_slug
+          LEFT JOIN user_article_state uas ON uas.article_id = a.id AND uas.user_id = %s
+          {query.where}
+          ORDER BY _page_order
+          LIMIT %s OFFSET %s
+        )
+        SELECT {_article_list_select("a")},
+          f._uas_state,
+          f._uas_starred,
+          f._uas_done_at,
+          f._uas_starred_at,
+          f._uas_skipped_at,
+          f._uas_archived_at,
+          f._uas_later_until,
+          f._uas_restored_at,
+          f._total
+        FROM filtered f
+        JOIN articles a ON a.id = f.id
+        ORDER BY f._page_order
+    """
+    with connect(db_path) as conn:
+        rows = conn.execute(sql, params).fetchall()
+        items = [_user_article_from_row(row) for row in rows]
+        if rows:
+            total = int(rows[0]["_total"])
+        else:
+            total = _count_search_articles_for_user_conn(
+                conn=conn,
+                user_id=user_id,
+                q=q,
+                states=states,
+                categories=categories,
+                sources=sources,
+                starred_only=starred_only,
+                include_archived=include_archived,
+                date_range=date_range,
+                now_ts=now_ts,
+                tag_id=tag_id,
+            )
     return {
         "items": items,
         "total": total,
@@ -2031,7 +2257,7 @@ def count_search_articles(  # noqa: PLR0913
     return int(row["total"] if row is not None else 0)
 
 
-def _search_articles_for_user(  # noqa: PLR0912, PLR0913, PLR0915
+def _search_articles_for_user(  # noqa: PLR0913
     *,
     user_id: int,
     q: str,
@@ -2047,82 +2273,23 @@ def _search_articles_for_user(  # noqa: PLR0912, PLR0913, PLR0915
     now_ts: str,
     tag_id: int | None = None,
 ) -> list[dict[str, Any]]:
-    tsquery = _search_tsquery(q)
-    clauses: list[str] = []
-    where_params: list[Any] = []  # params only for WHERE predicates
-
-    if tsquery:
-        clauses.append("a.search_vector @@ to_tsquery('english', %s)")
-        where_params.append(tsquery)
-
-    if not include_archived:
-        clauses.append("COALESCE(uas.state, 'today') != 'archived'")
-
-    if states:
-        state_placeholders = placeholders(states)
-        clauses.append(f"COALESCE(uas.state, 'today') IN ({state_placeholders})")
-        where_params.extend(states)
-        if include_archived is False and "archived" in states:
-            clauses.remove("COALESCE(uas.state, 'today') != 'archived'")
-
-    if categories:
-        category_placeholders = placeholders(categories)
-        clauses.append(f"a.category IN ({category_placeholders})")
-        where_params.extend(categories)
-
-    if sources:
-        source_placeholders = placeholders(sources)
-        clauses.append(f"a.source_slug IN ({source_placeholders})")
-        where_params.extend(sources)
-
-    if starred_only:
-        clauses.append("COALESCE(uas.starred, false) = true")
-
-    if date_range == "today":
-        clauses.append("a.discovered_at::timestamptz >= %s::timestamptz - interval '1 day'")
-        where_params.append(now_ts)
-    elif date_range == "week":
-        clauses.append("a.discovered_at::timestamptz >= %s::timestamptz - interval '7 days'")
-        where_params.append(now_ts)
-    elif date_range == "month":
-        clauses.append("a.discovered_at::timestamptz >= %s::timestamptz - interval '30 days'")
-        where_params.append(now_ts)
-
-    if tag_id is not None:
-        clauses.append(
-            "EXISTS (SELECT 1 FROM article_tags at"
-            " WHERE at.article_id = a.id AND at.user_id = %s AND at.tag_id = %s)"
-        )
-        where_params.extend([user_id, tag_id])
-
-    # Source subscription filter appended to WHERE
-    src_filter = (
-        "(src.owner_user_id IS NULL AND COALESCE(us_src.enabled, true)) OR src.owner_user_id = %s"
+    query = _build_user_search_query(
+        user_id=user_id,
+        q=q,
+        states=states,
+        categories=categories,
+        sources=sources,
+        starred_only=starred_only,
+        include_archived=include_archived,
+        date_range=date_range,
+        now_ts=now_ts,
+        tag_id=tag_id,
     )
-    if clauses:
-        clauses.append(f"({src_filter})")
-    else:
-        clauses = [f"({src_filter})"]
-
-    where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
-
-    if tsquery:
-        user_order_by = (
-            "ts_rank_cd(a.search_vector, to_tsquery('english', %s)) DESC,"
-            " a.importance_score DESC, a.discovered_at DESC, a.id DESC"
-        )
-        rank_params: list[Any] = [tsquery]
-    else:
-        user_order_by = "a.importance_score DESC, a.discovered_at DESC, a.id DESC"
-        rank_params = []
-
-    # Param order: us_src JOIN, uas JOIN, WHERE params, owner check, rank, limit, offset
     all_params: list[Any] = [
         user_id,
         user_id,
-        *where_params,
-        user_id,
-        *rank_params,
+        *query.where_params,
+        *query.rank_params,
         limit,
         offset,
     ]
@@ -2141,24 +2308,12 @@ def _search_articles_for_user(  # noqa: PLR0912, PLR0913, PLR0915
         LEFT JOIN sources src ON src.slug = a.source_slug
         LEFT JOIN user_sources us_src ON us_src.user_id = %s AND us_src.source_slug = a.source_slug
         LEFT JOIN user_article_state uas ON uas.article_id = a.id AND uas.user_id = %s
-        {where}
-        ORDER BY {user_order_by} LIMIT %s OFFSET %s
+        {query.where}
+        ORDER BY {query.order_by} LIMIT %s OFFSET %s
     """
     with connect(db_path) as conn:
         rows = conn.execute(sql, all_params).fetchall()
-        result = []
-        for row in rows:
-            d = _article_dict(row)
-            d["state"] = d.pop("_uas_state", "today")
-            d["starred"] = bool(d.pop("_uas_starred", 0))
-            d["done_at"] = d.pop("_uas_done_at", None)
-            d["starred_at"] = d.pop("_uas_starred_at", None)
-            d["skipped_at"] = d.pop("_uas_skipped_at", None)
-            d["archived_at"] = d.pop("_uas_archived_at", None)
-            d["later_until"] = d.pop("_uas_later_until", None)
-            d["restored_at"] = d.pop("_uas_restored_at", None)
-            result.append(d)
-        return result
+        return [_user_article_from_row(row) for row in rows]
 
 
 def _count_search_articles_for_user(  # noqa: PLR0913
@@ -2175,71 +2330,57 @@ def _count_search_articles_for_user(  # noqa: PLR0913
     now_ts: str,
     tag_id: int | None = None,
 ) -> int:
-    tsquery = _search_tsquery(q)
-    clauses: list[str] = []
-    where_params: list[Any] = []
-
-    if tsquery:
-        clauses.append("a.search_vector @@ to_tsquery('english', %s)")
-        where_params.append(tsquery)
-
-    if not include_archived:
-        clauses.append("COALESCE(uas.state, 'today') != 'archived'")
-
-    if states:
-        state_placeholders = placeholders(states)
-        clauses.append(f"COALESCE(uas.state, 'today') IN ({state_placeholders})")
-        where_params.extend(states)
-        if include_archived is False and "archived" in states:
-            clauses.remove("COALESCE(uas.state, 'today') != 'archived'")
-
-    if categories:
-        category_placeholders = placeholders(categories)
-        clauses.append(f"a.category IN ({category_placeholders})")
-        where_params.extend(categories)
-
-    if sources:
-        source_placeholders = placeholders(sources)
-        clauses.append(f"a.source_slug IN ({source_placeholders})")
-        where_params.extend(sources)
-
-    if starred_only:
-        clauses.append("COALESCE(uas.starred, false) = true")
-
-    if date_range == "today":
-        clauses.append("a.discovered_at::timestamptz >= %s::timestamptz - interval '1 day'")
-        where_params.append(now_ts)
-    elif date_range == "week":
-        clauses.append("a.discovered_at::timestamptz >= %s::timestamptz - interval '7 days'")
-        where_params.append(now_ts)
-    elif date_range == "month":
-        clauses.append("a.discovered_at::timestamptz >= %s::timestamptz - interval '30 days'")
-        where_params.append(now_ts)
-
-    if tag_id is not None:
-        clauses.append(
-            "EXISTS (SELECT 1 FROM article_tags at"
-            " WHERE at.article_id = a.id AND at.user_id = %s AND at.tag_id = %s)"
+    with connect(db_path) as conn:
+        return _count_search_articles_for_user_conn(
+            conn=conn,
+            user_id=user_id,
+            q=q,
+            states=states,
+            categories=categories,
+            sources=sources,
+            starred_only=starred_only,
+            include_archived=include_archived,
+            date_range=date_range,
+            now_ts=now_ts,
+            tag_id=tag_id,
         )
-        where_params.extend([user_id, tag_id])
 
-    src_filter = (
-        "(src.owner_user_id IS NULL AND COALESCE(us_src.enabled, true)) OR src.owner_user_id = %s"
+
+def _count_search_articles_for_user_conn(  # noqa: PLR0913
+    *,
+    conn: Any,
+    user_id: int,
+    q: str,
+    states: list[str] | None,
+    categories: list[str] | None,
+    sources: list[str] | None,
+    starred_only: bool,
+    include_archived: bool,
+    date_range: str,
+    now_ts: str,
+    tag_id: int | None = None,
+) -> int:
+    query = _build_user_search_query(
+        user_id=user_id,
+        q=q,
+        states=states,
+        categories=categories,
+        sources=sources,
+        starred_only=starred_only,
+        include_archived=include_archived,
+        date_range=date_range,
+        now_ts=now_ts,
+        tag_id=tag_id,
     )
-    clauses.append(f"({src_filter})")
-    where = f"WHERE {' AND '.join(clauses)}"
-    all_params: list[Any] = [user_id, user_id, *where_params, user_id]
-
     sql = f"""
         SELECT COUNT(*) AS total
         FROM articles a
         LEFT JOIN sources src ON src.slug = a.source_slug
         LEFT JOIN user_sources us_src ON us_src.user_id = %s AND us_src.source_slug = a.source_slug
         LEFT JOIN user_article_state uas ON uas.article_id = a.id AND uas.user_id = %s
-        {where}
+        {query.where}
     """
-    with connect(db_path) as conn:
-        row = conn.execute(sql, all_params).fetchone()
+    row = conn.execute(sql, [user_id, user_id, *query.where_params]).fetchone()
     return int(row["total"] if row is not None else 0)
 
 
