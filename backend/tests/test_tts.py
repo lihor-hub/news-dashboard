@@ -316,7 +316,7 @@ def test_generate_podcast_script() -> None:
             return_value=RunnableLambda(
                 lambda _messages: AIMessage(content=mock_response.choices[0].message.content)
             ),
-        ),
+        ) as get_model,
     ):
         script = generate_podcast_script(
             {
@@ -332,6 +332,8 @@ def test_generate_podcast_script() -> None:
     assert script[1]["speaker"] == "Taylor"
     assert script[1]["voice"] == "nova"
     assert script[1]["text"] == "Hi Alex!"
+    assert get_model.call_args.kwargs["max_tokens"] == 2048
+    assert get_model.call_args.kwargs["response_format"] == {"type": "json_object"}
 
 
 def test_generate_podcast_script_uses_native_chat_prompt() -> None:
@@ -383,7 +385,7 @@ def test_generate_podcast_script_strips_markdown_fence() -> None:
         patch.dict("os.environ", {"FREE_LLM_API_KEY": "sk-free-llm"}),
         patch("news_dashboard.ai_client.get_chat_model") as get_model,
     ):
-        get_model.return_value.bind.return_value.invoke.return_value = __import__(
+        get_model.return_value.invoke.return_value = __import__(
             "langchain_core.messages", fromlist=["AIMessage"]
         ).AIMessage(content=mock_response.choices[0].message.content)
         script = generate_podcast_script(
@@ -456,7 +458,7 @@ def test_generate_podcast_script_fallback_uses_alex_onyx() -> None:
         patch.dict("os.environ", {"FREE_LLM_API_KEY": "sk-free-llm"}),
         patch("news_dashboard.ai_client.get_chat_model") as get_model,
     ):
-        get_model.return_value.bind.return_value.invoke.return_value = __import__(
+        get_model.return_value.invoke.return_value = __import__(
             "langchain_core.messages", fromlist=["AIMessage"]
         ).AIMessage(content=mock_response.choices[0].message.content)
         script = generate_podcast_script({"title": "T", "summary": "Summary text", "sections": []})

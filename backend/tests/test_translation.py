@@ -1,5 +1,5 @@
 from typing import Any
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 from langchain_core.messages import AIMessage
 from langchain_core.runnables import RunnableLambda
@@ -11,8 +11,7 @@ from news_dashboard.ingest.service import detect_and_translate_article
 
 def test_detect_and_translate_article_english() -> None:
     # When source_lang is en, no translation API call should be made
-    mock_client = MagicMock()
-    with patch("openai.OpenAI", return_value=mock_client):
+    with patch("news_dashboard.ai_client.get_chat_model") as get_model:
         title, summary, lang, orig = detect_and_translate_article(
             "English Title", "English Summary", "en"
         )
@@ -20,7 +19,7 @@ def test_detect_and_translate_article_english() -> None:
     assert summary == "English Summary"
     assert lang == "en"
     assert orig is None
-    mock_client.chat.completions.create.assert_not_called()
+    get_model.assert_not_called()
 
 
 def test_detect_and_translate_article_japanese() -> None:
@@ -45,24 +44,36 @@ def test_detect_and_translate_article_japanese() -> None:
     assert summary == "Translated Summary"
     assert lang == "ja"
     assert orig == "日本語タイトル"
-    get_model.assert_called_once()
+    assert get_model.call_args.kwargs["max_tokens"] == 1024
+    assert get_model.call_args.kwargs["temperature"] == 0.0
+    assert get_model.call_args.kwargs["response_format"] == {"type": "json_object"}
 
 
 def test_translate_body_japanese() -> None:
     # Mocking OpenAI response for Japanese body translation
-    mock_completion = MagicMock()
-    mock_completion.choices[0].message.content = "Translated Body Text"
-    mock_client = MagicMock()
-    mock_client.chat.completions.create.return_value = mock_completion
+    calls: list[Any] = []
+
+    def translate(value: Any) -> AIMessage:
+        calls.append(value)
+        return AIMessage(content="Translated Body Text")
+
+    model: RunnableLambda[Any, AIMessage] = RunnableLambda(translate)
 
     with (
         patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}),
-        patch("openai.OpenAI", return_value=mock_client),
+        patch("news_dashboard.ai_client.get_chat_model", return_value=model) as get_model,
     ):
         translated = translate_body("日本語の本文", "ja")
 
     assert translated == "Translated Body Text"
-    mock_client.chat.completions.create.assert_called_once()
+    assert len(calls) == 1
+    get_model.assert_called_once_with(
+        api_key="sk-test",
+        base_url=None,
+        model="gpt-4o-mini",
+        max_tokens=2048,
+        temperature=0.0,
+    )
 
 
 def test_fetch_and_cache_body_translates_non_english(pg_clean: str) -> None:
@@ -92,14 +103,13 @@ def test_fetch_and_cache_body_translates_non_english(pg_clean: str) -> None:
 
     # Mock extract_body to return Japanese body text
     # Mock translate_body (or the OpenAI client it uses) to return English translated body
-    mock_completion = MagicMock()
-    mock_completion.choices[0].message.content = "Translated English Body"
-    mock_client = MagicMock()
-    mock_client.chat.completions.create.return_value = mock_completion
+    model: RunnableLambda[Any, AIMessage] = RunnableLambda(
+        lambda _value: AIMessage(content="Translated English Body")
+    )
 
     with (
         patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}),
-        patch("openai.OpenAI", return_value=mock_client),
+        patch("news_dashboard.ai_client.get_chat_model", return_value=model),
         patch("news_dashboard.body_fetch.extract_body", return_value=("日本語の本文", "ok")),
     ):
         article = fetch_and_cache_body(article_id, db_path=pg_clean)

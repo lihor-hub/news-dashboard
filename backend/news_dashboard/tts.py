@@ -278,7 +278,13 @@ def generate_podcast_script(briefing_content: dict[str, Any]) -> list[dict[str, 
     from news_dashboard.ai_client import get_chat_model, response_text, strip_markdown_fence
 
     model = os.getenv("OPENAI_BRIEFING_MODEL", "gpt-4o-mini")
-    chat_model = get_chat_model(api_key=api_key, base_url=base_url, model=model)
+    chat_model = get_chat_model(
+        api_key=api_key,
+        base_url=base_url,
+        model=model,
+        max_tokens=2048,
+        response_format={"type": "json_object"},
+    )
 
     title = briefing_content.get("title", "")
     summary = briefing_content.get("summary", "")
@@ -296,7 +302,7 @@ def generate_podcast_script(briefing_content: dict[str, Any]) -> list[dict[str, 
         },
     ]
 
-    response = chat_model.bind(response_format={"type": "json_object"}, max_tokens=2048).invoke(
+    response = chat_model.invoke(
         messages,
         config={"run_name": "podcast-script-generation", "tags": ["podcast"]},
     )

@@ -13,9 +13,7 @@ from news_dashboard.sources.service import SourceDefinition
 
 def _chat_model(response: SimpleNamespace) -> MagicMock:
     model = MagicMock()
-    model.bind.return_value.invoke.return_value = AIMessage(
-        content=response.choices[0].message.content
-    )
+    model.invoke.return_value = AIMessage(content=response.choices[0].message.content)
     return model
 
 
@@ -58,11 +56,19 @@ def test_podcast_feed_ingests_enclosure_with_ai_summary(pg_clean: str) -> None:
     with (
         patch("news_dashboard.ingest.service._parse_media_feed_url", return_value=entries),
         patch("news_dashboard.ai_client.free_llm_config", return_value=("test-key", None)),
-        patch("news_dashboard.ai_client.get_chat_model", return_value=_chat_model(response)),
+        patch(
+            "news_dashboard.ai_client.get_chat_model", return_value=_chat_model(response)
+        ) as get_model,
     ):
         outcome = _ingest_source(source, pg_clean)
 
     assert outcome.articles_new == 1
+    assert get_model.call_args.kwargs["max_tokens"] == 500
+    assert get_model.call_args.kwargs["temperature"] == 0.2
+    assert get_model.return_value.invoke.call_args.kwargs["config"] == {
+        "run_name": "summarize-media-article",
+        "tags": ["ingest", "media"],
+    }
     with connect(pg_clean) as conn:
         row = conn.execute(
             "SELECT url, summary, reason, tags, kind FROM articles WHERE source_slug=%s",

@@ -701,8 +701,14 @@ def _media_summary(title: str, description: str, entry: dict[str, Any]) -> str:
             from news_dashboard.ai_client import get_chat_model, response_text
 
             model = os.getenv("OPENAI_BRIEFING_MODEL", "gpt-4o-mini")
-            chat_model = get_chat_model(api_key=api_key, base_url=base_url, model=model)
-            response = chat_model.bind(max_tokens=500, temperature=0.2).invoke(
+            chat_model = get_chat_model(
+                api_key=api_key,
+                base_url=base_url,
+                model=model,
+                max_tokens=500,
+                temperature=0.2,
+            )
+            response = chat_model.invoke(
                 [
                     {
                         "role": "system",
@@ -766,7 +772,14 @@ def detect_and_translate_article(
         return title, summary, source_lang, None
 
     try:
-        chat_model = get_chat_model(api_key=api_key, base_url=base_url, model="gpt-4o-mini")
+        chat_model = get_chat_model(
+            api_key=api_key,
+            base_url=base_url,
+            model="gpt-4o-mini",
+            max_tokens=1024,
+            temperature=0.0,
+            response_format={"type": "json_object"},
+        )
         prompt = (
             "You are a translation assistant. Detect the language of the following text. "
             "If it is not English, translate both the title and the "
@@ -779,9 +792,7 @@ def detect_and_translate_article(
             '- "needs_translation": boolean indicating if it was translated\n'
         )
 
-        result = chat_model.bind(
-            response_format={"type": "json_object"}, max_tokens=1024, temperature=0.0
-        ).invoke(
+        result = chat_model.invoke(
             [
                 {"role": "system", "content": prompt},
                 {"role": "user", "content": f"Title: {title}\nSummary: {summary}"},
