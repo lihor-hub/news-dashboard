@@ -11,6 +11,8 @@ from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
+from langchain_core.messages import AIMessage
+from langchain_core.runnables import RunnableLambda
 
 from news_dashboard.db import connect
 from news_dashboard.insights import (
@@ -31,6 +33,20 @@ from news_dashboard.insights import (
     get_or_generate_insights,
     load_recent_embedded_articles,
 )
+
+
+class _MockModel(RunnableLambda[Any, AIMessage]):
+    """Runnable test double that records the fully rendered prompt value."""
+
+    def __init__(self, content: str) -> None:
+        self.calls: list[Any] = []
+        self.content = content
+        super().__init__(self._answer)
+
+    def _answer(self, value: Any) -> AIMessage:
+        self.calls.append(value)
+        return AIMessage(content=self.content)
+
 
 # ── shared test data ──────────────────────────────────────────────────────────
 
@@ -239,12 +255,7 @@ def test_insights_ai_config_falls_back_to_openai_when_gateway_missing(
 
 
 def test_generate_insights_returns_parsed_bullets() -> None:
-    mock_completion = MagicMock()
-    mock_completion.choices[
-        0
-    ].message.content = "• First bullet point\n• Second bullet point\n• Third bullet point"
-    mock_client = MagicMock()
-    mock_client.chat.completions.create.return_value = mock_completion
+    model = _MockModel("• First bullet point\n• Second bullet point\n• Third bullet point")
 
     with (
         patch.dict(
@@ -255,15 +266,19 @@ def test_generate_insights_returns_parsed_bullets() -> None:
                 "OPENAI_INSIGHTS_MODEL": "gateway-chat-model",
             },
         ),
-        patch("openai.OpenAI", return_value=mock_client),
+        patch("news_dashboard.ai_client.get_chat_model", return_value=model) as factory,
     ):
         bullets = generate_insights(_ARTICLE)
 
     assert bullets == ["First bullet point", "Second bullet point", "Third bullet point"]
-    mock_client.chat.completions.create.assert_called_once()
-    call_kwargs = mock_client.chat.completions.create.call_args.kwargs
-    assert call_kwargs["model"] == "gateway-chat-model"
-    assert "Test Headline" in call_kwargs["messages"][0]["content"]
+    assert len(model.calls) == 1
+    factory.assert_called_once_with(
+        api_key="sk-test",
+        base_url="http://shared-gateway:9130/v1",
+        model="gateway-chat-model",
+        max_tokens=512,
+    )
+    assert "Test Headline" in model.calls[0].to_messages()[0].content
 
 
 def test_generate_insights_returns_empty_list_for_empty_article() -> None:
@@ -274,20 +289,23 @@ def test_generate_insights_returns_empty_list_for_empty_article() -> None:
 
 def test_generate_insights_prompt_grounds_in_article_text() -> None:
     """Prompt must explicitly forbid speculation beyond article content."""
-    mock_completion = MagicMock()
-    mock_completion.choices[0].message.content = "• A bullet"
-    mock_client = MagicMock()
-    mock_client.chat.completions.create.return_value = mock_completion
+    model = _MockModel("• A bullet")
 
     with (
-        patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}),
-        patch("openai.OpenAI", return_value=mock_client),
+        patch.dict(
+            "os.environ",
+            {
+                "OPENAI_API_KEY": "sk-test",
+                "FREE_LLM_API_KEY": "",
+                "FREE_LLM_BASE_URL": "",
+                "OPENAI_INSIGHTS_MODEL": "gpt-4o-mini",
+            },
+        ),
+        patch("news_dashboard.ai_client.get_chat_model", return_value=model),
     ):
         generate_insights(_ARTICLE)
 
-    prompt_text: str = mock_client.chat.completions.create.call_args.kwargs["messages"][0][
-        "content"
-    ]
+    prompt_text = model.calls[0].to_messages()[0].content
     assert "ONLY" in prompt_text
     assert "speculation" in prompt_text
     assert "fewer bullets" in prompt_text
@@ -331,24 +349,21 @@ def test_get_or_generate_insights_returns_cached_without_api_call(pg_clean: str)
     cached = ["Cached bullet 1", "Cached bullet 2"]
     article_id = _seed_article(pg_clean, insights=json.dumps(cached))
 
-    mock_client = MagicMock()
+    model = MagicMock()
     with (
         patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}),
-        patch("openai.OpenAI", return_value=mock_client),
+        patch("news_dashboard.ai_client.get_chat_model", return_value=model),
     ):
         result = get_or_generate_insights(article_id, database_url=pg_clean)
 
     assert result == cached
-    mock_client.chat.completions.create.assert_not_called()
+    model.invoke.assert_not_called()
 
 
 def test_get_or_generate_insights_generates_and_caches_when_missing(pg_clean: str) -> None:
     article_id = _seed_article(pg_clean)
 
-    mock_completion = MagicMock()
-    mock_completion.choices[0].message.content = "• New bullet\n• Another bullet"
-    mock_client = MagicMock()
-    mock_client.chat.completions.create.return_value = mock_completion
+    model = _MockModel("• New bullet\n• Another bullet")
 
     fake_article = {
         "id": article_id,
@@ -359,13 +374,13 @@ def test_get_or_generate_insights_generates_and_caches_when_missing(pg_clean: st
 
     with (
         patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}),
-        patch("openai.OpenAI", return_value=mock_client),
+        patch("news_dashboard.ai_client.get_chat_model", return_value=model),
         patch("news_dashboard.insights.get_article", return_value=fake_article),
     ):
         result = get_or_generate_insights(article_id, database_url=pg_clean)
 
     assert result == ["New bullet", "Another bullet"]
-    mock_client.chat.completions.create.assert_called_once()
+    assert len(model.calls) == 1
 
     with connect(database_url=pg_clean) as conn:
         row = conn.execute("SELECT insights FROM articles WHERE id = %s", (article_id,)).fetchone()
@@ -391,30 +406,20 @@ def test_get_or_generate_insights_raises_without_api_key_when_not_cached(pg_clea
 
 def test_get_or_generate_insights_second_call_uses_cache(pg_clean: str) -> None:
     article_id = _seed_article(pg_clean)
-    call_count: list[int] = []
-
-    mock_completion = MagicMock()
-    mock_completion.choices[0].message.content = "• Bullet"
-    mock_client = MagicMock()
-
-    def count_call(**_kwargs: object) -> object:
-        call_count.append(1)
-        return mock_completion
-
-    mock_client.chat.completions.create.side_effect = count_call
+    model = _MockModel("• Bullet")
 
     fake_article = {"id": article_id, "title": "T", "body": "body", "summary": "s"}
 
     with (
         patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}),
-        patch("openai.OpenAI", return_value=mock_client),
+        patch("news_dashboard.ai_client.get_chat_model", return_value=model),
         patch("news_dashboard.insights.get_article", return_value=fake_article),
     ):
         r1 = get_or_generate_insights(article_id, database_url=pg_clean)
         r2 = get_or_generate_insights(article_id, database_url=pg_clean)
 
     assert r1 == r2 == ["Bullet"]
-    assert len(call_count) == 1, "AI called more than once — cache not working"
+    assert len(model.calls) == 1, "AI called more than once — cache not working"
 
 
 def test_get_or_generate_insights_returns_empty_for_missing_article(pg_clean: str) -> None:
@@ -436,13 +441,13 @@ def test_get_or_generate_insights_returns_empty_when_body_not_fetched(pg_clean: 
 
     with (
         patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}),
-        patch("openai.OpenAI", return_value=mock_client),
+        patch("news_dashboard.ai_client.get_chat_model", return_value=mock_client),
         patch("news_dashboard.insights.get_article", return_value=fake_article_no_body),
     ):
         result = get_or_generate_insights(article_id, database_url=pg_clean)
 
     assert result == []
-    mock_client.chat.completions.create.assert_not_called()
+    mock_client.invoke.assert_not_called()
 
 
 def test_get_or_generate_insights_returns_empty_when_body_is_empty_string(pg_clean: str) -> None:
@@ -458,13 +463,13 @@ def test_get_or_generate_insights_returns_empty_when_body_is_empty_string(pg_cle
 
     with (
         patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}),
-        patch("openai.OpenAI", return_value=mock_client),
+        patch("news_dashboard.ai_client.get_chat_model", return_value=mock_client),
         patch("news_dashboard.insights.get_article", return_value=fake_article_empty_body),
     ):
         result = get_or_generate_insights(article_id, database_url=pg_clean)
 
     assert result == []
-    mock_client.chat.completions.create.assert_not_called()
+    mock_client.invoke.assert_not_called()
 
 
 def test_get_or_generate_insights_cached_blocked_for_unauthorized_user(pg_clean: str) -> None:
@@ -479,12 +484,12 @@ def test_get_or_generate_insights_cached_blocked_for_unauthorized_user(pg_clean:
     mock_client = MagicMock()
     with (
         patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}),
-        patch("openai.OpenAI", return_value=mock_client),
+        patch("news_dashboard.ai_client.get_chat_model", return_value=mock_client),
     ):
         result = get_or_generate_insights(article_id, user_id=other_id, database_url=pg_clean)
 
     assert result == []
-    mock_client.chat.completions.create.assert_not_called()
+    mock_client.invoke.assert_not_called()
 
 
 def test_get_or_generate_insights_cached_returned_for_owner(pg_clean: str) -> None:
@@ -822,20 +827,29 @@ def test_cluster_recent_articles_groups_similar_embeddings(pg_clean: str) -> Non
         _normalize([0.01 if j != dim - 1 else 1.0 for j in range(dim)]),
     ]
 
-    mock_client = MagicMock()
-    mock_response = MagicMock()
-    mock_response.choices[0].message.content = "HEADLINE: Test\nSUMMARY: A test cluster."
-    mock_client.chat.completions.create.return_value = mock_response
+    model = _MockModel("HEADLINE: Test\nSUMMARY: A test cluster.")
 
     _seed_articles_with_embeddings(pg_clean, [group_a, group_b])
 
     with (
-        patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}),
-        patch("openai.OpenAI", return_value=mock_client),
+        patch.dict(
+            "os.environ",
+            {
+                "OPENAI_API_KEY": "sk-test",
+                "FREE_LLM_API_KEY": "",
+                "FREE_LLM_BASE_URL": "",
+                "OPENAI_INSIGHTS_MODEL": "gpt-4o-mini",
+            },
+        ),
+        patch("news_dashboard.ai_client.get_chat_model", return_value=model) as factory,
     ):
         clusters = cluster_recent_articles(database_url=pg_clean)
 
     assert len(clusters) >= 1
+    factory.assert_called_with(
+        api_key="sk-test", base_url=None, model="gpt-4o-mini", max_tokens=200
+    )
+    assert model.calls
     for cluster in clusters:
         assert "headline" in cluster
         assert "trend_summary" in cluster

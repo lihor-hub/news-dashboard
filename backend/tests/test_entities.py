@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import json
 from typing import Any
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
+from langchain_core.messages import AIMessage
+from langchain_core.runnables import RunnableLambda
 
 from news_dashboard.db import connect
 from news_dashboard.entities import (
@@ -85,12 +87,19 @@ def _entities_json(*pairs: tuple[str, str]) -> str:
     return json.dumps({"v": 1, "entities": [{"name": n, "type": t} for n, t in pairs]})
 
 
-def _mock_llm(content: str) -> MagicMock:
-    completion = MagicMock()
-    completion.choices[0].message.content = content
-    client = MagicMock()
-    client.chat.completions.create.return_value = completion
-    return client
+class _MockModel(RunnableLambda[Any, AIMessage]):
+    def __init__(self, content: str) -> None:
+        self.calls: list[Any] = []
+        self.content = content
+        super().__init__(self._answer)
+
+    def _answer(self, value: Any) -> AIMessage:
+        self.calls.append(value)
+        return AIMessage(content=self.content)
+
+
+def _mock_llm(content: str) -> _MockModel:
+    return _MockModel(content)
 
 
 # ── _parse_entities ───────────────────────────────────────────────────────────
@@ -203,20 +212,23 @@ def test_extract_entities_raises_without_api_key() -> None:
 
 
 def test_extract_entities_calls_llm_and_returns_parsed_list() -> None:
-    client = _mock_llm('[{"name": "OpenAI", "type": "org"}, {"name": "OpenAI", "type": "org"}]')
+    model = _mock_llm('[{"name": "OpenAI", "type": "org"}, {"name": "OpenAI", "type": "org"}]')
     with (
         patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}),
-        patch("openai.OpenAI", return_value=client),
+        patch("news_dashboard.ai_client.get_chat_model", return_value=model) as factory,
     ):
         result = extract_entities(
             {"id": 1, "title": "OpenAI ships", "summary": "OpenAI news", "body": "text"}
         )
     assert result == [{"name": "OpenAI", "type": "org"}]
-    client.chat.completions.create.assert_called_once()
+    assert len(model.calls) == 1
+    factory.assert_called_once_with(
+        api_key="sk-test", base_url=None, model="gpt-4o-mini", max_tokens=512
+    )
 
 
 def test_extract_entity_relationships_calls_llm_with_bounded_entities() -> None:
-    client = _mock_llm(
+    model = _mock_llm(
         json.dumps(
             [
                 {
@@ -235,7 +247,7 @@ def test_extract_entity_relationships_calls_llm_with_bounded_entities() -> None:
 
     with (
         patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}),
-        patch("openai.OpenAI", return_value=client),
+        patch("news_dashboard.ai_client.get_chat_model", return_value=model),
     ):
         result = extract_entity_relationships(
             {"id": 1, "title": "OpenAI", "summary": "Sam Altman leads OpenAI.", "body": None},
@@ -253,7 +265,7 @@ def test_extract_entity_relationships_calls_llm_with_bounded_entities() -> None:
             "confidence": 0.8,
         }
     ]
-    client.chat.completions.create.assert_called_once()
+    assert len(model.calls) == 1
 
 
 # ── get_or_extract_entities ───────────────────────────────────────────────────
@@ -263,31 +275,31 @@ def test_get_or_extract_entities_returns_cached_without_api_call(pg_clean: str) 
     cached = _entities_json(("OpenAI", "org"))
     article_id = _seed_article(pg_clean, url_slug="cached", title="T", entities=cached)
 
-    client = _mock_llm("[]")
+    model = _mock_llm("[]")
     with (
         patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}),
-        patch("openai.OpenAI", return_value=client),
+        patch("news_dashboard.ai_client.get_chat_model", return_value=model),
     ):
         result = get_or_extract_entities(article_id, database_url=pg_clean)
 
     assert result == [{"name": "OpenAI", "type": "org"}]
-    client.chat.completions.create.assert_not_called()
+    assert model.calls == []
 
 
 def test_get_or_extract_entities_extracts_and_caches_when_missing(pg_clean: str) -> None:
     article_id = _seed_article(pg_clean, url_slug="fresh", title="OpenAI ships a model")
 
-    client = _mock_llm('[{"name": "OpenAI", "type": "org"}]')
+    model = _mock_llm('[{"name": "OpenAI", "type": "org"}]')
     with (
         patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}),
-        patch("openai.OpenAI", return_value=client),
+        patch("news_dashboard.ai_client.get_chat_model", return_value=model),
     ):
         first = get_or_extract_entities(article_id, database_url=pg_clean)
         second = get_or_extract_entities(article_id, database_url=pg_clean)
 
     assert first == [{"name": "OpenAI", "type": "org"}]
     assert second == first
-    client.chat.completions.create.assert_called_once()
+    assert len(model.calls) == 1
 
     with connect(database_url=pg_clean) as conn:
         row = conn.execute("SELECT entities FROM articles WHERE id = %s", (article_id,)).fetchone()
@@ -306,10 +318,10 @@ def test_get_or_extract_entities_syncs_fresh_entities_to_graph_store(pg_clean: s
         ) -> None:
             synced.append((article, entities))
 
-    client = _mock_llm('[{"name": "OpenAI", "type": "org"}]')
+    model = _mock_llm('[{"name": "OpenAI", "type": "org"}]')
     with (
         patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}),
-        patch("openai.OpenAI", return_value=client),
+        patch("news_dashboard.ai_client.get_chat_model", return_value=model),
         patch("news_dashboard.entities.graph_store_from_env", return_value=FakeGraphStore()),
     ):
         result = get_or_extract_entities(article_id, database_url=pg_clean)

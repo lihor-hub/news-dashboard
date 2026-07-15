@@ -58,3 +58,24 @@ Red/green evidence:
 The database-backed legacy tests still cannot run while PostgreSQL on port
 55432 is unavailable. Their native-client mocks remain follow-up work for the
 combined Task 4 test migration.
+
+## Legacy test migration completion
+
+Converted the reviewer-identified native OpenAI test doubles in
+`test_body_fetch.py`, `test_translation.py`, `test_entities.py`,
+`test_insights.py` (including cluster labels), and `test_perspectives.py` to
+LangChain runnables and `get_chat_model` assertions. The tests continue to
+verify parsed domain output, prompt grounding/truncation, cache avoidance,
+model/provider selection, token and temperature settings, and JSON response
+configuration where applicable.
+
+Evidence:
+
+- Repository-wide search across the five files finds no `openai.OpenAI`,
+  `chat.completions`, or completion-shaped test doubles.
+- Eleven DB-independent migrated test functions were executed directly in an
+  isolated Python process because repository `pytest_configure` requires the
+  unavailable PostgreSQL service; all eleven passed.
+- Scoped Ruff format/check and mypy for all five migrated files passed.
+- The cluster-label and cache tests are migrated but remain unexecutable until
+  PostgreSQL on port 55432 is restored.
