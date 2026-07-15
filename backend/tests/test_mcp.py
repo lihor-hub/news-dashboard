@@ -1,8 +1,6 @@
 from __future__ import annotations
 
-import sys
 from collections.abc import Generator
-from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -249,21 +247,8 @@ def _pack(vector: list[float]) -> str:
 
 
 def _make_openai_stub(monkeypatch: pytest.MonkeyPatch, answer: str = "ok") -> None:
-    class FakeMessage:
-        content = answer
-
-    class FakeChoice:
-        message = FakeMessage()
-
-    class FakeResponse:
-        choices = (FakeChoice(),)
-
-    class FakeCompletions:
-        def create(self, **_: Any) -> FakeResponse:
-            return FakeResponse()
-
-    class FakeChat:
-        completions = FakeCompletions()
+    from langchain_core.messages import AIMessage
+    from langchain_core.runnables import RunnableLambda
 
     class FakeEmbeddingData:
         def __init__(self) -> None:
@@ -281,10 +266,13 @@ def _make_openai_stub(monkeypatch: pytest.MonkeyPatch, answer: str = "ok") -> No
 
     class FakeOpenAI:
         def __init__(self, **_: object) -> None:
-            self.chat = FakeChat()
             self.embeddings = FakeEmbeddings()
 
-    monkeypatch.setitem(sys.modules, "openai", SimpleNamespace(OpenAI=FakeOpenAI))
+    monkeypatch.setattr("news_dashboard.ai_client.get_openai_client", FakeOpenAI)
+    monkeypatch.setattr(
+        "news_dashboard.ai_client.get_chat_model",
+        lambda **_kwargs: RunnableLambda(lambda _value: AIMessage(content=answer)),
+    )
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")
 
 

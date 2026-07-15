@@ -1,8 +1,11 @@
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
+from typing import Any
+from unittest.mock import patch
 
 import pytest
+from langchain_core.messages import AIMessage
+from langchain_core.runnables import RunnableLambda
 
 
 def _make_user(database_url: str, username: str) -> int:
@@ -67,17 +70,18 @@ def test_briefing_prompt_includes_memory_for_current_user(monkeypatch: pytest.Mo
     from news_dashboard.ai_client import ManagedPrompt
     from news_dashboard.briefings.service import _call_openai
 
-    response = MagicMock()
-    response.choices = [
-        MagicMock(message=MagicMock(content='{"title":"T","summary":"S","sections":[]}'))
-    ]
-    chat_create = MagicMock(return_value=response)
+    captured: list[Any] = []
+
+    def answer(value: Any) -> AIMessage:
+        captured.extend(value.to_messages())
+        return AIMessage(content='{"title":"T","summary":"S","sections":[]}')
+
+    model = RunnableLambda(answer)
 
     with (
         patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}),
-        patch("news_dashboard.ai_client.get_openai_client"),
         patch("news_dashboard.ai_client.get_prompt", return_value=ManagedPrompt("system", None)),
-        patch("news_dashboard.ai_client.chat_create", new=chat_create),
+        patch("news_dashboard.ai_client.get_chat_model", return_value=model),
     ):
         monkeypatch.setattr(
             "news_dashboard.ai_memory.service.format_memories_for_prompt",
@@ -89,7 +93,8 @@ def test_briefing_prompt_includes_memory_for_current_user(monkeypatch: pytest.Mo
             user_id=42,
         )
 
-    system_message = chat_create.call_args.kwargs["messages"][0]["content"]
+    system_message = captured[0].content
+    assert isinstance(system_message, str)
     assert "prefer infra" in system_message
 
 

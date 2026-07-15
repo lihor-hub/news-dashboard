@@ -1,7 +1,7 @@
 """Assert that user_id is threaded to Langfuse traces in all AI features.
 
-Each test checks that the relevant ai_client wrapper function (chat_create or
-trace_params) is called with the expected user attribution — either a real user
+Each test checks that the relevant LangChain/Langfuse or native embedding seam
+is called with the expected user attribution — either a real user
 id or the "system" label for background / ingest-time calls.
 """
 
@@ -9,6 +9,9 @@ from __future__ import annotations
 
 from typing import Any
 from unittest.mock import MagicMock, patch
+
+from langchain_core.messages import AIMessage
+from langchain_core.runnables import RunnableLambda
 
 _ARTICLE: dict[str, Any] = {
     "id": 1,
@@ -28,51 +31,41 @@ _CANDIDATES: list[dict[str, Any]] = [
 ]
 
 
-def _mock_completion(content: str = "• Bullet") -> MagicMock:
-    completion = MagicMock()
-    completion.choices[0].message.content = content
-    return completion
-
-
-def _mock_json_completion(json_text: str) -> MagicMock:
-    completion = MagicMock()
-    completion.choices[0].message.content = json_text
-    return completion
+def _chat_model(content: str) -> RunnableLambda[Any, AIMessage]:
+    return RunnableLambda(lambda _value: AIMessage(content=content))
 
 
 # ── insights ──────────────────────────────────────────────────────────────────
 
 
-def test_generate_insights_threads_user_id_to_chat_create() -> None:
+def test_generate_insights_threads_user_id_to_langfuse() -> None:
     from news_dashboard.ai_client import ManagedPrompt
     from news_dashboard.insights import generate_insights
 
-    mock_cc = MagicMock(return_value=_mock_completion())
     with (
         patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}),
-        patch("news_dashboard.ai_client.get_openai_client"),
         patch("news_dashboard.ai_client.get_prompt", return_value=ManagedPrompt("prompt", None)),
-        patch("news_dashboard.ai_client.chat_create", new=mock_cc),
+        patch("news_dashboard.ai_client.get_chat_model", return_value=_chat_model("• Bullet")),
+        patch("langfuse.propagate_attributes") as attributes,
     ):
         generate_insights(_ARTICLE, user_id=42)
 
-    assert mock_cc.call_args.kwargs["user_id"] == 42
+    assert attributes.call_args.kwargs["user_id"] == "42"
 
 
 def test_generate_insights_passes_none_user_id_when_no_user() -> None:
     from news_dashboard.ai_client import ManagedPrompt
     from news_dashboard.insights import generate_insights
 
-    mock_cc = MagicMock(return_value=_mock_completion())
     with (
         patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}),
-        patch("news_dashboard.ai_client.get_openai_client"),
         patch("news_dashboard.ai_client.get_prompt", return_value=ManagedPrompt("prompt", None)),
-        patch("news_dashboard.ai_client.chat_create", new=mock_cc),
+        patch("news_dashboard.ai_client.get_chat_model", return_value=_chat_model("• Bullet")),
+        patch("langfuse.propagate_attributes") as attributes,
     ):
         generate_insights(_ARTICLE)
 
-    assert mock_cc.call_args.kwargs["user_id"] is None
+    assert attributes.call_args.kwargs["user_id"] is None
 
 
 # ── embeddings: article embedding tags "system" ────────────────────────────────
@@ -273,14 +266,16 @@ def test_ask_uses_native_langfuse_user_and_session_attributes() -> None:
 # ── body_fetch: AI body extraction threads user_id ────────────────────────────
 
 
-def test_ai_extract_body_threads_user_id_to_chat_create() -> None:
+def test_ai_extract_body_threads_user_id_to_langfuse() -> None:
     from news_dashboard.body_fetch import _ai_extract_body
 
-    mock_cc = MagicMock(return_value=_mock_completion("Article body text."))
     with (
         patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}),
-        patch("news_dashboard.ai_client.get_openai_client"),
-        patch("news_dashboard.ai_client.chat_create", new=mock_cc),
+        patch(
+            "news_dashboard.ai_client.get_chat_model",
+            return_value=_chat_model("Article body text."),
+        ),
+        patch("langfuse.propagate_attributes") as attributes,
         patch(
             "news_dashboard.body_fetch._fetch_capped_html",
             return_value="<html><body><p>article content here</p></body></html>",
@@ -288,17 +283,19 @@ def test_ai_extract_body_threads_user_id_to_chat_create() -> None:
     ):
         _ai_extract_body("https://example.com/article", user_id=55)
 
-    assert mock_cc.call_args.kwargs["user_id"] == 55
+    assert attributes.call_args.kwargs["user_id"] == "55"
 
 
 def test_ai_extract_body_passes_none_user_id_by_default() -> None:
     from news_dashboard.body_fetch import _ai_extract_body
 
-    mock_cc = MagicMock(return_value=_mock_completion("Article body text."))
     with (
         patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}),
-        patch("news_dashboard.ai_client.get_openai_client"),
-        patch("news_dashboard.ai_client.chat_create", new=mock_cc),
+        patch(
+            "news_dashboard.ai_client.get_chat_model",
+            return_value=_chat_model("Article body text."),
+        ),
+        patch("langfuse.propagate_attributes") as attributes,
         patch(
             "news_dashboard.body_fetch._fetch_capped_html",
             return_value="<html><body><p>article content here</p></body></html>",
@@ -306,13 +303,12 @@ def test_ai_extract_body_passes_none_user_id_by_default() -> None:
     ):
         _ai_extract_body("https://example.com/article")
 
-    assert mock_cc.call_args.kwargs["user_id"] is None
+    assert attributes.call_args.kwargs["user_id"] is None
 
 
 def test_ai_extract_body_uses_free_llm_gateway_config() -> None:
     from news_dashboard.body_fetch import _ai_extract_body
 
-    mock_cc = MagicMock(return_value=_mock_completion("Article body text."))
     with (
         patch.dict(
             "os.environ",
@@ -322,8 +318,10 @@ def test_ai_extract_body_uses_free_llm_gateway_config() -> None:
                 "OPENAI_BRIEFING_MODEL": "gateway-chat-model",
             },
         ),
-        patch("news_dashboard.ai_client.get_openai_client") as mock_client_factory,
-        patch("news_dashboard.ai_client.chat_create", new=mock_cc),
+        patch(
+            "news_dashboard.ai_client.get_chat_model",
+            return_value=_chat_model("Article body text."),
+        ) as factory,
         patch(
             "news_dashboard.body_fetch._fetch_capped_html",
             return_value="<html><body><p>article content here</p></body></html>",
@@ -331,20 +329,23 @@ def test_ai_extract_body_uses_free_llm_gateway_config() -> None:
     ):
         _ai_extract_body("https://example.com/article")
 
-    mock_client_factory.assert_called_once_with(
-        api_key="sk-gateway", base_url="http://gateway:9130/v1"
+    factory.assert_called_once_with(
+        api_key="sk-gateway",
+        base_url="http://gateway:9130/v1",
+        model="gateway-chat-model",
+        max_tokens=2048,
     )
-    assert mock_cc.call_args.kwargs["model"] == "gateway-chat-model"
 
 
 def test_ai_extract_body_falls_back_to_openai_when_gateway_unset() -> None:
     from news_dashboard.body_fetch import _ai_extract_body
 
-    mock_cc = MagicMock(return_value=_mock_completion("Article body text."))
     with (
         patch.dict("os.environ", {"OPENAI_API_KEY": "sk-openai"}, clear=True),
-        patch("news_dashboard.ai_client.get_openai_client") as mock_client_factory,
-        patch("news_dashboard.ai_client.chat_create", new=mock_cc),
+        patch(
+            "news_dashboard.ai_client.get_chat_model",
+            return_value=_chat_model("Article body text."),
+        ) as factory,
         patch(
             "news_dashboard.body_fetch._fetch_capped_html",
             return_value="<html><body><p>article content here</p></body></html>",
@@ -352,29 +353,28 @@ def test_ai_extract_body_falls_back_to_openai_when_gateway_unset() -> None:
     ):
         _ai_extract_body("https://example.com/article")
 
-    mock_client_factory.assert_called_once_with(api_key="sk-openai", base_url=None)
-    assert mock_cc.call_args.kwargs["model"] == "gpt-4o-mini"
+    factory.assert_called_once_with(
+        api_key="sk-openai", base_url=None, model="gpt-4o-mini", max_tokens=2048
+    )
 
 
 # ── briefings: generation threads user_id ─────────────────────────────────────
 
 
-def test_call_openai_threads_user_id_to_chat_create() -> None:
+def test_call_openai_threads_user_id_to_langfuse() -> None:
     from news_dashboard.ai_client import ManagedPrompt
     from news_dashboard.briefings.service import _call_openai
 
     json_text = '{"title":"T","summary":"S","sections":[],"worth_opening":[]}'
-    mock_cc = MagicMock(return_value=_mock_json_completion(json_text))
-
     with (
         patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}),
-        patch("news_dashboard.ai_client.get_openai_client"),
         patch("news_dashboard.ai_client.get_prompt", return_value=ManagedPrompt("system", None)),
-        patch("news_dashboard.ai_client.chat_create", new=mock_cc),
+        patch("news_dashboard.ai_client.get_chat_model", return_value=_chat_model(json_text)),
+        patch("langfuse.propagate_attributes") as attributes,
     ):
         _call_openai(_CANDIDATES, "gpt-4o-mini", user_id=33)
 
-    assert mock_cc.call_args.kwargs["user_id"] == 33
+    assert attributes.call_args.kwargs["user_id"] == "33"
 
 
 def test_call_openai_passes_none_user_id_for_system_briefings() -> None:
@@ -382,14 +382,12 @@ def test_call_openai_passes_none_user_id_for_system_briefings() -> None:
     from news_dashboard.briefings.service import _call_openai
 
     json_text = '{"title":"T","summary":"S","sections":[],"worth_opening":[]}'
-    mock_cc = MagicMock(return_value=_mock_json_completion(json_text))
-
     with (
         patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}),
-        patch("news_dashboard.ai_client.get_openai_client"),
         patch("news_dashboard.ai_client.get_prompt", return_value=ManagedPrompt("system", None)),
-        patch("news_dashboard.ai_client.chat_create", new=mock_cc),
+        patch("news_dashboard.ai_client.get_chat_model", return_value=_chat_model(json_text)),
+        patch("langfuse.propagate_attributes") as attributes,
     ):
         _call_openai(_CANDIDATES, "gpt-4o-mini")
 
-    assert mock_cc.call_args.kwargs["user_id"] is None
+    assert attributes.call_args.kwargs["user_id"] is None
