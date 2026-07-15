@@ -62,6 +62,8 @@ _PERSONA_FRAMING: dict[str, str] = {
     "new_to_ai": "for readers new to AI who want a clear on-ramp",
     "preparing_talk": "for someone preparing a talk on this topic",
 }
+_GRAPH_NODE_TYPES = {"concept", "entity", "article", "briefing"}
+_GRAPH_RELATIONSHIP_TYPES = {"introduces", "supports", "cites", "related_to"}
 
 _LESSON_CHAT_SYSTEM_PROMPT = """\
 You are the Lesson Follow-up Assistant. Answer follow-up questions about the \
@@ -164,7 +166,220 @@ def _serialize_lesson(row: Any) -> dict[str, Any]:
         value = lesson.get(key)
         if value is not None:
             lesson[key] = value.isoformat()
+    lesson["graph_context_available"] = bool(lesson.get("graph_context_available", False))
     return lesson
+
+
+def _graph_key(node_type: str, name: str) -> str:
+    slug = re.sub(r"[^a-z0-9]+", "-", name.strip().lower()).strip("-")
+    return f"{node_type}:{slug[:80]}"
+
+
+def _graph_name(value: Any, *, max_length: int = 120) -> str:
+    name = re.sub(r"\s+", " ", str(value or "")).strip()
+    return name[:max_length].strip()
+
+
+def _graph_node(
+    nodes: dict[str, dict[str, Any]],
+    *,
+    name: Any,
+    node_type: str,
+    source_field: str,
+    related_article_id: int | None = None,
+) -> str | None:
+    normalized = _graph_name(name)
+    if not normalized or node_type not in _GRAPH_NODE_TYPES:
+        return None
+    node_key = _graph_key(node_type, normalized)
+    nodes.setdefault(
+        node_key,
+        {
+            "node_key": node_key,
+            "name": normalized,
+            "node_type": node_type,
+            "source_field": source_field,
+            "related_article_id": related_article_id,
+        },
+    )
+    return node_key
+
+
+def _graph_edge(
+    edges: list[dict[str, Any]],
+    *,
+    source_key: str | None,
+    target_key: str | None,
+    relationship_type: str,
+    label: str,
+    confidence: float = 1.0,
+) -> None:
+    if (
+        source_key is None
+        or target_key is None
+        or source_key == target_key
+        or relationship_type not in _GRAPH_RELATIONSHIP_TYPES
+    ):
+        return
+    edges.append(
+        {
+            "source_key": source_key,
+            "target_key": target_key,
+            "relationship_type": relationship_type,
+            "label": label,
+            "confidence": max(0.0, min(confidence, 1.0)),
+        }
+    )
+
+
+def extract_lesson_graph_candidates(
+    lesson_fields: dict[str, Any], *, related_article_id: int | None = None
+) -> dict[str, list[dict[str, Any]]]:
+    detail = lesson_fields.get("lesson_detail")
+    if not isinstance(detail, dict):
+        return {"nodes": [], "edges": []}
+
+    nodes: dict[str, dict[str, Any]] = {}
+    edges: list[dict[str, Any]] = []
+    title_key = _graph_node(
+        nodes,
+        name=lesson_fields.get("title") or lesson_fields.get("original_url"),
+        node_type="article",
+        source_field="title",
+        related_article_id=related_article_id,
+    )
+    source_key = _graph_node(
+        nodes,
+        name=lesson_fields.get("source_name"),
+        node_type="entity",
+        source_field="source_name",
+    )
+    _graph_edge(
+        edges,
+        source_key=title_key,
+        target_key=source_key,
+        relationship_type="cites",
+        label="published by",
+        confidence=0.7,
+    )
+
+    for concept in detail.get("prerequisite_concepts") or []:
+        concept_key = _graph_node(
+            nodes, name=concept, node_type="concept", source_field="prerequisite_concepts"
+        )
+        _graph_edge(
+            edges,
+            source_key=title_key,
+            target_key=concept_key,
+            relationship_type="introduces",
+            label="introduces",
+        )
+
+    for claim in detail.get("key_claims") or []:
+        claim_key = _graph_node(nodes, name=claim, node_type="concept", source_field="key_claims")
+        _graph_edge(
+            edges,
+            source_key=title_key,
+            target_key=claim_key,
+            relationship_type="supports",
+            label="supports",
+            confidence=0.8,
+        )
+
+    for citation in detail.get("citations") or []:
+        if not isinstance(citation, dict):
+            continue
+        citation_key = _graph_node(
+            nodes, name=citation.get("source"), node_type="entity", source_field="citations"
+        )
+        _graph_edge(
+            edges,
+            source_key=title_key,
+            target_key=citation_key,
+            relationship_type="cites",
+            label="cites",
+        )
+
+    unique_edges = {
+        (edge["source_key"], edge["target_key"], edge["relationship_type"]): edge for edge in edges
+    }
+    return {"nodes": list(nodes.values()), "edges": list(unique_edges.values())}
+
+
+def persist_lesson_graph_context(
+    lesson_id: int,
+    user_id: int,
+    lesson_fields: dict[str, Any],
+    *,
+    database_url: str | None = None,
+) -> int:
+    init_db(database_url=database_url)
+    with connect(database_url=database_url) as conn:
+        related_article = conn.execute(
+            """
+            SELECT id FROM articles
+            WHERE url = %s OR canonical_url = %s
+            LIMIT 1
+            """,
+            (
+                lesson_fields.get("original_url"),
+                lesson_fields.get("normalized_url") or lesson_fields.get("original_url"),
+            ),
+        ).fetchone()
+        related_article_id = int(related_article["id"]) if related_article is not None else None
+        candidates = extract_lesson_graph_candidates(
+            lesson_fields, related_article_id=related_article_id
+        )
+        nodes = candidates["nodes"]
+        edges = candidates["edges"]
+        conn.execute("DELETE FROM lesson_graph_edges WHERE lesson_id = %s", (lesson_id,))
+        conn.execute("DELETE FROM lesson_graph_nodes WHERE lesson_id = %s", (lesson_id,))
+        for node in nodes:
+            conn.execute(
+                """
+                INSERT INTO lesson_graph_nodes(
+                  lesson_id, user_id, node_key, name, node_type, source_field, related_article_id
+                )
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
+                ON CONFLICT (lesson_id, node_key) DO UPDATE
+                SET name = EXCLUDED.name,
+                    node_type = EXCLUDED.node_type,
+                    source_field = EXCLUDED.source_field,
+                    related_article_id = EXCLUDED.related_article_id
+                """,
+                (
+                    lesson_id,
+                    user_id,
+                    node["node_key"],
+                    node["name"],
+                    node["node_type"],
+                    node["source_field"],
+                    node["related_article_id"],
+                ),
+            )
+        for edge in edges:
+            conn.execute(
+                """
+                INSERT INTO lesson_graph_edges(
+                  lesson_id, user_id, source_key, target_key,
+                  relationship_type, label, confidence
+                )
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
+                ON CONFLICT (lesson_id, source_key, target_key, relationship_type) DO UPDATE
+                SET label = EXCLUDED.label,
+                    confidence = EXCLUDED.confidence
+                """,
+                (
+                    lesson_id,
+                    user_id,
+                    edge["source_key"],
+                    edge["target_key"],
+                    edge["relationship_type"],
+                    edge["label"],
+                    edge["confidence"],
+                ),
+            )
+    return len(nodes)
 
 
 def create_lesson(
@@ -301,7 +516,11 @@ def _update_lesson_success(
                 user_id,
             ),
         ).fetchone()
-    return _serialize_lesson(row)
+    try:
+        persist_lesson_graph_context(lesson_id, user_id, lesson_fields, database_url=database_url)
+    except Exception:
+        logger.exception("lesson graph extraction failed for lesson %d", lesson_id)
+    return get_lesson(lesson_id, user_id, database_url=database_url) or _serialize_lesson(row)
 
 
 def _update_lesson_failure(
@@ -1483,7 +1702,15 @@ def list_lessons(
     database_url: str | None = None,
 ) -> list[dict[str, Any]]:
     init_db(database_url=database_url)
-    query = "SELECT * FROM lessons WHERE user_id = %s"
+    query = """
+        SELECT lessons.*,
+               EXISTS(
+                 SELECT 1 FROM lesson_graph_nodes
+                 WHERE lesson_graph_nodes.lesson_id = lessons.id
+               ) AS graph_context_available
+        FROM lessons
+        WHERE user_id = %s
+    """
     params: list[Any] = [user_id]
     if status is not None:
         query += " AND generation_status = %s"
@@ -1517,7 +1744,15 @@ def get_lesson(
     init_db(database_url=database_url)
     with connect(database_url=database_url) as conn:
         row = conn.execute(
-            "SELECT * FROM lessons WHERE id = %s AND user_id = %s",
+            """
+            SELECT lessons.*,
+                   EXISTS(
+                     SELECT 1 FROM lesson_graph_nodes
+                     WHERE lesson_graph_nodes.lesson_id = lessons.id
+                   ) AS graph_context_available
+            FROM lessons
+            WHERE id = %s AND user_id = %s
+            """,
             (lesson_id, user_id),
         ).fetchone()
     if row is None:

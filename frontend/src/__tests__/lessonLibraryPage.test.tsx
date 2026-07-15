@@ -37,6 +37,7 @@ const COMPLETE_LESSON: Lesson = {
   infographic: null,
   infographic_status: null,
   infographic_error: null,
+  graph_context_available: false,
   lesson_detail: {
     gist: 'The article argues that strong source selection matters more than raw volume.',
     explanation: 'explanation',
