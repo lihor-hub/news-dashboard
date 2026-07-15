@@ -14,6 +14,14 @@ services:
       retries: 5
     restart: unless-stopped
 
+  neo4j:
+    image: neo4j:5-community
+    environment:
+      NEO4J_AUTH: neo4j/news-dashboard-neo4j-local-password
+    volumes:
+      - news-dashboard-neo4j:/data
+    restart: unless-stopped
+
   news-dashboard:
     build: .
     image: news-dashboard:local
@@ -34,12 +42,18 @@ services:
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       FREE_LLM_API_KEY: ${FREE_LLM_API_KEY:-}
       FREE_LLM_BASE_URL: ${FREE_LLM_BASE_URL:-}
+      NEO4J_URI: bolt://neo4j:7687
+      NEO4J_USER: neo4j
+      NEO4J_PASSWORD: ${NEO4J_PASSWORD:-news-dashboard-neo4j-local-password}
+      NEO4J_DATABASE: neo4j
       DATA_DIR: /data
     volumes:
       - news-dashboard-data:/data
     depends_on:
       postgres:
         condition: service_healthy
+      neo4j:
+        condition: service_started
     healthcheck:
       test:
         [
@@ -56,4 +70,5 @@ services:
 
 volumes:
   news-dashboard-postgres:
+  news-dashboard-neo4j:
   news-dashboard-data:

@@ -38,7 +38,6 @@ The repository provides two Docker Compose files:
 
 ### Prerequisites
 
-- PostgreSQL database (version 16+)
 - Docker or container runtime
 - Required environment variables (see [Configuration](#configuration))
 
@@ -59,7 +58,7 @@ See the [.env.example reference](#environment-variables) below for all available
 docker compose -f docker-compose.prod.yml up -d
 ```
 
-The compose file will fail fast if required secrets (`SESSION_SECRET`, `BOOTSTRAP_ADMIN_USERNAME`, `BOOTSTRAP_ADMIN_PASSWORD`, `POSTGRES_PASSWORD`) are not set.
+The compose file will fail fast if required secrets (`SESSION_SECRET`, `BOOTSTRAP_ADMIN_USERNAME`, `BOOTSTRAP_ADMIN_PASSWORD`, `POSTGRES_PASSWORD`, `NEO4J_PASSWORD`) are not set.
 
 `docker-compose.prod.yml` also mounts the named `news-dashboard-data` volume at
 `/data` and sets `DATA_DIR=/data`. Generated article audio and briefing podcast
@@ -67,6 +66,18 @@ MP3 caches live under `/data/audio`, so keep that volume backed by persistent
 storage in production. If you run the container manually with `docker run`, pass
 both `-e DATA_DIR=/data` and `-v news-dashboard-data:/data`; otherwise audio
 files are lost when the app container is recreated.
+
+The production Compose stack also starts a bundled `neo4j:5-community`
+container and injects `NEO4J_URI`, `NEO4J_USER`, `NEO4J_PASSWORD`, and
+`NEO4J_DATABASE=neo4j` into the app so the knowledge graph is enabled by
+default. After first start, backfill existing cached entities:
+
+```bash
+docker compose -f docker-compose.prod.yml exec news-dashboard \
+  news-dashboard graph-backfill --limit 250 --days 30
+docker compose -f docker-compose.prod.yml exec news-dashboard \
+  news-dashboard graph-relationship-backfill --limit 50 --days 7
+```
 
 ### Verifying the Deployment
 
