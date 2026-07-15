@@ -21,7 +21,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from news_dashboard.ai_client import _client, chat_create, get_chat_client, langfuse_enabled
+from news_dashboard.ai_client import _client, langfuse_enabled
 
 logger = logging.getLogger(__name__)
 
@@ -152,19 +152,23 @@ def _optimizer_ai_config() -> tuple[str, str | None]:
 def _propose_revision(current_text: str, examples: list[NegativeExample], *, model: str) -> str:
     """Call the LLM to draft an improved prompt. Traced like any other call."""
     api_key, base_url = _optimizer_ai_config()
-    client = get_chat_client(api_key=api_key, base_url=base_url)
-    response = chat_create(
-        client,
-        name="prompt-optimizer",
-        tags=["prompt-optimizer"],
-        model=model,
-        messages=[
-            {"role": "system", "content": _OPTIMIZER_INSTRUCTIONS},
-            {"role": "user", "content": build_optimizer_prompt(current_text, examples)},
-        ],
-        max_tokens=1024,
+    from langchain_core.prompts import ChatPromptTemplate
+    from langfuse import propagate_attributes
+
+    from news_dashboard.ai_client import get_chat_model, response_text
+
+    chat_model = get_chat_model(api_key=api_key, base_url=base_url, model=model).bind(
+        max_tokens=1024
     )
-    return (response.choices[0].message.content or "").strip()
+    prompt = ChatPromptTemplate.from_messages(
+        [("system", _OPTIMIZER_INSTRUCTIONS), ("human", "{optimizer_prompt}")]
+    )
+    with propagate_attributes(tags=["prompt-optimizer"], trace_name="prompt-optimizer"):
+        response = (prompt | chat_model).invoke(
+            {"optimizer_prompt": build_optimizer_prompt(current_text, examples)},
+            config={"metadata": {"max_tokens": 1024}},
+        )
+    return response_text(response).strip()
 
 
 def optimize_prompt(

@@ -8,6 +8,8 @@ from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
+from langchain_core.messages import AIMessage
+from langchain_core.runnables import RunnableLambda
 
 from news_dashboard.auth import require_admin, require_auth
 from news_dashboard.db import connect, init_db
@@ -961,8 +963,11 @@ def test_ask_lesson_question_endpoint_returns_reply(
 
     import news_dashboard.ai_client as ai_client_mod
 
-    mock_chat_create, _captured = _mock_chat_reply("Here's an example.")
-    monkeypatch.setattr(ai_client_mod, "chat_create", mock_chat_create)
+    monkeypatch.setattr(
+        ai_client_mod,
+        "get_chat_model",
+        lambda **_kwargs: RunnableLambda(lambda _prompt: AIMessage(content="Here's an example.")),
+    )
 
     with _api_client(user_id) as client:
         response = client.post(
@@ -1437,18 +1442,14 @@ def test_lesson_relevance_uses_profile_and_llm_response(
             (user_id, '["technology", "AI"]'),
         )
 
-    class FakeChoice:
-        def __init__(self, content: str) -> None:
-            self.message = SimpleNamespace(content=content)
-
-    class FakeResponse:
-        def __init__(self, content: str) -> None:
-            self.choices = [FakeChoice(content)]
-
     monkeypatch.setattr(
-        "news_dashboard.ai_client.chat_create",
-        lambda *_args, **_kwargs: FakeResponse(
-            '{"explanation": "Relevant to your AI interests.", "signals": ["Interest: AI"]}'
+        "news_dashboard.ai_client.get_chat_model",
+        lambda **_kwargs: RunnableLambda(
+            lambda _prompt, **_kwargs: AIMessage(
+                content=(
+                    '{"explanation": "Relevant to your AI interests.", "signals": ["Interest: AI"]}'
+                )
+            )
         ),
     )
 

@@ -577,23 +577,23 @@ def generate_slide_deck_content(lesson: dict[str, Any], user_id: int) -> dict[st
 
     import json
 
-    from news_dashboard.ai_client import chat_create, get_chat_client
+    from langchain_core.prompts import ChatPromptTemplate
+    from langfuse import propagate_attributes
 
-    client = get_chat_client(api_key=api_key, base_url=base_url)
-    messages = [
-        {"role": "system", "content": _LESSON_SLIDE_DECK_SYSTEM_PROMPT},
-        {"role": "user", "content": _build_slide_deck_prompt(lesson)},
-    ]
-    response = chat_create(
-        client,
-        name="lesson-slide-deck",
-        tags=["lesson", "slide-deck"],
-        user_id=user_id,
-        model=os.getenv("OPENAI_LESSON_CHAT_MODEL", DEFAULT_LESSON_CHAT_MODEL),
-        messages=messages,
-        response_format={"type": "json_object"},
+    from news_dashboard.ai_client import get_chat_model, response_text
+
+    model = os.getenv("OPENAI_LESSON_CHAT_MODEL", DEFAULT_LESSON_CHAT_MODEL)
+    chat_model = get_chat_model(api_key=api_key, base_url=base_url, model=model).bind(
+        response_format={"type": "json_object"}
     )
-    parsed = json.loads(response.choices[0].message.content or "")
+    prompt = ChatPromptTemplate.from_messages(
+        [("system", _LESSON_SLIDE_DECK_SYSTEM_PROMPT), ("human", "{lesson}")]
+    )
+    with propagate_attributes(
+        user_id=str(user_id), tags=["lesson", "slide-deck"], trace_name="lesson-slide-deck"
+    ):
+        response = (prompt | chat_model).invoke({"lesson": _build_slide_deck_prompt(lesson)})
+    parsed = json.loads(response_text(response))
     return validate_slide_deck(parsed)
 
 
@@ -741,23 +741,23 @@ def generate_infographic_content(lesson: dict[str, Any], user_id: int) -> dict[s
 
     import json
 
-    from news_dashboard.ai_client import chat_create, get_chat_client
+    from langchain_core.prompts import ChatPromptTemplate
+    from langfuse import propagate_attributes
 
-    client = get_chat_client(api_key=api_key, base_url=base_url)
-    messages = [
-        {"role": "system", "content": _LESSON_INFOGRAPHIC_SYSTEM_PROMPT},
-        {"role": "user", "content": _build_infographic_prompt(lesson)},
-    ]
-    response = chat_create(
-        client,
-        name="lesson-infographic",
-        tags=["lesson", "infographic"],
-        user_id=user_id,
-        model=os.getenv("OPENAI_LESSON_CHAT_MODEL", DEFAULT_LESSON_CHAT_MODEL),
-        messages=messages,
-        response_format={"type": "json_object"},
+    from news_dashboard.ai_client import get_chat_model, response_text
+
+    model = os.getenv("OPENAI_LESSON_CHAT_MODEL", DEFAULT_LESSON_CHAT_MODEL)
+    chat_model = get_chat_model(api_key=api_key, base_url=base_url, model=model).bind(
+        response_format={"type": "json_object"}
     )
-    parsed = json.loads(response.choices[0].message.content or "")
+    prompt = ChatPromptTemplate.from_messages(
+        [("system", _LESSON_INFOGRAPHIC_SYSTEM_PROMPT), ("human", "{lesson}")]
+    )
+    with propagate_attributes(
+        user_id=str(user_id), tags=["lesson", "infographic"], trace_name="lesson-infographic"
+    ):
+        response = (prompt | chat_model).invoke({"lesson": _build_infographic_prompt(lesson)})
+    parsed = json.loads(response_text(response))
     return validate_infographic(parsed)
 
 
@@ -1575,41 +1575,36 @@ def generate_personal_relevance(
 
     import json
 
-    from news_dashboard.ai_client import chat_create, get_chat_client
+    from langchain_core.prompts import ChatPromptTemplate
+    from langfuse import propagate_attributes
+
+    from news_dashboard.ai_client import get_chat_model, response_text
 
     lesson_title = str(lesson_fields.get("title") or lesson_fields.get("original_url"))
     lesson_detail = lesson_fields.get("lesson_detail") or {}
-    messages = [
-        {
-            "role": "system",
-            "content": (
-                "Explain why a lesson is relevant using only the user's provided reading profile. "
-                "Return JSON with non-empty explanation and a signals array."
-            ),
-        },
-        {
-            "role": "user",
-            "content": (
-                f"Lesson title: {lesson_title}\n"
-                f"Lesson gist: {lesson_detail.get('gist', '')}\n"
-                f"Interests: {interests}\n"
-                f"Reading DNA categories: {dna_categories}\n"
-                f"Reading DNA sources: {dna_sources}\n"
-                f"Recent article titles: {[item['title'] for item in recent_articles]}"
-            ),
-        },
-    ]
+    system = (
+        "Explain why a lesson is relevant using only the user's provided reading profile. "
+        "Return JSON with non-empty explanation and a signals array."
+    )
+    user_prompt = (
+        f"Lesson title: {lesson_title}\n"
+        f"Lesson gist: {lesson_detail.get('gist', '')}\n"
+        f"Interests: {interests}\n"
+        f"Reading DNA categories: {dna_categories}\n"
+        f"Reading DNA sources: {dna_sources}\n"
+        f"Recent article titles: {[item['title'] for item in recent_articles]}"
+    )
     try:
-        response = chat_create(
-            get_chat_client(api_key=api_key, base_url=base_url),
-            name="lesson-relevance",
-            tags=["lesson", "relevance"],
-            user_id=user_id,
-            model=os.getenv("OPENAI_LESSON_CHAT_MODEL", DEFAULT_LESSON_CHAT_MODEL),
-            messages=messages,
-            response_format={"type": "json_object"},
+        model = os.getenv("OPENAI_LESSON_CHAT_MODEL", DEFAULT_LESSON_CHAT_MODEL)
+        chat_model = get_chat_model(api_key=api_key, base_url=base_url, model=model).bind(
+            response_format={"type": "json_object"}
         )
-        parsed = json.loads(response.choices[0].message.content or "")
+        prompt = ChatPromptTemplate.from_messages([("system", system), ("human", "{profile}")])
+        with propagate_attributes(
+            user_id=str(user_id), tags=["lesson", "relevance"], trace_name="lesson-relevance"
+        ):
+            response = (prompt | chat_model).invoke({"profile": user_prompt})
+        parsed = json.loads(response_text(response))
         return {
             "explanation": str(parsed["explanation"]),
             "signals": [str(signal) for signal in parsed["signals"] if signal],

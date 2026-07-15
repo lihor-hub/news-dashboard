@@ -719,7 +719,14 @@ class _FakeOpenAI:
 def _patch_openai(monkeypatch: pytest.MonkeyPatch, content: str) -> type[_FakeOpenAI]:
     monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
     cls = type("Patched", (_FakeOpenAI,), {"content": content})
-    monkeypatch.setattr("openai.OpenAI", cls)
+    from langchain_core.messages import AIMessage
+    from langchain_core.runnables import RunnableLambda
+
+    def factory(**kwargs: Any) -> Any:
+        _FakeOpenAI.last_kwargs = kwargs
+        return RunnableLambda(lambda _prompt, **_kwargs: AIMessage(content=content))
+
+    monkeypatch.setattr("news_dashboard.ai_client.get_chat_model", factory)
     return cls
 
 
@@ -727,21 +734,21 @@ def test_call_openai_uses_default_base_url_when_unset(monkeypatch: pytest.Monkey
     monkeypatch.delenv("OPENAI_BASE_URL", raising=False)
     monkeypatch.delenv("FREE_LLM_BASE_URL", raising=False)
     monkeypatch.delenv("FREE_LLM_API_KEY", raising=False)
-    cls = _patch_openai(monkeypatch, "{}")
+    _patch_openai(monkeypatch, "{}")
     _call_openai([{"id": 1, "title": "A"}], model="gpt-x")
-    assert cls.last_kwargs["api_key"] == "sk-test"
+    assert _FakeOpenAI.last_kwargs["api_key"] == "sk-test"
     # The client factory omits base_url entirely when none is configured
     # (equivalent to the OpenAI SDK default).
-    assert cls.last_kwargs.get("base_url") is None
+    assert _FakeOpenAI.last_kwargs.get("base_url") is None
 
 
 def test_call_openai_uses_free_llm_endpoint_override(monkeypatch: pytest.MonkeyPatch) -> None:
-    cls = _patch_openai(monkeypatch, "{}")
+    _patch_openai(monkeypatch, "{}")
     monkeypatch.setenv("FREE_LLM_API_KEY", "freellmapi-key")
     monkeypatch.setenv("FREE_LLM_BASE_URL", "http://127.0.0.1:9130/v1")
     _call_openai([{"id": 1, "title": "A"}], model="auto")
-    assert cls.last_kwargs["api_key"] == "freellmapi-key"
-    assert cls.last_kwargs["base_url"] == "http://127.0.0.1:9130/v1"
+    assert _FakeOpenAI.last_kwargs["api_key"] == "freellmapi-key"
+    assert _FakeOpenAI.last_kwargs["base_url"] == "http://127.0.0.1:9130/v1"
 
 
 def test_call_openai_parses_valid_json(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -788,16 +795,12 @@ def test_call_openai_wraps_upstream_error(monkeypatch: pytest.MonkeyPatch) -> No
 
     monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
     monkeypatch.setenv("FREE_LLM_BASE_URL", "http://192.168.0.75:9130/v1")
-    cls = type(
-        "Patched",
-        (_FakeOpenAI,),
-        {
-            "__init__": lambda self, **_kw: setattr(
-                self, "chat", SimpleNamespace(completions=SimpleNamespace(create=_raise))
-            )
-        },
+    from langchain_core.runnables import RunnableLambda
+
+    monkeypatch.setattr(
+        "news_dashboard.ai_client.get_chat_model",
+        lambda **_kwargs: RunnableLambda(lambda _prompt, **_kwargs: _raise()),
     )
-    monkeypatch.setattr("openai.OpenAI", cls)
     with pytest.raises(BriefingGenerationError, match=re.escape("192.168.0.75:9130")):
         _call_openai([{"id": 1, "title": "A"}], model="auto")
 
@@ -1198,21 +1201,23 @@ def test_call_openai_includes_focus_prompt_in_system_instruction(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
-    captured_messages = []
+    captured_messages: list[Any] = []
 
-    def _mock_chat_create(*args: Any, messages: list[dict[str, str]], **kwargs: Any) -> Any:
+    def _invoke(prompt: Any, **_kwargs: Any) -> Any:
         nonlocal captured_messages
-        captured_messages = messages
-        message = SimpleNamespace(content='{"title": "T", "sections": []}')
-        choice = SimpleNamespace(message=message)
-        return SimpleNamespace(choices=[choice])
+        captured_messages = prompt.messages
+        from langchain_core.messages import AIMessage
+
+        return AIMessage(content='{"title": "T", "sections": []}')
+
+    from langchain_core.runnables import RunnableLambda
 
     import news_dashboard.ai_client as ai_client_mod
 
-    monkeypatch.setattr(ai_client_mod, "chat_create", _mock_chat_create)
+    monkeypatch.setattr(ai_client_mod, "get_chat_model", lambda **_kwargs: RunnableLambda(_invoke))
 
     _call_openai([{"id": 1, "title": "A"}], model="gpt-x", focus_prompt="FUSION ENERGY")
-    assert any("FUSION ENERGY" in msg.get("content", "") for msg in captured_messages)
+    assert any("FUSION ENERGY" in str(msg.content) for msg in captured_messages)
 
 
 def test_generate_briefing_idempotency_respects_focus_prompt(pg_clean: str) -> None:

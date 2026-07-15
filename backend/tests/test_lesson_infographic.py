@@ -5,11 +5,12 @@ from __future__ import annotations
 import json
 from collections.abc import Generator
 from contextlib import contextmanager
-from types import SimpleNamespace
 from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
+from langchain_core.messages import AIMessage
+from langchain_core.runnables import RunnableLambda
 
 from news_dashboard.auth import require_admin, require_auth
 from news_dashboard.db import connect, init_db
@@ -124,11 +125,14 @@ _VALID_INFOGRAPHIC = {
 def _mock_chat_create(content: str) -> Any:
     captured: dict[str, Any] = {}
 
-    def _fake(*_args: Any, messages: list[dict[str, str]], **_kwargs: Any) -> Any:
-        captured["messages"] = messages
-        message = SimpleNamespace(content=content)
-        choice = SimpleNamespace(message=message)
-        return SimpleNamespace(choices=[choice])
+    def _fake(**_kwargs: Any) -> Any:
+        def _invoke(prompt: Any, **_kwargs: Any) -> AIMessage:
+            captured["messages"] = [
+                {"role": message.type, "content": message.content} for message in prompt.messages
+            ]
+            return AIMessage(content=content)
+
+        return RunnableLambda(_invoke)
 
     return _fake, captured
 
@@ -175,7 +179,7 @@ def test_generate_lesson_infographic_persists_failure_on_malformed_response(
     import news_dashboard.ai_client as ai_client_mod
 
     fake, _captured = _mock_chat_create('{"sections": []}')
-    monkeypatch.setattr(ai_client_mod, "chat_create", fake)
+    monkeypatch.setattr(ai_client_mod, "get_chat_model", fake)
 
     with pytest.raises(service.LessonInfographicGenerationError):
         service.generate_lesson_infographic(int(lesson["id"]), user_id, database_url=pg_clean)
@@ -196,7 +200,7 @@ def test_generate_lesson_infographic_succeeds_and_persists_complete(
     import news_dashboard.ai_client as ai_client_mod
 
     fake, captured = _mock_chat_create(json.dumps(_VALID_INFOGRAPHIC))
-    monkeypatch.setattr(ai_client_mod, "chat_create", fake)
+    monkeypatch.setattr(ai_client_mod, "get_chat_model", fake)
 
     result = service.generate_lesson_infographic(int(lesson["id"]), user_id, database_url=pg_clean)
 
@@ -225,7 +229,7 @@ def test_generate_lesson_infographic_returns_cached_artifact_without_force(
         call_count += 1
         return fake(*args, **kwargs)
 
-    monkeypatch.setattr(ai_client_mod, "chat_create", _counting_fake)
+    monkeypatch.setattr(ai_client_mod, "get_chat_model", _counting_fake)
 
     service.generate_lesson_infographic(int(lesson["id"]), user_id, database_url=pg_clean)
     service.generate_lesson_infographic(int(lesson["id"]), user_id, database_url=pg_clean)
@@ -250,7 +254,7 @@ def test_generate_lesson_infographic_regenerates_with_force(
         call_count += 1
         return fake(*args, **kwargs)
 
-    monkeypatch.setattr(ai_client_mod, "chat_create", _counting_fake)
+    monkeypatch.setattr(ai_client_mod, "get_chat_model", _counting_fake)
 
     service.generate_lesson_infographic(int(lesson["id"]), user_id, database_url=pg_clean)
     service.generate_lesson_infographic(
@@ -281,7 +285,7 @@ def test_generate_lesson_infographic_endpoint_returns_complete_lesson(
     import news_dashboard.ai_client as ai_client_mod
 
     fake, _captured = _mock_chat_create(json.dumps(_VALID_INFOGRAPHIC))
-    monkeypatch.setattr(ai_client_mod, "chat_create", fake)
+    monkeypatch.setattr(ai_client_mod, "get_chat_model", fake)
 
     with _api_client(user_id) as client:
         response = client.post(f"/api/learn/lessons/{lesson['id']}/infographic")

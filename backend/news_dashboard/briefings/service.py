@@ -210,9 +210,17 @@ def _call_openai(
             f"({a.get('source_name', '')} / {a.get('category', '')})\n  {snippet}"
         )
 
+    from langchain_core.prompts import ChatPromptTemplate
+    from langfuse import propagate_attributes
     from openai import OpenAIError  # lazy import — optional dep at import time
 
-    from news_dashboard.ai_client import chat_create, get_chat_client, get_prompt, observe
+    from news_dashboard.ai_client import (
+        get_chat_model,
+        get_prompt,
+        langfuse_enabled,
+        observe,
+        response_text,
+    )
     from news_dashboard.ai_memory.service import format_memories_for_prompt
 
     prompt = get_prompt("briefing-system", fallback=_BRIEFING_SYSTEM_PROMPT)
@@ -226,25 +234,29 @@ def _call_openai(
         )
     user = "Articles:\n\n" + "\n\n".join(article_lines)
 
-    client = get_chat_client(api_key=api_key, base_url=base_url)
+    chat_model = get_chat_model(api_key=api_key, base_url=base_url, model=model).bind(
+        response_format={"type": "json_object"}, max_tokens=2048
+    )
+    template = ChatPromptTemplate.from_messages([("system", "{system}"), ("human", "{articles}")])
+    callbacks: list[Any] = []
+    if langfuse_enabled():
+        from langfuse.langchain import CallbackHandler
+
+        callbacks.append(CallbackHandler())
     # Grouped under one Langfuse trace so its id can carry user thumbs feedback
     # (see the ``ai_feedback`` module) even though this helper only returns JSON.
     with observe("briefing-generation", input={"model": model}) as trace:
         try:
-            response = chat_create(
-                client,
-                name="briefing-generation",
+            with propagate_attributes(
+                user_id=str(user_id) if user_id is not None else None,
                 tags=["briefing"],
-                user_id=user_id,
-                prompt=prompt,
-                model=model,
-                messages=[
-                    {"role": "system", "content": system},
-                    {"role": "user", "content": user},
-                ],
-                response_format={"type": "json_object"},
-                max_tokens=2048,
-            )
+                trace_name="briefing-generation",
+                prompt=prompt.langfuse_prompt,
+            ):
+                response = (template | chat_model).invoke(
+                    {"system": system, "articles": user},
+                    config={"callbacks": callbacks, "metadata": {"max_tokens": 2048}},
+                )
         except OpenAIError as exc:
             # Connection refused, auth failure, or the model/gateway rejecting the
             # request (e.g. an endpoint that does not support JSON response_format).
@@ -254,7 +266,7 @@ def _call_openai(
             raise BriefingGenerationError(msg) from exc
         from news_dashboard.ai_client import strip_markdown_fence
 
-        text = strip_markdown_fence(response.choices[0].message.content or "{}")
+        text = strip_markdown_fence(response_text(response) or "{}")
         try:
             parsed: dict[str, Any] = json.loads(text)
         except json.JSONDecodeError as exc:
