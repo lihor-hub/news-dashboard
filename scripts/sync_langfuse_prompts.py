@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import os
 import sys
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
@@ -26,10 +27,32 @@ def _sdk_prompt(entry: PromptCatalogEntry) -> str | list[dict[str, str]]:
     return entry.fallback()
 
 
+def _normalize_chat_messages(prompt: Any) -> list[dict[str, str]] | None:
+    if not isinstance(prompt, list):
+        return None
+
+    normalized: list[dict[str, str]] = []
+    for message in prompt:
+        if not isinstance(message, Mapping) or not set(message) <= {"role", "content", "type"}:
+            return None
+        role = message.get("role")
+        content = message.get("content")
+        message_type = message.get("type", "text")
+        if not isinstance(role, str) or not isinstance(content, str) or message_type != "text":
+            return None
+        normalized.append({"role": role, "content": content})
+    return normalized
+
+
 def _matches(current: Any, entry: PromptCatalogEntry) -> bool:
-    return getattr(current, "type", entry.type) == entry.type and getattr(
-        current, "prompt", None
-    ) == _sdk_prompt(entry)
+    if getattr(current, "type", entry.type) != entry.type:
+        return False
+
+    current_prompt = getattr(current, "prompt", None)
+    expected_prompt = _sdk_prompt(entry)
+    if entry.type == "chat":
+        return _normalize_chat_messages(current_prompt) == expected_prompt
+    return current_prompt == expected_prompt
 
 
 def _sync(client: Any) -> None:

@@ -138,7 +138,10 @@ def test_sync_is_idempotent_when_production_content_matches(
             prompt = (
                 entry.prompt
                 if isinstance(entry.prompt, str)
-                else [{"role": item.role, "content": item.content} for item in entry.prompt]
+                else [
+                    {"role": item.role, "content": item.content, "type": "text"}
+                    for item in entry.prompt
+                ]
             )
             return SimpleNamespace(prompt=prompt, type=entry.type, version=7)
 
@@ -153,6 +156,27 @@ def test_sync_is_idempotent_when_production_content_matches(
 
     assert module.main() == 0
     assert create_calls == []
+
+
+def test_sync_chat_comparison_rejects_different_or_unsupported_messages(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    module = _load_sync_module(monkeypatch, object())
+    entry = next(item for item in PROMPT_CATALOG if item.type == "chat")
+    expected = entry.fallback()
+    assert isinstance(expected, list)
+    sdk_prompt = [{**message, "type": "text"} for message in expected]
+    changed_role = [{**sdk_prompt[0], "role": "assistant"}, *sdk_prompt[1:]]
+    changed_content = [{**sdk_prompt[0], "content": "changed"}, *sdk_prompt[1:]]
+    unsupported_type = [{**sdk_prompt[0], "type": "image"}, *sdk_prompt[1:]]
+    missing_content = [{"role": sdk_prompt[0]["role"], "type": "text"}, *sdk_prompt[1:]]
+
+    assert module._matches(SimpleNamespace(type="text", prompt=sdk_prompt), entry) is False
+    assert module._matches(SimpleNamespace(type="chat", prompt=changed_role), entry) is False
+    assert module._matches(SimpleNamespace(type="chat", prompt=changed_content), entry) is False
+    assert module._matches(SimpleNamespace(type="chat", prompt=sdk_prompt[::-1]), entry) is False
+    assert module._matches(SimpleNamespace(type="chat", prompt=unsupported_type), entry) is False
+    assert module._matches(SimpleNamespace(type="chat", prompt=missing_content), entry) is False
 
 
 @pytest.mark.parametrize("missing", ["LANGFUSE_PUBLIC_KEY", "LANGFUSE_SECRET_KEY", "LANGFUSE_HOST"])
