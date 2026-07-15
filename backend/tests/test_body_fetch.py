@@ -33,6 +33,7 @@ def _db(tmp_path: Path) -> Path:
 
 
 def _seed_article(db_path: Path) -> int:
+    article_url = f"https://example.com/{db_path.parent.name}/article-1"
     sync_sources(db_path)
     with connect(db_path) as conn:
         conn.execute(
@@ -40,15 +41,12 @@ def _seed_article(db_path: Path) -> int:
             INSERT INTO articles(
               url, canonical_url, title, source_slug, source_name, category, kind
             )
-            VALUES (
-              'https://example.com/article-1', 'https://example.com/article-1',
-              'Test Article', 'python-insider', 'Python Insider', 'python', 'rss_feed'
-            )
-            """
+            VALUES (%s, %s, 'Test Article', 'python-insider',
+                    'Python Insider', 'python', 'rss_feed')
+            """,
+            (article_url, article_url),
         )
-        row = conn.execute(
-            "SELECT id FROM articles WHERE url='https://example.com/article-1'"
-        ).fetchone()
+        row = conn.execute("SELECT id FROM articles WHERE url = %s", (article_url,)).fetchone()
     return int(row["id"] if isinstance(row, dict) else row[0])
 
 
