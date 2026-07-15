@@ -5,12 +5,11 @@ metadata fetch, prioritization, and mark-as-done.
 from __future__ import annotations
 
 from typing import Any
-from unittest.mock import ANY, MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 from fastapi.testclient import TestClient
 
-from news_dashboard.ai_client import ManagedPrompt
 from news_dashboard.auth import require_auth
 from news_dashboard.db import connect, init_db
 from news_dashboard.main import app
@@ -431,6 +430,8 @@ def test_fetch_metadata_for_item_records_error(
 
 
 def test_generate_summary_for_item_success(monkeypatch: pytest.MonkeyPatch, pg_clean: str) -> None:
+    from langchain_core.messages import AIMessage
+
     database_url = _setup_db(monkeypatch, pg_clean)
     user_id = _make_user(database_url)
     item = service.add_item(user_id, "https://example.com/post", database_url=database_url)
@@ -440,33 +441,20 @@ def test_generate_summary_for_item_success(monkeypatch: pytest.MonkeyPatch, pg_c
             ("A great post", "It explains things", item["id"]),
         )
 
-    mock_completion = MagicMock()
-    mock_completion.choices[0].message.content = "A concise take on why this post matters."
-    mock_client = MagicMock()
-    mock_client.chat.completions.create.return_value = mock_completion
-    managed_prompt = ManagedPrompt(text="compiled prompt for A great post")
-
     with (
         patch.dict("os.environ", {"FREE_LLM_API_KEY": "test-key"}),
-        patch("openai.OpenAI", return_value=mock_client),
-        patch("news_dashboard.ai_client.chat_create", return_value=mock_completion) as chat_create,
-        patch("news_dashboard.ai_client.get_prompt", return_value=managed_prompt) as get_prompt,
+        patch("news_dashboard.ai_client.get_chat_model") as get_model,
     ):
+        get_model.return_value.bind.return_value.invoke.return_value = AIMessage(
+            content="A concise take on why this post matters."
+        )
         service.generate_summary_for_item(item["id"], database_url=database_url)
 
     items = service.list_items(user_id, database_url=database_url)
     assert items[0]["summary_status"] == "ok"
     assert items[0]["summary"] == "A concise take on why this post matters."
-    call_kwargs = chat_create.call_args.kwargs
-    assert "A great post" in call_kwargs["messages"][0]["content"]
-    get_prompt.assert_called_once_with(
-        "reading-list-summary",
-        fallback=ANY,
-        label="production",
-        prompt_type="text",
-        variables={"reading_list_text": "Title: A great post\nDescription: It explains things"},
-    )
-    assert chat_create.call_args.kwargs["prompt"] is managed_prompt
+    messages = get_model.return_value.bind.return_value.invoke.call_args.args[0]
+    assert "A great post" in messages[0]["content"]
 
 
 def test_generate_summary_for_item_records_error_on_ai_failure(
@@ -481,12 +469,9 @@ def test_generate_summary_for_item_records_error_on_ai_failure(
             ("A great post", "It explains things", item["id"]),
         )
 
-    mock_client = MagicMock()
-    mock_client.chat.completions.create.side_effect = RuntimeError("upstream 429")
-
     with (
         patch.dict("os.environ", {"FREE_LLM_API_KEY": "test-key"}),
-        patch("openai.OpenAI", return_value=mock_client),
+        patch("news_dashboard.ai_client.get_chat_model", side_effect=RuntimeError("upstream 429")),
     ):
         service.generate_summary_for_item(item["id"], database_url=database_url)
 

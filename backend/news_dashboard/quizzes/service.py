@@ -15,14 +15,23 @@ from pathlib import Path
 from typing import Any
 
 from news_dashboard.db import connect, init_db
-from news_dashboard.prompt_catalog import get_text_prompt
 
 logger = logging.getLogger(__name__)
 
 DEFAULT_QUIZ_MODEL = "gpt-4o-mini"
 GOAL_ALIGNMENT_ADJUSTMENT = 4.0  # points added to recommendation score per matching goal
 _MAX_ARTICLE_CHARS = 3_000
-_QUIZ_PROMPT = get_text_prompt("weekly-quiz").removesuffix("\n\nArticles:\n{{article_blurbs}}")
+_QUIZ_PROMPT = (
+    "You are a study-aid assistant. Based ONLY on the articles listed below, generate exactly 3 "
+    "multiple-choice questions that test the reader's understanding of key facts or arguments. "
+    "For each question provide:\n"
+    "- question: the question text\n"
+    "- options: a JSON array of exactly 4 answer strings\n"
+    "- correct_index: 0-based index of the correct answer\n"
+    "- explanation: one sentence explaining why that answer is correct, citing the article\n"
+    "- article_id: the integer id of the article the question is drawn from\n\n"
+    "Return ONLY a JSON array of 3 objects with those exact keys. No other text."
+)
 
 
 # ── Goal CRUD helpers ─────────────────────────────────────────────────────────
@@ -283,29 +292,22 @@ def generate_weekly_quiz(
 
     api_key, base_url, model = _quiz_ai_config()
     blurbs = "\n\n---\n\n".join(_build_article_blurb(a) for a in articles)
-    from news_dashboard.ai_client import chat_create, get_chat_client, get_prompt
+    messages = [{"role": "user", "content": f"{_QUIZ_PROMPT}\n\nArticles:\n{blurbs}"}]
 
-    client = get_chat_client(api_key=api_key, base_url=base_url)
-    prompt = get_prompt(
-        "weekly-quiz",
-        label="production",
-        prompt_type="text",
-        fallback=get_text_prompt("weekly-quiz"),
-        variables={"article_blurbs": blurbs},
-    )
+    from news_dashboard.ai_client import get_chat_model, response_text
+
+    chat_model = get_chat_model(api_key=api_key, base_url=base_url, model=model)
     logger.info("Generating weekly quiz for user %s from %d articles", user_id, len(articles))
-    result = chat_create(
-        client,
-        name="weekly-quiz",
-        tags=["quiz"],
-        user_id=user_id,
-        prompt=prompt,
-        model=model,
-        messages=[{"role": "user", "content": prompt.text}],
-        max_tokens=1024,
+    result = chat_model.bind(max_tokens=1024).invoke(
+        messages,
+        config={
+            "run_name": "weekly-quiz",
+            "tags": ["quiz"],
+            "metadata": {"langfuse_user_id": str(user_id)},
+        },
     )
-    response_text = (result.choices[0].message.content or "").strip()
-    questions = _parse_questions(response_text)
+    answer = response_text(result).strip()
+    questions = _parse_questions(answer)
     if not questions:
         logger.warning("LLM returned no parseable questions for user %s", user_id)
         return None
