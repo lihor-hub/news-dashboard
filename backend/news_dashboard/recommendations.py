@@ -116,6 +116,18 @@ class ArticleSignal:
         return base
 
 
+@dataclass(frozen=True)
+class RecommendationScoreRecord:
+    """Persisted score payload for one user/article recommendation row."""
+
+    article_id: int
+    recommendation_score: float
+    cold_start_score: float | None = None
+    signals: dict[str, Any] | None = None
+    model_version: str = COLD_START_MODEL_VERSION
+    explanation: str | None = None
+
+
 @dataclass
 class AffinityProfile:
     """Per-user, per-feature affinities learned from workflow actions.
@@ -495,9 +507,36 @@ def upsert_recommendation_score(  # noqa: PLR0913
     explanation: str | None = None,
 ) -> None:
     """Persist recommendation metadata for one user/article pair."""
+    upsert_recommendation_scores(
+        user_id,
+        [
+            RecommendationScoreRecord(
+                article_id=article_id,
+                recommendation_score=recommendation_score,
+                cold_start_score=cold_start_score,
+                signals=signals,
+                model_version=model_version,
+                explanation=explanation,
+            )
+        ],
+        db_path=db_path,
+        database_url=database_url,
+    )
+
+
+def upsert_recommendation_scores(
+    user_id: int,
+    records: list[RecommendationScoreRecord],
+    *,
+    db_path: Path | str | None = None,
+    database_url: str | None = None,
+) -> None:
+    """Persist recommendation metadata for one user's article scores in one transaction."""
+    if not records:
+        return
     init_db(db_path, database_url=database_url)
-    with connect(db_path, database_url=database_url) as conn:
-        conn.execute(
+    with connect(db_path, database_url=database_url) as conn, conn.cursor() as cur:
+        cur.executemany(
             """
             INSERT INTO user_article_recommendations(
               user_id, article_id, recommendation_score, cold_start_score,
@@ -515,15 +554,40 @@ def upsert_recommendation_score(  # noqa: PLR0913
               ),
               updated_at = NOW()
             """,
-            (
-                user_id,
-                article_id,
-                float(recommendation_score),
-                cold_start_score,
-                json.dumps(signals or {}),
-                model_version,
-                explanation,
-            ),
+            [
+                (
+                    user_id,
+                    record.article_id,
+                    float(record.recommendation_score),
+                    record.cold_start_score,
+                    json.dumps(record.signals or {}),
+                    record.model_version,
+                    record.explanation,
+                )
+                for record in records
+            ],
+        )
+
+
+def update_recommendation_explanations(
+    user_id: int,
+    explanations: list[tuple[int, str]],
+    *,
+    db_path: Path | str | None = None,
+    database_url: str | None = None,
+) -> None:
+    """Persist generated explanations for one user in one transaction."""
+    if not explanations:
+        return
+    init_db(db_path, database_url=database_url)
+    with connect(db_path, database_url=database_url) as conn, conn.cursor() as cur:
+        cur.executemany(
+            """
+            UPDATE user_article_recommendations
+            SET explanation = %s
+            WHERE user_id = %s AND article_id = %s AND explanation IS NULL
+            """,
+            [(explanation, user_id, article_id) for article_id, explanation in explanations],
         )
 
 
@@ -675,7 +739,7 @@ def recompute_user_recommendations(
     # one it degrades to a no-op, so the version only advertises novelty when the
     # semantic profile is present.
     model_version = NOVELTY_MODEL_VERSION if semantic_profile else BEHAVIORAL_MODEL_VERSION
-    scored = 0
+    score_records: list[RecommendationScoreRecord] = []
     scored_items: list[tuple[int, float]] = []
     for candidate in candidates:
         base = float(candidate["base_score"])
@@ -705,33 +769,40 @@ def recompute_user_recommendations(
             0.0,
             100.0,
         )
-        upsert_recommendation_score(
-            user_id,
-            int(candidate["id"]),
-            final_score,
-            db_path=db_path,
-            database_url=database_url,
-            cold_start_score=base,
-            signals={
-                "base_score": round(base, 4),
-                "affinity_adjustment": round(adjustment, 4),
-                "manual_category_adjustment": round(manual_category, 4),
-                "semantic_adjustment": round(semantic, 4),
-                "freshness_adjustment": round(freshness, 4),
-                "novelty_adjustment": round(novelty, 4),
-                "novelty_weight": round(preferences.novelty_weight, 4),
-                "goal_alignment_adjustment": round(goal_boost, 4),
-                "source_slug": source_slug,
-                "category": category,
-            },
-            model_version=model_version,
+        article_id = int(candidate["id"])
+        score_records.append(
+            RecommendationScoreRecord(
+                article_id=article_id,
+                recommendation_score=final_score,
+                cold_start_score=base,
+                signals={
+                    "base_score": round(base, 4),
+                    "affinity_adjustment": round(adjustment, 4),
+                    "manual_category_adjustment": round(manual_category, 4),
+                    "semantic_adjustment": round(semantic, 4),
+                    "freshness_adjustment": round(freshness, 4),
+                    "novelty_adjustment": round(novelty, 4),
+                    "novelty_weight": round(preferences.novelty_weight, 4),
+                    "goal_alignment_adjustment": round(goal_boost, 4),
+                    "source_slug": source_slug,
+                    "category": category,
+                },
+                model_version=model_version,
+            )
         )
-        scored_items.append((int(candidate["id"]), final_score))
-        scored += 1
+        scored_items.append((article_id, final_score))
+
+    upsert_recommendation_scores(
+        user_id,
+        score_records,
+        db_path=db_path,
+        database_url=database_url,
+    )
 
     # Generate explanations for the top 20 articles only; the rest are low-signal
     # enough that a generic label suffices and the AI quota stays manageable.
     top_articles = sorted(scored_items, key=lambda x: x[1], reverse=True)[:20]
+    explanations: list[tuple[int, str]] = []
     for article_id, _ in top_articles:
         explanation = generate_recommendation_explanation(
             user_id,
@@ -740,14 +811,15 @@ def recompute_user_recommendations(
             database_url=database_url,
         )
         if explanation:
-            with connect(db_path, database_url=database_url) as conn:
-                conn.execute(
-                    "UPDATE user_article_recommendations SET explanation = %s"
-                    " WHERE user_id = %s AND article_id = %s AND explanation IS NULL",
-                    (explanation, user_id, article_id),
-                )
+            explanations.append((article_id, explanation))
+    update_recommendation_explanations(
+        user_id,
+        explanations,
+        db_path=db_path,
+        database_url=database_url,
+    )
 
-    return scored
+    return len(score_records)
 
 
 def _opt_float(value: Any) -> float | None:
