@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
+from typing import cast
 
 import yaml  # type: ignore[import-untyped]
 
@@ -106,7 +107,8 @@ def _compose_env_map(compose_path: Path) -> dict[str, object]:
     env = services["news-dashboard"].get("environment", {})
     if isinstance(env, list):
         env = dict(item.split("=", 1) if "=" in item else (item, "") for item in env)
-    return env
+    assert isinstance(env, dict), f"environment in {compose_path.name} must be a mapping or list"
+    return cast("dict[str, object]", env)
 
 
 def test_compose_file_enables_neo4j_for_app() -> None:
