@@ -15,7 +15,12 @@ from __future__ import annotations
 import json
 import logging
 import os
-from typing import Any
+from contextlib import nullcontext
+from typing import Any, NotRequired, cast
+
+from langchain_core.runnables import RunnableConfig
+from langgraph.graph import END, START, StateGraph
+from typing_extensions import TypedDict
 
 from news_dashboard.db import connect, init_db, row_to_dict
 
@@ -61,6 +66,27 @@ class AgentActionError(ValueError):
 
 class AgentActionNotFoundError(LookupError):
     """Raised when a run is missing or not visible to the requesting user."""
+
+
+class _PlanningState(TypedDict):
+    query: str
+    user_id: int
+    is_admin: bool
+    run_id: int
+    candidates: list[dict[str, Any]]
+    parsed: NotRequired[dict[str, Any]]
+    steps: NotRequired[list[dict[str, Any]]]
+    result: NotRequired[dict[str, Any]]
+
+
+class _ExecutionState(TypedDict):
+    run_id: int
+    user_id: int
+    is_admin: bool
+    steps: NotRequired[list[dict[str, Any]]]
+    step_index: NotRequired[int]
+    all_ok: NotRequired[bool]
+    result: NotRequired[dict[str, Any]]
 
 
 def _agent_actions_ai_config() -> tuple[str, str | None, str]:
@@ -153,33 +179,21 @@ def _validate_steps(
     return steps
 
 
-def plan_actions(query: str, *, user_id: int, is_admin: bool = False) -> dict[str, Any]:
-    """Interpret *query* and either persist a proposed plan or report non-actionable.
-
-    Returns ``{"actionable": False}`` when the request isn't a concrete action,
-    or ``{"actionable": True, "run_id": int, "status": "proposed", "steps": [...]}``
-    with a persisted, allowlisted plan. Raises AgentActionError for malformed or
-    disallowed planner output; nothing is persisted in that case.
-    """
-    clean_query = query.strip()
-    if not clean_query:
-        msg = "query must not be empty"
-        raise AgentActionError(msg)
-
-    candidates = _candidate_articles(clean_query, user_id)
-    candidate_ids = {c["id"] for c in candidates}
-
+def _plan_with_model(state: _PlanningState) -> dict[str, Any]:
     api_key, base_url, model = _agent_actions_ai_config()
     from news_dashboard.ai_client import chat_create, get_chat_client, get_prompt
 
     client = get_chat_client(api_key=api_key, base_url=base_url)
     prompt = get_prompt("agent-action-planning", fallback=_PROMPT)
-    user_content = f"User request: {clean_query}\n\nCandidate articles: {json.dumps(candidates)}"
+    user_content = (
+        f"User request: {state['query']}\n\nCandidate articles: {json.dumps(state['candidates'])}"
+    )
     result = chat_create(
         client,
         name="agent-action-planning",
         tags=["agent-actions"],
-        user_id=user_id,
+        user_id=state["user_id"],
+        session_id=f"agent-action:{state['run_id']}",
         prompt=prompt,
         model=model,
         messages=[{"role": "user", "content": f"{prompt.text}\n\n{user_content}"}],
@@ -191,24 +205,39 @@ def plan_actions(query: str, *, user_id: int, is_admin: bool = False) -> dict[st
     if parsed is None:
         msg = "planner returned malformed JSON"
         raise AgentActionError(msg)
+    return {"parsed": parsed}
 
+
+def _validate_plan(state: _PlanningState) -> dict[str, Any]:
+    parsed = state["parsed"]
     if not parsed.get("actionable"):
-        return {"actionable": False}
+        return {"steps": []}
 
-    steps = _validate_steps(parsed.get("steps"), candidate_ids, is_admin=is_admin)
+    candidate_ids = {c["id"] for c in state["candidates"]}
+    steps = _validate_steps(parsed.get("steps"), candidate_ids, is_admin=state["is_admin"])
+    return {"steps": steps}
+
+
+def _persist_plan(state: _PlanningState) -> dict[str, Any]:
+    steps = state["steps"]
     if not steps:
-        return {"actionable": False}
+        return {"result": {"actionable": False}}
 
-    articles_by_id = {c["id"]: c for c in candidates}
+    articles_by_id = {c["id"]: c for c in state["candidates"]}
     init_db()
     with connect() as conn:
         run_row = conn.execute(
             """
-            INSERT INTO agent_action_runs (user_id, query, plan, status)
-            VALUES (%s, %s, %s::jsonb, 'proposed')
+            INSERT INTO agent_action_runs (id, user_id, query, plan, status)
+            VALUES (%s, %s, %s, %s::jsonb, 'proposed')
             RETURNING id, user_id, query, plan, status, created_at, updated_at
             """,
-            (user_id, clean_query, json.dumps({"steps": steps})),
+            (
+                state["run_id"],
+                state["user_id"],
+                state["query"],
+                json.dumps({"steps": steps}),
+            ),
         ).fetchone()
         run = row_to_dict(run_row)
         run_id = run["id"]
@@ -227,11 +256,11 @@ def plan_actions(query: str, *, user_id: int, is_admin: bool = False) -> dict[st
             ).fetchone()
             step_rows.append(row_to_dict(row))
 
-    return {
+    result = {
         "actionable": True,
         "run_id": run_id,
         "status": run["status"],
-        "query": clean_query,
+        "query": state["query"],
         "steps": [
             {
                 **s,
@@ -242,6 +271,75 @@ def plan_actions(query: str, *, user_id: int, is_admin: bool = False) -> dict[st
             for s in step_rows
         ],
     }
+    return {"result": result}
+
+
+def _planning_graph() -> Any:
+    # LangGraph's private state protocol is not structurally visible to ty/pyrefly.
+    builder = StateGraph(cast("Any", _PlanningState))
+    builder.add_node("plan", _plan_with_model)
+    builder.add_node("validate", _validate_plan)
+    builder.add_node("persist", _persist_plan)
+    builder.add_edge(START, "plan")
+    builder.add_edge("plan", "validate")
+    builder.add_edge("validate", "persist")
+    builder.add_edge("persist", END)
+    return builder.compile()
+
+
+def _reserve_run_id() -> int:
+    init_db()
+    with connect() as conn:
+        row = conn.execute(
+            "SELECT nextval(pg_get_serial_sequence('agent_action_runs', 'id')) AS id"
+        ).fetchone()
+    return int(row["id"])
+
+
+def _graph_observability(
+    *, run_id: int, user_id: int, trace_name: str
+) -> tuple[RunnableConfig, Any]:
+    from news_dashboard.ai_client import langfuse_enabled
+
+    if not langfuse_enabled():
+        return {}, nullcontext()
+
+    from langfuse import propagate_attributes
+    from langfuse.langchain import CallbackHandler
+
+    session_id = f"agent-action:{run_id}"
+    config: RunnableConfig = {"callbacks": [CallbackHandler()]}
+    context = propagate_attributes(
+        session_id=session_id,
+        user_id=str(user_id),
+        tags=["agent-actions"],
+        trace_name=trace_name,
+    )
+    return config, context
+
+
+def plan_actions(query: str, *, user_id: int, is_admin: bool = False) -> dict[str, Any]:
+    """Interpret *query* and persist only a validated, actionable plan."""
+    clean_query = query.strip()
+    if not clean_query:
+        msg = "query must not be empty"
+        raise AgentActionError(msg)
+
+    candidates = _candidate_articles(clean_query, user_id)
+    run_id = _reserve_run_id()
+    config, context = _graph_observability(
+        run_id=run_id, user_id=user_id, trace_name="agent-action-planning"
+    )
+    initial: _PlanningState = {
+        "query": clean_query,
+        "user_id": user_id,
+        "is_admin": is_admin,
+        "run_id": run_id,
+        "candidates": candidates,
+    }
+    with context:
+        final = _planning_graph().invoke(initial, config=config)
+    return cast("dict[str, Any]", final["result"])
 
 
 def _get_run_for_user(conn: Any, run_id: int, user_id: int) -> dict[str, Any] | None:
@@ -336,61 +434,93 @@ def _execute_tool(tool: str, article_id: int | None, *, user_id: int) -> str:
     return f"{tool} applied to article {article_id}"
 
 
-def approve_run(run_id: int, *, user_id: int, is_admin: bool = False) -> dict[str, Any]:
-    """Approve a proposed run and execute its steps in order.
-
-    Each step is executed independently; a failure in one step does not stop
-    the remaining steps. The run's final status is 'executed' only if every
-    step succeeded, otherwise 'failed'.
-    """
+def _load_approved_run(state: _ExecutionState) -> dict[str, Any]:
     init_db()
     with connect() as conn:
-        run = _get_run_for_user(conn, run_id, user_id)
+        run = _get_run_for_user(conn, state["run_id"], state["user_id"])
         if run is None:
-            msg = f"agent action run {run_id} not found"
+            msg = f"agent action run {state['run_id']} not found"
             raise AgentActionNotFoundError(msg)
         if run["status"] != "proposed":
             msg = f"cannot approve a run with status {run['status']!r}"
             raise AgentActionError(msg)
         conn.execute(
             "UPDATE agent_action_runs SET status = 'approved', updated_at = NOW() WHERE id = %s",
-            (run_id,),
+            (state["run_id"],),
         )
-        steps = _get_steps(conn, run_id)
+        steps = _get_steps(conn, state["run_id"])
+    return {"steps": steps, "step_index": 0, "all_ok": True}
 
-    all_ok = True
-    for step in steps:
-        tool = step["tool"]
-        article_id = step["article_id"]
-        if tool in _ADMIN_TOOLS and not is_admin:
-            summary = f"tool {tool!r} requires admin privileges"
+
+def _execute_next_step(state: _ExecutionState) -> dict[str, Any]:
+    step = state["steps"][state["step_index"]]
+    all_ok = state["all_ok"]
+    tool = step["tool"]
+    article_id = step["article_id"]
+    if tool in _ADMIN_TOOLS and not state["is_admin"]:
+        summary = f"tool {tool!r} requires admin privileges"
+        status = "failed"
+        all_ok = False
+    else:
+        try:
+            summary = _execute_tool(tool, article_id, user_id=state["user_id"])
+            status = "executed"
+        except AgentActionError as exc:
+            summary = str(exc)
             status = "failed"
             all_ok = False
-        else:
-            try:
-                summary = _execute_tool(tool, article_id, user_id=user_id)
-                status = "executed"
-            except AgentActionError as exc:
-                summary = str(exc)
-                status = "failed"
-                all_ok = False
-        with connect() as conn:
-            conn.execute(
-                "UPDATE agent_action_steps"
-                " SET status = %s, result_summary = %s, updated_at = NOW()"
-                " WHERE id = %s",
-                (status, summary, step["id"]),
-            )
+    with connect() as conn:
+        conn.execute(
+            "UPDATE agent_action_steps"
+            " SET status = %s, result_summary = %s, updated_at = NOW()"
+            " WHERE id = %s",
+            (status, summary, step["id"]),
+        )
+    return {"step_index": state["step_index"] + 1, "all_ok": all_ok}
 
-    final_status = "executed" if all_ok else "failed"
+
+def _more_steps(state: _ExecutionState) -> str:
+    return "execute" if state["step_index"] < len(state["steps"]) else "finalize"
+
+
+def _finalize_execution(state: _ExecutionState) -> dict[str, Any]:
+    final_status = "executed" if state["all_ok"] else "failed"
     with connect() as conn:
         row = conn.execute(
             """
             UPDATE agent_action_runs SET status = %s, updated_at = NOW() WHERE id = %s
             RETURNING id, user_id, query, plan, status, created_at, updated_at
             """,
-            (final_status, run_id),
+            (final_status, state["run_id"]),
         ).fetchone()
         run = row_to_dict(row)
-        run["steps"] = _get_steps(conn, run_id)
-    return run
+        run["steps"] = _get_steps(conn, state["run_id"])
+    return {"result": run}
+
+
+def _execution_graph() -> Any:
+    # LangGraph's private state protocol is not structurally visible to ty/pyrefly.
+    builder = StateGraph(cast("Any", _ExecutionState))
+    builder.add_node("approve", _load_approved_run)
+    builder.add_node("execute", _execute_next_step)
+    builder.add_node("finalize", _finalize_execution)
+    builder.add_edge(START, "approve")
+    builder.add_conditional_edges("approve", _more_steps)
+    builder.add_conditional_edges("execute", _more_steps)
+    builder.add_edge("finalize", END)
+    return builder.compile()
+
+
+def approve_run(run_id: int, *, user_id: int, is_admin: bool = False) -> dict[str, Any]:
+    """Approve a proposed run and execute every step independently in order."""
+    config, context = _graph_observability(
+        run_id=run_id, user_id=user_id, trace_name="agent-action-execution"
+    )
+    initial: _ExecutionState = {
+        "run_id": run_id,
+        "user_id": user_id,
+        "is_admin": is_admin,
+    }
+    with context:
+        final = _execution_graph().invoke(initial, config=config)
+    return cast("dict[str, Any]", final["result"])

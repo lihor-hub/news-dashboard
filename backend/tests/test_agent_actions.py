@@ -163,6 +163,32 @@ def test_plan_actions_rejects_malformed_json(db: str) -> None:
         plan_actions("archive it", user_id=user_id)
 
 
+def test_plan_actions_propagates_stable_session_to_graph_and_model(db: str) -> None:
+    from langchain_core.callbacks import BaseCallbackHandler
+
+    user_id = _make_user(db, "alice")
+    article_id = _insert_article(db)
+    client = _mock_llm(_plan_json([{"tool": "star_article", "article_id": article_id}]))
+    callback = BaseCallbackHandler()
+    with (
+        patch("openai.OpenAI", return_value=client),
+        patch("news_dashboard.ai_client.langfuse_enabled", return_value=True),
+        patch("langfuse.langchain.CallbackHandler", return_value=callback),
+        patch("langfuse.propagate_attributes") as attributes,
+    ):
+        plan = plan_actions("star it", user_id=user_id)
+
+    session_id = f"agent-action:{plan['run_id']}"
+    metadata = client.chat.completions.create.call_args.kwargs["metadata"]
+    assert metadata["langfuse_session_id"] == session_id
+    attributes.assert_called_once_with(
+        session_id=session_id,
+        user_id=str(user_id),
+        tags=["agent-actions"],
+        trace_name="agent-action-planning",
+    )
+
+
 # ── approve_run / cancel_run ──────────────────────────────────────────────────
 
 
@@ -227,6 +253,29 @@ def test_approve_run_partial_failure_marks_run_failed(db: str) -> None:
     assert run["steps"][0]["status"] == "executed"
     assert run["steps"][1]["status"] == "failed"
     assert _uas_state(db, user_id, article_id) == "today"
+
+
+def test_approve_run_continues_after_failed_step(db: str) -> None:
+    user_id = _make_user(db, "alice")
+    first_id = _insert_article(db, "1")
+    second_id = _insert_article(db, "2")
+    client = _mock_llm(
+        _plan_json(
+            [
+                {"tool": "star_article", "article_id": first_id},
+                {"tool": "skip_article", "article_id": first_id},
+                {"tool": "archive_article", "article_id": second_id},
+            ]
+        )
+    )
+    with patch("openai.OpenAI", return_value=client):
+        plan = plan_actions("star, skip, then archive", user_id=user_id)
+
+    run = approve_run(plan["run_id"], user_id=user_id)
+
+    assert run["status"] == "failed"
+    assert [step["status"] for step in run["steps"]] == ["executed", "failed", "executed"]
+    assert _uas_state(db, user_id, second_id) == "archived"
 
 
 def test_get_run_not_found_for_other_user(db: str) -> None:
