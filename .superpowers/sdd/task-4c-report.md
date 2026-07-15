@@ -29,3 +29,5 @@ Follow-up focused suite: `207 passed, 18 warnings` before the final three callba
 ### Coverage completion
 
 Added path-specific regression assertions for slide deck, infographic, personal relevance, briefing generation, lesson recap, and prompt optimization. These verify model/JSON/token settings, the concrete Langfuse handler in runnable config, propagated user/tag/trace attributes, briefing managed-prompt linkage and root trace ID, and literal-brace preservation.
+
+Personal-relevance coverage additionally verifies the selected API key, base URL, model, and rendered lesson/profile prompt semantics.

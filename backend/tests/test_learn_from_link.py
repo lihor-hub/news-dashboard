@@ -1438,6 +1438,8 @@ def test_lesson_relevance_uses_profile_and_llm_response(
 
     monkeypatch.setenv("DATABASE_URL", pg_clean)
     monkeypatch.setenv("FREE_LLM_API_KEY", "fake-key")
+    monkeypatch.setenv("FREE_LLM_BASE_URL", "https://free.example/v1")
+    monkeypatch.setenv("OPENAI_LESSON_CHAT_MODEL", "lesson-relevance-model")
     user_id = _make_user(pg_clean)
     with connect(database_url=pg_clean) as conn:
         conn.execute(
@@ -1448,8 +1450,8 @@ def test_lesson_relevance_uses_profile_and_llm_response(
     callback = BaseCallbackHandler()
     captured: dict[str, Any] = {}
 
-    def invoke(_prompt: Any, config: Any) -> AIMessage:
-        captured["config"] = config
+    def invoke(prompt: Any, config: Any) -> AIMessage:
+        captured.update(prompt=prompt, config=config)
         return AIMessage(
             content=(
                 '{"explanation": "Relevant to your AI interests.", "signals": ["Interest: AI"]}'
@@ -1471,7 +1473,16 @@ def test_lesson_relevance_uses_profile_and_llm_response(
         "explanation": "Relevant to your AI interests.",
         "signals": ["Interest: AI"],
     }
-    assert captured["factory"]["response_format"] == {"type": "json_object"}
+    assert captured["factory"] == {
+        "api_key": "fake-key",
+        "base_url": "https://free.example/v1",
+        "model": "lesson-relevance-model",
+        "response_format": {"type": "json_object"},
+    }
+    rendered = captured["prompt"].messages[-1].content
+    assert "Lesson title: Title for https://example.com/ai" in rendered
+    assert "Interests: ['technology', 'AI']" in rendered
+    assert "Lesson gist:" in rendered
     assert callback in captured["config"]["callbacks"].handlers
     attributes.assert_called_once_with(
         user_id=str(user_id), tags=["lesson", "relevance"], trace_name="lesson-relevance"
