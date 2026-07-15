@@ -17,7 +17,6 @@ from typing import Any
 
 from news_dashboard import briefing_agent
 from news_dashboard.db import connect, row_to_dict
-from news_dashboard.prompt_catalog import get_chat_prompt
 from news_dashboard.reading_list import service as reading_list_service
 
 CANDIDATE_LIMIT = 40
@@ -883,11 +882,18 @@ def list_briefings_with_script(
         return briefings
 
 
-_CHAT_SYSTEM_PROMPT = (
-    get_chat_prompt("briefing-chat")[0]["content"]
-    .replace("{{briefing_context}}", "{briefing_context}")
-    .replace("{{articles_context}}", "{articles_context}")
-)
+_CHAT_SYSTEM_PROMPT = """\
+You are the Briefing Q&A Assistant. Your job is to answer follow-up questions \
+about the daily briefing provided below. Ground every answer in the briefing \
+summary and the full article texts supplied. If information is not present in \
+the provided context, say so clearly rather than guessing.
+
+--- BRIEFING ---
+{briefing_context}
+
+--- CITED ARTICLES ---
+{articles_context}
+"""
 
 
 def chat_with_briefing(
@@ -899,7 +905,7 @@ def chat_with_briefing(
     database_url: str | None = None,
 ) -> str:
     """Answer a follow-up question grounded in the cited articles of a briefing."""
-    _briefing_ai_config()
+    api_key, base_url = _briefing_ai_config()
     model = os.getenv("OPENAI_BRIEFING_MODEL", DEFAULT_BRIEFING_MODEL)
 
     briefing = get_briefing(briefing_id, database_url=database_url, user_id=user_id)
@@ -923,27 +929,41 @@ def chat_with_briefing(
     else:
         articles_context = "(No articles cited — answer from the briefing summary only.)"
 
-    from news_dashboard.ai_client import get_prompt
-    from news_dashboard.ai_orchestration import invoke_chat_chain
-
-    prompt = get_prompt(
-        "briefing-chat",
-        fallback=get_chat_prompt("briefing-chat"),
-        prompt_type="chat",
-        variables={
-            "briefing_context": briefing_context,
-            "articles_context": articles_context,
-            "question": message,
-        },
+    system = _CHAT_SYSTEM_PROMPT.format(
+        briefing_context=briefing_context,
+        articles_context=articles_context,
     )
-    messages = [*prompt.messages[:-1], *history, prompt.messages[-1]]
 
-    return invoke_chat_chain(
-        name="briefing-chat",
+    from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
+    from langfuse import propagate_attributes
+
+    from news_dashboard.ai_client import (
+        get_chat_model,
+        langfuse_enabled,
+        response_text,
+    )
+
+    chat_model = get_chat_model(api_key=api_key, base_url=base_url, model=model)
+    prompt = ChatPromptTemplate.from_messages(
+        [
+            ("system", system),
+            MessagesPlaceholder("history"),
+            ("human", "{message}"),
+        ]
+    )
+    callbacks: list[Any] = []
+    if langfuse_enabled():
+        from langfuse.langchain import CallbackHandler
+
+        callbacks.append(CallbackHandler())
+    with propagate_attributes(
+        user_id=str(user_id),
+        session_id=f"briefing:{user_id}:{briefing_id}",
         tags=["briefing", "chat"],
-        user_id=user_id,
-        session_id=f"briefing:{briefing_id}:user:{user_id}" if user_id is not None else None,
-        model=model,
-        messages=messages,
-        prompt=prompt,
-    )
+        trace_name="briefing-chat",
+    ):
+        response = (prompt | chat_model).invoke(
+            {"history": history, "message": message},
+            config={"callbacks": callbacks},
+        )
+    return response_text(response)

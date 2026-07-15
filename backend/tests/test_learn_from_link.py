@@ -804,6 +804,10 @@ def _mock_chat_reply(reply: str) -> Any:
 def test_ask_lesson_question_returns_grounded_reply(
     pg_clean: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    from langchain_core.callbacks import BaseCallbackHandler
+    from langchain_core.messages import AIMessage
+    from langchain_core.runnables import RunnableLambda
+
     monkeypatch.setenv("DATABASE_URL", pg_clean)
     monkeypatch.setenv("FREE_LLM_API_KEY", "freellmapi-key")
     user_id = _make_user(pg_clean)
@@ -811,8 +815,25 @@ def test_ask_lesson_question_returns_grounded_reply(
 
     import news_dashboard.ai_client as ai_client_mod
 
-    mock_chat_create, captured = _mock_chat_reply("Here is a simpler explanation.")
-    monkeypatch.setattr(ai_client_mod, "chat_create", mock_chat_create)
+    captured: dict[str, Any] = {}
+
+    def fake_invoke(prompt_value: Any, config: Any) -> AIMessage:
+        captured["messages"] = prompt_value.to_messages()
+        captured["config"] = config
+        return AIMessage(content="Here is a simpler explanation.")
+
+    @contextmanager
+    def fake_propagate_attributes(**kwargs: Any) -> Generator[None]:
+        captured["attributes"] = kwargs
+        yield
+
+    callback = BaseCallbackHandler()
+    monkeypatch.setattr(
+        ai_client_mod, "get_chat_model", lambda **_kwargs: RunnableLambda(fake_invoke)
+    )
+    monkeypatch.setattr(ai_client_mod, "langfuse_enabled", lambda: True)
+    monkeypatch.setattr("langfuse.propagate_attributes", fake_propagate_attributes)
+    monkeypatch.setattr("langfuse.langchain.CallbackHandler", lambda: callback)
 
     history = [
         {"role": "user", "content": "What is this about?"},
@@ -828,9 +849,20 @@ def test_ask_lesson_question_returns_grounded_reply(
 
     assert reply == "Here is a simpler explanation."
     messages = captured["messages"]
-    assert messages[0]["role"] == "system"
-    assert "Body for https://example.com/a" in messages[0]["content"]
-    assert messages[-1] == {"role": "user", "content": "Explain this more simply."}
+    assert [message.type for message in messages] == ["system", "human", "ai", "human"]
+    assert "Body for https://example.com/a" in messages[0].content
+    assert [message.content for message in messages[1:]] == [
+        "What is this about?",
+        "It's about the article.",
+        "Explain this more simply.",
+    ]
+    assert captured["config"]["callbacks"].handlers == [callback]
+    assert captured["attributes"] == {
+        "user_id": str(user_id),
+        "session_id": f"lesson:{user_id}:{lesson['id']}",
+        "tags": ["lesson", "chat"],
+        "trace_name": "lesson-chat",
+    }
 
 
 def test_ask_lesson_question_inserts_history_after_managed_system(

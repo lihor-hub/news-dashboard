@@ -14,6 +14,7 @@ actual psycopg %s parameterisation, JSONB round-trip, and NULLS LAST ordering.
 from __future__ import annotations
 
 from collections.abc import Generator
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock
@@ -750,26 +751,44 @@ def test_create_normalizes_blank_focus_prompt_to_none(client: TestClient, monkey
     assert captured["focus_prompt"] is None
 
 
-def test_chat_constructs_prompt_with_article_bodies(monkeypatch: Any) -> None:
+@pytest.mark.parametrize("tracing_enabled", [False, True])
+def test_chat_constructs_langchain_prompt_with_session(
+    monkeypatch: Any, tracing_enabled: bool
+) -> None:
     """Verify the system prompt includes briefing summary and article body text."""
     from unittest.mock import MagicMock, patch
+
+    from langchain_core.callbacks import BaseCallbackHandler
+    from langchain_core.messages import AIMessage
+    from langchain_core.runnables import RunnableLambda
 
     sample_briefing = dict(_SAMPLE_BRIEFING)
     article_body = "Detailed article body text about the announcement."
 
-    captured_messages: list[Any] = []
+    captured: dict[str, Any] = {}
 
-    def fake_chat_create(client: Any, *, messages: list[Any], **kwargs: Any) -> Any:
-        captured_messages.extend(messages)
-        mock_response = MagicMock()
-        mock_response.choices[0].message.content = "grounded answer"
-        return mock_response
+    def fake_invoke(prompt_value: Any, config: Any) -> AIMessage:
+        captured["messages"] = prompt_value.to_messages()
+        captured["config"] = config
+        return AIMessage(content="grounded answer")
+
+    @contextmanager
+    def fake_propagate_attributes(**kwargs: Any) -> Generator[None]:
+        captured["attributes"] = kwargs
+        yield
+
+    callback = BaseCallbackHandler()
 
     with (
         patch("news_dashboard.briefings.service.get_briefing", return_value=sample_briefing),
         patch("news_dashboard.briefings.service._briefing_ai_config", return_value=("key", None)),
-        patch("news_dashboard.ai_client.get_openai_client", return_value=MagicMock()),
-        patch("news_dashboard.ai_client.chat_create", side_effect=fake_chat_create),
+        patch(
+            "news_dashboard.ai_client.get_chat_model",
+            return_value=RunnableLambda(fake_invoke),
+        ),
+        patch("news_dashboard.ai_client.langfuse_enabled", return_value=tracing_enabled),
+        patch("langfuse.propagate_attributes", side_effect=fake_propagate_attributes),
+        patch("langfuse.langchain.CallbackHandler", return_value=callback),
         patch(
             "news_dashboard.briefings.service.connect",
         ) as mock_connect,
@@ -782,68 +801,31 @@ def test_chat_constructs_prompt_with_article_bodies(monkeypatch: Any) -> None:
 
         from news_dashboard.briefings.service import chat_with_briefing
 
-        reply = chat_with_briefing(1, "What are the benchmarks?", [], user_id=1)
+        reply = chat_with_briefing(
+            1,
+            "What are the benchmarks?",
+            [
+                {"role": "user", "content": "Summarize the briefing."},
+                {"role": "assistant", "content": "It covers AI frameworks."},
+            ],
+            user_id=1,
+        )
 
     assert reply == "grounded answer"
-    system_msg = next(m for m in captured_messages if m["role"] == "system")
-    assert "AI Frameworks Tighten Production Workflows" in system_msg["content"]
-    assert article_body in system_msg["content"]
-
-
-def test_chat_inserts_history_between_managed_messages(monkeypatch: Any) -> None:
-    from types import SimpleNamespace
-    from unittest.mock import MagicMock, patch
-
-    managed = SimpleNamespace(
-        messages=[
-            {"role": "system", "content": "compiled system"},
-            {"role": "user", "content": "compiled question"},
-        ],
-        langfuse_prompt=object(),
-    )
-    captured: dict[str, Any] = {}
-    history = [{"role": "user", "content": "earlier"}, {"role": "assistant", "content": "reply"}]
-    with (
-        patch(
-            "news_dashboard.briefings.service.get_briefing",
-            return_value=dict(_SAMPLE_BRIEFING, articles=[]),
-        ),
-        patch("news_dashboard.briefings.service._briefing_ai_config", return_value=("key", None)),
-        patch(
-            "news_dashboard.ai_client.get_prompt",
-            side_effect=lambda *args, **kwargs: (
-                captured.update(args=args, kwargs=kwargs) or managed
-            ),
-        ),
-        patch(
-            "news_dashboard.ai_client.chat_create",
-            return_value=SimpleNamespace(
-                choices=[SimpleNamespace(message=SimpleNamespace(content="answer"))]
-            ),
-        ) as chat_create,
-        patch("news_dashboard.ai_client.get_chat_client", return_value=MagicMock()),
-    ):
-        from news_dashboard.briefings.service import chat_with_briefing
-
-        chat_with_briefing(1, "question", history, user_id=1)
-
-    assert captured["args"] == ("briefing-chat",)
-    assert captured["kwargs"]["prompt_type"] == "chat"
-    assert captured["kwargs"]["variables"]["question"] == "question"
-    from news_dashboard.briefings import service as briefings_service
-
-    assert captured["kwargs"]["fallback"] == [
-        {
-            "role": "system",
-            "content": briefings_service._CHAT_SYSTEM_PROMPT.replace(
-                "{briefing_context}", "{{briefing_context}}"
-            ).replace("{articles_context}", "{{articles_context}}"),
-        },
-        {"role": "user", "content": "{{question}}"},
+    messages = captured["messages"]
+    assert [message.type for message in messages] == ["system", "human", "ai", "human"]
+    assert "AI Frameworks Tighten Production Workflows" in messages[0].content
+    assert article_body in messages[0].content
+    assert [message.content for message in messages[1:]] == [
+        "Summarize the briefing.",
+        "It covers AI frameworks.",
+        "What are the benchmarks?",
     ]
-    assert all(message not in captured["kwargs"]["fallback"] for message in history)
-    assert chat_create.call_args.kwargs["messages"] == [
-        managed.messages[0],
-        *history,
-        managed.messages[1],
-    ]
+    assert captured["attributes"] == {
+        "user_id": "1",
+        "session_id": "briefing:1:1",
+        "tags": ["briefing", "chat"],
+        "trace_name": "briefing-chat",
+    }
+    expected_callbacks = [callback] if tracing_enabled else []
+    assert captured["config"]["callbacks"].handlers == expected_callbacks
