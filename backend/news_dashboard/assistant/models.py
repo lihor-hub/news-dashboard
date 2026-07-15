@@ -10,6 +10,7 @@ MAX_ASK_QUERY_LENGTH = 2_000
 class AskRequest(BaseModel):
     query: str = Field(max_length=MAX_ASK_QUERY_LENGTH)
     include_all: bool = False
+    session_id: str | None = Field(default=None, max_length=199)
 
 
 class AgentActionPlanRequest(BaseModel):

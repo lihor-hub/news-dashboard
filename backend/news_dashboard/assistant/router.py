@@ -32,7 +32,12 @@ def ask_ai(
     if not q:
         raise HTTPException(status_code=400, detail="query must not be empty")
     try:
-        return service.ask(q, include_all=payload.include_all, user_id=current_user["id"])
+        return service.ask(
+            q,
+            include_all=payload.include_all,
+            user_id=current_user["id"],
+            session_id=payload.session_id,
+        )
     except service.EmbeddingUnavailableError as exc:
         raise HTTPException(
             status_code=503, detail="Ask AI is temporarily unavailable, try again shortly."

@@ -8,10 +8,16 @@ from news_dashboard.agent_actions import AgentActionError, AgentActionNotFoundEr
 from news_dashboard.embeddings import EmbeddingUnavailableError
 
 
-def ask(query: str, *, include_all: bool, user_id: int) -> dict[str, Any]:
+def ask(
+    query: str,
+    *,
+    include_all: bool,
+    user_id: int,
+    session_id: str | None = None,
+) -> dict[str, Any]:
     from news_dashboard.embeddings import ask as ask_impl
 
-    return ask_impl(query, include_all=include_all, user_id=user_id)
+    return ask_impl(query, include_all=include_all, user_id=user_id, session_id=session_id)
 
 
 def plan_actions(query: str, *, user_id: int, is_admin: bool) -> dict[str, Any]:

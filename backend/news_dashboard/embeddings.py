@@ -161,20 +161,21 @@ def _answer(
     user_prompt: str,
     *,
     user_id: int | None = None,
+    session_id: str | None = None,
     prompt: ManagedPrompt | None = None,
 ) -> str:
-    """Generate an answer via the free LLM gateway when configured, else OpenAI."""
-    from news_dashboard.ai_client import chat_create, free_llm_config, get_chat_client
+    """Generate an answer through a LangChain chat chain."""
+    from news_dashboard.ai_client import free_llm_config
+    from news_dashboard.ai_orchestration import invoke_chat_chain
 
-    api_key, base_url = free_llm_config()
+    api_key, _base_url = free_llm_config()
     if not api_key:
         _require_env("FREE_LLM_API_KEY", "use Ask AI")
-    client = get_chat_client(api_key=api_key, base_url=base_url)
-    response = chat_create(
-        client,
+    return invoke_chat_chain(
         name="ask-ai",
         tags=["ask-ai"],
         user_id=user_id,
+        session_id=session_id,
         prompt=prompt,
         model=os.getenv("OPENAI_ANSWER_MODEL", DEFAULT_ANSWER_MODEL),
         messages=[
@@ -183,7 +184,6 @@ def _answer(
         ],
         max_tokens=1024,
     )
-    return response.choices[0].message.content or ""
 
 
 def graph_context_for_articles(article_ids: list[int]) -> dict[str, Any] | None:
@@ -378,6 +378,7 @@ def ask(
     *,
     include_all: bool = False,
     user_id: int | None = None,
+    session_id: str | None = None,
 ) -> dict[str, Any]:
     """Answer *query* using RAG over saved/read articles.
 
@@ -489,7 +490,13 @@ def ask(
     # 6. Call OpenAI for the answer, grouping retrieval + generation under one
     #    Langfuse trace so its id can carry user feedback (see /api/feedback).
     with observe("ask-ai", input={"query": query, "include_all": include_all}) as trace:
-        answer_text = _answer(prompt.text, user_prompt, user_id=user_id, prompt=prompt)
+        answer_text = _answer(
+            prompt.text,
+            user_prompt,
+            user_id=user_id,
+            session_id=session_id,
+            prompt=prompt,
+        )
         trace.update_output(answer_text)
 
     # 7. Return answer + source list (top-k order)
