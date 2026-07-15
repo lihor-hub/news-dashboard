@@ -139,7 +139,7 @@ def test_sync_is_idempotent_when_production_content_matches(
                 entry.prompt
                 if isinstance(entry.prompt, str)
                 else [
-                    {"role": item.role, "content": item.content, "type": "text"}
+                    {"role": item.role, "content": item.content, "type": "message"}
                     for item in entry.prompt
                 ]
             )
@@ -165,7 +165,7 @@ def test_sync_chat_comparison_rejects_different_or_unsupported_messages(
     entry = next(item for item in PROMPT_CATALOG if item.type == "chat")
     expected = entry.fallback()
     assert isinstance(expected, list)
-    sdk_prompt = [{**message, "type": "text"} for message in expected]
+    sdk_prompt = [{**message, "type": "message"} for message in expected]
     changed_role = [{**sdk_prompt[0], "role": "assistant"}, *sdk_prompt[1:]]
     changed_content = [{**sdk_prompt[0], "content": "changed"}, *sdk_prompt[1:]]
     unsupported_type = [{**sdk_prompt[0], "type": "image"}, *sdk_prompt[1:]]

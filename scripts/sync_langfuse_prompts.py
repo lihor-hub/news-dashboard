@@ -38,7 +38,11 @@ def _normalize_chat_messages(prompt: Any) -> list[dict[str, str]] | None:
         role = message.get("role")
         content = message.get("content")
         message_type = message.get("type", "text")
-        if not isinstance(role, str) or not isinstance(content, str) or message_type != "text":
+        if (
+            not isinstance(role, str)
+            or not isinstance(content, str)
+            or message_type not in {"message", "text"}
+        ):
             return None
         normalized.append({"role": role, "content": content})
     return normalized
