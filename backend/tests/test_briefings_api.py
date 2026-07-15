@@ -830,6 +830,18 @@ def test_chat_inserts_history_between_managed_messages(monkeypatch: Any) -> None
     assert captured["args"] == ("briefing-chat",)
     assert captured["kwargs"]["prompt_type"] == "chat"
     assert captured["kwargs"]["variables"]["question"] == "question"
+    from news_dashboard.briefings import service as briefings_service
+
+    assert captured["kwargs"]["fallback"] == [
+        {
+            "role": "system",
+            "content": briefings_service._CHAT_SYSTEM_PROMPT.replace(
+                "{briefing_context}", "{{briefing_context}}"
+            ).replace("{articles_context}", "{{articles_context}}"),
+        },
+        {"role": "user", "content": "{{question}}"},
+    ]
+    assert all(message not in captured["kwargs"]["fallback"] for message in history)
     assert chat_create.call_args.kwargs["messages"] == [
         managed.messages[0],
         *history,

@@ -863,6 +863,16 @@ def test_ask_lesson_question_inserts_history_after_managed_system(
     assert captured["args"] == ("lesson-chat",)
     assert captured["kwargs"]["prompt_type"] == "chat"
     assert captured["kwargs"]["variables"]["question"] == "question"
+    assert captured["kwargs"]["fallback"] == [
+        {
+            "role": "system",
+            "content": service._LESSON_CHAT_SYSTEM_PROMPT.replace(
+                "{lesson_context}", "{{lesson_context}}"
+            ).replace("{source_context}", "{{source_context}}"),
+        },
+        {"role": "user", "content": "{{question}}"},
+    ]
+    assert all(message not in captured["kwargs"]["fallback"] for message in history)
     assert chat_capture["messages"] == [managed.messages[0], *history, managed.messages[1]]
 
 
@@ -1429,6 +1439,7 @@ def test_lesson_relevance_uses_native_chat_prompt(
     import news_dashboard.ai_client as ai_client_mod
 
     captured: dict[str, Any] = {}
+    chat_captured: dict[str, Any] = {}
     managed = SimpleNamespace(
         messages=[{"role": "system", "content": "managed"}], langfuse_prompt=object()
     )
@@ -1440,12 +1451,15 @@ def test_lesson_relevance_uses_native_chat_prompt(
     monkeypatch.setattr(
         ai_client_mod,
         "chat_create",
-        lambda *_args, **_kwargs: SimpleNamespace(
-            choices=[
-                SimpleNamespace(
-                    message=SimpleNamespace(content='{"explanation":"why","signals":[]}')
-                )
-            ]
+        lambda *_args, **kwargs: (
+            chat_captured.update(kwargs)
+            or SimpleNamespace(
+                choices=[
+                    SimpleNamespace(
+                        message=SimpleNamespace(content='{"explanation":"why","signals":[]}')
+                    )
+                ]
+            )
         ),
     )
 
@@ -1453,7 +1467,18 @@ def test_lesson_relevance_uses_native_chat_prompt(
 
     assert captured["args"] == ("lesson-relevance",)
     assert captured["kwargs"]["prompt_type"] == "chat"
+    assert captured["kwargs"]["fallback"] == [
+        {
+            "role": "system",
+            "content": (
+                "Explain why a lesson is relevant using only the user's provided reading profile. "
+                "Return JSON with non-empty explanation and a signals array."
+            ),
+        },
+        {"role": "user", "content": "{{lesson_context}}\n{{profile_context}}"},
+    ]
     assert set(captured["kwargs"]["variables"]) == {"lesson_context", "profile_context"}
+    assert chat_captured["messages"] is managed.messages
 
 
 def test_relevance_feedback_endpoint_is_owned_by_lesson_user(

@@ -21,3 +21,17 @@ values were printed or modified.
 - Lesson and briefing histories remain outside the managed prompt and are inserted
   between the compiled prompt's leading messages and final user message.
 - Existing FastAPI/Starlette dependency warnings remain: 18 warnings in the focused run.
+
+## Review follow-up
+
+Added regression assertions for the native-chat fallback roles and ordering, and for
+forwarding the compiled managed messages, across `lesson-slide-deck`,
+`lesson-infographic`, `lesson-relevance`, `lesson-chat`, and `briefing-chat`. The lesson
+and briefing chat tests now also prove history is inserted by Python between compiled
+messages and is absent from the fallback templates. No production defect was found.
+
+Commands and results:
+
+- `.venv/bin/ruff format backend/tests/test_lesson_slide_deck.py backend/tests/test_lesson_infographic.py backend/tests/test_learn_from_link.py backend/tests/test_briefings_api.py` — 4 files formatted.
+- `.venv/bin/ruff check backend/tests/test_lesson_slide_deck.py backend/tests/test_lesson_infographic.py backend/tests/test_learn_from_link.py backend/tests/test_briefings_api.py` — passed.
+- `dotenv run -- pytest backend/tests/test_tts.py backend/tests/test_lesson_slide_deck.py backend/tests/test_lesson_infographic.py backend/tests/test_learn_from_link.py backend/tests/test_briefings_api.py -q` — 167 passed, 18 existing Starlette deprecation warnings.
