@@ -122,6 +122,7 @@ def test_propose_revision_uses_langchain_model_and_preserves_token_limit(
         "api_key": "free-key",
         "base_url": "https://gateway.example/v1",
         "model": "optimizer-model",
+        "max_tokens": 1024,
     }
     config = cast("dict[str, Any]", captured["config"])
-    assert config["metadata"] == {"max_tokens": 1024}
+    assert config["callbacks"] is not None

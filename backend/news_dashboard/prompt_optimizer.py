@@ -157,16 +157,19 @@ def _propose_revision(current_text: str, examples: list[NegativeExample], *, mod
 
     from news_dashboard.ai_client import get_chat_model, response_text
 
-    chat_model = get_chat_model(api_key=api_key, base_url=base_url, model=model).bind(
-        max_tokens=1024
-    )
+    chat_model = get_chat_model(api_key=api_key, base_url=base_url, model=model, max_tokens=1024)
     prompt = ChatPromptTemplate.from_messages(
         [("system", _OPTIMIZER_INSTRUCTIONS), ("human", "{optimizer_prompt}")]
     )
+    callbacks: list[Any] = []
+    if langfuse_enabled():
+        from langfuse.langchain import CallbackHandler
+
+        callbacks.append(CallbackHandler())
     with propagate_attributes(tags=["prompt-optimizer"], trace_name="prompt-optimizer"):
         response = (prompt | chat_model).invoke(
             {"optimizer_prompt": build_optimizer_prompt(current_text, examples)},
-            config={"metadata": {"max_tokens": 1024}},
+            config={"callbacks": callbacks},
         )
     return response_text(response).strip()
 

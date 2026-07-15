@@ -38,8 +38,14 @@ def generate_lesson_recap_narrative(recap: dict[str, Any]) -> str:
 
     try:
         from langchain_core.prompts import ChatPromptTemplate
+        from langfuse import propagate_attributes
 
-        from news_dashboard.ai_client import free_llm_config, get_chat_model, response_text
+        from news_dashboard.ai_client import (
+            free_llm_config,
+            get_chat_model,
+            langfuse_enabled,
+            response_text,
+        )
 
         api_key, base_url = free_llm_config()
         if not api_key:
@@ -61,14 +67,25 @@ def generate_lesson_recap_narrative(recap: dict[str, Any]) -> str:
             "by a blank line."
         )
 
-        chat_model = get_chat_model(api_key=api_key, base_url=base_url, model=model).bind(
-            max_tokens=300, temperature=0.7
+        chat_model = get_chat_model(
+            api_key=api_key,
+            base_url=base_url,
+            model=model,
+            max_tokens=300,
+            temperature=0.7,
         )
         template = ChatPromptTemplate.from_messages([("human", "{prompt}")])
-        response = (template | chat_model).invoke(
-            {"prompt": prompt},
-            config={"metadata": {"max_tokens": 300, "temperature": 0.7}},
-        )
+        callbacks: list[Any] = []
+        if langfuse_enabled():
+            from langfuse.langchain import CallbackHandler
+
+            callbacks.append(CallbackHandler())
+        with propagate_attributes(
+            tags=["lesson", "recap", "narrative"], trace_name="lesson-recap-narrative"
+        ):
+            response = (template | chat_model).invoke(
+                {"prompt": prompt}, config={"callbacks": callbacks}
+            )
         narrative = response_text(response).strip()
         if narrative:
             return narrative

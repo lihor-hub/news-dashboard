@@ -588,6 +588,7 @@ def test_get_chat_model_preserves_generation_settings_on_lazy_fallback(
             model="shared-model",
             max_tokens=60,
             temperature=0.3,
+            response_format={"type": "json_object"},
         )
         result = model.invoke("hello")
 
@@ -596,6 +597,12 @@ def test_get_chat_model_preserves_generation_settings_on_lazy_fallback(
     assert constructor.call_args_list[0].kwargs["temperature"] == 0.3
     assert constructor.call_args_list[1].kwargs["max_tokens"] == 60
     assert constructor.call_args_list[1].kwargs["temperature"] == 0.3
+    assert constructor.call_args_list[0].kwargs["model_kwargs"] == {
+        "response_format": {"type": "json_object"}
+    }
+    assert constructor.call_args_list[1].kwargs["model_kwargs"] == {
+        "response_format": {"type": "json_object"}
+    }
 
 
 @pytest.mark.usefixtures("_no_langfuse")

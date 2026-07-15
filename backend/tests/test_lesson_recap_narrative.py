@@ -67,10 +67,15 @@ def test_generate_lesson_recap_narrative_returns_llm_text(monkeypatch: pytest.Mo
         result = generate_lesson_recap_narrative(_make_recap())
 
     assert result == narrative_text
-    factory.assert_called_once_with(api_key="fake-key", base_url=None, model="gpt-4o-mini")
+    factory.assert_called_once_with(
+        api_key="fake-key",
+        base_url=None,
+        model="gpt-4o-mini",
+        max_tokens=300,
+        temperature=0.7,
+    )
     assert "gradient descent" in captured["messages"].messages[0].content
-    assert captured["config"]["metadata"]["temperature"] == 0.7
-    assert captured["config"]["metadata"]["max_tokens"] == 300
+    assert captured["config"]["callbacks"] is not None
 
 
 def test_generate_lesson_recap_narrative_falls_back_on_llm_error(

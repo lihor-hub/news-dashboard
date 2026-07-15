@@ -580,19 +580,29 @@ def generate_slide_deck_content(lesson: dict[str, Any], user_id: int) -> dict[st
     from langchain_core.prompts import ChatPromptTemplate
     from langfuse import propagate_attributes
 
-    from news_dashboard.ai_client import get_chat_model, response_text
+    from news_dashboard.ai_client import get_chat_model, langfuse_enabled, response_text
 
     model = os.getenv("OPENAI_LESSON_CHAT_MODEL", DEFAULT_LESSON_CHAT_MODEL)
-    chat_model = get_chat_model(api_key=api_key, base_url=base_url, model=model).bind(
-        response_format={"type": "json_object"}
+    chat_model = get_chat_model(
+        api_key=api_key,
+        base_url=base_url,
+        model=model,
+        response_format={"type": "json_object"},
     )
     prompt = ChatPromptTemplate.from_messages(
         [("system", _LESSON_SLIDE_DECK_SYSTEM_PROMPT), ("human", "{lesson}")]
     )
+    callbacks: list[Any] = []
+    if langfuse_enabled():
+        from langfuse.langchain import CallbackHandler
+
+        callbacks.append(CallbackHandler())
     with propagate_attributes(
         user_id=str(user_id), tags=["lesson", "slide-deck"], trace_name="lesson-slide-deck"
     ):
-        response = (prompt | chat_model).invoke({"lesson": _build_slide_deck_prompt(lesson)})
+        response = (prompt | chat_model).invoke(
+            {"lesson": _build_slide_deck_prompt(lesson)}, config={"callbacks": callbacks}
+        )
     parsed = json.loads(response_text(response))
     return validate_slide_deck(parsed)
 
@@ -744,19 +754,29 @@ def generate_infographic_content(lesson: dict[str, Any], user_id: int) -> dict[s
     from langchain_core.prompts import ChatPromptTemplate
     from langfuse import propagate_attributes
 
-    from news_dashboard.ai_client import get_chat_model, response_text
+    from news_dashboard.ai_client import get_chat_model, langfuse_enabled, response_text
 
     model = os.getenv("OPENAI_LESSON_CHAT_MODEL", DEFAULT_LESSON_CHAT_MODEL)
-    chat_model = get_chat_model(api_key=api_key, base_url=base_url, model=model).bind(
-        response_format={"type": "json_object"}
+    chat_model = get_chat_model(
+        api_key=api_key,
+        base_url=base_url,
+        model=model,
+        response_format={"type": "json_object"},
     )
     prompt = ChatPromptTemplate.from_messages(
         [("system", _LESSON_INFOGRAPHIC_SYSTEM_PROMPT), ("human", "{lesson}")]
     )
+    callbacks: list[Any] = []
+    if langfuse_enabled():
+        from langfuse.langchain import CallbackHandler
+
+        callbacks.append(CallbackHandler())
     with propagate_attributes(
         user_id=str(user_id), tags=["lesson", "infographic"], trace_name="lesson-infographic"
     ):
-        response = (prompt | chat_model).invoke({"lesson": _build_infographic_prompt(lesson)})
+        response = (prompt | chat_model).invoke(
+            {"lesson": _build_infographic_prompt(lesson)}, config={"callbacks": callbacks}
+        )
     parsed = json.loads(response_text(response))
     return validate_infographic(parsed)
 
@@ -1578,7 +1598,7 @@ def generate_personal_relevance(
     from langchain_core.prompts import ChatPromptTemplate
     from langfuse import propagate_attributes
 
-    from news_dashboard.ai_client import get_chat_model, response_text
+    from news_dashboard.ai_client import get_chat_model, langfuse_enabled, response_text
 
     lesson_title = str(lesson_fields.get("title") or lesson_fields.get("original_url"))
     lesson_detail = lesson_fields.get("lesson_detail") or {}
@@ -1596,14 +1616,24 @@ def generate_personal_relevance(
     )
     try:
         model = os.getenv("OPENAI_LESSON_CHAT_MODEL", DEFAULT_LESSON_CHAT_MODEL)
-        chat_model = get_chat_model(api_key=api_key, base_url=base_url, model=model).bind(
-            response_format={"type": "json_object"}
+        chat_model = get_chat_model(
+            api_key=api_key,
+            base_url=base_url,
+            model=model,
+            response_format={"type": "json_object"},
         )
         prompt = ChatPromptTemplate.from_messages([("system", system), ("human", "{profile}")])
+        callbacks: list[Any] = []
+        if langfuse_enabled():
+            from langfuse.langchain import CallbackHandler
+
+            callbacks.append(CallbackHandler())
         with propagate_attributes(
             user_id=str(user_id), tags=["lesson", "relevance"], trace_name="lesson-relevance"
         ):
-            response = (prompt | chat_model).invoke({"profile": user_prompt})
+            response = (prompt | chat_model).invoke(
+                {"profile": user_prompt}, config={"callbacks": callbacks}
+            )
         parsed = json.loads(response_text(response))
         return {
             "explanation": str(parsed["explanation"]),

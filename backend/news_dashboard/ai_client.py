@@ -234,6 +234,7 @@ def get_chat_model(
     model: str,
     max_tokens: int | None = None,
     temperature: float | None = None,
+    response_format: dict[str, str] | None = None,
 ) -> Runnable[LanguageModelInput, AIMessage]:
     """Return a LangChain chat model with the existing OpenAI fallback semantics."""
     from langchain_core.runnables import RunnableConfig, RunnableLambda
@@ -251,6 +252,8 @@ def get_chat_model(
         kwargs["max_tokens"] = max_tokens
     if temperature is not None:
         kwargs["temperature"] = temperature
+    if response_format is not None:
+        kwargs["model_kwargs"] = {"response_format": response_format}
     primary = ChatOpenAI(**kwargs)
 
     openai_key, openai_base = openai_config()
@@ -268,6 +271,8 @@ def get_chat_model(
         fallback_kwargs["max_tokens"] = max_tokens
     if temperature is not None:
         fallback_kwargs["temperature"] = temperature
+    if response_format is not None:
+        fallback_kwargs["model_kwargs"] = {"response_format": response_format}
 
     def invoke_fallback(
         input: LanguageModelInput,  # noqa: A002 - LangChain runnable API terminology

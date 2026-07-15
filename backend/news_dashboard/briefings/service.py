@@ -234,8 +234,12 @@ def _call_openai(
         )
     user = "Articles:\n\n" + "\n\n".join(article_lines)
 
-    chat_model = get_chat_model(api_key=api_key, base_url=base_url, model=model).bind(
-        response_format={"type": "json_object"}, max_tokens=2048
+    chat_model = get_chat_model(
+        api_key=api_key,
+        base_url=base_url,
+        model=model,
+        max_tokens=2048,
+        response_format={"type": "json_object"},
     )
     template = ChatPromptTemplate.from_messages([("system", "{system}"), ("human", "{articles}")])
     callbacks: list[Any] = []

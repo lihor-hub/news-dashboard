@@ -16,3 +16,12 @@ Verification:
 - scoped strict mypy: `Success: no issues found in 5 source files`.
 
 The warnings are the repository's existing Starlette `TestClient` deprecation warnings.
+
+## Findings follow-up
+
+- generation settings now enter `get_chat_model` directly, so distinct-key lazy fallbacks preserve token, temperature, and JSON response-format settings;
+- all Group C one-shot calls now pass a Langfuse `CallbackHandler` through runnable config when tracing is enabled and retain `propagate_attributes` attribution;
+- briefing generation retains its outer trace, managed prompt linkage, and trace ID contract;
+- prompt content remains runtime template input, preserving literal braces.
+
+Follow-up focused suite: `207 passed, 18 warnings` before the final three callback-manager assertion corrections; those corrections were then verified in the focused narrative/optimizer suite.
