@@ -18,7 +18,6 @@ from typing import Any
 from news_dashboard.body_fetch import get_article
 from news_dashboard.db import connect, init_db
 from news_dashboard.embeddings import parse_vector
-from news_dashboard.prompt_catalog import get_text_prompt
 
 logger = logging.getLogger(__name__)
 
@@ -90,23 +89,32 @@ def generate_insights(article: dict[str, Any], *, user_id: int | None = None) ->
     if not text.strip():
         return []
 
-    from news_dashboard.ai_client import chat_create, get_chat_client, get_prompt
+    from langchain_core.prompts import ChatPromptTemplate
+    from langfuse import propagate_attributes
 
-    client = get_chat_client(api_key=api_key, base_url=base_url)
+    from news_dashboard.ai_client import get_chat_model, get_prompt, langfuse_enabled, response_text
+
     prompt = get_prompt("article-insights", fallback=_PROMPT)
     logger.info("Generating insights for article %s", article.get("id"))
-    result = chat_create(
-        client,
-        name="article-insights",
-        tags=["insights"],
-        user_id=user_id,
-        prompt=prompt,
-        model=model,
-        messages=[{"role": "user", "content": f"{prompt.text}\n\n{text}"}],
-        max_tokens=512,
+    chat_model = get_chat_model(api_key=api_key, base_url=base_url, model=model).bind(
+        max_tokens=512
     )
-    response_text = (result.choices[0].message.content or "").strip()
-    bullets = _parse_bullets(response_text)
+    callbacks: list[Any] = []
+    if langfuse_enabled():
+        from langfuse.langchain import CallbackHandler
+
+        callbacks.append(CallbackHandler())
+    template = ChatPromptTemplate.from_messages([("human", "{instruction}\n\n{text}")])
+    with propagate_attributes(
+        user_id=str(user_id) if user_id is not None else None,
+        tags=["insights"],
+        trace_name="article-insights",
+        prompt=prompt.langfuse_prompt,
+    ):
+        result = (template | chat_model).invoke(
+            {"instruction": prompt.text, "text": text}, config={"callbacks": callbacks}
+        )
+    bullets = _parse_bullets(response_text(result).strip())
     logger.info("Insights generated for article %s: %d bullets", article.get("id"), len(bullets))
     return bullets
 
@@ -179,7 +187,16 @@ def get_or_generate_insights(
 _CLUSTER_THRESHOLD = 0.72  # cosine similarity threshold for same-cluster assignment
 _MIN_CLUSTER_SIZE = 3  # minimum articles per cluster to surface
 _MAX_ARTICLES = 300  # cap to keep computation bounded
-_CLUSTER_LABEL_PROMPT = get_text_prompt("topic-cluster-label")
+_CLUSTER_LABEL_PROMPT = (
+    "You are analyzing a group of related news articles that cover the same story or topic arc. "
+    "Based ONLY on the article titles and summaries provided below, generate:\n"
+    "1. A concise Story Headline (max 8 words) capturing the central theme.\n"
+    "2. A one-sentence Trend Summary explaining the story arc or why these "
+    "articles are connected.\n\n"
+    "Respond in this exact format:\n"
+    "HEADLINE: <headline here>\n"
+    "SUMMARY: <one-sentence summary here>"
+)
 
 DEFAULT_CLUSTER_MODEL = "gpt-4o-mini"
 
@@ -316,32 +333,32 @@ def _generate_cluster_label(
         f"- Title: {a.get('title', '')}\n  Summary: {a.get('summary', '')}" for a in articles[:10]
     )
 
-    from news_dashboard.ai_client import chat_create, get_chat_client, get_prompt
+    from langchain_core.prompts import ChatPromptTemplate
+    from langfuse import propagate_attributes
 
-    client = get_chat_client(api_key=api_key, base_url=base_url)
-    prompt = get_prompt(
-        "topic-cluster-label",
-        fallback=get_text_prompt("topic-cluster-label"),
-        prompt_type="text",
-        label="production",
-        variables={"articles_text": articles_text},
+    from news_dashboard.ai_client import get_chat_model, langfuse_enabled, response_text
+
+    chat_model = get_chat_model(api_key=api_key, base_url=base_url, model=model).bind(
+        max_tokens=200
     )
-    result = chat_create(
-        client,
-        name="topic-cluster-label",
+    callbacks: list[Any] = []
+    if langfuse_enabled():
+        from langfuse.langchain import CallbackHandler
+
+        callbacks.append(CallbackHandler())
+    template = ChatPromptTemplate.from_messages(
+        [("human", "{instruction}\n\nArticles:\n{articles}")]
+    )
+    with propagate_attributes(
+        user_id=str(user_id) if user_id is not None else None,
         tags=["clustering"],
-        user_id=user_id,
-        prompt=prompt,
-        model=model,
-        messages=[
-            {
-                "role": "user",
-                "content": prompt.text,
-            },
-        ],
-        max_tokens=200,
-    )
-    text = (result.choices[0].message.content or "").strip()
+        trace_name="topic-cluster-label",
+    ):
+        result = (template | chat_model).invoke(
+            {"instruction": _CLUSTER_LABEL_PROMPT, "articles": articles_text},
+            config={"callbacks": callbacks},
+        )
+    text = response_text(result).strip()
 
     headline = ""
     trend_summary = ""
