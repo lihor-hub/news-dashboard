@@ -331,10 +331,10 @@ def _generate_cluster_label(
         f"- Title: {a.get('title', '')}\n  Summary: {a.get('summary', '')}" for a in articles[:10]
     )
 
-    from langchain_core.prompts import ChatPromptTemplate
+    from langchain_core.messages import HumanMessage
     from langfuse import propagate_attributes
 
-    from news_dashboard.ai_client import get_chat_model, langfuse_enabled, response_text
+    from news_dashboard.ai_client import get_chat_model, get_prompt, langfuse_enabled, response_text
 
     chat_model = get_chat_model(api_key=api_key, base_url=base_url, model=model, max_tokens=200)
     callbacks: list[Any] = []
@@ -342,17 +342,21 @@ def _generate_cluster_label(
         from langfuse.langchain import CallbackHandler
 
         callbacks.append(CallbackHandler())
-    template = ChatPromptTemplate.from_messages(
-        [("human", "{instruction}\n\nArticles:\n{articles}")]
+    prompt = get_prompt(
+        "topic-cluster-label",
+        fallback=_CLUSTER_LABEL_PROMPT,
+        prompt_type="text",
+        label="production",
+        variables={"articles_text": articles_text},
     )
     with propagate_attributes(
         user_id=str(user_id) if user_id is not None else None,
         tags=["clustering"],
         trace_name="topic-cluster-label",
+        prompt=prompt.langfuse_prompt,
     ):
-        result = (template | chat_model).invoke(
-            {"instruction": _CLUSTER_LABEL_PROMPT, "articles": articles_text},
-            config={"callbacks": callbacks},
+        result = chat_model.invoke(
+            [HumanMessage(content=prompt.text)], config={"callbacks": callbacks}
         )
     text = response_text(result).strip()
 

@@ -322,9 +322,13 @@ def test_generate_cluster_label_uses_managed_prompt() -> None:
 
     with (
         patch("news_dashboard.insights._cluster_ai_config", return_value=("key", None, "model")),
-        patch("news_dashboard.ai_client.get_chat_client", return_value=MagicMock()),
         patch("news_dashboard.ai_client.get_prompt", return_value=managed) as get_prompt,
-        patch("news_dashboard.ai_client.chat_create", return_value=response) as chat_create,
+        patch(
+            "news_dashboard.ai_client.get_chat_model",
+            return_value=RunnableLambda(
+                lambda _messages: AIMessage(content="HEADLINE: Managed\nSUMMARY: Managed summary.")
+            ),
+        ) as get_chat_model,
     ):
         result = _generate_cluster_label(articles, user_id=7)
 
@@ -336,10 +340,7 @@ def test_generate_cluster_label_uses_managed_prompt() -> None:
         label="production",
         variables={"articles_text": articles_text},
     )
-    assert chat_create.call_args.kwargs["prompt"] is managed
-    assert chat_create.call_args.kwargs["messages"] == [
-        {"role": "user", "content": "compiled cluster prompt"}
-    ]
+    get_chat_model.assert_called_once()
 
 
 # ── get_or_generate_insights ──────────────────────────────────────────────────

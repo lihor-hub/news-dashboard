@@ -122,6 +122,15 @@ framework call sites use `langfuse.langchain.CallbackHandler` and
 has its own trace; a Langfuse session groups related traces without replacing
 the trace IDs used for feedback.
 
+Managed prompts are fetched by the stable `production` label by default.
+Langfuse assigns every saved prompt an immutable version, and the exact fetched
+prompt object is linked to its generation in each trace. This makes prompt
+version, labels, trace, user, and session available together in Langfuse. The
+prompt optimizer writes proposed revisions as new `candidate`-labeled versions;
+promoting or rolling back means moving the `production` label in Langfuse, not
+deploying application code. Internal callers may also request an exact prompt
+version when a reproducible evaluation or rollback requires it.
+
 | Operation              | Langfuse session ID                                                                |
 | ---------------------- | ---------------------------------------------------------------------------------- |
 | Ask AI                 | Optional client-provided `session_id`; omitted requests remain independent traces. |

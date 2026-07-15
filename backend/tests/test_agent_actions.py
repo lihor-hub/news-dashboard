@@ -185,12 +185,16 @@ def test_plan_actions_propagates_stable_session_to_graph_and_model(db: str) -> N
     article_id = _insert_article(db)
     model = _mock_llm(_plan_json([{"tool": "star_article", "article_id": article_id}]))
     callback = BaseCallbackHandler()
+    managed_prompt = MagicMock()
     with (
         patch("news_dashboard.ai_client.get_chat_model", return_value=model),
+        patch("news_dashboard.ai_client.get_prompt") as get_prompt,
         patch("news_dashboard.ai_client.langfuse_enabled", return_value=True),
         patch("langfuse.langchain.CallbackHandler", return_value=callback),
         patch("langfuse.propagate_attributes") as attributes,
     ):
+        get_prompt.return_value.text = "Plan actions"
+        get_prompt.return_value.langfuse_prompt = managed_prompt
         plan = plan_actions("star it", user_id=user_id)
 
     session_id = f"agent-action:{plan['run_id']}"
@@ -201,6 +205,7 @@ def test_plan_actions_propagates_stable_session_to_graph_and_model(db: str) -> N
         user_id=str(user_id),
         tags=["agent-actions"],
         trace_name="agent-action-planning",
+        prompt=managed_prompt,
     )
 
 

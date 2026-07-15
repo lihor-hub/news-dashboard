@@ -275,14 +275,18 @@ def generate_podcast_script(briefing_content: dict[str, Any]) -> list[dict[str, 
     """Generate a conversational podcast script from briefing content using LLM."""
     api_key, base_url = _script_ai_config()
 
+    from langchain_core.messages import convert_to_messages
+    from langchain_core.prompt_values import ChatPromptValue
     from langfuse import propagate_attributes
 
     from news_dashboard.ai_client import (
         get_chat_model,
+        get_prompt,
         langfuse_enabled,
         response_text,
         strip_markdown_fence,
     )
+    from news_dashboard.prompt_catalog import get_chat_prompt
 
     model = os.getenv("OPENAI_BRIEFING_MODEL", "gpt-4o-mini")
     chat_model = get_chat_model(
@@ -301,21 +305,25 @@ def generate_podcast_script(briefing_content: dict[str, Any]) -> list[dict[str, 
     for idx, sec in enumerate(sections):
         content_str += f"\nSegment {idx + 1}: {sec.get('title', '')}\n{sec.get('body', '')}\n"
 
-    messages = [
-        {"role": "system", "content": _PODCAST_SYSTEM_PROMPT},
-        {
-            "role": "user",
-            "content": f"Please generate a podcast script for the following news:\n\n{content_str}",
-        },
-    ]
+    prompt = get_prompt(
+        "podcast-script-generation",
+        fallback=get_chat_prompt("podcast-script-generation"),
+        prompt_type="chat",
+        variables={"content": content_str},
+    )
 
     callbacks: list[Any] = []
     if langfuse_enabled():
         from langfuse.langchain import CallbackHandler
 
         callbacks.append(CallbackHandler())
-    with propagate_attributes(tags=["podcast"], trace_name="podcast-script-generation"):
-        response = chat_model.invoke(messages, config={"callbacks": callbacks})
+    with propagate_attributes(
+        tags=["podcast"],
+        trace_name="podcast-script-generation",
+        prompt=prompt.langfuse_prompt,
+    ):
+        prompt_value = ChatPromptValue(messages=convert_to_messages(prompt.messages))
+        response = chat_model.invoke(prompt_value, config={"callbacks": callbacks})
 
     text = strip_markdown_fence(response_text(response) or "{}")
     try:

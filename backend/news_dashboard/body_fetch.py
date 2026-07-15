@@ -33,7 +33,7 @@ _AI_FETCH_BYTE_CAP = 200_000
 _AI_MODEL = "gpt-4o-mini"
 _AI_PROMPT = (
     "Extract the main article text from this HTML. "
-    "Return only the article body as plain text, no HTML tags."
+    "Return only the article body as plain text, no HTML tags.\n\n{{html}}"
 )
 
 
@@ -91,11 +91,13 @@ def _ai_extract_body(url: str, *, user_id: int | None = None) -> tuple[str, str]
         return "", "error"
 
     try:
-        from langchain_core.prompts import ChatPromptTemplate
+        from langchain_core.messages import HumanMessage
+        from langchain_core.prompt_values import ChatPromptValue
         from langfuse import propagate_attributes
 
         from news_dashboard.ai_client import (
             get_chat_model,
+            get_prompt,
             langfuse_enabled,
             response_text,
         )
@@ -103,19 +105,27 @@ def _ai_extract_body(url: str, *, user_id: int | None = None) -> tuple[str, str]
         chat_model = get_chat_model(
             api_key=api_key, base_url=base_url, model=model, max_tokens=2048
         )
+        prompt = get_prompt(
+            "ai-body-fetch",
+            fallback=_AI_PROMPT,
+            prompt_type="text",
+            label="production",
+            variables={"html": html},
+        )
         callbacks: list[Any] = []
         if langfuse_enabled():
             from langfuse.langchain import CallbackHandler
 
             callbacks.append(CallbackHandler())
-        prompt = ChatPromptTemplate.from_messages([("human", "{instruction}\n\n{html}")])
         with propagate_attributes(
             user_id=str(user_id) if user_id is not None else None,
             tags=["body-fetch"],
             trace_name="ai-body-fetch",
+            prompt=prompt.langfuse_prompt,
         ):
-            result = (prompt | chat_model).invoke(
-                {"instruction": _AI_PROMPT, "html": html}, config={"callbacks": callbacks}
+            result = chat_model.invoke(
+                ChatPromptValue(messages=[HumanMessage(content=prompt.text)]),
+                config={"callbacks": callbacks},
             )
         text = response_text(result).strip()
         if not text:

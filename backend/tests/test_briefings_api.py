@@ -826,6 +826,7 @@ def test_chat_constructs_langchain_prompt_with_session(
         "session_id": "briefing:1:1",
         "tags": ["briefing", "chat"],
         "trace_name": "briefing-chat",
+        "prompt": None,
     }
     expected_callbacks = [callback] if tracing_enabled else []
     assert captured["config"]["callbacks"].handlers == expected_callbacks

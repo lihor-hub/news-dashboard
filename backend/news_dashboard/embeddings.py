@@ -497,6 +497,7 @@ def ask(
             with propagate_attributes(
                 user_id=str(user_id) if user_id is not None else None,
                 session_id=session_id,
+                tags=["ask-ai"],
                 prompt=prompt.langfuse_prompt,
             ):
                 answer_text = _answer(prompt.text, user_prompt)

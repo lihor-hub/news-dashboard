@@ -9,6 +9,8 @@ import time
 from typing import Any, Literal, NotRequired, cast
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
+from langchain_core.messages import convert_to_messages
+from langchain_core.prompt_values import ChatPromptValue
 from psycopg.types.json import Jsonb
 from pydantic import ValidationError
 from typing_extensions import TypedDict
@@ -578,10 +580,10 @@ def generate_slide_deck_content(lesson: dict[str, Any], user_id: int) -> dict[st
 
     import json
 
-    from langchain_core.prompts import ChatPromptTemplate
     from langfuse import propagate_attributes
 
-    from news_dashboard.ai_client import get_chat_model, langfuse_enabled, response_text
+    from news_dashboard.ai_client import get_chat_model, get_prompt, langfuse_enabled, response_text
+    from news_dashboard.prompt_catalog import get_chat_prompt
 
     model = os.getenv("OPENAI_LESSON_CHAT_MODEL", DEFAULT_LESSON_CHAT_MODEL)
     chat_model = get_chat_model(
@@ -590,8 +592,11 @@ def generate_slide_deck_content(lesson: dict[str, Any], user_id: int) -> dict[st
         model=model,
         response_format={"type": "json_object"},
     )
-    prompt = ChatPromptTemplate.from_messages(
-        [("system", _LESSON_SLIDE_DECK_SYSTEM_PROMPT), ("human", "{lesson}")]
+    prompt = get_prompt(
+        "lesson-slide-deck",
+        fallback=get_chat_prompt("lesson-slide-deck"),
+        prompt_type="chat",
+        variables={"lesson_content": _build_slide_deck_prompt(lesson)},
     )
     callbacks: list[Any] = []
     if langfuse_enabled():
@@ -603,10 +608,10 @@ def generate_slide_deck_content(lesson: dict[str, Any], user_id: int) -> dict[st
         session_id=f"lesson:{user_id}:{lesson['id']}",
         tags=["lesson", "slide-deck"],
         trace_name="lesson-slide-deck",
+        prompt=prompt.langfuse_prompt,
     ):
-        response = (prompt | chat_model).invoke(
-            {"lesson": _build_slide_deck_prompt(lesson)}, config={"callbacks": callbacks}
-        )
+        prompt_value = ChatPromptValue(messages=convert_to_messages(prompt.messages))
+        response = chat_model.invoke(prompt_value, config={"callbacks": callbacks})
     parsed = json.loads(response_text(response))
     return validate_slide_deck(parsed)
 
@@ -755,10 +760,10 @@ def generate_infographic_content(lesson: dict[str, Any], user_id: int) -> dict[s
 
     import json
 
-    from langchain_core.prompts import ChatPromptTemplate
     from langfuse import propagate_attributes
 
-    from news_dashboard.ai_client import get_chat_model, langfuse_enabled, response_text
+    from news_dashboard.ai_client import get_chat_model, get_prompt, langfuse_enabled, response_text
+    from news_dashboard.prompt_catalog import get_chat_prompt
 
     model = os.getenv("OPENAI_LESSON_CHAT_MODEL", DEFAULT_LESSON_CHAT_MODEL)
     chat_model = get_chat_model(
@@ -767,8 +772,11 @@ def generate_infographic_content(lesson: dict[str, Any], user_id: int) -> dict[s
         model=model,
         response_format={"type": "json_object"},
     )
-    prompt = ChatPromptTemplate.from_messages(
-        [("system", _LESSON_INFOGRAPHIC_SYSTEM_PROMPT), ("human", "{lesson}")]
+    prompt = get_prompt(
+        "lesson-infographic",
+        fallback=get_chat_prompt("lesson-infographic"),
+        prompt_type="chat",
+        variables={"lesson_content": _build_infographic_prompt(lesson)},
     )
     callbacks: list[Any] = []
     if langfuse_enabled():
@@ -780,10 +788,10 @@ def generate_infographic_content(lesson: dict[str, Any], user_id: int) -> dict[s
         session_id=f"lesson:{user_id}:{lesson['id']}",
         tags=["lesson", "infographic"],
         trace_name="lesson-infographic",
+        prompt=prompt.langfuse_prompt,
     ):
-        response = (prompt | chat_model).invoke(
-            {"lesson": _build_infographic_prompt(lesson)}, config={"callbacks": callbacks}
-        )
+        prompt_value = ChatPromptValue(messages=convert_to_messages(prompt.messages))
+        response = chat_model.invoke(prompt_value, config={"callbacks": callbacks})
     parsed = json.loads(response_text(response))
     return validate_infographic(parsed)
 
@@ -1598,29 +1606,29 @@ def ask_lesson_question(
     model = os.getenv("OPENAI_LESSON_CHAT_MODEL", DEFAULT_LESSON_CHAT_MODEL)
 
     lesson_context, source_context = _lesson_chat_context(lesson)
-    system = _LESSON_CHAT_SYSTEM_PROMPT.format(
-        lesson_context=lesson_context,
-        source_context=source_context,
-    )
-
-    from langchain_core.messages import SystemMessage
-    from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
     from langfuse import propagate_attributes
 
     from news_dashboard.ai_client import (
         get_chat_model,
+        get_prompt,
         langfuse_enabled,
         response_text,
     )
+    from news_dashboard.prompt_catalog import get_chat_prompt
 
     chat_model = get_chat_model(api_key=api_key, base_url=base_url, model=model)
-    prompt = ChatPromptTemplate.from_messages(
-        [
-            SystemMessage(content=system),
-            MessagesPlaceholder("history"),
-            ("human", "{question}"),
-        ]
+    prompt = get_prompt(
+        "lesson-chat",
+        fallback=get_chat_prompt("lesson-chat"),
+        prompt_type="chat",
+        variables={
+            "lesson_context": lesson_context,
+            "source_context": source_context,
+            "question": stripped,
+        },
     )
+    messages = [*prompt.messages[:-1], *history, prompt.messages[-1]]
+    prompt_value = ChatPromptValue(messages=convert_to_messages(messages))
     callbacks: list[Any] = []
     if langfuse_enabled():
         from langfuse.langchain import CallbackHandler
@@ -1631,11 +1639,9 @@ def ask_lesson_question(
         session_id=f"lesson:{user_id}:{lesson_id}",
         tags=["lesson", "chat"],
         trace_name="lesson-chat",
+        prompt=prompt.langfuse_prompt,
     ):
-        response = (prompt | chat_model).invoke(
-            {"history": history, "question": stripped},
-            config={"callbacks": callbacks},
-        )
+        response = chat_model.invoke(prompt_value, config={"callbacks": callbacks})
     return response_text(response)
 
 
@@ -1721,20 +1727,15 @@ def generate_personal_relevance(
 
     import json
 
-    from langchain_core.prompts import ChatPromptTemplate
     from langfuse import propagate_attributes
 
-    from news_dashboard.ai_client import get_chat_model, langfuse_enabled, response_text
+    from news_dashboard.ai_client import get_chat_model, get_prompt, langfuse_enabled, response_text
+    from news_dashboard.prompt_catalog import get_chat_prompt
 
     lesson_title = str(lesson_fields.get("title") or lesson_fields.get("original_url"))
     lesson_detail = lesson_fields.get("lesson_detail") or {}
-    system = (
-        "Explain why a lesson is relevant using only the user's provided reading profile. "
-        "Return JSON with non-empty explanation and a signals array."
-    )
-    user_prompt = (
-        f"Lesson title: {lesson_title}\n"
-        f"Lesson gist: {lesson_detail.get('gist', '')}\n"
+    lesson_context = f"Lesson title: {lesson_title}\nLesson gist: {lesson_detail.get('gist', '')}"
+    profile_context = (
         f"Interests: {interests}\n"
         f"Reading DNA categories: {dna_categories}\n"
         f"Reading DNA sources: {dna_sources}\n"
@@ -1748,7 +1749,15 @@ def generate_personal_relevance(
             model=model,
             response_format={"type": "json_object"},
         )
-        prompt = ChatPromptTemplate.from_messages([("system", system), ("human", "{profile}")])
+        prompt = get_prompt(
+            "lesson-relevance",
+            fallback=get_chat_prompt("lesson-relevance"),
+            prompt_type="chat",
+            variables={
+                "lesson_context": lesson_context,
+                "profile_context": profile_context,
+            },
+        )
         callbacks: list[Any] = []
         if langfuse_enabled():
             from langfuse.langchain import CallbackHandler
@@ -1759,10 +1768,10 @@ def generate_personal_relevance(
             session_id=f"lesson:{user_id}:{lesson_id}",
             tags=["lesson", "relevance"],
             trace_name="lesson-relevance",
+            prompt=prompt.langfuse_prompt,
         ):
-            response = (prompt | chat_model).invoke(
-                {"profile": user_prompt}, config={"callbacks": callbacks}
-            )
+            prompt_value = ChatPromptValue(messages=convert_to_messages(prompt.messages))
+            response = chat_model.invoke(prompt_value, config={"callbacks": callbacks})
         parsed = json.loads(response_text(response))
         return {
             "explanation": str(parsed["explanation"]),

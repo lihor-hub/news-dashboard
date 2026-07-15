@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from collections.abc import Generator
 from contextlib import contextmanager
+from types import SimpleNamespace
 from typing import Any
 from unittest.mock import patch
 
@@ -37,18 +38,16 @@ def test_generate_infographic_content_uses_native_chat_prompt(
     )
     monkeypatch.setattr(
         ai_client_mod,
-        "chat_create",
-        lambda *_args, **kwargs: (
-            chat_captured.update(kwargs)
-            or SimpleNamespace(
-                choices=[
-                    SimpleNamespace(message=SimpleNamespace(content=json.dumps(_VALID_INFOGRAPHIC)))
-                ]
+        "get_chat_model",
+        lambda **_kwargs: RunnableLambda(
+            lambda prompt: (
+                chat_captured.update(messages=prompt.messages)
+                or AIMessage(content=json.dumps(_VALID_INFOGRAPHIC))
             )
         ),
     )
 
-    lesson = {"title": "Lesson", "lesson_detail": {"gist": "A gist"}}
+    lesson = {"id": 9, "title": "Lesson", "lesson_detail": {"gist": "A gist"}}
     service.generate_infographic_content(lesson, 7)
 
     assert captured["args"] == ("lesson-infographic",)
@@ -60,7 +59,7 @@ def test_generate_infographic_content_uses_native_chat_prompt(
     assert captured["kwargs"]["variables"] == {
         "lesson_content": service._build_infographic_prompt(lesson)
     }
-    assert chat_captured["messages"] is managed.messages
+    assert [message.content for message in chat_captured["messages"]] == ["managed"]
 
 
 def _make_user(database_url: str, username: str = "alice") -> int:
@@ -177,6 +176,7 @@ def test_generate_infographic_content_preserves_json_settings_and_tracing(
         session_id="lesson:42:99",
         tags=["lesson", "infographic"],
         trace_name="lesson-infographic",
+        prompt=None,
     )
 
 

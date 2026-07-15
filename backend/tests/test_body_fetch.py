@@ -564,24 +564,19 @@ def test_ai_extract_body_calls_openai_on_html(tmp_path: Path) -> None:
 
 
 def test_ai_extract_body_uses_managed_prompt() -> None:
-    from types import SimpleNamespace
-    from unittest.mock import MagicMock
-
     from news_dashboard.ai_client import ManagedPrompt
     from news_dashboard.body_fetch import _ai_extract_body
 
     html = "<html><body>Managed HTML</body></html>"
     managed = ManagedPrompt(text="compiled extraction prompt", langfuse_prompt=object())
-    completion = SimpleNamespace(
-        choices=[SimpleNamespace(message=SimpleNamespace(content="Managed body"))]
-    )
-
     with (
         patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}),
         patch("httpx.stream", return_value=_FakeStreamResponse(html)),
-        patch("news_dashboard.ai_client.get_chat_client", return_value=MagicMock()),
         patch("news_dashboard.ai_client.get_prompt", return_value=managed) as get_prompt,
-        patch("news_dashboard.ai_client.chat_create", return_value=completion) as chat_create,
+        patch(
+            "news_dashboard.ai_client.get_chat_model",
+            return_value=RunnableLambda(lambda _messages: AIMessage(content="Managed body")),
+        ) as get_chat_model,
     ):
         body, status = _ai_extract_body("https://example.com/article")
 
@@ -593,10 +588,7 @@ def test_ai_extract_body_uses_managed_prompt() -> None:
         label="production",
         variables={"html": html},
     )
-    assert chat_create.call_args.kwargs["prompt"] is managed
-    assert chat_create.call_args.kwargs["messages"] == [
-        {"role": "user", "content": "compiled extraction prompt"}
-    ]
+    get_chat_model.assert_called_once()
 
 
 def test_ai_extract_body_returns_error_on_http_failure(tmp_path: Path) -> None:

@@ -15,6 +15,8 @@ from functools import partial
 from pathlib import Path
 from typing import Any, cast
 
+from langchain_core.messages import convert_to_messages
+from langchain_core.prompt_values import ChatPromptValue
 from langchain_core.runnables import RunnableLambda
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.state import CompiledStateGraph
@@ -1005,29 +1007,29 @@ def chat_with_briefing(
     else:
         articles_context = "(No articles cited — answer from the briefing summary only.)"
 
-    system = _CHAT_SYSTEM_PROMPT.format(
-        briefing_context=briefing_context,
-        articles_context=articles_context,
-    )
-
-    from langchain_core.messages import SystemMessage
-    from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
     from langfuse import propagate_attributes
 
     from news_dashboard.ai_client import (
         get_chat_model,
+        get_prompt,
         langfuse_enabled,
         response_text,
     )
+    from news_dashboard.prompt_catalog import get_chat_prompt
 
     chat_model = get_chat_model(api_key=api_key, base_url=base_url, model=model)
-    prompt = ChatPromptTemplate.from_messages(
-        [
-            SystemMessage(content=system),
-            MessagesPlaceholder("history"),
-            ("human", "{message}"),
-        ]
+    prompt = get_prompt(
+        "briefing-chat",
+        fallback=get_chat_prompt("briefing-chat"),
+        prompt_type="chat",
+        variables={
+            "briefing_context": briefing_context,
+            "articles_context": articles_context,
+            "question": message,
+        },
     )
+    messages = [*prompt.messages[:-1], *history, prompt.messages[-1]]
+    prompt_value = ChatPromptValue(messages=convert_to_messages(messages))
     callbacks: list[Any] = []
     if langfuse_enabled():
         from langfuse.langchain import CallbackHandler
@@ -1038,9 +1040,7 @@ def chat_with_briefing(
         session_id=f"briefing:{user_id}:{briefing_id}",
         tags=["briefing", "chat"],
         trace_name="briefing-chat",
+        prompt=prompt.langfuse_prompt,
     ):
-        response = (prompt | chat_model).invoke(
-            {"history": history, "message": message},
-            config={"callbacks": callbacks},
-        )
+        response = chat_model.invoke(prompt_value, config={"callbacks": callbacks})
     return response_text(response)

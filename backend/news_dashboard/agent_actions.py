@@ -74,6 +74,7 @@ class _PlanningState(TypedDict):
     is_admin: bool
     run_id: int
     candidates: list[dict[str, Any]]
+    prompt: Any
     parsed: NotRequired[dict[str, Any]]
     steps: NotRequired[list[dict[str, Any]]]
     result: NotRequired[dict[str, Any]]
@@ -181,9 +182,9 @@ def _validate_steps(
 
 def _plan_with_model(state: _PlanningState, config: RunnableConfig) -> dict[str, Any]:
     api_key, base_url, model = _agent_actions_ai_config()
-    from news_dashboard.ai_client import get_chat_model, get_prompt, response_text
+    from news_dashboard.ai_client import get_chat_model, response_text
 
-    prompt = get_prompt("agent-action-planning", fallback=_PROMPT)
+    prompt = state["prompt"]
     user_content = (
         f"User request: {state['query']}\n\nCandidate articles: {json.dumps(state['candidates'])}"
     )
@@ -293,7 +294,7 @@ def _reserve_run_id() -> int:
 
 
 def _graph_observability(
-    *, run_id: int, user_id: int, trace_name: str
+    *, run_id: int, user_id: int, trace_name: str, prompt: Any | None = None
 ) -> tuple[RunnableConfig, Any]:
     from news_dashboard.ai_client import langfuse_enabled
 
@@ -308,12 +309,15 @@ def _graph_observability(
     from langfuse.langchain import CallbackHandler
 
     config["callbacks"] = [CallbackHandler()]
-    context = propagate_attributes(
-        session_id=session_id,
-        user_id=str(user_id),
-        tags=["agent-actions"],
-        trace_name=trace_name,
-    )
+    attributes: dict[str, Any] = {
+        "session_id": session_id,
+        "user_id": str(user_id),
+        "tags": ["agent-actions"],
+        "trace_name": trace_name,
+    }
+    if prompt is not None:
+        attributes["prompt"] = prompt.langfuse_prompt
+    context = propagate_attributes(**attributes)
     return config, context
 
 
@@ -324,10 +328,16 @@ def plan_actions(query: str, *, user_id: int, is_admin: bool = False) -> dict[st
         msg = "query must not be empty"
         raise AgentActionError(msg)
 
+    from news_dashboard.ai_client import get_prompt
+
     candidates = _candidate_articles(clean_query, user_id)
+    prompt = get_prompt("agent-action-planning", fallback=_PROMPT)
     run_id = _reserve_run_id()
     config, context = _graph_observability(
-        run_id=run_id, user_id=user_id, trace_name="agent-action-planning"
+        run_id=run_id,
+        user_id=user_id,
+        trace_name="agent-action-planning",
+        prompt=prompt,
     )
     initial: _PlanningState = {
         "query": clean_query,
@@ -335,6 +345,7 @@ def plan_actions(query: str, *, user_id: int, is_admin: bool = False) -> dict[st
         "is_admin": is_admin,
         "run_id": run_id,
         "candidates": candidates,
+        "prompt": prompt,
     }
     with context:
         final = _planning_graph().invoke(initial, config=config)

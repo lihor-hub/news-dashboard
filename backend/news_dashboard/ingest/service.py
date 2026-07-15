@@ -23,6 +23,7 @@ import psycopg
 from news_dashboard.article_visibility import get_visible_article_row
 from news_dashboard.db import connect, init_db, insert_article_sql, placeholders, row_to_dict
 from news_dashboard.ingest_events import ingest_events
+from news_dashboard.prompt_catalog import get_chat_prompt
 from news_dashboard.recommendations import COLD_START_MODEL_VERSION
 from news_dashboard.sources.service import DEFAULT_SOURCES, SourceDefinition
 from news_dashboard.url_safety import (
@@ -30,6 +31,8 @@ from news_dashboard.url_safety import (
     open_server_fetch_url,
     validate_server_fetch_url,
 )
+
+_MEDIA_SUMMARY_PROMPT = get_chat_prompt("summarize-media-article")
 
 try:
     from rapidfuzz.distance import Levenshtein
@@ -698,9 +701,16 @@ def _media_summary(title: str, description: str, entry: dict[str, Any]) -> str:
     api_key, base_url = free_llm_config()
     if api_key and transcript:
         try:
+            from langchain_core.messages import convert_to_messages
+            from langchain_core.prompt_values import ChatPromptValue
             from langfuse import propagate_attributes
 
-            from news_dashboard.ai_client import get_chat_model, langfuse_enabled, response_text
+            from news_dashboard.ai_client import (
+                get_chat_model,
+                get_prompt,
+                langfuse_enabled,
+                response_text,
+            )
 
             model = os.getenv("OPENAI_BRIEFING_MODEL", "gpt-4o-mini")
             chat_model = get_chat_model(
@@ -710,33 +720,29 @@ def _media_summary(title: str, description: str, entry: dict[str, Any]) -> str:
                 max_tokens=500,
                 temperature=0.2,
             )
+            prompt = get_prompt(
+                "summarize-media-article",
+                fallback=_MEDIA_SUMMARY_PROMPT,
+                prompt_type="chat",
+                label="production",
+                variables={
+                    "title": title,
+                    "description": description,
+                    "transcript": transcript,
+                },
+            )
             callbacks: list[Any] = []
             if langfuse_enabled():
                 from langfuse.langchain import CallbackHandler
 
                 callbacks.append(CallbackHandler())
             with propagate_attributes(
-                tags=["ingest", "media"], trace_name="summarize-media-article"
+                tags=["ingest", "media"],
+                trace_name="summarize-media-article",
+                prompt=prompt.langfuse_prompt,
             ):
-                response = chat_model.invoke(
-                    [
-                        {
-                            "role": "system",
-                            "content": (
-                                "Summarize this podcast or video transcript as a concise readable "
-                                "article summary for a news reader."
-                            ),
-                        },
-                        {
-                            "role": "user",
-                            "content": (
-                                f"Title: {title}\nDescription: {description}\n"
-                                f"Transcript:\n{transcript}"
-                            ),
-                        },
-                    ],
-                    config={"callbacks": callbacks},
-                )
+                prompt_value = ChatPromptValue(messages=convert_to_messages(prompt.messages))
+                response = chat_model.invoke(prompt_value, config={"callbacks": callbacks})
             generated = clean_html(response_text(response))
             if generated:
                 summary = generated

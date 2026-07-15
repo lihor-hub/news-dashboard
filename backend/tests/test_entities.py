@@ -254,7 +254,7 @@ def test_extract_entities_attaches_langfuse_callback_and_managed_prompt() -> Non
         patch("news_dashboard.ai_client.langfuse_enabled", return_value=True),
         patch(
             "news_dashboard.ai_client.get_prompt",
-            return_value=ManagedPrompt("Extract entities", managed),
+            return_value=ManagedPrompt(text="Extract entities", langfuse_prompt=managed),
         ),
         patch("langfuse.langchain.CallbackHandler", return_value=callback),
         patch("langfuse.propagate_attributes", side_effect=attributes),

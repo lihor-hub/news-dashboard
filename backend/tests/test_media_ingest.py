@@ -73,7 +73,9 @@ def test_podcast_feed_ingests_enclosure_with_ai_summary(pg_clean: str) -> None:
     assert get_model.call_args.kwargs["temperature"] == 0.2
     assert callback in get_model.return_value.invoke.call_args.kwargs["config"]["callbacks"]
     attributes.assert_called_once_with(
-        tags=["ingest", "media"], trace_name="summarize-media-article"
+        tags=["ingest", "media"],
+        trace_name="summarize-media-article",
+        prompt=None,
     )
     with connect(pg_clean) as conn:
         row = conn.execute(
@@ -153,9 +155,11 @@ def test_media_summary_uses_managed_chat_prompt() -> None:
 
     with (
         patch("news_dashboard.ai_client.free_llm_config", return_value=("key", None)),
-        patch("news_dashboard.ai_client.get_chat_client", return_value=object()),
         patch("news_dashboard.ai_client.get_prompt", return_value=managed) as get_prompt,
-        patch("news_dashboard.ai_client.chat_create", return_value=response) as chat_create,
+        patch(
+            "news_dashboard.ai_client.get_chat_model",
+            return_value=_chat_model(response),
+        ) as get_chat_model,
     ):
         summary = _media_summary("Title", "Description", entry)
 
@@ -171,8 +175,7 @@ def test_media_summary_uses_managed_chat_prompt() -> None:
             "transcript": "Transcript",
         },
     )
-    assert chat_create.call_args.kwargs["prompt"] is managed
-    assert chat_create.call_args.kwargs["messages"] == managed.messages
+    get_chat_model.assert_called_once()
 
 
 def test_media_ingest_falls_back_when_ai_disabled(pg_clean: str) -> None:

@@ -223,6 +223,7 @@ def test_ask_uses_native_langfuse_user_and_session_attributes() -> None:
         assert kwargs == {
             "user_id": "7",
             "session_id": "conversation-42",
+            "tags": ["ask-ai"],
             "prompt": None,
         }
         yield

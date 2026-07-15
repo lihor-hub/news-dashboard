@@ -221,6 +221,46 @@ def test_get_prompt_uses_fallback_when_disabled() -> None:
     assert prompt.langfuse_prompt is None
 
 
+def test_get_prompt_fetches_production_label_and_keeps_version_link(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from news_dashboard import ai_client
+
+    remote = MagicMock(is_fallback=False, version=7)
+    remote.compile.return_value = "Managed prompt"
+    client = MagicMock()
+    client.get_prompt.return_value = remote
+    monkeypatch.setattr(ai_client, "langfuse_enabled", lambda: True)
+    monkeypatch.setattr(ai_client, "_client", lambda: client)
+
+    prompt = get_prompt("managed-prompt", fallback="Fallback")
+
+    client.get_prompt.assert_called_once_with(
+        "managed-prompt", label="production", type="text", fallback="Fallback"
+    )
+    assert prompt.langfuse_prompt is remote
+
+
+def test_get_prompt_can_fetch_an_exact_version_without_a_label(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from news_dashboard import ai_client
+
+    remote = MagicMock(is_fallback=False, version=4)
+    remote.compile.return_value = "Versioned prompt"
+    client = MagicMock()
+    client.get_prompt.return_value = remote
+    monkeypatch.setattr(ai_client, "langfuse_enabled", lambda: True)
+    monkeypatch.setattr(ai_client, "_client", lambda: client)
+
+    prompt = get_prompt("managed-prompt", fallback="Fallback", version=4)
+
+    client.get_prompt.assert_called_once_with(
+        "managed-prompt", version=4, type="text", fallback="Fallback"
+    )
+    assert prompt.langfuse_prompt is remote
+
+
 @pytest.mark.usefixtures("_no_langfuse")
 def test_get_chat_prompt_compiles_local_fallback_in_role_order() -> None:
     prompt = get_prompt(

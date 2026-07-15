@@ -867,6 +867,7 @@ def test_ask_lesson_question_returns_grounded_reply(
         "session_id": f"lesson:{user_id}:{lesson['id']}",
         "tags": ["lesson", "chat"],
         "trace_name": "lesson-chat",
+        "prompt": None,
     }
 
 
@@ -891,8 +892,16 @@ def test_ask_lesson_question_inserts_history_after_managed_system(
         "get_prompt",
         lambda *args, **kwargs: captured.update(args=args, kwargs=kwargs) or managed,
     )
-    mock_chat, chat_capture = _mock_chat_reply("answer")
-    monkeypatch.setattr(ai_client_mod, "chat_create", mock_chat)
+    chat_capture: dict[str, Any] = {}
+    monkeypatch.setattr(
+        ai_client_mod,
+        "get_chat_model",
+        lambda **_kwargs: RunnableLambda(
+            lambda prompt: (
+                chat_capture.update(messages=prompt.messages) or AIMessage(content="answer")
+            )
+        ),
+    )
     history = [{"role": "user", "content": "earlier"}, {"role": "assistant", "content": "reply"}]
 
     service.ask_lesson_question(lesson["id"], user_id, "question", history, database_url=pg_clean)
@@ -910,7 +919,12 @@ def test_ask_lesson_question_inserts_history_after_managed_system(
         {"role": "user", "content": "{{question}}"},
     ]
     assert all(message not in captured["kwargs"]["fallback"] for message in history)
-    assert chat_capture["messages"] == [managed.messages[0], *history, managed.messages[1]]
+    assert [message.content for message in chat_capture["messages"]] == [
+        "compiled system",
+        "earlier",
+        "reply",
+        "compiled question",
+    ]
 
 
 def test_ask_lesson_question_is_user_scoped(pg_clean: str, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -1495,6 +1509,7 @@ def test_lesson_relevance_uses_profile_and_llm_response(
         session_id=f"lesson:{user_id}:{lesson['id']}",
         tags=["lesson", "relevance"],
         trace_name="lesson-relevance",
+        prompt=None,
     )
 
 
@@ -1522,15 +1537,11 @@ def test_lesson_relevance_uses_native_chat_prompt(
     )
     monkeypatch.setattr(
         ai_client_mod,
-        "chat_create",
-        lambda *_args, **kwargs: (
-            chat_captured.update(kwargs)
-            or SimpleNamespace(
-                choices=[
-                    SimpleNamespace(
-                        message=SimpleNamespace(content='{"explanation":"why","signals":[]}')
-                    )
-                ]
+        "get_chat_model",
+        lambda **_kwargs: RunnableLambda(
+            lambda prompt: (
+                chat_captured.update(messages=prompt.messages)
+                or AIMessage(content='{"explanation":"why","signals":[]}')
             )
         ),
     )
@@ -1550,7 +1561,7 @@ def test_lesson_relevance_uses_native_chat_prompt(
         {"role": "user", "content": "{{lesson_context}}\n{{profile_context}}"},
     ]
     assert set(captured["kwargs"]["variables"]) == {"lesson_context", "profile_context"}
-    assert chat_captured["messages"] is managed.messages
+    assert [message.content for message in chat_captured["messages"]] == ["managed"]
 
 
 def test_relevance_feedback_endpoint_is_owned_by_lesson_user(

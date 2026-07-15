@@ -523,6 +523,7 @@ def get_prompt(
     fallback: str,
     prompt_type: Literal["text"] = "text",
     label: str = "production",
+    version: int | None = None,
     variables: dict[str, Any] | None = None,
 ) -> _ManagedTextPrompt: ...
 
@@ -534,6 +535,7 @@ def get_prompt(
     fallback: list[PromptMessage],
     prompt_type: Literal["chat"],
     label: str = "production",
+    version: int | None = None,
     variables: dict[str, Any] | None = None,
 ) -> _ManagedChatPrompt: ...
 
@@ -544,6 +546,7 @@ def get_prompt(
     fallback: PromptFallback,
     prompt_type: PromptType = "text",
     label: str = "production",
+    version: int | None = None,
     variables: dict[str, Any] | None = None,
 ) -> _ManagedTextPrompt | _ManagedChatPrompt:
     """Fetch a managed text or chat prompt, falling back to *fallback*.
@@ -558,7 +561,8 @@ def get_prompt(
         return fallback_prompt
     try:
         client = _client()
-        prompt = client.get_prompt(name, label=label, type=prompt_type, fallback=fallback)
+        selector = {"version": version} if version is not None else {"label": label}
+        prompt = client.get_prompt(name, **selector, type=prompt_type, fallback=fallback)
         compiled = prompt.compile(**variables)
         # A fallback-resolved prompt has no real version to link against.
         is_fallback = getattr(prompt, "is_fallback", False)

@@ -429,22 +429,31 @@ def generate_recommendation_explanation(
         history_text = "\n".join(lines)
 
     tags = article.get("tags") or ""
-    prompt = (
-        f"You are a personalized news assistant. Explain in one short sentence (under 20 words) "
-        f"why this article matches the user's reading interests.\n\n"
-        f'Article: "{article.get("title", "")}"\n'
-        f"Source: {article.get('source_name', '')}\n"
-        f"Category: {article.get('category', '')}\n"
-        f"Tags: {tags}\n\n"
-        f"User's recent reading history:\n{history_text}\n\n"
-        f"Reply with just the explanation sentence, no preamble."
-    )
-
     try:
         from langchain_core.messages import HumanMessage
         from langfuse import propagate_attributes
 
-        from news_dashboard.ai_client import get_chat_model, langfuse_enabled, response_text
+        from news_dashboard.ai_client import (
+            get_chat_model,
+            get_prompt,
+            langfuse_enabled,
+            response_text,
+        )
+        from news_dashboard.prompt_catalog import get_text_prompt
+
+        prompt = get_prompt(
+            "recommendation-explanation",
+            fallback=get_text_prompt("recommendation-explanation"),
+            prompt_type="text",
+            label="production",
+            variables={
+                "article_title": article.get("title", ""),
+                "article_source": article.get("source_name", ""),
+                "article_category": article.get("category", ""),
+                "article_tags": tags,
+                "history_text": history_text,
+            },
+        )
 
         chat_model = get_chat_model(
             api_key=api_key,
@@ -462,9 +471,10 @@ def generate_recommendation_explanation(
             user_id=str(user_id),
             tags=["recommendation", "explanation"],
             trace_name="recommendation-explanation",
+            prompt=prompt.langfuse_prompt,
         ):
             response = chat_model.invoke(
-                [HumanMessage(content=prompt)], config={"callbacks": callbacks}
+                [HumanMessage(content=prompt.text)], config={"callbacks": callbacks}
             )
         text = response_text(response)
         return text.strip() if text else None
