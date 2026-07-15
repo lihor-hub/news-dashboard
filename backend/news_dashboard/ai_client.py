@@ -234,6 +234,7 @@ def get_chat_model(
     model: str,
 ) -> Runnable[LanguageModelInput, AIMessage]:
     """Return a LangChain chat model with the existing OpenAI fallback semantics."""
+    from langchain_core.runnables import RunnableConfig, RunnableLambda
     from langchain_openai import ChatOpenAI
     from openai import OpenAIError
 
@@ -257,8 +258,16 @@ def get_chat_model(
     }
     if openai_base is not None:
         fallback_kwargs["base_url"] = openai_base
-    fallback = ChatOpenAI(**fallback_kwargs)
-    return primary.with_fallbacks([fallback], exceptions_to_handle=(OpenAIError,))
+
+    def invoke_fallback(
+        input: LanguageModelInput,  # noqa: A002 - LangChain runnable API terminology
+        config: RunnableConfig,
+    ) -> AIMessage:
+        fallback = ChatOpenAI(**fallback_kwargs)
+        return fallback.invoke(input, config=config)
+
+    lazy_fallback = RunnableLambda(invoke_fallback)
+    return primary.with_fallbacks([lazy_fallback], exceptions_to_handle=(OpenAIError,))
 
 
 def response_text(message: AIMessage) -> str:

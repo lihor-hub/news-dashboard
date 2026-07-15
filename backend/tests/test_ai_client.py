@@ -530,30 +530,63 @@ def test_get_chat_model_preserves_free_provider_fallback(
 ) -> None:
     from unittest.mock import patch
 
+    from langchain_core.runnables import RunnableLambda
     from openai import OpenAIError
 
     _clear_ai_env(monkeypatch)
     monkeypatch.setenv("OPENAI_API_KEY", "oa-key")
-    primary = MagicMock()
-    runnable = MagicMock()
-    primary.with_fallbacks.return_value = runnable
-    fallback = MagicMock()
+
+    class _UpstreamError(OpenAIError):
+        pass
+
+    def fail_primary(_input: object) -> AIMessage:
+        message = "gateway down"
+        raise _UpstreamError(message)
+
+    primary = RunnableLambda(fail_primary)
+    fallback: RunnableLambda[str, AIMessage] = RunnableLambda(
+        lambda _input: AIMessage(content="fallback-result")
+    )
 
     with patch("langchain_openai.ChatOpenAI", side_effect=[primary, fallback]) as constructor:
-        result = get_chat_model(
+        model = get_chat_model(
             api_key="free-key",
             base_url="http://gateway:9130/v1",
             model="shared-model",
         )
+        result = model.invoke("hello")
 
-    assert result is runnable
+    assert response_text(result) == "fallback-result"
     assert constructor.call_args_list[1].kwargs == {
         "api_key": "oa-key",
         "model": "shared-model",
         "timeout": 30.0,
     }
-    assert primary.with_fallbacks.call_args.args == ([fallback],)
-    assert primary.with_fallbacks.call_args.kwargs == {"exceptions_to_handle": (OpenAIError,)}
+
+
+@pytest.mark.usefixtures("_no_langfuse")
+def test_get_chat_model_does_not_construct_fallback_for_healthy_primary(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from unittest.mock import patch
+
+    from langchain_core.runnables import RunnableLambda
+
+    _clear_ai_env(monkeypatch)
+    monkeypatch.setenv("OPENAI_API_KEY", "invalid-unused-key")
+    primary: RunnableLambda[str, AIMessage] = RunnableLambda(
+        lambda _input: AIMessage(content="primary-result")
+    )
+
+    with patch(
+        "langchain_openai.ChatOpenAI",
+        side_effect=[primary, RuntimeError("fallback constructed eagerly")],
+    ) as constructor:
+        model = get_chat_model(api_key="free-key", base_url=None, model="shared-model")
+        result = model.invoke("hello")
+
+    assert response_text(result) == "primary-result"
+    assert constructor.call_count == 1
 
 
 @pytest.mark.usefixtures("_no_langfuse")
