@@ -8,11 +8,16 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from langfuse.api.commons.errors.not_found_error import NotFoundError
+
 BACKEND_DIR = Path(__file__).resolve().parents[1] / "backend"
 if str(BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(BACKEND_DIR))
 
-from news_dashboard.prompt_catalog import PROMPT_CATALOG, PromptCatalogEntry  # noqa: E402
+from news_dashboard.prompt_catalog import (  # noqa: E402 - backend path is configured above
+    PROMPT_CATALOG,
+    PromptCatalogEntry,
+)
 
 _ENVIRONMENT_VARIABLES = ("LANGFUSE_PUBLIC_KEY", "LANGFUSE_SECRET_KEY", "LANGFUSE_HOST")
 
@@ -31,7 +36,7 @@ def _sync(client: Any) -> None:
     for entry in PROMPT_CATALOG:
         try:
             current = client.get_prompt(entry.name, label="production", type=entry.type)
-        except Exception:  # Langfuse uses multiple exception types for an absent prompt.
+        except NotFoundError:
             current = None
 
         if current is not None and _matches(current, entry):

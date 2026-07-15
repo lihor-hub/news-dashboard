@@ -1,12 +1,12 @@
 from __future__ import annotations
 
 import importlib.util
-import sys
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
 from typing import Any
 
 import pytest
+from langfuse.api.commons.errors.not_found_error import NotFoundError
 
 from news_dashboard.prompt_catalog import PROMPT_CATALOG, PromptCatalogEntry
 
@@ -34,12 +34,9 @@ EXPECTED_NAMES = {
 
 
 def _load_sync_module(monkeypatch: pytest.MonkeyPatch, client: Any) -> ModuleType:
-    class FakeLangfuseModule(ModuleType):
-        Langfuse: Any
+    import langfuse
 
-    fake_langfuse = FakeLangfuseModule("langfuse")
-    fake_langfuse.Langfuse = lambda **_kwargs: client
-    monkeypatch.setitem(sys.modules, "langfuse", fake_langfuse)
+    monkeypatch.setattr(langfuse, "Langfuse", lambda **_kwargs: client)
     path = Path(__file__).parents[2] / "scripts" / "sync_langfuse_prompts.py"
     spec = importlib.util.spec_from_file_location("sync_langfuse_prompts", path)
     assert spec is not None
@@ -84,8 +81,7 @@ def test_sync_creates_each_missing_prompt_with_production_label(
 
     class FakeClient:
         def get_prompt(self, *_args: Any, **_kwargs: Any) -> Any:
-            message = "not found"
-            raise RuntimeError(message)
+            raise NotFoundError({"message": "not found"})
 
         def create_prompt(self, **kwargs: Any) -> Any:
             calls.append(kwargs)
@@ -103,6 +99,31 @@ def test_sync_creates_each_missing_prompt_with_production_label(
     output = capsys.readouterr().out
     assert "secret-from-environment" not in output
     assert "public-from-environment" not in output
+
+
+def test_sync_propagates_prompt_lookup_failures_without_creating(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    create_calls: list[dict[str, Any]] = []
+
+    class FakeClient:
+        def get_prompt(self, *_args: Any, **_kwargs: Any) -> Any:
+            message = "authentication failed"
+            raise RuntimeError(message)
+
+        def create_prompt(self, **kwargs: Any) -> Any:
+            create_calls.append(kwargs)
+            return SimpleNamespace(version=1)
+
+    monkeypatch.setenv("LANGFUSE_PUBLIC_KEY", "public")
+    monkeypatch.setenv("LANGFUSE_SECRET_KEY", "secret")
+    monkeypatch.setenv("LANGFUSE_HOST", "https://langfuse.example")
+    module = _load_sync_module(monkeypatch, FakeClient())
+
+    with pytest.raises(RuntimeError, match="authentication failed"):
+        module.main()
+
+    assert create_calls == []
 
 
 def test_sync_is_idempotent_when_production_content_matches(
