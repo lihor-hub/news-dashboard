@@ -7,8 +7,10 @@ from unittest.mock import MagicMock
 import pytest
 
 from news_dashboard.ai_client import (
+    ManagedPrompt,
     _compile_fallback,
     _normalise_host_env,
+    chat_create,
     create_score,
     flush,
     get_openai_client,
@@ -211,8 +213,189 @@ def test_get_prompt_uses_fallback_when_disabled() -> None:
         variables={"topic": "Postgres"},
     )
     assert prompt.text == "Answer about Postgres clearly."
+    assert prompt.messages is None
     # No Langfuse prompt object to link against in fallback mode.
     assert prompt.langfuse_prompt is None
+
+
+@pytest.mark.usefixtures("_no_langfuse")
+def test_get_chat_prompt_compiles_local_fallback_in_role_order() -> None:
+    prompt = get_prompt(
+        "ask-chat",
+        fallback=[
+            {"role": "system", "content": "Answer about {{topic}}."},
+            {"role": "user", "content": "Explain {{topic}} to {{audience}}."},
+        ],
+        prompt_type="chat",
+        variables={"topic": "Postgres", "audience": "beginners"},
+    )
+
+    assert prompt.text is None
+    assert prompt.messages == [
+        {"role": "system", "content": "Answer about Postgres."},
+        {"role": "user", "content": "Explain Postgres to beginners."},
+    ]
+    assert prompt.langfuse_prompt is None
+
+
+def test_get_text_prompt_fetches_compiles_and_retains_sdk_prompt(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from unittest.mock import patch
+
+    monkeypatch.setenv("LANGFUSE_PUBLIC_KEY", "pk")
+    monkeypatch.setenv("LANGFUSE_SECRET_KEY", "sk")
+    sdk_prompt = MagicMock()
+    sdk_prompt.is_fallback = False
+    sdk_prompt.compile.return_value = "Answer about Postgres."
+    client = MagicMock()
+    client.get_prompt.return_value = sdk_prompt
+
+    with patch("news_dashboard.ai_client._client", return_value=client):
+        prompt = get_prompt(
+            "ask-system",
+            fallback="Answer about {{topic}}.",
+            variables={"topic": "Postgres"},
+        )
+
+    client.get_prompt.assert_called_once_with(
+        "ask-system",
+        label="production",
+        type="text",
+        fallback="Answer about {{topic}}.",
+    )
+    sdk_prompt.compile.assert_called_once_with(topic="Postgres")
+    assert prompt.text == "Answer about Postgres."
+    assert prompt.messages is None
+    assert prompt.langfuse_prompt is sdk_prompt
+
+
+def test_get_chat_prompt_fetches_compiles_and_retains_sdk_prompt(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from unittest.mock import patch
+
+    monkeypatch.setenv("LANGFUSE_PUBLIC_KEY", "pk")
+    monkeypatch.setenv("LANGFUSE_SECRET_KEY", "sk")
+    fallback = [{"role": "system", "content": "Answer about {{topic}}."}]
+    compiled = [{"role": "system", "content": "Answer about Postgres."}]
+    sdk_prompt = MagicMock()
+    sdk_prompt.is_fallback = False
+    sdk_prompt.compile.return_value = compiled
+    client = MagicMock()
+    client.get_prompt.return_value = sdk_prompt
+
+    with patch("news_dashboard.ai_client._client", return_value=client):
+        prompt = get_prompt(
+            "ask-chat",
+            fallback=fallback,
+            prompt_type="chat",
+            label="staging",
+            variables={"topic": "Postgres"},
+        )
+
+    client.get_prompt.assert_called_once_with(
+        "ask-chat", label="staging", type="chat", fallback=fallback
+    )
+    sdk_prompt.compile.assert_called_once_with(topic="Postgres")
+    assert prompt.text is None
+    assert prompt.messages == compiled
+    assert prompt.langfuse_prompt is sdk_prompt
+
+
+@pytest.mark.parametrize(
+    ("prompt_type", "fallback", "expected_text", "expected_messages"),
+    [
+        ("text", "Hi {{name}}", "Hi Sam", None),
+        (
+            "chat",
+            [{"role": "assistant", "content": "Hi {{name}}"}],
+            None,
+            [{"role": "assistant", "content": "Hi Sam"}],
+        ),
+    ],
+)
+def test_get_prompt_uses_typed_fallback_when_sdk_raises(
+    monkeypatch: pytest.MonkeyPatch,
+    prompt_type: str,
+    fallback: str | list[dict[str, str]],
+    expected_text: str | None,
+    expected_messages: list[dict[str, str]] | None,
+) -> None:
+    from unittest.mock import patch
+
+    monkeypatch.setenv("LANGFUSE_PUBLIC_KEY", "pk")
+    monkeypatch.setenv("LANGFUSE_SECRET_KEY", "sk")
+    client = MagicMock()
+    client.get_prompt.side_effect = RuntimeError("unavailable")
+    prompt: ManagedPrompt
+
+    with patch("news_dashboard.ai_client._client", return_value=client):
+        if prompt_type == "text":
+            assert isinstance(fallback, str)
+            prompt = get_prompt(
+                "managed", fallback=fallback, prompt_type="text", variables={"name": "Sam"}
+            )
+        else:
+            assert isinstance(fallback, list)
+            prompt = get_prompt(
+                "managed", fallback=fallback, prompt_type="chat", variables={"name": "Sam"}
+            )
+
+    assert prompt.text == expected_text
+    assert prompt.messages == expected_messages
+    assert prompt.langfuse_prompt is None
+
+
+def test_get_prompt_warns_and_falls_back_for_invalid_compiled_chat(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    from unittest.mock import patch
+
+    monkeypatch.setenv("LANGFUSE_PUBLIC_KEY", "pk")
+    monkeypatch.setenv("LANGFUSE_SECRET_KEY", "sk")
+    sdk_prompt = MagicMock()
+    sdk_prompt.compile.return_value = [{"role": "system"}]
+    client = MagicMock()
+    client.get_prompt.return_value = sdk_prompt
+    fallback = [{"role": "system", "content": "Local {{topic}}"}]
+
+    with patch("news_dashboard.ai_client._client", return_value=client):
+        prompt = get_prompt(
+            "managed", fallback=fallback, prompt_type="chat", variables={"topic": "copy"}
+        )
+
+    assert prompt.messages == [{"role": "system", "content": "Local copy"}]
+    assert prompt.langfuse_prompt is None
+    assert "using fallback" in caplog.text
+
+
+def test_chat_create_forwards_only_real_langfuse_prompt(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("LANGFUSE_PUBLIC_KEY", "pk")
+    monkeypatch.setenv("LANGFUSE_SECRET_KEY", "sk")
+    client = MagicMock()
+    sdk_prompt = object()
+
+    chat_create(
+        client,
+        name="managed-chat",
+        prompt=ManagedPrompt(text=None, messages=[], langfuse_prompt=sdk_prompt),
+        model="model",
+        messages=[],
+    )
+    chat_create(
+        client,
+        name="fallback-chat",
+        prompt=ManagedPrompt(text=None, messages=[], langfuse_prompt=None),
+        model="model",
+        messages=[],
+    )
+
+    assert client.chat.completions.create.call_args_list[0].kwargs["langfuse_prompt"] is sdk_prompt
+    assert "langfuse_prompt" not in client.chat.completions.create.call_args_list[1].kwargs
 
 
 @pytest.mark.usefixtures("_no_langfuse")
