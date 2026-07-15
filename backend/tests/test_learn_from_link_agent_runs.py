@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
+from collections.abc import Generator
+from contextlib import contextmanager
 from typing import Any
+from unittest.mock import patch
 
 import pytest
+from langchain_core.callbacks import BaseCallbackHandler
 
 from news_dashboard.db import connect
 from news_dashboard.learn_from_link import agent_runs, service
@@ -97,6 +101,54 @@ def test_successful_generation_records_version_metadata_and_all_steps(
     ]
     assert all(s["status"] == "complete" for s in steps)
     assert all(s["latency_ms"] is not None for s in steps)
+
+
+def test_lesson_graph_is_compiled_without_a_checkpointer() -> None:
+    graph = service.build_lesson_graph()
+
+    assert graph.checkpointer is None
+    assert set(graph.get_graph().nodes) == {
+        "__start__",
+        "fetch",
+        "extraction",
+        "synthesis",
+        "citation_verification",
+        "personal_relevance",
+        "persistence",
+        "failure",
+        "__end__",
+    }
+
+
+def test_generation_propagates_user_session_and_native_callback(
+    pg_clean: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("DATABASE_URL", pg_clean)
+    monkeypatch.setenv("LANGFUSE_PUBLIC_KEY", "test-public")
+    monkeypatch.setenv("LANGFUSE_SECRET_KEY", "test-secret")
+    user_id = _make_user(pg_clean)
+    callback = BaseCallbackHandler()
+    propagated: dict[str, Any] = {}
+
+    @contextmanager
+    def attributes(**kwargs: Any) -> Generator[None]:
+        propagated.update(kwargs)
+        yield
+
+    with (
+        patch("langfuse.propagate_attributes", side_effect=attributes),
+        patch("langfuse.langchain.CallbackHandler", return_value=callback) as handler,
+    ):
+        lesson = service.create_lesson(user_id, "https://example.com/traced", database_url=pg_clean)
+
+    run = _run_row(pg_clean, int(lesson["id"]))
+    handler.assert_called_once_with()
+    assert propagated == {
+        "user_id": str(user_id),
+        "session_id": f"lesson-run:{run['id']}",
+        "tags": ["lesson", "generation"],
+        "trace_name": "lesson-generation",
+    }
 
 
 def test_extraction_failure_marks_run_failed_at_extraction_step(

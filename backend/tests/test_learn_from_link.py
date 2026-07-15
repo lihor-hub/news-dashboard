@@ -1484,7 +1484,13 @@ def test_lesson_relevance_uses_profile_and_llm_response(
     assert "Interests: ['technology', 'AI']" in rendered
     assert "Lesson gist:" in rendered
     assert callback in captured["config"]["callbacks"].handlers
-    attributes.assert_called_once_with(
+    attributes.assert_any_call(
+        user_id=str(user_id),
+        session_id="lesson-run:1",
+        tags=["lesson", "generation"],
+        trace_name="lesson-generation",
+    )
+    attributes.assert_any_call(
         user_id=str(user_id), tags=["lesson", "relevance"], trace_name="lesson-relevance"
     )
 
