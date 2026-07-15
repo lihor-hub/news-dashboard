@@ -6,6 +6,7 @@ import os
 import subprocess
 import sys
 import uuid
+from pathlib import Path
 
 import pytest
 
@@ -164,6 +165,115 @@ def test_sweep_drops_schemas_owned_by_a_dead_process() -> None:
                 (dead_schema,),
             ).fetchone()
             assert row is None
+    finally:
+        with psycopg.connect(admin_url, autocommit=True) as admin_conn:
+            admin_conn.execute(
+                sql.SQL("DROP DATABASE IF EXISTS {} WITH (FORCE)").format(
+                    sql.Identifier(scratch_db)
+                )
+            )
+
+
+def test_session_hash_schema_cleanup_drops_only_registered_schemas() -> None:
+    """Session-end cleanup removes only hash schemas registered by this run."""
+    import psycopg
+    from conftest import drop_session_hash_schemas
+    from psycopg import sql
+
+    service_url = os.environ.get("TEST_DATABASE_URL")
+    if not service_url:
+        pytest.skip("TEST_DATABASE_URL not set")
+
+    base_url, _, _dbname = service_url.rpartition("/")
+    scratch_db = f"schema_cleanup_scratch_{uuid.uuid4().hex[:12]}"
+    scratch_url = f"{base_url}/{scratch_db}"
+    admin_url = f"{base_url}/postgres"
+
+    with psycopg.connect(admin_url, autocommit=True) as admin_conn:
+        try:
+            admin_conn.execute(sql.SQL("CREATE DATABASE {}").format(sql.Identifier(scratch_db)))
+        except psycopg.errors.InsufficientPrivilege:
+            pytest.skip("connected role lacks CREATEDB; cannot build an isolated scratch database")
+    try:
+        registered_schema = f"test_{uuid.uuid4().hex[:16]}"
+        live_other_session_schema = f"test_{uuid.uuid4().hex[:16]}"
+        non_hash_schema = "test_not_a_hash_schema"
+
+        with psycopg.connect(scratch_url, autocommit=True) as conn:
+            for schema_name in (registered_schema, live_other_session_schema, non_hash_schema):
+                conn.execute(sql.SQL("CREATE SCHEMA {}").format(sql.Identifier(schema_name)))
+
+            drop_session_hash_schemas(scratch_url, {registered_schema, non_hash_schema})
+
+            rows = conn.execute(
+                """
+                SELECT schema_name FROM information_schema.schemata
+                WHERE schema_name = ANY(%s)
+                ORDER BY schema_name
+                """,
+                ([registered_schema, live_other_session_schema, non_hash_schema],),
+            ).fetchall()
+
+        assert [row[0] for row in rows] == [
+            live_other_session_schema,
+            non_hash_schema,
+        ]
+    finally:
+        with psycopg.connect(admin_url, autocommit=True) as admin_conn:
+            admin_conn.execute(
+                sql.SQL("DROP DATABASE IF EXISTS {} WITH (FORCE)").format(
+                    sql.Identifier(scratch_db)
+                )
+            )
+
+
+def test_successful_pytest_session_leaves_no_hash_schemas() -> None:
+    """A successful representative Path-backed pytest run cleans up its schema."""
+    import psycopg
+    from psycopg import sql
+
+    service_url = os.environ.get("TEST_DATABASE_URL")
+    if not service_url:
+        pytest.skip("TEST_DATABASE_URL not set")
+
+    base_url, _, _dbname = service_url.rpartition("/")
+    scratch_db = f"schema_session_scratch_{uuid.uuid4().hex[:12]}"
+    scratch_url = f"{base_url}/{scratch_db}"
+    admin_url = f"{base_url}/postgres"
+
+    with psycopg.connect(admin_url, autocommit=True) as admin_conn:
+        try:
+            admin_conn.execute(sql.SQL("CREATE DATABASE {}").format(sql.Identifier(scratch_db)))
+        except psycopg.errors.InsufficientPrivilege:
+            pytest.skip("connected role lacks CREATEDB; cannot build an isolated scratch database")
+    try:
+        env = os.environ.copy()
+        env["DATABASE_URL"] = scratch_url
+        env["TEST_DATABASE_URL"] = scratch_url
+        env["PYTEST_ADDOPTS"] = ""
+        subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "pytest",
+                "-q",
+                "-n0",
+                "backend/tests/test_pgvector_migration.py::test_vector_extension_is_available",
+            ],
+            check=True,
+            cwd=Path(__file__).parents[2],
+            env=env,
+            timeout=60,
+        )
+
+        with psycopg.connect(scratch_url, autocommit=True) as conn:
+            rows = conn.execute(
+                r"""
+                SELECT schema_name FROM information_schema.schemata
+                WHERE schema_name ~ '^test_[0-9a-f]{16}$'
+                """
+            ).fetchall()
+        assert rows == []
     finally:
         with psycopg.connect(admin_url, autocommit=True) as admin_conn:
             admin_conn.execute(
