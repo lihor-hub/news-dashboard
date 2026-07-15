@@ -313,7 +313,14 @@ def test_generate_podcast_script() -> None:
     model.invoke.return_value = AIMessage(content=mock_response.choices[0].message.content)
     callback = BaseCallbackHandler()
     with (
-        patch.dict("os.environ", {"FREE_LLM_API_KEY": "sk-free-llm"}),
+        patch.dict(
+            "os.environ",
+            {
+                "FREE_LLM_API_KEY": "sk-free-llm",
+                "OPENAI_FREE_MODEL": "gpt-4o-mini",
+                "OPENAI_BRIEFING_MODEL": "gpt-4o-mini",
+            },
+        ),
         patch("news_dashboard.ai_client.get_chat_model", return_value=model) as get_model,
         patch("news_dashboard.ai_client.langfuse_enabled", return_value=True),
         patch("langfuse.langchain.CallbackHandler", return_value=callback),

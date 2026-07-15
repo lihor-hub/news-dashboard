@@ -685,6 +685,8 @@ def test_generate_push_hook_returns_llm_hook(monkeypatch: pytest.MonkeyPatch) ->
     from langchain_core.messages import AIMessage
 
     monkeypatch.setenv("FREE_LLM_API_KEY", "fake-key")
+    monkeypatch.setenv("OPENAI_FREE_MODEL", "gpt-4o-mini")
+    monkeypatch.setenv("OPENAI_BRIEFING_MODEL", "gpt-4o-mini")
 
     hook_text = "Claude 4 drops; markets soar — your brief awaits"
     model = MagicMock()
