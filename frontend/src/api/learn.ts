@@ -15,6 +15,28 @@ export interface LessonCitation {
   source: string;
 }
 
+export interface LessonGraphEntity {
+  id: string;
+  name: string;
+  type: 'concept' | 'person' | 'org' | 'product' | 'place';
+}
+
+export interface LessonGraphRelationship {
+  source: string;
+  target: string;
+  relationship_type: string;
+  label: string;
+  confidence: number;
+}
+
+export interface LessonGraphContext {
+  available: boolean;
+  entities: LessonGraphEntity[];
+  relationships: LessonGraphRelationship[];
+  related_article_ids: number[];
+  related_briefing_ids: number[];
+}
+
 export interface LessonDetail {
   gist: string;
   explanation: string;
@@ -25,6 +47,7 @@ export interface LessonDetail {
   who_should_read: string[];
   questions_to_keep_in_mind: string[];
   citations: LessonCitation[];
+  graph_context?: LessonGraphContext | null;
 }
 
 export interface ComprehensionQuestion {

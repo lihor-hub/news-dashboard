@@ -100,6 +100,26 @@ describe('LessonDetailPage', () => {
     expect(screen.getByText('Graph context')).toBeInTheDocument();
   });
 
+  it('indicates when a completed lesson has graph context', async () => {
+    vi.spyOn(api, 'fetchLesson').mockResolvedValue({
+      ...COMPLETE_LESSON,
+      lesson_detail: {
+        ...COMPLETE_LESSON.lesson_detail!,
+        graph_context: {
+          available: true,
+          entities: [{ id: 'concept:concept-one', name: 'concept one', type: 'concept' }],
+          relationships: [],
+          related_article_ids: [42],
+          related_briefing_ids: [],
+        },
+      },
+    });
+
+    renderPage(5);
+
+    expect(await screen.findByText('Graph context available')).toBeInTheDocument();
+  });
+
   it('shows an error state when the lesson cannot be loaded', async () => {
     vi.spyOn(api, 'fetchLesson').mockRejectedValue(new Error('lesson fetch failed'));
 

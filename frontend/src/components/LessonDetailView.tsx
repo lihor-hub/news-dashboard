@@ -88,6 +88,7 @@ export function LessonDetailView({
   const isCompleteLesson = lesson.generation_status === 'complete';
   const lessonDetail = lesson.lesson_detail ?? null;
   const hasLessonDetail = isCompleteLesson && lessonDetail !== null;
+  const graphContext = lessonDetail?.graph_context;
 
   async function handleGeneratePodcast(force: boolean) {
     setIsGeneratingPodcast(true);
@@ -194,6 +195,12 @@ export function LessonDetailView({
             <Badge variant={verdictBadgeVariant(lessonDetail.read_worthiness.verdict)}>
               {capitalizeLabel(lessonDetail.read_worthiness.verdict)}
             </Badge>
+            {graphContext?.available ? (
+              <Badge variant="outline" className="gap-1">
+                <Network className="size-3" />
+                {t('learn.detail.graph_context_available', 'Graph context available')}
+              </Badge>
+            ) : null}
             <div className="min-w-0 text-sm text-muted-foreground">
               {lessonDetail.read_worthiness.rationale}
             </div>

@@ -57,6 +57,34 @@ class LessonCitation(BaseModel):
     source: NonEmptyText
 
 
+class LessonGraphEntity(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: NonEmptyText
+    name: NonEmptyText
+    type: Literal["concept", "person", "org", "product", "place"]
+
+
+class LessonGraphRelationship(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    source: NonEmptyText
+    target: NonEmptyText
+    relationship_type: NonEmptyText
+    label: NonEmptyText
+    confidence: float = Field(ge=0.0, le=1.0)
+
+
+class LessonGraphContext(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    available: bool
+    entities: list[LessonGraphEntity] = Field(default_factory=list)
+    relationships: list[LessonGraphRelationship] = Field(default_factory=list)
+    related_article_ids: list[int] = Field(default_factory=list)
+    related_briefing_ids: list[int] = Field(default_factory=list)
+
+
 class ReadWorthiness(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -76,6 +104,7 @@ class LessonDetail(BaseModel):
     who_should_read: list[NonEmptyText] = Field(min_length=1)
     questions_to_keep_in_mind: list[NonEmptyText] = Field(min_length=1)
     citations: list[LessonCitation] = Field(min_length=1)
+    graph_context: LessonGraphContext | None = None
 
 
 class ComprehensionQuestion(BaseModel):
