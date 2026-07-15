@@ -297,6 +297,8 @@ def generate_weekly_quiz(
     client = get_chat_client(api_key=api_key, base_url=base_url)
     prompt = get_prompt(
         "weekly-quiz",
+        label="production",
+        prompt_type="text",
         fallback=f"{_QUIZ_PROMPT}\n\nArticles:\n{{{{article_blurbs}}}}",
         variables={"article_blurbs": blurbs},
     )

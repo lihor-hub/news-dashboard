@@ -113,6 +113,8 @@ def generate_push_hook(briefing: dict[str, Any]) -> str:
 
         prompt = get_prompt(
             "briefing-push-hook",
+            label="production",
+            prompt_type="text",
             fallback=(
                 "Write a single punchy mobile push notification hook (max 15 words) "
                 "that entices the user to open their news briefing. "
@@ -185,6 +187,8 @@ def generate_recap_push_hook(recap: dict[str, Any]) -> str:
         }
         prompt = get_prompt(
             "recap-push-hook",
+            label="production",
+            prompt_type="text",
             fallback=(
                 "Write a single encouraging mobile push notification hook (max 20 words) "
                 "summarizing this user's weekly reading recap. "

@@ -6,11 +6,12 @@ import json
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
-from unittest.mock import MagicMock, patch
+from unittest.mock import ANY, MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
 
+from news_dashboard.ai_client import ManagedPrompt
 from news_dashboard.auth import require_auth
 from news_dashboard.db import connect, init_db
 from news_dashboard.main import app
@@ -233,15 +234,13 @@ def test_generate_weekly_quiz_with_articles(tmp_path: Path) -> None:
 
     mock_response = MagicMock()
     mock_response.choices[0].message.content = json.dumps(_MOCK_QUESTIONS)
+    managed_prompt = ManagedPrompt(text="compiled quiz prompt")
 
     with (
         patch.dict("os.environ", {"OPENAI_API_KEY": "test-key"}),
         patch("news_dashboard.ai_client.get_openai_client") as mock_client_factory,
-        patch("news_dashboard.ai_client.chat_create", return_value=mock_response),
-        patch(
-            "news_dashboard.ai_client.get_prompt",
-            wraps=__import__("news_dashboard.ai_client", fromlist=["get_prompt"]).get_prompt,
-        ) as get_prompt,
+        patch("news_dashboard.ai_client.chat_create", return_value=mock_response) as chat_create,
+        patch("news_dashboard.ai_client.get_prompt", return_value=managed_prompt) as get_prompt,
     ):
         mock_client_factory.return_value = MagicMock()
         quiz = generate_weekly_quiz(user_id, db_path=db_path)
@@ -250,11 +249,16 @@ def test_generate_weekly_quiz_with_articles(tmp_path: Path) -> None:
     assert quiz["user_id"] == user_id
     assert len(quiz["questions"]) == 3
     assert quiz["score"] is None
-    assert get_prompt.call_args.args == ("weekly-quiz",)
-    assert get_prompt.call_args.kwargs["variables"] == {
-        "article_blurbs": get_prompt.call_args.kwargs["variables"]["article_blurbs"]
-    }
-    assert "AI Transformer Deep Dive" in get_prompt.call_args.kwargs["variables"]["article_blurbs"]
+    article_blurbs = get_prompt.call_args.kwargs["variables"]["article_blurbs"]
+    assert "AI Transformer Deep Dive" in article_blurbs
+    get_prompt.assert_called_once_with(
+        "weekly-quiz",
+        fallback=ANY,
+        label="production",
+        prompt_type="text",
+        variables={"article_blurbs": article_blurbs},
+    )
+    assert chat_create.call_args.kwargs["prompt"] is managed_prompt
 
 
 def test_get_latest_quiz_empty(tmp_path: Path) -> None:

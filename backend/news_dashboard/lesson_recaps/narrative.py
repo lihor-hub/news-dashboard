@@ -56,6 +56,8 @@ def generate_lesson_recap_narrative(recap: dict[str, Any]) -> str:
         recap_json = json.dumps(metrics, default=str)
         prompt = get_prompt(
             "weekly-lesson-recap-narrative",
+            label="production",
+            prompt_type="text",
             fallback=(
                 "Write a weekly learning review in the voice of 'here's what you "
                 "learned this week', addressed directly to the reader (second "

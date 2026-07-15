@@ -438,6 +438,8 @@ def generate_recommendation_explanation(
     }
     prompt = get_prompt(
         "recommendation-explanation",
+        label="production",
+        prompt_type="text",
         fallback=(
             "You are a personalized news assistant. Explain in one short sentence "
             "(under 20 words) why this article matches the user's reading interests.\n\n"

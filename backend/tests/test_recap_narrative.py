@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 from typing import Any
-from unittest.mock import MagicMock, patch
+from unittest.mock import ANY, MagicMock, patch
 
 import pytest
 
+from news_dashboard.ai_client import ManagedPrompt
 from news_dashboard.recaps.narrative import generate_recap_narrative
 
 
@@ -51,23 +52,29 @@ def test_generate_recap_narrative_returns_llm_text(monkeypatch: pytest.MonkeyPat
     mock_client.chat.completions.create.return_value = MagicMock(
         choices=[MagicMock(message=MagicMock(content=narrative_text))]
     )
+    completion = mock_client.chat.completions.create.return_value
+    managed_prompt = ManagedPrompt(text="compiled recap narrative")
 
     with (
         patch("news_dashboard.ai_client.get_chat_client", return_value=mock_client),
+        patch("news_dashboard.ai_client.chat_create", return_value=completion) as chat_create,
         patch("news_dashboard.ai_client.free_llm_config", return_value=("fake-key", None)),
-        patch(
-            "news_dashboard.ai_client.get_prompt",
-            wraps=__import__("news_dashboard.ai_client", fromlist=["get_prompt"]).get_prompt,
-        ) as get_prompt,
+        patch("news_dashboard.ai_client.get_prompt", return_value=managed_prompt) as get_prompt,
     ):
         result = generate_recap_narrative(_make_recap())
 
     assert result == narrative_text
-    mock_client.chat.completions.create.assert_called_once()
-    call_kwargs = mock_client.chat.completions.create.call_args.kwargs
-    assert "12" in call_kwargs["messages"][0]["content"]
-    assert get_prompt.call_args.args == ("weekly-recap-narrative",)
-    assert set(get_prompt.call_args.kwargs["variables"]) == {"recap_json"}
+    call_kwargs = chat_create.call_args.kwargs
+    recap_json = get_prompt.call_args.kwargs["variables"]["recap_json"]
+    assert "12" in recap_json
+    get_prompt.assert_called_once_with(
+        "weekly-recap-narrative",
+        fallback=ANY,
+        label="production",
+        prompt_type="text",
+        variables={"recap_json": recap_json},
+    )
+    assert call_kwargs["prompt"] is managed_prompt
 
 
 def test_generate_recap_narrative_falls_back_on_llm_error(monkeypatch: pytest.MonkeyPatch) -> None:

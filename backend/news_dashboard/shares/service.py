@@ -401,7 +401,13 @@ def generate_share_context(share_id: int) -> str | None:
     from news_dashboard.ai_client import chat_create, get_chat_client, get_prompt
 
     client = get_chat_client(api_key=api_key, base_url=base_url)
-    prompt = get_prompt("share-context", fallback=fallback, variables=variables)
+    prompt = get_prompt(
+        "share-context",
+        fallback=fallback,
+        label="production",
+        prompt_type="text",
+        variables=variables,
+    )
     try:
         completion = chat_create(
             client,
