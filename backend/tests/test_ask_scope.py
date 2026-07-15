@@ -14,6 +14,11 @@ from news_dashboard.db import EMBEDDING_DIMENSIONS, connect, init_db
 from news_dashboard.embeddings import vector_literal
 
 
+@pytest.fixture(autouse=True)
+def _clean_postgres(pg_clean: str) -> None:
+    """Isolate legacy tmp-path call sites on the PostgreSQL test schema."""
+
+
 def _test_vector(value: float = 0.1, dims: int = 10) -> str:
     """A pgvector literal padded to the real embedding_vec(1536) width.
 
