@@ -95,6 +95,7 @@ export interface Lesson {
   infographic: InfographicArtifact | null;
   infographic_status: 'complete' | 'failed' | null;
   infographic_error: string | null;
+  graph_context_available: boolean;
   created_at: string;
   updated_at: string;
 }

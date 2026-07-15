@@ -57,6 +57,7 @@ const GENERATED_LESSON: Lesson = {
   infographic: null,
   infographic_status: null,
   infographic_error: null,
+  graph_context_available: false,
   lesson_detail: null,
   study_artifacts: null,
   created_at: '2026-07-08T10:00:00Z',

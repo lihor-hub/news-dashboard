@@ -1,5 +1,13 @@
 import { useState } from 'react';
-import { AlertCircle, ExternalLink, Headphones, Image, Loader2, Presentation } from 'lucide-react';
+import {
+  AlertCircle,
+  ExternalLink,
+  Headphones,
+  Image,
+  Loader2,
+  Network,
+  Presentation,
+} from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -131,6 +139,12 @@ export function LessonDetailView({
               : t('learn.status.pending')}
         </Badge>
         {isPendingLesson ? <Loader2 className="size-4 animate-spin text-muted-foreground" /> : null}
+        {lesson.graph_context_available ? (
+          <Badge variant="outline" className="gap-1">
+            <Network className="size-3.5" />
+            {t('learn.graph_context_available', 'Graph context')}
+          </Badge>
+        ) : null}
       </div>
 
       <div className="space-y-2">

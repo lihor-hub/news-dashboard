@@ -37,6 +37,7 @@ const COMPLETE_LESSON: Lesson = {
   infographic: null,
   infographic_status: null,
   infographic_error: null,
+  graph_context_available: true,
   lesson_detail: {
     gist: 'gist text',
     explanation: 'explanation text',
@@ -96,6 +97,7 @@ describe('LessonDetailPage', () => {
       'href',
       '/learn/library'
     );
+    expect(screen.getByText('Graph context')).toBeInTheDocument();
   });
 
   it('shows an error state when the lesson cannot be loaded', async () => {

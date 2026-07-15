@@ -689,6 +689,39 @@ POSTGRES_MULTIUSER_SCHEMA = [
     "CREATE INDEX IF NOT EXISTS idx_lesson_generations_lesson_created"
     " ON lesson_generations(lesson_id, created_at DESC)",
     """
+    CREATE TABLE IF NOT EXISTS lesson_graph_nodes (
+      id BIGSERIAL PRIMARY KEY,
+      lesson_id BIGINT NOT NULL REFERENCES lessons(id) ON DELETE CASCADE,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      node_key TEXT NOT NULL,
+      name TEXT NOT NULL,
+      node_type TEXT NOT NULL
+        CHECK(node_type IN ('concept','entity','article','briefing')),
+      source_field TEXT NOT NULL,
+      related_article_id BIGINT REFERENCES articles(id) ON DELETE SET NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE(lesson_id, node_key)
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_lesson_graph_nodes_user"
+    " ON lesson_graph_nodes(user_id, lesson_id)",
+    """
+    CREATE TABLE IF NOT EXISTS lesson_graph_edges (
+      id BIGSERIAL PRIMARY KEY,
+      lesson_id BIGINT NOT NULL REFERENCES lessons(id) ON DELETE CASCADE,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      source_key TEXT NOT NULL,
+      target_key TEXT NOT NULL,
+      relationship_type TEXT NOT NULL,
+      label TEXT NOT NULL,
+      confidence REAL NOT NULL DEFAULT 1.0,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE(lesson_id, source_key, target_key, relationship_type)
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_lesson_graph_edges_user"
+    " ON lesson_graph_edges(user_id, lesson_id)",
+    """
     CREATE TABLE IF NOT EXISTS user_lesson_suggestion_dismissals (
       user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       article_id  BIGINT NOT NULL REFERENCES articles(id) ON DELETE CASCADE,

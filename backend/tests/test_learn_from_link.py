@@ -176,6 +176,55 @@ def test_create_lesson_completes_with_extracted_content(
             }
         ],
     }
+    assert lesson["graph_context_available"] is True
+
+    with connect(database_url=pg_clean) as conn:
+        nodes = conn.execute(
+            """
+            SELECT name, node_type, source_field
+            FROM lesson_graph_nodes
+            WHERE lesson_id = %s AND user_id = %s
+            ORDER BY node_type, name
+            """,
+            (lesson["id"], user_id),
+        ).fetchall()
+        edges_count = conn.execute(
+            "SELECT COUNT(*) AS count FROM lesson_graph_edges WHERE lesson_id = %s",
+            (lesson["id"],),
+        ).fetchone()
+
+    node_tuples = [(row["name"], row["node_type"], row["source_field"]) for row in nodes]
+    assert ("Context from Example Journal", "concept", "prerequisite_concepts") in node_tuples
+    assert edges_count is not None
+    assert int(edges_count["count"]) > 0
+
+
+def test_lesson_graph_extraction_failure_does_not_fail_core_lesson(
+    pg_clean: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("DATABASE_URL", pg_clean)
+    user_id = _make_user(pg_clean)
+
+    def fail_graph(*_args: object, **_kwargs: object) -> int:
+        message = "graph unavailable"
+        raise RuntimeError(message)
+
+    monkeypatch.setattr(service, "persist_lesson_graph_context", fail_graph)
+
+    lesson = service.create_lesson(user_id, "https://example.com/a", database_url=pg_clean)
+
+    assert lesson["generation_status"] == "complete"
+    assert lesson["lesson_detail"] is not None
+    assert lesson["graph_context_available"] is False
+
+
+def test_get_lesson_scopes_graph_context_to_current_user(pg_clean: str) -> None:
+    user_id = _make_user(pg_clean, "alice")
+    other_user_id = _make_user(pg_clean, "bob")
+    lesson = service.create_lesson(user_id, "https://example.com/a", database_url=pg_clean)
+
+    assert service.get_lesson(lesson["id"], user_id, database_url=pg_clean) is not None
+    assert service.get_lesson(lesson["id"], other_user_id, database_url=pg_clean) is None
 
 
 def test_create_lesson_marks_failed_when_extraction_fails(
