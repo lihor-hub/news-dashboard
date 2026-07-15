@@ -395,9 +395,15 @@ def generate_share_context(share_id: int) -> str | None:
 
     from news_dashboard.ai_client import get_chat_model, response_text
 
-    chat_model = get_chat_model(api_key=api_key, base_url=base_url, model=model)
+    chat_model = get_chat_model(
+        api_key=api_key,
+        base_url=base_url,
+        model=model,
+        max_tokens=120,
+        temperature=0.7,
+    )
     try:
-        completion = chat_model.bind(max_tokens=120, temperature=0.7).invoke(
+        completion = chat_model.invoke(
             [{"role": "user", "content": prompt}],
             config={
                 "run_name": "share-context",

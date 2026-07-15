@@ -112,8 +112,14 @@ def generate_push_hook(briefing: dict[str, Any]) -> str:
             "Reply with only the hook text, no quotes or punctuation at the end."
         )
 
-        chat_model = get_chat_model(api_key=api_key, base_url=base_url, model=model)
-        response = chat_model.bind(max_tokens=40, temperature=0.7).invoke(
+        chat_model = get_chat_model(
+            api_key=api_key,
+            base_url=base_url,
+            model=model,
+            max_tokens=40,
+            temperature=0.7,
+        )
+        response = chat_model.invoke(
             [{"role": "user", "content": prompt}],
             config={"run_name": "push-hook", "tags": ["push"]},
         )
@@ -166,8 +172,14 @@ def generate_recap_push_hook(recap: dict[str, Any]) -> str:
             "Reply with only the hook text, no quotes or punctuation at the end."
         )
 
-        chat_model = get_chat_model(api_key=api_key, base_url=base_url, model=model)
-        response = chat_model.bind(max_tokens=40, temperature=0.7).invoke(
+        chat_model = get_chat_model(
+            api_key=api_key,
+            base_url=base_url,
+            model=model,
+            max_tokens=40,
+            temperature=0.7,
+        )
+        response = chat_model.invoke(
             [{"role": "user", "content": prompt}],
             config={"run_name": "recap-push-hook", "tags": ["push", "recap"]},
         )

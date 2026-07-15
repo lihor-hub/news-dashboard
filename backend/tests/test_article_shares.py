@@ -541,10 +541,17 @@ def test_generate_share_context_stores_summary(db: str, monkeypatch: pytest.Monk
     with patch("news_dashboard.ai_client.get_chat_model") as get_model:
         from langchain_core.messages import AIMessage
 
-        get_model.return_value.bind.return_value.invoke.return_value = AIMessage(content=summary)
+        get_model.return_value.invoke.return_value = AIMessage(content=summary)
         result = generate_share_context(share_id)
 
     assert result == summary
+    assert get_model.call_args.kwargs["max_tokens"] == 120
+    assert get_model.call_args.kwargs["temperature"] == 0.7
+    assert get_model.return_value.invoke.call_args.kwargs["config"] == {
+        "run_name": "share-context",
+        "tags": ["shares"],
+        "metadata": {"langfuse_user_id": str(alice)},
+    }
 
     detail = get_share(share_id, bob)
     assert detail is not None

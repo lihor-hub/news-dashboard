@@ -267,8 +267,8 @@ def _summary_ai_config() -> tuple[str, str | None, str]:
 def _call_summary_model(api_key: str, base_url: str | None, model: str, text: str) -> str:
     from news_dashboard.ai_client import get_chat_model, response_text
 
-    chat_model = get_chat_model(api_key=api_key, base_url=base_url, model=model)
-    result = chat_model.bind(max_tokens=120).invoke(
+    chat_model = get_chat_model(api_key=api_key, base_url=base_url, model=model, max_tokens=120)
+    result = chat_model.invoke(
         [{"role": "user", "content": f"{_SUMMARY_PROMPT}\n\n{text}"}],
         config={"run_name": "reading-list-summary", "tags": ["reading-list"]},
     )

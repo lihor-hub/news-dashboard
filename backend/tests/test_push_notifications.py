@@ -14,6 +14,7 @@ from news_dashboard.main import app
 from news_dashboard.push import (
     delete_push_subscriptions,
     generate_push_hook,
+    generate_recap_push_hook,
     get_user_push_subscriptions,
     save_push_subscription,
     send_push_for_user,
@@ -681,14 +682,12 @@ def _make_briefing(
 
 def test_generate_push_hook_returns_llm_hook(monkeypatch: pytest.MonkeyPatch) -> None:
     from langchain_core.messages import AIMessage
-    from langchain_core.runnables import RunnableLambda
 
     monkeypatch.setenv("FREE_LLM_API_KEY", "fake-key")
 
     hook_text = "Claude 4 drops; markets soar — your brief awaits"
-    model: RunnableLambda[Any, AIMessage] = RunnableLambda(
-        lambda _messages: AIMessage(content=hook_text)
-    )
+    model = MagicMock()
+    model.invoke.return_value = AIMessage(content=hook_text)
 
     with (
         patch("news_dashboard.ai_client.get_chat_model", return_value=model) as get_model,
@@ -697,7 +696,43 @@ def test_generate_push_hook_returns_llm_hook(monkeypatch: pytest.MonkeyPatch) ->
         result = generate_push_hook(_make_briefing())
 
     assert result == hook_text
-    assert get_model.call_args.kwargs["model"] == "gpt-4o-mini"
+    assert get_model.call_args.kwargs == {
+        "api_key": "fake-key",
+        "base_url": None,
+        "model": "gpt-4o-mini",
+        "max_tokens": 40,
+        "temperature": 0.7,
+    }
+    assert model.invoke.call_args.kwargs["config"] == {
+        "run_name": "push-hook",
+        "tags": ["push"],
+    }
+
+
+def test_generate_recap_push_hook_uses_langchain_settings_and_trace_config() -> None:
+    from langchain_core.messages import AIMessage
+
+    model = MagicMock()
+    model.invoke.return_value = AIMessage(content="Seven thoughtful reads made your week")
+    recap = {
+        "articles_read": 7,
+        "categories": [{"category": "AI"}],
+        "current_streak_days": 3,
+    }
+
+    with (
+        patch("news_dashboard.ai_client.get_chat_model", return_value=model) as get_model,
+        patch("news_dashboard.ai_client.free_llm_config", return_value=("fake-key", None)),
+    ):
+        result = generate_recap_push_hook(recap)
+
+    assert result == "Seven thoughtful reads made your week"
+    assert get_model.call_args.kwargs["max_tokens"] == 40
+    assert get_model.call_args.kwargs["temperature"] == 0.7
+    assert model.invoke.call_args.kwargs["config"] == {
+        "run_name": "recap-push-hook",
+        "tags": ["push", "recap"],
+    }
 
 
 def test_generate_push_hook_falls_back_on_llm_error(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -296,9 +296,9 @@ def generate_weekly_quiz(
 
     from news_dashboard.ai_client import get_chat_model, response_text
 
-    chat_model = get_chat_model(api_key=api_key, base_url=base_url, model=model)
+    chat_model = get_chat_model(api_key=api_key, base_url=base_url, model=model, max_tokens=1024)
     logger.info("Generating weekly quiz for user %s from %d articles", user_id, len(articles))
-    result = chat_model.bind(max_tokens=1024).invoke(
+    result = chat_model.invoke(
         messages,
         config={
             "run_name": "weekly-quiz",

@@ -445,7 +445,7 @@ def test_generate_summary_for_item_success(monkeypatch: pytest.MonkeyPatch, pg_c
         patch.dict("os.environ", {"FREE_LLM_API_KEY": "test-key"}),
         patch("news_dashboard.ai_client.get_chat_model") as get_model,
     ):
-        get_model.return_value.bind.return_value.invoke.return_value = AIMessage(
+        get_model.return_value.invoke.return_value = AIMessage(
             content="A concise take on why this post matters."
         )
         service.generate_summary_for_item(item["id"], database_url=database_url)
@@ -453,8 +453,13 @@ def test_generate_summary_for_item_success(monkeypatch: pytest.MonkeyPatch, pg_c
     items = service.list_items(user_id, database_url=database_url)
     assert items[0]["summary_status"] == "ok"
     assert items[0]["summary"] == "A concise take on why this post matters."
-    messages = get_model.return_value.bind.return_value.invoke.call_args.args[0]
+    assert get_model.call_args.kwargs["max_tokens"] == 120
+    messages = get_model.return_value.invoke.call_args.args[0]
     assert "A great post" in messages[0]["content"]
+    assert get_model.return_value.invoke.call_args.kwargs["config"] == {
+        "run_name": "reading-list-summary",
+        "tags": ["reading-list"],
+    }
 
 
 def test_generate_summary_for_item_records_error_on_ai_failure(
