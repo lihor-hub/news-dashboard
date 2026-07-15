@@ -2215,7 +2215,7 @@ def list_lesson_suggestions(
             f"""
             SELECT a.id, a.title, a.canonical_url, a.source_name, a.category,
                    a.importance_score, s.starred,
-                   EXTRACT(EPOCH FROM (NOW() - a.discovered_at::timestamptz)) / 86400.0
+                   EXTRACT(EPOCH FROM (NOW() - a.discovered_at)) / 86400.0
                      AS age_days
             FROM articles a
             JOIN user_article_state s ON s.article_id = a.id

@@ -63,6 +63,7 @@ def _export_articles(conn: Any, user_id: int) -> list[dict[str, Any]]:
         _normalize_timestamps(
             d,
             (
+                "discovered_at",
                 "done_at",
                 "starred_at",
                 "skipped_at",

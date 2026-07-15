@@ -420,7 +420,7 @@ def extract_missing_entities(
             """
             SELECT id, url, title, source_slug, summary, body, discovered_at
             FROM articles
-            WHERE discovered_at::timestamptz >= NOW() - INTERVAL '1 day' * %s
+            WHERE discovered_at >= NOW() - INTERVAL '1 day' * %s
               AND entities IS NULL
             ORDER BY discovered_at DESC
             LIMIT %s
@@ -462,7 +462,7 @@ def sync_cached_entities_to_graph(
             """
             SELECT id, url, title, source_slug, entities, discovered_at
             FROM articles
-            WHERE discovered_at::timestamptz >= NOW() - INTERVAL '1 day' * %s
+            WHERE discovered_at >= NOW() - INTERVAL '1 day' * %s
               AND entities IS NOT NULL
             ORDER BY discovered_at DESC
             LIMIT %s
@@ -507,7 +507,7 @@ def extract_missing_entity_relationships(
             """
             SELECT id, title, summary, body, entities
             FROM articles
-            WHERE discovered_at::timestamptz >= NOW() - INTERVAL '1 day' * %s
+            WHERE discovered_at >= NOW() - INTERVAL '1 day' * %s
               AND entities IS NOT NULL
             ORDER BY discovered_at DESC
             LIMIT %s
@@ -577,7 +577,7 @@ def _visible_graph_rows(
                 """
                 SELECT id, title, entities
                 FROM articles
-                WHERE discovered_at::timestamptz >= NOW() - INTERVAL '1 day' * %s
+                WHERE discovered_at >= NOW() - INTERVAL '1 day' * %s
                 ORDER BY discovered_at DESC
                 LIMIT %s
                 """,
@@ -594,7 +594,7 @@ def _visible_graph_rows(
               ON us.source_slug = src.slug AND us.user_id = %s
             LEFT JOIN user_article_state uas
               ON uas.article_id = a.id AND uas.user_id = %s
-            WHERE a.discovered_at::timestamptz >= NOW() - INTERVAL '1 day' * %s
+            WHERE a.discovered_at >= NOW() - INTERVAL '1 day' * %s
               AND COALESCE(uas.state, 'today') != 'archived'
               AND (
                 (

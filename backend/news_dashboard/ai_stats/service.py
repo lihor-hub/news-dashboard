@@ -386,7 +386,7 @@ def _load_recent_articles(
                 """
                 SELECT id, title, summary, category, (embedding_vec IS NOT NULL) AS embedded
                 FROM articles
-                WHERE discovered_at::timestamptz >= NOW() - INTERVAL '1 day' * %s
+                WHERE discovered_at >= NOW() - INTERVAL '1 day' * %s
                 ORDER BY discovered_at DESC
                 LIMIT %s
                 """,
@@ -403,7 +403,7 @@ def _load_recent_articles(
                   ON us.source_slug = src.slug AND us.user_id = %s
                 LEFT JOIN user_article_state uas
                   ON uas.article_id = a.id AND uas.user_id = %s
-                WHERE a.discovered_at::timestamptz >= NOW() - INTERVAL '1 day' * %s
+                WHERE a.discovered_at >= NOW() - INTERVAL '1 day' * %s
                   AND COALESCE(uas.state, 'today') != 'archived'
                   AND (
                     (
