@@ -5,6 +5,7 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
+from langchain_core.messages import AIMessage
 
 from news_dashboard.ai_client import (
     ManagedPrompt,
@@ -13,11 +14,13 @@ from news_dashboard.ai_client import (
     chat_create,
     create_score,
     flush,
+    get_chat_model,
     get_openai_client,
     get_prompt,
     get_trace_url,
     langfuse_enabled,
     observe,
+    response_text,
     trace_params,
 )
 
@@ -487,6 +490,70 @@ def _ok_client(result: object) -> MagicMock:
 def _clear_ai_env(monkeypatch: pytest.MonkeyPatch) -> None:
     for var in ("FREE_LLM_API_KEY", "FREE_LLM_BASE_URL", "OPENAI_API_KEY", "OPENAI_BASE_URL"):
         monkeypatch.delenv(var, raising=False)
+
+
+@pytest.mark.usefixtures("_no_langfuse")
+def test_get_chat_model_forwards_provider_model_and_timeout(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from unittest.mock import patch
+
+    monkeypatch.setenv("AI_REQUEST_TIMEOUT_SECONDS", "12.5")
+
+    with patch("langchain_openai.ChatOpenAI", return_value=MagicMock()) as constructor:
+        get_chat_model(
+            api_key="free-key",
+            base_url="http://gateway:9130/v1",
+            model="free-model",
+        )
+
+    assert constructor.call_args.kwargs == {
+        "api_key": "free-key",
+        "base_url": "http://gateway:9130/v1",
+        "model": "free-model",
+        "timeout": 12.5,
+    }
+
+
+def test_response_text_accepts_string_content() -> None:
+    assert response_text(AIMessage(content="answer")) == "answer"
+
+
+def test_response_text_rejects_unsupported_block_content() -> None:
+    with pytest.raises(TypeError, match="string content"):
+        response_text(AIMessage(content=[{"type": "text", "text": "answer"}]))
+
+
+@pytest.mark.usefixtures("_no_langfuse")
+def test_get_chat_model_preserves_free_provider_fallback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from unittest.mock import patch
+
+    from openai import OpenAIError
+
+    _clear_ai_env(monkeypatch)
+    monkeypatch.setenv("OPENAI_API_KEY", "oa-key")
+    primary = MagicMock()
+    runnable = MagicMock()
+    primary.with_fallbacks.return_value = runnable
+    fallback = MagicMock()
+
+    with patch("langchain_openai.ChatOpenAI", side_effect=[primary, fallback]) as constructor:
+        result = get_chat_model(
+            api_key="free-key",
+            base_url="http://gateway:9130/v1",
+            model="shared-model",
+        )
+
+    assert result is runnable
+    assert constructor.call_args_list[1].kwargs == {
+        "api_key": "oa-key",
+        "model": "shared-model",
+        "timeout": 30.0,
+    }
+    assert primary.with_fallbacks.call_args.args == ([fallback],)
+    assert primary.with_fallbacks.call_args.kwargs == {"exceptions_to_handle": (OpenAIError,)}
 
 
 @pytest.mark.usefixtures("_no_langfuse")

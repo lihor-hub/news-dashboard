@@ -24,6 +24,9 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Literal, TypeGuard, cast, overload
 
 if TYPE_CHECKING:
+    from langchain_core.language_models import LanguageModelInput
+    from langchain_core.messages import AIMessage
+    from langchain_core.runnables import Runnable
     from openai import OpenAI
     from openai.types.chat import ChatCompletion
 
@@ -222,6 +225,48 @@ def get_openai_client(
     from openai import OpenAI as PlainOpenAI
 
     return PlainOpenAI(**kwargs)
+
+
+def get_chat_model(
+    *,
+    api_key: str,
+    base_url: str | None,
+    model: str,
+) -> Runnable[LanguageModelInput, AIMessage]:
+    """Return a LangChain chat model with the existing OpenAI fallback semantics."""
+    from langchain_openai import ChatOpenAI
+    from openai import OpenAIError
+
+    kwargs: dict[str, Any] = {
+        "api_key": api_key,
+        "model": model,
+        "timeout": request_timeout_seconds(),
+    }
+    if base_url is not None:
+        kwargs["base_url"] = base_url
+    primary = ChatOpenAI(**kwargs)
+
+    openai_key, openai_base = openai_config()
+    if not openai_key or (openai_key, openai_base) == (api_key, base_url):
+        return primary
+
+    fallback_kwargs: dict[str, Any] = {
+        "api_key": openai_key,
+        "model": model,
+        "timeout": request_timeout_seconds(),
+    }
+    if openai_base is not None:
+        fallback_kwargs["base_url"] = openai_base
+    fallback = ChatOpenAI(**fallback_kwargs)
+    return primary.with_fallbacks([fallback], exceptions_to_handle=(OpenAIError,))
+
+
+def response_text(message: AIMessage) -> str:
+    """Return text content from a LangChain response, rejecting content blocks."""
+    if isinstance(message.content, str):
+        return message.content
+    msg = "AI response must contain string content"
+    raise TypeError(msg)
 
 
 # ── Runtime free-LLM → OpenAI fallback ─────────────────────────────────────
