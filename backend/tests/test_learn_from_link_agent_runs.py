@@ -105,9 +105,10 @@ def test_successful_generation_records_version_metadata_and_all_steps(
 
 def test_lesson_graph_is_compiled_without_a_checkpointer() -> None:
     graph = service.build_lesson_graph()
+    drawable = graph.get_graph()
 
     assert graph.checkpointer is None
-    assert set(graph.get_graph().nodes) == {
+    assert set(drawable.nodes) == {
         "__start__",
         "fetch",
         "extraction",
@@ -118,6 +119,19 @@ def test_lesson_graph_is_compiled_without_a_checkpointer() -> None:
         "failure",
         "__end__",
     }
+    assert [(edge.source, edge.target, edge.data, edge.conditional) for edge in drawable.edges] == [
+        ("__start__", "fetch", None, False),
+        ("citation_verification", "failure", "fail", True),
+        ("citation_verification", "personal_relevance", "continue", True),
+        ("extraction", "failure", "fail", True),
+        ("extraction", "synthesis", "continue", True),
+        ("fetch", "extraction", None, False),
+        ("personal_relevance", "persistence", None, False),
+        ("synthesis", "citation_verification", "continue", True),
+        ("synthesis", "failure", "fail", True),
+        ("failure", "__end__", None, False),
+        ("persistence", "__end__", None, False),
+    ]
 
 
 def test_generation_propagates_user_session_and_native_callback(
@@ -164,11 +178,13 @@ def test_extraction_failure_marks_run_failed_at_extraction_step(
     run = _run_row(pg_clean, int(lesson["id"]))
     assert run["status"] == "failed"
     assert run["failed_step"] == STEP_EXTRACTION
+    assert run["error"] == "Could not extract readable article content."
 
     steps = _step_rows(pg_clean, int(run["id"]))
-    extraction_step = next(s for s in steps if s["step"] == STEP_EXTRACTION)
-    assert extraction_step["status"] == "failed"
-    assert not any(s["step"] == STEP_SYNTHESIS for s in steps)
+    assert [(step["step"], step["ordinal"], step["status"], step["error"]) for step in steps] == [
+        (STEP_FETCH, 1, "complete", None),
+        (STEP_EXTRACTION, 2, "failed", "extract_body returned status='error'"),
+    ]
 
 
 def test_citation_failure_marks_run_failed_at_citation_verification_step(
@@ -205,13 +221,20 @@ def test_citation_failure_marks_run_failed_at_citation_verification_step(
     run = _run_row(pg_clean, int(lesson["id"]))
     assert run["status"] == "failed"
     assert run["failed_step"] == STEP_CITATION_VERIFICATION
+    assert run["error"] == "Generated lesson citations did not match source content."
 
     steps = _step_rows(pg_clean, int(run["id"]))
-    synthesis_step = next(s for s in steps if s["step"] == STEP_SYNTHESIS)
-    citation_step = next(s for s in steps if s["step"] == STEP_CITATION_VERIFICATION)
-    assert synthesis_step["status"] == "complete"
-    assert citation_step["status"] == "failed"
-    assert not any(s["step"] == STEP_PERSISTENCE for s in steps)
+    assert [(step["step"], step["ordinal"], step["status"], step["error"]) for step in steps] == [
+        (STEP_FETCH, 1, "complete", None),
+        (STEP_EXTRACTION, 2, "complete", None),
+        (STEP_SYNTHESIS, 3, "complete", None),
+        (
+            STEP_CITATION_VERIFICATION,
+            4,
+            "failed",
+            "Generated lesson citations did not match source content.",
+        ),
+    ]
 
 
 def test_synthesis_failure_marks_run_failed_at_synthesis_step(
@@ -232,6 +255,14 @@ def test_synthesis_failure_marks_run_failed_at_synthesis_step(
     run = _run_row(pg_clean, int(lesson["id"]))
     assert run["status"] == "failed"
     assert run["failed_step"] == STEP_SYNTHESIS
+    assert run["error"] == "Generated lesson detail was malformed."
+
+    steps = _step_rows(pg_clean, int(run["id"]))
+    assert [(step["step"], step["ordinal"], step["status"], step["error"]) for step in steps] == [
+        (STEP_FETCH, 1, "complete", None),
+        (STEP_EXTRACTION, 2, "complete", None),
+        (STEP_SYNTHESIS, 3, "failed", "Generated lesson detail was malformed."),
+    ]
 
 
 def test_admin_run_summary_returns_recent_runs_with_steps(
