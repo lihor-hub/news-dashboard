@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
-from unittest.mock import ANY, MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 from fastapi.testclient import TestClient
 
-from news_dashboard.ai_client import ManagedPrompt
 from news_dashboard.auth import create_user, require_auth
 from news_dashboard.body_fetch import get_article
 from news_dashboard.db import connect
@@ -528,6 +527,8 @@ def test_generate_share_context_no_api_key(db: str, monkeypatch: pytest.MonkeyPa
 
 
 def test_generate_share_context_stores_summary(db: str, monkeypatch: pytest.MonkeyPatch) -> None:
+    from langchain_core.callbacks import BaseCallbackHandler
+
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")
 
     alice = _make_user(db, "alice")
@@ -537,40 +538,31 @@ def test_generate_share_context_stores_summary(db: str, monkeypatch: pytest.Monk
     share_id = int(share["id"])
     add_annotation(share_id, highlighted_text="the key section", note="this is relevant")
 
-    mock_completion = MagicMock()
     summary = "Alice highlighted this because it matters. You will find it useful."
-    mock_completion.choices[0].message.content = summary
 
-    managed_prompt = ManagedPrompt(text="compiled share context")
+    callback = BaseCallbackHandler()
     with (
-        patch("news_dashboard.ai_client.get_openai_client") as mock_client_factory,
-        patch("news_dashboard.ai_client.chat_create", return_value=mock_completion) as chat_create,
-        patch("news_dashboard.ai_client.get_prompt", return_value=managed_prompt) as get_prompt,
+        patch("news_dashboard.ai_client.get_chat_model") as get_model,
+        patch("news_dashboard.ai_client.langfuse_enabled", return_value=True),
+        patch("langfuse.langchain.CallbackHandler", return_value=callback),
+        patch("langfuse.propagate_attributes") as attributes,
     ):
-        mock_client_factory.return_value = MagicMock()
+        from langchain_core.messages import AIMessage
+
+        get_model.return_value.invoke.return_value = AIMessage(content=summary)
         result = generate_share_context(share_id)
 
     assert result == summary
+    assert get_model.call_args.kwargs["max_tokens"] == 120
+    assert get_model.call_args.kwargs["temperature"] == 0.7
+    assert callback in get_model.return_value.invoke.call_args.kwargs["config"]["callbacks"]
+    attributes.assert_called_once_with(
+        user_id=str(alice), tags=["shares"], trace_name="share-context"
+    )
 
     detail = get_share(share_id, bob)
     assert detail is not None
     assert detail["context_summary"] == result
-    variables = get_prompt.call_args.kwargs["variables"]
-    get_prompt.assert_called_once_with(
-        "share-context",
-        fallback=ANY,
-        label="production",
-        prompt_type="text",
-        variables=variables,
-    )
-    assert variables == {
-        "article_title": "Article 1",
-        "article_summary": "",
-        "sender_note": "(none)",
-        "annotation_text": '- "the key section": this is relevant',
-        "recipient_interests": "general news",
-    }
-    assert chat_create.call_args.kwargs["prompt"] is managed_prompt
 
 
 # ── Payload bounds (#602) ─────────────────────────────────────────────────────

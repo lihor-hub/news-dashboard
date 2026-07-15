@@ -5,6 +5,7 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
+from langchain_core.messages import AIMessage
 
 from news_dashboard.ai_client import (
     ManagedPrompt,
@@ -13,11 +14,13 @@ from news_dashboard.ai_client import (
     chat_create,
     create_score,
     flush,
+    get_chat_model,
     get_openai_client,
     get_prompt,
     get_trace_url,
     langfuse_enabled,
     observe,
+    response_text,
     trace_params,
 )
 
@@ -216,6 +219,46 @@ def test_get_prompt_uses_fallback_when_disabled() -> None:
     assert prompt.messages is None
     # No Langfuse prompt object to link against in fallback mode.
     assert prompt.langfuse_prompt is None
+
+
+def test_get_prompt_fetches_production_label_and_keeps_version_link(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from news_dashboard import ai_client
+
+    remote = MagicMock(is_fallback=False, version=7)
+    remote.compile.return_value = "Managed prompt"
+    client = MagicMock()
+    client.get_prompt.return_value = remote
+    monkeypatch.setattr(ai_client, "langfuse_enabled", lambda: True)
+    monkeypatch.setattr(ai_client, "_client", lambda: client)
+
+    prompt = get_prompt("managed-prompt", fallback="Fallback")
+
+    client.get_prompt.assert_called_once_with(
+        "managed-prompt", label="production", type="text", fallback="Fallback"
+    )
+    assert prompt.langfuse_prompt is remote
+
+
+def test_get_prompt_can_fetch_an_exact_version_without_a_label(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from news_dashboard import ai_client
+
+    remote = MagicMock(is_fallback=False, version=4)
+    remote.compile.return_value = "Versioned prompt"
+    client = MagicMock()
+    client.get_prompt.return_value = remote
+    monkeypatch.setattr(ai_client, "langfuse_enabled", lambda: True)
+    monkeypatch.setattr(ai_client, "_client", lambda: client)
+
+    prompt = get_prompt("managed-prompt", fallback="Fallback", version=4)
+
+    client.get_prompt.assert_called_once_with(
+        "managed-prompt", version=4, type="text", fallback="Fallback"
+    )
+    assert prompt.langfuse_prompt is remote
 
 
 @pytest.mark.usefixtures("_no_langfuse")
@@ -487,6 +530,144 @@ def _ok_client(result: object) -> MagicMock:
 def _clear_ai_env(monkeypatch: pytest.MonkeyPatch) -> None:
     for var in ("FREE_LLM_API_KEY", "FREE_LLM_BASE_URL", "OPENAI_API_KEY", "OPENAI_BASE_URL"):
         monkeypatch.delenv(var, raising=False)
+
+
+@pytest.mark.usefixtures("_no_langfuse")
+def test_get_chat_model_forwards_provider_model_and_timeout(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from unittest.mock import patch
+
+    monkeypatch.setenv("AI_REQUEST_TIMEOUT_SECONDS", "12.5")
+
+    with patch("langchain_openai.ChatOpenAI", return_value=MagicMock()) as constructor:
+        get_chat_model(
+            api_key="free-key",
+            base_url="http://gateway:9130/v1",
+            model="free-model",
+        )
+
+    assert constructor.call_args.kwargs == {
+        "api_key": "free-key",
+        "base_url": "http://gateway:9130/v1",
+        "model": "free-model",
+        "timeout": 12.5,
+    }
+
+
+def test_response_text_accepts_string_content() -> None:
+    assert response_text(AIMessage(content="answer")) == "answer"
+
+
+def test_response_text_rejects_unsupported_block_content() -> None:
+    with pytest.raises(TypeError, match="string content"):
+        response_text(AIMessage(content=[{"type": "text", "text": "answer"}]))
+
+
+@pytest.mark.usefixtures("_no_langfuse")
+def test_get_chat_model_preserves_free_provider_fallback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from unittest.mock import patch
+
+    from langchain_core.runnables import RunnableLambda
+    from openai import OpenAIError
+
+    _clear_ai_env(monkeypatch)
+    monkeypatch.setenv("OPENAI_API_KEY", "oa-key")
+
+    class _UpstreamError(OpenAIError):
+        pass
+
+    def fail_primary(_input: object) -> AIMessage:
+        message = "gateway down"
+        raise _UpstreamError(message)
+
+    primary = RunnableLambda(fail_primary)
+    fallback: RunnableLambda[str, AIMessage] = RunnableLambda(
+        lambda _input: AIMessage(content="fallback-result")
+    )
+
+    with patch("langchain_openai.ChatOpenAI", side_effect=[primary, fallback]) as constructor:
+        model = get_chat_model(
+            api_key="free-key",
+            base_url="http://gateway:9130/v1",
+            model="shared-model",
+        )
+        result = model.invoke("hello")
+
+    assert response_text(result) == "fallback-result"
+    assert constructor.call_args_list[1].kwargs == {
+        "api_key": "oa-key",
+        "model": "shared-model",
+        "timeout": 30.0,
+    }
+
+
+@pytest.mark.usefixtures("_no_langfuse")
+def test_get_chat_model_preserves_generation_settings_on_lazy_fallback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from unittest.mock import patch
+
+    from langchain_core.runnables import RunnableLambda
+    from openai import OpenAIError
+
+    _clear_ai_env(monkeypatch)
+    monkeypatch.setenv("OPENAI_API_KEY", "oa-key")
+
+    primary = RunnableLambda(lambda _input: (_ for _ in ()).throw(OpenAIError("gateway down")))
+    fallback: RunnableLambda[str, AIMessage] = RunnableLambda(
+        lambda _input: AIMessage(content="fallback-result")
+    )
+
+    with patch("langchain_openai.ChatOpenAI", side_effect=[primary, fallback]) as constructor:
+        model = get_chat_model(
+            api_key="free-key",
+            base_url="http://gateway:9130/v1",
+            model="shared-model",
+            max_tokens=60,
+            temperature=0.3,
+            response_format={"type": "json_object"},
+        )
+        result = model.invoke("hello")
+
+    assert response_text(result) == "fallback-result"
+    assert constructor.call_args_list[0].kwargs["max_tokens"] == 60
+    assert constructor.call_args_list[0].kwargs["temperature"] == 0.3
+    assert constructor.call_args_list[1].kwargs["max_tokens"] == 60
+    assert constructor.call_args_list[1].kwargs["temperature"] == 0.3
+    assert constructor.call_args_list[0].kwargs["model_kwargs"] == {
+        "response_format": {"type": "json_object"}
+    }
+    assert constructor.call_args_list[1].kwargs["model_kwargs"] == {
+        "response_format": {"type": "json_object"}
+    }
+
+
+@pytest.mark.usefixtures("_no_langfuse")
+def test_get_chat_model_does_not_construct_fallback_for_healthy_primary(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from unittest.mock import patch
+
+    from langchain_core.runnables import RunnableLambda
+
+    _clear_ai_env(monkeypatch)
+    monkeypatch.setenv("OPENAI_API_KEY", "invalid-unused-key")
+    primary: RunnableLambda[str, AIMessage] = RunnableLambda(
+        lambda _input: AIMessage(content="primary-result")
+    )
+
+    with patch(
+        "langchain_openai.ChatOpenAI",
+        side_effect=[primary, RuntimeError("fallback constructed eagerly")],
+    ) as constructor:
+        model = get_chat_model(api_key="free-key", base_url=None, model="shared-model")
+        result = model.invoke("hello")
+
+    assert response_text(result) == "primary-result"
+    assert constructor.call_count == 1
 
 
 @pytest.mark.usefixtures("_no_langfuse")

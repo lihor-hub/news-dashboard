@@ -4,12 +4,11 @@ from __future__ import annotations
 
 from collections.abc import Generator
 from typing import Any
-from unittest.mock import ANY, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
 
-from news_dashboard.ai_client import ManagedPrompt
 from news_dashboard.db import POSTGRES_MULTIUSER_SCHEMA, init_db
 from news_dashboard.main import app
 from news_dashboard.push import (
@@ -682,61 +681,76 @@ def _make_briefing(
 
 
 def test_generate_push_hook_returns_llm_hook(monkeypatch: pytest.MonkeyPatch) -> None:
+    from langchain_core.callbacks import BaseCallbackHandler
+    from langchain_core.messages import AIMessage
+
     monkeypatch.setenv("FREE_LLM_API_KEY", "fake-key")
+    monkeypatch.setenv("OPENAI_FREE_MODEL", "gpt-4o-mini")
+    monkeypatch.setenv("OPENAI_BRIEFING_MODEL", "gpt-4o-mini")
 
     hook_text = "Claude 4 drops; markets soar — your brief awaits"
-    mock_client = MagicMock()
-    mock_client.chat.completions.create.return_value = MagicMock(
-        choices=[MagicMock(message=MagicMock(content=hook_text))]
-    )
+    model = MagicMock()
+    model.invoke.return_value = AIMessage(content=hook_text)
+    callback = BaseCallbackHandler()
 
     with (
-        patch("news_dashboard.ai_client.get_chat_client", return_value=mock_client),
+        patch("news_dashboard.ai_client.get_chat_model", return_value=model) as get_model,
         patch("news_dashboard.ai_client.free_llm_config", return_value=("fake-key", None)),
+        patch("news_dashboard.ai_client.langfuse_enabled", return_value=True),
+        patch("langfuse.langchain.CallbackHandler", return_value=callback),
+        patch("langfuse.propagate_attributes") as attributes,
     ):
         result = generate_push_hook(_make_briefing())
 
     assert result == hook_text
-    mock_client.chat.completions.create.assert_called_once()
-    call_kwargs = mock_client.chat.completions.create.call_args.kwargs
-    assert call_kwargs["max_tokens"] == 40
-    assert "Claude 4 released" in call_kwargs["messages"][0]["content"]
+    assert get_model.call_args.kwargs == {
+        "api_key": "fake-key",
+        "base_url": None,
+        "model": "gpt-4o-mini",
+        "max_tokens": 40,
+        "temperature": 0.7,
+    }
+    assert callback in model.invoke.call_args.kwargs["config"]["callbacks"]
+    attributes.assert_called_once_with(tags=["push"], trace_name="push-hook")
 
 
-def test_generate_recap_push_hook_resolves_bounded_prompt_variables(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setenv("FREE_LLM_API_KEY", "fake-key")
-    completion = MagicMock(choices=[MagicMock(message=MagicMock(content="Keep reading"))])
-    managed_prompt = ManagedPrompt(text="compiled recap prompt")
+def test_generate_recap_push_hook_uses_langchain_settings_and_trace_config() -> None:
+    from langchain_core.callbacks import BaseCallbackHandler
+    from langchain_core.messages import AIMessage
+
+    model = MagicMock()
+    model.invoke.return_value = AIMessage(content="Seven thoughtful reads made your week")
+    callback = BaseCallbackHandler()
+    recap = {
+        "articles_read": 7,
+        "categories": [{"category": "AI"}],
+        "current_streak_days": 3,
+    }
+
     with (
-        patch("news_dashboard.ai_client.get_chat_client", return_value=MagicMock()),
-        patch("news_dashboard.ai_client.chat_create", return_value=completion) as chat_create,
+        patch("news_dashboard.ai_client.get_chat_model", return_value=model) as get_model,
         patch("news_dashboard.ai_client.free_llm_config", return_value=("fake-key", None)),
-        patch("news_dashboard.ai_client.get_prompt", return_value=managed_prompt) as get_prompt,
+        patch("news_dashboard.ai_client.langfuse_enabled", return_value=True),
+        patch("langfuse.langchain.CallbackHandler", return_value=callback),
+        patch("langfuse.propagate_attributes") as attributes,
     ):
-        generate_recap_push_hook(
-            {"articles_read": 7, "categories": [{"category": "science"}], "current_streak_days": 4}
-        )
+        result = generate_recap_push_hook(recap)
 
-    get_prompt.assert_called_once_with(
-        "recap-push-hook",
-        fallback=ANY,
-        label="production",
-        prompt_type="text",
-        variables={"articles_read": 7, "top_category": "science", "current_streak_days": 4},
-    )
-    assert chat_create.call_args.kwargs["prompt"] is managed_prompt
+    assert result == "Seven thoughtful reads made your week"
+    assert get_model.call_args.kwargs["max_tokens"] == 40
+    assert get_model.call_args.kwargs["temperature"] == 0.7
+    assert callback in model.invoke.call_args.kwargs["config"]["callbacks"]
+    attributes.assert_called_once_with(tags=["push", "recap"], trace_name="recap-push-hook")
 
 
 def test_generate_push_hook_falls_back_on_llm_error(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("FREE_LLM_API_KEY", "fake-key")
 
-    mock_client = MagicMock()
-    mock_client.chat.completions.create.side_effect = RuntimeError("LLM unavailable")
-
     with (
-        patch("news_dashboard.ai_client.get_chat_client", return_value=mock_client),
+        patch(
+            "news_dashboard.ai_client.get_chat_model",
+            side_effect=RuntimeError("LLM unavailable"),
+        ),
         patch("news_dashboard.ai_client.free_llm_config", return_value=("fake-key", None)),
     ):
         result = generate_push_hook(_make_briefing(title="Morning Brief"))
@@ -762,15 +776,18 @@ def test_generate_push_hook_fallback_no_title() -> None:
 
 
 def test_generate_push_hook_uses_section_titles_in_prompt(monkeypatch: pytest.MonkeyPatch) -> None:
+    from langchain_core.messages import AIMessage
+    from langchain_core.runnables import RunnableLambda
+
     monkeypatch.setenv("FREE_LLM_API_KEY", "fake-key")
 
-    mock_client = MagicMock()
-    completion = MagicMock(
-        choices=[MagicMock(message=MagicMock(content="Breaking: AI takes over coding"))]
-    )
-    managed_prompt = ManagedPrompt(
-        text="- AI milestone achieved\n- Economy grows 3%\n- Sports finals tonight"
-    )
+    captured_prompt: list[str] = []
+
+    def fake_invoke(messages: Any) -> AIMessage:
+        captured_prompt.append(messages[0]["content"])
+        return AIMessage(content="Breaking: AI takes over coding")
+
+    model: RunnableLambda[Any, AIMessage] = RunnableLambda(fake_invoke)
 
     sections = [
         {"title": "AI milestone achieved", "body": "", "citations": []},
@@ -780,25 +797,13 @@ def test_generate_push_hook_uses_section_titles_in_prompt(monkeypatch: pytest.Mo
     ]
 
     with (
-        patch("news_dashboard.ai_client.get_chat_client", return_value=mock_client),
-        patch("news_dashboard.ai_client.chat_create", return_value=completion) as chat_create,
+        patch("news_dashboard.ai_client.get_chat_model", return_value=model),
         patch("news_dashboard.ai_client.free_llm_config", return_value=("fake-key", None)),
-        patch("news_dashboard.ai_client.get_prompt", return_value=managed_prompt) as get_prompt,
     ):
         generate_push_hook(_make_briefing(sections=sections))
 
-    prompt = chat_create.call_args.kwargs["messages"][0]["content"]
+    prompt = captured_prompt[0]
     assert "AI milestone achieved" in prompt
     assert "Economy grows 3%" in prompt
     assert "Sports finals tonight" in prompt
     assert "This one should be excluded" not in prompt
-    get_prompt.assert_called_once_with(
-        "briefing-push-hook",
-        fallback=ANY,
-        label="production",
-        prompt_type="text",
-        variables={
-            "headline_block": "- AI milestone achieved\n- Economy grows 3%\n- Sports finals tonight"
-        },
-    )
-    assert chat_create.call_args.kwargs["prompt"] is managed_prompt

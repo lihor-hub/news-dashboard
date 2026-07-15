@@ -17,7 +17,6 @@ from typing import Any
 
 from news_dashboard.article_visibility import get_visible_article_row
 from news_dashboard.db import connect, init_db, row_to_dict
-from news_dashboard.prompt_catalog import get_chat_prompt, get_text_prompt
 from news_dashboard.scraper import TIMEOUT_SECS, USER_AGENT
 from news_dashboard.url_safety import (
     UnsafeUrlError,
@@ -32,8 +31,10 @@ _AI_HTML_LIMIT = 15_000
 # to tolerate multi-byte charsets while still bounding worst-case memory/network use.
 _AI_FETCH_BYTE_CAP = 200_000
 _AI_MODEL = "gpt-4o-mini"
-_AI_PROMPT = get_text_prompt("ai-body-fetch")
-_TRANSLATE_BODY_PROMPT = get_chat_prompt("translate-body")
+_AI_PROMPT = (
+    "Extract the main article text from this HTML. "
+    "Return only the article body as plain text, no HTML tags.\n\n{{html}}"
+)
 
 
 def _fetch_capped_html(url: str, *, byte_cap: int) -> str:
@@ -90,27 +91,43 @@ def _ai_extract_body(url: str, *, user_id: int | None = None) -> tuple[str, str]
         return "", "error"
 
     try:
-        from news_dashboard.ai_client import chat_create, get_chat_client, get_prompt
+        from langchain_core.messages import HumanMessage
+        from langchain_core.prompt_values import ChatPromptValue
+        from langfuse import propagate_attributes
 
-        client = get_chat_client(api_key=api_key, base_url=base_url)
+        from news_dashboard.ai_client import (
+            get_chat_model,
+            get_prompt,
+            langfuse_enabled,
+            response_text,
+        )
+
+        chat_model = get_chat_model(
+            api_key=api_key, base_url=base_url, model=model, max_tokens=2048
+        )
         prompt = get_prompt(
             "ai-body-fetch",
-            fallback=get_text_prompt("ai-body-fetch"),
+            fallback=_AI_PROMPT,
             prompt_type="text",
             label="production",
             variables={"html": html},
         )
-        result = chat_create(
-            client,
-            name="ai-body-fetch",
+        callbacks: list[Any] = []
+        if langfuse_enabled():
+            from langfuse.langchain import CallbackHandler
+
+            callbacks.append(CallbackHandler())
+        with propagate_attributes(
+            user_id=str(user_id) if user_id is not None else None,
             tags=["body-fetch"],
-            user_id=user_id,
-            prompt=prompt,
-            model=model,
-            messages=[{"role": "user", "content": prompt.text}],
-            max_tokens=2048,
-        )
-        text = (result.choices[0].message.content or "").strip()
+            trace_name="ai-body-fetch",
+            prompt=prompt.langfuse_prompt,
+        ):
+            result = chat_model.invoke(
+                ChatPromptValue(messages=[HumanMessage(content=prompt.text)]),
+                config={"callbacks": callbacks},
+            )
+        text = response_text(result).strip()
         if not text:
             return "", "error"
         logger.info("ai_body_fetch: AI extraction succeeded for %r", url)
@@ -468,28 +485,36 @@ def translate_body(body: str, from_lang: str) -> str:
         return body
 
     try:
-        from news_dashboard.ai_client import chat_create, get_chat_client, get_prompt
+        from langchain_core.messages import SystemMessage
+        from langchain_core.prompts import ChatPromptTemplate
+        from langfuse import propagate_attributes
 
-        client = get_chat_client(api_key=api_key, base_url=base_url)
-        prompt = get_prompt(
-            "translate-body",
-            fallback=get_chat_prompt("translate-body"),
-            prompt_type="chat",
-            label="production",
-            variables={"from_lang": from_lang, "body": body},
+        from news_dashboard.ai_client import get_chat_model, langfuse_enabled, response_text
+
+        prompt = (
+            f"You are a translation assistant. Translate the following body text from "
+            f"language code '{from_lang}' to English. Return only the translated plain text, "
+            f"preserving paragraph breaks, and no additional commentary."
         )
 
-        result = chat_create(
-            client,
-            name="translate-body",
-            tags=["translation"],
-            prompt=prompt,
+        chat_model = get_chat_model(
+            api_key=api_key,
+            base_url=base_url,
             model="gpt-4o-mini",
-            messages=prompt.messages,
             max_tokens=2048,
             temperature=0.0,
         )
-        translated = (result.choices[0].message.content or "").strip()
+        callbacks: list[Any] = []
+        if langfuse_enabled():
+            from langfuse.langchain import CallbackHandler
+
+            callbacks.append(CallbackHandler())
+        template = ChatPromptTemplate.from_messages(
+            [SystemMessage(content=prompt), ("human", "{body}")]
+        )
+        with propagate_attributes(tags=["translation"], trace_name="translate-body"):
+            result = (template | chat_model).invoke({"body": body}, config={"callbacks": callbacks})
+        translated = response_text(result).strip()
         if translated:
             return translated
     except Exception as exc:

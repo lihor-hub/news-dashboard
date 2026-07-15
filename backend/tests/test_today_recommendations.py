@@ -10,7 +10,71 @@ from news_dashboard.auth import require_auth
 from news_dashboard.db import connect, init_db
 from news_dashboard.ingest.service import sync_sources
 from news_dashboard.main import app
-from news_dashboard.recommendations import upsert_recommendation_score
+from news_dashboard.recommendations import (
+    generate_recommendation_explanation,
+    upsert_recommendation_score,
+)
+
+
+def test_generate_recommendation_explanation_invokes_langchain(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from unittest.mock import MagicMock, patch
+
+    from langchain_core.messages import AIMessage
+    from langchain_core.runnables import RunnableLambda
+
+    connection = MagicMock()
+    connection.execute.side_effect = [
+        MagicMock(
+            fetchone=MagicMock(
+                return_value={
+                    "title": "New compiler",
+                    "category": "python",
+                    "tags": "compiler",
+                    "source_name": "Python News",
+                }
+            )
+        ),
+        MagicMock(
+            fetchall=MagicMock(
+                return_value=[
+                    {
+                        "title": "Earlier compiler",
+                        "category": "python",
+                        "source_name": "Python News",
+                        "tags": "compiler",
+                        "starred": True,
+                    }
+                ]
+            )
+        ),
+    ]
+    context = MagicMock()
+    context.__enter__.return_value = connection
+    context.__exit__.return_value = False
+    model: RunnableLambda[Any, AIMessage] = RunnableLambda(
+        lambda _messages: AIMessage(content="Matches your compiler reading.")
+    )
+
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
+    monkeypatch.setenv("OPENAI_BRIEFING_MODEL", "gpt-4o-mini")
+    with (
+        patch("news_dashboard.recommendations.init_db"),
+        patch("news_dashboard.recommendations.connect", return_value=context),
+        patch("news_dashboard.ai_client.get_chat_model", return_value=model) as factory,
+    ):
+        result = generate_recommendation_explanation(7, 11)
+
+    assert result == "Matches your compiler reading."
+    factory.assert_called_once_with(
+        api_key="sk-test",
+        base_url=None,
+        model="gpt-4o-mini",
+        max_tokens=60,
+        temperature=0.3,
+    )
+
 
 pytestmark = pytest.mark.postgres
 

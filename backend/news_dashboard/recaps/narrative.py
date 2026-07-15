@@ -7,8 +7,6 @@ import logging
 import os
 from typing import Any
 
-from news_dashboard.prompt_catalog import get_text_prompt
-
 logger = logging.getLogger(__name__)
 
 
@@ -40,42 +38,55 @@ def generate_recap_narrative(recap: dict[str, Any]) -> str:
     fallback = _fallback_narrative(recap)
 
     try:
+        from langchain_core.prompts import ChatPromptTemplate
+        from langfuse import propagate_attributes
+
         from news_dashboard.ai_client import (
-            chat_create,
             free_llm_config,
-            get_chat_client,
-            get_prompt,
+            get_chat_model,
+            langfuse_enabled,
+            response_text,
         )
 
         api_key, base_url = free_llm_config()
         if not api_key:
             return fallback
 
-        client = get_chat_client(api_key=api_key, base_url=base_url)
         model = os.getenv("OPENAI_BRIEFING_MODEL", "gpt-4o-mini")
 
         metrics = {k: v for k, v in recap.items() if k != "generated_at"}
 
-        recap_json = json.dumps(metrics, default=str)
-        prompt = get_prompt(
-            "weekly-recap-narrative",
-            label="production",
-            prompt_type="text",
-            fallback=get_text_prompt("weekly-recap-narrative"),
-            variables={"recap_json": recap_json},
+        prompt = (
+            "Write a weekly reading review in the voice of 'here's your week in "
+            "reading', addressed directly to the reader (second person). "
+            "Write exactly 2 short paragraphs, roughly 60-120 words total. "
+            "Ground everything strictly in the metrics below — do not invent "
+            "facts, activity, or numbers that are not present in the data. "
+            "If 'saved' or 'dwell' data is present, mention their reading "
+            "backlog and skim-vs-read balance.\n\n"
+            f"Recap metrics (JSON):\n{json.dumps(metrics, default=str)}\n\n"
+            "Reply with only the narrative text, as plain paragraphs separated "
+            "by a blank line."
         )
 
-        response = chat_create(
-            client,
-            name="weekly-recap-narrative",
-            tags=["recap"],
-            prompt=prompt,
+        chat_model = get_chat_model(
+            api_key=api_key,
+            base_url=base_url,
             model=model,
-            messages=[{"role": "user", "content": prompt.text}],
             max_tokens=300,
             temperature=0.7,
         )
-        narrative = (response.choices[0].message.content or "").strip()
+        template = ChatPromptTemplate.from_messages([("human", "{prompt}")])
+        callbacks: list[Any] = []
+        if langfuse_enabled():
+            from langfuse.langchain import CallbackHandler
+
+            callbacks.append(CallbackHandler())
+        with propagate_attributes(tags=["recap", "narrative"], trace_name="recap-narrative"):
+            response = (template | chat_model).invoke(
+                {"prompt": prompt}, config={"callbacks": callbacks}
+            )
+        narrative = response_text(response).strip()
         if narrative:
             return narrative
     except Exception:

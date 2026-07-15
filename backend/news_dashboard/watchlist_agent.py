@@ -137,28 +137,38 @@ def ai_match(
         return None
     api_key, base_url, model = config
     try:
-        from news_dashboard.ai_client import chat_create, get_chat_client, get_prompt
+        from langchain_core.prompts import ChatPromptTemplate
+        from langfuse import propagate_attributes
 
-        client = get_chat_client(api_key=api_key, base_url=base_url)
+        from news_dashboard.ai_client import (
+            get_chat_model,
+            get_prompt,
+            langfuse_enabled,
+            response_text,
+        )
+
         prompt = get_prompt("watchlist-match", fallback=_AI_JUDGE_PROMPT)
         text = _article_text(article)[:_AI_MAX_ARTICLE_CHARS]
-        result = chat_create(
-            client,
-            name="watchlist-match",
-            tags=["watchlist"],
-            user_id=user_id,
-            prompt=prompt,
-            model=model,
-            messages=[
-                {
-                    "role": "user",
-                    "content": f"{prompt.text}\n\nWatchlist: {query}\n\nArticle:\n{text}",
-                }
-            ],
-            max_tokens=150,
+        chat_model = get_chat_model(api_key=api_key, base_url=base_url, model=model, max_tokens=150)
+        callbacks: list[Any] = []
+        if langfuse_enabled():
+            from langfuse.langchain import CallbackHandler
+
+            callbacks.append(CallbackHandler())
+        template = ChatPromptTemplate.from_messages(
+            [("human", "{instruction}\n\nWatchlist: {query}\n\nArticle:\n{text}")]
         )
-        response_text = result.choices[0].message.content or ""
-        return _parse_ai_response(response_text)
+        with propagate_attributes(
+            user_id=str(user_id) if user_id is not None else None,
+            tags=["watchlist"],
+            trace_name="watchlist-match",
+            prompt=prompt.langfuse_prompt,
+        ):
+            result = (template | chat_model).invoke(
+                {"instruction": prompt.text, "query": query, "text": text},
+                config={"callbacks": callbacks},
+            )
+        return _parse_ai_response(response_text(result))
     except Exception:
         logger.exception("AI watchlist match failed for query=%r", query)
         return None

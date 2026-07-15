@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import re
+from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from typing import Any, ClassVar
@@ -719,7 +720,14 @@ class _FakeOpenAI:
 def _patch_openai(monkeypatch: pytest.MonkeyPatch, content: str) -> type[_FakeOpenAI]:
     monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
     cls = type("Patched", (_FakeOpenAI,), {"content": content})
-    monkeypatch.setattr("openai.OpenAI", cls)
+    from langchain_core.messages import AIMessage
+    from langchain_core.runnables import RunnableLambda
+
+    def factory(**kwargs: Any) -> Any:
+        _FakeOpenAI.last_kwargs = kwargs
+        return RunnableLambda(lambda _prompt, **_kwargs: AIMessage(content=content))
+
+    monkeypatch.setattr("news_dashboard.ai_client.get_chat_model", factory)
     return cls
 
 
@@ -727,21 +735,21 @@ def test_call_openai_uses_default_base_url_when_unset(monkeypatch: pytest.Monkey
     monkeypatch.delenv("OPENAI_BASE_URL", raising=False)
     monkeypatch.delenv("FREE_LLM_BASE_URL", raising=False)
     monkeypatch.delenv("FREE_LLM_API_KEY", raising=False)
-    cls = _patch_openai(monkeypatch, "{}")
+    _patch_openai(monkeypatch, "{}")
     _call_openai([{"id": 1, "title": "A"}], model="gpt-x")
-    assert cls.last_kwargs["api_key"] == "sk-test"
+    assert _FakeOpenAI.last_kwargs["api_key"] == "sk-test"
     # The client factory omits base_url entirely when none is configured
     # (equivalent to the OpenAI SDK default).
-    assert cls.last_kwargs.get("base_url") is None
+    assert _FakeOpenAI.last_kwargs.get("base_url") is None
 
 
 def test_call_openai_uses_free_llm_endpoint_override(monkeypatch: pytest.MonkeyPatch) -> None:
-    cls = _patch_openai(monkeypatch, "{}")
+    _patch_openai(monkeypatch, "{}")
     monkeypatch.setenv("FREE_LLM_API_KEY", "freellmapi-key")
     monkeypatch.setenv("FREE_LLM_BASE_URL", "http://127.0.0.1:9130/v1")
     _call_openai([{"id": 1, "title": "A"}], model="auto")
-    assert cls.last_kwargs["api_key"] == "freellmapi-key"
-    assert cls.last_kwargs["base_url"] == "http://127.0.0.1:9130/v1"
+    assert _FakeOpenAI.last_kwargs["api_key"] == "freellmapi-key"
+    assert _FakeOpenAI.last_kwargs["base_url"] == "http://127.0.0.1:9130/v1"
 
 
 def test_call_openai_parses_valid_json(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -788,18 +796,76 @@ def test_call_openai_wraps_upstream_error(monkeypatch: pytest.MonkeyPatch) -> No
 
     monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
     monkeypatch.setenv("FREE_LLM_BASE_URL", "http://192.168.0.75:9130/v1")
-    cls = type(
-        "Patched",
-        (_FakeOpenAI,),
-        {
-            "__init__": lambda self, **_kw: setattr(
-                self, "chat", SimpleNamespace(completions=SimpleNamespace(create=_raise))
-            )
-        },
+    from langchain_core.runnables import RunnableLambda
+
+    monkeypatch.setattr(
+        "news_dashboard.ai_client.get_chat_model",
+        lambda **_kwargs: RunnableLambda(lambda _prompt, **_kwargs: _raise()),
     )
-    monkeypatch.setattr("openai.OpenAI", cls)
     with pytest.raises(BriefingGenerationError, match=re.escape("192.168.0.75:9130")):
         _call_openai([{"id": 1, "title": "A"}], model="auto")
+
+
+def test_call_openai_preserves_settings_callback_prompt_linkage_and_root_trace(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from contextlib import contextmanager
+    from unittest.mock import patch
+
+    from langchain_core.callbacks import BaseCallbackHandler
+    from langchain_core.messages import AIMessage
+    from langchain_core.runnables import RunnableLambda
+
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
+    callback = BaseCallbackHandler()
+    managed_prompt = object()
+    captured: dict[str, Any] = {}
+    trace = SimpleNamespace(trace_id="trace-123", update_output=lambda _output: None)
+
+    def invoke(prompt: Any, config: Any) -> AIMessage:
+        captured.update(prompt=prompt, config=config)
+        return AIMessage(content='{"title": "T", "sections": []}')
+
+    def factory(**kwargs: Any) -> Any:
+        captured["factory"] = kwargs
+        return RunnableLambda(invoke)
+
+    @contextmanager
+    def observe(name: str, **kwargs: Any) -> Any:
+        captured.update(root_name=name, root_kwargs=kwargs)
+        yield trace
+
+    monkeypatch.setattr("news_dashboard.ai_client.get_chat_model", factory)
+    monkeypatch.setattr(
+        "news_dashboard.ai_client.get_prompt",
+        lambda *_a, **_k: SimpleNamespace(
+            text="Use {literal} braces", langfuse_prompt=managed_prompt
+        ),
+    )
+    monkeypatch.setattr("news_dashboard.ai_client.langfuse_enabled", lambda: True)
+    monkeypatch.setattr("news_dashboard.ai_client.observe", observe)
+    monkeypatch.setattr("langfuse.langchain.CallbackHandler", lambda: callback)
+
+    with patch("langfuse.propagate_attributes") as attributes:
+        result = _call_openai([{"id": 1, "title": "A"}], model="briefing-model", user_id=7)
+
+    assert captured["factory"] == {
+        "api_key": "sk-test",
+        "base_url": None,
+        "model": "briefing-model",
+        "max_tokens": 2048,
+        "response_format": {"type": "json_object"},
+    }
+    assert callback in captured["config"]["callbacks"].handlers
+    assert "Use {literal} braces" in captured["prompt"].messages[0].content
+    attributes.assert_called_once_with(
+        user_id="7",
+        tags=["briefing"],
+        trace_name="briefing-generation",
+        prompt=managed_prompt,
+    )
+    assert captured["root_name"] == "briefing-generation"
+    assert result["_trace_id"] == "trace-123"
 
 
 # ── generate_briefing (end-to-end with fake AI) ───────────────────────────────
@@ -1198,21 +1264,23 @@ def test_call_openai_includes_focus_prompt_in_system_instruction(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
-    captured_messages = []
+    captured_messages: list[Any] = []
 
-    def _mock_chat_create(*args: Any, messages: list[dict[str, str]], **kwargs: Any) -> Any:
+    def _invoke(prompt: Any, **_kwargs: Any) -> Any:
         nonlocal captured_messages
-        captured_messages = messages
-        message = SimpleNamespace(content='{"title": "T", "sections": []}')
-        choice = SimpleNamespace(message=message)
-        return SimpleNamespace(choices=[choice])
+        captured_messages = prompt.messages
+        from langchain_core.messages import AIMessage
+
+        return AIMessage(content='{"title": "T", "sections": []}')
+
+    from langchain_core.runnables import RunnableLambda
 
     import news_dashboard.ai_client as ai_client_mod
 
-    monkeypatch.setattr(ai_client_mod, "chat_create", _mock_chat_create)
+    monkeypatch.setattr(ai_client_mod, "get_chat_model", lambda **_kwargs: RunnableLambda(_invoke))
 
     _call_openai([{"id": 1, "title": "A"}], model="gpt-x", focus_prompt="FUSION ENERGY")
-    assert any("FUSION ENERGY" in msg.get("content", "") for msg in captured_messages)
+    assert any("FUSION ENERGY" in str(msg.content) for msg in captured_messages)
 
 
 def test_generate_briefing_idempotency_respects_focus_prompt(pg_clean: str) -> None:
@@ -1353,6 +1421,77 @@ def test_generate_briefing_records_no_run_row_for_no_candidates(pg_clean: str) -
     run = row_to_dict(row)
     assert run["status"] == "complete"
     assert run["briefing_id"] is None
+
+
+def test_generate_briefing_compiles_graph_without_checkpointer(
+    pg_clean: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from langgraph.graph import StateGraph
+
+    compile_calls: list[dict[str, Any]] = []
+    original_compile = StateGraph.compile
+
+    def _compile_spy(self: StateGraph[Any], **kwargs: Any) -> Any:
+        compile_calls.append(kwargs)
+        return original_compile(self, **kwargs)
+
+    monkeypatch.setattr(StateGraph, "compile", _compile_spy)
+
+    assert generate_briefing(database_url=pg_clean, ai_fn=_fake_ai) == {"status": "no_candidates"}
+    assert compile_calls == [{}]
+
+
+def test_generate_briefing_propagates_run_session_and_user(
+    pg_clean: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import langfuse
+    import langfuse.langchain
+    from langchain_core.callbacks import BaseCallbackHandler
+    from langgraph.graph import StateGraph
+
+    _seed_source(pg_clean)
+    user_id = _seed_user(pg_clean, "graph-attribution-user")
+    _seed_article(pg_clean, url="https://example.com/graph-attribution", state="today")
+    propagated: list[dict[str, Any]] = []
+    invoke_configs: list[dict[str, Any]] = []
+    callback = BaseCallbackHandler()
+    original_compile = StateGraph.compile
+
+    def _compile_spy(graph: Any, **kwargs: Any) -> Any:
+        compiled = original_compile(graph, **kwargs)
+        original_invoke = compiled.invoke
+
+        def _invoke_spy(*args: Any, **invoke_kwargs: Any) -> Any:
+            invoke_configs.append(invoke_kwargs["config"])
+            return original_invoke(*args, **invoke_kwargs)
+
+        monkeypatch.setattr(compiled, "invoke", _invoke_spy)
+        return compiled
+
+    @contextmanager
+    def _propagate_spy(**kwargs: Any) -> Any:
+        propagated.append(kwargs)
+        yield
+
+    monkeypatch.setattr(langfuse, "propagate_attributes", _propagate_spy)
+    monkeypatch.setattr(StateGraph, "compile", _compile_spy)
+    monkeypatch.setattr(briefings_mod, "langfuse_enabled", lambda: True, raising=False)
+    monkeypatch.setattr("news_dashboard.ai_client.langfuse_enabled", lambda: True)
+    monkeypatch.setattr(langfuse.langchain, "CallbackHandler", lambda: callback)
+
+    result = generate_briefing(database_url=pg_clean, ai_fn=_fake_ai, user_id=user_id)
+    run = _fetch_agent_run(pg_clean, result["id"])
+
+    assert propagated == [
+        {
+            "user_id": str(user_id),
+            "session_id": f"briefing-run:{run['id']}",
+            "tags": ["briefing"],
+            "trace_name": "briefing-generation",
+        }
+    ]
+    assert invoke_configs[0]["callbacks"] == [callback]
+    assert invoke_configs[0]["callbacks"][0] is callback
 
 
 # ── reading-list "saved for later" section ────────────────────────────────────

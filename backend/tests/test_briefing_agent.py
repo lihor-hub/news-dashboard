@@ -15,11 +15,17 @@ from news_dashboard.briefing_agent import (
     STAGE_CANDIDATE_SELECTION,
     STAGE_CITATION_VERIFICATION,
     STAGE_DRAFTING,
+    STAGE_ORDER,
     STAGE_THEME_CLUSTERING,
     Theme,
     cluster_themes,
     flatten_themes,
     verify_citations,
+)
+from news_dashboard.briefings.service import (
+    BriefingNode,
+    BriefingState,
+    _compile_briefing_graph,
 )
 
 # ── cluster_themes / flatten_themes ───────────────────────────────────────────
@@ -133,8 +139,6 @@ def test_verify_citations_handles_missing_worth_opening() -> None:
 
 
 def test_stage_constants_cover_the_full_pipeline() -> None:
-    from news_dashboard.briefing_agent import STAGE_ORDER
-
     assert STAGE_ORDER == (
         STAGE_CANDIDATE_SELECTION,
         STAGE_THEME_CLUSTERING,
@@ -142,3 +146,68 @@ def test_stage_constants_cover_the_full_pipeline() -> None:
         STAGE_CITATION_VERIFICATION,
         STAGE_ASSEMBLY,
     )
+
+
+def test_briefing_graph_has_exact_pipeline_nodes_and_edges() -> None:
+    def _node(state: BriefingState) -> BriefingState:
+        return state
+
+    compiled = _compile_briefing_graph(dict.fromkeys(STAGE_ORDER, _node))
+    drawable = compiled.get_graph()
+
+    assert set(drawable.nodes) == {"__start__", *STAGE_ORDER, "__end__"}
+    assert {(edge.source, edge.target, edge.conditional) for edge in drawable.edges} == {
+        ("__start__", STAGE_CANDIDATE_SELECTION, False),
+        (STAGE_CANDIDATE_SELECTION, "__end__", True),
+        (STAGE_CANDIDATE_SELECTION, STAGE_THEME_CLUSTERING, True),
+        (STAGE_THEME_CLUSTERING, STAGE_DRAFTING, False),
+        (STAGE_DRAFTING, STAGE_CITATION_VERIFICATION, False),
+        (STAGE_CITATION_VERIFICATION, STAGE_ASSEMBLY, False),
+        (STAGE_ASSEMBLY, "__end__", False),
+    }
+
+
+def test_briefing_graph_no_candidates_routes_to_end_and_skips_downstream() -> None:
+    calls: list[str] = []
+
+    def _candidate_selection(_state: BriefingState) -> BriefingState:
+        calls.append(STAGE_CANDIDATE_SELECTION)
+        return {"candidates": []}
+
+    def _downstream(_state: BriefingState) -> BriefingState:
+        calls.append("downstream")
+        return {}
+
+    nodes: dict[str, BriefingNode] = dict.fromkeys(STAGE_ORDER, _downstream)
+    nodes[STAGE_CANDIDATE_SELECTION] = _candidate_selection
+
+    result = _compile_briefing_graph(nodes).invoke(BriefingState())
+
+    assert result == {"candidates": []}
+    assert calls == [STAGE_CANDIDATE_SELECTION]
+
+
+def test_briefing_graph_node_failure_skips_every_later_node() -> None:
+    calls: list[str] = []
+
+    def _candidate_selection(_state: BriefingState) -> BriefingState:
+        calls.append(STAGE_CANDIDATE_SELECTION)
+        return {"candidates": [{"id": 1}]}
+
+    def _theme_failure(_state: BriefingState) -> BriefingState:
+        calls.append(STAGE_THEME_CLUSTERING)
+        msg = "theme node failed"
+        raise RuntimeError(msg)
+
+    def _downstream(_state: BriefingState) -> BriefingState:
+        calls.append("downstream")
+        return {}
+
+    nodes: dict[str, BriefingNode] = dict.fromkeys(STAGE_ORDER, _downstream)
+    nodes[STAGE_CANDIDATE_SELECTION] = _candidate_selection
+    nodes[STAGE_THEME_CLUSTERING] = _theme_failure
+
+    with pytest.raises(RuntimeError, match="theme node failed"):
+        _compile_briefing_graph(nodes).invoke(BriefingState())
+
+    assert calls == [STAGE_CANDIDATE_SELECTION, STAGE_THEME_CLUSTERING]

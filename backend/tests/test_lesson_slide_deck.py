@@ -7,9 +7,12 @@ from collections.abc import Generator
 from contextlib import contextmanager
 from types import SimpleNamespace
 from typing import Any
+from unittest.mock import patch
 
 import pytest
 from fastapi.testclient import TestClient
+from langchain_core.messages import AIMessage
+from langchain_core.runnables import RunnableLambda
 
 from news_dashboard.auth import require_admin, require_auth
 from news_dashboard.db import connect, init_db
@@ -35,18 +38,16 @@ def test_generate_slide_deck_content_uses_native_chat_prompt(
     )
     monkeypatch.setattr(
         ai_client_mod,
-        "chat_create",
-        lambda *_args, **kwargs: (
-            chat_captured.update(kwargs)
-            or SimpleNamespace(
-                choices=[
-                    SimpleNamespace(message=SimpleNamespace(content=json.dumps(_VALID_SLIDE_DECK)))
-                ]
+        "get_chat_model",
+        lambda **_kwargs: RunnableLambda(
+            lambda prompt: (
+                chat_captured.update(messages=prompt.messages)
+                or AIMessage(content=json.dumps(_VALID_SLIDE_DECK))
             )
         ),
     )
 
-    lesson = {"title": "Lesson", "lesson_detail": {"gist": "A gist"}}
+    lesson = {"id": 9, "title": "Lesson", "lesson_detail": {"gist": "A gist"}}
     service.generate_slide_deck_content(lesson, 7)
 
     assert captured["args"] == ("lesson-slide-deck",)
@@ -58,7 +59,7 @@ def test_generate_slide_deck_content_uses_native_chat_prompt(
     assert captured["kwargs"]["variables"] == {
         "lesson_content": service._build_slide_deck_prompt(lesson)
     }
-    assert chat_captured["messages"] is managed.messages
+    assert [message.content for message in chat_captured["messages"]] == ["managed"]
 
 
 def _make_user(database_url: str, username: str = "alice") -> int:
@@ -119,13 +120,59 @@ _VALID_SLIDE_DECK = {
 def _mock_chat_create(content: str) -> Any:
     captured: dict[str, Any] = {}
 
-    def _fake(*_args: Any, messages: list[dict[str, str]], **_kwargs: Any) -> Any:
-        captured["messages"] = messages
-        message = SimpleNamespace(content=content)
-        choice = SimpleNamespace(message=message)
-        return SimpleNamespace(choices=[choice])
+    def _fake(**_kwargs: Any) -> Any:
+        def _invoke(prompt: Any, **_kwargs: Any) -> AIMessage:
+            captured["messages"] = [
+                {"role": message.type, "content": message.content} for message in prompt.messages
+            ]
+            return AIMessage(content=content)
+
+        return RunnableLambda(_invoke)
 
     return _fake, captured
+
+
+def test_generate_slide_deck_content_preserves_json_settings_and_tracing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from langchain_core.callbacks import BaseCallbackHandler
+
+    monkeypatch.setenv("FREE_LLM_API_KEY", "fake-key")
+    monkeypatch.setenv("OPENAI_LESSON_CHAT_MODEL", "lesson-model")
+    callback = BaseCallbackHandler()
+    captured: dict[str, Any] = {}
+
+    def invoke(_prompt: Any, config: Any) -> AIMessage:
+        captured["config"] = config
+        return AIMessage(content=json.dumps(_VALID_SLIDE_DECK))
+
+    def factory(**kwargs: Any) -> Any:
+        captured["factory"] = kwargs
+        return RunnableLambda(invoke)
+
+    monkeypatch.setattr("news_dashboard.ai_client.get_chat_model", factory)
+    monkeypatch.setattr("news_dashboard.ai_client.langfuse_enabled", lambda: True)
+    monkeypatch.setattr("langfuse.langchain.CallbackHandler", lambda: callback)
+    with patch("langfuse.propagate_attributes") as attributes:
+        result = service.generate_slide_deck_content(
+            {"id": 99, "title": "T", "lesson_detail": {"gist": "G"}}, 42
+        )
+
+    assert len(result["slides"]) == 6
+    assert captured["factory"] == {
+        "api_key": "fake-key",
+        "base_url": None,
+        "model": "lesson-model",
+        "response_format": {"type": "json_object"},
+    }
+    assert callback in captured["config"]["callbacks"].handlers
+    attributes.assert_called_once_with(
+        user_id="42",
+        session_id="lesson:42:99",
+        tags=["lesson", "slide-deck"],
+        trace_name="lesson-slide-deck",
+        prompt=None,
+    )
 
 
 # ── service.generate_lesson_slide_deck ─────────────────────────────────────────
@@ -175,7 +222,7 @@ def test_generate_lesson_slide_deck_persists_failure_on_malformed_response(
     import news_dashboard.ai_client as ai_client_mod
 
     fake, _captured = _mock_chat_create('{"slides": []}')
-    monkeypatch.setattr(ai_client_mod, "chat_create", fake)
+    monkeypatch.setattr(ai_client_mod, "get_chat_model", fake)
 
     with pytest.raises(service.LessonSlideDeckGenerationError):
         service.generate_lesson_slide_deck(int(lesson["id"]), user_id, database_url=pg_clean)
@@ -196,7 +243,7 @@ def test_generate_lesson_slide_deck_succeeds_and_persists_complete(
     import news_dashboard.ai_client as ai_client_mod
 
     fake, captured = _mock_chat_create(json.dumps(_VALID_SLIDE_DECK))
-    monkeypatch.setattr(ai_client_mod, "chat_create", fake)
+    monkeypatch.setattr(ai_client_mod, "get_chat_model", fake)
 
     result = service.generate_lesson_slide_deck(int(lesson["id"]), user_id, database_url=pg_clean)
 
@@ -226,7 +273,7 @@ def test_generate_lesson_slide_deck_returns_cached_deck_without_force(
         call_count += 1
         return fake(*args, **kwargs)
 
-    monkeypatch.setattr(ai_client_mod, "chat_create", _counting_fake)
+    monkeypatch.setattr(ai_client_mod, "get_chat_model", _counting_fake)
 
     service.generate_lesson_slide_deck(int(lesson["id"]), user_id, database_url=pg_clean)
     service.generate_lesson_slide_deck(int(lesson["id"]), user_id, database_url=pg_clean)
@@ -251,7 +298,7 @@ def test_generate_lesson_slide_deck_regenerates_with_force(
         call_count += 1
         return fake(*args, **kwargs)
 
-    monkeypatch.setattr(ai_client_mod, "chat_create", _counting_fake)
+    monkeypatch.setattr(ai_client_mod, "get_chat_model", _counting_fake)
 
     service.generate_lesson_slide_deck(int(lesson["id"]), user_id, database_url=pg_clean)
     service.generate_lesson_slide_deck(
@@ -285,7 +332,7 @@ def test_generate_lesson_slide_deck_endpoint_returns_complete_lesson(
     import news_dashboard.ai_client as ai_client_mod
 
     fake, _captured = _mock_chat_create(json.dumps(_VALID_SLIDE_DECK))
-    monkeypatch.setattr(ai_client_mod, "chat_create", fake)
+    monkeypatch.setattr(ai_client_mod, "get_chat_model", fake)
 
     with _api_client(user_id) as client:
         response = client.post(f"/api/learn/lessons/{lesson['id']}/slides")

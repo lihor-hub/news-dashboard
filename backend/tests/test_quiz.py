@@ -6,12 +6,12 @@ import json
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
-from unittest.mock import ANY, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
+from langchain_core.messages import AIMessage
 
-from news_dashboard.ai_client import ManagedPrompt
 from news_dashboard.auth import require_auth
 from news_dashboard.db import connect, init_db
 from news_dashboard.main import app
@@ -26,6 +26,12 @@ from news_dashboard.quizzes.service import (
     list_quizzes,
     submit_quiz,
 )
+
+
+def _chat_model_response(response: MagicMock) -> MagicMock:
+    model = MagicMock()
+    model.invoke.return_value = AIMessage(content=response.choices[0].message.content)
+    return model
 
 
 def _db_url(value: Path | str) -> str | None:
@@ -228,37 +234,38 @@ def test_generate_weekly_quiz_no_articles(tmp_path: Path) -> None:
 
 
 def test_generate_weekly_quiz_with_articles(tmp_path: Path) -> None:
+    from langchain_core.callbacks import BaseCallbackHandler
+
     db_path = tmp_path / "q.db"
     user_id, article_id = _seed(db_path)
     _seed_done_article(db_path, user_id, article_id)
 
     mock_response = MagicMock()
     mock_response.choices[0].message.content = json.dumps(_MOCK_QUESTIONS)
-    managed_prompt = ManagedPrompt(text="compiled quiz prompt")
 
+    callback = BaseCallbackHandler()
     with (
         patch.dict("os.environ", {"OPENAI_API_KEY": "test-key"}),
-        patch("news_dashboard.ai_client.get_openai_client") as mock_client_factory,
-        patch("news_dashboard.ai_client.chat_create", return_value=mock_response) as chat_create,
-        patch("news_dashboard.ai_client.get_prompt", return_value=managed_prompt) as get_prompt,
+        patch(
+            "news_dashboard.ai_client.get_chat_model",
+            return_value=_chat_model_response(mock_response),
+        ) as get_model,
+        patch("news_dashboard.ai_client.langfuse_enabled", return_value=True),
+        patch("langfuse.langchain.CallbackHandler", return_value=callback),
+        patch("langfuse.propagate_attributes") as attributes,
     ):
-        mock_client_factory.return_value = MagicMock()
         quiz = generate_weekly_quiz(user_id, db_path=db_path)
 
     assert quiz is not None
     assert quiz["user_id"] == user_id
     assert len(quiz["questions"]) == 3
     assert quiz["score"] is None
-    article_blurbs = get_prompt.call_args.kwargs["variables"]["article_blurbs"]
-    assert "AI Transformer Deep Dive" in article_blurbs
-    get_prompt.assert_called_once_with(
-        "weekly-quiz",
-        fallback=ANY,
-        label="production",
-        prompt_type="text",
-        variables={"article_blurbs": article_blurbs},
+    assert get_model.call_args.kwargs["max_tokens"] == 1024
+    model = get_model.return_value
+    assert callback in model.invoke.call_args.kwargs["config"]["callbacks"]
+    attributes.assert_called_once_with(
+        user_id=str(user_id), tags=["quiz"], trace_name="weekly-quiz"
     )
-    assert chat_create.call_args.kwargs["prompt"] is managed_prompt
 
 
 def test_get_latest_quiz_empty(tmp_path: Path) -> None:
@@ -380,10 +387,11 @@ def test_submit_quiz_scoring(tmp_path: Path) -> None:
 
     with (
         patch.dict("os.environ", {"OPENAI_API_KEY": "test-key"}),
-        patch("news_dashboard.ai_client.get_openai_client") as mock_client_factory,
-        patch("news_dashboard.ai_client.chat_create", return_value=mock_response),
+        patch(
+            "news_dashboard.ai_client.get_chat_model",
+            return_value=_chat_model_response(mock_response),
+        ),
     ):
-        mock_client_factory.return_value = MagicMock()
         quiz = generate_weekly_quiz(user_id, db_path=db_path)
 
     assert quiz is not None
@@ -405,10 +413,11 @@ def test_submit_quiz_partial_score(tmp_path: Path) -> None:
 
     with (
         patch.dict("os.environ", {"OPENAI_API_KEY": "test-key"}),
-        patch("news_dashboard.ai_client.get_openai_client") as mock_client_factory,
-        patch("news_dashboard.ai_client.chat_create", return_value=mock_response),
+        patch(
+            "news_dashboard.ai_client.get_chat_model",
+            return_value=_chat_model_response(mock_response),
+        ),
     ):
-        mock_client_factory.return_value = MagicMock()
         quiz = generate_weekly_quiz(user_id, db_path=db_path)
 
     assert quiz is not None
@@ -431,10 +440,11 @@ def _generate_quiz_with_mock(user_id: int, db_path: Path) -> dict[str, Any]:
     mock_response.choices[0].message.content = json.dumps(_MOCK_QUESTIONS)
     with (
         patch.dict("os.environ", {"OPENAI_API_KEY": "test-key"}),
-        patch("news_dashboard.ai_client.get_openai_client") as mock_client_factory,
-        patch("news_dashboard.ai_client.chat_create", return_value=mock_response),
+        patch(
+            "news_dashboard.ai_client.get_chat_model",
+            return_value=_chat_model_response(mock_response),
+        ),
     ):
-        mock_client_factory.return_value = MagicMock()
         quiz = generate_weekly_quiz(user_id, db_path=db_path)
     assert quiz is not None
     return quiz

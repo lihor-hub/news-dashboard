@@ -194,23 +194,31 @@ def extract_entities(article: dict[str, Any], user_id: int | None = None) -> lis
     if not text.strip():
         return []
 
-    from news_dashboard.ai_client import chat_create, get_chat_client, get_prompt
+    from langchain_core.prompts import ChatPromptTemplate
+    from langfuse import propagate_attributes
 
-    client = get_chat_client(api_key=api_key, base_url=base_url)
+    from news_dashboard.ai_client import get_chat_model, get_prompt, langfuse_enabled, response_text
+
     prompt = get_prompt("entity-extraction", fallback=_PROMPT)
     logger.info("Extracting entities for article %s", article.get("id"))
-    result = chat_create(
-        client,
-        name="entity-extraction",
+    chat_model = get_chat_model(api_key=api_key, base_url=base_url, model=model, max_tokens=512)
+    callbacks: list[Any] = []
+    if langfuse_enabled():
+        from langfuse.langchain import CallbackHandler
+
+        callbacks.append(CallbackHandler())
+    template = ChatPromptTemplate.from_messages([("human", "{instruction}\n\n{text}")])
+    with propagate_attributes(
+        user_id=str(user_id) if user_id is not None else None,
         tags=["entities"],
-        user_id=user_id,
-        prompt=prompt,
-        model=model,
-        messages=[{"role": "user", "content": f"{prompt.text}\n\n{text}"}],
-        max_tokens=512,
-    )
-    response_text = (result.choices[0].message.content or "").strip()
-    entities = _parse_entities(response_text)
+        trace_name="entity-extraction",
+        prompt=prompt.langfuse_prompt,
+    ):
+        result = (template | chat_model).invoke(
+            {"instruction": prompt.text, "text": text}, config={"callbacks": callbacks}
+        )
+    response = response_text(result).strip()
+    entities = _parse_entities(response)
     logger.info("Entities extracted for article %s: %d entities", article.get("id"), len(entities))
     return entities
 
@@ -228,28 +236,33 @@ def extract_entity_relationships(
     if not text.strip():
         return []
 
-    from news_dashboard.ai_client import chat_create, get_chat_client, get_prompt
+    from langchain_core.prompts import ChatPromptTemplate
+    from langfuse import propagate_attributes
 
-    client = get_chat_client(api_key=api_key, base_url=base_url)
+    from news_dashboard.ai_client import get_chat_model, get_prompt, langfuse_enabled, response_text
+
     prompt = get_prompt("entity-relationship-extraction", fallback=_RELATIONSHIP_PROMPT)
     entity_text = json.dumps(entities)
-    result = chat_create(
-        client,
-        name="entity-relationship-extraction",
-        tags=["entities", "relationships"],
-        user_id=user_id,
-        prompt=prompt,
-        model=model,
-        messages=[
-            {
-                "role": "user",
-                "content": f"{prompt.text}\n\nEntities:\n{entity_text}\n\nArticle:\n{text}",
-            }
-        ],
-        max_tokens=768,
+    chat_model = get_chat_model(api_key=api_key, base_url=base_url, model=model, max_tokens=768)
+    callbacks: list[Any] = []
+    if langfuse_enabled():
+        from langfuse.langchain import CallbackHandler
+
+        callbacks.append(CallbackHandler())
+    template = ChatPromptTemplate.from_messages(
+        [("human", "{instruction}\n\nEntities:\n{entities}\n\nArticle:\n{text}")]
     )
-    response_text = (result.choices[0].message.content or "").strip()
-    return _parse_relationships(response_text, entities)
+    with propagate_attributes(
+        user_id=str(user_id) if user_id is not None else None,
+        tags=["entities", "relationships"],
+        trace_name="entity-relationship-extraction",
+        prompt=prompt.langfuse_prompt,
+    ):
+        result = (template | chat_model).invoke(
+            {"instruction": prompt.text, "entities": entity_text, "text": text},
+            config={"callbacks": callbacks},
+        )
+    return _parse_relationships(response_text(result).strip(), entities)
 
 
 def _decode_cached_payload(raw: str | None) -> dict[str, Any] | None:

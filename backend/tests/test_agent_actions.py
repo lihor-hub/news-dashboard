@@ -68,11 +68,11 @@ def _uas_state(db_path: str, user_id: int, article_id: int) -> str:
 
 
 def _mock_llm(content: str) -> MagicMock:
-    completion = MagicMock()
-    completion.choices[0].message.content = content
-    client = MagicMock()
-    client.chat.completions.create.return_value = completion
-    return client
+    from langchain_core.messages import AIMessage
+
+    model = MagicMock()
+    model.invoke.return_value = AIMessage(content=content)
+    return model
 
 
 def _plan_json(steps: list[dict[str, object]], *, actionable: bool = True) -> str:
@@ -86,7 +86,7 @@ def test_plan_actions_non_actionable_query_persists_nothing(db: str) -> None:
     user_id = _make_user(db, "alice")
     _insert_article(db)
     client = _mock_llm(_plan_json([], actionable=False))
-    with patch("openai.OpenAI", return_value=client):
+    with patch("news_dashboard.ai_client.get_chat_model", return_value=client):
         result = plan_actions("what happened in tech today?", user_id=user_id)
     assert result == {"actionable": False}
     with connect(db) as conn:
@@ -98,7 +98,7 @@ def test_plan_actions_persists_proposed_run_without_mutating(db: str) -> None:
     user_id = _make_user(db, "alice")
     article_id = _insert_article(db)
     client = _mock_llm(_plan_json([{"tool": "archive_article", "article_id": article_id}]))
-    with patch("openai.OpenAI", return_value=client):
+    with patch("news_dashboard.ai_client.get_chat_model", return_value=client):
         result = plan_actions("archive the kubernetes story", user_id=user_id)
 
     assert result["actionable"] is True
@@ -112,7 +112,10 @@ def test_plan_actions_rejects_unknown_tool(db: str) -> None:
     user_id = _make_user(db, "alice")
     article_id = _insert_article(db)
     client = _mock_llm(_plan_json([{"tool": "delete_everything", "article_id": article_id}]))
-    with patch("openai.OpenAI", return_value=client), pytest.raises(AgentActionError):
+    with (
+        patch("news_dashboard.ai_client.get_chat_model", return_value=client),
+        pytest.raises(AgentActionError),
+    ):
         plan_actions("wipe my feed", user_id=user_id)
     with connect(db) as conn:
         count = conn.execute("SELECT COUNT(*) AS c FROM agent_action_runs").fetchone()["c"]
@@ -123,14 +126,20 @@ def test_plan_actions_rejects_invalid_article_id(db: str) -> None:
     user_id = _make_user(db, "alice")
     _insert_article(db)
     client = _mock_llm(_plan_json([{"tool": "archive_article", "article_id": 999999}]))
-    with patch("openai.OpenAI", return_value=client), pytest.raises(AgentActionError):
+    with (
+        patch("news_dashboard.ai_client.get_chat_model", return_value=client),
+        pytest.raises(AgentActionError),
+    ):
         plan_actions("archive the kubernetes story", user_id=user_id)
 
 
 def test_plan_actions_rejects_admin_only_tool_for_non_admin(db: str) -> None:
     user_id = _make_user(db, "alice")
     client = _mock_llm(_plan_json([{"tool": "refresh_feeds", "article_id": None}]))
-    with patch("openai.OpenAI", return_value=client), pytest.raises(AgentActionError):
+    with (
+        patch("news_dashboard.ai_client.get_chat_model", return_value=client),
+        pytest.raises(AgentActionError),
+    ):
         plan_actions("refresh my feeds", user_id=user_id, is_admin=False)
 
 
@@ -138,7 +147,7 @@ def test_plan_actions_allows_admin_only_tool_for_admin(db: str) -> None:
     user_id = _make_user(db, "alice")
     client = _mock_llm(_plan_json([{"tool": "refresh_feeds", "article_id": None}]))
     with (
-        patch("openai.OpenAI", return_value=client),
+        patch("news_dashboard.ai_client.get_chat_model", return_value=client),
         patch("news_dashboard.ingest.service.ingest_all") as mock_ingest,
     ):
         mock_ingest.return_value = MagicMock(results={})
@@ -151,7 +160,10 @@ def test_plan_actions_rejects_malformed_args(db: str) -> None:
     user_id = _make_user(db, "alice")
     _insert_article(db)
     client = _mock_llm(_plan_json([{"tool": "archive_article", "article_id": "not-an-int"}]))
-    with patch("openai.OpenAI", return_value=client), pytest.raises(AgentActionError):
+    with (
+        patch("news_dashboard.ai_client.get_chat_model", return_value=client),
+        pytest.raises(AgentActionError),
+    ):
         plan_actions("archive it", user_id=user_id)
 
 
@@ -159,8 +171,42 @@ def test_plan_actions_rejects_malformed_json(db: str) -> None:
     user_id = _make_user(db, "alice")
     _insert_article(db)
     client = _mock_llm("not json at all")
-    with patch("openai.OpenAI", return_value=client), pytest.raises(AgentActionError):
+    with (
+        patch("news_dashboard.ai_client.get_chat_model", return_value=client),
+        pytest.raises(AgentActionError),
+    ):
         plan_actions("archive it", user_id=user_id)
+
+
+def test_plan_actions_propagates_stable_session_to_graph_and_model(db: str) -> None:
+    from langchain_core.callbacks import BaseCallbackHandler
+
+    user_id = _make_user(db, "alice")
+    article_id = _insert_article(db)
+    model = _mock_llm(_plan_json([{"tool": "star_article", "article_id": article_id}]))
+    callback = BaseCallbackHandler()
+    managed_prompt = MagicMock()
+    with (
+        patch("news_dashboard.ai_client.get_chat_model", return_value=model),
+        patch("news_dashboard.ai_client.get_prompt") as get_prompt,
+        patch("news_dashboard.ai_client.langfuse_enabled", return_value=True),
+        patch("langfuse.langchain.CallbackHandler", return_value=callback),
+        patch("langfuse.propagate_attributes") as attributes,
+    ):
+        get_prompt.return_value.text = "Plan actions"
+        get_prompt.return_value.langfuse_prompt = managed_prompt
+        plan = plan_actions("star it", user_id=user_id)
+
+    session_id = f"agent-action:{plan['run_id']}"
+    metadata = model.invoke.call_args.kwargs["config"]["metadata"]
+    assert metadata["langfuse_session_id"] == session_id
+    attributes.assert_called_once_with(
+        session_id=session_id,
+        user_id=str(user_id),
+        tags=["agent-actions"],
+        trace_name="agent-action-planning",
+        prompt=managed_prompt,
+    )
 
 
 # ── approve_run / cancel_run ──────────────────────────────────────────────────
@@ -170,7 +216,7 @@ def test_approve_run_executes_allowlisted_mutation(db: str) -> None:
     user_id = _make_user(db, "alice")
     article_id = _insert_article(db)
     client = _mock_llm(_plan_json([{"tool": "archive_article", "article_id": article_id}]))
-    with patch("openai.OpenAI", return_value=client):
+    with patch("news_dashboard.ai_client.get_chat_model", return_value=client):
         plan = plan_actions("archive it", user_id=user_id)
 
     run = approve_run(plan["run_id"], user_id=user_id)
@@ -184,7 +230,7 @@ def test_approve_run_owner_only(db: str) -> None:
     bob = _make_user(db, "bob")
     article_id = _insert_article(db)
     client = _mock_llm(_plan_json([{"tool": "archive_article", "article_id": article_id}]))
-    with patch("openai.OpenAI", return_value=client):
+    with patch("news_dashboard.ai_client.get_chat_model", return_value=client):
         plan = plan_actions("archive it", user_id=alice)
 
     with pytest.raises(AgentActionNotFoundError):
@@ -195,7 +241,7 @@ def test_cancel_run_records_cancelled_without_mutating(db: str) -> None:
     user_id = _make_user(db, "alice")
     article_id = _insert_article(db)
     client = _mock_llm(_plan_json([{"tool": "archive_article", "article_id": article_id}]))
-    with patch("openai.OpenAI", return_value=client):
+    with patch("news_dashboard.ai_client.get_chat_model", return_value=client):
         plan = plan_actions("archive it", user_id=user_id)
 
     run = cancel_run(plan["run_id"], user_id=user_id)
@@ -219,7 +265,7 @@ def test_approve_run_partial_failure_marks_run_failed(db: str) -> None:
             ]
         )
     )
-    with patch("openai.OpenAI", return_value=client):
+    with patch("news_dashboard.ai_client.get_chat_model", return_value=client):
         plan = plan_actions("star then skip it", user_id=user_id)
 
     run = approve_run(plan["run_id"], user_id=user_id)
@@ -229,12 +275,35 @@ def test_approve_run_partial_failure_marks_run_failed(db: str) -> None:
     assert _uas_state(db, user_id, article_id) == "today"
 
 
+def test_approve_run_continues_after_failed_step(db: str) -> None:
+    user_id = _make_user(db, "alice")
+    first_id = _insert_article(db, "1")
+    second_id = _insert_article(db, "2")
+    client = _mock_llm(
+        _plan_json(
+            [
+                {"tool": "star_article", "article_id": first_id},
+                {"tool": "skip_article", "article_id": first_id},
+                {"tool": "archive_article", "article_id": second_id},
+            ]
+        )
+    )
+    with patch("news_dashboard.ai_client.get_chat_model", return_value=client):
+        plan = plan_actions("star, skip, then archive", user_id=user_id)
+
+    run = approve_run(plan["run_id"], user_id=user_id)
+
+    assert run["status"] == "failed"
+    assert [step["status"] for step in run["steps"]] == ["executed", "failed", "executed"]
+    assert _uas_state(db, user_id, second_id) == "archived"
+
+
 def test_get_run_not_found_for_other_user(db: str) -> None:
     alice = _make_user(db, "alice")
     bob = _make_user(db, "bob")
     article_id = _insert_article(db)
     client = _mock_llm(_plan_json([{"tool": "archive_article", "article_id": article_id}]))
-    with patch("openai.OpenAI", return_value=client):
+    with patch("news_dashboard.ai_client.get_chat_model", return_value=client):
         plan = plan_actions("archive it", user_id=alice)
 
     with pytest.raises(AgentActionNotFoundError):
@@ -257,7 +326,7 @@ def test_agent_actions_api_plan_approve_flow(db: str) -> None:
         "is_admin": False,
     }
     try:
-        with patch("openai.OpenAI", return_value=client):
+        with patch("news_dashboard.ai_client.get_chat_model", return_value=client):
             plan_response = http.post("/api/agent/actions/plan", json={"query": "star it"})
         assert plan_response.status_code == 200
         run_id = plan_response.json()["run_id"]
@@ -286,7 +355,7 @@ def test_agent_actions_api_cancel(db: str) -> None:
         "is_admin": False,
     }
     try:
-        with patch("openai.OpenAI", return_value=client):
+        with patch("news_dashboard.ai_client.get_chat_model", return_value=client):
             plan_response = http.post("/api/agent/actions/plan", json={"query": "star it"})
         run_id = plan_response.json()["run_id"]
 
@@ -310,7 +379,7 @@ def test_agent_actions_api_rejects_other_users_run(db: str) -> None:
         "email": None,
         "is_admin": False,
     }
-    with patch("openai.OpenAI", return_value=client):
+    with patch("news_dashboard.ai_client.get_chat_model", return_value=client):
         plan_response = http.post("/api/agent/actions/plan", json={"query": "star it"})
     run_id = plan_response.json()["run_id"]
 

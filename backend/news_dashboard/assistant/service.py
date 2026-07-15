@@ -9,11 +9,7 @@ from news_dashboard.embeddings import EmbeddingUnavailableError
 
 
 def ask(
-    query: str,
-    *,
-    include_all: bool,
-    user_id: int,
-    session_id: str | None = None,
+    query: str, *, include_all: bool, user_id: int, session_id: str | None = None
 ) -> dict[str, Any]:
     from news_dashboard.embeddings import ask as ask_impl
 

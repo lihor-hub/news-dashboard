@@ -172,23 +172,30 @@ def generate_perspectives(
     if not text.strip():
         return {"verified_facts": [], "omissions": [], "alternative_perspectives": []}
 
-    from news_dashboard.ai_client import chat_create, get_chat_client, get_prompt
+    from langchain_core.prompts import ChatPromptTemplate
+    from langfuse import propagate_attributes
 
-    client = get_chat_client(api_key=api_key, base_url=base_url)
+    from news_dashboard.ai_client import get_chat_model, get_prompt, langfuse_enabled, response_text
+
     prompt = get_prompt("article-perspectives", fallback=_PROMPT)
     logger.info("Generating perspectives for article %s", article.get("id"))
-    result = chat_create(
-        client,
-        name="article-perspectives",
+    chat_model = get_chat_model(api_key=api_key, base_url=base_url, model=model, max_tokens=1024)
+    callbacks: list[Any] = []
+    if langfuse_enabled():
+        from langfuse.langchain import CallbackHandler
+
+        callbacks.append(CallbackHandler())
+    template = ChatPromptTemplate.from_messages([("human", "{instruction}\n\n{text}")])
+    with propagate_attributes(
+        user_id=str(user_id) if user_id is not None else None,
         tags=["perspectives"],
-        user_id=user_id,
-        prompt=prompt,
-        model=model,
-        messages=[{"role": "user", "content": f"{prompt.text}\n\n{text}"}],
-        max_tokens=1024,
-    )
-    response_text = (result.choices[0].message.content or "").strip()
-    analysis = _parse_analysis(response_text)
+        trace_name="article-perspectives",
+        prompt=prompt.langfuse_prompt,
+    ):
+        result = (template | chat_model).invoke(
+            {"instruction": prompt.text, "text": text}, config={"callbacks": callbacks}
+        )
+    analysis = _parse_analysis(response_text(result).strip())
     logger.info("Perspectives generated for article %s", article.get("id"))
     return analysis
 

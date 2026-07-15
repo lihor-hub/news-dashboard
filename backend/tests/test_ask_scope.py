@@ -2,16 +2,21 @@
 
 from __future__ import annotations
 
-import sys
 from pathlib import Path
-from types import SimpleNamespace
 from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
+from langchain_core.messages import AIMessage
+from langchain_core.runnables import RunnableLambda
 
 from news_dashboard.db import EMBEDDING_DIMENSIONS, connect, init_db
 from news_dashboard.embeddings import vector_literal
+
+
+@pytest.fixture(autouse=True)
+def _clean_postgres(pg_clean: str) -> None:
+    """Isolate legacy tmp-path call sites on the PostgreSQL test schema."""
 
 
 def _test_vector(value: float = 0.1, dims: int = 10) -> str:
@@ -72,23 +77,7 @@ def _seed_articles(db_path: Path) -> None:
 
 
 def _make_openai_stub(monkeypatch: pytest.MonkeyPatch, answer: str = "ok") -> None:
-    """Patch openai so _embed and _answer don't hit the network."""
-
-    class FakeMessage:
-        content = answer
-
-    class FakeChoice:
-        message = FakeMessage()
-
-    class FakeResponse:
-        choices = (FakeChoice(),)
-
-    class FakeCompletions:
-        def create(self, **_: Any) -> FakeResponse:
-            return FakeResponse()
-
-    class FakeChat:
-        completions = FakeCompletions()
+    """Patch the native embedding client and LangChain answer model."""
 
     class FakeEmbeddingData:
         def __init__(self) -> None:
@@ -104,10 +93,13 @@ def _make_openai_stub(monkeypatch: pytest.MonkeyPatch, answer: str = "ok") -> No
 
     class FakeOpenAI:
         def __init__(self, **_: object) -> None:
-            self.chat = FakeChat()
             self.embeddings = FakeEmbeddings()
 
-    monkeypatch.setitem(sys.modules, "openai", SimpleNamespace(OpenAI=FakeOpenAI))
+    monkeypatch.setattr("news_dashboard.ai_client.get_openai_client", FakeOpenAI)
+    monkeypatch.setattr(
+        "news_dashboard.ai_client.get_chat_model",
+        lambda **_kwargs: RunnableLambda(lambda _value: AIMessage(content=answer)),
+    )
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")
 
 
@@ -441,3 +433,44 @@ def test_ask_endpoint_rejects_oversized_query(api_client: TestClient) -> None:
 def test_ask_endpoint_rejects_blank_query(api_client: TestClient) -> None:
     resp = api_client.post("/api/ask", json={"query": "   "})
     assert resp.status_code == 400
+
+
+def test_ask_endpoint_threads_optional_session_id(
+    api_client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    captured: dict[str, Any] = {}
+
+    def fake_ask(query: str, **kwargs: Any) -> dict[str, Any]:
+        captured["query"] = query
+        captured.update(kwargs)
+        return {"answer": "ok", "sources": [], "trace_id": None}
+
+    monkeypatch.setattr("news_dashboard.assistant.service.ask", fake_ask)
+    response = api_client.post(
+        "/api/ask", json={"query": "question", "session_id": "conversation-42"}
+    )
+
+    assert response.status_code == 200
+    assert captured["session_id"] == "conversation-42"
+
+
+def test_ask_endpoint_remains_compatible_without_session_id(
+    api_client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    captured: dict[str, Any] = {}
+
+    def fake_ask(_query: str, **kwargs: Any) -> dict[str, Any]:
+        captured.update(kwargs)
+        return {"answer": "ok", "sources": [], "trace_id": None}
+
+    monkeypatch.setattr("news_dashboard.assistant.service.ask", fake_ask)
+    response = api_client.post("/api/ask", json={"query": "question"})
+
+    assert response.status_code == 200
+    assert captured["session_id"] is None
+
+
+@pytest.mark.parametrize("session_id", ["café", "x" * 200])
+def test_ask_endpoint_rejects_invalid_session_id(api_client: TestClient, session_id: str) -> None:
+    response = api_client.post("/api/ask", json={"query": "question", "session_id": session_id})
+    assert response.status_code == 422

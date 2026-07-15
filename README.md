@@ -17,7 +17,8 @@ Self-hosted technical news inbox for curated feeds, article triage, source
 health, search, briefings, and saved/read history.
 
 The app uses a FastAPI backend, a Vite React frontend, PostgreSQL storage, and
-optional OpenAI features for embeddings, Ask AI, and briefings.
+optional OpenAI-compatible AI features. LangChain composes conversational and
+structured model calls, while LangGraph orchestrates multi-stage workflows.
 
 ![News Dashboard Today feed showing triaged articles with recommendation scores](docs/screenshots/today-feed.webp)
 
@@ -36,12 +37,12 @@ optional OpenAI features for embeddings, Ask AI, and briefings.
 <details>
 <summary>Screenshots</summary>
 
-| Article reader | AI briefing |
-| --- | --- |
+| Article reader                                                                               | AI briefing                                                       |
+| -------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
 | ![Article reader view with AI-generated key takeaways](docs/screenshots/article-detail.webp) | ![AI daily briefing landing page](docs/screenshots/briefing.webp) |
 
-| Source management |
-| --- |
+| Source management                                                                          |
+| ------------------------------------------------------------------------------------------ |
 | ![Feeds page listing subscribed sources with health status](docs/screenshots/sources.webp) |
 
 Screenshots are generated from demo-mode seed data by `npm run capture:screenshots`
@@ -52,7 +53,7 @@ real account data is shown.
 
 ## Stack
 
-- Backend: Python 3.14, FastAPI, Typer, psycopg, APScheduler.
+- Backend: Python 3.14, FastAPI, Typer, psycopg, APScheduler, LangChain, LangGraph.
 - Frontend: React, TypeScript, Vite, TanStack Query.
 - Database: PostgreSQL.
 - Tooling: Ruff, mypy, pytest, ESLint, Prettier, Vitest, Playwright.
@@ -79,26 +80,79 @@ Runtime storage is PostgreSQL only. Set `DATABASE_URL` or the split
 | `DATABASE_URL`                                                                                                   | PostgreSQL DSN.                                                                                                                                                                                                                                                                                                                                                                  |
 | `POSTGRES_HOST`, `POSTGRES_PORT`, `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD`                            | PostgreSQL connection parts used when `DATABASE_URL` is unset.                                                                                                                                                                                                                                                                                                                   |
 | `SESSION_SECRET`                                                                                                 | Signed session key. Also signs digest mark-read tokens when `TOKEN_SECRET` is unset. Generate with `python -c "import secrets; print(secrets.token_hex(32))"`.                                                                                                                                                                                                                   |
-| `TOKEN_SECRET`                                                                                                   | Optional override used to sign one-click digest mark-read tokens. Set this when digest token rotation should be independent from `SESSION_SECRET`.                                                                                                                                                                                                                                |
+| `TOKEN_SECRET`                                                                                                   | Optional override used to sign one-click digest mark-read tokens. Set this when digest token rotation should be independent from `SESSION_SECRET`.                                                                                                                                                                                                                               |
 | `BOOTSTRAP_ADMIN_USERNAME`, `BOOTSTRAP_ADMIN_PASSWORD`                                                           | First local admin account. Used only when no users exist.                                                                                                                                                                                                                                                                                                                        |
 | `FREE_LLM_API_KEY`, `FREE_LLM_BASE_URL`                                                                          | Primary API key and base URL for chat, embeddings, Ask AI, and briefings. Use these to point at a self-hosted OpenAI-compatible gateway. Falls back to `OPENAI_API_KEY` / `OPENAI_BASE_URL` when not set.                                                                                                                                                                        |
 | `OPENAI_API_KEY`, `OPENAI_BASE_URL`                                                                              | OpenAI credentials. Required for TTS/audio (not replaceable by the free LLM gateway). Also used as fallback for all other AI features when `FREE_LLM_API_KEY` is absent.                                                                                                                                                                                                         |
 | `OPENAI_BRIEFING_MODEL`                                                                                          | Model name for briefing generation (e.g. `auto` for a routing gateway, or a specific model ID). Defaults to `gpt-4o-mini`.                                                                                                                                                                                                                                                       |
 | `LANGFUSE_HOST`, `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`                                                    | Traces every OpenAI call (embeddings, Ask AI, briefings, insights, TTS, body fetch) in [Langfuse](https://langfuse.com), each tagged with a descriptive name (`ask-ai`, `briefing-generation`, …). Tracing activates only when both keys are set; otherwise the app uses a plain OpenAI client with no tracing. `LANGFUSE_BASE_URL` is accepted as an alias for `LANGFUSE_HOST`. |
-| `KEYCLOAK_AUTH_ENABLED`, `KEYCLOAK_SERVER_URL`, `KEYCLOAK_REALM`, `KEYCLOAK_CLIENT_ID`, `KEYCLOAK_CLIENT_SECRET` | Enables Keycloak. See [Authentication (Keycloak)](https://docs.lihor.ro/docs/configuration/authentication).                                                                                                                                                                                                                                                                                                            |
+| `KEYCLOAK_AUTH_ENABLED`, `KEYCLOAK_SERVER_URL`, `KEYCLOAK_REALM`, `KEYCLOAK_CLIENT_ID`, `KEYCLOAK_CLIENT_SECRET` | Enables Keycloak. See [Authentication (Keycloak)](https://docs.lihor.ro/docs/configuration/authentication).                                                                                                                                                                                                                                                                      |
 | `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`                                                                          | VAPID public and private keys for Web Push notifications. Generate using `npx web-push generate-vapid-keys`.                                                                                                                                                                                                                                                                     |
 | `VAPID_EMAIL`                                                                                                    | Contact email address used in VAPID claims mailto link. Defaults to `admin@example.com` if unset.                                                                                                                                                                                                                                                                                |
 | `CORS_ORIGINS`                                                                                                   | Comma-separated browser dev origins.                                                                                                                                                                                                                                                                                                                                             |
 | `ANALYTICS_RETENTION_DAYS`                                                                                       | Days to retain `user_events` before the daily cleanup job prunes them. Defaults to `180`.                                                                                                                                                                                                                                                                                        |
-| `ANALYTICS_ENABLED`                                                                                              | Instance-wide analytics kill switch. Set to `false` to stop ingesting `user_events` for every user regardless of their individual Settings preference. Defaults to `true`. Users can opt out individually from Settings → Privacy.                                                                                                                                             |
+| `ANALYTICS_ENABLED`                                                                                              | Instance-wide analytics kill switch. Set to `false` to stop ingesting `user_events` for every user regardless of their individual Settings preference. Defaults to `true`. Users can opt out individually from Settings → Privacy.                                                                                                                                               |
 | `ENABLE_API_DOCS`                                                                                                | Serves the interactive API docs (`/docs`, `/redoc`, `/openapi.json`) when truthy. Off by default so a public deployment doesn't leak its full API surface.                                                                                                                                                                                                                       |
 | `NEWSLETTER_IMAP_HOST`, `NEWSLETTER_IMAP_PORT`, `NEWSLETTER_IMAP_USERNAME`, `NEWSLETTER_IMAP_PASSWORD`           | Shared IMAP mailbox polled for newsletter emails (`newsletter_ingest.py`). Feature is fully inert unless host, username, and password are all set. Port defaults to `993`.                                                                                                                                                                                                       |
-| `NEWSLETTER_IMAP_FOLDER`                                                                                         | Mailbox folder to poll for newsletters. Defaults to `INBOX`.                                                                                                                                                                                                                                                                                                                      |
-| `NEWSLETTER_POLL_MINUTES`                                                                                        | Interval in minutes between newsletter mailbox polls. Defaults to `15`.                                                                                                                                                                                                                                                                                                           |
-| `NEWSLETTER_MAX_MESSAGE_BYTES`                                                                                   | Max accepted size in bytes for one RFC822 newsletter message. Oversized messages are skipped and marked seen (not retried) before full parsing. Defaults to 5 MiB (`5242880`).                                                                                                                                                                                                  |
+| `NEWSLETTER_IMAP_FOLDER`                                                                                         | Mailbox folder to poll for newsletters. Defaults to `INBOX`.                                                                                                                                                                                                                                                                                                                     |
+| `NEWSLETTER_POLL_MINUTES`                                                                                        | Interval in minutes between newsletter mailbox polls. Defaults to `15`.                                                                                                                                                                                                                                                                                                          |
+| `NEWSLETTER_MAX_MESSAGE_BYTES`                                                                                   | Max accepted size in bytes for one RFC822 newsletter message. Oversized messages are skipped and marked seen (not retried) before full parsing. Defaults to 5 MiB (`5242880`).                                                                                                                                                                                                   |
 
 SQLite is supported only as a legacy import source for
 `news-dashboard-migrate sqlite-to-postgres`.
+
+### AI orchestration and tracing
+
+The backend uses the vanilla LangChain and LangGraph APIs according to the
+shape of each AI operation:
+
+- LangChain composes Ask AI, briefing chat, lesson chat, prompts, model calls,
+  and structured output parsing.
+- LangGraph orchestrates briefing generation, lesson generation, and agent
+  action planning and execution. These graphs are compiled without a
+  checkpointer. PostgreSQL run and step records remain the source of truth for
+  workflow status and history, including idempotency and stale-run recovery
+  where those behaviors apply.
+- Native provider clients remain in use for embeddings, TTS, image generation,
+  and isolated calls that do not need chain or graph orchestration.
+
+Langfuse tracing is optional. When both Langfuse keys are configured,
+framework call sites use `langfuse.langchain.CallbackHandler` and
+`langfuse.propagate_attributes(...)` directly. Each request or operation still
+has its own trace; a Langfuse session groups related traces without replacing
+the trace IDs used for feedback.
+
+Managed prompts are fetched by the stable `production` label by default.
+Langfuse assigns every saved prompt an immutable version, and the exact fetched
+prompt object is linked to its generation in each trace. This makes prompt
+version, labels, trace, user, and session available together in Langfuse. The
+prompt optimizer writes proposed revisions as new `candidate`-labeled versions;
+promoting or rolling back means moving the `production` label in Langfuse, not
+deploying application code. Internal callers may also request an exact prompt
+version when a reproducible evaluation or rollback requires it.
+
+| Operation              | Langfuse session ID                                                                |
+| ---------------------- | ---------------------------------------------------------------------------------- |
+| Ask AI                 | Optional client-provided `session_id`; omitted requests remain independent traces. |
+| Briefing conversation  | `briefing:{user_id}:{briefing_id}`                                                 |
+| Lesson conversation and related lesson work | `lesson:{user_id}:{lesson_id}`                                      |
+| Briefing generation    | `briefing-run:{run_id}`                                                            |
+| Lesson generation      | `lesson-run:{run_id}`                                                              |
+| Agent action lifecycle | `agent-action:{run_id}`                                                            |
+
+`POST /api/ask` accepts the optional field alongside its existing inputs:
+
+```json
+{
+  "query": "What changed in LangGraph this week?",
+  "include_all": false,
+  "session_id": "research:langgraph-weekly"
+}
+```
+
+Session IDs must be ASCII strings of at most 199 characters. Blank strings are
+treated as absent; invalid values receive a request validation error. Existing
+clients can omit `session_id`.
 
 > **Upgrading an existing deployment:** article embeddings moved from an
 > opaque BLOB column to [pgvector](https://github.com/pgvector/pgvector), so
@@ -147,6 +201,7 @@ knowledge graph is enabled locally by default.
 ### Option 2: Run the published image (recommended for production)
 
 First, start PostgreSQL:
+
 ```bash
 docker run --rm -d \
   --name news-dashboard-postgres \
@@ -159,6 +214,7 @@ docker run --rm -d \
 ```
 
 Then run the application:
+
 ```bash
 docker run -d \
   --name news-dashboard \
@@ -177,6 +233,7 @@ docker run -d \
   --restart unless-stopped \
   ghcr.io/lihor-hub/news-dashboard:latest
 ```
+
 **Note**: Replace `latest` with a specific version tag (e.g., `v1.21.0`) or commit SHA for pinned deployments. The `news-dashboard-data:/data` volume keeps generated audio and other app data across container recreates; without it, optional TTS and podcast MP3 caches are lost during upgrades. See [Configuration](#configuration) for all required environment variables.
 
 If you also want the knowledge graph enabled in a manual `docker run`
@@ -318,6 +375,7 @@ To begin using News Dashboard as a reader, see the
 The full documentation site is published at **[docs.lihor.ro](https://docs.lihor.ro)**.
 
 For end-user documentation, see the [User Guide](docs/user-guide/README.md) which covers:
+
 - Concepts and terminology
 - The Today Feed and triage workflow
 - Managing sources and subscriptions

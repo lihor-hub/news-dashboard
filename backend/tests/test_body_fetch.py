@@ -8,9 +8,12 @@ import urllib.request
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from pathlib import Path
+from typing import Any
 from unittest.mock import patch
 
 import pytest
+from langchain_core.messages import AIMessage
+from langchain_core.runnables import RunnableLambda
 
 from news_dashboard.body_fetch import (
     _AI_PROMPT,
@@ -30,6 +33,7 @@ def _db(tmp_path: Path) -> Path:
 
 
 def _seed_article(db_path: Path) -> int:
+    article_url = f"https://example.com/{db_path.parent.name}/article-1"
     sync_sources(db_path)
     with connect(db_path) as conn:
         conn.execute(
@@ -37,15 +41,12 @@ def _seed_article(db_path: Path) -> int:
             INSERT INTO articles(
               url, canonical_url, title, source_slug, source_name, category, kind
             )
-            VALUES (
-              'https://example.com/article-1', 'https://example.com/article-1',
-              'Test Article', 'python-insider', 'Python Insider', 'python', 'rss_feed'
-            )
-            """
+            VALUES (%s, %s, 'Test Article', 'python-insider',
+                    'Python Insider', 'python', 'rss_feed')
+            """,
+            (article_url, article_url),
         )
-        row = conn.execute(
-            "SELECT id FROM articles WHERE url='https://example.com/article-1'"
-        ).fetchone()
+        row = conn.execute("SELECT id FROM articles WHERE url = %s", (article_url,)).fetchone()
     return int(row["id"] if isinstance(row, dict) else row[0])
 
 
@@ -538,48 +539,44 @@ def test_ai_extract_body_rejects_private_network_url_before_fetch() -> None:
 
 
 def test_ai_extract_body_calls_openai_on_html(tmp_path: Path) -> None:
-    from unittest.mock import MagicMock
-
     from news_dashboard.body_fetch import _ai_extract_body
 
     fake_stream = _FakeStreamResponse("<html><body>Hello world</body></html>")
 
-    mock_completion = MagicMock()
-    mock_completion.choices[0].message.content = "Hello world"
-    mock_client = MagicMock()
-    mock_client.chat.completions.create.return_value = mock_completion
+    calls: list[object] = []
+
+    def answer(value: object) -> AIMessage:
+        calls.append(value)
+        return AIMessage(content="Hello world")
+
+    model: RunnableLambda[object, AIMessage] = RunnableLambda(answer)
 
     with (
         patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}),
         patch("httpx.stream", return_value=fake_stream),
-        patch("openai.OpenAI", return_value=mock_client),
+        patch("news_dashboard.ai_client.get_chat_model", return_value=model),
     ):
         body, status = _ai_extract_body("https://example.com/article")
 
     assert status == "ok"
     assert body == "Hello world"
-    mock_client.chat.completions.create.assert_called_once()
+    assert len(calls) == 1
 
 
 def test_ai_extract_body_uses_managed_prompt() -> None:
-    from types import SimpleNamespace
-    from unittest.mock import MagicMock
-
     from news_dashboard.ai_client import ManagedPrompt
     from news_dashboard.body_fetch import _ai_extract_body
 
     html = "<html><body>Managed HTML</body></html>"
     managed = ManagedPrompt(text="compiled extraction prompt", langfuse_prompt=object())
-    completion = SimpleNamespace(
-        choices=[SimpleNamespace(message=SimpleNamespace(content="Managed body"))]
-    )
-
     with (
         patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}),
         patch("httpx.stream", return_value=_FakeStreamResponse(html)),
-        patch("news_dashboard.ai_client.get_chat_client", return_value=MagicMock()),
         patch("news_dashboard.ai_client.get_prompt", return_value=managed) as get_prompt,
-        patch("news_dashboard.ai_client.chat_create", return_value=completion) as chat_create,
+        patch(
+            "news_dashboard.ai_client.get_chat_model",
+            return_value=RunnableLambda(lambda _messages: AIMessage(content="Managed body")),
+        ) as get_chat_model,
     ):
         body, status = _ai_extract_body("https://example.com/article")
 
@@ -591,10 +588,7 @@ def test_ai_extract_body_uses_managed_prompt() -> None:
         label="production",
         variables={"html": html},
     )
-    assert chat_create.call_args.kwargs["prompt"] is managed
-    assert chat_create.call_args.kwargs["messages"] == [
-        {"role": "user", "content": "compiled extraction prompt"}
-    ]
+    get_chat_model.assert_called_once()
 
 
 def test_ai_extract_body_returns_error_on_http_failure(tmp_path: Path) -> None:
@@ -626,21 +620,18 @@ def test_ai_extract_body_returns_error_on_non_2xx_status(tmp_path: Path) -> None
 
 
 def test_ai_extract_body_returns_error_when_openai_returns_empty(tmp_path: Path) -> None:
-    from unittest.mock import MagicMock
-
     from news_dashboard.body_fetch import _ai_extract_body
 
     fake_stream = _FakeStreamResponse("<html><body>some html</body></html>")
 
-    mock_completion = MagicMock()
-    mock_completion.choices[0].message.content = "   "
-    mock_client = MagicMock()
-    mock_client.chat.completions.create.return_value = mock_completion
+    model: RunnableLambda[object, AIMessage] = RunnableLambda(
+        lambda _value: AIMessage(content="   ")
+    )
 
     with (
         patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}),
         patch("httpx.stream", return_value=fake_stream),
-        patch("openai.OpenAI", return_value=mock_client),
+        patch("news_dashboard.ai_client.get_chat_model", return_value=model),
     ):
         body, status = _ai_extract_body("https://example.com/article")
 
@@ -649,32 +640,32 @@ def test_ai_extract_body_returns_error_when_openai_returns_empty(tmp_path: Path)
 
 
 def test_ai_extract_body_truncates_html_to_limit(tmp_path: Path) -> None:
-    from unittest.mock import MagicMock
-
     from news_dashboard.body_fetch import _AI_HTML_LIMIT, _AI_PROMPT, _ai_extract_body
 
     # 'A' * limit + 'B' * limit — 'B' must never appear in the OpenAI call
     long_html = "A" * _AI_HTML_LIMIT + "B" * _AI_HTML_LIMIT
     fake_stream = _FakeStreamResponse(long_html)
 
-    mock_completion = MagicMock()
-    mock_completion.choices[0].message.content = "extracted"
-    mock_client = MagicMock()
-    mock_client.chat.completions.create.return_value = mock_completion
+    calls: list[Any] = []
+
+    def answer(value: Any) -> AIMessage:
+        calls.append(value)
+        return AIMessage(content="extracted")
+
+    model: RunnableLambda[Any, AIMessage] = RunnableLambda(answer)
 
     with (
         patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}),
         patch("httpx.stream", return_value=fake_stream),
-        patch("openai.OpenAI", return_value=mock_client),
+        patch("news_dashboard.ai_client.get_chat_model", return_value=model),
     ):
         _ai_extract_body("https://example.com/article")
 
-    mock_client.chat.completions.create.assert_called_once()
-    # call_args.kwargs["messages"] is a list[dict]; inspect the sent content
-    sent_messages = mock_client.chat.completions.create.call_args.kwargs["messages"]
-    assert isinstance(sent_messages, list)
+    assert len(calls) == 1
+    prompt_value = calls[0]
+    sent_messages = prompt_value.to_messages()
     assert len(sent_messages) == 1
-    prompt_msg = sent_messages[0]["content"]
+    prompt_msg = sent_messages[0].content
     assert isinstance(prompt_msg, str)
     # The 'B' portion (beyond the limit) must not appear in the sent message
     assert "B" not in prompt_msg

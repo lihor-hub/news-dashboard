@@ -9,15 +9,21 @@ import json
 import logging
 import os
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from datetime import datetime, timedelta, timezone
 from functools import partial
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
+
+from langchain_core.messages import convert_to_messages
+from langchain_core.prompt_values import ChatPromptValue
+from langchain_core.runnables import RunnableLambda
+from langgraph.graph import END, START, StateGraph
+from langgraph.graph.state import CompiledStateGraph
+from typing_extensions import TypedDict
 
 from news_dashboard import briefing_agent
 from news_dashboard.db import connect, row_to_dict
-from news_dashboard.prompt_catalog import get_chat_prompt
 from news_dashboard.reading_list import service as reading_list_service
 
 CANDIDATE_LIMIT = 40
@@ -67,6 +73,49 @@ class BriefingNotFoundError(KeyError):
 # ── Type alias for the injectable AI function ─────────────────────────────────
 
 AiFn = Callable[[list[dict[str, Any]], str], dict[str, Any]]
+
+
+class BriefingState(TypedDict, total=False):
+    """Mutable values passed between the five briefing graph stages."""
+
+    candidates: list[dict[str, Any]]
+    candidate_ids: set[int]
+    raw_content: dict[str, Any]
+    content: dict[str, Any]
+    result: dict[str, Any]
+    trace_id: str | None
+
+
+BriefingNode = Callable[[BriefingState], BriefingState]
+
+
+def _compile_briefing_graph(
+    nodes: Mapping[str, BriefingNode],
+) -> CompiledStateGraph[  # pyrefly: ignore[bad-specialization]  # pyrefly lacks LangGraph TypedDict support
+    BriefingState, None, BriefingState, BriefingState  # ty: ignore[invalid-type-arguments]  # ty lacks LangGraph TypedDict support
+]:
+    """Compile the fixed five-stage briefing topology without a checkpointer."""
+    # pyrefly: ignore[bad-specialization]  # pyrefly lacks LangGraph TypedDict support
+    graph = StateGraph(BriefingState)  # ty: ignore[invalid-argument-type]  # ty lacks TypedDict support here
+    for stage in briefing_agent.STAGE_ORDER:
+        # pyrefly: ignore[no-matching-overload]  # upstream LangGraph typing mismatch
+        graph.add_node(  # ty: ignore[no-matching-overload]  # upstream LangGraph typing mismatch
+            stage,
+            RunnableLambda(nodes[stage]),
+            input_schema=BriefingState,
+        )
+    graph.add_edge(START, briefing_agent.STAGE_CANDIDATE_SELECTION)
+    graph.add_conditional_edges(
+        briefing_agent.STAGE_CANDIDATE_SELECTION,
+        lambda state: "continue" if state["candidates"] else "done",
+        {"continue": briefing_agent.STAGE_THEME_CLUSTERING, "done": END},
+    )
+    graph.add_edge(briefing_agent.STAGE_THEME_CLUSTERING, briefing_agent.STAGE_DRAFTING)
+    graph.add_edge(briefing_agent.STAGE_DRAFTING, briefing_agent.STAGE_CITATION_VERIFICATION)
+    graph.add_edge(briefing_agent.STAGE_CITATION_VERIFICATION, briefing_agent.STAGE_ASSEMBLY)
+    graph.add_edge(briefing_agent.STAGE_ASSEMBLY, END)
+    return graph.compile()  # ty: ignore[invalid-return-type]  # follows suppressed upstream generic
+
 
 # ── SQL constants ─────────────────────────────────────────────────────────────
 
@@ -211,9 +260,17 @@ def _call_openai(
             f"({a.get('source_name', '')} / {a.get('category', '')})\n  {snippet}"
         )
 
+    from langchain_core.prompts import ChatPromptTemplate
+    from langfuse import propagate_attributes
     from openai import OpenAIError  # lazy import — optional dep at import time
 
-    from news_dashboard.ai_client import chat_create, get_chat_client, get_prompt, observe
+    from news_dashboard.ai_client import (
+        get_chat_model,
+        get_prompt,
+        langfuse_enabled,
+        observe,
+        response_text,
+    )
     from news_dashboard.ai_memory.service import format_memories_for_prompt
 
     prompt = get_prompt("briefing-system", fallback=_BRIEFING_SYSTEM_PROMPT)
@@ -227,25 +284,33 @@ def _call_openai(
         )
     user = "Articles:\n\n" + "\n\n".join(article_lines)
 
-    client = get_chat_client(api_key=api_key, base_url=base_url)
+    chat_model = get_chat_model(
+        api_key=api_key,
+        base_url=base_url,
+        model=model,
+        max_tokens=2048,
+        response_format={"type": "json_object"},
+    )
+    template = ChatPromptTemplate.from_messages([("system", "{system}"), ("human", "{articles}")])
+    callbacks: list[Any] = []
+    if langfuse_enabled():
+        from langfuse.langchain import CallbackHandler
+
+        callbacks.append(CallbackHandler())
     # Grouped under one Langfuse trace so its id can carry user thumbs feedback
     # (see the ``ai_feedback`` module) even though this helper only returns JSON.
     with observe("briefing-generation", input={"model": model}) as trace:
         try:
-            response = chat_create(
-                client,
-                name="briefing-generation",
+            with propagate_attributes(
+                user_id=str(user_id) if user_id is not None else None,
                 tags=["briefing"],
-                user_id=user_id,
-                prompt=prompt,
-                model=model,
-                messages=[
-                    {"role": "system", "content": system},
-                    {"role": "user", "content": user},
-                ],
-                response_format={"type": "json_object"},
-                max_tokens=2048,
-            )
+                trace_name="briefing-generation",
+                prompt=prompt.langfuse_prompt,
+            ):
+                response = (template | chat_model).invoke(
+                    {"system": system, "articles": user},
+                    config={"callbacks": callbacks, "metadata": {"max_tokens": 2048}},
+                )
         except OpenAIError as exc:
             # Connection refused, auth failure, or the model/gateway rejecting the
             # request (e.g. an endpoint that does not support JSON response_format).
@@ -255,7 +320,7 @@ def _call_openai(
             raise BriefingGenerationError(msg) from exc
         from news_dashboard.ai_client import strip_markdown_fence
 
-        text = strip_markdown_fence(response.choices[0].message.content or "{}")
+        text = strip_markdown_fence(response_text(response) or "{}")
         try:
             parsed: dict[str, Any] = json.loads(text)
         except json.JSONDecodeError as exc:
@@ -567,70 +632,110 @@ def generate_briefing(  # noqa: PLR0913, PLR0915
             database_url, run_id, status="failed", failed_stage=stage, error=str(exc)
         )
 
-    # Stage 1: candidate selection.
-    t0 = time.monotonic()
-    candidates = select_candidates(
-        since_at, until_at=until_at, database_url=database_url, user_id=user_id
-    )
-    _record(
-        briefing_agent.STAGE_CANDIDATE_SELECTION,
-        "complete",
-        latency_ms=int((time.monotonic() - t0) * 1000),
-    )
-    if not candidates:
-        briefing_agent.finish_run(database_url, run_id, status="complete")
-        return {"status": "no_candidates"}
-
     keywords = []
     if focus_prompt:
         cleaned = "".join(c if c.isalnum() else " " for c in focus_prompt.lower())
         keywords = [w for w in cleaned.split() if len(w) >= 3]
 
-    if keywords:
-        candidates = sorted(
-            candidates,
-            key=lambda a: (
-                _keyword_score(a, keywords),
-                -float(a["importance_score"]) if a.get("importance_score") is not None else -50.0,
-            ),
-            reverse=True,
-        )
-
-    # Stage 2: theme clustering (deterministic, no AI call).
-    t0 = time.monotonic()
-    themes = briefing_agent.cluster_themes(candidates)
-    candidates = briefing_agent.flatten_themes(themes)
-    _record(
-        briefing_agent.STAGE_THEME_CLUSTERING,
-        "complete",
-        latency_ms=int((time.monotonic() - t0) * 1000),
-    )
-
-    candidate_ids = {int(a["id"]) for a in candidates}
     call_ai: AiFn = (
         ai_fn
         if ai_fn is not None
         else partial(_call_openai, user_id=user_id, focus_prompt=focus_prompt)
     )
 
-    # Stage 3: section drafting, with retry on transient AI failures.
-    attempts = max(1, max_attempts)
-    raw_content: dict[str, Any] | None = None
-    t0 = time.monotonic()
-    for attempt in range(1, attempts + 1):
-        try:
-            raw_content = call_ai(candidates, resolved_model)
-            break
-        except BriefingAINotConfiguredError as exc:
-            # Misconfiguration won't fix itself on retry — fail fast.
-            _record(
-                briefing_agent.STAGE_DRAFTING,
-                "failed",
-                model=resolved_model,
-                latency_ms=int((time.monotonic() - t0) * 1000),
-                error=str(exc),
+    def candidate_selection(_state: BriefingState) -> BriefingState:
+        t0 = time.monotonic()
+        candidates = select_candidates(
+            since_at, until_at=until_at, database_url=database_url, user_id=user_id
+        )
+        _record(
+            briefing_agent.STAGE_CANDIDATE_SELECTION,
+            "complete",
+            latency_ms=int((time.monotonic() - t0) * 1000),
+        )
+        if not candidates:
+            briefing_agent.finish_run(database_url, run_id, status="complete")
+        elif keywords:
+            candidates = sorted(
+                candidates,
+                key=lambda article: (
+                    _keyword_score(article, keywords),
+                    -float(article["importance_score"])
+                    if article.get("importance_score") is not None
+                    else -50.0,
+                ),
+                reverse=True,
             )
-            _fail_run(briefing_agent.STAGE_DRAFTING, exc)
+        return {"candidates": candidates}
+
+    def theme_clustering(state: BriefingState) -> BriefingState:
+        t0 = time.monotonic()
+        candidates = briefing_agent.flatten_themes(
+            briefing_agent.cluster_themes(state["candidates"])
+        )
+        _record(
+            briefing_agent.STAGE_THEME_CLUSTERING,
+            "complete",
+            latency_ms=int((time.monotonic() - t0) * 1000),
+        )
+        return {"candidates": candidates, "candidate_ids": {int(a["id"]) for a in candidates}}
+
+    def drafting(state: BriefingState) -> BriefingState:
+        attempts = max(1, max_attempts)
+        t0 = time.monotonic()
+        for attempt in range(1, attempts + 1):
+            try:
+                raw_content = call_ai(state["candidates"], resolved_model)
+                _record(
+                    briefing_agent.STAGE_DRAFTING,
+                    "complete",
+                    model=resolved_model,
+                    latency_ms=int((time.monotonic() - t0) * 1000),
+                )
+                return {
+                    "raw_content": raw_content,
+                    "trace_id": raw_content.pop("_trace_id", None),
+                }
+            except (BriefingAINotConfiguredError, BriefingGenerationError) as exc:
+                terminal = isinstance(exc, BriefingAINotConfiguredError) or attempt >= attempts
+                if terminal:
+                    _record(
+                        briefing_agent.STAGE_DRAFTING,
+                        "failed",
+                        model=resolved_model,
+                        latency_ms=int((time.monotonic() - t0) * 1000),
+                        error=str(exc),
+                    )
+                    _fail_run(briefing_agent.STAGE_DRAFTING, exc)
+                    _save_failed_briefing(
+                        since_at,
+                        until_at,
+                        exc,
+                        resolved_model,
+                        database_url,
+                        user_id=user_id,
+                        focus_prompt=focus_prompt,
+                    )
+                    raise
+                delay = retry_base_delay_seconds * (2 ** (attempt - 1))
+                logger.warning(
+                    "Briefing generation attempt %d/%d failed (%s); retrying in %.2fs",
+                    attempt,
+                    attempts,
+                    exc,
+                    delay,
+                )
+                if delay > 0:
+                    time.sleep(delay)
+        msg = "Briefing generation produced no content"
+        raise BriefingGenerationError(msg)
+
+    def citation_verification(state: BriefingState) -> BriefingState:
+        try:
+            content = _validate_content(state["raw_content"], state["candidate_ids"])
+        except BriefingGenerationError as exc:
+            _record(briefing_agent.STAGE_CITATION_VERIFICATION, "failed", error=str(exc))
+            _fail_run(briefing_agent.STAGE_CITATION_VERIFICATION, exc)
             _save_failed_briefing(
                 since_at,
                 until_at,
@@ -641,91 +746,63 @@ def generate_briefing(  # noqa: PLR0913, PLR0915
                 focus_prompt=focus_prompt,
             )
             raise
-        except BriefingGenerationError as exc:
-            if attempt >= attempts:
-                _record(
-                    briefing_agent.STAGE_DRAFTING,
-                    "failed",
-                    model=resolved_model,
-                    latency_ms=int((time.monotonic() - t0) * 1000),
-                    error=str(exc),
-                )
-                _fail_run(briefing_agent.STAGE_DRAFTING, exc)
-                _save_failed_briefing(
-                    since_at,
-                    until_at,
-                    exc,
-                    resolved_model,
-                    database_url,
-                    user_id=user_id,
-                    focus_prompt=focus_prompt,
-                )
-                raise
-            delay = retry_base_delay_seconds * (2 ** (attempt - 1))
-            logger.warning(
-                "Briefing generation attempt %d/%d failed (%s); retrying in %.2fs",
-                attempt,
-                attempts,
-                exc,
-                delay,
+        _record(briefing_agent.STAGE_CITATION_VERIFICATION, "complete")
+        return {"content": content}
+
+    def assembly(state: BriefingState) -> BriefingState:
+        try:
+            result = _save_briefing(
+                since_at,
+                until_at,
+                state["content"],
+                state["candidate_ids"],
+                resolved_model,
+                database_url,
+                user_id=user_id,
+                focus_prompt=focus_prompt,
+                reading_list_items=_reading_list_section(user_id, database_url=database_url),
+                trace_id=state.get("trace_id"),
             )
-            if delay > 0:
-                time.sleep(delay)
+        except Exception as exc:
+            _record(briefing_agent.STAGE_ASSEMBLY, "failed", error=str(exc))
+            _fail_run(briefing_agent.STAGE_ASSEMBLY, exc)
+            raise
+        _record(briefing_agent.STAGE_ASSEMBLY, "complete")
+        briefing_agent.finish_run(
+            database_url, run_id, status="complete", briefing_id=int(result["id"])
+        )
+        return {"result": result}
 
-    if raw_content is None:  # pragma: no cover — loop either breaks or raises
-        msg = "Briefing generation produced no content"
-        raise BriefingGenerationError(msg)
-    _record(
-        briefing_agent.STAGE_DRAFTING,
-        "complete",
-        model=resolved_model,
-        latency_ms=int((time.monotonic() - t0) * 1000),
+    compiled = _compile_briefing_graph(
+        {
+            briefing_agent.STAGE_CANDIDATE_SELECTION: candidate_selection,
+            briefing_agent.STAGE_THEME_CLUSTERING: theme_clustering,
+            briefing_agent.STAGE_DRAFTING: drafting,
+            briefing_agent.STAGE_CITATION_VERIFICATION: citation_verification,
+            briefing_agent.STAGE_ASSEMBLY: assembly,
+        }
     )
 
-    trace_id = raw_content.pop("_trace_id", None)
+    from langfuse import propagate_attributes
 
-    # Stage 4: citation verification.
-    try:
-        content = _validate_content(raw_content, candidate_ids)
-    except BriefingGenerationError as exc:
-        _record(briefing_agent.STAGE_CITATION_VERIFICATION, "failed", error=str(exc))
-        _fail_run(briefing_agent.STAGE_CITATION_VERIFICATION, exc)
-        _save_failed_briefing(
-            since_at,
-            until_at,
-            exc,
-            resolved_model,
-            database_url,
-            user_id=user_id,
-            focus_prompt=focus_prompt,
-        )
-        raise
-    _record(briefing_agent.STAGE_CITATION_VERIFICATION, "complete")
+    from news_dashboard.ai_client import langfuse_enabled
 
-    # Stage 5: assembly (persistence).
-    reading_list_items = _reading_list_section(user_id, database_url=database_url)
-    try:
-        result = _save_briefing(
-            since_at,
-            until_at,
-            content,
-            candidate_ids,
-            resolved_model,
-            database_url,
-            user_id=user_id,
-            focus_prompt=focus_prompt,
-            reading_list_items=reading_list_items,
-            trace_id=trace_id,
+    callbacks: list[Any] = []
+    if langfuse_enabled():
+        from langfuse.langchain import CallbackHandler
+
+        callbacks.append(CallbackHandler())
+    with propagate_attributes(
+        user_id=str(user_id) if user_id is not None else None,
+        session_id=f"briefing-run:{run_id}",
+        tags=["briefing"],
+        trace_name="briefing-generation",
+    ):
+        final_state = compiled.invoke(
+            BriefingState(),
+            config={"callbacks": callbacks},
         )
-    except Exception as exc:
-        _record(briefing_agent.STAGE_ASSEMBLY, "failed", error=str(exc))
-        _fail_run(briefing_agent.STAGE_ASSEMBLY, exc)
-        raise
-    _record(briefing_agent.STAGE_ASSEMBLY, "complete")
-    briefing_agent.finish_run(
-        database_url, run_id, status="complete", briefing_id=int(result["id"])
-    )
-    return result
+    return cast("dict[str, Any]", final_state.get("result", {"status": "no_candidates"}))
 
 
 def get_latest_briefing(
@@ -883,11 +960,18 @@ def list_briefings_with_script(
         return briefings
 
 
-_CHAT_SYSTEM_PROMPT = (
-    get_chat_prompt("briefing-chat")[0]["content"]
-    .replace("{{briefing_context}}", "{briefing_context}")
-    .replace("{{articles_context}}", "{articles_context}")
-)
+_CHAT_SYSTEM_PROMPT = """\
+You are the Briefing Q&A Assistant. Your job is to answer follow-up questions \
+about the daily briefing provided below. Ground every answer in the briefing \
+summary and the full article texts supplied. If information is not present in \
+the provided context, say so clearly rather than guessing.
+
+--- BRIEFING ---
+{briefing_context}
+
+--- CITED ARTICLES ---
+{articles_context}
+"""
 
 
 def chat_with_briefing(
@@ -899,7 +983,7 @@ def chat_with_briefing(
     database_url: str | None = None,
 ) -> str:
     """Answer a follow-up question grounded in the cited articles of a briefing."""
-    _briefing_ai_config()
+    api_key, base_url = _briefing_ai_config()
     model = os.getenv("OPENAI_BRIEFING_MODEL", DEFAULT_BRIEFING_MODEL)
 
     briefing = get_briefing(briefing_id, database_url=database_url, user_id=user_id)
@@ -923,9 +1007,17 @@ def chat_with_briefing(
     else:
         articles_context = "(No articles cited — answer from the briefing summary only.)"
 
-    from news_dashboard.ai_client import get_prompt
-    from news_dashboard.ai_orchestration import invoke_chat_chain
+    from langfuse import propagate_attributes
 
+    from news_dashboard.ai_client import (
+        get_chat_model,
+        get_prompt,
+        langfuse_enabled,
+        response_text,
+    )
+    from news_dashboard.prompt_catalog import get_chat_prompt
+
+    chat_model = get_chat_model(api_key=api_key, base_url=base_url, model=model)
     prompt = get_prompt(
         "briefing-chat",
         fallback=get_chat_prompt("briefing-chat"),
@@ -937,13 +1029,18 @@ def chat_with_briefing(
         },
     )
     messages = [*prompt.messages[:-1], *history, prompt.messages[-1]]
+    prompt_value = ChatPromptValue(messages=convert_to_messages(messages))
+    callbacks: list[Any] = []
+    if langfuse_enabled():
+        from langfuse.langchain import CallbackHandler
 
-    return invoke_chat_chain(
-        name="briefing-chat",
+        callbacks.append(CallbackHandler())
+    with propagate_attributes(
+        user_id=str(user_id),
+        session_id=f"briefing:{user_id}:{briefing_id}",
         tags=["briefing", "chat"],
-        user_id=user_id,
-        session_id=f"briefing:{briefing_id}:user:{user_id}" if user_id is not None else None,
-        model=model,
-        messages=messages,
-        prompt=prompt,
-    )
+        trace_name="briefing-chat",
+        prompt=prompt.langfuse_prompt,
+    ):
+        response = chat_model.invoke(prompt_value, config={"callbacks": callbacks})
+    return response_text(response)

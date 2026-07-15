@@ -16,7 +16,6 @@ from typing import Any
 from news_dashboard.article_visibility import get_visible_article_row
 from news_dashboard.body_fetch import fetch_and_cache_body
 from news_dashboard.db import connect, row_to_dict
-from news_dashboard.prompt_catalog import get_text_prompt
 
 logger = logging.getLogger(__name__)
 
@@ -383,36 +382,41 @@ def generate_share_context(share_id: int) -> str | None:
     article_summary = (share_data.get("summary") or share_data.get("body") or "")[:800]
     recipient_interests = ", ".join(top_categories) if top_categories else "general news"
 
-    variables = {
-        "article_title": article_title,
-        "article_summary": article_summary,
-        "sender_note": sender_note or "(none)",
-        "annotation_text": annotation_text,
-        "recipient_interests": recipient_interests,
-    }
-    from news_dashboard.ai_client import chat_create, get_chat_client, get_prompt
+    prompt = (
+        f'Article: "{article_title}"\n'
+        f"Summary: {article_summary}\n\n"
+        f"Sender's note: {sender_note or '(none)'}\n"
+        f"Highlighted sections:\n{annotation_text}\n\n"
+        f"Recipient's main reading interests: {recipient_interests}\n\n"
+        "Write exactly 2 sentences explaining why the sender highlighted these specific "
+        "sections and why they are directly relevant to the recipient's interests. "
+        "Be specific and personal, not generic."
+    )
 
-    client = get_chat_client(api_key=api_key, base_url=base_url)
-    prompt = get_prompt(
-        "share-context",
-        fallback=get_text_prompt("share-context"),
-        label="production",
-        prompt_type="text",
-        variables=variables,
+    from langfuse import propagate_attributes
+
+    from news_dashboard.ai_client import get_chat_model, langfuse_enabled, response_text
+
+    chat_model = get_chat_model(
+        api_key=api_key,
+        base_url=base_url,
+        model=model,
+        max_tokens=120,
+        temperature=0.7,
     )
     try:
-        completion = chat_create(
-            client,
-            name="share-context",
-            tags=["shares"],
-            prompt=prompt,
-            model=model,
-            messages=[{"role": "user", "content": prompt.text}],
-            max_tokens=120,
-            temperature=0.7,
-        )
-        context = completion.choices[0].message.content or ""
-        context = context.strip()
+        callbacks: list[Any] = []
+        if langfuse_enabled():
+            from langfuse.langchain import CallbackHandler
+
+            callbacks.append(CallbackHandler())
+        with propagate_attributes(
+            user_id=str(share_data["from_user_id"]), tags=["shares"], trace_name="share-context"
+        ):
+            completion = chat_model.invoke(
+                [{"role": "user", "content": prompt}], config={"callbacks": callbacks}
+            )
+        context = response_text(completion).strip()
     except Exception:
         logger.exception("generate_share_context: LLM call failed for share %d", share_id)
         return None

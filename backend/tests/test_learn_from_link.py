@@ -5,9 +5,12 @@ from collections.abc import Generator
 from contextlib import contextmanager
 from types import SimpleNamespace
 from typing import Any
+from unittest.mock import patch
 
 import pytest
 from fastapi.testclient import TestClient
+from langchain_core.messages import AIMessage
+from langchain_core.runnables import RunnableLambda
 
 from news_dashboard.auth import require_admin, require_auth
 from news_dashboard.db import connect, init_db
@@ -804,15 +807,38 @@ def _mock_chat_reply(reply: str) -> Any:
 def test_ask_lesson_question_returns_grounded_reply(
     pg_clean: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    from langchain_core.callbacks import BaseCallbackHandler
+    from langchain_core.messages import AIMessage
+    from langchain_core.runnables import RunnableLambda
+
     monkeypatch.setenv("DATABASE_URL", pg_clean)
     monkeypatch.setenv("FREE_LLM_API_KEY", "freellmapi-key")
+    source_body = 'Example JSON: {"framework": "LangChain", "ready": true}'
+    monkeypatch.setattr(service, "extract_body", lambda _url: (source_body, "ok"))
     user_id = _make_user(pg_clean)
     lesson = service.create_lesson(user_id, "https://example.com/a", database_url=pg_clean)
 
     import news_dashboard.ai_client as ai_client_mod
 
-    mock_chat_create, captured = _mock_chat_reply("Here is a simpler explanation.")
-    monkeypatch.setattr(ai_client_mod, "chat_create", mock_chat_create)
+    captured: dict[str, Any] = {}
+
+    def fake_invoke(prompt_value: Any, config: Any) -> AIMessage:
+        captured["messages"] = prompt_value.to_messages()
+        captured["config"] = config
+        return AIMessage(content="Here is a simpler explanation.")
+
+    @contextmanager
+    def fake_propagate_attributes(**kwargs: Any) -> Generator[None]:
+        captured["attributes"] = kwargs
+        yield
+
+    callback = BaseCallbackHandler()
+    monkeypatch.setattr(
+        ai_client_mod, "get_chat_model", lambda **_kwargs: RunnableLambda(fake_invoke)
+    )
+    monkeypatch.setattr(ai_client_mod, "langfuse_enabled", lambda: True)
+    monkeypatch.setattr("langfuse.propagate_attributes", fake_propagate_attributes)
+    monkeypatch.setattr("langfuse.langchain.CallbackHandler", lambda: callback)
 
     history = [
         {"role": "user", "content": "What is this about?"},
@@ -828,9 +854,21 @@ def test_ask_lesson_question_returns_grounded_reply(
 
     assert reply == "Here is a simpler explanation."
     messages = captured["messages"]
-    assert messages[0]["role"] == "system"
-    assert "Body for https://example.com/a" in messages[0]["content"]
-    assert messages[-1] == {"role": "user", "content": "Explain this more simply."}
+    assert [message.type for message in messages] == ["system", "human", "ai", "human"]
+    assert source_body in messages[0].content
+    assert [message.content for message in messages[1:]] == [
+        "What is this about?",
+        "It's about the article.",
+        "Explain this more simply.",
+    ]
+    assert captured["config"]["callbacks"].handlers == [callback]
+    assert captured["attributes"] == {
+        "user_id": str(user_id),
+        "session_id": f"lesson:{user_id}:{lesson['id']}",
+        "tags": ["lesson", "chat"],
+        "trace_name": "lesson-chat",
+        "prompt": None,
+    }
 
 
 def test_ask_lesson_question_inserts_history_after_managed_system(
@@ -854,8 +892,16 @@ def test_ask_lesson_question_inserts_history_after_managed_system(
         "get_prompt",
         lambda *args, **kwargs: captured.update(args=args, kwargs=kwargs) or managed,
     )
-    mock_chat, chat_capture = _mock_chat_reply("answer")
-    monkeypatch.setattr(ai_client_mod, "chat_create", mock_chat)
+    chat_capture: dict[str, Any] = {}
+    monkeypatch.setattr(
+        ai_client_mod,
+        "get_chat_model",
+        lambda **_kwargs: RunnableLambda(
+            lambda prompt: (
+                chat_capture.update(messages=prompt.messages) or AIMessage(content="answer")
+            )
+        ),
+    )
     history = [{"role": "user", "content": "earlier"}, {"role": "assistant", "content": "reply"}]
 
     service.ask_lesson_question(lesson["id"], user_id, "question", history, database_url=pg_clean)
@@ -873,7 +919,12 @@ def test_ask_lesson_question_inserts_history_after_managed_system(
         {"role": "user", "content": "{{question}}"},
     ]
     assert all(message not in captured["kwargs"]["fallback"] for message in history)
-    assert chat_capture["messages"] == [managed.messages[0], *history, managed.messages[1]]
+    assert [message.content for message in chat_capture["messages"]] == [
+        "compiled system",
+        "earlier",
+        "reply",
+        "compiled question",
+    ]
 
 
 def test_ask_lesson_question_is_user_scoped(pg_clean: str, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -927,8 +978,11 @@ def test_ask_lesson_question_endpoint_returns_reply(
 
     import news_dashboard.ai_client as ai_client_mod
 
-    mock_chat_create, _captured = _mock_chat_reply("Here's an example.")
-    monkeypatch.setattr(ai_client_mod, "chat_create", mock_chat_create)
+    monkeypatch.setattr(
+        ai_client_mod,
+        "get_chat_model",
+        lambda **_kwargs: RunnableLambda(lambda _prompt: AIMessage(content="Here's an example.")),
+    )
 
     with _api_client(user_id) as client:
         response = client.post(
@@ -1394,8 +1448,12 @@ def test_lesson_includes_fallback_personal_relevance_without_profile(
 def test_lesson_relevance_uses_profile_and_llm_response(
     pg_clean: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    from langchain_core.callbacks import BaseCallbackHandler
+
     monkeypatch.setenv("DATABASE_URL", pg_clean)
     monkeypatch.setenv("FREE_LLM_API_KEY", "fake-key")
+    monkeypatch.setenv("FREE_LLM_BASE_URL", "https://free.example/v1")
+    monkeypatch.setenv("OPENAI_LESSON_CHAT_MODEL", "lesson-relevance-model")
     user_id = _make_user(pg_clean)
     with connect(database_url=pg_clean) as conn:
         conn.execute(
@@ -1403,27 +1461,56 @@ def test_lesson_relevance_uses_profile_and_llm_response(
             (user_id, '["technology", "AI"]'),
         )
 
-    class FakeChoice:
-        def __init__(self, content: str) -> None:
-            self.message = SimpleNamespace(content=content)
+    callback = BaseCallbackHandler()
+    captured: dict[str, Any] = {}
 
-    class FakeResponse:
-        def __init__(self, content: str) -> None:
-            self.choices = [FakeChoice(content)]
+    def invoke(prompt: Any, config: Any) -> AIMessage:
+        captured.update(prompt=prompt, config=config)
+        return AIMessage(
+            content=(
+                '{"explanation": "Relevant to your AI interests.", "signals": ["Interest: AI"]}'
+            )
+        )
 
-    monkeypatch.setattr(
-        "news_dashboard.ai_client.chat_create",
-        lambda *_args, **_kwargs: FakeResponse(
-            '{"explanation": "Relevant to your AI interests.", "signals": ["Interest: AI"]}'
-        ),
-    )
+    def factory(**kwargs: Any) -> Any:
+        captured["factory"] = kwargs
+        return RunnableLambda(invoke)
 
-    lesson = service.create_lesson(user_id, "https://example.com/ai", database_url=pg_clean)
+    monkeypatch.setattr("news_dashboard.ai_client.get_chat_model", factory)
+    monkeypatch.setattr("news_dashboard.ai_client.langfuse_enabled", lambda: True)
+    monkeypatch.setattr("langfuse.langchain.CallbackHandler", lambda: callback)
+
+    with patch("langfuse.propagate_attributes") as attributes:
+        lesson = service.create_lesson(user_id, "https://example.com/ai", database_url=pg_clean)
 
     assert lesson["personal_relevance"] == {
         "explanation": "Relevant to your AI interests.",
         "signals": ["Interest: AI"],
     }
+    assert captured["factory"] == {
+        "api_key": "fake-key",
+        "base_url": "https://free.example/v1",
+        "model": "lesson-relevance-model",
+        "response_format": {"type": "json_object"},
+    }
+    rendered = captured["prompt"].messages[-1].content
+    assert "Lesson title: Title for https://example.com/ai" in rendered
+    assert "Interests: ['technology', 'AI']" in rendered
+    assert "Lesson gist:" in rendered
+    assert callback in captured["config"]["callbacks"].handlers
+    attributes.assert_any_call(
+        user_id=str(user_id),
+        session_id="lesson-run:1",
+        tags=["lesson", "generation"],
+        trace_name="lesson-generation",
+    )
+    attributes.assert_any_call(
+        user_id=str(user_id),
+        session_id=f"lesson:{user_id}:{lesson['id']}",
+        tags=["lesson", "relevance"],
+        trace_name="lesson-relevance",
+        prompt=None,
+    )
 
 
 def test_lesson_relevance_uses_native_chat_prompt(
@@ -1450,15 +1537,11 @@ def test_lesson_relevance_uses_native_chat_prompt(
     )
     monkeypatch.setattr(
         ai_client_mod,
-        "chat_create",
-        lambda *_args, **kwargs: (
-            chat_captured.update(kwargs)
-            or SimpleNamespace(
-                choices=[
-                    SimpleNamespace(
-                        message=SimpleNamespace(content='{"explanation":"why","signals":[]}')
-                    )
-                ]
+        "get_chat_model",
+        lambda **_kwargs: RunnableLambda(
+            lambda prompt: (
+                chat_captured.update(messages=prompt.messages)
+                or AIMessage(content='{"explanation":"why","signals":[]}')
             )
         ),
     )
@@ -1478,7 +1561,7 @@ def test_lesson_relevance_uses_native_chat_prompt(
         {"role": "user", "content": "{{lesson_context}}\n{{profile_context}}"},
     ]
     assert set(captured["kwargs"]["variables"]) == {"lesson_context", "profile_context"}
-    assert chat_captured["messages"] is managed.messages
+    assert [message.content for message in chat_captured["messages"]] == ["managed"]
 
 
 def test_relevance_feedback_endpoint_is_owned_by_lesson_user(

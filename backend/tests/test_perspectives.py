@@ -11,6 +11,8 @@ from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
+from langchain_core.messages import AIMessage
+from langchain_core.runnables import RunnableLambda
 
 from news_dashboard.db import connect
 from news_dashboard.perspectives import (
@@ -23,6 +25,18 @@ from news_dashboard.perspectives import (
     generate_perspectives,
     get_or_generate_perspectives,
 )
+
+
+class _MockModel(RunnableLambda[Any, AIMessage]):
+    def __init__(self, content: str) -> None:
+        self.calls: list[Any] = []
+        self.content = content
+        super().__init__(self._answer)
+
+    def _answer(self, value: Any) -> AIMessage:
+        self.calls.append(value)
+        return AIMessage(content=self.content)
+
 
 # ── shared test data ──────────────────────────────────────────────────────────
 
@@ -228,21 +242,18 @@ def test_perspectives_ai_config_uses_model_override(monkeypatch: pytest.MonkeyPa
 
 
 def test_generate_perspectives_returns_parsed_analysis() -> None:
-    mock_completion = MagicMock()
-    mock_completion.choices[0].message.content = json.dumps(_VALID_ANALYSIS)
-    mock_client = MagicMock()
-    mock_client.chat.completions.create.return_value = mock_completion
+    model = _MockModel(json.dumps(_VALID_ANALYSIS))
 
     with (
         patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}),
-        patch("openai.OpenAI", return_value=mock_client),
+        patch("news_dashboard.ai_client.get_chat_model", return_value=model),
     ):
         result = generate_perspectives(_ARTICLE)
 
     assert result["verified_facts"] == ["Fact one"]
     assert result["omissions"] == ["Missing context"]
     assert result["alternative_perspectives"] == ["Counter view"]
-    mock_client.chat.completions.create.assert_called_once()
+    assert len(model.calls) == 1
 
 
 def test_generate_perspectives_returns_empty_for_empty_article() -> None:
@@ -268,25 +279,22 @@ def test_get_or_generate_returns_cached_without_api_call(pg_clean: str) -> None:
     cached = json.dumps(_VALID_ANALYSIS)
     article_id = _seed_article(pg_clean, perspective_analysis=cached)
 
-    mock_client = MagicMock()
+    model = MagicMock()
     with (
         patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}),
-        patch("openai.OpenAI", return_value=mock_client),
+        patch("news_dashboard.ai_client.get_chat_model", return_value=model),
     ):
         result = get_or_generate_perspectives(article_id, database_url=pg_clean)
 
     assert result is not None
     assert result["verified_facts"] == ["Fact one"]
-    mock_client.chat.completions.create.assert_not_called()
+    model.invoke.assert_not_called()
 
 
 def test_get_or_generate_generates_and_caches_when_missing(pg_clean: str) -> None:
     article_id = _seed_article(pg_clean)
 
-    mock_completion = MagicMock()
-    mock_completion.choices[0].message.content = json.dumps(_VALID_ANALYSIS)
-    mock_client = MagicMock()
-    mock_client.chat.completions.create.return_value = mock_completion
+    model = _MockModel(json.dumps(_VALID_ANALYSIS))
 
     fake_article = {
         "id": article_id,
@@ -297,14 +305,14 @@ def test_get_or_generate_generates_and_caches_when_missing(pg_clean: str) -> Non
 
     with (
         patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}),
-        patch("openai.OpenAI", return_value=mock_client),
+        patch("news_dashboard.ai_client.get_chat_model", return_value=model),
         patch("news_dashboard.perspectives.get_article", return_value=fake_article),
     ):
         result = get_or_generate_perspectives(article_id, database_url=pg_clean)
 
     assert result is not None
     assert result["verified_facts"] == ["Fact one"]
-    mock_client.chat.completions.create.assert_called_once()
+    assert len(model.calls) == 1
 
     with connect(database_url=pg_clean) as conn:
         row = conn.execute(
@@ -323,45 +331,35 @@ def test_get_or_generate_returns_none_for_missing_article(pg_clean: str) -> None
 def test_get_or_generate_returns_empty_when_no_body(pg_clean: str) -> None:
     article_id = _seed_article(pg_clean)
 
-    mock_client = MagicMock()
+    model = MagicMock()
     fake_article = {"id": article_id, "title": "T", "body": None, "summary": "s"}
 
     with (
         patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}),
-        patch("openai.OpenAI", return_value=mock_client),
+        patch("news_dashboard.ai_client.get_chat_model", return_value=model),
         patch("news_dashboard.perspectives.get_article", return_value=fake_article),
     ):
         result = get_or_generate_perspectives(article_id, database_url=pg_clean)
 
     assert result == {"verified_facts": [], "omissions": [], "alternative_perspectives": []}
-    mock_client.chat.completions.create.assert_not_called()
+    model.invoke.assert_not_called()
 
 
 def test_get_or_generate_second_call_uses_cache(pg_clean: str) -> None:
     article_id = _seed_article(pg_clean)
-    call_count: list[int] = []
-
-    mock_completion = MagicMock()
-    mock_completion.choices[0].message.content = json.dumps(_VALID_ANALYSIS)
-    mock_client = MagicMock()
-
-    def count_call(**_kwargs: object) -> object:
-        call_count.append(1)
-        return mock_completion
-
-    mock_client.chat.completions.create.side_effect = count_call
+    model = _MockModel(json.dumps(_VALID_ANALYSIS))
     fake_article = {"id": article_id, "title": "T", "body": "body text", "summary": "s"}
 
     with (
         patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}),
-        patch("openai.OpenAI", return_value=mock_client),
+        patch("news_dashboard.ai_client.get_chat_model", return_value=model),
         patch("news_dashboard.perspectives.get_article", return_value=fake_article),
     ):
         r1 = get_or_generate_perspectives(article_id, database_url=pg_clean)
         r2 = get_or_generate_perspectives(article_id, database_url=pg_clean)
 
     assert r1 == r2
-    assert len(call_count) == 1, "AI called more than once — cache not working"
+    assert len(model.calls) == 1, "AI called more than once — cache not working"
 
 
 # ── visibility / authorization tests ─────────────────────────────────────────

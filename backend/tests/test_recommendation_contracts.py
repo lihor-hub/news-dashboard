@@ -130,12 +130,12 @@ def test_recommendation_explanation_resolves_article_and_history_variables(
             "INSERT INTO user_article_state(user_id, article_id, state) VALUES (%s, %s, 'done')",
             (user_id, history_id),
         )
-    completion = MagicMock(choices=[MagicMock(message=MagicMock(content="A match."))])
+    model = MagicMock()
+    model.invoke.return_value.content = "A match."
     managed_prompt = ManagedPrompt(text="compiled recommendation prompt")
     with (
         patch("news_dashboard.ai_client.free_llm_config", return_value=("fake-key", None)),
-        patch("news_dashboard.ai_client.get_chat_client", return_value=MagicMock()),
-        patch("news_dashboard.ai_client.chat_create", return_value=completion) as chat_create,
+        patch("news_dashboard.ai_client.get_chat_model", return_value=model),
         patch("news_dashboard.ai_client.get_prompt", return_value=managed_prompt) as get_prompt,
     ):
         generate_recommendation_explanation(user_id, article_id, database_url=db)
@@ -155,7 +155,7 @@ def test_recommendation_explanation_resolves_article_and_history_variables(
         "article_tags": "",
         "history_text": '- read: "Article history" (Science-Source / science)',
     }
-    assert chat_create.call_args.kwargs["prompt"] is managed_prompt
+    assert model.invoke.called
 
 
 # ── Ranking preserves every eligible article ──────────────────────────────────

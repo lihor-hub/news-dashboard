@@ -1,12 +1,18 @@
 from __future__ import annotations
 
+from typing import Any, cast
+from unittest.mock import patch
+
 import pytest
+from langchain_core.messages import AIMessage
+from langchain_core.runnables import RunnableLambda
 
 from news_dashboard.prompt_optimizer import (
     NegativeExample,
     PromptOptimizerError,
     _extract_question,
     _optimizer_ai_config,
+    _propose_revision,
     _score_is_negative,
     build_optimizer_prompt,
     collect_negative_examples,
@@ -88,3 +94,45 @@ def test_optimizer_ai_config_falls_back_to_openai(monkeypatch: pytest.MonkeyPatc
 
     assert api_key == "plain-key"
     assert base_url is None
+
+
+def test_propose_revision_uses_langchain_model_and_preserves_token_limit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from langchain_core.callbacks import BaseCallbackHandler
+
+    captured: dict[str, object] = {}
+    callback = BaseCallbackHandler()
+
+    def invoke(prompt: object, config: object, **_kwargs: object) -> AIMessage:
+        captured.update(prompt=prompt, config=config)
+        return AIMessage(content="  Revised prompt  ")
+
+    monkeypatch.setattr(
+        "news_dashboard.ai_client.get_chat_model",
+        lambda **kwargs: captured.update(factory=kwargs) or RunnableLambda(invoke),
+    )
+    monkeypatch.setattr(
+        "news_dashboard.prompt_optimizer._optimizer_ai_config",
+        lambda: ("free-key", "https://gateway.example/v1"),
+    )
+    with (
+        monkeypatch.context() as context,
+        patch("langfuse.langchain.CallbackHandler", return_value=callback),
+        patch("langfuse.propagate_attributes") as attributes,
+    ):
+        context.setattr("news_dashboard.prompt_optimizer.langfuse_enabled", lambda: True)
+        result = _propose_revision(
+            "Current", [NegativeExample(question="Q", answer="A")], model="optimizer-model"
+        )
+
+    assert result == "Revised prompt"
+    assert captured["factory"] == {
+        "api_key": "free-key",
+        "base_url": "https://gateway.example/v1",
+        "model": "optimizer-model",
+        "max_tokens": 1024,
+    }
+    config = cast("dict[str, Any]", captured["config"])
+    assert callback in config["callbacks"].handlers
+    attributes.assert_called_once_with(tags=["prompt-optimizer"], trace_name="prompt-optimizer")

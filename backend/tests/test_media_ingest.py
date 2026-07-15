@@ -1,12 +1,20 @@
 from __future__ import annotations
 
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
+
+from langchain_core.messages import AIMessage
 
 from news_dashboard.ai_client import ManagedPrompt
 from news_dashboard.db import connect
 from news_dashboard.ingest.service import _ingest_source
 from news_dashboard.sources.service import SourceDefinition
+
+
+def _chat_model(response: SimpleNamespace) -> MagicMock:
+    model = MagicMock()
+    model.invoke.return_value = AIMessage(content=response.choices[0].message.content)
+    return model
 
 
 def _source(kind: str, url: str = "https://example.com/feed.xml") -> SourceDefinition:
@@ -21,6 +29,8 @@ def _source(kind: str, url: str = "https://example.com/feed.xml") -> SourceDefin
 
 
 def test_podcast_feed_ingests_enclosure_with_ai_summary(pg_clean: str) -> None:
+    from langchain_core.callbacks import BaseCallbackHandler
+
     source = _source("podcast_feed")
     entries = [
         {
@@ -45,15 +55,28 @@ def test_podcast_feed_ingests_enclosure_with_ai_summary(pg_clean: str) -> None:
             (source.slug, source.name, source.url, source.category, source.kind, source.priority),
         )
 
+    callback = BaseCallbackHandler()
     with (
         patch("news_dashboard.ingest.service._parse_media_feed_url", return_value=entries),
         patch("news_dashboard.ai_client.free_llm_config", return_value=("test-key", None)),
-        patch("news_dashboard.ai_client.get_chat_client", return_value=object()),
-        patch("news_dashboard.ai_client.chat_create", return_value=response),
+        patch(
+            "news_dashboard.ai_client.get_chat_model", return_value=_chat_model(response)
+        ) as get_model,
+        patch("news_dashboard.ai_client.langfuse_enabled", return_value=True),
+        patch("langfuse.langchain.CallbackHandler", return_value=callback),
+        patch("langfuse.propagate_attributes") as attributes,
     ):
         outcome = _ingest_source(source, pg_clean)
 
     assert outcome.articles_new == 1
+    assert get_model.call_args.kwargs["max_tokens"] == 500
+    assert get_model.call_args.kwargs["temperature"] == 0.2
+    assert callback in get_model.return_value.invoke.call_args.kwargs["config"]["callbacks"]
+    attributes.assert_called_once_with(
+        tags=["ingest", "media"],
+        trace_name="summarize-media-article",
+        prompt=None,
+    )
     with connect(pg_clean) as conn:
         row = conn.execute(
             "SELECT url, summary, reason, tags, kind FROM articles WHERE source_slug=%s",
@@ -100,8 +123,7 @@ def test_youtube_channel_ingests_caption_summary(pg_clean: str) -> None:
     with (
         patch("news_dashboard.ingest.service._parse_media_feed_url", return_value=entries),
         patch("news_dashboard.ai_client.free_llm_config", return_value=("test-key", None)),
-        patch("news_dashboard.ai_client.get_chat_client", return_value=object()),
-        patch("news_dashboard.ai_client.chat_create", return_value=response),
+        patch("news_dashboard.ai_client.get_chat_model", return_value=_chat_model(response)),
     ):
         outcome = _ingest_source(source, pg_clean)
 
@@ -133,9 +155,11 @@ def test_media_summary_uses_managed_chat_prompt() -> None:
 
     with (
         patch("news_dashboard.ai_client.free_llm_config", return_value=("key", None)),
-        patch("news_dashboard.ai_client.get_chat_client", return_value=object()),
         patch("news_dashboard.ai_client.get_prompt", return_value=managed) as get_prompt,
-        patch("news_dashboard.ai_client.chat_create", return_value=response) as chat_create,
+        patch(
+            "news_dashboard.ai_client.get_chat_model",
+            return_value=_chat_model(response),
+        ) as get_chat_model,
     ):
         summary = _media_summary("Title", "Description", entry)
 
@@ -151,8 +175,7 @@ def test_media_summary_uses_managed_chat_prompt() -> None:
             "transcript": "Transcript",
         },
     )
-    assert chat_create.call_args.kwargs["prompt"] is managed
-    assert chat_create.call_args.kwargs["messages"] == managed.messages
+    get_chat_model.assert_called_once()
 
 
 def test_media_ingest_falls_back_when_ai_disabled(pg_clean: str) -> None:
@@ -179,12 +202,12 @@ def test_media_ingest_falls_back_when_ai_disabled(pg_clean: str) -> None:
     with (
         patch("news_dashboard.ingest.service._parse_media_feed_url", return_value=entries),
         patch("news_dashboard.ai_client.free_llm_config", return_value=("", None)),
-        patch("news_dashboard.ai_client.chat_create") as chat_create,
+        patch("news_dashboard.ai_client.get_chat_model") as get_chat_model,
     ):
         outcome = _ingest_source(source, pg_clean)
 
     assert outcome.articles_new == 1
-    chat_create.assert_not_called()
+    get_chat_model.assert_not_called()
     with connect(pg_clean) as conn:
         row = conn.execute(
             "SELECT summary, tags FROM articles WHERE source_slug=%s",

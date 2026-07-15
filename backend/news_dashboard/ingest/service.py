@@ -32,6 +32,8 @@ from news_dashboard.url_safety import (
     validate_server_fetch_url,
 )
 
+_MEDIA_SUMMARY_PROMPT = get_chat_prompt("summarize-media-article")
+
 try:
     from rapidfuzz.distance import Levenshtein
 
@@ -204,8 +206,6 @@ _MEDIA_SOURCE_KINDS: frozenset[str] = frozenset({"youtube_channel", "podcast_fee
 
 # Cap the number of page fetches per ingest run to keep ingest fast.
 _MAX_SNIPPET_FETCHES_PER_RUN: int = 10
-_MEDIA_SUMMARY_PROMPT = get_chat_prompt("summarize-media-article")
-_TRANSLATE_ARTICLE_PROMPT = get_chat_prompt("translate-article")
 
 
 def now_iso() -> str:
@@ -701,12 +701,28 @@ def _media_summary(title: str, description: str, entry: dict[str, Any]) -> str:
     api_key, base_url = free_llm_config()
     if api_key and transcript:
         try:
-            from news_dashboard.ai_client import chat_create, get_chat_client, get_prompt
+            from langchain_core.messages import convert_to_messages
+            from langchain_core.prompt_values import ChatPromptValue
+            from langfuse import propagate_attributes
 
-            client = get_chat_client(api_key=api_key, base_url=base_url)
+            from news_dashboard.ai_client import (
+                get_chat_model,
+                get_prompt,
+                langfuse_enabled,
+                response_text,
+            )
+
+            model = os.getenv("OPENAI_BRIEFING_MODEL", "gpt-4o-mini")
+            chat_model = get_chat_model(
+                api_key=api_key,
+                base_url=base_url,
+                model=model,
+                max_tokens=500,
+                temperature=0.2,
+            )
             prompt = get_prompt(
                 "summarize-media-article",
-                fallback=get_chat_prompt("summarize-media-article"),
+                fallback=_MEDIA_SUMMARY_PROMPT,
                 prompt_type="chat",
                 label="production",
                 variables={
@@ -715,17 +731,19 @@ def _media_summary(title: str, description: str, entry: dict[str, Any]) -> str:
                     "transcript": transcript,
                 },
             )
-            response = chat_create(
-                client,
-                name="summarize-media-article",
+            callbacks: list[Any] = []
+            if langfuse_enabled():
+                from langfuse.langchain import CallbackHandler
+
+                callbacks.append(CallbackHandler())
+            with propagate_attributes(
                 tags=["ingest", "media"],
-                prompt=prompt,
-                model=os.getenv("OPENAI_BRIEFING_MODEL", "gpt-4o-mini"),
-                messages=prompt.messages,
-                max_tokens=500,
-                temperature=0.2,
-            )
-            generated = clean_html(response.choices[0].message.content or "")
+                trace_name="summarize-media-article",
+                prompt=prompt.langfuse_prompt,
+            ):
+                prompt_value = ChatPromptValue(messages=convert_to_messages(prompt.messages))
+                response = chat_model.invoke(prompt_value, config={"callbacks": callbacks})
+            generated = clean_html(response_text(response))
             if generated:
                 summary = generated
         except Exception:
@@ -745,7 +763,9 @@ def detect_and_translate_article(
     """Detect language and translate title and summary to English if needed."""
     import json
 
-    from news_dashboard.ai_client import chat_create, get_chat_client, get_prompt
+    from langfuse import propagate_attributes
+
+    from news_dashboard.ai_client import get_chat_model, langfuse_enabled, response_text
 
     is_non_eng = source_lang != "en"
     if not is_non_eng:
@@ -771,28 +791,41 @@ def detect_and_translate_article(
         return title, summary, source_lang, None
 
     try:
-        client = get_chat_client(api_key=api_key, base_url=base_url)
-        prompt = get_prompt(
-            "translate-article",
-            fallback=get_chat_prompt("translate-article"),
-            prompt_type="chat",
-            label="production",
-            variables={"title": title, "summary": summary},
-        )
-
-        result = chat_create(
-            client,
-            name="translate-article",
-            tags=["translation"],
-            prompt=prompt,
+        chat_model = get_chat_model(
+            api_key=api_key,
+            base_url=base_url,
             model="gpt-4o-mini",
-            response_format={"type": "json_object"},
-            messages=prompt.messages,
             max_tokens=1024,
             temperature=0.0,
+            response_format={"type": "json_object"},
+        )
+        prompt = (
+            "You are a translation assistant. Detect the language of the following text. "
+            "If it is not English, translate both the title and the "
+            "summary/description to English. "
+            "Return a JSON object with the following keys:\n"
+            '- "detected_lang": the 2-letter ISO 639-1 language code '
+            '(e.g. "ja", "zh", "ru", "fr", "de", "en")\n'
+            '- "translated_title": the translated title in English\n'
+            '- "translated_summary": the translated summary/description in English\n'
+            '- "needs_translation": boolean indicating if it was translated\n'
         )
 
-        data = json.loads(result.choices[0].message.content or "{}")
+        callbacks: list[Any] = []
+        if langfuse_enabled():
+            from langfuse.langchain import CallbackHandler
+
+            callbacks.append(CallbackHandler())
+        with propagate_attributes(tags=["translation"], trace_name="translate-article"):
+            result = chat_model.invoke(
+                [
+                    {"role": "system", "content": prompt},
+                    {"role": "user", "content": f"Title: {title}\nSummary: {summary}"},
+                ],
+                config={"callbacks": callbacks},
+            )
+
+        data = json.loads(response_text(result) or "{}")
         detected_lang = data.get("detected_lang", source_lang)
         needs_translation = data.get("needs_translation", False)
 

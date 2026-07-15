@@ -1,6 +1,11 @@
+from collections.abc import Generator
+from contextlib import contextmanager
+from typing import Any
 from unittest.mock import MagicMock, patch
 
-from news_dashboard.ai_client import ManagedPrompt
+from langchain_core.messages import AIMessage
+from langchain_core.runnables import RunnableLambda
+
 from news_dashboard.body_fetch import fetch_and_cache_body, translate_body
 from news_dashboard.db import connect
 from news_dashboard.ingest.service import detect_and_translate_article
@@ -8,8 +13,7 @@ from news_dashboard.ingest.service import detect_and_translate_article
 
 def test_detect_and_translate_article_english() -> None:
     # When source_lang is en, no translation API call should be made
-    mock_client = MagicMock()
-    with patch("openai.OpenAI", return_value=mock_client):
+    with patch("news_dashboard.ai_client.get_chat_model") as get_model:
         title, summary, lang, orig = detect_and_translate_article(
             "English Title", "English Summary", "en"
         )
@@ -17,22 +21,27 @@ def test_detect_and_translate_article_english() -> None:
     assert summary == "English Summary"
     assert lang == "en"
     assert orig is None
-    mock_client.chat.completions.create.assert_not_called()
+    get_model.assert_not_called()
 
 
 def test_detect_and_translate_article_japanese() -> None:
+    from langchain_core.callbacks import BaseCallbackHandler
+
     # Mocking OpenAI response for Japanese translation
-    mock_completion = MagicMock()
-    mock_completion.choices[0].message.content = (
+    content = (
         '{"detected_lang": "ja", "translated_title": "Translated Title", '
         '"translated_summary": "Translated Summary", "needs_translation": true}'
     )
-    mock_client = MagicMock()
-    mock_client.chat.completions.create.return_value = mock_completion
+    model = MagicMock()
+    model.invoke.return_value = AIMessage(content=content)
+    callback = BaseCallbackHandler()
 
     with (
         patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}),
-        patch("openai.OpenAI", return_value=mock_client),
+        patch("news_dashboard.ai_client.get_chat_model", return_value=model) as get_model,
+        patch("news_dashboard.ai_client.langfuse_enabled", return_value=True),
+        patch("langfuse.langchain.CallbackHandler", return_value=callback),
+        patch("langfuse.propagate_attributes") as attributes,
     ):
         title, summary, lang, orig = detect_and_translate_article(
             "日本語タイトル", "日本語サマリー", "ja"
@@ -42,88 +51,71 @@ def test_detect_and_translate_article_japanese() -> None:
     assert summary == "Translated Summary"
     assert lang == "ja"
     assert orig == "日本語タイトル"
-    mock_client.chat.completions.create.assert_called_once()
+    assert get_model.call_args.kwargs["max_tokens"] == 1024
+    assert get_model.call_args.kwargs["temperature"] == 0.0
+    assert get_model.call_args.kwargs["response_format"] == {"type": "json_object"}
+    assert callback in model.invoke.call_args.kwargs["config"]["callbacks"]
+    attributes.assert_called_once_with(tags=["translation"], trace_name="translate-article")
 
 
 def test_translate_body_japanese() -> None:
     # Mocking OpenAI response for Japanese body translation
-    mock_completion = MagicMock()
-    mock_completion.choices[0].message.content = "Translated Body Text"
-    mock_client = MagicMock()
-    mock_client.chat.completions.create.return_value = mock_completion
+    calls: list[Any] = []
+
+    def translate(value: Any) -> AIMessage:
+        calls.append(value)
+        return AIMessage(content="Translated Body Text")
+
+    model: RunnableLambda[Any, AIMessage] = RunnableLambda(translate)
 
     with (
         patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}),
-        patch("openai.OpenAI", return_value=mock_client),
+        patch("news_dashboard.ai_client.get_chat_model", return_value=model) as get_model,
     ):
         translated = translate_body("日本語の本文", "ja")
 
     assert translated == "Translated Body Text"
-    mock_client.chat.completions.create.assert_called_once()
-
-
-def test_translate_body_uses_managed_chat_prompt() -> None:
-    from news_dashboard.body_fetch import _TRANSLATE_BODY_PROMPT
-
-    managed = ManagedPrompt(
-        text=None,
-        messages=[{"role": "system", "content": "compiled"}, {"role": "user", "content": "本文"}],
-        langfuse_prompt=object(),
+    assert len(calls) == 1
+    get_model.assert_called_once_with(
+        api_key="sk-test",
+        base_url=None,
+        model="gpt-4o-mini",
+        max_tokens=2048,
+        temperature=0.0,
     )
-    completion = MagicMock()
-    completion.choices[0].message.content = "Translated"
 
+
+def test_translate_body_attaches_langfuse_callback_and_trace_attributes() -> None:
+    from langchain_core.callbacks import BaseCallbackHandler
+
+    captured: dict[str, Any] = {}
+
+    def answer(prompt_value: Any, config: Any) -> AIMessage:
+        captured["config"] = config
+        return AIMessage(content="Translated Body")
+
+    @contextmanager
+    def attributes(**kwargs: Any) -> Generator[None]:
+        captured["attributes"] = kwargs
+        yield
+
+    callback = BaseCallbackHandler()
+    model: RunnableLambda[Any, AIMessage] = RunnableLambda(answer)
     with (
-        patch("news_dashboard.ai_client.free_llm_config", return_value=("key", None)),
-        patch("news_dashboard.ai_client.get_chat_client", return_value=MagicMock()),
-        patch("news_dashboard.ai_client.get_prompt", return_value=managed) as get_prompt,
-        patch("news_dashboard.ai_client.chat_create", return_value=completion) as chat_create,
+        patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}),
+        patch("news_dashboard.ai_client.get_chat_model", return_value=model),
+        patch("news_dashboard.ai_client.langfuse_enabled", return_value=True),
+        patch("langfuse.langchain.CallbackHandler", return_value=callback),
+        patch("langfuse.propagate_attributes", side_effect=attributes),
     ):
-        assert translate_body("本文", "ja") == "Translated"
+        translated = translate_body("日本語の本文", "ja")
 
-    get_prompt.assert_called_once_with(
-        "translate-body",
-        fallback=_TRANSLATE_BODY_PROMPT,
-        prompt_type="chat",
-        label="production",
-        variables={"from_lang": "ja", "body": "本文"},
-    )
-    assert chat_create.call_args.kwargs["prompt"] is managed
-    assert chat_create.call_args.kwargs["messages"] == managed.messages
-
-
-def test_detect_and_translate_article_uses_managed_chat_prompt() -> None:
-    from news_dashboard.ingest.service import _TRANSLATE_ARTICLE_PROMPT
-
-    managed = ManagedPrompt(
-        text=None,
-        messages=[{"role": "system", "content": "compiled translation"}],
-        langfuse_prompt=object(),
-    )
-    completion = MagicMock()
-    completion.choices[0].message.content = (
-        '{"detected_lang":"ja","translated_title":"English title",'
-        '"translated_summary":"English summary","needs_translation":true}'
-    )
-
-    with (
-        patch("news_dashboard.ai_client.free_llm_config", return_value=("key", None)),
-        patch("news_dashboard.ai_client.get_chat_client", return_value=MagicMock()),
-        patch("news_dashboard.ai_client.get_prompt", return_value=managed) as get_prompt,
-        patch("news_dashboard.ai_client.chat_create", return_value=completion) as chat_create,
-    ):
-        result = detect_and_translate_article("日本語タイトル", "日本語要約", "ja")
-
-    assert result == ("English title", "English summary", "ja", "日本語タイトル")
-    get_prompt.assert_called_once_with(
-        "translate-article",
-        fallback=_TRANSLATE_ARTICLE_PROMPT,
-        prompt_type="chat",
-        label="production",
-        variables={"title": "日本語タイトル", "summary": "日本語要約"},
-    )
-    assert chat_create.call_args.kwargs["prompt"] is managed
-    assert chat_create.call_args.kwargs["messages"] == managed.messages
+    assert translated == "Translated Body"
+    assert captured["attributes"] == {
+        "tags": ["translation"],
+        "trace_name": "translate-body",
+    }
+    assert captured["config"]["callbacks"].handlers == [callback]
 
 
 def test_fetch_and_cache_body_translates_non_english(pg_clean: str) -> None:
@@ -153,14 +145,13 @@ def test_fetch_and_cache_body_translates_non_english(pg_clean: str) -> None:
 
     # Mock extract_body to return Japanese body text
     # Mock translate_body (or the OpenAI client it uses) to return English translated body
-    mock_completion = MagicMock()
-    mock_completion.choices[0].message.content = "Translated English Body"
-    mock_client = MagicMock()
-    mock_client.chat.completions.create.return_value = mock_completion
+    model: RunnableLambda[Any, AIMessage] = RunnableLambda(
+        lambda _value: AIMessage(content="Translated English Body")
+    )
 
     with (
         patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}),
-        patch("openai.OpenAI", return_value=mock_client),
+        patch("news_dashboard.ai_client.get_chat_model", return_value=model),
         patch("news_dashboard.body_fetch.extract_body", return_value=("日本語の本文", "ok")),
     ):
         article = fetch_and_cache_body(article_id, db_path=pg_clean)

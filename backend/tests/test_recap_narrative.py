@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 from typing import Any
-from unittest.mock import ANY, MagicMock, patch
+from unittest.mock import patch
 
 import pytest
+from langchain_core.messages import AIMessage
+from langchain_core.runnables import RunnableLambda
 
-from news_dashboard.ai_client import ManagedPrompt
 from news_dashboard.recaps.narrative import generate_recap_narrative
 
 
@@ -43,54 +44,53 @@ def test_generate_recap_narrative_falls_back_with_zero_articles() -> None:
 
 def test_generate_recap_narrative_returns_llm_text(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("FREE_LLM_API_KEY", "fake-key")
+    monkeypatch.setenv("OPENAI_BRIEFING_MODEL", "gpt-4o-mini")
 
     narrative_text = (
         "You had a strong week, reading 12 articles mostly about science.\n\n"
         "Keep up the streak — three days running is great momentum."
     )
-    mock_client = MagicMock()
-    mock_client.chat.completions.create.return_value = MagicMock(
-        choices=[MagicMock(message=MagicMock(content=narrative_text))]
-    )
-    completion = mock_client.chat.completions.create.return_value
-    managed_prompt = ManagedPrompt(text="compiled recap narrative")
+    captured: dict[str, Any] = {}
+
+    def fake_invoke(messages: Any, config: Any, **_kwargs: Any) -> AIMessage:
+        captured.update(messages=messages, config=config)
+        return AIMessage(content=narrative_text)
 
     with (
-        patch("news_dashboard.ai_client.get_chat_client", return_value=mock_client),
-        patch("news_dashboard.ai_client.chat_create", return_value=completion) as chat_create,
+        patch(
+            "news_dashboard.ai_client.get_chat_model",
+            return_value=RunnableLambda(fake_invoke),
+        ) as factory,
         patch("news_dashboard.ai_client.free_llm_config", return_value=("fake-key", None)),
-        patch("news_dashboard.ai_client.get_prompt", return_value=managed_prompt) as get_prompt,
     ):
         result = generate_recap_narrative(_make_recap())
 
     assert result == narrative_text
-    call_kwargs = chat_create.call_args.kwargs
-    recap_json = get_prompt.call_args.kwargs["variables"]["recap_json"]
-    assert "12" in recap_json
-    get_prompt.assert_called_once_with(
-        "weekly-recap-narrative",
-        fallback=ANY,
-        label="production",
-        prompt_type="text",
-        variables={"recap_json": recap_json},
+    factory.assert_called_once_with(
+        api_key="fake-key",
+        base_url=None,
+        model="gpt-4o-mini",
+        max_tokens=300,
+        temperature=0.7,
     )
-    assert call_kwargs["prompt"] is managed_prompt
+    assert "12" in captured["messages"].messages[0].content
+    assert captured["config"]["callbacks"] is not None
 
 
 def test_generate_recap_narrative_falls_back_on_llm_error(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("FREE_LLM_API_KEY", "fake-key")
 
-    mock_client = MagicMock()
-    mock_client.chat.completions.create.side_effect = RuntimeError("LLM unavailable")
+    def fail(_prompt: Any) -> AIMessage:
+        message = "LLM unavailable"
+        raise RuntimeError(message)
 
     with (
-        patch("news_dashboard.ai_client.get_chat_client", return_value=mock_client),
+        patch("news_dashboard.ai_client.get_chat_model", return_value=RunnableLambda(fail)),
         patch("news_dashboard.ai_client.free_llm_config", return_value=("fake-key", None)),
     ):
         result = generate_recap_narrative(_make_recap())
 
     assert "12" in result
-    mock_client.chat.completions.create.assert_called_once()
 
 
 def test_generate_recap_narrative_mentions_saved_and_dwell(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -98,12 +98,9 @@ def test_generate_recap_narrative_mentions_saved_and_dwell(monkeypatch: pytest.M
 
     captured_prompt: list[str] = []
 
-    def fake_create(**kwargs: Any) -> MagicMock:
-        captured_prompt.append(kwargs["messages"][0]["content"])
-        return MagicMock(choices=[MagicMock(message=MagicMock(content="Narrative."))])
-
-    mock_client = MagicMock()
-    mock_client.chat.completions.create.side_effect = fake_create
+    def fake_invoke(prompt: Any, **_kwargs: Any) -> AIMessage:
+        captured_prompt.append(prompt.messages[0].content)
+        return AIMessage(content="Narrative.")
 
     recap = _make_recap(
         saved={"starred_this_week": 2, "read_from_backlog": 1, "backlog_total": 8},
@@ -111,7 +108,10 @@ def test_generate_recap_narrative_mentions_saved_and_dwell(monkeypatch: pytest.M
     )
 
     with (
-        patch("news_dashboard.ai_client.get_chat_client", return_value=mock_client),
+        patch(
+            "news_dashboard.ai_client.get_chat_model",
+            return_value=RunnableLambda(fake_invoke),
+        ),
         patch("news_dashboard.ai_client.free_llm_config", return_value=("fake-key", None)),
     ):
         generate_recap_narrative(recap)
@@ -120,3 +120,34 @@ def test_generate_recap_narrative_mentions_saved_and_dwell(monkeypatch: pytest.M
     assert "backlog_total" in prompt
     assert "average_seconds" in prompt
     assert "generated_at" not in prompt
+
+
+def test_generate_recap_narrative_traces_callback_attribution_and_literal_braces(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from langchain_core.callbacks import BaseCallbackHandler
+
+    monkeypatch.setenv("FREE_LLM_API_KEY", "fake-key")
+    callback = BaseCallbackHandler()
+    captured: dict[str, Any] = {}
+
+    def invoke(prompt: Any, config: Any) -> AIMessage:
+        captured.update(prompt=prompt, config=config)
+        return AIMessage(content="Narrative.")
+
+    with (
+        patch(
+            "news_dashboard.ai_client.get_chat_model",
+            return_value=RunnableLambda(invoke),
+        ),
+        patch("news_dashboard.ai_client.free_llm_config", return_value=("fake-key", None)),
+        patch("news_dashboard.ai_client.langfuse_enabled", return_value=True),
+        patch("langfuse.langchain.CallbackHandler", return_value=callback),
+        patch("langfuse.propagate_attributes") as attributes,
+    ):
+        result = generate_recap_narrative(_make_recap(categories=[{"category": "{science}"}]))
+
+    assert result == "Narrative."
+    assert callback in captured["config"]["callbacks"].handlers
+    attributes.assert_called_once_with(tags=["recap", "narrative"], trace_name="recap-narrative")
+    assert "{science}" in captured["prompt"].messages[0].content

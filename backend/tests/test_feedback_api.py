@@ -89,6 +89,29 @@ def test_feedback_noop_returns_recorded_false(
     assert resp.json() == {"recorded": False}
 
 
+def test_feedback_scores_returned_ask_root_trace(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    scored: list[str] = []
+
+    def create_score(trace_id: str, **_kwargs: Any) -> bool:
+        scored.append(trace_id)
+        return True
+
+    monkeypatch.setattr(
+        "news_dashboard.ai_client.create_score",
+        create_score,
+    )
+    monkeypatch.setattr(
+        "news_dashboard.ai_memory.service.record_memory_event", lambda *_args, **_kwargs: {}
+    )
+
+    response = client.post("/api/feedback", json={"trace_id": "ask-root-trace", "helpful": True})
+
+    assert response.status_code == 200
+    assert scored == ["ask-root-trace"]
+
+
 def test_feedback_persists_local_memory_event(
     client: TestClient, monkeypatch: pytest.MonkeyPatch, pg_clean: str
 ) -> None:

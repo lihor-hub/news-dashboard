@@ -6,11 +6,14 @@ import logging
 import os
 import re
 import time
-from typing import Any
+from typing import Any, Literal, NotRequired, cast
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
+from langchain_core.messages import convert_to_messages
+from langchain_core.prompt_values import ChatPromptValue
 from psycopg.types.json import Jsonb
 from pydantic import ValidationError
+from typing_extensions import TypedDict
 
 from news_dashboard.body_fetch import extract_body
 from news_dashboard.db import connect, init_db, row_to_dict
@@ -24,7 +27,6 @@ from news_dashboard.learn_from_link.models import (
     SlideDeck,
     StudyArtifacts,
 )
-from news_dashboard.prompt_catalog import get_chat_prompt
 from news_dashboard.reading_list.metadata import fetch_url_metadata
 from news_dashboard.reading_list.service import normalize_url
 from news_dashboard.url_safety import UnsafeUrlError, validate_server_fetch_url
@@ -61,11 +63,18 @@ _PERSONA_FRAMING: dict[str, str] = {
     "preparing_talk": "for someone preparing a talk on this topic",
 }
 
-_LESSON_CHAT_SYSTEM_PROMPT = (
-    get_chat_prompt("lesson-chat")[0]["content"]
-    .replace("{{lesson_context}}", "{lesson_context}")
-    .replace("{{source_context}}", "{source_context}")
-)
+_LESSON_CHAT_SYSTEM_PROMPT = """\
+You are the Lesson Follow-up Assistant. Answer follow-up questions about the \
+lesson below, grounded in the lesson detail and source article content \
+supplied. If information is not present in the provided context, say so \
+clearly rather than guessing.
+
+--- LESSON ---
+{lesson_context}
+
+--- SOURCE ARTICLE ---
+{source_context}
+"""
 
 _LESSON_ARTIFACT_RESET_ASSIGNMENTS = """\
 podcast_status = NULL,
@@ -525,7 +534,13 @@ def _update_lesson_slide_deck_failure(
     return _serialize_lesson(row)
 
 
-_LESSON_SLIDE_DECK_SYSTEM_PROMPT = get_chat_prompt("lesson-slide-deck")[0]["content"]
+_LESSON_SLIDE_DECK_SYSTEM_PROMPT = """\
+You are the Lesson Slide Deck Generator. Produce a short teaching slide deck \
+summarizing the lesson below as a shareable learning artifact. Return JSON \
+with a "slides" array of 6 to 10 slides, each with a "title" and 1-6 \
+"bullets". Ground every slide in the supplied lesson detail; do not invent \
+facts.
+"""
 
 
 def _build_slide_deck_prompt(lesson: dict[str, Any]) -> str:
@@ -565,27 +580,39 @@ def generate_slide_deck_content(lesson: dict[str, Any], user_id: int) -> dict[st
 
     import json
 
-    from news_dashboard.ai_client import chat_create, get_chat_client, get_prompt
+    from langfuse import propagate_attributes
 
-    client = get_chat_client(api_key=api_key, base_url=base_url)
-    lesson_content = _build_slide_deck_prompt(lesson)
+    from news_dashboard.ai_client import get_chat_model, get_prompt, langfuse_enabled, response_text
+    from news_dashboard.prompt_catalog import get_chat_prompt
+
+    model = os.getenv("OPENAI_LESSON_CHAT_MODEL", DEFAULT_LESSON_CHAT_MODEL)
+    chat_model = get_chat_model(
+        api_key=api_key,
+        base_url=base_url,
+        model=model,
+        response_format={"type": "json_object"},
+    )
     prompt = get_prompt(
         "lesson-slide-deck",
         fallback=get_chat_prompt("lesson-slide-deck"),
         prompt_type="chat",
-        variables={"lesson_content": lesson_content},
+        variables={"lesson_content": _build_slide_deck_prompt(lesson)},
     )
-    response = chat_create(
-        client,
-        name="lesson-slide-deck",
+    callbacks: list[Any] = []
+    if langfuse_enabled():
+        from langfuse.langchain import CallbackHandler
+
+        callbacks.append(CallbackHandler())
+    with propagate_attributes(
+        user_id=str(user_id),
+        session_id=f"lesson:{user_id}:{lesson['id']}",
         tags=["lesson", "slide-deck"],
-        user_id=user_id,
-        model=os.getenv("OPENAI_LESSON_CHAT_MODEL", DEFAULT_LESSON_CHAT_MODEL),
-        messages=prompt.messages,
-        langfuse_prompt=prompt.langfuse_prompt,
-        response_format={"type": "json_object"},
-    )
-    parsed = json.loads(response.choices[0].message.content or "")
+        trace_name="lesson-slide-deck",
+        prompt=prompt.langfuse_prompt,
+    ):
+        prompt_value = ChatPromptValue(messages=convert_to_messages(prompt.messages))
+        response = chat_model.invoke(prompt_value, config={"callbacks": callbacks})
+    parsed = json.loads(response_text(response))
     return validate_slide_deck(parsed)
 
 
@@ -691,7 +718,13 @@ def _update_lesson_infographic_failure(
     return _serialize_lesson(row)
 
 
-_LESSON_INFOGRAPHIC_SYSTEM_PROMPT = get_chat_prompt("lesson-infographic")[0]["content"]
+_LESSON_INFOGRAPHIC_SYSTEM_PROMPT = """\
+You are the Lesson Infographic Generator. Produce a deterministic, text-first \
+infographic artifact from the lesson below. Return JSON with title, subtitle, \
+sections, and footer fields. Each section needs a heading and body. Ground the \
+artifact only in the supplied lesson detail; do not invent facts, image URLs, \
+or external assets.
+"""
 
 
 def _build_infographic_prompt(lesson: dict[str, Any]) -> str:
@@ -727,27 +760,39 @@ def generate_infographic_content(lesson: dict[str, Any], user_id: int) -> dict[s
 
     import json
 
-    from news_dashboard.ai_client import chat_create, get_chat_client, get_prompt
+    from langfuse import propagate_attributes
 
-    client = get_chat_client(api_key=api_key, base_url=base_url)
-    lesson_content = _build_infographic_prompt(lesson)
+    from news_dashboard.ai_client import get_chat_model, get_prompt, langfuse_enabled, response_text
+    from news_dashboard.prompt_catalog import get_chat_prompt
+
+    model = os.getenv("OPENAI_LESSON_CHAT_MODEL", DEFAULT_LESSON_CHAT_MODEL)
+    chat_model = get_chat_model(
+        api_key=api_key,
+        base_url=base_url,
+        model=model,
+        response_format={"type": "json_object"},
+    )
     prompt = get_prompt(
         "lesson-infographic",
         fallback=get_chat_prompt("lesson-infographic"),
         prompt_type="chat",
-        variables={"lesson_content": lesson_content},
+        variables={"lesson_content": _build_infographic_prompt(lesson)},
     )
-    response = chat_create(
-        client,
-        name="lesson-infographic",
+    callbacks: list[Any] = []
+    if langfuse_enabled():
+        from langfuse.langchain import CallbackHandler
+
+        callbacks.append(CallbackHandler())
+    with propagate_attributes(
+        user_id=str(user_id),
+        session_id=f"lesson:{user_id}:{lesson['id']}",
         tags=["lesson", "infographic"],
-        user_id=user_id,
-        model=os.getenv("OPENAI_LESSON_CHAT_MODEL", DEFAULT_LESSON_CHAT_MODEL),
-        messages=prompt.messages,
-        langfuse_prompt=prompt.langfuse_prompt,
-        response_format={"type": "json_object"},
-    )
-    parsed = json.loads(response.choices[0].message.content or "")
+        trace_name="lesson-infographic",
+        prompt=prompt.langfuse_prompt,
+    ):
+        prompt_value = ChatPromptValue(messages=convert_to_messages(prompt.messages))
+        response = chat_model.invoke(prompt_value, config={"callbacks": callbacks})
+    parsed = json.loads(response_text(response))
     return validate_infographic(parsed)
 
 
@@ -1037,6 +1082,7 @@ def _add_personal_relevance(
         raw_relevance = generate_personal_relevance(
             user_id,
             lesson_fields,
+            lesson_id=lesson_id,
             database_url=database_url,
         )
         lesson_fields["personal_relevance"] = validate_personal_relevance(raw_relevance)
@@ -1171,6 +1217,211 @@ def _run_citation_verification_step(
     return detail, error
 
 
+class LessonGraphState(TypedDict):
+    """Typed state shared by the durable lesson-generation graph."""
+
+    lesson_id: int
+    user_id: int
+    database_url: str | None
+    run_id: int
+    depth: LessonDepth
+    persona: LessonPersona
+    lesson_url: str
+    metadata: NotRequired[dict[str, Any]]
+    body_text: NotRequired[str]
+    lesson_fields: NotRequired[dict[str, Any]]
+    detail_model: NotRequired[LessonDetail]
+    error: NotRequired[str]
+    failed_step: NotRequired[str]
+    result: NotRequired[dict[str, Any]]
+
+
+def _lesson_graph_route(state: LessonGraphState) -> Literal["continue", "fail"]:
+    return "fail" if state.get("error") else "continue"
+
+
+def build_lesson_graph() -> Any:  # noqa: PLR0915 - graph wiring is clearest in one factory
+    """Compile the lesson pipeline without a checkpointer.
+
+    Durable run, step, generation, and lesson records remain the persistence
+    boundary; graph state is deliberately invocation-local.
+    """
+    from langgraph.graph import END, START, StateGraph
+
+    # LangGraph's runtime accepts TypedDict schemas, while ty/pyrefly do not
+    # currently recognize Python 3.14's TypedDict metaclass against its bound.
+    state_schema = cast("Any", LessonGraphState)
+    graph = StateGraph(state_schema)
+
+    def fetch_node(state: LessonGraphState) -> dict[str, Any]:
+        metadata = _run_fetch_step(state["database_url"], state["run_id"], state["lesson_url"])
+        return {"metadata": metadata}
+
+    def extraction_node(state: LessonGraphState) -> dict[str, Any]:
+        body_text, error = _run_extraction_step(
+            state["database_url"], state["run_id"], state["lesson_url"]
+        )
+        if error or body_text is None:
+            return {
+                "error": error or "Could not extract readable article content.",
+                "failed_step": agent_runs.STEP_EXTRACTION,
+            }
+        metadata = state.get("metadata", {})
+        return {
+            "body_text": body_text,
+            "lesson_fields": {
+                "original_url": state["lesson_url"],
+                "title": str(metadata.get("title") or state["lesson_url"]),
+                "source_name": metadata.get("site_name"),
+                "author": metadata.get("author"),
+                "published_at": metadata.get("published_at"),
+                "source_content": body_text,
+            },
+        }
+
+    def synthesis_node(state: LessonGraphState) -> dict[str, Any]:
+        lesson_fields = state["lesson_fields"]
+        detail_model, artifacts, error = _run_synthesis_step(
+            state["database_url"],
+            state["run_id"],
+            lesson_fields,
+            state["depth"],
+            state["persona"],
+            state["lesson_id"],
+        )
+        if error or detail_model is None:
+            return {
+                "error": error or "Generated lesson detail was malformed.",
+                "failed_step": agent_runs.STEP_SYNTHESIS,
+            }
+        lesson_fields["study_artifacts"] = artifacts
+        return {"lesson_fields": lesson_fields, "detail_model": detail_model}
+
+    def citation_node(state: LessonGraphState) -> dict[str, Any]:
+        lesson_fields = state["lesson_fields"]
+        detail, error = _run_citation_verification_step(
+            state["database_url"],
+            state["run_id"],
+            state["detail_model"],
+            lesson_fields,
+            state["lesson_id"],
+        )
+        if error or detail is None:
+            return {
+                "error": error or "Generated lesson citations did not match source content.",
+                "failed_step": agent_runs.STEP_CITATION_VERIFICATION,
+            }
+        lesson_fields["lesson_detail"] = detail
+        return {"lesson_fields": lesson_fields}
+
+    def relevance_node(state: LessonGraphState) -> dict[str, Any]:
+        lesson_fields = state["lesson_fields"]
+        _add_personal_relevance(
+            state["user_id"],
+            state["lesson_id"],
+            lesson_fields,
+            state["database_url"],
+        )
+        return {"lesson_fields": lesson_fields}
+
+    def persistence_node(state: LessonGraphState) -> dict[str, Any]:
+        started = time.monotonic()
+        try:
+            result = _update_lesson_success(
+                state["lesson_id"],
+                state["user_id"],
+                lesson_fields=state["lesson_fields"],
+                database_url=state["database_url"],
+            )
+            _record_lesson_generation(
+                state["lesson_id"],
+                depth=state["depth"],
+                persona=state["persona"],
+                generation_status="complete",
+                lesson_detail=state["lesson_fields"]["lesson_detail"],
+                generation_error=None,
+                database_url=state["database_url"],
+            )
+        except Exception as exc:
+            agent_runs.record_step(
+                state["database_url"],
+                state["run_id"],
+                agent_runs.STEP_PERSISTENCE,
+                5,
+                status="failed",
+                latency_ms=int((time.monotonic() - started) * 1000),
+                error=str(exc)[:2000],
+            )
+            agent_runs.finish_run(
+                state["database_url"],
+                state["run_id"],
+                status="failed",
+                failed_step=agent_runs.STEP_PERSISTENCE,
+                error=str(exc)[:2000],
+            )
+            raise
+        agent_runs.record_step(
+            state["database_url"],
+            state["run_id"],
+            agent_runs.STEP_PERSISTENCE,
+            5,
+            status="complete",
+            latency_ms=int((time.monotonic() - started) * 1000),
+        )
+        agent_runs.finish_run(state["database_url"], state["run_id"], status="complete")
+        return {"result": result}
+
+    def failure_node(state: LessonGraphState) -> dict[str, Any]:
+        error = state["error"]
+        result = _update_lesson_failure(
+            state["lesson_id"], state["user_id"], error, database_url=state["database_url"]
+        )
+        _record_lesson_generation(
+            state["lesson_id"],
+            depth=state["depth"],
+            persona=state["persona"],
+            generation_status="failed",
+            lesson_detail=None,
+            generation_error=error,
+            database_url=state["database_url"],
+        )
+        agent_runs.finish_run(
+            state["database_url"],
+            state["run_id"],
+            status="failed",
+            failed_step=state["failed_step"],
+            error=error,
+        )
+        return {"result": result}
+
+    graph.add_node("fetch", fetch_node)
+    graph.add_node("extraction", extraction_node)
+    graph.add_node("synthesis", synthesis_node)
+    graph.add_node("citation_verification", citation_node)
+    graph.add_node("personal_relevance", relevance_node)
+    graph.add_node("persistence", persistence_node)
+    graph.add_node("failure", failure_node)
+    graph.add_edge(START, "fetch")
+    graph.add_edge("fetch", "extraction")
+    graph.add_conditional_edges(
+        "extraction", _lesson_graph_route, {"continue": "synthesis", "fail": "failure"}
+    )
+    graph.add_conditional_edges(
+        "synthesis",
+        _lesson_graph_route,
+        {"continue": "citation_verification", "fail": "failure"},
+    )
+    graph.add_conditional_edges(
+        "citation_verification",
+        _lesson_graph_route,
+        {"continue": "personal_relevance", "fail": "failure"},
+    )
+    graph.add_edge("personal_relevance", "persistence")
+    graph.add_edge("persistence", END)
+    graph.add_edge("failure", END)
+    return graph.compile()
+
+
 def generate_lesson_from_url(
     lesson_id: int,
     user_id: int,
@@ -1193,122 +1444,34 @@ def generate_lesson_from_url(
         config={"depth": depth, "persona": persona},
     )
 
-    def _fail(error_message: str, *, failed_step: str) -> dict[str, Any]:
-        result = _update_lesson_failure(
-            lesson_id,
-            user_id,
-            error_message,
-            database_url=database_url,
-        )
-        _record_lesson_generation(
-            lesson_id,
-            depth=depth,
-            persona=persona,
-            generation_status="failed",
-            lesson_detail=None,
-            generation_error=error_message,
-            database_url=database_url,
-        )
-        agent_runs.finish_run(
-            database_url,
-            run_id,
-            status="failed",
-            failed_step=failed_step,
-            error=error_message,
-        )
-        return result
+    from langfuse import propagate_attributes
 
-    lesson_url = str(lesson["original_url"])
-    metadata = _run_fetch_step(database_url, run_id, lesson_url)
+    from news_dashboard.ai_client import langfuse_enabled
 
-    body_text, extraction_error = _run_extraction_step(database_url, run_id, lesson_url)
-    if extraction_error or body_text is None:
-        return _fail(
-            extraction_error or "Could not extract readable article content.",
-            failed_step=agent_runs.STEP_EXTRACTION,
-        )
+    callbacks: list[Any] = []
+    if langfuse_enabled():
+        from langfuse.langchain import CallbackHandler
 
-    lesson_fields: dict[str, Any] = {
-        "original_url": lesson_url,
-        "title": str(metadata.get("title") or lesson_url),
-        "source_name": metadata.get("site_name"),
-        "author": metadata.get("author"),
-        "published_at": metadata.get("published_at"),
-        "source_content": body_text,
-    }
-
-    detail_model, artifacts, synthesis_error = _run_synthesis_step(
-        database_url, run_id, lesson_fields, depth, persona, lesson_id
-    )
-    if synthesis_error or detail_model is None:
-        return _fail(
-            synthesis_error or "Generated lesson detail was malformed.",
-            failed_step=agent_runs.STEP_SYNTHESIS,
+        callbacks.append(CallbackHandler())
+    with propagate_attributes(
+        user_id=str(user_id),
+        session_id=f"lesson-run:{run_id}",
+        tags=["lesson", "generation"],
+        trace_name="lesson-generation",
+    ):
+        final_state = build_lesson_graph().invoke(
+            {
+                "lesson_id": lesson_id,
+                "user_id": user_id,
+                "database_url": database_url,
+                "run_id": run_id,
+                "depth": depth,
+                "persona": persona,
+                "lesson_url": str(lesson["original_url"]),
+            },
+            config={"callbacks": callbacks},
         )
-    lesson_fields["study_artifacts"] = artifacts
-
-    detail, citation_error = _run_citation_verification_step(
-        database_url, run_id, detail_model, lesson_fields, lesson_id
-    )
-    if citation_error or detail is None:
-        return _fail(
-            citation_error or "Generated lesson citations did not match source content.",
-            failed_step=agent_runs.STEP_CITATION_VERIFICATION,
-        )
-    lesson_fields["lesson_detail"] = detail
-
-    _add_personal_relevance(
-        user_id,
-        lesson_id,
-        lesson_fields,
-        database_url=database_url,
-    )
-
-    persistence_start = time.monotonic()
-    try:
-        result = _update_lesson_success(
-            lesson_id,
-            user_id,
-            lesson_fields=lesson_fields,
-            database_url=database_url,
-        )
-        _record_lesson_generation(
-            lesson_id,
-            depth=depth,
-            persona=persona,
-            generation_status="complete",
-            lesson_detail=lesson_fields["lesson_detail"],
-            generation_error=None,
-            database_url=database_url,
-        )
-    except Exception as exc:
-        agent_runs.record_step(
-            database_url,
-            run_id,
-            agent_runs.STEP_PERSISTENCE,
-            5,
-            status="failed",
-            latency_ms=int((time.monotonic() - persistence_start) * 1000),
-            error=str(exc)[:2000],
-        )
-        agent_runs.finish_run(
-            database_url,
-            run_id,
-            status="failed",
-            failed_step=agent_runs.STEP_PERSISTENCE,
-            error=str(exc)[:2000],
-        )
-        raise
-    agent_runs.record_step(
-        database_url,
-        run_id,
-        agent_runs.STEP_PERSISTENCE,
-        5,
-        status="complete",
-        latency_ms=int((time.monotonic() - persistence_start) * 1000),
-    )
-    agent_runs.finish_run(database_url, run_id, status="complete")
-    return result
+    return cast("dict[str, Any]", final_state["result"])
 
 
 def list_lessons(
@@ -1439,13 +1602,21 @@ def ask_lesson_question(
     if lesson is None:
         raise LessonNotFoundError
 
-    _lesson_chat_ai_config()
+    api_key, base_url = _lesson_chat_ai_config()
     model = os.getenv("OPENAI_LESSON_CHAT_MODEL", DEFAULT_LESSON_CHAT_MODEL)
 
     lesson_context, source_context = _lesson_chat_context(lesson)
-    from news_dashboard.ai_client import get_prompt
-    from news_dashboard.ai_orchestration import invoke_chat_chain
+    from langfuse import propagate_attributes
 
+    from news_dashboard.ai_client import (
+        get_chat_model,
+        get_prompt,
+        langfuse_enabled,
+        response_text,
+    )
+    from news_dashboard.prompt_catalog import get_chat_prompt
+
+    chat_model = get_chat_model(api_key=api_key, base_url=base_url, model=model)
     prompt = get_prompt(
         "lesson-chat",
         fallback=get_chat_prompt("lesson-chat"),
@@ -1457,16 +1628,21 @@ def ask_lesson_question(
         },
     )
     messages = [*prompt.messages[:-1], *history, prompt.messages[-1]]
+    prompt_value = ChatPromptValue(messages=convert_to_messages(messages))
+    callbacks: list[Any] = []
+    if langfuse_enabled():
+        from langfuse.langchain import CallbackHandler
 
-    return invoke_chat_chain(
-        name="lesson-chat",
+        callbacks.append(CallbackHandler())
+    with propagate_attributes(
+        user_id=str(user_id),
+        session_id=f"lesson:{user_id}:{lesson_id}",
         tags=["lesson", "chat"],
-        user_id=user_id,
-        session_id=f"lesson:{lesson_id}:user:{user_id}",
-        model=model,
-        messages=messages,
-        prompt=prompt,
-    )
+        trace_name="lesson-chat",
+        prompt=prompt.langfuse_prompt,
+    ):
+        response = chat_model.invoke(prompt_value, config={"callbacks": callbacks})
+    return response_text(response)
 
 
 def _get_relevance_data(
@@ -1528,6 +1704,7 @@ def generate_personal_relevance(
     user_id: int,
     lesson_fields: dict[str, Any],
     *,
+    lesson_id: int,
     database_url: str | None = None,
 ) -> dict[str, Any]:
     interests, dna_categories, dna_sources, recent_articles = _get_relevance_data(
@@ -1550,34 +1727,52 @@ def generate_personal_relevance(
 
     import json
 
-    from news_dashboard.ai_client import chat_create, get_chat_client, get_prompt
+    from langfuse import propagate_attributes
+
+    from news_dashboard.ai_client import get_chat_model, get_prompt, langfuse_enabled, response_text
+    from news_dashboard.prompt_catalog import get_chat_prompt
 
     lesson_title = str(lesson_fields.get("title") or lesson_fields.get("original_url"))
     lesson_detail = lesson_fields.get("lesson_detail") or {}
     lesson_context = f"Lesson title: {lesson_title}\nLesson gist: {lesson_detail.get('gist', '')}"
     profile_context = (
-        f"Interests: {interests}\nReading DNA categories: {dna_categories}\n"
+        f"Interests: {interests}\n"
+        f"Reading DNA categories: {dna_categories}\n"
         f"Reading DNA sources: {dna_sources}\n"
         f"Recent article titles: {[item['title'] for item in recent_articles]}"
     )
     try:
+        model = os.getenv("OPENAI_LESSON_CHAT_MODEL", DEFAULT_LESSON_CHAT_MODEL)
+        chat_model = get_chat_model(
+            api_key=api_key,
+            base_url=base_url,
+            model=model,
+            response_format={"type": "json_object"},
+        )
         prompt = get_prompt(
             "lesson-relevance",
             fallback=get_chat_prompt("lesson-relevance"),
             prompt_type="chat",
-            variables={"lesson_context": lesson_context, "profile_context": profile_context},
+            variables={
+                "lesson_context": lesson_context,
+                "profile_context": profile_context,
+            },
         )
-        response = chat_create(
-            get_chat_client(api_key=api_key, base_url=base_url),
-            name="lesson-relevance",
+        callbacks: list[Any] = []
+        if langfuse_enabled():
+            from langfuse.langchain import CallbackHandler
+
+            callbacks.append(CallbackHandler())
+        with propagate_attributes(
+            user_id=str(user_id),
+            session_id=f"lesson:{user_id}:{lesson_id}",
             tags=["lesson", "relevance"],
-            user_id=user_id,
-            model=os.getenv("OPENAI_LESSON_CHAT_MODEL", DEFAULT_LESSON_CHAT_MODEL),
-            messages=prompt.messages,
-            langfuse_prompt=prompt.langfuse_prompt,
-            response_format={"type": "json_object"},
-        )
-        parsed = json.loads(response.choices[0].message.content or "")
+            trace_name="lesson-relevance",
+            prompt=prompt.langfuse_prompt,
+        ):
+            prompt_value = ChatPromptValue(messages=convert_to_messages(prompt.messages))
+            response = chat_model.invoke(prompt_value, config={"callbacks": callbacks})
+        parsed = json.loads(response_text(response))
         return {
             "explanation": str(parsed["explanation"]),
             "signals": [str(signal) for signal in parsed["signals"] if signal],
