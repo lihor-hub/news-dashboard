@@ -393,7 +393,9 @@ def generate_share_context(share_id: int) -> str | None:
         "Be specific and personal, not generic."
     )
 
-    from news_dashboard.ai_client import get_chat_model, response_text
+    from langfuse import propagate_attributes
+
+    from news_dashboard.ai_client import get_chat_model, langfuse_enabled, response_text
 
     chat_model = get_chat_model(
         api_key=api_key,
@@ -403,14 +405,17 @@ def generate_share_context(share_id: int) -> str | None:
         temperature=0.7,
     )
     try:
-        completion = chat_model.invoke(
-            [{"role": "user", "content": prompt}],
-            config={
-                "run_name": "share-context",
-                "tags": ["shares"],
-                "metadata": {"langfuse_user_id": str(share_data["from_user_id"])},
-            },
-        )
+        callbacks: list[Any] = []
+        if langfuse_enabled():
+            from langfuse.langchain import CallbackHandler
+
+            callbacks.append(CallbackHandler())
+        with propagate_attributes(
+            user_id=str(share_data["from_user_id"]), tags=["shares"], trace_name="share-context"
+        ):
+            completion = chat_model.invoke(
+                [{"role": "user", "content": prompt}], config={"callbacks": callbacks}
+            )
         context = response_text(completion).strip()
     except Exception:
         logger.exception("generate_share_context: LLM call failed for share %d", share_id)

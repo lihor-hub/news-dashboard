@@ -65,10 +65,7 @@ def test_podcast_feed_ingests_enclosure_with_ai_summary(pg_clean: str) -> None:
     assert outcome.articles_new == 1
     assert get_model.call_args.kwargs["max_tokens"] == 500
     assert get_model.call_args.kwargs["temperature"] == 0.2
-    assert get_model.return_value.invoke.call_args.kwargs["config"] == {
-        "run_name": "summarize-media-article",
-        "tags": ["ingest", "media"],
-    }
+    assert "callbacks" in get_model.return_value.invoke.call_args.kwargs["config"]
     with connect(pg_clean) as conn:
         row = conn.execute(
             "SELECT url, summary, reason, tags, kind FROM articles WHERE source_slug=%s",

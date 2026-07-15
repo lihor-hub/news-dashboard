@@ -538,7 +538,10 @@ def test_generate_share_context_stores_summary(db: str, monkeypatch: pytest.Monk
 
     summary = "Alice highlighted this because it matters. You will find it useful."
 
-    with patch("news_dashboard.ai_client.get_chat_model") as get_model:
+    with (
+        patch("news_dashboard.ai_client.get_chat_model") as get_model,
+        patch("langfuse.propagate_attributes") as attributes,
+    ):
         from langchain_core.messages import AIMessage
 
         get_model.return_value.invoke.return_value = AIMessage(content=summary)
@@ -547,11 +550,10 @@ def test_generate_share_context_stores_summary(db: str, monkeypatch: pytest.Monk
     assert result == summary
     assert get_model.call_args.kwargs["max_tokens"] == 120
     assert get_model.call_args.kwargs["temperature"] == 0.7
-    assert get_model.return_value.invoke.call_args.kwargs["config"] == {
-        "run_name": "share-context",
-        "tags": ["shares"],
-        "metadata": {"langfuse_user_id": str(alice)},
-    }
+    assert "callbacks" in get_model.return_value.invoke.call_args.kwargs["config"]
+    attributes.assert_called_once_with(
+        user_id=str(alice), tags=["shares"], trace_name="share-context"
+    )
 
     detail = get_share(share_id, bob)
     assert detail is not None

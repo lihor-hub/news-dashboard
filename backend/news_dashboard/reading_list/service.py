@@ -265,13 +265,21 @@ def _summary_ai_config() -> tuple[str, str | None, str]:
 
 
 def _call_summary_model(api_key: str, base_url: str | None, model: str, text: str) -> str:
-    from news_dashboard.ai_client import get_chat_model, response_text
+    from langfuse import propagate_attributes
+
+    from news_dashboard.ai_client import get_chat_model, langfuse_enabled, response_text
 
     chat_model = get_chat_model(api_key=api_key, base_url=base_url, model=model, max_tokens=120)
-    result = chat_model.invoke(
-        [{"role": "user", "content": f"{_SUMMARY_PROMPT}\n\n{text}"}],
-        config={"run_name": "reading-list-summary", "tags": ["reading-list"]},
-    )
+    callbacks: list[Any] = []
+    if langfuse_enabled():
+        from langfuse.langchain import CallbackHandler
+
+        callbacks.append(CallbackHandler())
+    with propagate_attributes(tags=["reading-list"], trace_name="reading-list-summary"):
+        result = chat_model.invoke(
+            [{"role": "user", "content": f"{_SUMMARY_PROMPT}\n\n{text}"}],
+            config={"callbacks": callbacks},
+        )
     summary = response_text(result).strip()
     if not summary:
         message = "empty summary response"

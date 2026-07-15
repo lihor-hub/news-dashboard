@@ -275,7 +275,14 @@ def generate_podcast_script(briefing_content: dict[str, Any]) -> list[dict[str, 
     """Generate a conversational podcast script from briefing content using LLM."""
     api_key, base_url = _script_ai_config()
 
-    from news_dashboard.ai_client import get_chat_model, response_text, strip_markdown_fence
+    from langfuse import propagate_attributes
+
+    from news_dashboard.ai_client import (
+        get_chat_model,
+        langfuse_enabled,
+        response_text,
+        strip_markdown_fence,
+    )
 
     model = os.getenv("OPENAI_BRIEFING_MODEL", "gpt-4o-mini")
     chat_model = get_chat_model(
@@ -302,10 +309,13 @@ def generate_podcast_script(briefing_content: dict[str, Any]) -> list[dict[str, 
         },
     ]
 
-    response = chat_model.invoke(
-        messages,
-        config={"run_name": "podcast-script-generation", "tags": ["podcast"]},
-    )
+    callbacks: list[Any] = []
+    if langfuse_enabled():
+        from langfuse.langchain import CallbackHandler
+
+        callbacks.append(CallbackHandler())
+    with propagate_attributes(tags=["podcast"], trace_name="podcast-script-generation"):
+        response = chat_model.invoke(messages, config={"callbacks": callbacks})
 
     text = strip_markdown_fence(response_text(response) or "{}")
     try:

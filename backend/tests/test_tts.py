@@ -293,8 +293,8 @@ def test_script_ai_config_raises_when_no_key(monkeypatch: pytest.MonkeyPatch) ->
 
 
 def test_generate_podcast_script() -> None:
+    from langchain_core.callbacks import BaseCallbackHandler
     from langchain_core.messages import AIMessage
-    from langchain_core.runnables import RunnableLambda
 
     mock_response = MagicMock()
     mock_response.choices = [
@@ -309,14 +309,15 @@ def test_generate_podcast_script() -> None:
             )
         )
     ]
+    model = MagicMock()
+    model.invoke.return_value = AIMessage(content=mock_response.choices[0].message.content)
+    callback = BaseCallbackHandler()
     with (
         patch.dict("os.environ", {"FREE_LLM_API_KEY": "sk-free-llm"}),
-        patch(
-            "news_dashboard.ai_client.get_chat_model",
-            return_value=RunnableLambda(
-                lambda _messages: AIMessage(content=mock_response.choices[0].message.content)
-            ),
-        ) as get_model,
+        patch("news_dashboard.ai_client.get_chat_model", return_value=model) as get_model,
+        patch("news_dashboard.ai_client.langfuse_enabled", return_value=True),
+        patch("langfuse.langchain.CallbackHandler", return_value=callback),
+        patch("langfuse.propagate_attributes") as attributes,
     ):
         script = generate_podcast_script(
             {
@@ -334,6 +335,10 @@ def test_generate_podcast_script() -> None:
     assert script[1]["text"] == "Hi Alex!"
     assert get_model.call_args.kwargs["max_tokens"] == 2048
     assert get_model.call_args.kwargs["response_format"] == {"type": "json_object"}
+    assert get_model.call_args.kwargs["model"] == "gpt-4o-mini"
+    assert get_model.call_args.kwargs["base_url"] is None
+    assert callback in model.invoke.call_args.kwargs["config"]["callbacks"]
+    attributes.assert_called_once_with(tags=["podcast"], trace_name="podcast-script-generation")
 
 
 def test_generate_podcast_script_uses_native_chat_prompt() -> None:

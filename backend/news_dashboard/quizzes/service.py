@@ -294,18 +294,19 @@ def generate_weekly_quiz(
     blurbs = "\n\n---\n\n".join(_build_article_blurb(a) for a in articles)
     messages = [{"role": "user", "content": f"{_QUIZ_PROMPT}\n\nArticles:\n{blurbs}"}]
 
-    from news_dashboard.ai_client import get_chat_model, response_text
+    from langfuse import propagate_attributes
+
+    from news_dashboard.ai_client import get_chat_model, langfuse_enabled, response_text
 
     chat_model = get_chat_model(api_key=api_key, base_url=base_url, model=model, max_tokens=1024)
     logger.info("Generating weekly quiz for user %s from %d articles", user_id, len(articles))
-    result = chat_model.invoke(
-        messages,
-        config={
-            "run_name": "weekly-quiz",
-            "tags": ["quiz"],
-            "metadata": {"langfuse_user_id": str(user_id)},
-        },
-    )
+    callbacks: list[Any] = []
+    if langfuse_enabled():
+        from langfuse.langchain import CallbackHandler
+
+        callbacks.append(CallbackHandler())
+    with propagate_attributes(user_id=str(user_id), tags=["quiz"], trace_name="weekly-quiz"):
+        result = chat_model.invoke(messages, config={"callbacks": callbacks})
     answer = response_text(result).strip()
     questions = _parse_questions(answer)
     if not questions:

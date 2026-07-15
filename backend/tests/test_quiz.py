@@ -247,6 +247,7 @@ def test_generate_weekly_quiz_with_articles(tmp_path: Path) -> None:
             "news_dashboard.ai_client.get_chat_model",
             return_value=_chat_model_response(mock_response),
         ) as get_model,
+        patch("langfuse.propagate_attributes") as attributes,
     ):
         quiz = generate_weekly_quiz(user_id, db_path=db_path)
 
@@ -256,11 +257,10 @@ def test_generate_weekly_quiz_with_articles(tmp_path: Path) -> None:
     assert quiz["score"] is None
     assert get_model.call_args.kwargs["max_tokens"] == 1024
     model = get_model.return_value
-    assert model.invoke.call_args.kwargs["config"] == {
-        "run_name": "weekly-quiz",
-        "tags": ["quiz"],
-        "metadata": {"langfuse_user_id": str(user_id)},
-    }
+    assert "callbacks" in model.invoke.call_args.kwargs["config"]
+    attributes.assert_called_once_with(
+        user_id=str(user_id), tags=["quiz"], trace_name="weekly-quiz"
+    )
 
 
 def test_get_latest_quiz_empty(tmp_path: Path) -> None:

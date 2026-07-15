@@ -92,7 +92,14 @@ def generate_push_hook(briefing: dict[str, Any]) -> str:
     fallback = f"Your daily brief: {title}" if title else _DEFAULT_PUSH_TITLE
 
     try:
-        from news_dashboard.ai_client import free_llm_config, get_chat_model, response_text
+        from langfuse import propagate_attributes
+
+        from news_dashboard.ai_client import (
+            free_llm_config,
+            get_chat_model,
+            langfuse_enabled,
+            response_text,
+        )
 
         api_key, base_url = free_llm_config()
         if not api_key:
@@ -119,10 +126,15 @@ def generate_push_hook(briefing: dict[str, Any]) -> str:
             max_tokens=40,
             temperature=0.7,
         )
-        response = chat_model.invoke(
-            [{"role": "user", "content": prompt}],
-            config={"run_name": "push-hook", "tags": ["push"]},
-        )
+        callbacks: list[Any] = []
+        if langfuse_enabled():
+            from langfuse.langchain import CallbackHandler
+
+            callbacks.append(CallbackHandler())
+        with propagate_attributes(tags=["push"], trace_name="push-hook"):
+            response = chat_model.invoke(
+                [{"role": "user", "content": prompt}], config={"callbacks": callbacks}
+            )
         hook = response_text(response).strip()
         if hook:
             return hook
@@ -155,7 +167,14 @@ def generate_recap_push_hook(recap: dict[str, Any]) -> str:
         fallback = f"You read {articles_read} articles this week."
 
     try:
-        from news_dashboard.ai_client import free_llm_config, get_chat_model, response_text
+        from langfuse import propagate_attributes
+
+        from news_dashboard.ai_client import (
+            free_llm_config,
+            get_chat_model,
+            langfuse_enabled,
+            response_text,
+        )
 
         api_key, base_url = free_llm_config()
         if not api_key:
@@ -179,10 +198,15 @@ def generate_recap_push_hook(recap: dict[str, Any]) -> str:
             max_tokens=40,
             temperature=0.7,
         )
-        response = chat_model.invoke(
-            [{"role": "user", "content": prompt}],
-            config={"run_name": "recap-push-hook", "tags": ["push", "recap"]},
-        )
+        callbacks: list[Any] = []
+        if langfuse_enabled():
+            from langfuse.langchain import CallbackHandler
+
+            callbacks.append(CallbackHandler())
+        with propagate_attributes(tags=["push", "recap"], trace_name="recap-push-hook"):
+            response = chat_model.invoke(
+                [{"role": "user", "content": prompt}], config={"callbacks": callbacks}
+            )
         hook = response_text(response).strip()
         if hook:
             return hook

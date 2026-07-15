@@ -698,7 +698,9 @@ def _media_summary(title: str, description: str, entry: dict[str, Any]) -> str:
     api_key, base_url = free_llm_config()
     if api_key and transcript:
         try:
-            from news_dashboard.ai_client import get_chat_model, response_text
+            from langfuse import propagate_attributes
+
+            from news_dashboard.ai_client import get_chat_model, langfuse_enabled, response_text
 
             model = os.getenv("OPENAI_BRIEFING_MODEL", "gpt-4o-mini")
             chat_model = get_chat_model(
@@ -708,24 +710,33 @@ def _media_summary(title: str, description: str, entry: dict[str, Any]) -> str:
                 max_tokens=500,
                 temperature=0.2,
             )
-            response = chat_model.invoke(
-                [
-                    {
-                        "role": "system",
-                        "content": (
-                            "Summarize this podcast or video transcript as a concise readable "
-                            "article summary for a news reader."
-                        ),
-                    },
-                    {
-                        "role": "user",
-                        "content": (
-                            f"Title: {title}\nDescription: {description}\nTranscript:\n{transcript}"
-                        ),
-                    },
-                ],
-                config={"run_name": "summarize-media-article", "tags": ["ingest", "media"]},
-            )
+            callbacks: list[Any] = []
+            if langfuse_enabled():
+                from langfuse.langchain import CallbackHandler
+
+                callbacks.append(CallbackHandler())
+            with propagate_attributes(
+                tags=["ingest", "media"], trace_name="summarize-media-article"
+            ):
+                response = chat_model.invoke(
+                    [
+                        {
+                            "role": "system",
+                            "content": (
+                                "Summarize this podcast or video transcript as a concise readable "
+                                "article summary for a news reader."
+                            ),
+                        },
+                        {
+                            "role": "user",
+                            "content": (
+                                f"Title: {title}\nDescription: {description}\n"
+                                f"Transcript:\n{transcript}"
+                            ),
+                        },
+                    ],
+                    config={"callbacks": callbacks},
+                )
             generated = clean_html(response_text(response))
             if generated:
                 summary = generated
@@ -746,7 +757,9 @@ def detect_and_translate_article(
     """Detect language and translate title and summary to English if needed."""
     import json
 
-    from news_dashboard.ai_client import get_chat_model, response_text
+    from langfuse import propagate_attributes
+
+    from news_dashboard.ai_client import get_chat_model, langfuse_enabled, response_text
 
     is_non_eng = source_lang != "en"
     if not is_non_eng:
@@ -792,13 +805,19 @@ def detect_and_translate_article(
             '- "needs_translation": boolean indicating if it was translated\n'
         )
 
-        result = chat_model.invoke(
-            [
-                {"role": "system", "content": prompt},
-                {"role": "user", "content": f"Title: {title}\nSummary: {summary}"},
-            ],
-            config={"run_name": "translate-article", "tags": ["translation"]},
-        )
+        callbacks: list[Any] = []
+        if langfuse_enabled():
+            from langfuse.langchain import CallbackHandler
+
+            callbacks.append(CallbackHandler())
+        with propagate_attributes(tags=["translation"], trace_name="translate-article"):
+            result = chat_model.invoke(
+                [
+                    {"role": "system", "content": prompt},
+                    {"role": "user", "content": f"Title: {title}\nSummary: {summary}"},
+                ],
+                config={"callbacks": callbacks},
+            )
 
         data = json.loads(response_text(result) or "{}")
         detected_lang = data.get("detected_lang", source_lang)

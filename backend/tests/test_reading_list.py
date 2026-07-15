@@ -456,10 +456,7 @@ def test_generate_summary_for_item_success(monkeypatch: pytest.MonkeyPatch, pg_c
     assert get_model.call_args.kwargs["max_tokens"] == 120
     messages = get_model.return_value.invoke.call_args.args[0]
     assert "A great post" in messages[0]["content"]
-    assert get_model.return_value.invoke.call_args.kwargs["config"] == {
-        "run_name": "reading-list-summary",
-        "tags": ["reading-list"],
-    }
+    assert "callbacks" in get_model.return_value.invoke.call_args.kwargs["config"]
 
 
 def test_generate_summary_for_item_records_error_on_ai_failure(

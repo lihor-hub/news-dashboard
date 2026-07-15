@@ -1,7 +1,7 @@
 from collections.abc import Generator
 from contextlib import contextmanager
 from typing import Any
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from langchain_core.messages import AIMessage
 from langchain_core.runnables import RunnableLambda
@@ -25,18 +25,23 @@ def test_detect_and_translate_article_english() -> None:
 
 
 def test_detect_and_translate_article_japanese() -> None:
+    from langchain_core.callbacks import BaseCallbackHandler
+
     # Mocking OpenAI response for Japanese translation
     content = (
         '{"detected_lang": "ja", "translated_title": "Translated Title", '
         '"translated_summary": "Translated Summary", "needs_translation": true}'
     )
-    model: RunnableLambda[Any, AIMessage] = RunnableLambda(
-        lambda _messages: AIMessage(content=content)
-    )
+    model = MagicMock()
+    model.invoke.return_value = AIMessage(content=content)
+    callback = BaseCallbackHandler()
 
     with (
         patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}),
         patch("news_dashboard.ai_client.get_chat_model", return_value=model) as get_model,
+        patch("news_dashboard.ai_client.langfuse_enabled", return_value=True),
+        patch("langfuse.langchain.CallbackHandler", return_value=callback),
+        patch("langfuse.propagate_attributes") as attributes,
     ):
         title, summary, lang, orig = detect_and_translate_article(
             "日本語タイトル", "日本語サマリー", "ja"
@@ -49,6 +54,8 @@ def test_detect_and_translate_article_japanese() -> None:
     assert get_model.call_args.kwargs["max_tokens"] == 1024
     assert get_model.call_args.kwargs["temperature"] == 0.0
     assert get_model.call_args.kwargs["response_format"] == {"type": "json_object"}
+    assert callback in model.invoke.call_args.kwargs["config"]["callbacks"]
+    attributes.assert_called_once_with(tags=["translation"], trace_name="translate-article")
 
 
 def test_translate_body_japanese() -> None:

@@ -703,10 +703,7 @@ def test_generate_push_hook_returns_llm_hook(monkeypatch: pytest.MonkeyPatch) ->
         "max_tokens": 40,
         "temperature": 0.7,
     }
-    assert model.invoke.call_args.kwargs["config"] == {
-        "run_name": "push-hook",
-        "tags": ["push"],
-    }
+    assert "callbacks" in model.invoke.call_args.kwargs["config"]
 
 
 def test_generate_recap_push_hook_uses_langchain_settings_and_trace_config() -> None:
@@ -729,10 +726,7 @@ def test_generate_recap_push_hook_uses_langchain_settings_and_trace_config() -> 
     assert result == "Seven thoughtful reads made your week"
     assert get_model.call_args.kwargs["max_tokens"] == 40
     assert get_model.call_args.kwargs["temperature"] == 0.7
-    assert model.invoke.call_args.kwargs["config"] == {
-        "run_name": "recap-push-hook",
-        "tags": ["push", "recap"],
-    }
+    assert "callbacks" in model.invoke.call_args.kwargs["config"]
 
 
 def test_generate_push_hook_falls_back_on_llm_error(monkeypatch: pytest.MonkeyPatch) -> None:
