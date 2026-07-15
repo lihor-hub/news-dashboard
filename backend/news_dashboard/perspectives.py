@@ -179,9 +179,7 @@ def generate_perspectives(
 
     prompt = get_prompt("article-perspectives", fallback=_PROMPT)
     logger.info("Generating perspectives for article %s", article.get("id"))
-    chat_model = get_chat_model(api_key=api_key, base_url=base_url, model=model).bind(
-        max_tokens=1024
-    )
+    chat_model = get_chat_model(api_key=api_key, base_url=base_url, model=model, max_tokens=1024)
     callbacks: list[Any] = []
     if langfuse_enabled():
         from langfuse.langchain import CallbackHandler

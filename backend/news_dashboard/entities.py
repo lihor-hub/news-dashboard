@@ -201,9 +201,7 @@ def extract_entities(article: dict[str, Any], user_id: int | None = None) -> lis
 
     prompt = get_prompt("entity-extraction", fallback=_PROMPT)
     logger.info("Extracting entities for article %s", article.get("id"))
-    chat_model = get_chat_model(api_key=api_key, base_url=base_url, model=model).bind(
-        max_tokens=512
-    )
+    chat_model = get_chat_model(api_key=api_key, base_url=base_url, model=model, max_tokens=512)
     callbacks: list[Any] = []
     if langfuse_enabled():
         from langfuse.langchain import CallbackHandler
@@ -245,9 +243,7 @@ def extract_entity_relationships(
 
     prompt = get_prompt("entity-relationship-extraction", fallback=_RELATIONSHIP_PROMPT)
     entity_text = json.dumps(entities)
-    chat_model = get_chat_model(api_key=api_key, base_url=base_url, model=model).bind(
-        max_tokens=768
-    )
+    chat_model = get_chat_model(api_key=api_key, base_url=base_url, model=model, max_tokens=768)
     callbacks: list[Any] = []
     if langfuse_enabled():
         from langfuse.langchain import CallbackHandler

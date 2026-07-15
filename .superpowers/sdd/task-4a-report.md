@@ -36,3 +36,25 @@ still cannot connect to the absent test database.
 The focused database-backed suites must be rerun once `nd-test-pg` is available.
 Legacy tests that patch the native OpenAI client will also need their in-flight
 Task 4 test migration completed before the combined branch is green.
+
+## Reviewer follow-up
+
+Fixed bound-generation settings breaking the lazy free-provider fallback. The
+foundation now accepts `max_tokens` and `temperature` directly and applies them
+identically when constructing both primary and fallback chat models; group-A
+call sites no longer bind kwargs outside the fallback wrapper.
+
+Red/green evidence:
+
+- New fallback regression initially failed with `TypeError: get_chat_model()
+  got an unexpected keyword argument 'max_tokens'`, then passed after the
+  foundation change.
+- Isolated no-conftest tests for the fallback regression, successful watchlist
+  `ai_match`, and successful recommendation explanation: `3 passed`.
+- `make lint`: passed.
+- Focused Ruff and mypy checks: passed (the commit hook additionally runs ty,
+  pyrefly, and vulture).
+
+The database-backed legacy tests still cannot run while PostgreSQL on port
+55432 is unavailable. Their native-client mocks remain follow-up work for the
+combined Task 4 test migration.

@@ -446,8 +446,12 @@ def generate_recommendation_explanation(
 
         from news_dashboard.ai_client import get_chat_model, langfuse_enabled, response_text
 
-        chat_model = get_chat_model(api_key=api_key, base_url=base_url, model=model).bind(
-            max_tokens=60, temperature=0.3
+        chat_model = get_chat_model(
+            api_key=api_key,
+            base_url=base_url,
+            model=model,
+            max_tokens=60,
+            temperature=0.3,
         )
         callbacks: list[Any] = []
         if langfuse_enabled():

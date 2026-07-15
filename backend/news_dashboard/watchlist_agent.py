@@ -149,9 +149,7 @@ def ai_match(
 
         prompt = get_prompt("watchlist-match", fallback=_AI_JUDGE_PROMPT)
         text = _article_text(article)[:_AI_MAX_ARTICLE_CHARS]
-        chat_model = get_chat_model(api_key=api_key, base_url=base_url, model=model).bind(
-            max_tokens=150
-        )
+        chat_model = get_chat_model(api_key=api_key, base_url=base_url, model=model, max_tokens=150)
         callbacks: list[Any] = []
         if langfuse_enabled():
             from langfuse.langchain import CallbackHandler

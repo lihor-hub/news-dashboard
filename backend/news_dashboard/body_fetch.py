@@ -100,8 +100,8 @@ def _ai_extract_body(url: str, *, user_id: int | None = None) -> tuple[str, str]
             response_text,
         )
 
-        chat_model = get_chat_model(api_key=api_key, base_url=base_url, model=model).bind(
-            max_tokens=2048
+        chat_model = get_chat_model(
+            api_key=api_key, base_url=base_url, model=model, max_tokens=2048
         )
         callbacks: list[Any] = []
         if langfuse_enabled():
@@ -487,8 +487,12 @@ def translate_body(body: str, from_lang: str) -> str:
             f"preserving paragraph breaks, and no additional commentary."
         )
 
-        chat_model = get_chat_model(api_key=api_key, base_url=base_url, model="gpt-4o-mini").bind(
-            max_tokens=2048, temperature=0.0
+        chat_model = get_chat_model(
+            api_key=api_key,
+            base_url=base_url,
+            model="gpt-4o-mini",
+            max_tokens=2048,
+            temperature=0.0,
         )
         callbacks: list[Any] = []
         if langfuse_enabled():

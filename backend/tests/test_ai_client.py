@@ -565,6 +565,40 @@ def test_get_chat_model_preserves_free_provider_fallback(
 
 
 @pytest.mark.usefixtures("_no_langfuse")
+def test_get_chat_model_preserves_generation_settings_on_lazy_fallback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from unittest.mock import patch
+
+    from langchain_core.runnables import RunnableLambda
+    from openai import OpenAIError
+
+    _clear_ai_env(monkeypatch)
+    monkeypatch.setenv("OPENAI_API_KEY", "oa-key")
+
+    primary = RunnableLambda(lambda _input: (_ for _ in ()).throw(OpenAIError("gateway down")))
+    fallback: RunnableLambda[str, AIMessage] = RunnableLambda(
+        lambda _input: AIMessage(content="fallback-result")
+    )
+
+    with patch("langchain_openai.ChatOpenAI", side_effect=[primary, fallback]) as constructor:
+        model = get_chat_model(
+            api_key="free-key",
+            base_url="http://gateway:9130/v1",
+            model="shared-model",
+            max_tokens=60,
+            temperature=0.3,
+        )
+        result = model.invoke("hello")
+
+    assert response_text(result) == "fallback-result"
+    assert constructor.call_args_list[0].kwargs["max_tokens"] == 60
+    assert constructor.call_args_list[0].kwargs["temperature"] == 0.3
+    assert constructor.call_args_list[1].kwargs["max_tokens"] == 60
+    assert constructor.call_args_list[1].kwargs["temperature"] == 0.3
+
+
+@pytest.mark.usefixtures("_no_langfuse")
 def test_get_chat_model_does_not_construct_fallback_for_healthy_primary(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

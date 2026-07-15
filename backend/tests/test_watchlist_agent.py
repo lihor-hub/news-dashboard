@@ -350,6 +350,33 @@ def test_ai_match_returns_none_when_not_configured(monkeypatch: pytest.MonkeyPat
     assert result is None
 
 
+def test_ai_match_invokes_langchain_and_parses_success(monkeypatch: pytest.MonkeyPatch) -> None:
+    from langchain_core.messages import AIMessage
+    from langchain_core.runnables import RunnableLambda
+
+    captured: dict[str, Any] = {}
+
+    def answer(prompt_value: Any) -> AIMessage:
+        captured["messages"] = prompt_value.to_messages()
+        return AIMessage(content='{"score": 0.9, "explanation": "Direct match"}')
+
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
+    with patch(
+        "news_dashboard.ai_client.get_chat_model", return_value=RunnableLambda(answer)
+    ) as factory:
+        result = ai_match(
+            "quantum computing",
+            {"title": "Quantum breakthrough", "summary": "New qubit results"},
+            user_id=7,
+        )
+
+    assert result == (0.9, "Direct match")
+    assert "quantum computing" in captured["messages"][0].content
+    factory.assert_called_once_with(
+        api_key="sk-test", base_url=None, model="gpt-4o-mini", max_tokens=150
+    )
+
+
 # ── API endpoint tests ────────────────────────────────────────────────────────
 
 

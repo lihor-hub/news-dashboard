@@ -96,9 +96,7 @@ def generate_insights(article: dict[str, Any], *, user_id: int | None = None) ->
 
     prompt = get_prompt("article-insights", fallback=_PROMPT)
     logger.info("Generating insights for article %s", article.get("id"))
-    chat_model = get_chat_model(api_key=api_key, base_url=base_url, model=model).bind(
-        max_tokens=512
-    )
+    chat_model = get_chat_model(api_key=api_key, base_url=base_url, model=model, max_tokens=512)
     callbacks: list[Any] = []
     if langfuse_enabled():
         from langfuse.langchain import CallbackHandler
@@ -338,9 +336,7 @@ def _generate_cluster_label(
 
     from news_dashboard.ai_client import get_chat_model, langfuse_enabled, response_text
 
-    chat_model = get_chat_model(api_key=api_key, base_url=base_url, model=model).bind(
-        max_tokens=200
-    )
+    chat_model = get_chat_model(api_key=api_key, base_url=base_url, model=model, max_tokens=200)
     callbacks: list[Any] = []
     if langfuse_enabled():
         from langfuse.langchain import CallbackHandler
