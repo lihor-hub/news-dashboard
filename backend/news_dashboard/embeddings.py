@@ -11,10 +11,7 @@ from __future__ import annotations
 import logging
 import os
 import time
-from typing import TYPE_CHECKING, Any
-
-if TYPE_CHECKING:
-    from news_dashboard.ai_client import ManagedPrompt
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -159,31 +156,27 @@ def _embed(text: str) -> list[float]:
 def _answer(
     system_prompt: str,
     user_prompt: str,
-    *,
-    user_id: int | None = None,
-    session_id: str | None = None,
-    prompt: ManagedPrompt | None = None,
 ) -> str:
-    """Generate an answer through a LangChain chat chain."""
-    from news_dashboard.ai_client import free_llm_config
-    from news_dashboard.ai_orchestration import invoke_chat_chain
+    """Generate an answer with a vanilla LangChain prompt/model/parser pipeline."""
+    from langchain_core.output_parsers import StrOutputParser
+    from langchain_core.prompts import ChatPromptTemplate
 
-    api_key, _base_url = free_llm_config()
+    from news_dashboard.ai_client import free_llm_config, get_chat_model
+
+    api_key, base_url = free_llm_config()
     if not api_key:
         _require_env("FREE_LLM_API_KEY", "use Ask AI")
-    return invoke_chat_chain(
-        name="ask-ai",
-        tags=["ask-ai"],
-        user_id=user_id,
-        session_id=session_id,
-        prompt=prompt,
+    model = get_chat_model(
+        api_key=api_key,
+        base_url=base_url,
         model=os.getenv("OPENAI_ANSWER_MODEL", DEFAULT_ANSWER_MODEL),
-        messages=[
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt},
-        ],
-        max_tokens=1024,
     )
+    chain = (
+        ChatPromptTemplate.from_messages([("system", system_prompt), ("human", "{user_prompt}")])
+        | model
+        | StrOutputParser()
+    )
+    return chain.invoke({"user_prompt": user_prompt})
 
 
 def graph_context_for_articles(article_ids: list[int]) -> dict[str, Any] | None:
@@ -478,7 +471,7 @@ def ask(
     graph_context = graph_context_for_articles([int(row["id"]) for row in rows])
     graph_context_text = _format_graph_context(graph_context)
 
-    from news_dashboard.ai_client import get_prompt, observe
+    from news_dashboard.ai_client import _client, get_prompt, langfuse_enabled
     from news_dashboard.ai_memory.service import format_memories_for_prompt
 
     prompt = get_prompt("ask-system", fallback=ASK_SYSTEM_PROMPT)
@@ -489,22 +482,32 @@ def ask(
 
     # 6. Call OpenAI for the answer, grouping retrieval + generation under one
     #    Langfuse trace so its id can carry user feedback (see /api/feedback).
-    with observe("ask-ai", input={"query": query, "include_all": include_all}) as trace:
-        answer_text = _answer(
-            prompt.text,
-            user_prompt,
-            user_id=user_id,
-            session_id=session_id,
-            prompt=prompt,
-        )
-        trace.update_output(answer_text)
+    trace_id: str | None = None
+    trace_input = {"query": query, "include_all": include_all}
+    if langfuse_enabled():
+        from langfuse import propagate_attributes
+
+        client = _client()
+        with client.start_as_current_observation(
+            name="ask-ai", as_type="chain", input=trace_input
+        ) as root:
+            with propagate_attributes(
+                user_id=str(user_id) if user_id is not None else None,
+                session_id=session_id,
+                prompt=prompt.langfuse_prompt,
+            ):
+                answer_text = _answer(prompt.text, user_prompt)
+            root.update(output=answer_text)
+            trace_id = client.get_current_trace_id()
+    else:
+        answer_text = _answer(prompt.text, user_prompt)
 
     # 7. Return answer + source list (top-k order)
     sources = [{"id": row["id"], "title": row["title"], "url": row["url"]} for row in rows]
     result: dict[str, Any] = {
         "answer": answer_text,
         "sources": sources,
-        "trace_id": trace.trace_id,
+        "trace_id": trace_id,
     }
     if graph_context is not None:
         result["graph_context"] = graph_context

@@ -180,32 +180,91 @@ def test_embed_falls_back_to_openai_when_no_gateway_configured() -> None:
 # ── embeddings: ask-ai answer threads real user_id ────────────────────────────
 
 
-def test_answer_threads_user_id_to_chat_create() -> None:
+def test_answer_builds_langchain_prompt_and_returns_text() -> None:
+    from langchain_core.messages import AIMessage
+    from langchain_core.runnables import RunnableLambda
+
     from news_dashboard.embeddings import _answer
 
-    mock_cc = MagicMock(return_value=_mock_completion("The answer."))
+    captured: list[Any] = []
+
+    def answer(messages: Any) -> AIMessage:
+        captured.extend(messages.to_messages())
+        return AIMessage(content="The answer.")
+
+    model = RunnableLambda(answer)
     with (
         patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}),
-        patch("news_dashboard.ai_client.get_openai_client"),
-        patch("news_dashboard.ai_client.chat_create", new=mock_cc),
+        patch("news_dashboard.ai_client.get_chat_model", return_value=model) as factory,
     ):
-        _answer("system prompt", "user prompt", user_id=7)
+        result = _answer("system prompt", "user prompt")
 
-    assert mock_cc.call_args.kwargs["user_id"] == 7
+    assert result == "The answer."
+    assert [message.content for message in captured] == ["system prompt", "user prompt"]
+    factory.assert_called_once_with(api_key="sk-test", base_url=None, model="gpt-4o-mini")
 
 
-def test_answer_passes_none_user_id_when_absent() -> None:
-    from news_dashboard.embeddings import _answer
+def test_ask_uses_native_langfuse_user_and_session_attributes() -> None:
+    from contextlib import contextmanager
 
-    mock_cc = MagicMock(return_value=_mock_completion("The answer."))
+    from news_dashboard import embeddings
+
+    span = MagicMock()
+    client = MagicMock()
+    client.get_current_trace_id.return_value = "root-trace"
+
+    @contextmanager
+    def observation(**kwargs: Any) -> Any:
+        assert kwargs == {
+            "name": "ask-ai",
+            "as_type": "chain",
+            "input": {"query": "question", "include_all": False},
+        }
+        yield span
+
+    @contextmanager
+    def attributes(**kwargs: Any) -> Any:
+        assert kwargs == {
+            "user_id": "7",
+            "session_id": "conversation-42",
+            "prompt": None,
+        }
+        yield
+
+    client.start_as_current_observation.side_effect = observation
     with (
-        patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}),
-        patch("news_dashboard.ai_client.get_openai_client"),
-        patch("news_dashboard.ai_client.chat_create", new=mock_cc),
+        patch("news_dashboard.ai_client.langfuse_enabled", return_value=True),
+        patch("news_dashboard.ai_client._client", return_value=client),
+        patch("langfuse.propagate_attributes", side_effect=attributes),
+        patch.object(embeddings, "embed_all_eligible", return_value=0),
+        patch.object(embeddings, "_embed", return_value=[]),
+        patch("news_dashboard.db.init_db"),
+        patch("news_dashboard.db.connect") as connect,
     ):
-        _answer("system prompt", "user prompt")
+        rows = [
+            {
+                "id": i,
+                "title": f"Title {i}",
+                "url": f"https://x/{i}",
+                "summary": "S",
+                "eligible_count": 5,
+            }
+            for i in range(1, 6)
+        ]
+        fetchall = connect.return_value.__enter__.return_value.execute.return_value.fetchall
+        fetchall.return_value = rows
+        with (
+            patch.object(embeddings, "graph_context_for_articles", return_value=None),
+            patch("news_dashboard.ai_client.get_prompt") as get_prompt,
+            patch("news_dashboard.ai_memory.service.format_memories_for_prompt", return_value=""),
+            patch.object(embeddings, "_answer", return_value="answer"),
+        ):
+            get_prompt.return_value.text = "system"
+            get_prompt.return_value.langfuse_prompt = None
+            result = embeddings.ask("question", user_id=7, session_id="conversation-42")
 
-    assert mock_cc.call_args.kwargs["user_id"] is None
+    assert result["trace_id"] == "root-trace"
+    span.update.assert_called_once_with(output="answer")
 
 
 # ── body_fetch: AI body extraction threads user_id ────────────────────────────

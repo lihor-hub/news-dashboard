@@ -441,3 +441,44 @@ def test_ask_endpoint_rejects_oversized_query(api_client: TestClient) -> None:
 def test_ask_endpoint_rejects_blank_query(api_client: TestClient) -> None:
     resp = api_client.post("/api/ask", json={"query": "   "})
     assert resp.status_code == 400
+
+
+def test_ask_endpoint_threads_optional_session_id(
+    api_client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    captured: dict[str, Any] = {}
+
+    def fake_ask(query: str, **kwargs: Any) -> dict[str, Any]:
+        captured["query"] = query
+        captured.update(kwargs)
+        return {"answer": "ok", "sources": [], "trace_id": None}
+
+    monkeypatch.setattr("news_dashboard.assistant.service.ask", fake_ask)
+    response = api_client.post(
+        "/api/ask", json={"query": "question", "session_id": "conversation-42"}
+    )
+
+    assert response.status_code == 200
+    assert captured["session_id"] == "conversation-42"
+
+
+def test_ask_endpoint_remains_compatible_without_session_id(
+    api_client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    captured: dict[str, Any] = {}
+
+    def fake_ask(_query: str, **kwargs: Any) -> dict[str, Any]:
+        captured.update(kwargs)
+        return {"answer": "ok", "sources": [], "trace_id": None}
+
+    monkeypatch.setattr("news_dashboard.assistant.service.ask", fake_ask)
+    response = api_client.post("/api/ask", json={"query": "question"})
+
+    assert response.status_code == 200
+    assert captured["session_id"] is None
+
+
+@pytest.mark.parametrize("session_id", ["café", "x" * 200])
+def test_ask_endpoint_rejects_invalid_session_id(api_client: TestClient, session_id: str) -> None:
+    response = api_client.post("/api/ask", json={"query": "question", "session_id": session_id})
+    assert response.status_code == 422
