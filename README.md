@@ -126,7 +126,7 @@ the trace IDs used for feedback.
 | ---------------------- | ---------------------------------------------------------------------------------- |
 | Ask AI                 | Optional client-provided `session_id`; omitted requests remain independent traces. |
 | Briefing conversation  | `briefing:{user_id}:{briefing_id}`                                                 |
-| Lesson conversation    | `lesson:{user_id}:{lesson_id}`                                                     |
+| Lesson conversation and related lesson work | `lesson:{user_id}:{lesson_id}`                                      |
 | Briefing generation    | `briefing-run:{run_id}`                                                            |
 | Lesson generation      | `lesson-run:{run_id}`                                                              |
 | Agent action lifecycle | `agent-action:{run_id}`                                                            |

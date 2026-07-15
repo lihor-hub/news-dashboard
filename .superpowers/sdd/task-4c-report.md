@@ -31,3 +31,5 @@ Follow-up focused suite: `207 passed, 18 warnings` before the final three callba
 Added path-specific regression assertions for slide deck, infographic, personal relevance, briefing generation, lesson recap, and prompt optimization. These verify model/JSON/token settings, the concrete Langfuse handler in runnable config, propagated user/tag/trace attributes, briefing managed-prompt linkage and root trace ID, and literal-brace preservation.
 
 Personal-relevance coverage additionally verifies the selected API key, base URL, model, and rendered lesson/profile prompt semantics.
+
+Lesson slide decks, infographics, and personal relevance now propagate the canonical `lesson:{user_id}:{lesson_id}` session ID, grouping related lesson work with its conversation trace. The README session table reflects that scope.

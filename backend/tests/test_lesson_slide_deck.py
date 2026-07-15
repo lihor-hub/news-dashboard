@@ -156,7 +156,7 @@ def test_generate_slide_deck_content_preserves_json_settings_and_tracing(
     monkeypatch.setattr("langfuse.langchain.CallbackHandler", lambda: callback)
     with patch("langfuse.propagate_attributes") as attributes:
         result = service.generate_slide_deck_content(
-            {"title": "T", "lesson_detail": {"gist": "G"}}, 42
+            {"id": 99, "title": "T", "lesson_detail": {"gist": "G"}}, 42
         )
 
     assert len(result["slides"]) == 6
@@ -168,7 +168,10 @@ def test_generate_slide_deck_content_preserves_json_settings_and_tracing(
     }
     assert callback in captured["config"]["callbacks"].handlers
     attributes.assert_called_once_with(
-        user_id="42", tags=["lesson", "slide-deck"], trace_name="lesson-slide-deck"
+        user_id="42",
+        session_id="lesson:42:99",
+        tags=["lesson", "slide-deck"],
+        trace_name="lesson-slide-deck",
     )
 
 

@@ -1491,7 +1491,10 @@ def test_lesson_relevance_uses_profile_and_llm_response(
         trace_name="lesson-generation",
     )
     attributes.assert_any_call(
-        user_id=str(user_id), tags=["lesson", "relevance"], trace_name="lesson-relevance"
+        user_id=str(user_id),
+        session_id=f"lesson:{user_id}:{lesson['id']}",
+        tags=["lesson", "relevance"],
+        trace_name="lesson-relevance",
     )
 
 

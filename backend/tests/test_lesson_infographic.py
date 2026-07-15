@@ -161,7 +161,7 @@ def test_generate_infographic_content_preserves_json_settings_and_tracing(
     monkeypatch.setattr("langfuse.langchain.CallbackHandler", lambda: callback)
     with patch("langfuse.propagate_attributes") as attributes:
         result = service.generate_infographic_content(
-            {"title": "T", "lesson_detail": {"gist": "G"}}, 42
+            {"id": 99, "title": "T", "lesson_detail": {"gist": "G"}}, 42
         )
 
     assert len(result["sections"]) == 3
@@ -173,7 +173,10 @@ def test_generate_infographic_content_preserves_json_settings_and_tracing(
     }
     assert callback in captured["config"]["callbacks"].handlers
     attributes.assert_called_once_with(
-        user_id="42", tags=["lesson", "infographic"], trace_name="lesson-infographic"
+        user_id="42",
+        session_id="lesson:42:99",
+        tags=["lesson", "infographic"],
+        trace_name="lesson-infographic",
     )
 
 

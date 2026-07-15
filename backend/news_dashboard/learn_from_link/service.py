@@ -599,7 +599,10 @@ def generate_slide_deck_content(lesson: dict[str, Any], user_id: int) -> dict[st
 
         callbacks.append(CallbackHandler())
     with propagate_attributes(
-        user_id=str(user_id), tags=["lesson", "slide-deck"], trace_name="lesson-slide-deck"
+        user_id=str(user_id),
+        session_id=f"lesson:{user_id}:{lesson['id']}",
+        tags=["lesson", "slide-deck"],
+        trace_name="lesson-slide-deck",
     ):
         response = (prompt | chat_model).invoke(
             {"lesson": _build_slide_deck_prompt(lesson)}, config={"callbacks": callbacks}
@@ -773,7 +776,10 @@ def generate_infographic_content(lesson: dict[str, Any], user_id: int) -> dict[s
 
         callbacks.append(CallbackHandler())
     with propagate_attributes(
-        user_id=str(user_id), tags=["lesson", "infographic"], trace_name="lesson-infographic"
+        user_id=str(user_id),
+        session_id=f"lesson:{user_id}:{lesson['id']}",
+        tags=["lesson", "infographic"],
+        trace_name="lesson-infographic",
     ):
         response = (prompt | chat_model).invoke(
             {"lesson": _build_infographic_prompt(lesson)}, config={"callbacks": callbacks}
@@ -1068,6 +1074,7 @@ def _add_personal_relevance(
         raw_relevance = generate_personal_relevance(
             user_id,
             lesson_fields,
+            lesson_id=lesson_id,
             database_url=database_url,
         )
         lesson_fields["personal_relevance"] = validate_personal_relevance(raw_relevance)
@@ -1691,6 +1698,7 @@ def generate_personal_relevance(
     user_id: int,
     lesson_fields: dict[str, Any],
     *,
+    lesson_id: int,
     database_url: str | None = None,
 ) -> dict[str, Any]:
     interests, dna_categories, dna_sources, recent_articles = _get_relevance_data(
@@ -1747,7 +1755,10 @@ def generate_personal_relevance(
 
             callbacks.append(CallbackHandler())
         with propagate_attributes(
-            user_id=str(user_id), tags=["lesson", "relevance"], trace_name="lesson-relevance"
+            user_id=str(user_id),
+            session_id=f"lesson:{user_id}:{lesson_id}",
+            tags=["lesson", "relevance"],
+            trace_name="lesson-relevance",
         ):
             response = (prompt | chat_model).invoke(
                 {"profile": user_prompt}, config={"callbacks": callbacks}
