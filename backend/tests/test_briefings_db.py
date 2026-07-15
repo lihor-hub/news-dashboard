@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import re
+from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from typing import Any, ClassVar
@@ -1420,6 +1421,60 @@ def test_generate_briefing_records_no_run_row_for_no_candidates(pg_clean: str) -
     run = row_to_dict(row)
     assert run["status"] == "complete"
     assert run["briefing_id"] is None
+
+
+def test_generate_briefing_compiles_graph_without_checkpointer(
+    pg_clean: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from langgraph.graph import StateGraph
+
+    compile_calls: list[dict[str, Any]] = []
+    original_compile = StateGraph.compile
+
+    def _compile_spy(self: StateGraph[Any], **kwargs: Any) -> Any:
+        compile_calls.append(kwargs)
+        return original_compile(self, **kwargs)
+
+    monkeypatch.setattr(StateGraph, "compile", _compile_spy)
+
+    assert generate_briefing(database_url=pg_clean, ai_fn=_fake_ai) == {"status": "no_candidates"}
+    assert compile_calls == [{}]
+
+
+def test_generate_briefing_propagates_run_session_and_user(
+    pg_clean: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import langfuse
+    import langfuse.langchain
+    from langchain_core.callbacks import BaseCallbackHandler
+
+    _seed_source(pg_clean)
+    user_id = _seed_user(pg_clean, "graph-attribution-user")
+    _seed_article(pg_clean, url="https://example.com/graph-attribution", state="today")
+    propagated: list[dict[str, Any]] = []
+    callback = BaseCallbackHandler()
+
+    @contextmanager
+    def _propagate_spy(**kwargs: Any) -> Any:
+        propagated.append(kwargs)
+        yield
+
+    monkeypatch.setattr(langfuse, "propagate_attributes", _propagate_spy)
+    monkeypatch.setattr(briefings_mod, "langfuse_enabled", lambda: True, raising=False)
+    monkeypatch.setattr("news_dashboard.ai_client.langfuse_enabled", lambda: True)
+    monkeypatch.setattr(langfuse.langchain, "CallbackHandler", lambda: callback)
+
+    result = generate_briefing(database_url=pg_clean, ai_fn=_fake_ai, user_id=user_id)
+    run = _fetch_agent_run(pg_clean, result["id"])
+
+    assert propagated == [
+        {
+            "user_id": str(user_id),
+            "session_id": f"briefing-run:{run['id']}",
+            "tags": ["briefing"],
+            "trace_name": "briefing-generation",
+        }
+    ]
 
 
 # ── reading-list "saved for later" section ────────────────────────────────────
