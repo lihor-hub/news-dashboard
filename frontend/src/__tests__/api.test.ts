@@ -370,7 +370,17 @@ describe('sources, summary, ingest', () => {
   it('askAI POSTs the query and include_all', async () => {
     const { calls } = stubFetch(() => jsonOk({ answer: 'x' }));
     await api.askAI('q', true);
-    expect(calls[0].init?.body).toBe(JSON.stringify({ query: 'q', include_all: true }));
+    expect(calls[0].init?.body).toBe(
+      JSON.stringify({ query: 'q', include_all: true, session_id: undefined })
+    );
+  });
+
+  it('askAI can send a session id', async () => {
+    const { calls } = stubFetch(() => jsonOk({ answer: 'x' }));
+    await api.askAI('q', false, 'ask-session-1');
+    expect(calls[0].init?.body).toBe(
+      JSON.stringify({ query: 'q', include_all: false, session_id: 'ask-session-1' })
+    );
   });
 
   it('updateSourceEnabled PATCHes enabled', async () => {

@@ -1449,7 +1449,7 @@ def ask_lesson_question(
     if lesson is None:
         raise LessonNotFoundError
 
-    api_key, base_url = _lesson_chat_ai_config()
+    _lesson_chat_ai_config()
     model = os.getenv("OPENAI_LESSON_CHAT_MODEL", DEFAULT_LESSON_CHAT_MODEL)
 
     lesson_context, source_context = _lesson_chat_context(lesson)
@@ -1458,22 +1458,20 @@ def ask_lesson_question(
         source_context=source_context,
     )
 
-    from news_dashboard.ai_client import chat_create, get_chat_client
+    from news_dashboard.ai_orchestration import invoke_chat_chain
 
-    client = get_chat_client(api_key=api_key, base_url=base_url)
     messages: list[dict[str, str]] = [{"role": "system", "content": system}]
     messages.extend(history)
     messages.append({"role": "user", "content": stripped})
 
-    response = chat_create(
-        client,
+    return invoke_chat_chain(
         name="lesson-chat",
         tags=["lesson", "chat"],
         user_id=user_id,
+        session_id=f"lesson:{lesson_id}:user:{user_id}",
         model=model,
         messages=messages,
     )
-    return response.choices[0].message.content or ""
 
 
 def _get_relevance_data(

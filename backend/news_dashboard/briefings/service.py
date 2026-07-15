@@ -905,7 +905,7 @@ def chat_with_briefing(
     database_url: str | None = None,
 ) -> str:
     """Answer a follow-up question grounded in the cited articles of a briefing."""
-    api_key, base_url = _briefing_ai_config()
+    _briefing_ai_config()
     model = os.getenv("OPENAI_BRIEFING_MODEL", DEFAULT_BRIEFING_MODEL)
 
     briefing = get_briefing(briefing_id, database_url=database_url, user_id=user_id)
@@ -934,19 +934,17 @@ def chat_with_briefing(
         articles_context=articles_context,
     )
 
-    from news_dashboard.ai_client import chat_create, get_chat_client
+    from news_dashboard.ai_orchestration import invoke_chat_chain
 
-    client = get_chat_client(api_key=api_key, base_url=base_url)
     messages: list[dict[str, str]] = [{"role": "system", "content": system}]
     messages.extend(history)
     messages.append({"role": "user", "content": message})
 
-    response = chat_create(
-        client,
+    return invoke_chat_chain(
         name="briefing-chat",
         tags=["briefing", "chat"],
         user_id=user_id,
+        session_id=f"briefing:{briefing_id}:user:{user_id}" if user_id is not None else None,
         model=model,
         messages=messages,
     )
-    return response.choices[0].message.content or ""

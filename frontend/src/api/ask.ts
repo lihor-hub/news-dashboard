@@ -1,10 +1,14 @@
 import type { AgentActionPlanResponse, AgentActionRun, AskResponse } from '../types';
 import { requestJson } from './core';
 
-export async function askAI(query: string, includeAll = false): Promise<AskResponse> {
+export async function askAI(
+  query: string,
+  includeAll = false,
+  sessionId?: string
+): Promise<AskResponse> {
   return requestJson<AskResponse>('/api/ask', {
     method: 'POST',
-    body: JSON.stringify({ query, include_all: includeAll }),
+    body: JSON.stringify({ query, include_all: includeAll, session_id: sessionId }),
   });
 }
 
