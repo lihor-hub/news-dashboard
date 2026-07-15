@@ -929,16 +929,26 @@ def chat_with_briefing(
     else:
         articles_context = "(No articles cited — answer from the briefing summary only.)"
 
-    system = _CHAT_SYSTEM_PROMPT.format(
-        briefing_context=briefing_context,
-        articles_context=articles_context,
-    )
-
+    from news_dashboard.ai_client import get_prompt
     from news_dashboard.ai_orchestration import invoke_chat_chain
 
-    messages: list[dict[str, str]] = [{"role": "system", "content": system}]
-    messages.extend(history)
-    messages.append({"role": "user", "content": message})
+    fallback_system = _CHAT_SYSTEM_PROMPT.replace(
+        "{briefing_context}", "{{briefing_context}}"
+    ).replace("{articles_context}", "{{articles_context}}")
+    prompt = get_prompt(
+        "briefing-chat",
+        fallback=[
+            {"role": "system", "content": fallback_system},
+            {"role": "user", "content": "{{question}}"},
+        ],
+        prompt_type="chat",
+        variables={
+            "briefing_context": briefing_context,
+            "articles_context": articles_context,
+            "question": message,
+        },
+    )
+    messages = [*prompt.messages[:-1], *history, prompt.messages[-1]]
 
     return invoke_chat_chain(
         name="briefing-chat",
@@ -947,4 +957,5 @@ def chat_with_briefing(
         session_id=f"briefing:{briefing_id}:user:{user_id}" if user_id is not None else None,
         model=model,
         messages=messages,
+        prompt=prompt,
     )

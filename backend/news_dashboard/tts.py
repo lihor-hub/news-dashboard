@@ -275,7 +275,12 @@ def generate_podcast_script(briefing_content: dict[str, Any]) -> list[dict[str, 
     """Generate a conversational podcast script from briefing content using LLM."""
     api_key, base_url = _script_ai_config()
 
-    from news_dashboard.ai_client import chat_create, get_chat_client, strip_markdown_fence
+    from news_dashboard.ai_client import (
+        chat_create,
+        get_chat_client,
+        get_prompt,
+        strip_markdown_fence,
+    )
 
     model = os.getenv("OPENAI_BRIEFING_MODEL", "gpt-4o-mini")
     client = get_chat_client(api_key=api_key, base_url=base_url)
@@ -288,20 +293,28 @@ def generate_podcast_script(briefing_content: dict[str, Any]) -> list[dict[str, 
     for idx, sec in enumerate(sections):
         content_str += f"\nSegment {idx + 1}: {sec.get('title', '')}\n{sec.get('body', '')}\n"
 
-    messages = [
-        {"role": "system", "content": _PODCAST_SYSTEM_PROMPT},
-        {
-            "role": "user",
-            "content": f"Please generate a podcast script for the following news:\n\n{content_str}",
-        },
-    ]
+    prompt = get_prompt(
+        "podcast-script-generation",
+        fallback=[
+            {"role": "system", "content": _PODCAST_SYSTEM_PROMPT},
+            {
+                "role": "user",
+                "content": (
+                    "Please generate a podcast script for the following news:\n\n{{content}}"
+                ),
+            },
+        ],
+        prompt_type="chat",
+        variables={"content": content_str},
+    )
 
     response = chat_create(
         client,
         name="podcast-script-generation",
         tags=["podcast"],
         model=model,
-        messages=messages,
+        messages=prompt.messages,
+        langfuse_prompt=prompt.langfuse_prompt,
         response_format={"type": "json_object"},
         max_tokens=2048,
     )

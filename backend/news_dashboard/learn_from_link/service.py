@@ -577,20 +577,27 @@ def generate_slide_deck_content(lesson: dict[str, Any], user_id: int) -> dict[st
 
     import json
 
-    from news_dashboard.ai_client import chat_create, get_chat_client
+    from news_dashboard.ai_client import chat_create, get_chat_client, get_prompt
 
     client = get_chat_client(api_key=api_key, base_url=base_url)
-    messages = [
-        {"role": "system", "content": _LESSON_SLIDE_DECK_SYSTEM_PROMPT},
-        {"role": "user", "content": _build_slide_deck_prompt(lesson)},
-    ]
+    lesson_content = _build_slide_deck_prompt(lesson)
+    prompt = get_prompt(
+        "lesson-slide-deck",
+        fallback=[
+            {"role": "system", "content": _LESSON_SLIDE_DECK_SYSTEM_PROMPT},
+            {"role": "user", "content": "{{lesson_content}}"},
+        ],
+        prompt_type="chat",
+        variables={"lesson_content": lesson_content},
+    )
     response = chat_create(
         client,
         name="lesson-slide-deck",
         tags=["lesson", "slide-deck"],
         user_id=user_id,
         model=os.getenv("OPENAI_LESSON_CHAT_MODEL", DEFAULT_LESSON_CHAT_MODEL),
-        messages=messages,
+        messages=prompt.messages,
+        langfuse_prompt=prompt.langfuse_prompt,
         response_format={"type": "json_object"},
     )
     parsed = json.loads(response.choices[0].message.content or "")
@@ -741,20 +748,27 @@ def generate_infographic_content(lesson: dict[str, Any], user_id: int) -> dict[s
 
     import json
 
-    from news_dashboard.ai_client import chat_create, get_chat_client
+    from news_dashboard.ai_client import chat_create, get_chat_client, get_prompt
 
     client = get_chat_client(api_key=api_key, base_url=base_url)
-    messages = [
-        {"role": "system", "content": _LESSON_INFOGRAPHIC_SYSTEM_PROMPT},
-        {"role": "user", "content": _build_infographic_prompt(lesson)},
-    ]
+    lesson_content = _build_infographic_prompt(lesson)
+    prompt = get_prompt(
+        "lesson-infographic",
+        fallback=[
+            {"role": "system", "content": _LESSON_INFOGRAPHIC_SYSTEM_PROMPT},
+            {"role": "user", "content": "{{lesson_content}}"},
+        ],
+        prompt_type="chat",
+        variables={"lesson_content": lesson_content},
+    )
     response = chat_create(
         client,
         name="lesson-infographic",
         tags=["lesson", "infographic"],
         user_id=user_id,
         model=os.getenv("OPENAI_LESSON_CHAT_MODEL", DEFAULT_LESSON_CHAT_MODEL),
-        messages=messages,
+        messages=prompt.messages,
+        langfuse_prompt=prompt.langfuse_prompt,
         response_format={"type": "json_object"},
     )
     parsed = json.loads(response.choices[0].message.content or "")
@@ -1453,16 +1467,26 @@ def ask_lesson_question(
     model = os.getenv("OPENAI_LESSON_CHAT_MODEL", DEFAULT_LESSON_CHAT_MODEL)
 
     lesson_context, source_context = _lesson_chat_context(lesson)
-    system = _LESSON_CHAT_SYSTEM_PROMPT.format(
-        lesson_context=lesson_context,
-        source_context=source_context,
-    )
-
+    from news_dashboard.ai_client import get_prompt
     from news_dashboard.ai_orchestration import invoke_chat_chain
 
-    messages: list[dict[str, str]] = [{"role": "system", "content": system}]
-    messages.extend(history)
-    messages.append({"role": "user", "content": stripped})
+    fallback_system = _LESSON_CHAT_SYSTEM_PROMPT.replace(
+        "{lesson_context}", "{{lesson_context}}"
+    ).replace("{source_context}", "{{source_context}}")
+    prompt = get_prompt(
+        "lesson-chat",
+        fallback=[
+            {"role": "system", "content": fallback_system},
+            {"role": "user", "content": "{{question}}"},
+        ],
+        prompt_type="chat",
+        variables={
+            "lesson_context": lesson_context,
+            "source_context": source_context,
+            "question": stripped,
+        },
+    )
+    messages = [*prompt.messages[:-1], *history, prompt.messages[-1]]
 
     return invoke_chat_chain(
         name="lesson-chat",
@@ -1471,6 +1495,7 @@ def ask_lesson_question(
         session_id=f"lesson:{lesson_id}:user:{user_id}",
         model=model,
         messages=messages,
+        prompt=prompt,
     )
 
 
@@ -1555,11 +1580,11 @@ def generate_personal_relevance(
 
     import json
 
-    from news_dashboard.ai_client import chat_create, get_chat_client
+    from news_dashboard.ai_client import chat_create, get_chat_client, get_prompt
 
     lesson_title = str(lesson_fields.get("title") or lesson_fields.get("original_url"))
     lesson_detail = lesson_fields.get("lesson_detail") or {}
-    messages = [
+    fallback = [
         {
             "role": "system",
             "content": (
@@ -1569,24 +1594,30 @@ def generate_personal_relevance(
         },
         {
             "role": "user",
-            "content": (
-                f"Lesson title: {lesson_title}\n"
-                f"Lesson gist: {lesson_detail.get('gist', '')}\n"
-                f"Interests: {interests}\n"
-                f"Reading DNA categories: {dna_categories}\n"
-                f"Reading DNA sources: {dna_sources}\n"
-                f"Recent article titles: {[item['title'] for item in recent_articles]}"
-            ),
+            "content": ("{{lesson_context}}\n{{profile_context}}"),
         },
     ]
+    lesson_context = f"Lesson title: {lesson_title}\nLesson gist: {lesson_detail.get('gist', '')}"
+    profile_context = (
+        f"Interests: {interests}\nReading DNA categories: {dna_categories}\n"
+        f"Reading DNA sources: {dna_sources}\n"
+        f"Recent article titles: {[item['title'] for item in recent_articles]}"
+    )
     try:
+        prompt = get_prompt(
+            "lesson-relevance",
+            fallback=fallback,
+            prompt_type="chat",
+            variables={"lesson_context": lesson_context, "profile_context": profile_context},
+        )
         response = chat_create(
             get_chat_client(api_key=api_key, base_url=base_url),
             name="lesson-relevance",
             tags=["lesson", "relevance"],
             user_id=user_id,
             model=os.getenv("OPENAI_LESSON_CHAT_MODEL", DEFAULT_LESSON_CHAT_MODEL),
-            messages=messages,
+            messages=prompt.messages,
+            langfuse_prompt=prompt.langfuse_prompt,
             response_format={"type": "json_object"},
         )
         parsed = json.loads(response.choices[0].message.content or "")

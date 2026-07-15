@@ -833,6 +833,39 @@ def test_ask_lesson_question_returns_grounded_reply(
     assert messages[-1] == {"role": "user", "content": "Explain this more simply."}
 
 
+def test_ask_lesson_question_inserts_history_after_managed_system(
+    pg_clean: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("FREE_LLM_API_KEY", "fake-key")
+    user_id = _make_user(pg_clean)
+    lesson = service.create_lesson(user_id, "https://example.com/a", database_url=pg_clean)
+    import news_dashboard.ai_client as ai_client_mod
+
+    managed = SimpleNamespace(
+        messages=[
+            {"role": "system", "content": "compiled system"},
+            {"role": "user", "content": "compiled question"},
+        ],
+        langfuse_prompt=object(),
+    )
+    captured: dict[str, Any] = {}
+    monkeypatch.setattr(
+        ai_client_mod,
+        "get_prompt",
+        lambda *args, **kwargs: captured.update(args=args, kwargs=kwargs) or managed,
+    )
+    mock_chat, chat_capture = _mock_chat_reply("answer")
+    monkeypatch.setattr(ai_client_mod, "chat_create", mock_chat)
+    history = [{"role": "user", "content": "earlier"}, {"role": "assistant", "content": "reply"}]
+
+    service.ask_lesson_question(lesson["id"], user_id, "question", history, database_url=pg_clean)
+
+    assert captured["args"] == ("lesson-chat",)
+    assert captured["kwargs"]["prompt_type"] == "chat"
+    assert captured["kwargs"]["variables"]["question"] == "question"
+    assert chat_capture["messages"] == [managed.messages[0], *history, managed.messages[1]]
+
+
 def test_ask_lesson_question_is_user_scoped(pg_clean: str, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("DATABASE_URL", pg_clean)
     monkeypatch.setenv("FREE_LLM_API_KEY", "freellmapi-key")
@@ -1381,6 +1414,46 @@ def test_lesson_relevance_uses_profile_and_llm_response(
         "explanation": "Relevant to your AI interests.",
         "signals": ["Interest: AI"],
     }
+
+
+def test_lesson_relevance_uses_native_chat_prompt(
+    pg_clean: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("FREE_LLM_API_KEY", "fake-key")
+    user_id = _make_user(pg_clean)
+    with connect(database_url=pg_clean) as conn:
+        conn.execute(
+            "INSERT INTO user_interest_profiles (user_id, interests) VALUES (%s, %s::jsonb)",
+            (user_id, '["technology"]'),
+        )
+    import news_dashboard.ai_client as ai_client_mod
+
+    captured: dict[str, Any] = {}
+    managed = SimpleNamespace(
+        messages=[{"role": "system", "content": "managed"}], langfuse_prompt=object()
+    )
+    monkeypatch.setattr(
+        ai_client_mod,
+        "get_prompt",
+        lambda *args, **kwargs: captured.update(args=args, kwargs=kwargs) or managed,
+    )
+    monkeypatch.setattr(
+        ai_client_mod,
+        "chat_create",
+        lambda *_args, **_kwargs: SimpleNamespace(
+            choices=[
+                SimpleNamespace(
+                    message=SimpleNamespace(content='{"explanation":"why","signals":[]}')
+                )
+            ]
+        ),
+    )
+
+    service.create_lesson(user_id, "https://example.com/relevance", database_url=pg_clean)
+
+    assert captured["args"] == ("lesson-relevance",)
+    assert captured["kwargs"]["prompt_type"] == "chat"
+    assert set(captured["kwargs"]["variables"]) == {"lesson_context", "profile_context"}
 
 
 def test_relevance_feedback_endpoint_is_owned_by_lesson_user(

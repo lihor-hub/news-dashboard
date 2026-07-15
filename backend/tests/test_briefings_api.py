@@ -788,3 +788,50 @@ def test_chat_constructs_prompt_with_article_bodies(monkeypatch: Any) -> None:
     system_msg = next(m for m in captured_messages if m["role"] == "system")
     assert "AI Frameworks Tighten Production Workflows" in system_msg["content"]
     assert article_body in system_msg["content"]
+
+
+def test_chat_inserts_history_between_managed_messages(monkeypatch: Any) -> None:
+    from types import SimpleNamespace
+    from unittest.mock import MagicMock, patch
+
+    managed = SimpleNamespace(
+        messages=[
+            {"role": "system", "content": "compiled system"},
+            {"role": "user", "content": "compiled question"},
+        ],
+        langfuse_prompt=object(),
+    )
+    captured: dict[str, Any] = {}
+    history = [{"role": "user", "content": "earlier"}, {"role": "assistant", "content": "reply"}]
+    with (
+        patch(
+            "news_dashboard.briefings.service.get_briefing",
+            return_value=dict(_SAMPLE_BRIEFING, articles=[]),
+        ),
+        patch("news_dashboard.briefings.service._briefing_ai_config", return_value=("key", None)),
+        patch(
+            "news_dashboard.ai_client.get_prompt",
+            side_effect=lambda *args, **kwargs: (
+                captured.update(args=args, kwargs=kwargs) or managed
+            ),
+        ),
+        patch(
+            "news_dashboard.ai_client.chat_create",
+            return_value=SimpleNamespace(
+                choices=[SimpleNamespace(message=SimpleNamespace(content="answer"))]
+            ),
+        ) as chat_create,
+        patch("news_dashboard.ai_client.get_chat_client", return_value=MagicMock()),
+    ):
+        from news_dashboard.briefings.service import chat_with_briefing
+
+        chat_with_briefing(1, "question", history, user_id=1)
+
+    assert captured["args"] == ("briefing-chat",)
+    assert captured["kwargs"]["prompt_type"] == "chat"
+    assert captured["kwargs"]["variables"]["question"] == "question"
+    assert chat_create.call_args.kwargs["messages"] == [
+        managed.messages[0],
+        *history,
+        managed.messages[1],
+    ]

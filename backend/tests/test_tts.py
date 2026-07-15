@@ -12,6 +12,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from news_dashboard.tts import (
+    _PODCAST_SYSTEM_PROMPT,
     TTSNotConfiguredError,
     _build_lesson_podcast_text,
     _build_text,
@@ -323,6 +324,37 @@ def test_generate_podcast_script() -> None:
     assert script[1]["speaker"] == "Taylor"
     assert script[1]["voice"] == "nova"
     assert script[1]["text"] == "Hi Alex!"
+
+
+def test_generate_podcast_script_uses_native_chat_prompt() -> None:
+    mock_response = MagicMock()
+    mock_response.choices = [MagicMock(message=MagicMock(content='{"script": []}'))]
+    managed = MagicMock(
+        messages=[{"role": "system", "content": "managed"}], langfuse_prompt=object()
+    )
+    with (
+        patch.dict("os.environ", {"FREE_LLM_API_KEY": "fake-key"}),
+        patch("news_dashboard.ai_client.get_prompt", return_value=managed) as get_prompt,
+        patch("news_dashboard.ai_client.chat_create", return_value=mock_response) as chat_create,
+    ):
+        generate_podcast_script({"title": "Briefing", "summary": "Summary", "sections": []})
+
+    get_prompt.assert_called_once_with(
+        "podcast-script-generation",
+        fallback=[
+            {"role": "system", "content": _PODCAST_SYSTEM_PROMPT},
+            {
+                "role": "user",
+                "content": (
+                    "Please generate a podcast script for the following news:\n\n{{content}}"
+                ),
+            },
+        ],
+        prompt_type="chat",
+        variables={"content": "Podcast Title: Briefing\nSummary: Summary\n\nSegments:\n"},
+    )
+    assert chat_create.call_args.kwargs["messages"] == managed.messages
+    assert chat_create.call_args.kwargs["langfuse_prompt"] is managed.langfuse_prompt
 
 
 def test_generate_podcast_script_strips_markdown_fence() -> None:
