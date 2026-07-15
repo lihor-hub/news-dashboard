@@ -1447,12 +1447,26 @@ def test_generate_briefing_propagates_run_session_and_user(
     import langfuse
     import langfuse.langchain
     from langchain_core.callbacks import BaseCallbackHandler
+    from langgraph.graph import StateGraph
 
     _seed_source(pg_clean)
     user_id = _seed_user(pg_clean, "graph-attribution-user")
     _seed_article(pg_clean, url="https://example.com/graph-attribution", state="today")
     propagated: list[dict[str, Any]] = []
+    invoke_configs: list[dict[str, Any]] = []
     callback = BaseCallbackHandler()
+    original_compile = StateGraph.compile
+
+    def _compile_spy(graph: Any, **kwargs: Any) -> Any:
+        compiled = original_compile(graph, **kwargs)
+        original_invoke = compiled.invoke
+
+        def _invoke_spy(*args: Any, **invoke_kwargs: Any) -> Any:
+            invoke_configs.append(invoke_kwargs["config"])
+            return original_invoke(*args, **invoke_kwargs)
+
+        monkeypatch.setattr(compiled, "invoke", _invoke_spy)
+        return compiled
 
     @contextmanager
     def _propagate_spy(**kwargs: Any) -> Any:
@@ -1460,6 +1474,7 @@ def test_generate_briefing_propagates_run_session_and_user(
         yield
 
     monkeypatch.setattr(langfuse, "propagate_attributes", _propagate_spy)
+    monkeypatch.setattr(StateGraph, "compile", _compile_spy)
     monkeypatch.setattr(briefings_mod, "langfuse_enabled", lambda: True, raising=False)
     monkeypatch.setattr("news_dashboard.ai_client.langfuse_enabled", lambda: True)
     monkeypatch.setattr(langfuse.langchain, "CallbackHandler", lambda: callback)
@@ -1475,6 +1490,8 @@ def test_generate_briefing_propagates_run_session_and_user(
             "trace_name": "briefing-generation",
         }
     ]
+    assert invoke_configs[0]["callbacks"] == [callback]
+    assert invoke_configs[0]["callbacks"][0] is callback
 
 
 # ── reading-list "saved for later" section ────────────────────────────────────

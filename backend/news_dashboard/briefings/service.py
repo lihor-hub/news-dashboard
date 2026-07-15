@@ -9,7 +9,7 @@ import json
 import logging
 import os
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from datetime import datetime, timedelta, timezone
 from functools import partial
 from pathlib import Path
@@ -17,6 +17,7 @@ from typing import Any, cast
 
 from langchain_core.runnables import RunnableLambda
 from langgraph.graph import END, START, StateGraph
+from langgraph.graph.state import CompiledStateGraph
 from typing_extensions import TypedDict
 
 from news_dashboard import briefing_agent
@@ -81,6 +82,37 @@ class BriefingState(TypedDict, total=False):
     content: dict[str, Any]
     result: dict[str, Any]
     trace_id: str | None
+
+
+BriefingNode = Callable[[BriefingState], BriefingState]
+
+
+def _compile_briefing_graph(
+    nodes: Mapping[str, BriefingNode],
+) -> CompiledStateGraph[  # pyrefly: ignore[bad-specialization]  # pyrefly lacks LangGraph TypedDict support
+    BriefingState, None, BriefingState, BriefingState  # ty: ignore[invalid-type-arguments]  # ty lacks LangGraph TypedDict support
+]:
+    """Compile the fixed five-stage briefing topology without a checkpointer."""
+    # pyrefly: ignore[bad-specialization]  # pyrefly lacks LangGraph TypedDict support
+    graph = StateGraph(BriefingState)  # ty: ignore[invalid-argument-type]  # ty lacks TypedDict support here
+    for stage in briefing_agent.STAGE_ORDER:
+        # pyrefly: ignore[no-matching-overload]  # upstream LangGraph typing mismatch
+        graph.add_node(  # ty: ignore[no-matching-overload]  # upstream LangGraph typing mismatch
+            stage,
+            RunnableLambda(nodes[stage]),
+            input_schema=BriefingState,
+        )
+    graph.add_edge(START, briefing_agent.STAGE_CANDIDATE_SELECTION)
+    graph.add_conditional_edges(
+        briefing_agent.STAGE_CANDIDATE_SELECTION,
+        lambda state: "continue" if state["candidates"] else "done",
+        {"continue": briefing_agent.STAGE_THEME_CLUSTERING, "done": END},
+    )
+    graph.add_edge(briefing_agent.STAGE_THEME_CLUSTERING, briefing_agent.STAGE_DRAFTING)
+    graph.add_edge(briefing_agent.STAGE_DRAFTING, briefing_agent.STAGE_CITATION_VERIFICATION)
+    graph.add_edge(briefing_agent.STAGE_CITATION_VERIFICATION, briefing_agent.STAGE_ASSEMBLY)
+    graph.add_edge(briefing_agent.STAGE_ASSEMBLY, END)
+    return graph.compile()  # ty: ignore[invalid-return-type]  # follows suppressed upstream generic
 
 
 # ── SQL constants ─────────────────────────────────────────────────────────────
@@ -739,49 +771,15 @@ def generate_briefing(  # noqa: PLR0913, PLR0915
         )
         return {"result": result}
 
-    # pyrefly: ignore[bad-specialization]  # pyrefly lacks LangGraph TypedDict support
-    graph = StateGraph(BriefingState)  # ty: ignore[invalid-argument-type]  # ty lacks TypedDict support here
-    # pyrefly: ignore[no-matching-overload]  # upstream LangGraph typing mismatch
-    graph.add_node(  # ty: ignore[no-matching-overload]  # upstream LangGraph typing mismatch
-        briefing_agent.STAGE_CANDIDATE_SELECTION,
-        RunnableLambda(candidate_selection),
-        input_schema=BriefingState,
+    compiled = _compile_briefing_graph(
+        {
+            briefing_agent.STAGE_CANDIDATE_SELECTION: candidate_selection,
+            briefing_agent.STAGE_THEME_CLUSTERING: theme_clustering,
+            briefing_agent.STAGE_DRAFTING: drafting,
+            briefing_agent.STAGE_CITATION_VERIFICATION: citation_verification,
+            briefing_agent.STAGE_ASSEMBLY: assembly,
+        }
     )
-    # pyrefly: ignore[no-matching-overload]  # upstream LangGraph typing mismatch
-    graph.add_node(  # ty: ignore[no-matching-overload]  # upstream LangGraph typing mismatch
-        briefing_agent.STAGE_THEME_CLUSTERING,
-        RunnableLambda(theme_clustering),
-        input_schema=BriefingState,
-    )
-    # pyrefly: ignore[no-matching-overload]  # upstream LangGraph typing mismatch
-    graph.add_node(  # ty: ignore[no-matching-overload]  # upstream LangGraph typing mismatch
-        briefing_agent.STAGE_DRAFTING,
-        RunnableLambda(drafting),
-        input_schema=BriefingState,
-    )
-    # pyrefly: ignore[no-matching-overload]  # upstream LangGraph typing mismatch
-    graph.add_node(  # ty: ignore[no-matching-overload]  # upstream LangGraph typing mismatch
-        briefing_agent.STAGE_CITATION_VERIFICATION,
-        RunnableLambda(citation_verification),
-        input_schema=BriefingState,
-    )
-    # pyrefly: ignore[no-matching-overload]  # upstream LangGraph typing mismatch
-    graph.add_node(  # ty: ignore[no-matching-overload]  # upstream LangGraph typing mismatch
-        briefing_agent.STAGE_ASSEMBLY,
-        RunnableLambda(assembly),
-        input_schema=BriefingState,
-    )
-    graph.add_edge(START, briefing_agent.STAGE_CANDIDATE_SELECTION)
-    graph.add_conditional_edges(
-        briefing_agent.STAGE_CANDIDATE_SELECTION,
-        lambda state: "continue" if state["candidates"] else "done",
-        {"continue": briefing_agent.STAGE_THEME_CLUSTERING, "done": END},
-    )
-    graph.add_edge(briefing_agent.STAGE_THEME_CLUSTERING, briefing_agent.STAGE_DRAFTING)
-    graph.add_edge(briefing_agent.STAGE_DRAFTING, briefing_agent.STAGE_CITATION_VERIFICATION)
-    graph.add_edge(briefing_agent.STAGE_CITATION_VERIFICATION, briefing_agent.STAGE_ASSEMBLY)
-    graph.add_edge(briefing_agent.STAGE_ASSEMBLY, END)
-    compiled = graph.compile()
 
     from langfuse import propagate_attributes
 
@@ -799,7 +797,7 @@ def generate_briefing(  # noqa: PLR0913, PLR0915
         trace_name="briefing-generation",
     ):
         final_state = compiled.invoke(
-            BriefingState(),  # ty: ignore[invalid-argument-type]  # upstream LangGraph typing mismatch
+            BriefingState(),
             config={"callbacks": callbacks},
         )
     return cast("dict[str, Any]", final_state.get("result", {"status": "no_candidates"}))
