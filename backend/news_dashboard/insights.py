@@ -186,7 +186,8 @@ _CLUSTER_LABEL_PROMPT = (
     "articles are connected.\n\n"
     "Respond in this exact format:\n"
     "HEADLINE: <headline here>\n"
-    "SUMMARY: <one-sentence summary here>"
+    "SUMMARY: <one-sentence summary here>\n\n"
+    "Articles:\n{{articles_text}}"
 )
 
 DEFAULT_CLUSTER_MODEL = "gpt-4o-mini"
@@ -324,20 +325,25 @@ def _generate_cluster_label(
         f"- Title: {a.get('title', '')}\n  Summary: {a.get('summary', '')}" for a in articles[:10]
     )
 
-    from news_dashboard.ai_client import chat_create, get_chat_client
+    from news_dashboard.ai_client import chat_create, get_chat_client, get_prompt
 
     client = get_chat_client(api_key=api_key, base_url=base_url)
+    prompt = get_prompt(
+        "topic-cluster-label",
+        fallback=_CLUSTER_LABEL_PROMPT,
+        variables={"articles_text": articles_text},
+    )
     result = chat_create(
         client,
         name="topic-cluster-label",
         tags=["clustering"],
         user_id=user_id,
-        prompt=None,
+        prompt=prompt,
         model=model,
         messages=[
             {
                 "role": "user",
-                "content": f"{_CLUSTER_LABEL_PROMPT}\n\nArticles:\n{articles_text}",
+                "content": prompt.text,
             },
         ],
         max_tokens=200,

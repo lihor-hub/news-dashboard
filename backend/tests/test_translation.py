@@ -1,5 +1,6 @@
 from unittest.mock import MagicMock, patch
 
+from news_dashboard.ai_client import ManagedPrompt
 from news_dashboard.body_fetch import fetch_and_cache_body, translate_body
 from news_dashboard.db import connect
 from news_dashboard.ingest.service import detect_and_translate_article
@@ -59,6 +60,63 @@ def test_translate_body_japanese() -> None:
 
     assert translated == "Translated Body Text"
     mock_client.chat.completions.create.assert_called_once()
+
+
+def test_translate_body_uses_managed_chat_prompt() -> None:
+    managed = ManagedPrompt(
+        text=None,
+        messages=[{"role": "system", "content": "compiled"}, {"role": "user", "content": "本文"}],
+        langfuse_prompt=object(),
+    )
+    completion = MagicMock()
+    completion.choices[0].message.content = "Translated"
+
+    with (
+        patch("news_dashboard.ai_client.free_llm_config", return_value=("key", None)),
+        patch("news_dashboard.ai_client.get_chat_client", return_value=MagicMock()),
+        patch("news_dashboard.ai_client.get_prompt", return_value=managed) as get_prompt,
+        patch("news_dashboard.ai_client.chat_create", return_value=completion) as chat_create,
+    ):
+        assert translate_body("本文", "ja") == "Translated"
+
+    get_prompt.assert_called_once()
+    assert get_prompt.call_args.args == ("translate-body",)
+    assert get_prompt.call_args.kwargs["prompt_type"] == "chat"
+    assert get_prompt.call_args.kwargs["variables"] == {"from_lang": "ja", "body": "本文"}
+    assert chat_create.call_args.kwargs["prompt"] is managed
+    assert chat_create.call_args.kwargs["messages"] == managed.messages
+
+
+def test_detect_and_translate_article_uses_managed_chat_prompt() -> None:
+    managed = ManagedPrompt(
+        text=None,
+        messages=[{"role": "system", "content": "compiled translation"}],
+        langfuse_prompt=object(),
+    )
+    completion = MagicMock()
+    completion.choices[0].message.content = (
+        '{"detected_lang":"ja","translated_title":"English title",'
+        '"translated_summary":"English summary","needs_translation":true}'
+    )
+
+    with (
+        patch("news_dashboard.ai_client.free_llm_config", return_value=("key", None)),
+        patch("news_dashboard.ai_client.get_chat_client", return_value=MagicMock()),
+        patch("news_dashboard.ai_client.get_prompt", return_value=managed) as get_prompt,
+        patch("news_dashboard.ai_client.chat_create", return_value=completion) as chat_create,
+    ):
+        result = detect_and_translate_article("日本語タイトル", "日本語要約", "ja")
+
+    assert result == ("English title", "English summary", "ja", "日本語タイトル")
+    get_prompt.assert_called_once()
+    assert get_prompt.call_args.args == ("translate-article",)
+    assert get_prompt.call_args.kwargs["prompt_type"] == "chat"
+    assert get_prompt.call_args.kwargs["variables"] == {
+        "title": "日本語タイトル",
+        "summary": "日本語要約",
+    }
+    assert chat_create.call_args.kwargs["prompt"] is managed
+    assert chat_create.call_args.kwargs["messages"] == managed.messages
 
 
 def test_fetch_and_cache_body_translates_non_english(pg_clean: str) -> None:

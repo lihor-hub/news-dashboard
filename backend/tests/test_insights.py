@@ -14,10 +14,12 @@ import pytest
 
 from news_dashboard.db import connect
 from news_dashboard.insights import (
+    _CLUSTER_LABEL_PROMPT,
     DEFAULT_INSIGHTS_MODEL,
     InsightsNotConfiguredError,
     _build_text,
     _cosine_sim,
+    _generate_cluster_label,
     _greedy_cluster,
     _insights_ai_config,
     _normalize,
@@ -289,6 +291,35 @@ def test_generate_insights_prompt_grounds_in_article_text() -> None:
     assert "ONLY" in prompt_text
     assert "speculation" in prompt_text
     assert "fewer bullets" in prompt_text
+
+
+def test_generate_cluster_label_uses_managed_prompt() -> None:
+    from news_dashboard.ai_client import ManagedPrompt
+
+    articles = [{"title": "One", "summary": "First"}, {"title": "Two", "summary": "Second"}]
+    articles_text = "- Title: One\n  Summary: First\n- Title: Two\n  Summary: Second"
+    managed = ManagedPrompt(text="compiled cluster prompt", langfuse_prompt=object())
+    response = MagicMock()
+    response.choices[0].message.content = "HEADLINE: Managed\nSUMMARY: Managed summary."
+
+    with (
+        patch("news_dashboard.insights._cluster_ai_config", return_value=("key", None, "model")),
+        patch("news_dashboard.ai_client.get_chat_client", return_value=MagicMock()),
+        patch("news_dashboard.ai_client.get_prompt", return_value=managed) as get_prompt,
+        patch("news_dashboard.ai_client.chat_create", return_value=response) as chat_create,
+    ):
+        result = _generate_cluster_label(articles, user_id=7)
+
+    assert result == ("Managed", "Managed summary.")
+    get_prompt.assert_called_once_with(
+        "topic-cluster-label",
+        fallback=_CLUSTER_LABEL_PROMPT,
+        variables={"articles_text": articles_text},
+    )
+    assert chat_create.call_args.kwargs["prompt"] is managed
+    assert chat_create.call_args.kwargs["messages"] == [
+        {"role": "user", "content": "compiled cluster prompt"}
+    ]
 
 
 # ── get_or_generate_insights ──────────────────────────────────────────────────
