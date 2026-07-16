@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen, act, waitFor } from '@testing-library/react';
+import { render, screen, act, waitFor, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -118,6 +118,129 @@ describe('LessonDetailPage', () => {
     renderPage(5);
 
     expect(await screen.findByText('Graph context available')).toBeInTheDocument();
+  });
+
+  it('renders an interactive lesson concept graph and linked graph details', async () => {
+    vi.spyOn(api, 'fetchLesson').mockResolvedValue({
+      ...COMPLETE_LESSON,
+      lesson_detail: {
+        ...COMPLETE_LESSON.lesson_detail!,
+        key_claims: ['Transformers use attention to route information.'],
+        graph_context: {
+          available: true,
+          entities: [
+            { id: 'concept:attention', name: 'Attention', type: 'concept' },
+            { id: 'product:transformers', name: 'Transformers', type: 'product' },
+          ],
+          relationships: [
+            {
+              source: 'product:transformers',
+              target: 'concept:attention',
+              relationship_type: 'uses',
+              label: 'uses',
+              confidence: 0.91,
+            },
+          ],
+          related_article_ids: [42],
+          related_briefing_ids: [9],
+        },
+      },
+    });
+
+    const { container } = renderPage(5);
+
+    await waitFor(() => {
+      expect(container.querySelector('.react-flow')).toBeInTheDocument();
+      expect(container.querySelectorAll('[data-testid="lesson-graph-node"]')).toHaveLength(2);
+    });
+    expect(container.querySelectorAll('[data-testid="lesson-graph-edge"]')).toHaveLength(1);
+    expect(screen.getByText('Attention')).toBeInTheDocument();
+    expect(
+      screen.getAllByText('Transformers use attention to route information.').length
+    ).toBeGreaterThan(1);
+    expect(screen.getByRole('link', { name: 'Article #42' })).toHaveAttribute('href', '/a/42');
+    expect(screen.getByRole('link', { name: 'Briefing #9' })).toHaveAttribute('href', '/briefs/9');
+  });
+
+  it('shows relationship details when a graph node is selected', async () => {
+    vi.spyOn(api, 'fetchLesson').mockResolvedValue({
+      ...COMPLETE_LESSON,
+      lesson_detail: {
+        ...COMPLETE_LESSON.lesson_detail!,
+        graph_context: {
+          available: true,
+          entities: [
+            { id: 'concept:attention', name: 'Attention', type: 'concept' },
+            { id: 'product:transformers', name: 'Transformers', type: 'product' },
+          ],
+          relationships: [
+            {
+              source: 'product:transformers',
+              target: 'concept:attention',
+              relationship_type: 'uses',
+              label: 'uses',
+              confidence: 0.91,
+            },
+          ],
+          related_article_ids: [],
+          related_briefing_ids: [],
+        },
+      },
+    });
+
+    const { container } = renderPage(5);
+    await waitFor(() => {
+      expect(container.querySelectorAll('[data-testid="lesson-graph-node"]')).toHaveLength(2);
+    });
+    const attention = [...container.querySelectorAll('[data-testid="lesson-graph-node"]')].find(
+      (node) => node.getAttribute('data-entity') === 'concept:attention'
+    );
+    expect(attention).toBeTruthy();
+
+    fireEvent.click(attention!.closest('.react-flow__node') ?? attention!);
+
+    expect(await screen.findByText('uses')).toBeInTheDocument();
+    expect(screen.getAllByText('Transformers').length).toBeGreaterThan(0);
+  });
+
+  it('shows an empty lesson graph state when extraction found no nodes', async () => {
+    vi.spyOn(api, 'fetchLesson').mockResolvedValue({
+      ...COMPLETE_LESSON,
+      lesson_detail: {
+        ...COMPLETE_LESSON.lesson_detail!,
+        graph_context: {
+          available: true,
+          entities: [],
+          relationships: [],
+          related_article_ids: [],
+          related_briefing_ids: [],
+        },
+      },
+    });
+
+    renderPage(5);
+
+    expect(await screen.findByText(/No graph nodes were extracted/i)).toBeInTheDocument();
+  });
+
+  it('shows a degraded lesson graph state when extraction is unavailable', async () => {
+    vi.spyOn(api, 'fetchLesson').mockResolvedValue({
+      ...COMPLETE_LESSON,
+      lesson_detail: {
+        ...COMPLETE_LESSON.lesson_detail!,
+        graph_context: {
+          available: false,
+          entities: [],
+          relationships: [],
+          related_article_ids: [],
+          related_briefing_ids: [],
+        },
+      },
+    });
+
+    renderPage(5);
+
+    expect(await screen.findByText(/Graph extraction is not available/i)).toBeInTheDocument();
   });
 
   it('shows an error state when the lesson cannot be loaded', async () => {
