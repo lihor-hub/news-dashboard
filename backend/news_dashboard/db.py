@@ -29,6 +29,8 @@ _INITIALIZED_DATABASES: set[tuple[str, str | None, str]] = set()
 _POOL_LOCK = threading.Lock()
 _POOL: ConnectionPool[Any] | None = None
 _POOL_DSN: str | None = None
+_PATH_TEST_SCHEMAS_LOCK = threading.Lock()
+_PATH_TEST_SCHEMAS_CREATED: dict[str, set[str]] = {}
 
 
 class SchemaInitializationError(RuntimeError):
@@ -1315,6 +1317,7 @@ def connect(
         if isinstance(db_path, Path):
             schema = _schema_name(db_path)
             conn.execute(sql.SQL("CREATE SCHEMA IF NOT EXISTS {}").format(sql.Identifier(schema)))
+            _register_path_test_schema(schema, database_url)
             # `public` stays on the path (after the test schema) so extension
             # types/operators pgvector installs there — e.g. `vector`,
             # `<=>` — resolve even though tables/functions still isolate per
@@ -1519,6 +1522,53 @@ def init_db(db_path: Path | str | None = None, database_url: str | None = None) 
 def _schema_name(token: Path) -> str:
     digest = sha256(str(token).encode("utf-8")).hexdigest()[:16]
     return f"test_{digest}"
+
+
+def _path_test_schema_registry_key(database_url: str | None) -> str:
+    dsn = database_url or os.environ.get("DATABASE_URL") or ""
+    if not dsn:
+        return ""
+    parsed = urlsplit(dsn)
+    return urlunsplit((parsed.scheme, parsed.netloc, parsed.path, "", ""))
+
+
+def _register_path_test_schema(schema: str, database_url: str | None) -> None:
+    registry_key = _path_test_schema_registry_key(database_url)
+    with _PATH_TEST_SCHEMAS_LOCK:
+        _PATH_TEST_SCHEMAS_CREATED.setdefault(registry_key, set()).add(schema)
+    registry_file = os.environ.get("NEWS_DASHBOARD_PATH_TEST_SCHEMA_REGISTRY")
+    if registry_file:
+        with Path(registry_file).open("a", encoding="utf-8") as handle:
+            handle.write(f"{registry_key}\t{schema}\n")
+
+
+def drop_registered_path_test_schemas(database_url: str | None = None) -> None:
+    """Drop hash-style schemas created by Path-backed test connections."""
+    registry_key = _path_test_schema_registry_key(database_url)
+    with _PATH_TEST_SCHEMAS_LOCK:
+        schemas = sorted(_PATH_TEST_SCHEMAS_CREATED.pop(registry_key, set()))
+    if not schemas:
+        return
+
+    drop_path_test_schemas(schemas, database_url)
+
+
+def drop_path_test_schemas(schemas: Sequence[str], database_url: str | None = None) -> None:
+    """Drop the given hash-style Path-backed test schemas."""
+    if not schemas:
+        return
+    try:
+        with _open_connection(database_url) as conn:
+            for schema in schemas:
+                conn.execute(
+                    sql.SQL("DROP SCHEMA IF EXISTS {} CASCADE").format(sql.Identifier(schema))
+                )
+                conn.commit()
+    except Exception:
+        with _PATH_TEST_SCHEMAS_LOCK:
+            registry_key = _path_test_schema_registry_key(database_url)
+            _PATH_TEST_SCHEMAS_CREATED.setdefault(registry_key, set()).update(schemas)
+        raise
 
 
 def get_setting(key: str, default: str | None = None) -> str | None:
