@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   AlertCircle,
+  BookOpen,
   ExternalLink,
   Headphones,
   Image,
@@ -19,8 +20,10 @@ import {
   generateLessonInfographic,
   generateLessonPodcast,
   generateLessonSlideDeck,
+  fetchLessonTrails,
   type Lesson,
   type LessonDetail,
+  type LessonTrailResponse,
 } from '@/api';
 import { classifyGenerationError, type FriendlyError } from '@/lib/errorPresentation';
 
@@ -83,6 +86,8 @@ export function LessonDetailView({
   const [slideDeckError, setSlideDeckError] = useState<FriendlyError | null>(null);
   const [isGeneratingInfographic, setIsGeneratingInfographic] = useState(false);
   const [infographicError, setInfographicError] = useState<FriendlyError | null>(null);
+  const [trails, setTrails] = useState<LessonTrailResponse | null>(null);
+  const [trailError, setTrailError] = useState<string | null>(null);
   const publishedLabel = formatPublishedDate(lesson.published_at);
   const isPendingLesson = lesson.generation_status === 'pending';
   const isFailedLesson = lesson.generation_status === 'failed';
@@ -90,6 +95,27 @@ export function LessonDetailView({
   const lessonDetail = lesson.lesson_detail ?? null;
   const hasLessonDetail = isCompleteLesson && lessonDetail !== null;
   const graphContext = lessonDetail?.graph_context;
+
+  useEffect(() => {
+    let cancelled = false;
+    setTrails(null);
+    setTrailError(null);
+    if (!hasLessonDetail) return;
+
+    void fetchLessonTrails(lesson.id)
+      .then((nextTrails) => {
+        if (!cancelled) setTrails(nextTrails);
+      })
+      .catch((error: unknown) => {
+        if (!cancelled) {
+          setTrailError(error instanceof Error ? error.message : 'Failed to load learning trails.');
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [hasLessonDetail, lesson.id]);
 
   async function handleGeneratePodcast(force: boolean) {
     setIsGeneratingPodcast(true);
@@ -284,6 +310,73 @@ export function LessonDetailView({
 
       {hasLessonDetail && lesson.study_artifacts ? (
         <StudyArtifactsView artifacts={lesson.study_artifacts} />
+      ) : null}
+
+      {hasLessonDetail ? (
+        <div className="space-y-3 rounded-lg border border-border bg-card/60 p-4">
+          <div className="flex items-center gap-2">
+            <BookOpen className="size-4 text-muted-foreground" />
+            <h3 className="text-sm font-semibold text-foreground">
+              {t('learn.trails.title', 'Learning trail')}
+            </h3>
+          </div>
+
+          {trailError ? (
+            <div className="text-sm text-muted-foreground">{trailError}</div>
+          ) : trails === null ? (
+            <div className="space-y-2">
+              <Skeleton className="h-4 w-40" />
+              <Skeleton className="h-4 w-11/12" />
+            </div>
+          ) : trails.empty_message ? (
+            <div className="text-sm leading-6 text-muted-foreground">{trails.empty_message}</div>
+          ) : (
+            <div className="grid gap-3 md:grid-cols-2">
+              {trails.groups
+                .filter((group) => group.items.length > 0)
+                .map((group) => (
+                  <section key={group.path} className="space-y-2">
+                    <h4 className="text-xs font-semibold uppercase text-muted-foreground">
+                      {group.label}
+                    </h4>
+                    <ul className="space-y-2">
+                      {group.items.map((item) => (
+                        <li
+                          key={`${item.item_type}-${item.id}`}
+                          className="rounded-md border border-border bg-background p-3"
+                        >
+                          {item.url ? (
+                            <a
+                              href={item.url}
+                              className="text-sm font-semibold text-foreground hover:underline"
+                            >
+                              {item.title}
+                            </a>
+                          ) : (
+                            <div className="text-sm font-semibold text-foreground">
+                              {item.title}
+                            </div>
+                          )}
+                          <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                            {item.explanation}
+                          </p>
+                          {item.matched_signals.length > 0 ? (
+                            <div className="mt-2 flex flex-wrap gap-1">
+                              {item.matched_signals.map((signal) => (
+                                <Badge key={signal} variant="outline" className="text-[11px]">
+                                  {signal}
+                                </Badge>
+                              ))}
+                            </div>
+                          ) : null}
+                        </li>
+                      ))}
+                    </ul>
+                  </section>
+                ))}
+            </div>
+          )}
+        </div>
       ) : null}
 
       {hasLessonDetail ? (

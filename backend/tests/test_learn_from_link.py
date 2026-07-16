@@ -1067,6 +1067,137 @@ def test_get_lesson_endpoint_404s_for_other_user(
     assert response.json()["detail"] == "lesson not found"
 
 
+def test_recommend_lesson_trails_groups_related_lessons_and_articles(
+    pg_clean: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("DATABASE_URL", pg_clean)
+    user_id = _make_user(pg_clean)
+    current = service.create_lesson(user_id, "https://example.com/current", database_url=pg_clean)
+
+    def detail_with(*, gist: str, verdict: str, concepts: list[str]) -> dict[str, Any]:
+        return {
+            "gist": gist,
+            "explanation": f"{gist} explains vector search and embeddings.",
+            "key_claims": [f"{gist} uses embeddings."],
+            "prerequisite_concepts": concepts,
+            "why_it_matters": "It matters for retrieval systems.",
+            "read_worthiness": {"verdict": verdict, "rationale": "Useful follow-up."},
+            "who_should_read": ["Builders"],
+            "questions_to_keep_in_mind": ["What connects these ideas?"],
+            "citations": [{"label": "1", "snippet": gist, "source": gist}],
+        }
+
+    with connect(database_url=pg_clean) as conn:
+        conn.execute(
+            "UPDATE lessons SET lesson_detail = %s::jsonb, source_content = %s WHERE id = %s",
+            (
+                Jsonb(
+                    detail_with(
+                        gist="Vector search foundation",
+                        verdict="read",
+                        concepts=["Embeddings", "Vector search"],
+                    )
+                ),
+                "Vector search foundation with embeddings.",
+                current["id"],
+            ),
+        )
+    prerequisite = service.create_lesson(
+        user_id, "https://example.com/prerequisite", database_url=pg_clean
+    )
+    deeper = service.create_lesson(user_id, "https://example.com/deeper", database_url=pg_clean)
+    with connect(database_url=pg_clean) as conn:
+        conn.execute(
+            "UPDATE lessons SET title = %s, lesson_detail = %s::jsonb WHERE id = %s",
+            (
+                "Embeddings basics",
+                Jsonb(
+                    detail_with(
+                        gist="Embeddings basics",
+                        verdict="skim",
+                        concepts=["Embeddings"],
+                    )
+                ),
+                prerequisite["id"],
+            ),
+        )
+        conn.execute(
+            "UPDATE lessons SET title = %s, lesson_detail = %s::jsonb WHERE id = %s",
+            (
+                "Deep vector retrieval",
+                Jsonb(
+                    detail_with(
+                        gist="Deep vector retrieval",
+                        verdict="study",
+                        concepts=["Vector search"],
+                    )
+                ),
+                deeper["id"],
+            ),
+        )
+    article_id = _seed_article(
+        pg_clean,
+        slug="trail-article",
+        title="Foundation production checklist",
+        summary="Foundation patterns in production retrieval systems.",
+    )
+
+    trails = service.recommend_lesson_trails(current["id"], user_id, database_url=pg_clean)
+
+    groups = {group["path"]: group["items"] for group in trails["groups"]}
+    assert trails["empty_message"] is None
+    assert groups["prerequisite"][0]["title"] == "Embeddings basics"
+    assert groups["prerequisite"][0]["item_type"] == "lesson"
+    assert "Embeddings" in groups["prerequisite"][0]["matched_signals"]
+    assert groups["deeper"][0]["title"] == "Deep vector retrieval"
+    assert groups["deeper"][0]["explanation"]
+    all_items = [item for items in groups.values() for item in items]
+    assert any(item["id"] == article_id and item["item_type"] == "article" for item in all_items)
+
+
+def test_recommend_lesson_trails_returns_empty_state_when_no_candidates(
+    pg_clean: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("DATABASE_URL", pg_clean)
+    user_id = _make_user(pg_clean)
+    lesson = service.create_lesson(user_id, "https://example.com/current", database_url=pg_clean)
+
+    trails = service.recommend_lesson_trails(lesson["id"], user_id, database_url=pg_clean)
+
+    assert [group["path"] for group in trails["groups"]] == [
+        "prerequisite",
+        "easier",
+        "adjacent",
+        "deeper",
+    ]
+    assert all(group["items"] == [] for group in trails["groups"])
+    assert (
+        trails["empty_message"]
+        == "No related lessons or articles are available in your corpus yet."
+    )
+
+
+def test_get_lesson_trails_endpoint_is_user_scoped(
+    pg_clean: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("DATABASE_URL", pg_clean)
+    init_db(database_url=pg_clean)
+    alice = _make_user(pg_clean, "alice")
+    bob = _make_user(pg_clean, "bob")
+    lesson = service.create_lesson(alice, "https://example.com/a", database_url=pg_clean)
+
+    with _api_client(alice) as client:
+        response = client.get(f"/api/learn/lessons/{lesson['id']}/trails")
+
+    assert response.status_code == 200
+    assert response.json()["lesson_id"] == lesson["id"]
+
+    with _api_client(bob, username="bob") as client:
+        response = client.get(f"/api/learn/lessons/{lesson['id']}/trails")
+
+    assert response.status_code == 404
+
+
 def _mock_chat_reply(reply: str) -> Any:
     captured: dict[str, Any] = {}
 
