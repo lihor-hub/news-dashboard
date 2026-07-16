@@ -13,6 +13,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { LessonChat } from '@/components/LessonChat';
+import { LessonConceptGraph } from '@/components/LessonConceptGraph';
 import { StudyArtifactsView } from '@/components/StudyArtifactsView';
 import {
   generateLessonInfographic,
@@ -275,6 +276,10 @@ export function LessonDetailView({
             </section>
           </div>
         </div>
+      ) : null}
+
+      {hasLessonDetail && lessonDetail ? (
+        <LessonConceptGraph context={lessonDetail.graph_context} detail={lessonDetail} />
       ) : null}
 
       {hasLessonDetail && lesson.study_artifacts ? (
