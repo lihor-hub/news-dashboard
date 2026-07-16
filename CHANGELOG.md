@@ -3,6 +3,9 @@
 All notable changes to this project will be documented in this file.
 This project adheres to [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.155.0] — 2026-07-16
+- **Get recommendations for your next learning trail.** The app now suggests lesson trails you might find useful, so you can discover new topics without having to hunt for them.
+
 ## [1.150.0] — 2026-07-15
 - Smarter AI suggestions and faster responses, giving you more relevant news instantly.
 
