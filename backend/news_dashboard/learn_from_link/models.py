@@ -184,3 +184,31 @@ class LessonSuggestionDismissRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     article_id: int
+
+
+class LessonTrailItem(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    item_type: Literal["lesson", "article"]
+    id: int
+    title: NonEmptyText
+    url: str | None = None
+    source_name: str | None = None
+    explanation: NonEmptyText
+    matched_signals: list[NonEmptyText] = Field(default_factory=list)
+
+
+class LessonTrailGroup(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    path: Literal["prerequisite", "easier", "adjacent", "deeper"]
+    label: NonEmptyText
+    items: list[LessonTrailItem] = Field(default_factory=list)
+
+
+class LessonTrailResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    lesson_id: int
+    groups: list[LessonTrailGroup]
+    empty_message: str | None = None

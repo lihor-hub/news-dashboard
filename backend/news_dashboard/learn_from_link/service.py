@@ -2341,6 +2341,14 @@ _SUGGESTION_LIMIT_DEFAULT = 10
 _SUGGESTION_CANDIDATE_POOL = 200
 _NOVELTY_RECENT_DAYS = 7
 _NOVELTY_MEDIUM_DAYS = 30
+_TRAIL_GROUP_LIMIT = 3
+_TRAIL_CANDIDATE_LIMIT = 80
+_TRAIL_GROUP_LABELS = {
+    "prerequisite": "Prerequisite concepts",
+    "easier": "Easier on-ramp",
+    "adjacent": "Adjacent reads",
+    "deeper": "Deeper path",
+}
 
 
 def _novelty_score(age_days: float | None) -> float:
@@ -2351,6 +2359,296 @@ def _novelty_score(age_days: float | None) -> float:
     if age_days <= _NOVELTY_MEDIUM_DAYS:
         return 0.6
     return 0.3
+
+
+def _trail_terms(lesson: dict[str, Any]) -> list[str]:
+    detail = lesson.get("lesson_detail") or {}
+    terms: list[str] = [str(value) for value in detail.get("prerequisite_concepts") or []]
+    for value in detail.get("key_claims") or []:
+        terms.extend(re.findall(r"\b[A-Za-z][A-Za-z0-9&.-]{3,}\b", str(value))[:3])
+    graph_context = detail.get("graph_context") or {}
+    terms.extend(
+        str(entity["name"])
+        for entity in graph_context.get("entities") or []
+        if isinstance(entity, dict) and entity.get("name")
+    )
+
+    seen: set[str] = set()
+    unique_terms: list[str] = []
+    for term in terms:
+        clean = re.sub(r"\s+", " ", term).strip()
+        if len(clean) < 4 or clean.lower() in seen:
+            continue
+        seen.add(clean.lower())
+        unique_terms.append(clean)
+        if len(unique_terms) >= 10:
+            break
+    return unique_terms
+
+
+def _matches_for_text(text: str, terms: list[str]) -> list[str]:
+    lowered = text.lower()
+    matches = [term for term in terms if term.lower() in lowered]
+    return matches[:4]
+
+
+def _lesson_depth_rank(lesson: dict[str, Any]) -> int:
+    detail = lesson.get("lesson_detail") or {}
+    verdict = (detail.get("read_worthiness") or {}).get("verdict")
+    if verdict == "study":
+        return 4
+    if verdict == "read":
+        return 3
+    if verdict == "skim":
+        return 2
+    return 1
+
+
+def _trail_lesson_candidate(
+    candidate: dict[str, Any],
+    *,
+    path: str,
+    matches: list[str],
+) -> dict[str, Any]:
+    title = str(candidate.get("title") or candidate.get("original_url"))
+    if path == "prerequisite":
+        explanation = f"Builds background around {matches[0]} before revisiting this lesson."
+    elif path == "easier":
+        explanation = f"Offers a lighter on-ramp that overlaps on {matches[0]}."
+    elif path == "deeper":
+        explanation = f"Continues into a more demanding follow-up connected by {matches[0]}."
+    else:
+        explanation = f"Shares adjacent context through {matches[0]}."
+    return {
+        "item_type": "lesson",
+        "id": int(candidate["id"]),
+        "title": title,
+        "url": f"/learn/{candidate['id']}",
+        "source_name": candidate.get("source_name"),
+        "explanation": explanation,
+        "matched_signals": matches,
+    }
+
+
+def _trail_article_candidate(
+    article: dict[str, Any],
+    *,
+    path: str,
+    matches: list[str],
+) -> dict[str, Any]:
+    title = str(article.get("title") or article.get("canonical_url"))
+    if path == "prerequisite":
+        explanation = f"Introduces background signal {matches[0]} from your article corpus."
+    elif path == "easier":
+        explanation = f"A shorter article-shaped on-ramp tied to {matches[0]}."
+    elif path == "deeper":
+        explanation = f"High-signal follow-up that develops {matches[0]} further."
+    else:
+        explanation = f"Related article connected by {matches[0]}."
+    return {
+        "item_type": "article",
+        "id": int(article["id"]),
+        "title": title,
+        "url": str(article.get("canonical_url") or article.get("url") or ""),
+        "source_name": article.get("source_name"),
+        "explanation": explanation,
+        "matched_signals": matches,
+    }
+
+
+def _append_trail_item(
+    groups: dict[str, list[dict[str, Any]]],
+    path: str,
+    item: dict[str, Any],
+) -> None:
+    if len(groups[path]) >= _TRAIL_GROUP_LIMIT:
+        return
+    key = (item["item_type"], item["id"])
+    if any(
+        (existing["item_type"], existing["id"]) == key
+        for values in groups.values()
+        for existing in values
+    ):
+        return
+    groups[path].append(item)
+
+
+def _trail_path_for_lesson(
+    candidate: dict[str, Any],
+    *,
+    matches: list[str],
+    prerequisite_concepts: list[str],
+    current_rank: int,
+) -> str:
+    rank = _lesson_depth_rank(candidate)
+    if rank > current_rank:
+        return "deeper"
+    if any(match in prerequisite_concepts for match in matches):
+        return "prerequisite"
+    if rank < current_rank:
+        return "easier"
+    return "adjacent"
+
+
+def _trail_path_for_article(
+    article: dict[str, Any],
+    *,
+    matches: list[str],
+    prerequisite_concepts: list[str],
+    source_length: int,
+) -> str:
+    if any(match in prerequisite_concepts for match in matches):
+        return "prerequisite"
+    body_length = len(str(article.get("body") or article.get("summary") or ""))
+    if body_length < source_length / 2:
+        return "easier"
+    importance = int(article.get("importance_score") or 50)
+    if importance >= 80 or body_length > source_length:
+        return "deeper"
+    return "adjacent"
+
+
+def recommend_lesson_trails(
+    lesson_id: int,
+    user_id: int,
+    *,
+    database_url: str | None = None,
+) -> dict[str, Any]:
+    lesson = get_lesson(lesson_id, user_id, database_url=database_url)
+    if lesson is None:
+        raise LessonNotFoundError
+    if lesson.get("generation_status") != "complete" or not isinstance(
+        lesson.get("lesson_detail"), dict
+    ):
+        return {
+            "lesson_id": lesson_id,
+            "groups": [
+                {"path": path, "label": label, "items": []}
+                for path, label in _TRAIL_GROUP_LABELS.items()
+            ],
+            "empty_message": "Complete this lesson before building a learning trail.",
+        }
+
+    terms = _trail_terms(lesson)
+    if not terms:
+        return {
+            "lesson_id": lesson_id,
+            "groups": [
+                {"path": path, "label": label, "items": []}
+                for path, label in _TRAIL_GROUP_LABELS.items()
+            ],
+            "empty_message": "Not enough lesson concepts were found to recommend a trail yet.",
+        }
+
+    current_rank = _lesson_depth_rank(lesson)
+    prerequisite_concepts = [
+        str(concept)
+        for concept in (lesson.get("lesson_detail") or {}).get("prerequisite_concepts", [])
+    ]
+    source_length = len(str(lesson.get("source_content") or ""))
+    groups: dict[str, list[dict[str, Any]]] = {path: [] for path in _TRAIL_GROUP_LABELS}
+
+    from news_dashboard.article_visibility import visible_article_sql
+
+    init_db(database_url=database_url)
+    with connect(database_url=database_url) as conn:
+        lesson_rows = conn.execute(
+            """
+            SELECT id, title, original_url, source_name, lesson_detail, created_at
+            FROM lessons
+            WHERE user_id = %s
+              AND id != %s
+              AND generation_status = 'complete'
+              AND lesson_detail IS NOT NULL
+            ORDER BY created_at DESC
+            LIMIT %s
+            """,
+            (user_id, lesson_id, _TRAIL_CANDIDATE_LIMIT),
+        ).fetchall()
+        article_rows = conn.execute(
+            f"""
+            SELECT a.id, a.title, a.url, a.canonical_url, a.source_name, a.summary,
+                   a.body, a.importance_score, uas.starred
+            FROM articles a
+            JOIN sources a_src ON a_src.slug = a.source_slug
+            LEFT JOIN user_sources a_us
+              ON a_us.source_slug = a.source_slug AND a_us.user_id = %s
+            LEFT JOIN user_article_state uas
+              ON uas.article_id = a.id AND uas.user_id = %s
+            WHERE ({visible_article_sql("a")})
+            ORDER BY COALESCE(uas.starred, FALSE) DESC, a.importance_score DESC, a.id DESC
+            LIMIT %s
+            """,
+            (user_id, user_id, user_id, _TRAIL_CANDIDATE_LIMIT),
+        ).fetchall()
+
+    for row in lesson_rows:
+        candidate = row_to_dict(row)
+        detail = candidate.get("lesson_detail") or {}
+        text = " ".join(
+            str(value)
+            for value in (
+                candidate.get("title"),
+                detail.get("gist"),
+                detail.get("explanation"),
+                " ".join(detail.get("prerequisite_concepts") or []),
+                " ".join(detail.get("key_claims") or []),
+            )
+            if value
+        )
+        matches = _matches_for_text(text, terms)
+        if not matches:
+            continue
+        path = _trail_path_for_lesson(
+            candidate,
+            matches=matches,
+            prerequisite_concepts=prerequisite_concepts,
+            current_rank=current_rank,
+        )
+        _append_trail_item(
+            groups,
+            path,
+            _trail_lesson_candidate(candidate, path=path, matches=matches),
+        )
+
+    for row in article_rows:
+        article = row_to_dict(row)
+        text = " ".join(
+            str(value)
+            for value in (
+                article.get("title"),
+                article.get("summary"),
+                article.get("body"),
+            )
+            if value
+        )
+        matches = _matches_for_text(text, terms)
+        if not matches:
+            continue
+        path = _trail_path_for_article(
+            article,
+            matches=matches,
+            prerequisite_concepts=prerequisite_concepts,
+            source_length=source_length,
+        )
+        _append_trail_item(
+            groups,
+            path,
+            _trail_article_candidate(article, path=path, matches=matches),
+        )
+
+    response_groups = [
+        {"path": path, "label": label, "items": groups[path]}
+        for path, label in _TRAIL_GROUP_LABELS.items()
+    ]
+    has_items = any(group["items"] for group in response_groups)
+    return {
+        "lesson_id": lesson_id,
+        "groups": response_groups,
+        "empty_message": None
+        if has_items
+        else "No related lessons or articles are available in your corpus yet.",
+    }
 
 
 def _score_suggestion_candidate(

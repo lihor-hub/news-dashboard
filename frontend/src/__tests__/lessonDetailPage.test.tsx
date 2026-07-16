@@ -80,6 +80,16 @@ function renderPage(lessonId: number) {
 describe('LessonDetailPage', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+    vi.spyOn(api, 'fetchLessonTrails').mockResolvedValue({
+      lesson_id: 5,
+      groups: [
+        { path: 'prerequisite', label: 'Prerequisite concepts', items: [] },
+        { path: 'easier', label: 'Easier on-ramp', items: [] },
+        { path: 'adjacent', label: 'Adjacent reads', items: [] },
+        { path: 'deeper', label: 'Deeper path', items: [] },
+      ],
+      empty_message: 'No related lessons or articles are available in your corpus yet.',
+    });
   });
 
   afterEach(() => {
@@ -221,6 +231,75 @@ describe('LessonDetailPage', () => {
     renderPage(5);
 
     expect(await screen.findByText(/No graph nodes were extracted/i)).toBeInTheDocument();
+  });
+
+  it('renders grouped learning trail recommendations', async () => {
+    vi.spyOn(api, 'fetchLesson').mockResolvedValue(COMPLETE_LESSON);
+    vi.spyOn(api, 'fetchLessonTrails').mockResolvedValue({
+      lesson_id: 5,
+      groups: [
+        {
+          path: 'prerequisite',
+          label: 'Prerequisite concepts',
+          items: [
+            {
+              item_type: 'lesson',
+              id: 2,
+              title: 'Embeddings basics',
+              url: '/learn/2',
+              source_name: 'Example Journal',
+              explanation: 'Builds background around Embeddings before revisiting this lesson.',
+              matched_signals: ['Embeddings'],
+            },
+          ],
+        },
+        { path: 'easier', label: 'Easier on-ramp', items: [] },
+        {
+          path: 'adjacent',
+          label: 'Adjacent reads',
+          items: [
+            {
+              item_type: 'article',
+              id: 42,
+              title: 'Vector search checklist',
+              url: 'https://example.com/vector',
+              source_name: 'Example Journal',
+              explanation: 'Related article connected by Vector search.',
+              matched_signals: ['Vector search'],
+            },
+          ],
+        },
+        { path: 'deeper', label: 'Deeper path', items: [] },
+      ],
+      empty_message: null,
+    });
+
+    renderPage(5);
+
+    expect(await screen.findByText('Learning trail')).toBeInTheDocument();
+    expect(screen.getAllByText('Prerequisite concepts').length).toBeGreaterThan(0);
+    expect(await screen.findByRole('link', { name: 'Embeddings basics' })).toHaveAttribute(
+      'href',
+      '/learn/2'
+    );
+    expect(screen.getByRole('link', { name: 'Vector search checklist' })).toHaveAttribute(
+      'href',
+      'https://example.com/vector'
+    );
+    expect(
+      screen.getByText('Builds background around Embeddings before revisiting this lesson.')
+    ).toBeInTheDocument();
+    expect(screen.getByText('Vector search')).toBeInTheDocument();
+  });
+
+  it('shows a learning trail empty state', async () => {
+    vi.spyOn(api, 'fetchLesson').mockResolvedValue(COMPLETE_LESSON);
+
+    renderPage(5);
+
+    expect(
+      await screen.findByText('No related lessons or articles are available in your corpus yet.')
+    ).toBeInTheDocument();
   });
 
   it('shows a degraded lesson graph state when extraction is unavailable', async () => {

@@ -150,6 +150,28 @@ export interface LessonGeneration {
   created_at: string;
 }
 
+export interface LessonTrailItem {
+  item_type: 'lesson' | 'article';
+  id: number;
+  title: string;
+  url: string | null;
+  source_name: string | null;
+  explanation: string;
+  matched_signals: string[];
+}
+
+export interface LessonTrailGroup {
+  path: 'prerequisite' | 'easier' | 'adjacent' | 'deeper';
+  label: string;
+  items: LessonTrailItem[];
+}
+
+export interface LessonTrailResponse {
+  lesson_id: number;
+  groups: LessonTrailGroup[];
+  empty_message: string | null;
+}
+
 export async function createLessonFromLink(
   url: string,
   depth: LessonDepth = 'normal',
@@ -178,6 +200,10 @@ export async function regenerateLesson(
 
 export async function fetchLessonGenerations(id: number): Promise<LessonGeneration[]> {
   return requestJson<LessonGeneration[]>(`/api/learn/lessons/${id}/generations`);
+}
+
+export async function fetchLessonTrails(id: number): Promise<LessonTrailResponse> {
+  return requestJson<LessonTrailResponse>(`/api/learn/lessons/${id}/trails`);
 }
 
 export async function generateLessonPodcast(id: number, force = false): Promise<Lesson> {

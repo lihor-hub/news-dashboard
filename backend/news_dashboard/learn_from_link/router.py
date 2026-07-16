@@ -14,6 +14,7 @@ from news_dashboard.learn_from_link.models import (
     LessonQuestionRequest,
     LessonRegenerateRequest,
     LessonSuggestionDismissRequest,
+    LessonTrailResponse,
     RelevanceFeedbackRequest,
 )
 
@@ -209,6 +210,18 @@ def ask_lesson_question_endpoint(
     except service.LessonChatNotConfiguredError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     return {"reply": reply}
+
+
+@router.get("/api/learn/lessons/{lesson_id}/trails")
+def get_lesson_trails_endpoint(
+    lesson_id: int,
+    current_user: Annotated[dict[str, Any], Depends(require_auth)],
+) -> dict[str, Any]:
+    try:
+        trails = service.recommend_lesson_trails(lesson_id, current_user["id"])
+    except service.LessonNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="lesson not found") from exc
+    return LessonTrailResponse.model_validate(trails).model_dump(mode="json")
 
 
 @router.post("/api/learn/lessons/{lesson_id}/relevance/feedback")
