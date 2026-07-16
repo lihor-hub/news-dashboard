@@ -31,6 +31,50 @@ def _make_user(database_url: str, username: str = "alice") -> int:
     return int(row["id"])
 
 
+def _seed_source(database_url: str, slug: str, *, owner_user_id: int | None = None) -> None:
+    with connect(database_url=database_url) as conn:
+        conn.execute(
+            """
+            INSERT INTO sources(slug, name, url, category, kind, owner_user_id)
+            VALUES (%s, %s, %s, 'tech', 'rss_feed', %s)
+            ON CONFLICT(slug) DO NOTHING
+            """,
+            (slug, slug, f"https://{slug}.example", owner_user_id),
+        )
+
+
+def _seed_article(
+    database_url: str,
+    *,
+    slug: str,
+    title: str,
+    summary: str,
+    owner_user_id: int | None = None,
+) -> int:
+    _seed_source(database_url, slug, owner_user_id=owner_user_id)
+    with connect(database_url=database_url) as conn:
+        row = conn.execute(
+            """
+            INSERT INTO articles(
+              url, canonical_url, title, source_slug, source_name, category, kind, summary,
+              discovered_at
+            )
+            VALUES (%s, %s, %s, %s, %s, 'tech', 'rss_feed', %s, NOW())
+            RETURNING id
+            """,
+            (
+                f"https://{slug}.example/story",
+                f"https://{slug}.example/story",
+                title,
+                slug,
+                slug,
+                summary,
+            ),
+        ).fetchone()
+    assert row is not None
+    return int(row["id"])
+
+
 @contextmanager
 def _api_client(user_id: int, username: str = "alice") -> Generator[TestClient]:
     fake_user = {"id": user_id, "username": username, "email": None, "is_admin": False}
@@ -120,7 +164,15 @@ def test_create_lesson_completes_with_extracted_content(
     assert lesson["source_content"] == "Paragraph one.\n\nParagraph two."
     assert lesson["depth"] == "normal"
     assert lesson["persona"] == "developer"
-    assert lesson["lesson_detail"] == {
+    detail = dict(lesson["lesson_detail"])
+    graph_context = detail.pop("graph_context")
+    assert graph_context["available"] is True
+    assert graph_context["entities"][0] == {
+        "id": "concept:context-from-example-journal",
+        "name": "Context from Example Journal",
+        "type": "concept",
+    }
+    assert detail == {
         "gist": "Paragraph one.",
         "explanation": "Paragraph one.\n\nParagraph two.",
         "key_claims": ["Paragraph one.", "Paragraph two."],
@@ -226,6 +278,85 @@ def test_get_lesson_scopes_graph_context_to_current_user(pg_clean: str) -> None:
 
     assert service.get_lesson(lesson["id"], user_id, database_url=pg_clean) is not None
     assert service.get_lesson(lesson["id"], other_user_id, database_url=pg_clean) is None
+
+
+def test_create_lesson_adds_user_scoped_graph_context(
+    pg_clean: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("DATABASE_URL", pg_clean)
+    user_id = _make_user(pg_clean)
+    other_id = _make_user(pg_clean, username="bob")
+    visible_article_id = _seed_article(
+        pg_clean,
+        slug="visible-ai",
+        title="OpenAI systems lesson",
+        summary="Background context for OpenAI deployments.",
+    )
+    _seed_article(
+        pg_clean,
+        slug="private-ai",
+        title="OpenAI private note",
+        summary="Hidden context.",
+        owner_user_id=other_id,
+    )
+    with connect(database_url=pg_clean) as conn:
+        briefing_row = conn.execute(
+            """
+            INSERT INTO briefings(user_id, title, content)
+            VALUES (%s, %s, %s::jsonb)
+            RETURNING id
+            """,
+            (user_id, "OpenAI briefing", Jsonb({"summary": "OpenAI context"})),
+        ).fetchone()
+    assert briefing_row is not None
+
+    monkeypatch.setattr(
+        service,
+        "fetch_url_metadata",
+        lambda _url: {
+            "title": "OpenAI article",
+            "site_name": "Example Journal",
+            "author": "Ada Writer",
+            "published_at": "2026-07-09",
+        },
+        raising=False,
+    )
+    monkeypatch.setattr(
+        service,
+        "extract_body",
+        lambda _url: ("OpenAI builds useful systems. Sam Altman discussed them.", "ok"),
+        raising=False,
+    )
+
+    lesson = service.create_lesson(user_id, "https://example.com/openai", database_url=pg_clean)
+
+    graph_context = lesson["lesson_detail"]["graph_context"]
+    assert graph_context["available"] is True
+    assert visible_article_id in graph_context["related_article_ids"]
+    assert int(briefing_row["id"]) in graph_context["related_briefing_ids"]
+    assert {entity["name"] for entity in graph_context["entities"]} >= {
+        "Context from Example Journal",
+        "OpenAI",
+    }
+    assert graph_context["relationships"]
+
+
+def test_create_lesson_detail_graph_extraction_failure_does_not_fail_lesson(
+    pg_clean: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("DATABASE_URL", pg_clean)
+    user_id = _make_user(pg_clean)
+
+    def fail_graph(**_kwargs: Any) -> None:
+        msg = "graph unavailable"
+        raise RuntimeError(msg)
+
+    monkeypatch.setattr(service, "extract_lesson_graph_context", fail_graph)
+
+    lesson = service.create_lesson(user_id, "https://example.com/a", database_url=pg_clean)
+
+    assert lesson["generation_status"] == "complete"
+    assert lesson["lesson_detail"]["graph_context"] is None
 
 
 def test_create_lesson_marks_failed_when_extraction_fails(

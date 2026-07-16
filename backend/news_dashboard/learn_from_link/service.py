@@ -22,6 +22,7 @@ from news_dashboard.learn_from_link.models import (
     InfographicArtifact,
     LessonDepth,
     LessonDetail,
+    LessonGraphContext,
     LessonPersona,
     PersonalRelevance,
     SlideDeck,
@@ -93,6 +94,11 @@ slide_deck = NULL,
                 personal_relevance = NULL,
                 relevance_feedback = NULL,
 """
+_MAX_LESSON_GRAPH_ENTITIES = 12
+_MAX_LESSON_GRAPH_RELATIONSHIPS = 16
+_MAX_RELATED_ARTICLES = 8
+_MAX_RELATED_BRIEFINGS = 5
+_LESSON_GRAPH_ENTITY_TYPES = frozenset({"concept", "person", "org", "product", "place"})
 
 
 class LessonUrlError(ValueError):
@@ -1114,6 +1120,214 @@ def _normalized_text(text: str) -> str:
     return re.sub(r"\s+", " ", text).strip().lower()
 
 
+def _graph_entity_id(name: str, entity_type: str) -> str:
+    slug = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")
+    return f"{entity_type}:{slug}"
+
+
+def _add_graph_entity(
+    entities: list[dict[str, str]],
+    seen: set[tuple[str, str]],
+    *,
+    name: str,
+    entity_type: str,
+) -> str | None:
+    clean_name = re.sub(r"\s+", " ", name).strip()
+    clean_type = entity_type.strip().lower()
+    if not clean_name or clean_type not in _LESSON_GRAPH_ENTITY_TYPES:
+        return None
+    key = (clean_name.lower(), clean_type)
+    entity_id = _graph_entity_id(clean_name, clean_type)
+    if key not in seen and len(entities) < _MAX_LESSON_GRAPH_ENTITIES:
+        seen.add(key)
+        entities.append({"id": entity_id, "name": clean_name, "type": clean_type})
+    return entity_id
+
+
+def _candidate_named_entities(text: str) -> list[str]:
+    candidates = re.findall(r"\b(?:[A-Z][A-Za-z0-9&.-]+)(?:\s+[A-Z][A-Za-z0-9&.-]+){0,3}\b", text)
+    ignored = {"The", "A", "An", "This", "That", "It", "Context"}
+    seen: set[str] = set()
+    names: list[str] = []
+    for candidate in candidates:
+        clean = candidate.strip()
+        if clean in ignored or clean.lower() in seen:
+            continue
+        seen.add(clean.lower())
+        names.append(clean)
+        if len(names) >= 6:
+            break
+    return names
+
+
+def extract_lesson_graph_context(
+    lesson_detail: dict[str, Any],
+    lesson_fields: dict[str, Any],
+    *,
+    user_id: int,
+    database_url: str | None = None,
+) -> dict[str, Any]:
+    """Build graph metadata from a validated lesson and user-visible related content."""
+    entities: list[dict[str, str]] = []
+    seen_entities: set[tuple[str, str]] = set()
+    relationships: list[dict[str, Any]] = []
+
+    concept_ids: list[str] = []
+    for concept in lesson_detail.get("prerequisite_concepts") or []:
+        entity_id = _add_graph_entity(
+            entities,
+            seen_entities,
+            name=str(concept),
+            entity_type="concept",
+        )
+        if entity_id is not None:
+            concept_ids.append(entity_id)
+
+    source_text = "\n".join(
+        str(value)
+        for value in (
+            lesson_fields.get("title"),
+            lesson_fields.get("source_name"),
+            lesson_fields.get("author"),
+            lesson_fields.get("source_content"),
+        )
+        if value
+    )
+    for name in _candidate_named_entities(source_text):
+        _add_graph_entity(entities, seen_entities, name=name, entity_type="org")
+
+    gist_id = concept_ids[0] if concept_ids else None
+    for entity in entities:
+        if entity["type"] != "concept" and gist_id is not None:
+            relationships.append(
+                {
+                    "source": gist_id,
+                    "target": entity["id"],
+                    "relationship_type": "mentions",
+                    "label": "mentions",
+                    "confidence": 0.6,
+                }
+            )
+            if len(relationships) >= _MAX_LESSON_GRAPH_RELATIONSHIPS:
+                break
+
+    related_article_ids, related_briefing_ids = _find_related_graph_content(
+        user_id=user_id,
+        entities=entities,
+        database_url=database_url,
+    )
+    return {
+        "available": bool(entities or related_article_ids or related_briefing_ids),
+        "entities": entities,
+        "relationships": relationships,
+        "related_article_ids": related_article_ids,
+        "related_briefing_ids": related_briefing_ids,
+    }
+
+
+def _find_related_graph_content(
+    *,
+    user_id: int,
+    entities: list[dict[str, str]],
+    database_url: str | None,
+) -> tuple[list[int], list[int]]:
+    terms = [entity["name"] for entity in entities[:6] if entity.get("name")]
+    if not terms:
+        return [], []
+
+    article_ids: list[int] = []
+    briefing_ids: list[int] = []
+    init_db(database_url=database_url)
+    with connect(database_url=database_url) as conn:
+        for term in terms:
+            like_term = f"%{term}%"
+            article_rows = conn.execute(
+                """
+                SELECT DISTINCT a.id
+                FROM articles a
+                JOIN sources src ON src.slug = a.source_slug
+                LEFT JOIN user_sources us
+                  ON us.source_slug = src.slug AND us.user_id = %s
+                LEFT JOIN user_article_state uas
+                  ON uas.article_id = a.id AND uas.user_id = %s
+                WHERE COALESCE(uas.state, 'today') != 'archived'
+                  AND (
+                    (src.owner_user_id IS NULL AND COALESCE(us.enabled, TRUE) IS TRUE)
+                    OR (src.owner_user_id = %s AND src.enabled IS TRUE)
+                  )
+                  AND (
+                    a.title ILIKE %s
+                    OR a.summary ILIKE %s
+                    OR a.body ILIKE %s
+                    OR a.entities::text ILIKE %s
+                  )
+                ORDER BY a.id DESC
+                LIMIT %s
+                """,
+                (
+                    user_id,
+                    user_id,
+                    user_id,
+                    like_term,
+                    like_term,
+                    like_term,
+                    like_term,
+                    _MAX_RELATED_ARTICLES,
+                ),
+            ).fetchall()
+            for row in article_rows:
+                article_id = int(row["id"])
+                if article_id not in article_ids:
+                    article_ids.append(article_id)
+                    if len(article_ids) >= _MAX_RELATED_ARTICLES:
+                        break
+            if len(article_ids) >= _MAX_RELATED_ARTICLES:
+                break
+
+        for term in terms:
+            like_term = f"%{term}%"
+            rows = conn.execute(
+                """
+                SELECT DISTINCT id
+                FROM briefings
+                WHERE user_id = %s
+                  AND (title ILIKE %s OR content::text ILIKE %s)
+                ORDER BY id DESC
+                LIMIT %s
+                """,
+                (user_id, like_term, like_term, _MAX_RELATED_BRIEFINGS),
+            ).fetchall()
+            for row in rows:
+                briefing_id = int(row["id"])
+                if briefing_id not in briefing_ids:
+                    briefing_ids.append(briefing_id)
+                    if len(briefing_ids) >= _MAX_RELATED_BRIEFINGS:
+                        break
+            if len(briefing_ids) >= _MAX_RELATED_BRIEFINGS:
+                break
+    return article_ids, briefing_ids
+
+
+def _add_lesson_graph_context(
+    *,
+    user_id: int,
+    lesson_id: int,
+    lesson_fields: dict[str, Any],
+    database_url: str | None,
+) -> None:
+    try:
+        raw_context = extract_lesson_graph_context(
+            lesson_fields["lesson_detail"],
+            lesson_fields,
+            user_id=user_id,
+            database_url=database_url,
+        )
+        graph_context = LessonGraphContext.model_validate(raw_context)
+        lesson_fields["lesson_detail"]["graph_context"] = graph_context.model_dump(mode="json")
+    except Exception as exc:
+        logger.warning("lesson graph extraction failed for lesson %d: %s", lesson_id, exc)
+
+
 def generate_structured_lesson_detail(
     lesson_fields: dict[str, Any],
     *,
@@ -1533,6 +1747,12 @@ def build_lesson_graph() -> Any:  # noqa: PLR0915 - graph wiring is clearest in 
                 "failed_step": agent_runs.STEP_CITATION_VERIFICATION,
             }
         lesson_fields["lesson_detail"] = detail
+        _add_lesson_graph_context(
+            user_id=state["user_id"],
+            lesson_id=state["lesson_id"],
+            lesson_fields=lesson_fields,
+            database_url=state["database_url"],
+        )
         return {"lesson_fields": lesson_fields}
 
     def relevance_node(state: LessonGraphState) -> dict[str, Any]:
