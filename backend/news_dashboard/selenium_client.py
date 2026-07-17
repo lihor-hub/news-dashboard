@@ -6,6 +6,7 @@ import logging
 import urllib.parse
 from collections.abc import Callable, Generator
 from contextlib import contextmanager
+from typing import Protocol
 
 from selenium import webdriver
 from selenium.common.exceptions import NoSuchElementException, TimeoutException
@@ -17,7 +18,7 @@ from webdriver_manager.chrome import ChromeDriverManager
 
 from news_dashboard.content_extraction import assess_extracted_text
 from news_dashboard.scraper import USER_AGENT
-from news_dashboard.url_safety import validate_server_fetch_url
+from news_dashboard.url_safety import UnsafeUrlError, validate_server_fetch_url
 
 logger = logging.getLogger(__name__)
 
@@ -77,8 +78,17 @@ _OVERLAY_REMOVAL_JS = """
 DomainHandler = Callable[[webdriver.Chrome], None]
 
 
+class _BrowserRequest(Protocol):
+    url: str
+
+    def fail(self) -> None: ...
+
+    def continue_request(self) -> None: ...
+
+
 def _build_options() -> Options:
     opts = Options()
+    opts.enable_bidi = True
     opts.add_argument("--headless=new")
     opts.add_argument("--no-sandbox")
     opts.add_argument("--disable-dev-shm-usage")
@@ -261,9 +271,38 @@ def _meaningful_content_present(driver: webdriver.Chrome) -> bool:
     return assess_extracted_text(text).accepted
 
 
+def _install_request_safety(driver: webdriver.Chrome) -> list[str]:
+    """Block every unsafe browser request before Chrome sends it."""
+    blocked_urls: list[str] = []
+
+    def validate_request(request: _BrowserRequest) -> None:
+        request_url = str(request.url or "")
+        if not request_url.startswith(("http://", "https://")):
+            return
+        try:
+            validate_server_fetch_url(request_url)
+        except UnsafeUrlError:
+            blocked_urls.append(request_url)
+            request.fail()
+            return
+        try:
+            request.continue_request()
+        except Exception:
+            # A browser/driver without working BiDi interception cannot be
+            # allowed to continue unguarded. Surface the capability failure to
+            # the navigation thread and fail the rendered stage closed.
+            blocked_urls.append(f"interception-error:{request_url}")
+
+    driver.network.add_request_handler(  # type: ignore[no-untyped-call]
+        "before_request", validate_request
+    )
+    return blocked_urls
+
+
 def _fetch_with_cleanup(url: str, timeout: float = _DEFAULT_TIMEOUT) -> str:
     """Fetch *url* with headless Chrome, run overlay dismissal, return page source."""
     with headless_browser() as driver:
+        blocked_urls = _install_request_safety(driver)
         driver.set_page_load_timeout(timeout)
         driver.set_script_timeout(timeout)
         navigation_timed_out = False
@@ -279,6 +318,14 @@ def _fetch_with_cleanup(url: str, timeout: float = _DEFAULT_TIMEOUT) -> str:
                 driver.execute_script("window.stop()")
             except Exception as exc:
                 logger.debug("selenium: failed to stop loading after timeout for %r: %s", url, exc)
+
+        if blocked_urls:
+            msg = f"Browser navigation attempted an unsafe URL: {blocked_urls[0]!r}"
+            raise UnsafeUrlError(msg)
+
+        final_url = driver.current_url
+        if isinstance(final_url, str):
+            validate_server_fetch_url(final_url)
 
         if not navigation_timed_out:
             try:

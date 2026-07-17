@@ -5,23 +5,34 @@ Skipped automatically when the `selenium` package is not installed.
 
 from __future__ import annotations
 
+import threading
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from typing import Any
+
 pytest = __import__("pytest")
 pytest.importorskip("selenium")
 
 from unittest.mock import MagicMock, call, patch  # noqa: E402
 
-from selenium.common.exceptions import NoSuchElementException, TimeoutException  # noqa: E402
+from selenium.common.exceptions import (  # noqa: E402
+    NoSuchElementException,
+    TimeoutException,
+    WebDriverException,
+)
 
 from news_dashboard.selenium_client import (  # noqa: E402
     _click_consent_buttons,
     _dismiss_modal_close_buttons,
     _fetch_with_cleanup,
     _get_domain_handler,
+    _install_request_safety,
     _meaningful_content_present,
     _remove_overlays_js,
     _try_amp_url,
     dismiss_overlays,
+    fetch_spa_html,
 )
+from news_dashboard.url_safety import UnsafeUrlError  # noqa: E402
 
 
 def _make_driver(*, buttons: list[str] | None = None) -> MagicMock:
@@ -203,7 +214,7 @@ def test_fetch_with_cleanup_configures_navigation_timeouts() -> None:
         result = _fetch_with_cleanup("https://example.com/article", timeout=3.5)
 
     assert result == "<html><article>loaded</article></html>"
-    assert driver.mock_calls[:3] == [
+    assert driver.mock_calls[1:4] == [
         call.set_page_load_timeout(3.5),
         call.set_script_timeout(3.5),
         call.get("https://example.com/article"),
@@ -255,3 +266,76 @@ def test_fetch_with_cleanup_stops_loading_after_navigation_timeout() -> None:
     driver.execute_script.assert_called_with("window.stop()")
     wait_cls.return_value.until.assert_not_called()
     dismiss_mock.assert_called_once_with(driver, "https://example.com/slow")
+
+
+def test_request_safety_fails_unsafe_browser_request() -> None:
+    driver = MagicMock()
+    blocked = _install_request_safety(driver)
+    callback = driver.network.add_request_handler.call_args.args[1]
+    request = MagicMock(url="http://127.0.0.1/private")
+
+    callback(request)
+
+    assert blocked == ["http://127.0.0.1/private"]
+    request.fail.assert_called_once()
+
+
+def test_fetch_with_cleanup_rejects_unsafe_request_even_after_timeout() -> None:
+    driver = MagicMock()
+    driver.get.side_effect = TimeoutException("page load timed out")
+    driver.current_url = "https://example.com/slow"
+    browser_context = MagicMock()
+    browser_context.__enter__.return_value = driver
+
+    with (
+        patch("news_dashboard.selenium_client.headless_browser", return_value=browser_context),
+        patch(
+            "news_dashboard.selenium_client._install_request_safety",
+            return_value=["http://169.254.169.254/latest/meta-data"],
+        ),
+        pytest.raises(UnsafeUrlError),
+    ):
+        _fetch_with_cleanup("https://example.com/slow", timeout=1.0)
+
+
+def test_fetch_spa_html_renders_local_javascript_fixture() -> None:
+    paragraph = (
+        "This JavaScript-rendered article explains a technical topic with detailed "
+        "examples, limitations, tradeoffs, and practical consequences for readers."
+    )
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_GET(self) -> None:
+            body = (
+                "<html><body><main id='content'></main><script>"
+                "document.getElementById('content').innerHTML = "
+                f"`<p>{paragraph}</p><p>{paragraph}</p>`;"
+                "</script></body></html>"
+            ).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, format: str, *args: Any) -> None:  # noqa: A002, ARG002
+            return
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    url = f"http://127.0.0.1:{server.server_port}/"
+    html = ""
+    try:
+        with patch("news_dashboard.selenium_client.validate_server_fetch_url"):
+            try:
+                html = fetch_spa_html(url, timeout=5.0)
+            except WebDriverException as exc:
+                pytest.skip(f"Chrome is unavailable: {exc}")
+        if paragraph not in html:
+            pytest.skip("Installed Chrome does not support Selenium BiDi interception")
+        assert paragraph in html
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)

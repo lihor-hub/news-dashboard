@@ -111,8 +111,9 @@ callers migrate to the shared result.
 5. Return immediately when the candidate passes the quality gate.
 6. Otherwise render the page with Selenium, wait for meaningful DOM content, and
    reassess the rendered candidate with the same quality gate.
-7. If rendered extraction fails or remains inadequate, try Crawl4AI's cleaned
-   Markdown extraction.
+7. If rendered extraction fails or remains inadequate, use Crawl4AI only when
+   it can enforce the same per-request network boundary. Otherwise record that
+   stage as unavailable and fail closed instead of launching its browser.
 8. If configured and permitted by the caller, use the existing AI extractor as
    the final fallback. Its output must pass the same quality gate.
 9. Return the best successful candidate or a structured failure containing all
@@ -146,7 +147,8 @@ source accurately.
 
 Selenium remains a fallback, not the default. It will:
 
-- validate the URL before navigation;
+- validate the URL before navigation and intercept every HTTP(S) request before
+  dispatch, covering redirects, subresources, and JavaScript navigation;
 - use the existing page-load and script timeouts;
 - wait until a candidate selector contains enough text to have a chance of
   passing the quality gate, instead of waiting only for the first matching tag;

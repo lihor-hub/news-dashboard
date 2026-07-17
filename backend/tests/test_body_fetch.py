@@ -28,6 +28,7 @@ from news_dashboard.body_fetch import (
 )
 from news_dashboard.db import connect, init_db
 from news_dashboard.ingest.service import sync_sources
+from news_dashboard.url_safety import UnsafeUrlError
 
 
 def _db(tmp_path: Path) -> Path:
@@ -225,6 +226,19 @@ def test_extract_public_content_uses_crawl4ai_then_optional_ai() -> None:
         "ai",
     ]
     ai.assert_called_once_with("https://example.com/article", user_id=42)
+
+
+def test_static_extract_classifies_unsafe_redirect() -> None:
+    with (
+        patch("news_dashboard.body_fetch.validate_server_fetch_url"),
+        patch(
+            "news_dashboard.body_fetch.open_server_fetch_url",
+            side_effect=UnsafeUrlError("unsafe redirect"),
+        ),
+    ):
+        body, status, reason = _static_extract_body("https://example.com/redirect")
+
+    assert (body, status, reason) == ("", "error", "unsafe_url")
 
 
 def test_extract_public_content_skips_ai_and_preserves_blocked_failure() -> None:
@@ -1080,13 +1094,14 @@ def test_normalize_crawl4ai_result_collapses_blank_lines() -> None:
     assert _normalize_crawl4ai_result(result) == ("First paragraph line.\n\nSecond paragraph line.")
 
 
-def test_crawl4ai_extract_body_success() -> None:
+def test_crawl4ai_extract_body_fails_closed_without_request_interception() -> None:
     text = "Crawl4AI produced this clean article body that is definitely long enough."
     result = _FakeCrawlResult(markdown=_FakeMarkdown(fit_markdown=text))
-    with patch("news_dashboard.body_fetch._run_crawl4ai", return_value=result):
+    with patch("news_dashboard.body_fetch._run_crawl4ai", return_value=result) as crawl:
         body, status = _crawl4ai_extract_body("https://example.com/article")
-    assert status == "ok"
-    assert body == text
+    assert status == "error"
+    assert body == ""
+    crawl.assert_not_called()
 
 
 def test_crawl4ai_extract_body_returns_error_on_short_output() -> None:

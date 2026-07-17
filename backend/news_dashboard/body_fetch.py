@@ -206,7 +206,7 @@ def _run_crawl4ai(url: str) -> Any:
     return asyncio.run(_crawl())
 
 
-def _crawl4ai_extract_body(url: str) -> tuple[str, str]:
+def _crawl4ai_extract_body(_url: str) -> tuple[str, str]:
     """Deterministic Crawl4AI-backed extraction, tried before the LLM fallback.
 
     Enforces the same SSRF/scheme boundary as the other fetchers via
@@ -215,28 +215,13 @@ def _crawl4ai_extract_body(url: str) -> tuple[str, str]:
     ``('', 'error')`` for unsafe URLs, a missing dependency, or any
     fetch/parse failure.
     """
-    try:
-        validate_server_fetch_url(url)
-    except UnsafeUrlError as exc:
-        logger.warning("crawl4ai_body_fetch: unsafe URL %r: %s", url, exc)
-        return "", "error"
-
-    try:
-        result = _run_crawl4ai(url)
-    except ImportError:
-        logger.info("crawl4ai_body_fetch: crawl4ai not installed; skipping")
-        return "", "error"
-    except Exception as exc:
-        logger.warning("crawl4ai_body_fetch: crawl failed for %r: %s", url, exc)
-        return "", "error"
-
-    text = _normalize_crawl4ai_result(result)
-    if len(text) < _CRAWL4AI_MIN_LEN:
-        logger.info("crawl4ai_body_fetch: output too short for %r", url)
-        return "", "error"
-
-    logger.info("crawl4ai_body_fetch: extraction succeeded for %r", url)
-    return text, "ok"
+    # Crawl4AI owns its browser networking and does not currently expose the
+    # per-request interception used by selenium_client. Launching it for a
+    # user-controlled URL could therefore follow a redirect or JS request into
+    # a private network. Keep the stage fail-closed until equivalent request
+    # interception is available.
+    logger.info("crawl4ai_body_fetch: disabled because request interception is unavailable")
+    return "", "error"
 
 
 # Tags whose entire subtree we skip

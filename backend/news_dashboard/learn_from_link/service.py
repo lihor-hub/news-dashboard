@@ -1571,11 +1571,18 @@ def _run_extraction_step(
         )
         return None, "Could not extract readable article content."
 
+    attempt_summary = ""
     if isinstance(raw_result, ExtractionResult):
         body_text = raw_result.text.strip()
         status = raw_result.status
-        attempt_summary = ",".join(
-            attempt.method + ":" + attempt.status for attempt in raw_result.attempts
+        attempt_summary = ";".join(
+            f"{attempt.method}:{attempt.status}:{attempt.latency_ms}ms"
+            f":reason={attempt.failure_reason}"
+            f":quality={attempt.quality.character_count if attempt.quality else '-'}chars/"
+            f"{attempt.quality.word_count if attempt.quality else '-'}words/"
+            f"{attempt.quality.meaningful_block_count if attempt.quality else '-'}blocks"
+            f":rejections={','.join(attempt.quality.rejection_reasons) if attempt.quality else '-'}"
+            for attempt in raw_result.attempts
         )
         failure_detail = f"failure_reason={raw_result.failure_reason}; attempts={attempt_summary}"
         method = raw_result.method
@@ -1605,6 +1612,11 @@ def _run_extraction_step(
         status="complete",
         latency_ms=latency_ms,
         model=f"extractor:{method}" if method else None,
+        error=(
+            f"attempts={attempt_summary}"[:2000]
+            if isinstance(raw_result, ExtractionResult)
+            else None
+        ),
     )
     return body_text, None
 
