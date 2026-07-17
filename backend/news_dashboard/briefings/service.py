@@ -588,6 +588,8 @@ def generate_briefing(  # noqa: PLR0913, PLR0915
     max_attempts: int = BRIEFING_MAX_ATTEMPTS,
     retry_base_delay_seconds: float = BRIEFING_RETRY_BASE_DELAY_SECONDS,
     focus_prompt: str | None = None,
+    langfuse_session_id: str | None = None,
+    langfuse_tags: list[str] | None = None,
 ) -> dict[str, Any]:
     """Generate and persist a briefing from eligible Today articles.
 
@@ -794,8 +796,10 @@ def generate_briefing(  # noqa: PLR0913, PLR0915
         callbacks.append(CallbackHandler())
     with propagate_attributes(
         user_id=str(user_id) if user_id is not None else None,
-        session_id=f"briefing-run:{run_id}",
-        tags=["briefing"],
+        session_id=(
+            langfuse_session_id if langfuse_session_id is not None else f"briefing-run:{run_id}"
+        ),
+        tags=langfuse_tags if langfuse_tags is not None else ["briefing"],
         trace_name="briefing-generation",
     ):
         final_state = compiled.invoke(

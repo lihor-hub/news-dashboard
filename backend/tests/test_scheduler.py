@@ -8,6 +8,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Generator
 from datetime import datetime, timezone
+from types import SimpleNamespace
 from typing import Any
 from unittest.mock import MagicMock, patch
 
@@ -215,6 +216,41 @@ def test_run_per_user_briefings_generates_but_skips_push_when_disabled() -> None
     generate.assert_called_once_with(user_id=42)
     hook.assert_not_called()
     send_push.assert_not_called()
+
+
+def test_scheduler_email_only_user_generates_and_delivers() -> None:
+    fake_conn = _FakeRowsConn(
+        [
+            {
+                "id": 42,
+                "briefing_time": "21:00",
+                "briefing_timezone": "Europe/Bucharest",
+                "briefing_push_enabled": False,
+                "briefing_email_enabled": True,
+            }
+        ]
+    )
+    now = datetime(2026, 7, 17, 18, 0, tzinfo=timezone.utc)
+    outcome = SimpleNamespace(
+        status="sent", briefing={"id": 7, "status": "complete", "title": "Daily Brief"}
+    )
+
+    with (
+        patch("news_dashboard.scheduler.service.datetime") as mock_dt,
+        patch("news_dashboard.db.connect", return_value=fake_conn),
+        patch(
+            "news_dashboard.briefing_email.service.deliver_daily_briefing",
+            return_value=outcome,
+        ) as deliver,
+        patch(_GEN_PATH) as generate,
+    ):
+        mock_dt.now.return_value = now
+        result = _run_per_user_briefings()
+
+    assert "briefing_email_enabled" in fake_conn.sql
+    deliver.assert_called_once_with(42, now=now)
+    generate.assert_not_called()
+    assert result == ("success", "1 user targeted, 1 succeeded, 0 failed")
 
 
 # ── _run_weekly_recaps ────────────────────────────────────────────────────────

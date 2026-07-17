@@ -133,7 +133,13 @@ def _run_briefing() -> tuple[str, str | None]:
         return "failure", str(exc)[:500]
 
 
-def _generate_briefing_for_user(user_id: int, *, push_enabled: bool = True) -> bool:
+def _generate_briefing_for_user(
+    user_id: int,
+    *,
+    push_enabled: bool = True,
+    email_enabled: bool = False,
+    now: datetime | None = None,
+) -> bool:
     """Generate and push a briefing for one user. Returns True on success."""
     from news_dashboard.briefings.service import (
         BriefingAINotConfiguredError,
@@ -144,7 +150,21 @@ def _generate_briefing_for_user(user_id: int, *, push_enabled: bool = True) -> b
 
     logger.info("Per-user briefing: generating for user_id=%s", user_id)
     try:
-        result = generate_briefing(user_id=user_id)
+        email_ok = True
+        if email_enabled:
+            from news_dashboard.briefing_email.service import deliver_daily_briefing
+
+            outcome = deliver_daily_briefing(user_id, now=now)
+            result = outcome.briefing or {"status": outcome.status}
+            email_ok = outcome.status in {"sent", "skipped", "unsubscribed"}
+            if not email_ok:
+                logger.warning(
+                    "Per-user briefing: email delivery failed for user_id=%s category=%s",
+                    user_id,
+                    outcome.status,
+                )
+        else:
+            result = generate_briefing(user_id=user_id)
         if result.get("status") == "no_candidates":
             logger.info("Per-user briefing: skipped for user_id=%s (no candidates)", user_id)
         else:
@@ -165,7 +185,7 @@ def _generate_briefing_for_user(user_id: int, *, push_enabled: bool = True) -> b
                     logger.exception(
                         "Per-user briefing: push notification failed for user_id=%s", user_id
                     )
-        return True
+        return email_ok or push_enabled
     except BriefingAINotConfiguredError:
         logger.warning("Per-user briefing: skipped for user_id=%s (AI not configured)", user_id)
         return True
@@ -191,31 +211,41 @@ def _run_per_user_briefings() -> tuple[str, str | None] | None:
     try:
         with connect() as conn:
             rows = conn.execute(
-                "SELECT id, briefing_time, briefing_timezone, briefing_push_enabled FROM users"
-                " WHERE briefing_push_enabled = TRUE OR briefing_time IS NOT NULL",
+                "SELECT id, briefing_time, briefing_timezone, briefing_push_enabled,"
+                " briefing_email_enabled FROM users"
+                " WHERE briefing_push_enabled = TRUE OR briefing_email_enabled = TRUE",
             ).fetchall()
         user_rows = [row_to_dict(r) for r in rows]
     except Exception as exc:
         logger.exception("Per-user briefing: failed to query users")
         return "failure", str(exc)[:500]
 
-    scheduled_users: list[tuple[int, bool]] = []
+    scheduled_users: list[tuple[int, bool, bool]] = []
     for row in user_rows:
         tz_name: str = row.get("briefing_timezone") or "UTC"
         briefing_time: str = row.get("briefing_time") or "09:00"
         try:
             tz = ZoneInfo(tz_name)
         except (ZoneInfoNotFoundError, KeyError):
+            logger.warning("Per-user briefing: invalid timezone %s; using UTC", tz_name)
             tz = ZoneInfo("UTC")
         if now.astimezone(tz).strftime("%H:%M") == briefing_time:
-            scheduled_users.append((int(row["id"]), bool(row.get("briefing_push_enabled"))))
+            scheduled_users.append(
+                (
+                    int(row["id"]),
+                    bool(row.get("briefing_push_enabled")),
+                    bool(row.get("briefing_email_enabled")),
+                )
+            )
 
     if not scheduled_users:
         return None  # nothing scheduled this minute — skip recording
 
     results = [
-        _generate_briefing_for_user(uid, push_enabled=push_enabled)
-        for uid, push_enabled in scheduled_users
+        _generate_briefing_for_user(
+            uid, push_enabled=push_enabled, email_enabled=email_enabled, now=now
+        )
+        for uid, push_enabled, email_enabled in scheduled_users
     ]
     succeeded = sum(1 for ok in results if ok)
     failed = len(results) - succeeded

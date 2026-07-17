@@ -8,6 +8,7 @@ import psycopg
 import pytest
 
 from news_dashboard.auth import create_user
+from news_dashboard.briefing_email.service import claim_delivery
 from news_dashboard.db import connect
 
 
@@ -57,3 +58,15 @@ def test_delivery_status_rejects_unknown_value(pg_clean: str) -> None:
             """,
             (user_id, date(2026, 7, 17)),
         )
+
+
+@pytest.mark.postgres
+def test_claim_delivery_returns_once_for_local_date(pg_clean: str) -> None:
+    user_id = _make_user(pg_clean, "email_claim")
+
+    first = claim_delivery(user_id, date(2026, 7, 17), database_url=pg_clean)
+    repeated = claim_delivery(user_id, date(2026, 7, 17), database_url=pg_clean)
+
+    assert first is not None
+    assert first.status == "claimed"
+    assert repeated is None
