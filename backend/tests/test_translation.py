@@ -143,7 +143,7 @@ def test_fetch_and_cache_body_translates_non_english(pg_clean: str) -> None:
         ).fetchone()
     article_id = int(row["id"])
 
-    # Mock extract_body to return Japanese body text
+    # Mock extract_public_content to return Japanese body text
     # Mock translate_body (or the OpenAI client it uses) to return English translated body
     model: RunnableLambda[Any, AIMessage] = RunnableLambda(
         lambda _value: AIMessage(content="Translated English Body")
@@ -152,7 +152,9 @@ def test_fetch_and_cache_body_translates_non_english(pg_clean: str) -> None:
     with (
         patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}),
         patch("news_dashboard.ai_client.get_chat_model", return_value=model),
-        patch("news_dashboard.body_fetch.extract_body", return_value=("日本語の本文", "ok")),
+        patch(
+            "news_dashboard.body_fetch.extract_public_content", return_value=("日本語の本文", "ok")
+        ),
     ):
         article = fetch_and_cache_body(article_id, db_path=pg_clean)
 

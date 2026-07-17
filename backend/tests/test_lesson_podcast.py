@@ -55,7 +55,7 @@ def _lesson_extraction_stubs(monkeypatch: pytest.MonkeyPatch) -> None:
     )
     monkeypatch.setattr(
         service,
-        "extract_body",
+        "extract_public_content",
         lambda url: (f"Body for {url}. It has enough detail to be a lesson.", "ok"),
         raising=False,
     )
