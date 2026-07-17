@@ -343,6 +343,10 @@ def test_fetch_spa_html_renders_local_javascript_fixture() -> None:
         with patch("news_dashboard.selenium_client.validate_server_fetch_url"):
             try:
                 html = fetch_spa_html(url, timeout=5.0)
+            except UnsafeUrlError as exc:
+                if "interception-error:" not in str(exc):
+                    raise
+                pytest.skip("Installed Chrome does not support Selenium BiDi interception")
             except WebDriverException as exc:
                 pytest.skip(f"Chrome is unavailable: {exc}")
         if paragraph not in html:
