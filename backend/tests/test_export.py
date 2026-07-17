@@ -199,6 +199,7 @@ def test_export_empty_for_new_user(pg_clean: str) -> None:
         "updated_at": None,
     }
     assert result["preferences"]["notifications"]["push_enabled"] is False
+    assert result["preferences"]["notifications"]["email_enabled"] is False
 
 
 def test_export_deterministic_ordering(pg_clean: str) -> None:
@@ -388,7 +389,8 @@ def test_export_preferences_include_recommendations_onboarding_notifications(
             """
             UPDATE users
             SET briefing_time = '07:30', briefing_timezone = 'America/New_York',
-                briefing_push_enabled = TRUE, recap_enabled = FALSE, recap_day = 'fri'
+                briefing_push_enabled = TRUE, briefing_email_enabled = TRUE,
+                recap_enabled = FALSE, recap_day = 'fri'
             WHERE id = %s
             """,
             (uid,),
@@ -403,6 +405,7 @@ def test_export_preferences_include_recommendations_onboarding_notifications(
     assert prefs["notifications"]["briefing_time"] == "07:30"
     assert prefs["notifications"]["briefing_timezone"] == "America/New_York"
     assert prefs["notifications"]["push_enabled"] is True
+    assert prefs["notifications"]["email_enabled"] is True
     assert prefs["notifications"]["recap_enabled"] is False
     assert prefs["notifications"]["recap_day"] == "fri"
 

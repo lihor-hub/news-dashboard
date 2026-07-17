@@ -8,6 +8,7 @@ from pydantic import BaseModel
 class NotificationSettingsUpdate(BaseModel):
     briefing_time: str | None = None
     push_enabled: bool | None = None
+    email_enabled: bool | None = None
     briefing_timezone: str | None = None
     recap_enabled: bool | None = None
     recap_day: str | None = None

@@ -69,6 +69,12 @@ def _smtp_config() -> _SmtpConfig:
     return _SmtpConfig(host, port, username, password, tls_mode, from_addr)
 
 
+def smtp_configured() -> bool:
+    """Return whether the resolved SMTP transport has required credentials."""
+    config = _smtp_config()
+    return bool(config.host and config.username and config.password)
+
+
 def send_otp_email(to_email: str, otp: str) -> None:
     """Send a 6-digit OTP to *to_email* via the configured SMTP relay."""
     config = _smtp_config()

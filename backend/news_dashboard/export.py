@@ -12,7 +12,8 @@ SCHEMA_VERSION = 2
 # Safe, non-secret user columns. Excludes password_hash and
 # podcast_feed_token_version, which are never exported.
 _NOTIFICATION_COLS = (
-    "briefing_time, briefing_push_enabled, briefing_timezone, recap_enabled, recap_day, "
+    "briefing_time, briefing_push_enabled, briefing_email_enabled, briefing_timezone, "
+    "recap_enabled, recap_day, "
     "analytics_enabled"
 )
 
@@ -218,6 +219,7 @@ def _export_notification_settings(conn: Any, user_id: int) -> dict[str, Any]:
             "briefing_time": "09:00",
             "briefing_timezone": "UTC",
             "push_enabled": False,
+            "email_enabled": False,
             "recap_enabled": True,
             "recap_day": "mon",
             "analytics_enabled": True,
@@ -226,6 +228,7 @@ def _export_notification_settings(conn: Any, user_id: int) -> dict[str, Any]:
         "briefing_time": row["briefing_time"] or "09:00",
         "briefing_timezone": row["briefing_timezone"] or "UTC",
         "push_enabled": bool(row["briefing_push_enabled"]),
+        "email_enabled": bool(row["briefing_email_enabled"]),
         "recap_enabled": bool(row["recap_enabled"]),
         "recap_day": row["recap_day"] or "mon",
         "analytics_enabled": bool(row["analytics_enabled"]),

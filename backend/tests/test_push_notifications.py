@@ -47,6 +47,11 @@ def test_users_briefing_push_enabled_column_in_schema() -> None:
     assert "briefing_push_enabled" in combined
 
 
+def test_users_briefing_email_enabled_column_in_schema() -> None:
+    combined = "\n".join(POSTGRES_MULTIUSER_SCHEMA)
+    assert "briefing_email_enabled" in combined
+
+
 # ── Push subscription CRUD (integration) ──────────────────────────────────────
 
 
@@ -347,9 +352,15 @@ def test_get_notification_settings_returns_defaults(
         "recap_day": "mon",
         "briefing_include_reading_list": False,
         "briefing_reading_list_limit": 3,
+        "briefing_email_enabled": False,
+        "email": "reader@example.com",
+        "is_guest": False,
     }
 
-    with patch("news_dashboard.user_settings.service.connect") as mock_connect:
+    with (
+        patch("news_dashboard.user_settings.service.connect") as mock_connect,
+        patch("news_dashboard.user_settings.service.smtp_configured", return_value=False),
+    ):
         ctx = mock_connect.return_value.__enter__.return_value
         ctx.execute.return_value.fetchone.return_value = fake_row
 
@@ -363,6 +374,10 @@ def test_get_notification_settings_returns_defaults(
     assert data["recap_enabled"] is True
     assert data["recap_day"] == "mon"
     assert data["vapid_public_key"] == "BExampleKey=="
+    assert data["email_enabled"] is False
+    assert data["email_address"] == "reader@example.com"
+    assert data["email_available"] is True
+    assert data["email_delivery_configured"] is False
 
 
 def test_get_notification_settings_utc_fallback(
@@ -379,6 +394,9 @@ def test_get_notification_settings_utc_fallback(
         "recap_day": "mon",
         "briefing_include_reading_list": False,
         "briefing_reading_list_limit": 3,
+        "briefing_email_enabled": False,
+        "email": None,
+        "is_guest": False,
     }
 
     with patch("news_dashboard.user_settings.service.connect") as mock_connect:
@@ -400,6 +418,9 @@ def test_put_notification_settings_valid_time(client: TestClient) -> None:
         "recap_day": "mon",
         "briefing_include_reading_list": False,
         "briefing_reading_list_limit": 3,
+        "briefing_email_enabled": True,
+        "email": "reader@example.com",
+        "is_guest": False,
     }
 
     with patch("news_dashboard.user_settings.service.connect") as mock_connect:
@@ -417,6 +438,70 @@ def test_put_notification_settings_valid_time(client: TestClient) -> None:
     assert data["push_enabled"] is True
 
 
+def test_put_notification_settings_enables_email(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("OTP_SMTP_HOST", "smtp.example.com")
+    monkeypatch.setenv("OTP_SMTP_USER", "mailer@example.com")
+    monkeypatch.setenv("OTP_SMTP_PASS", "secret")
+    fake_row: dict[str, Any] = {
+        "briefing_time": "09:00",
+        "briefing_push_enabled": False,
+        "briefing_timezone": "UTC",
+        "recap_enabled": True,
+        "recap_day": "mon",
+        "briefing_include_reading_list": False,
+        "briefing_reading_list_limit": 3,
+        "briefing_email_enabled": True,
+        "email": "reader@example.com",
+        "is_guest": False,
+    }
+    with patch("news_dashboard.user_settings.service.connect") as mock_connect:
+        ctx = mock_connect.return_value.__enter__.return_value
+        ctx.execute.return_value.fetchone.return_value = fake_row
+
+        response = client.put("/api/settings/notifications", json={"email_enabled": True})
+
+    assert response.status_code == 200
+    assert response.json()["email_enabled"] is True
+    update = ctx.execute.call_args_list[1]
+    assert "briefing_email_enabled = %s" in update.args[0]
+    assert update.args[1] == [True, 1]
+
+
+@pytest.mark.parametrize(
+    ("email", "is_guest"),
+    [(None, False), ("guest@example.com", True)],
+)
+def test_notification_email_requires_account_email(
+    client: TestClient, email: str | None, is_guest: bool
+) -> None:
+    fake_row = {"email": email, "is_guest": is_guest}
+    with patch("news_dashboard.user_settings.service.connect") as mock_connect:
+        ctx = mock_connect.return_value.__enter__.return_value
+        ctx.execute.return_value.fetchone.return_value = fake_row
+
+        response = client.put("/api/settings/notifications", json={"email_enabled": True})
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == "account email is required"
+
+
+def test_notification_email_requires_smtp_configuration(client: TestClient) -> None:
+    fake_row = {"email": "reader@example.com", "is_guest": False}
+    with (
+        patch("news_dashboard.user_settings.service.connect") as mock_connect,
+        patch("news_dashboard.user_settings.service.smtp_configured", return_value=False),
+    ):
+        ctx = mock_connect.return_value.__enter__.return_value
+        ctx.execute.return_value.fetchone.return_value = fake_row
+
+        response = client.put("/api/settings/notifications", json={"email_enabled": True})
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == "email delivery is not configured"
+
+
 def test_put_notification_settings_valid_timezone(client: TestClient) -> None:
     fake_row: dict[str, Any] = {
         "briefing_time": "09:00",
@@ -426,6 +511,9 @@ def test_put_notification_settings_valid_timezone(client: TestClient) -> None:
         "recap_day": "mon",
         "briefing_include_reading_list": False,
         "briefing_reading_list_limit": 3,
+        "briefing_email_enabled": False,
+        "email": "reader@example.com",
+        "is_guest": False,
     }
 
     with patch("news_dashboard.user_settings.service.connect") as mock_connect:
@@ -450,6 +538,9 @@ def test_put_notification_settings_valid_reading_list_opt_in(client: TestClient)
         "recap_day": "mon",
         "briefing_include_reading_list": True,
         "briefing_reading_list_limit": 5,
+        "briefing_email_enabled": False,
+        "email": "reader@example.com",
+        "is_guest": False,
     }
 
     with patch("news_dashboard.user_settings.service.connect") as mock_connect:
