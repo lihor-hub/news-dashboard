@@ -281,26 +281,35 @@ _BLOCK_TAGS = frozenset(
 class _BodyExtractor(HTMLParser):
     def __init__(self) -> None:
         super().__init__()
-        self._skip_depth = 0
+        self._skip_tag: str | None = None
+        self._skip_tag_depth = 0
         self._chunks: list[str] = []
         self._current: list[str] = []
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:  # noqa: ARG002
-        if self._skip_depth or tag in _SKIP_TAGS:
-            self._skip_depth += 1
+        if self._skip_tag is not None:
+            if tag == self._skip_tag:
+                self._skip_tag_depth += 1
+            return
+        if tag in _SKIP_TAGS:
+            self._skip_tag = tag
+            self._skip_tag_depth = 1
             return
         if tag in _BLOCK_TAGS:
             self._flush()
 
     def handle_endtag(self, tag: str) -> None:
-        if self._skip_depth:
-            self._skip_depth -= 1
+        if self._skip_tag is not None:
+            if tag == self._skip_tag:
+                self._skip_tag_depth -= 1
+                if self._skip_tag_depth == 0:
+                    self._skip_tag = None
             return
         if tag in _BLOCK_TAGS:
             self._flush()
 
     def handle_data(self, data: str) -> None:
-        if self._skip_depth:
+        if self._skip_tag is not None:
             return
         text = data.strip()
         if text:
