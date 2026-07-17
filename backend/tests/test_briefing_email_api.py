@@ -160,13 +160,52 @@ def test_preview_cooldown_is_scoped_to_database_identity(monkeypatch: Any) -> No
     first_database = "postgresql://localhost/first"
     second_database = "postgresql://localhost/second"
 
-    service._claim_preview_cooldown(user_id, database_url=first_database)
+    first_key = service._claim_preview_cooldown(user_id, database_url=first_database)
     with pytest.raises(service.PreviewCooldownError):
         service._claim_preview_cooldown(user_id, database_url=first_database)
 
     service._claim_preview_cooldown(user_id, database_url=second_database)
-    service._release_preview_cooldown(user_id, database_url=first_database)
+    service._release_preview_cooldown(first_key)
 
     service._claim_preview_cooldown(user_id, database_url=first_database)
     with pytest.raises(service.PreviewCooldownError):
         service._claim_preview_cooldown(user_id, database_url=second_database)
+
+
+def test_preview_cooldown_resolves_split_postgres_configuration(monkeypatch: Any) -> None:
+    monkeypatch.setattr(service, "_preview_sent_at", type(service._preview_sent_at)())
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    monkeypatch.setenv("POSTGRES_HOST", "first-db.internal")
+    monkeypatch.setenv("POSTGRES_PORT", "5432")
+    monkeypatch.setenv("POSTGRES_DB", "news")
+    monkeypatch.setenv("POSTGRES_USER", "reader")
+    monkeypatch.setenv("POSTGRES_PASSWORD", "password")
+    user_id = 7
+
+    service._claim_preview_cooldown(user_id)
+    monkeypatch.setenv("POSTGRES_HOST", "second-db.internal")
+    service._claim_preview_cooldown(user_id)
+
+    with pytest.raises(service.PreviewCooldownError):
+        service._claim_preview_cooldown(user_id)
+
+
+def test_preview_failure_releases_claim_after_database_environment_changes(
+    pg_clean: str, monkeypatch: Any
+) -> None:
+    monkeypatch.setattr(service, "_preview_sent_at", type(service._preview_sent_at)())
+    monkeypatch.setenv("DATABASE_URL", pg_clean)
+    user_id = _user(pg_clean, "release_changed_environment")
+    _complete_briefing(pg_clean, user_id)
+
+    def fail_delivery(**_: Any) -> str:
+        monkeypatch.setenv("DATABASE_URL", "postgresql://localhost/changed")
+        return "delivery_failed"
+
+    monkeypatch.setattr(service, "send_email", fail_delivery)
+
+    with pytest.raises(service.PreviewUnavailableError):
+        service.send_preview(user_id)
+
+    monkeypatch.setenv("DATABASE_URL", pg_clean)
+    service._claim_preview_cooldown(user_id)

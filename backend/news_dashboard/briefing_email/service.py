@@ -14,7 +14,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from news_dashboard.briefing_email.rendering import render_briefing_email
 from news_dashboard.briefing_email.tokens import make_unsubscribe_token
-from news_dashboard.db import connect, row_to_dict
+from news_dashboard.db import active_database_url, connect, row_to_dict
 from news_dashboard.email import send_email, smtp_configured
 
 _COOLDOWN_SECONDS = 60.0
@@ -23,7 +23,8 @@ _MISSING_EMAIL = "missing_email"
 _GUEST_ACCOUNT = "guest_account"
 _MISSING_BRIEFING = "missing_briefing"
 _DELIVERY_FAILED = "delivery_failed"
-_preview_sent_at: OrderedDict[tuple[str, str, int], float] = OrderedDict()
+_PreviewCooldownKey = tuple[str, str, int]
+_preview_sent_at: OrderedDict[_PreviewCooldownKey, float] = OrderedDict()
 _preview_lock = threading.Lock()
 _STALE_CLAIM_AFTER = timedelta(minutes=30)
 _RETRY_DELAY = timedelta(minutes=15)
@@ -414,12 +415,13 @@ def unsubscribe_user(user_id: int, *, database_url: str | None = None) -> bool:
     return row is not None
 
 
-def _preview_cooldown_key(database_url: str | None, user_id: int) -> tuple[str, str, int]:
-    database_identity = database_url or os.getenv("DATABASE_URL") or ""
-    return ("briefing_email_preview", database_identity, user_id)
+def _preview_cooldown_key(database_url: str | None, user_id: int) -> _PreviewCooldownKey:
+    return ("briefing_email_preview", active_database_url(database_url), user_id)
 
 
-def _claim_preview_cooldown(user_id: int, *, database_url: str | None = None) -> None:
+def _claim_preview_cooldown(
+    user_id: int, *, database_url: str | None = None
+) -> _PreviewCooldownKey:
     key = _preview_cooldown_key(database_url, user_id)
     now = time.monotonic()
     with _preview_lock:
@@ -430,11 +432,12 @@ def _claim_preview_cooldown(user_id: int, *, database_url: str | None = None) ->
         _preview_sent_at.move_to_end(key)
         while len(_preview_sent_at) > _COOLDOWN_MAX_ENTRIES:
             _preview_sent_at.popitem(last=False)
+    return key
 
 
-def _release_preview_cooldown(user_id: int, *, database_url: str | None = None) -> None:
+def _release_preview_cooldown(key: _PreviewCooldownKey) -> None:
     with _preview_lock:
-        _preview_sent_at.pop(_preview_cooldown_key(database_url, user_id), None)
+        _preview_sent_at.pop(key, None)
 
 
 def _base_url() -> str:
@@ -475,7 +478,7 @@ def _load_preview(database_url: str | None, user_id: int) -> tuple[dict[str, Any
 def send_preview(user_id: int, *, database_url: str | None = None) -> bool:
     """Render and send the latest complete briefing without touching schedule state."""
     user, briefing = _load_preview(database_url, user_id)
-    _claim_preview_cooldown(user_id, database_url=database_url)
+    cooldown_key = _claim_preview_cooldown(user_id, database_url=database_url)
     try:
         timezone_name = str(user.get("briefing_timezone") or "UTC")
         try:
@@ -506,9 +509,9 @@ def send_preview(user_id: int, *, database_url: str | None = None) -> bool:
             },
         )
     except Exception:
-        _release_preview_cooldown(user_id, database_url=database_url)
+        _release_preview_cooldown(cooldown_key)
         raise
     if error is not None:
-        _release_preview_cooldown(user_id, database_url=database_url)
+        _release_preview_cooldown(cooldown_key)
         raise PreviewUnavailableError(_DELIVERY_FAILED)
     return True
