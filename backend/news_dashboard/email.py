@@ -71,8 +71,17 @@ def _smtp_config() -> _SmtpConfig:
 
 def smtp_configured() -> bool:
     """Return whether the resolved SMTP transport has required credentials."""
-    config = _smtp_config()
-    return bool(config.host and config.username and config.password)
+    try:
+        config = _smtp_config()
+    except ValueError:
+        return False
+    return bool(
+        config.host
+        and config.username
+        and config.password
+        and 1 <= config.port <= 65535
+        and config.tls_mode in {"none", "ssl", "starttls"}
+    )
 
 
 def send_otp_email(to_email: str, otp: str) -> None:

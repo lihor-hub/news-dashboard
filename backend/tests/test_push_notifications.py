@@ -9,7 +9,9 @@ from unittest.mock import MagicMock, patch
 import pytest
 from fastapi.testclient import TestClient
 
-from news_dashboard.db import POSTGRES_MULTIUSER_SCHEMA, init_db
+from news_dashboard.auth import create_user, require_auth
+from news_dashboard.db import POSTGRES_MULTIUSER_SCHEMA, connect, init_db
+from news_dashboard.email import smtp_configured
 from news_dashboard.main import app
 from news_dashboard.push import (
     delete_push_subscriptions,
@@ -409,6 +411,30 @@ def test_get_notification_settings_utc_fallback(
     assert resp.json()["briefing_timezone"] == "UTC"
 
 
+def test_get_notification_settings_whitespace_email_is_unavailable(client: TestClient) -> None:
+    fake_row: dict[str, Any] = {
+        "briefing_time": "09:00",
+        "briefing_push_enabled": False,
+        "briefing_timezone": "UTC",
+        "recap_enabled": True,
+        "recap_day": "mon",
+        "briefing_include_reading_list": False,
+        "briefing_reading_list_limit": 3,
+        "briefing_email_enabled": False,
+        "email": "   ",
+        "is_guest": False,
+    }
+    with patch("news_dashboard.user_settings.service.connect") as mock_connect:
+        ctx = mock_connect.return_value.__enter__.return_value
+        ctx.execute.return_value.fetchone.return_value = fake_row
+
+        response = client.get("/api/settings/notifications")
+
+    assert response.status_code == 200
+    assert response.json()["email_address"] is None
+    assert response.json()["email_available"] is False
+
+
 def test_put_notification_settings_valid_time(client: TestClient) -> None:
     fake_row: dict[str, Any] = {
         "briefing_time": "08:30",
@@ -471,7 +497,7 @@ def test_put_notification_settings_enables_email(
 
 @pytest.mark.parametrize(
     ("email", "is_guest"),
-    [(None, False), ("guest@example.com", True)],
+    [(None, False), ("   ", False), ("guest@example.com", True)],
 )
 def test_notification_email_requires_account_email(
     client: TestClient, email: str | None, is_guest: bool
@@ -500,6 +526,50 @@ def test_notification_email_requires_smtp_configuration(client: TestClient) -> N
 
     assert response.status_code == 422
     assert response.json()["detail"] == "email delivery is not configured"
+
+
+def test_smtp_configured_returns_false_for_malformed_port(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("OTP_SMTP_HOST", "smtp.example.com")
+    monkeypatch.setenv("OTP_SMTP_USER", "mailer@example.com")
+    monkeypatch.setenv("OTP_SMTP_PASS", "secret")
+    monkeypatch.setenv("OTP_SMTP_PORT", "not-a-port")
+
+    assert smtp_configured() is False
+
+
+@pytest.mark.postgres
+def test_put_notification_settings_persists_email_opt_in(
+    pg_clean: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("DATABASE_URL", pg_clean)
+    monkeypatch.setenv("OTP_SMTP_HOST", "smtp.example.com")
+    monkeypatch.setenv("OTP_SMTP_USER", "mailer@example.com")
+    monkeypatch.setenv("OTP_SMTP_PASS", "secret")
+    user = create_user(
+        "email_settings_integration",
+        "password123",
+        email="reader@example.com",
+        db_path=pg_clean,
+    )
+    user_id = int(user["id"])
+    app.dependency_overrides[require_auth] = lambda: user
+    try:
+        with TestClient(app, raise_server_exceptions=True) as postgres_client:
+            response = postgres_client.put(
+                "/api/settings/notifications", json={"email_enabled": True}
+            )
+    finally:
+        app.dependency_overrides.pop(require_auth, None)
+
+    assert response.status_code == 200
+    with connect(database_url=pg_clean) as conn:
+        row = conn.execute(
+            "SELECT briefing_email_enabled FROM users WHERE id = %s", (user_id,)
+        ).fetchone()
+    assert row is not None
+    assert row["briefing_email_enabled"] is True
 
 
 def test_put_notification_settings_valid_timezone(client: TestClient) -> None:

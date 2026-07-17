@@ -30,13 +30,14 @@ def preference_payload(preferences: Any) -> dict[str, Any]:
 
 
 def _notification_payload(row: Any, *, include_vapid_key: bool) -> dict[str, Any]:
+    email = str(row["email"]).strip() if row["email"] is not None else ""
     result = {
         "briefing_time": row["briefing_time"] or "09:00",
         "briefing_timezone": row["briefing_timezone"] or "UTC",
         "push_enabled": bool(row["briefing_push_enabled"]),
         "email_enabled": bool(row["briefing_email_enabled"]),
-        "email_address": row["email"],
-        "email_available": bool(row["email"] and not row["is_guest"]),
+        "email_address": email or None,
+        "email_available": bool(email and not row["is_guest"]),
         "email_delivery_configured": smtp_configured(),
         "recap_enabled": bool(row["recap_enabled"]),
         "recap_day": row["recap_day"] or "mon",
@@ -110,7 +111,8 @@ def update_notification_settings(
         if account is None:
             msg = "user not found"
             raise LookupError(msg)
-        if not account["email"] or account["is_guest"]:
+        email = str(account["email"]).strip() if account["email"] is not None else ""
+        if not email or account["is_guest"]:
             msg = "account email is required"
             raise ValueError(msg)
         if not smtp_configured():
