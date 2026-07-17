@@ -116,7 +116,7 @@ def _lesson_extraction_stubs(monkeypatch: pytest.MonkeyPatch) -> None:
     )
     monkeypatch.setattr(
         service,
-        "extract_body",
+        "extract_public_content",
         lambda url: (f"Body for {url}", "ok"),
         raising=False,
     )
@@ -141,7 +141,7 @@ def test_create_lesson_completes_with_extracted_content(
     )
     monkeypatch.setattr(
         service,
-        "extract_body",
+        "extract_public_content",
         lambda _url: ("Paragraph one.\n\nParagraph two.", "ok"),
         raising=False,
     )
@@ -323,7 +323,7 @@ def test_create_lesson_adds_user_scoped_graph_context(
     )
     monkeypatch.setattr(
         service,
-        "extract_body",
+        "extract_public_content",
         lambda _url: ("OpenAI builds useful systems. Sam Altman discussed them.", "ok"),
         raising=False,
     )
@@ -373,7 +373,7 @@ def test_create_lesson_marks_failed_when_extraction_fails(
     )
     monkeypatch.setattr(
         service,
-        "extract_body",
+        "extract_public_content",
         lambda _url: ("", "error"),
         raising=False,
     )
@@ -548,7 +548,7 @@ def test_create_lesson_ignores_metadata_failure_when_body_succeeds(
     monkeypatch.setattr(service, "fetch_url_metadata", _boom, raising=False)
     monkeypatch.setattr(
         service,
-        "extract_body",
+        "extract_public_content",
         lambda _url: ("Useful body text.", "ok"),
         raising=False,
     )
@@ -603,7 +603,9 @@ def test_list_lessons_filters_by_status(pg_clean: str, monkeypatch: pytest.Monke
     monkeypatch.setenv("DATABASE_URL", pg_clean)
     user_id = _make_user(pg_clean)
     completed = service.create_lesson(user_id, "https://example.com/ok", database_url=pg_clean)
-    monkeypatch.setattr(service, "extract_body", lambda _url: ("", "error"), raising=False)
+    monkeypatch.setattr(
+        service, "extract_public_content", lambda _url: ("", "error"), raising=False
+    )
     failed = service.create_lesson(user_id, "https://example.com/bad", database_url=pg_clean)
 
     complete_only = service.list_lessons(user_id, status="complete", database_url=pg_clean)
@@ -698,7 +700,9 @@ def test_list_lesson_summaries_keeps_filters_with_pagination(
     user_id = _make_user(pg_clean)
     service.create_lesson(user_id, "https://example.com/first", database_url=pg_clean)
     service.create_lesson(user_id, "https://example.com/second", database_url=pg_clean)
-    monkeypatch.setattr(service, "extract_body", lambda _url: ("", "error"), raising=False)
+    monkeypatch.setattr(
+        service, "extract_public_content", lambda _url: ("", "error"), raising=False
+    )
     service.create_lesson(user_id, "https://example.com/failed", database_url=pg_clean)
 
     page = service.list_lesson_summaries(
@@ -866,7 +870,7 @@ def test_create_lesson_failed_retry_clears_stale_extracted_fields(
 
     monkeypatch.setattr(
         service,
-        "extract_body",
+        "extract_public_content",
         lambda _url: ("", "error"),
         raising=False,
     )
@@ -897,7 +901,7 @@ def test_create_lesson_marks_failed_when_extraction_raises(
         message = "extract exploded"
         raise RuntimeError(message)
 
-    monkeypatch.setattr(service, "extract_body", _boom, raising=False)
+    monkeypatch.setattr(service, "extract_public_content", _boom, raising=False)
 
     lesson = service.create_lesson(user_id, "https://example.com/a", database_url=pg_clean)
 
@@ -1220,7 +1224,7 @@ def test_ask_lesson_question_returns_grounded_reply(
     monkeypatch.setenv("DATABASE_URL", pg_clean)
     monkeypatch.setenv("FREE_LLM_API_KEY", "freellmapi-key")
     source_body = 'Example JSON: {"framework": "LangChain", "ready": true}'
-    monkeypatch.setattr(service, "extract_body", lambda _url: (source_body, "ok"))
+    monkeypatch.setattr(service, "extract_public_content", lambda _url: (source_body, "ok"))
     user_id = _make_user(pg_clean)
     lesson = service.create_lesson(user_id, "https://example.com/a", database_url=pg_clean)
 
@@ -1709,7 +1713,9 @@ def test_generate_lesson_from_url_records_failed_generation_history(
 ) -> None:
     monkeypatch.setenv("DATABASE_URL", pg_clean)
     user_id = _make_user(pg_clean)
-    monkeypatch.setattr(service, "extract_body", lambda _url: ("", "error"), raising=False)
+    monkeypatch.setattr(
+        service, "extract_public_content", lambda _url: ("", "error"), raising=False
+    )
 
     lesson = service.create_lesson(user_id, "https://example.com/a", database_url=pg_clean)
 

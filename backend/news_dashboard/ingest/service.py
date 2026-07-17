@@ -338,9 +338,14 @@ def _fetch_article_snippet(url: str) -> str:
     can treat a missing snippet as a no-op rather than an error.
     """
     try:
-        from news_dashboard.body_fetch import extract_body  # lazy — optional dep
+        from news_dashboard.body_fetch import extract_public_content  # lazy — optional dep
+        from news_dashboard.content_extraction import ExtractionResult
 
-        text, status = extract_body(url)
+        result: Any = extract_public_content(url, allow_ai=False)
+        if isinstance(result, ExtractionResult):
+            text, status = result.text, result.status
+        else:
+            text, status = result
         if status == "ok" and text:
             return text[:280] + ("…" if len(text) > 280 else "")
     except Exception:

@@ -10,12 +10,21 @@ from __future__ import annotations
 import logging
 import os
 import re
+import time
+import urllib.error
 import urllib.request
 from html.parser import HTMLParser
 from pathlib import Path
 from typing import Any
 
 from news_dashboard.article_visibility import get_visible_article_row
+from news_dashboard.content_extraction import (
+    ExtractionAttempt,
+    ExtractionMethod,
+    ExtractionResult,
+    FailureReason,
+    assess_extracted_text,
+)
 from news_dashboard.db import connect, init_db, row_to_dict
 from news_dashboard.scraper import TIMEOUT_SECS, USER_AGENT
 from news_dashboard.url_safety import (
@@ -197,7 +206,7 @@ def _run_crawl4ai(url: str) -> Any:
     return asyncio.run(_crawl())
 
 
-def _crawl4ai_extract_body(url: str) -> tuple[str, str]:
+def _crawl4ai_extract_body(_url: str) -> tuple[str, str]:
     """Deterministic Crawl4AI-backed extraction, tried before the LLM fallback.
 
     Enforces the same SSRF/scheme boundary as the other fetchers via
@@ -206,28 +215,13 @@ def _crawl4ai_extract_body(url: str) -> tuple[str, str]:
     ``('', 'error')`` for unsafe URLs, a missing dependency, or any
     fetch/parse failure.
     """
-    try:
-        validate_server_fetch_url(url)
-    except UnsafeUrlError as exc:
-        logger.warning("crawl4ai_body_fetch: unsafe URL %r: %s", url, exc)
-        return "", "error"
-
-    try:
-        result = _run_crawl4ai(url)
-    except ImportError:
-        logger.info("crawl4ai_body_fetch: crawl4ai not installed; skipping")
-        return "", "error"
-    except Exception as exc:
-        logger.warning("crawl4ai_body_fetch: crawl failed for %r: %s", url, exc)
-        return "", "error"
-
-    text = _normalize_crawl4ai_result(result)
-    if len(text) < _CRAWL4AI_MIN_LEN:
-        logger.info("crawl4ai_body_fetch: output too short for %r", url)
-        return "", "error"
-
-    logger.info("crawl4ai_body_fetch: extraction succeeded for %r", url)
-    return text, "ok"
+    # Crawl4AI owns its browser networking and does not currently expose the
+    # per-request interception used by selenium_client. Launching it for a
+    # user-controlled URL could therefore follow a redirect or JS request into
+    # a private network. Keep the stage fail-closed until equivalent request
+    # interception is available.
+    logger.info("crawl4ai_body_fetch: disabled because request interception is unavailable")
+    return "", "error"
 
 
 # Tags whose entire subtree we skip
@@ -360,28 +354,35 @@ def _selenium_extract_body(url: str) -> tuple[str, str]:
     return text, "ok"
 
 
-def extract_body(url: str) -> tuple[str, str]:
-    """Fetch URL and extract readable text.
-
-    Falls back to headless browser rendering when static HTML yields no content
-    (e.g. JS-rendered SPAs).  Returns (body_text, 'ok') on success or
-    ('', 'error') on failure.
-    """
+def _static_extract_body(  # noqa: PLR0911 - each bounded fetch failure has a distinct reason
+    url: str,
+) -> tuple[str, str, FailureReason | None]:
+    """Fetch and parse static HTML without invoking a rendered fallback."""
     try:
         validate_server_fetch_url(url)
         req = urllib.request.Request(  # noqa: S310 - scheme validated above
             url, headers={"User-Agent": USER_AGENT}
         )
         with open_server_fetch_url(req, timeout=TIMEOUT_SECS) as resp:
+            content_type = resp.headers.get_content_type()
+            if content_type not in {"text/html", "application/xhtml+xml"}:
+                return "", "error", "non_html"
             raw: bytes = resp.read(500_000)  # cap at ~500 KB
             charset = resp.headers.get_content_charset("utf-8") or "utf-8"
             html = raw.decode(str(charset), errors="replace")
     except UnsafeUrlError as exc:
         logger.warning("body_fetch: unsafe URL %r: %s", url, exc)
-        return "", "error"
+        return "", "error", "unsafe_url"
+    except urllib.error.HTTPError as exc:
+        logger.warning("body_fetch: HTTP %d for %r", exc.code, url)
+        if exc.code == 404:
+            return "", "error", "not_found"
+        if exc.code in {403, 429}:
+            return "", "error", "blocked"
+        return "", "error", "fetch_failed"
     except Exception as exc:
         logger.warning("body_fetch: fetch failed for %r: %s", url, exc)
-        return "", "error"
+        return "", "error", "fetch_failed"
 
     try:
         parser = _BodyExtractor()
@@ -389,12 +390,136 @@ def extract_body(url: str) -> tuple[str, str]:
         text = parser.result()
     except Exception as exc:
         logger.warning("body_fetch: parse failed for %r: %s", url, exc)
-        return "", "error"
+        return "", "error", "no_readable_content"
 
     if not text.strip():
-        return _selenium_extract_body(url)
+        return "", "error", "no_readable_content"
 
-    return text, "ok"
+    return text, "ok", None
+
+
+def _attempt_extraction(
+    method: ExtractionMethod,
+    func: Any,
+    *args: Any,
+    **kwargs: Any,
+) -> tuple[str, ExtractionAttempt]:
+    started = time.monotonic()
+    body, status = func(*args, **kwargs)
+    latency_ms = int((time.monotonic() - started) * 1000)
+    if status != "ok" or not body.strip():
+        reason: FailureReason = "render_failed" if method == "selenium" else "fetch_failed"
+        return "", ExtractionAttempt(
+            method=method,
+            status="failed",
+            latency_ms=latency_ms,
+            failure_reason=reason,
+            detail=f"{method} returned status={status!r}",
+        )
+
+    quality = assess_extracted_text(body)
+    return body, ExtractionAttempt(
+        method=method,
+        status="accepted" if quality.accepted else "rejected",
+        latency_ms=latency_ms,
+        quality=quality,
+        failure_reason=None if quality.accepted else "no_readable_content",
+        detail=None if quality.accepted else ",".join(quality.rejection_reasons),
+    )
+
+
+def extract_public_content(
+    url: str,
+    *,
+    user_id: int | None = None,
+    allow_ai: bool = True,
+    allow_crawl4ai: bool = True,
+) -> ExtractionResult:
+    """Extract meaningful public web content through ordered bounded fallbacks."""
+    attempts: list[ExtractionAttempt] = []
+
+    started = time.monotonic()
+    body, status, failure_reason = _static_extract_body(url)
+    latency_ms = int((time.monotonic() - started) * 1000)
+    if status == "ok":
+        quality = assess_extracted_text(body)
+        static_attempt = ExtractionAttempt(
+            method="static",
+            status="accepted" if quality.accepted else "rejected",
+            latency_ms=latency_ms,
+            quality=quality,
+            failure_reason=None if quality.accepted else "no_readable_content",
+            detail=None if quality.accepted else ",".join(quality.rejection_reasons),
+        )
+        attempts.append(static_attempt)
+        if quality.accepted:
+            return ExtractionResult.success(
+                text=body,
+                method="static",
+                quality=quality,
+                attempts=tuple(attempts),
+            )
+    else:
+        reason = failure_reason or "fetch_failed"
+        attempts.append(
+            ExtractionAttempt(
+                method="static",
+                status="failed",
+                latency_ms=latency_ms,
+                failure_reason=reason,
+                detail=f"static extraction failed: {reason}",
+            )
+        )
+        if reason in {"unsafe_url", "not_found", "non_html"}:
+            return ExtractionResult.failure(failure_reason=reason, attempts=tuple(attempts))
+
+    body, attempt = _attempt_extraction("selenium", _selenium_extract_body, url)
+    attempts.append(attempt)
+    if attempt.status == "accepted" and attempt.quality is not None:
+        return ExtractionResult.success(
+            text=body,
+            method="selenium",
+            quality=attempt.quality,
+            attempts=tuple(attempts),
+        )
+
+    if allow_crawl4ai:
+        body, attempt = _attempt_extraction("crawl4ai", _crawl4ai_extract_body, url)
+        attempts.append(attempt)
+        if attempt.status == "accepted" and attempt.quality is not None:
+            return ExtractionResult.success(
+                text=body,
+                method="crawl4ai",
+                quality=attempt.quality,
+                attempts=tuple(attempts),
+            )
+
+    if allow_ai:
+        body, attempt = _attempt_extraction("ai", _ai_extract_body, url, user_id=user_id)
+        attempts.append(attempt)
+        if attempt.status == "accepted" and attempt.quality is not None:
+            return ExtractionResult.success(
+                text=body,
+                method="ai",
+                quality=attempt.quality,
+                attempts=tuple(attempts),
+            )
+
+    final_reason: FailureReason = "no_readable_content"
+    for item in attempts:
+        if item.failure_reason in {"blocked", "unsafe_url", "not_found", "non_html"}:
+            final_reason = item.failure_reason
+            break
+    return ExtractionResult.failure(failure_reason=final_reason, attempts=tuple(attempts))
+
+
+def extract_body(url: str) -> tuple[str, str]:
+    """Compatibility wrapper for quality-gated static and Selenium extraction."""
+    result = extract_public_content(url, allow_ai=False, allow_crawl4ai=False)
+    if result.status == "ok":
+        return result.text, "ok"
+
+    return "", "error"
 
 
 def _merge_user_state(
@@ -551,11 +676,15 @@ def fetch_and_cache_body(
             return _article_from_row(row, conn, article_id, user_id)
 
     url = row_d["url"]
-    body, status = extract_body(url)
-    if status == "error":
-        body, status = _crawl4ai_extract_body(url)
-    if status == "error":
-        body, status = _ai_extract_body(url, user_id=user_id)
+    extraction: Any = (
+        extract_public_content(url, user_id=user_id)
+        if user_id is not None
+        else extract_public_content(url)
+    )
+    if isinstance(extraction, ExtractionResult):
+        body, status = extraction.text, extraction.status
+    else:
+        body, status = extraction
 
     original_body = None
     detected_lang = row_d.get("detected_lang") or "en"

@@ -81,10 +81,7 @@ class _ValidatingRedirectHandler(urllib.request.HTTPRedirectHandler):
         headers: HTTPMessage,
         newurl: str,
     ) -> urllib.request.Request | None:
-        try:
-            validate_server_fetch_url(newurl)
-        except UnsafeUrlError:
-            return None
+        validate_server_fetch_url(newurl)
         return super().redirect_request(req, fp, code, msg, headers, newurl)
 
 

@@ -15,7 +15,8 @@ from psycopg.types.json import Jsonb
 from pydantic import ValidationError
 from typing_extensions import TypedDict
 
-from news_dashboard.body_fetch import extract_body
+from news_dashboard.body_fetch import extract_public_content
+from news_dashboard.content_extraction import ExtractionResult
 from news_dashboard.db import connect, init_db, row_to_dict
 from news_dashboard.learn_from_link import agent_runs
 from news_dashboard.learn_from_link.models import (
@@ -1557,7 +1558,7 @@ def _run_extraction_step(
 ) -> tuple[str | None, str | None]:
     """Extract article body text. Returns ``(body_text, error_message)``."""
     try:
-        (body, status), latency_ms = _timed(extract_body, lesson_url)
+        raw_result, latency_ms = _timed(extract_public_content, lesson_url)
     except Exception as exc:
         logger.warning("lesson body extraction failed for %r: %s", lesson_url, exc)
         agent_runs.record_step(
@@ -1570,7 +1571,27 @@ def _run_extraction_step(
         )
         return None, "Could not extract readable article content."
 
-    body_text = body.strip()
+    attempt_summary = ""
+    if isinstance(raw_result, ExtractionResult):
+        body_text = raw_result.text.strip()
+        status = raw_result.status
+        attempt_summary = ";".join(
+            f"{attempt.method}:{attempt.status}:{attempt.latency_ms}ms"
+            f":reason={attempt.failure_reason}"
+            f":quality={attempt.quality.character_count if attempt.quality else '-'}chars/"
+            f"{attempt.quality.word_count if attempt.quality else '-'}words/"
+            f"{attempt.quality.meaningful_block_count if attempt.quality else '-'}blocks"
+            f":rejections={','.join(attempt.quality.rejection_reasons) if attempt.quality else '-'}"
+            for attempt in raw_result.attempts
+        )
+        failure_detail = f"failure_reason={raw_result.failure_reason}; attempts={attempt_summary}"
+        method = raw_result.method
+    else:
+        body, status = raw_result
+        body_text = body.strip()
+        failure_detail = f"extract_public_content returned status={status!r}"
+        method = None
+
     if status != "ok" or not body_text:
         agent_runs.record_step(
             database_url,
@@ -1579,7 +1600,7 @@ def _run_extraction_step(
             2,
             status="failed",
             latency_ms=latency_ms,
-            error=f"extract_body returned status={status!r}",
+            error=failure_detail[:2000],
         )
         return None, "Could not extract readable article content."
 
@@ -1590,6 +1611,12 @@ def _run_extraction_step(
         2,
         status="complete",
         latency_ms=latency_ms,
+        model=f"extractor:{method}" if method else None,
+        error=(
+            f"attempts={attempt_summary}"[:2000]
+            if isinstance(raw_result, ExtractionResult)
+            else None
+        ),
     )
     return body_text, None
 

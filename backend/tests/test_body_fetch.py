@@ -19,13 +19,16 @@ from news_dashboard.body_fetch import (
     _AI_PROMPT,
     _crawl4ai_extract_body,
     _normalize_crawl4ai_result,
+    _static_extract_body,
     extract_body,
+    extract_public_content,
     fetch_and_cache_body,
     get_article,
     prefetch_article_bodies,
 )
 from news_dashboard.db import connect, init_db
 from news_dashboard.ingest.service import sync_sources
+from news_dashboard.url_safety import UnsafeUrlError
 
 
 def _db(tmp_path: Path) -> Path:
@@ -94,14 +97,17 @@ def test_extract_body_ok() -> None:
       <nav>skip nav</nav>
       <main>
         <p>This is a long enough paragraph that should be extracted by the body parser.</p>
-        <p>Another paragraph with sufficient content to pass the forty-char filter.</p>
+        <p>Another paragraph with sufficient content to pass the forty-char filter and
+        explain the technical topic with enough context for a useful generated lesson.</p>
+        <p>A final paragraph adds practical consequences, examples, and tradeoffs so the
+        extracted article is substantial rather than a title or navigation fragment.</p>
       </main>
       <footer>skip footer</footer>
     </body></html>
     """
     url, thread = _start_server(html)
     with _allow_local_body_fetches():
-        body, status = extract_body(url)
+        body, status, _reason = _static_extract_body(url)
     thread.join(timeout=2)
     assert status == "ok"
     assert "long enough paragraph" in body
@@ -123,7 +129,7 @@ def test_extract_body_resumes_after_void_elements_in_skipped_header() -> None:
     """
     url, thread = _start_server(html)
     with _allow_local_body_fetches():
-        body, status = extract_body(url)
+        body, status, _reason = _static_extract_body(url)
     thread.join(timeout=2)
     assert status == "ok"
     assert "article paragraph follows" in body
@@ -151,6 +157,112 @@ def test_extract_body_empty_page_returns_error() -> None:
     assert status == "error"
 
 
+def _substantial_extracted_text() -> str:
+    paragraph = (
+        "This extracted article paragraph explains a technical idea with detailed context, "
+        "examples, limitations, tradeoffs, and practical consequences for an interested reader."
+    )
+    return f"{paragraph}\n\n{paragraph}"
+
+
+def test_extract_public_content_stops_after_accepted_static_candidate() -> None:
+    text = _substantial_extracted_text()
+    with (
+        patch("news_dashboard.body_fetch._static_extract_body", return_value=(text, "ok", None)),
+        patch("news_dashboard.body_fetch._selenium_extract_body") as selenium,
+        patch("news_dashboard.body_fetch._crawl4ai_extract_body") as crawl,
+        patch("news_dashboard.body_fetch._ai_extract_body") as ai,
+    ):
+        result = extract_public_content("https://example.com/article")
+
+    assert result.status == "ok"
+    assert result.method == "static"
+    assert [attempt.method for attempt in result.attempts] == ["static"]
+    selenium.assert_not_called()
+    crawl.assert_not_called()
+    ai.assert_not_called()
+
+
+def test_extract_public_content_falls_back_when_static_candidate_is_too_short() -> None:
+    rendered = _substantial_extracted_text()
+    with (
+        patch(
+            "news_dashboard.body_fetch._static_extract_body",
+            return_value=("Page title", "ok", None),
+        ),
+        patch(
+            "news_dashboard.body_fetch._selenium_extract_body",
+            return_value=(rendered, "ok"),
+        ),
+    ):
+        result = extract_public_content(
+            "https://example.com/article", allow_ai=False, allow_crawl4ai=False
+        )
+
+    assert result.status == "ok"
+    assert result.method == "selenium"
+    assert [attempt.status for attempt in result.attempts] == ["rejected", "accepted"]
+
+
+def test_extract_public_content_uses_crawl4ai_then_optional_ai() -> None:
+    ai_text = _substantial_extracted_text()
+    with (
+        patch(
+            "news_dashboard.body_fetch._static_extract_body",
+            return_value=("", "error", "blocked"),
+        ),
+        patch("news_dashboard.body_fetch._selenium_extract_body", return_value=("", "error")),
+        patch("news_dashboard.body_fetch._crawl4ai_extract_body", return_value=("", "error")),
+        patch("news_dashboard.body_fetch._ai_extract_body", return_value=(ai_text, "ok")) as ai,
+    ):
+        result = extract_public_content("https://example.com/article", user_id=42)
+
+    assert result.status == "ok"
+    assert result.method == "ai"
+    assert [attempt.method for attempt in result.attempts] == [
+        "static",
+        "selenium",
+        "crawl4ai",
+        "ai",
+    ]
+    ai.assert_called_once_with("https://example.com/article", user_id=42)
+
+
+def test_static_extract_classifies_unsafe_redirect() -> None:
+    with (
+        patch("news_dashboard.body_fetch.validate_server_fetch_url"),
+        patch(
+            "news_dashboard.body_fetch.open_server_fetch_url",
+            side_effect=UnsafeUrlError("unsafe redirect"),
+        ),
+    ):
+        body, status, reason = _static_extract_body("https://example.com/redirect")
+
+    assert (body, status, reason) == ("", "error", "unsafe_url")
+
+
+def test_extract_public_content_skips_ai_and_preserves_blocked_failure() -> None:
+    with (
+        patch(
+            "news_dashboard.body_fetch._static_extract_body",
+            return_value=("", "error", "blocked"),
+        ),
+        patch("news_dashboard.body_fetch._selenium_extract_body", return_value=("", "error")),
+        patch("news_dashboard.body_fetch._crawl4ai_extract_body", return_value=("", "error")),
+        patch("news_dashboard.body_fetch._ai_extract_body") as ai,
+    ):
+        result = extract_public_content("https://example.com/article", allow_ai=False)
+
+    assert result.status == "error"
+    assert result.failure_reason == "blocked"
+    assert [attempt.method for attempt in result.attempts] == [
+        "static",
+        "selenium",
+        "crawl4ai",
+    ]
+    ai.assert_not_called()
+
+
 # ── fetch_and_cache_body ──────────────────────────────────────────────────────
 
 
@@ -161,7 +273,10 @@ def test_fetch_and_cache_body_success(tmp_path: Path) -> None:
     html = b"""
     <html><body>
       <p>This article body has enough text content to be considered valid extraction.</p>
-      <p>Second paragraph with more meaningful content for the reader experience.</p>
+      <p>Second paragraph with more meaningful content for the reader experience and enough
+      technical explanation to ground a useful generated lesson in the original source.</p>
+      <p>A third paragraph supplies examples, tradeoffs, and practical consequences rather
+      than leaving the extractor with only a title or a short navigation fragment.</p>
     </body></html>
     """
     url, thread = _start_server(html)
@@ -198,7 +313,7 @@ def test_fetch_and_cache_body_cache_hit(tmp_path: Path) -> None:
         called.append(url)
         return "new text", "ok"
 
-    with patch("news_dashboard.body_fetch.extract_body", fake_extract):
+    with patch("news_dashboard.body_fetch.extract_public_content", fake_extract):
         result = fetch_and_cache_body(article_id, db_path=db_path)
 
     assert called == [], "should not re-fetch when cache is warm"
@@ -211,7 +326,10 @@ def test_fetch_and_cache_body_fetch_error(tmp_path: Path) -> None:
     article_id = _seed_article(db_path)
 
     with (
-        patch("news_dashboard.body_fetch.extract_body", return_value=("", "error")),
+        patch(
+            "news_dashboard.body_fetch.extract_public_content",
+            return_value=("", "error"),
+        ),
         patch("news_dashboard.body_fetch._crawl4ai_extract_body", return_value=("", "error")),
     ):
         result = fetch_and_cache_body(article_id, db_path=db_path)
@@ -390,7 +508,7 @@ def test_fetch_and_cache_body_with_user_id_hides_other_users_private_source(
     other_id = _seed_user(db_path, "other")
     article_id = _seed_private_article(db_path, owner_user_id=owner_id)
 
-    with patch("news_dashboard.body_fetch.extract_body") as extract:
+    with patch("news_dashboard.body_fetch.extract_public_content") as extract:
         result = fetch_and_cache_body(article_id, db_path=db_path, user_id=other_id)
 
     assert result is None
@@ -420,7 +538,10 @@ def test_prefetch_article_bodies_fetches_missing(tmp_path: Path) -> None:
     html = b"""
     <html><body>
       <p>Prefetch test paragraph that is long enough to be extracted by the parser.</p>
-      <p>Another paragraph with enough content to make it past the forty-char minimum.</p>
+      <p>Another paragraph with enough content to explain the technical subject and provide
+      useful context for a reader who has not encountered the underlying idea before.</p>
+      <p>The final paragraph adds examples and practical consequences so the candidate passes
+      the same quality gate used for interactive article and lesson extraction.</p>
     </body></html>
     """
     url, thread = _start_server(html)
@@ -459,7 +580,7 @@ def test_prefetch_article_bodies_skips_already_ok(tmp_path: Path) -> None:
         called.append(url)
         return "new", "ok"
 
-    with patch("news_dashboard.body_fetch.extract_body", fake_extract):
+    with patch("news_dashboard.body_fetch.extract_public_content", fake_extract):
         count = prefetch_article_bodies(db_path=db_path)
 
     assert count == 0
@@ -724,7 +845,10 @@ def test_fetch_and_cache_body_uses_ai_fallback_when_scraper_fails(tmp_path: Path
     article_id = _seed_article(db_path)
 
     with (
-        patch("news_dashboard.body_fetch.extract_body", return_value=("", "error")),
+        patch(
+            "news_dashboard.body_fetch.extract_public_content",
+            return_value=("AI extracted text", "ok"),
+        ),
         patch("news_dashboard.body_fetch._crawl4ai_extract_body", return_value=("", "error")),
         patch(
             "news_dashboard.body_fetch._ai_extract_body",
@@ -748,8 +872,10 @@ def test_fetch_and_cache_body_ai_fallback_not_called_when_scraper_ok(tmp_path: P
         return "ai text", "ok"
 
     with (
-        patch("news_dashboard.body_fetch.extract_body", return_value=("scraper text", "ok")),
-        patch("news_dashboard.body_fetch._ai_extract_body", side_effect=fake_ai),
+        patch(
+            "news_dashboard.body_fetch.extract_public_content", return_value=("scraper text", "ok")
+        ),
+        patch("news_dashboard.body_fetch._ai_extract_body"),
     ):
         result = fetch_and_cache_body(article_id, db_path=db_path)
 
@@ -769,9 +895,9 @@ def test_fetch_and_cache_body_ai_fallback_result_is_cached(tmp_path: Path) -> No
         return "AI body text", "ok"
 
     with (
-        patch("news_dashboard.body_fetch.extract_body", return_value=("", "error")),
+        patch("news_dashboard.body_fetch.extract_public_content", side_effect=fake_ai),
         patch("news_dashboard.body_fetch._crawl4ai_extract_body", return_value=("", "error")),
-        patch("news_dashboard.body_fetch._ai_extract_body", side_effect=fake_ai),
+        patch("news_dashboard.body_fetch._ai_extract_body"),
     ):
         result1 = fetch_and_cache_body(article_id, db_path=db_path)
         result2 = fetch_and_cache_body(article_id, db_path=db_path)
@@ -788,7 +914,12 @@ def test_fetch_and_cache_body_ai_fallback_result_is_cached(tmp_path: Path) -> No
 
 def test_extract_body_falls_back_to_selenium_when_static_empty() -> None:
     url, thread = _start_server(b"<html><body></body></html>")
-    spa_content = "SPA article content rendered by JavaScript and extracted by headless browser."
+    spa_content = (
+        "SPA article content rendered by JavaScript explains the technical topic in detail.\n\n"
+        "A second meaningful paragraph provides examples, tradeoffs, and enough context for "
+        "a generated lesson to remain grounded in the rendered source material while explaining "
+        "the important implementation details, limitations, and practical consequences clearly."
+    )
     with (
         _allow_local_body_fetches(),
         patch(
@@ -806,7 +937,10 @@ def test_extract_body_falls_back_to_selenium_when_static_empty() -> None:
 def test_extract_body_does_not_call_selenium_when_static_ok() -> None:
     html = b"""
     <html><body>
-      <p>This is a long enough paragraph that should be extracted by the body parser.</p>
+      <p>This is a long enough paragraph that should be extracted by the body parser and
+      includes enough technical context to make the first block meaningful to a learner.</p>
+      <p>A second paragraph explains examples and consequences so static extraction can pass
+      the shared quality gate without invoking the rendered browser fallback.</p>
     </body></html>
     """
     url, thread = _start_server(html)
@@ -960,13 +1094,14 @@ def test_normalize_crawl4ai_result_collapses_blank_lines() -> None:
     assert _normalize_crawl4ai_result(result) == ("First paragraph line.\n\nSecond paragraph line.")
 
 
-def test_crawl4ai_extract_body_success() -> None:
+def test_crawl4ai_extract_body_fails_closed_without_request_interception() -> None:
     text = "Crawl4AI produced this clean article body that is definitely long enough."
     result = _FakeCrawlResult(markdown=_FakeMarkdown(fit_markdown=text))
-    with patch("news_dashboard.body_fetch._run_crawl4ai", return_value=result):
+    with patch("news_dashboard.body_fetch._run_crawl4ai", return_value=result) as crawl:
         body, status = _crawl4ai_extract_body("https://example.com/article")
-    assert status == "ok"
-    assert body == text
+    assert status == "error"
+    assert body == ""
+    crawl.assert_not_called()
 
 
 def test_crawl4ai_extract_body_returns_error_on_short_output() -> None:
@@ -1015,7 +1150,10 @@ def test_fetch_and_cache_body_uses_crawl4ai_when_scraper_fails(tmp_path: Path) -
         return "AI text", "ok"
 
     with (
-        patch("news_dashboard.body_fetch.extract_body", return_value=("", "error")),
+        patch(
+            "news_dashboard.body_fetch.extract_public_content",
+            return_value=("Crawl4AI extracted text", "ok"),
+        ),
         patch(
             "news_dashboard.body_fetch._crawl4ai_extract_body",
             return_value=("Crawl4AI extracted text", "ok"),
@@ -1040,7 +1178,9 @@ def test_fetch_and_cache_body_crawl4ai_not_called_when_scraper_ok(tmp_path: Path
         return "crawl text", "ok"
 
     with (
-        patch("news_dashboard.body_fetch.extract_body", return_value=("scraper text", "ok")),
+        patch(
+            "news_dashboard.body_fetch.extract_public_content", return_value=("scraper text", "ok")
+        ),
         patch("news_dashboard.body_fetch._crawl4ai_extract_body", side_effect=fake_crawl),
     ):
         result = fetch_and_cache_body(article_id, db_path=db_path)
@@ -1055,7 +1195,10 @@ def test_fetch_and_cache_body_ai_fallback_after_crawl4ai_fails(tmp_path: Path) -
     article_id = _seed_article(db_path)
 
     with (
-        patch("news_dashboard.body_fetch.extract_body", return_value=("", "error")),
+        patch(
+            "news_dashboard.body_fetch.extract_public_content",
+            return_value=("AI extracted text", "ok"),
+        ),
         patch("news_dashboard.body_fetch._crawl4ai_extract_body", return_value=("", "error")),
         patch(
             "news_dashboard.body_fetch._ai_extract_body",
@@ -1079,7 +1222,7 @@ def test_fetch_and_cache_body_cache_hit_skips_all_extractors(tmp_path: Path) -> 
         )
 
     with (
-        patch("news_dashboard.body_fetch.extract_body") as mock_extract,
+        patch("news_dashboard.body_fetch.extract_public_content") as mock_extract,
         patch("news_dashboard.body_fetch._crawl4ai_extract_body") as mock_crawl,
         patch("news_dashboard.body_fetch._ai_extract_body") as mock_ai,
     ):

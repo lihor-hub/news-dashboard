@@ -87,8 +87,12 @@ def test_redirect_handler_blocks_redirect_to_private_host(
     handler = _ValidatingRedirectHandler()
     req = urllib.request.Request("https://example.com/feed.xml")
 
-    result = handler.redirect_request(
-        req, io.BytesIO(), 302, "Found", HTTPMessage(), "http://169.254.169.254/latest/meta-data"
-    )
-
-    assert result is None
+    with pytest.raises(UnsafeUrlError):
+        handler.redirect_request(
+            req,
+            io.BytesIO(),
+            302,
+            "Found",
+            HTTPMessage(),
+            "http://169.254.169.254/latest/meta-data",
+        )
