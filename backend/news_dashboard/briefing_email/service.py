@@ -433,8 +433,10 @@ def _release_preview_cooldown(user_id: int) -> None:
 
 
 def _base_url() -> str:
+    """Resolve the public link base, preferring the deployment-wide contract."""
     return (
-        os.getenv("NEWS_DASHBOARD_BASE_URL")
+        os.getenv("APP_BASE_URL")
+        or os.getenv("NEWS_DASHBOARD_BASE_URL")
         or os.getenv("NEWS_DASHBOARD_URL")
         or "http://localhost:5173"
     ).rstrip("/")

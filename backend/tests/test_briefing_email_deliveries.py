@@ -2,14 +2,17 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime, timedelta, timezone
 from threading import Barrier
+from typing import Any
 
 import psycopg
 import pytest
 
 from news_dashboard.auth import create_user
+from news_dashboard.briefing_email.rendering import RenderedEmail, render_briefing_email
 from news_dashboard.briefing_email.service import (
     DeliveryClaimLostError,
     _acquire_delivery,
@@ -313,6 +316,55 @@ def _enable_email(database_url: str, user_id: int) -> None:
             "UPDATE users SET email = %s, briefing_email_enabled = TRUE WHERE id = %s",
             ("reader@example.com", user_id),
         )
+
+
+@pytest.mark.postgres
+def test_app_base_url_is_used_for_all_briefing_email_links(
+    pg_clean: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    user_id = _make_user(pg_clean, "email_app_base_url")
+    now = datetime(2026, 7, 17, 18, 0, tzinfo=timezone.utc)
+    briefing_id = _seed_complete_briefing(pg_clean, user_id, now)
+    captured: dict[str, str] = {}
+
+    def capture_links(
+        briefing: Mapping[str, Any],
+        *,
+        local_date: date,
+        timezone_name: str,
+        briefing_url: str,
+        preferences_url: str,
+        unsubscribe_url: str,
+    ) -> RenderedEmail:
+        captured.update(
+            briefing_url=briefing_url,
+            preferences_url=preferences_url,
+            unsubscribe_url=unsubscribe_url,
+        )
+        return render_briefing_email(
+            briefing,
+            local_date=local_date,
+            timezone_name=timezone_name,
+            briefing_url=briefing_url,
+            preferences_url=preferences_url,
+            unsubscribe_url=unsubscribe_url,
+        )
+
+    monkeypatch.setenv("APP_BASE_URL", "https://public.example/")
+    monkeypatch.setenv("NEWS_DASHBOARD_BASE_URL", "https://keycloak-compat.example")
+    monkeypatch.setenv("NEWS_DASHBOARD_URL", "https://legacy.example")
+    monkeypatch.setattr(
+        "news_dashboard.briefing_email.service.render_briefing_email", capture_links
+    )
+    monkeypatch.setattr("news_dashboard.briefing_email.service.smtp_configured", lambda: False)
+
+    deliver_daily_briefing(user_id, now=now, database_url=pg_clean)
+
+    assert captured["briefing_url"] == f"https://public.example/briefings/{briefing_id}"
+    assert captured["preferences_url"] == "https://public.example/settings/notifications"
+    assert captured["unsubscribe_url"].startswith(
+        "https://public.example/email/briefing/unsubscribe?token="
+    )
 
 
 @pytest.mark.postgres

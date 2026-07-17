@@ -42,6 +42,12 @@ services:
       SMTP_PASS: ${SMTP_PASS:-}
       SMTP_FROM: ${SMTP_FROM:-}
       SMTP_TLS: ${SMTP_TLS:-}
+      OTP_SMTP_HOST: ${OTP_SMTP_HOST:-}
+      OTP_SMTP_PORT: ${OTP_SMTP_PORT:-}
+      OTP_SMTP_USER: ${OTP_SMTP_USER:-}
+      OTP_SMTP_PASS: ${OTP_SMTP_PASS:-}
+      OTP_SMTP_FROM: ${OTP_SMTP_FROM:-}
+      OTP_SMTP_TLS: ${OTP_SMTP_TLS:-}
       APP_BASE_URL: ${APP_BASE_URL:-}
       # Legacy credential aliases remain available to the OTP mailer.
       SMTP_USERNAME: ${SMTP_USERNAME:-}

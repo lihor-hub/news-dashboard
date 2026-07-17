@@ -33,3 +33,6 @@ deployments. OTP-specific `OTP_SMTP_*` values retain precedence when set. With
 Helm, configure the non-secret values under `app.email`, set
 `app.publicBaseUrl`, and provide credentials through `app.email.existingSecret`;
 the chart does not render credential values into the Deployment.
+
+For email links, `APP_BASE_URL` takes precedence over the compatibility
+variables `NEWS_DASHBOARD_BASE_URL` and `NEWS_DASHBOARD_URL`, in that order.
