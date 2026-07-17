@@ -320,8 +320,26 @@ def test_repeated_scheduler_path_pushes_only_for_claim_winner() -> None:
         repeated = _generate_briefing_for_user(42, push_enabled=True, email_enabled=True)
 
     assert first is True
-    assert repeated is False
+    assert repeated is True
     send_push.assert_called_once()
+
+
+@pytest.mark.parametrize("terminal_status", ["sent", "skipped", "unsubscribed"])
+def test_repeated_terminal_email_outcome_is_success_without_push(terminal_status: str) -> None:
+    outcome = SimpleNamespace(status=terminal_status, briefing=None)
+    with (
+        patch(
+            "news_dashboard.briefing_email.service.deliver_daily_briefing",
+            return_value=outcome,
+        ),
+        patch("news_dashboard.push.send_push_for_user") as send_push,
+    ):
+        from news_dashboard.scheduler.service import _generate_briefing_for_user
+
+        result = _generate_briefing_for_user(42, push_enabled=True, email_enabled=True)
+
+    assert result is True
+    send_push.assert_not_called()
 
 
 def test_push_failure_is_reported_even_when_email_succeeds() -> None:

@@ -158,14 +158,27 @@ def test_verify_citations_rejects_empty_summary_with_stories() -> None:
         verify_citations(raw, candidate_ids={1})
 
 
-def test_verify_citations_rejects_more_than_1800_words() -> None:
+@pytest.mark.parametrize(
+    ("body_word_count", "raises"),
+    [(1_797, False), (1_798, True)],
+    ids=["exactly-1800-accepted", "1801-rejected"],
+)
+def test_verify_citations_enforces_total_1800_word_budget(
+    body_word_count: int, raises: bool
+) -> None:
     raw = {
         "title": "T",
         "summary": "Summary",
-        "sections": [{"title": "A", "body": " ".join(["word"] * 1_800), "citations": [1]}],
+        "sections": [
+            {"title": "A", "body": " ".join(["word"] * body_word_count), "citations": [1]}
+        ],
     }
-    with pytest.raises(ValueError, match="1800-word"):
-        verify_citations(raw, candidate_ids={1})
+    if raises:
+        with pytest.raises(ValueError, match="1800-word"):
+            verify_citations(raw, candidate_ids={1})
+    else:
+        content, _unsupported = verify_citations(raw, candidate_ids={1})
+        assert content["summary"] == "Summary"
 
 
 def test_stage_constants_cover_the_full_pipeline() -> None:

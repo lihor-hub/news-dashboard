@@ -305,3 +305,133 @@ def test_bucharest_repeated_dst_wall_time_keeps_one_local_date_claim(
         ).fetchone()
     assert row is not None
     assert row["count"] == 1
+
+
+def _enable_email(database_url: str, user_id: int) -> None:
+    with connect(database_url=database_url) as conn:
+        conn.execute(
+            "UPDATE users SET email = %s, briefing_email_enabled = TRUE WHERE id = %s",
+            ("reader@example.com", user_id),
+        )
+
+
+@pytest.mark.postgres
+def test_smtp_success_persists_full_delivery_transition(
+    pg_clean: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    user_id = _make_user(pg_clean, "email_smtp_success")
+    now = datetime(2026, 7, 17, 18, 0, tzinfo=timezone.utc)
+    briefing_id = _seed_complete_briefing(pg_clean, user_id, now)
+    _enable_email(pg_clean, user_id)
+    monkeypatch.setattr("news_dashboard.briefing_email.service.smtp_configured", lambda: True)
+    monkeypatch.setattr("news_dashboard.briefing_email.service.send_email", lambda **_kwargs: None)
+
+    outcome = deliver_daily_briefing(user_id, now=now, database_url=pg_clean)
+
+    assert outcome.status == "sent"
+    with connect(database_url=pg_clean) as conn:
+        row = conn.execute(
+            """
+            SELECT status, briefing_id, attempt_count, sent_at, next_attempt_at, error_code
+            FROM briefing_email_deliveries WHERE id = %s
+            """,
+            (outcome.delivery.id,),
+        ).fetchone()
+    assert row is not None
+    assert row["status"] == "sent"
+    assert row["briefing_id"] == briefing_id
+    assert row["attempt_count"] == 1
+    assert row["sent_at"] == now
+    assert row["next_attempt_at"] is None
+    assert row["error_code"] is None
+
+
+@pytest.mark.postgres
+def test_retryable_smtp_failure_persists_due_retry(
+    pg_clean: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    user_id = _make_user(pg_clean, "email_smtp_retry")
+    now = datetime(2026, 7, 17, 18, 0, tzinfo=timezone.utc)
+    _seed_complete_briefing(pg_clean, user_id, now)
+    _enable_email(pg_clean, user_id)
+    monkeypatch.setattr("news_dashboard.briefing_email.service.smtp_configured", lambda: True)
+    monkeypatch.setattr(
+        "news_dashboard.briefing_email.service.send_email", lambda **_kwargs: "smtp_error"
+    )
+
+    outcome = deliver_daily_briefing(user_id, now=now, database_url=pg_clean)
+
+    assert outcome.status == "retryable_failed"
+    assert outcome.delivery.attempt_count == 1
+    assert outcome.delivery.next_attempt_at == now + timedelta(minutes=15)
+    with connect(database_url=pg_clean) as conn:
+        row = conn.execute(
+            "SELECT status, error_code, error_message, sent_at FROM briefing_email_deliveries"
+            " WHERE id = %s",
+            (outcome.delivery.id,),
+        ).fetchone()
+    assert row is not None
+    assert row["status"] == "retryable_failed"
+    assert row["error_code"] == "smtp_error"
+    assert row["error_message"] == "smtp_error"
+    assert row["sent_at"] is None
+
+
+@pytest.mark.postgres
+def test_nonretryable_transport_failure_is_permanent_and_sanitized(
+    pg_clean: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    user_id = _make_user(pg_clean, "email_smtp_permanent")
+    now = datetime(2026, 7, 17, 18, 0, tzinfo=timezone.utc)
+    _seed_complete_briefing(pg_clean, user_id, now)
+    _enable_email(pg_clean, user_id)
+    monkeypatch.setattr("news_dashboard.briefing_email.service.smtp_configured", lambda: True)
+    monkeypatch.setattr(
+        "news_dashboard.briefing_email.service.send_email",
+        lambda **_kwargs: "smtp_not_configured",
+    )
+
+    outcome = deliver_daily_briefing(user_id, now=now, database_url=pg_clean)
+
+    assert outcome.status == "permanent_failed"
+    assert outcome.delivery.attempt_count == 1
+    assert outcome.delivery.next_attempt_at is None
+    with connect(database_url=pg_clean) as conn:
+        row = conn.execute(
+            "SELECT error_code, error_message FROM briefing_email_deliveries WHERE id = %s",
+            (outcome.delivery.id,),
+        ).fetchone()
+    assert row is not None
+    assert row["error_code"] == "smtp_not_configured"
+    assert row["error_message"] == "smtp_not_configured"
+
+
+@pytest.mark.postgres
+def test_delivery_claim_exists_before_generation_and_no_candidates_persists_skipped(
+    pg_clean: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    user_id = _make_user(pg_clean, "email_claim_before_generation")
+    now = datetime(2026, 7, 17, 18, 0, tzinfo=timezone.utc)
+    observed: dict[str, object] = {}
+
+    def generate(**_kwargs: object) -> dict[str, object]:
+        with connect(database_url=pg_clean) as conn:
+            row = conn.execute(
+                "SELECT status FROM briefing_email_deliveries WHERE user_id = %s",
+                (user_id,),
+            ).fetchone()
+        observed["status_during_generation"] = row["status"] if row is not None else None
+        return {"status": "no_candidates"}
+
+    monkeypatch.setattr("news_dashboard.briefings.service.generate_briefing", generate)
+    outcome = deliver_daily_briefing(user_id, now=now, database_url=pg_clean)
+
+    assert observed["status_during_generation"] == "claimed"
+    assert outcome.status == "skipped"
+    with connect(database_url=pg_clean) as conn:
+        row = conn.execute(
+            "SELECT status FROM briefing_email_deliveries WHERE id = %s",
+            (outcome.delivery.id,),
+        ).fetchone()
+    assert row is not None
+    assert row["status"] == "skipped"

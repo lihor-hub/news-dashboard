@@ -163,7 +163,7 @@ def _generate_briefing_for_user(
                     outcome.status,
                 )
             if outcome.briefing is None:
-                return False
+                return email_ok
             result = outcome.briefing
         else:
             result = generate_briefing(user_id=user_id)

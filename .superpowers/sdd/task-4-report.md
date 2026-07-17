@@ -58,3 +58,28 @@ Implemented claim-safe scheduled daily briefing email delivery and integrated it
 - Scheduler coverage includes email-only users, invalid timezone UTC fallback, Bucharest summer/winter offsets, repeated-path push suppression, honest push failure, and per-user failure isolation.
 - `make lint`: passed after formatting.
 - `make typecheck`: mypy, ty, pyrefly, and frontend typecheck passed.
+
+## Final state-machine coverage pass
+
+### Correction
+
+- A repeated terminal delivery with no briefing payload now suppresses push while returning the terminal email result. Existing `sent`, `skipped`, and `unsubscribed` rows are successful scheduler outcomes; nonterminal claim losers remain failures for the current run.
+
+### RED evidence
+
+- Four scheduler regressions failed before the correction: repeated `sent`, `skipped`, and `unsubscribed` outcomes, including the two-invocation claim-winner path, returned `False` instead of `True`.
+
+### Direct PostgreSQL evidence
+
+- Successful SMTP delivery persists `sent`, the canonical `briefing_id`, `attempt_count = 1`, and `sent_at`, with no retry or error category.
+- Retryable SMTP failure persists `retryable_failed`, sanitized `smtp_error`, one attempt, and a due `next_attempt_at`.
+- Safe nonretryable transport failure persists `permanent_failed`, sanitized `smtp_not_configured`, one attempt, and no retry timestamp.
+- Generation observes an already-persisted `claimed` row, proving claim-before-generation ordering.
+- `no_candidates` persists `skipped` in the delivery ledger.
+- Total word-budget boundaries are explicit: exactly 1,800 words pass and 1,801 words fail.
+
+### Final GREEN evidence
+
+- Required focused suite: `212 passed in 16.51s`.
+- `make lint`: passed.
+- `make typecheck`: mypy, ty, pyrefly, and frontend typecheck passed.
