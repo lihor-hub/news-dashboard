@@ -242,6 +242,55 @@ def test_also_from_no_user_includes_all_sources(pg_clean: str) -> None:
     assert "judy-private" in article["also_from"]
 
 
+def test_also_from_excludes_primary_source_and_repeated_source_names(pg_clean: str) -> None:
+    """Only distinct sources other than the canonical source are secondary coverage."""
+    _insert_source(pg_clean, "primary-src")
+    canonical_id = _insert_canonical(
+        pg_clean, "https://j.com/story", "Repeated Coverage", "primary-src"
+    )
+    _insert_duplicate(
+        pg_clean, "https://j.com/story-copy", "Repeated Coverage", "primary-src", canonical_id
+    )
+
+    _insert_source(pg_clean, "secondary-src")
+    _insert_duplicate(
+        pg_clean,
+        "https://secondary.example.com/story",
+        "Repeated Coverage",
+        "secondary-src",
+        canonical_id,
+    )
+    _insert_duplicate(
+        pg_clean,
+        "https://secondary.example.com/story-copy",
+        "Repeated Coverage",
+        "secondary-src",
+        canonical_id,
+    )
+
+    _insert_source(pg_clean, "another-secondary-src")
+    _insert_duplicate(
+        pg_clean,
+        "https://another-secondary.example.com/story",
+        "Repeated Coverage",
+        "another-secondary-src",
+        canonical_id,
+    )
+
+    article: dict[str, Any] = {"id": canonical_id}
+    with connect(database_url=pg_clean) as conn:
+        _attach_also_from(conn, [article])
+
+    assert article["also_from"] == ["secondary-src", "another-secondary-src"]
+
+    uid = _insert_user(pg_clean, "also-from-reader")
+    user_article: dict[str, Any] = {"id": canonical_id}
+    with connect(database_url=pg_clean) as conn:
+        _attach_also_from(conn, [user_article], user_id=uid)
+
+    assert user_article["also_from"] == ["secondary-src", "another-secondary-src"]
+
+
 # ── URL-variant reappearance regression (issue #1215) ─────────────────────────
 
 

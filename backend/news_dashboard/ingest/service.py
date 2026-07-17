@@ -1801,17 +1801,25 @@ def _attach_also_from(
         dup_rows = conn.execute(
             f"""
             SELECT a.canonical_id, a.source_name FROM articles a
+            JOIN articles canonical ON canonical.id = a.canonical_id
             JOIN sources s ON s.slug = a.source_slug
             WHERE a.canonical_id IN ({article_placeholders}) AND a.state = 'archived'
+              AND a.source_name IS DISTINCT FROM canonical.source_name
               AND (s.owner_user_id IS NULL OR s.owner_user_id = %s)
+            GROUP BY a.canonical_id, a.source_name
+            ORDER BY a.canonical_id, MIN(a.id)
             """,
             [*article_ids, user_id],
         ).fetchall()
     else:
         dup_rows = conn.execute(
             f"""
-            SELECT canonical_id, source_name FROM articles
-            WHERE canonical_id IN ({article_placeholders}) AND state = 'archived'
+            SELECT a.canonical_id, a.source_name FROM articles a
+            JOIN articles canonical ON canonical.id = a.canonical_id
+            WHERE a.canonical_id IN ({article_placeholders}) AND a.state = 'archived'
+              AND a.source_name IS DISTINCT FROM canonical.source_name
+            GROUP BY a.canonical_id, a.source_name
+            ORDER BY a.canonical_id, MIN(a.id)
             """,
             article_ids,
         ).fetchall()
