@@ -19,6 +19,7 @@ from news_dashboard.email import send_email
 _COOLDOWN_SECONDS = 60.0
 _COOLDOWN_MAX_ENTRIES = 10_000
 _MISSING_EMAIL = "missing_email"
+_GUEST_ACCOUNT = "guest_account"
 _MISSING_BRIEFING = "missing_briefing"
 _DELIVERY_FAILED = "delivery_failed"
 _preview_sent_at: OrderedDict[tuple[str, int], float] = OrderedDict()
@@ -81,7 +82,7 @@ def _base_url() -> str:
 def _load_preview(database_url: str | None, user_id: int) -> tuple[dict[str, Any], dict[str, Any]]:
     with connect(database_url=database_url) as conn:
         user_row = conn.execute(
-            "SELECT email, briefing_timezone FROM users WHERE id = %s",
+            "SELECT email, briefing_timezone, is_guest FROM users WHERE id = %s",
             (user_id,),
         ).fetchone()
         briefing_row = conn.execute(
@@ -96,6 +97,8 @@ def _load_preview(database_url: str | None, user_id: int) -> tuple[dict[str, Any
         ).fetchone()
     if user_row is None or not str(user_row["email"] or "").strip():
         raise PreviewUnavailableError(_MISSING_EMAIL)
+    if bool(user_row["is_guest"]):
+        raise PreviewUnavailableError(_GUEST_ACCOUNT)
     if briefing_row is None:
         raise PreviewUnavailableError(_MISSING_BRIEFING)
     return row_to_dict(user_row), row_to_dict(briefing_row)

@@ -13,8 +13,14 @@ from news_dashboard.db import connect
 from news_dashboard.main import app
 
 
-def _user(database_url: str, name: str, *, email: str | None = "reader@example.com") -> int:
-    user_id = int(create_user(name, "password123", db_path=database_url)["id"])
+def _user(
+    database_url: str,
+    name: str,
+    *,
+    email: str | None = "reader@example.com",
+    is_guest: bool = False,
+) -> int:
+    user_id = int(create_user(name, "password123", db_path=database_url, is_guest=is_guest)["id"])
     with connect(database_url=database_url) as conn:
         conn.execute(
             "UPDATE users SET email = %s, briefing_email_enabled = TRUE WHERE id = %s",
@@ -112,6 +118,14 @@ def test_preview_sends_latest_complete_briefing_without_changing_state(
 def test_preview_requires_account_email(pg_clean: str, monkeypatch: Any) -> None:
     monkeypatch.setenv("DATABASE_URL", pg_clean)
     user_id = _user(pg_clean, "no_email", email=None)
+    _complete_briefing(pg_clean, user_id)
+    response = _client_for(pg_clean, user_id).post("/api/settings/notifications/email/preview")
+    assert response.status_code == 400
+
+
+def test_preview_rejects_guest_account_inside_service(pg_clean: str, monkeypatch: Any) -> None:
+    monkeypatch.setenv("DATABASE_URL", pg_clean)
+    user_id = _user(pg_clean, "guest_preview", is_guest=True)
     _complete_briefing(pg_clean, user_id)
     response = _client_for(pg_clean, user_id).post("/api/settings/notifications/email/preview")
     assert response.status_code == 400
