@@ -18,6 +18,12 @@ export async function updateNotificationSettings(
   });
 }
 
+export async function sendEmailBriefingPreview(): Promise<{ sent: boolean }> {
+  return requestJson('/api/settings/notifications/email/preview', {
+    method: 'POST',
+  });
+}
+
 export async function subscribePush(
   payload: PushSubscribeRequest
 ): Promise<{ subscribed: boolean }> {

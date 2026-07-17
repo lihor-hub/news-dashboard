@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -11,12 +11,14 @@ const {
   mockUpdateSettings,
   mockSubscribePush,
   mockUnsubscribePush,
+  mockSendEmailPreview,
   mockRecalculate,
 } = vi.hoisted(() => ({
   mockFetchSettings: vi.fn(),
   mockUpdateSettings: vi.fn(),
   mockSubscribePush: vi.fn(),
   mockUnsubscribePush: vi.fn(),
+  mockSendEmailPreview: vi.fn(),
   mockRecalculate: vi.fn(),
 }));
 
@@ -25,6 +27,7 @@ vi.mock('@/api', () => ({
   updateNotificationSettings: mockUpdateSettings,
   subscribePush: mockSubscribePush,
   unsubscribePush: mockUnsubscribePush,
+  sendEmailBriefingPreview: mockSendEmailPreview,
   recalculateMyRecommendations: mockRecalculate,
   fetchWatchlists: vi.fn().mockResolvedValue([]),
 }));
@@ -32,7 +35,10 @@ vi.mock('@/api', () => ({
 import { SettingsPage } from '../pages/SettingsPage';
 import type { PushSubscribeRequest } from '../types';
 
-function renderSettings() {
+function renderSettings(settings: Partial<typeof defaultSettings> = {}) {
+  if (Object.keys(settings).length > 0) {
+    mockFetchSettings.mockResolvedValue({ ...defaultSettings, ...settings });
+  }
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <MemoryRouter>
@@ -50,6 +56,10 @@ const defaultSettings = {
   briefing_timezone: 'UTC',
   push_enabled: false,
   vapid_public_key: null as string | null,
+  email_enabled: false,
+  email_address: 'reader@example.com' as string | null,
+  email_available: true,
+  email_delivery_configured: true,
 };
 
 beforeEach(() => {
@@ -61,6 +71,7 @@ beforeEach(() => {
   mockUpdateSettings.mockResolvedValue({ briefing_time: '09:00', push_enabled: false });
   mockSubscribePush.mockResolvedValue({ subscribed: true });
   mockUnsubscribePush.mockResolvedValue({ unsubscribed: true });
+  mockSendEmailPreview.mockResolvedValue({ sent: true });
   mockRecalculate.mockResolvedValue({ scored: 0 });
 });
 
@@ -277,6 +288,100 @@ describe('DailyBriefSection', () => {
     expect(
       screen.getByText('Push notifications require server configuration (VAPID keys).')
     ).toBeInTheDocument();
+  });
+});
+
+describe('DailyBriefSection — email briefing', () => {
+  it('enables email briefing for the account address', async () => {
+    const user = userEvent.setup();
+    renderSettings({ email_enabled: false, email_address: 'reader@example.com' });
+
+    const region = await screen.findByRole('region', { name: 'Email briefing' });
+    expect(within(region).getByText('reader@example.com')).toBeVisible();
+    await user.click(within(region).getByRole('button', { name: 'Enable email briefing' }));
+
+    expect(mockUpdateSettings).toHaveBeenCalledWith({ email_enabled: true });
+    expect(within(region).getByText('Enabled')).toBeVisible();
+  });
+
+  it('disables an enabled email briefing', async () => {
+    const user = userEvent.setup();
+    renderSettings({ email_enabled: true });
+
+    const region = await screen.findByRole('region', { name: 'Email briefing' });
+    await user.click(within(region).getByRole('button', { name: 'Disable email briefing' }));
+
+    expect(mockUpdateSettings).toHaveBeenCalledWith({ email_enabled: false });
+    expect(within(region).getByRole('button', { name: 'Enable email briefing' })).toBeVisible();
+  });
+
+  it('explains that an account email is required', async () => {
+    renderSettings({ email_address: null, email_available: false });
+
+    const region = await screen.findByRole('region', { name: 'Email briefing' });
+    expect(
+      within(region).getByText('Add an email address to your account to use email briefing.')
+    ).toBeVisible();
+    expect(
+      within(region).queryByRole('button', { name: 'Enable email briefing' })
+    ).not.toBeInTheDocument();
+  });
+
+  it('explains when email delivery is not configured', async () => {
+    renderSettings({ email_delivery_configured: false });
+
+    const region = await screen.findByRole('region', { name: 'Email briefing' });
+    expect(
+      within(region).getByText('Email delivery is not configured on this server.')
+    ).toBeVisible();
+    expect(
+      within(region).queryByRole('button', { name: 'Enable email briefing' })
+    ).not.toBeInTheDocument();
+  });
+
+  it('rolls back an email mutation and shows an alert on failure', async () => {
+    const user = userEvent.setup();
+    mockUpdateSettings.mockRejectedValueOnce(new Error('save failed'));
+    renderSettings({ email_enabled: false });
+
+    const region = await screen.findByRole('region', { name: 'Email briefing' });
+    await user.click(within(region).getByRole('button', { name: 'Enable email briefing' }));
+
+    expect(await within(region).findByRole('alert')).toHaveTextContent(
+      'Could not update email briefing. Please try again.'
+    );
+    expect(within(region).getByRole('button', { name: 'Enable email briefing' })).toBeVisible();
+  });
+
+  it('shows pending and success feedback for a preview', async () => {
+    const user = userEvent.setup();
+    let resolvePreview!: (value: { sent: boolean }) => void;
+    mockSendEmailPreview.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolvePreview = resolve;
+      })
+    );
+    renderSettings({ email_enabled: true });
+
+    const region = await screen.findByRole('region', { name: 'Email briefing' });
+    await user.click(within(region).getByRole('button', { name: 'Send preview email' }));
+    expect(within(region).getByRole('button', { name: 'Sending preview email' })).toBeDisabled();
+    resolvePreview({ sent: true });
+
+    expect(await within(region).findByText('Preview email sent.')).toBeVisible();
+  });
+
+  it('shows an alert when preview delivery fails', async () => {
+    const user = userEvent.setup();
+    mockSendEmailPreview.mockRejectedValueOnce(new Error('delivery failed'));
+    renderSettings({ email_enabled: true });
+
+    const region = await screen.findByRole('region', { name: 'Email briefing' });
+    await user.click(within(region).getByRole('button', { name: 'Send preview email' }));
+
+    expect(await within(region).findByRole('alert')).toHaveTextContent(
+      'Could not send preview email. Please try again.'
+    );
   });
 });
 

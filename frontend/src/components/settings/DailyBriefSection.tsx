@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
-import { RefreshCw, Bell, BellOff } from 'lucide-react';
+import { RefreshCw, Bell, BellOff, Mail, Send } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
   fetchNotificationSettings,
+  sendEmailBriefingPreview,
   subscribePush,
   unsubscribePush,
   updateNotificationSettings,
@@ -23,6 +24,8 @@ function arrayBufferToBase64Url(buffer: ArrayBuffer): string {
 
 type PushState = 'idle' | 'requesting' | 'subscribed' | 'denied' | 'unavailable' | 'error';
 type TimezoneSaveState = 'idle' | 'saving' | 'saved' | 'error';
+type EmailMutationState = 'idle' | 'saving' | 'error';
+type EmailPreviewState = 'idle' | 'sending' | 'sent' | 'error';
 
 const FALLBACK_TIMEZONES = [
   'UTC',
@@ -53,6 +56,12 @@ export function DailyBriefSection() {
   const [timezoneSaveState, setTimezoneSaveState] = useState<TimezoneSaveState>('idle');
   const [timezoneError, setTimezoneError] = useState<string | null>(null);
   const [pushEnabled, setPushEnabled] = useState(false);
+  const [emailEnabled, setEmailEnabled] = useState(false);
+  const [emailAddress, setEmailAddress] = useState<string | null>(null);
+  const [emailAvailable, setEmailAvailable] = useState(false);
+  const [emailDeliveryConfigured, setEmailDeliveryConfigured] = useState(false);
+  const [emailMutationState, setEmailMutationState] = useState<EmailMutationState>('idle');
+  const [emailPreviewState, setEmailPreviewState] = useState<EmailPreviewState>('idle');
   const [vapidKey, setVapidKey] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [timeSaving, setTimeSaving] = useState(false);
@@ -71,6 +80,10 @@ export function DailyBriefSection() {
           setBriefingTimezone(loadedTimezone);
           setSavedBriefingTimezone(loadedTimezone);
           setPushEnabled(s.push_enabled);
+          setEmailEnabled(s.email_enabled);
+          setEmailAddress(s.email_address);
+          setEmailAvailable(s.email_available);
+          setEmailDeliveryConfigured(s.email_delivery_configured);
           setVapidKey(s.vapid_public_key);
           if (s.push_enabled) setPushState('subscribed');
         }
@@ -164,6 +177,31 @@ export function DailyBriefSection() {
       setPushState('subscribed');
     } catch {
       setPushState('error');
+    }
+  };
+
+  const setEmailSubscription = async (enabled: boolean) => {
+    const previousEnabled = emailEnabled;
+    setEmailEnabled(enabled);
+    setEmailMutationState('saving');
+    setEmailPreviewState('idle');
+    try {
+      await updateNotificationSettings({ email_enabled: enabled });
+      setEmailMutationState('idle');
+    } catch {
+      setEmailEnabled(previousEnabled);
+      setEmailMutationState('error');
+    }
+  };
+
+  const sendEmailPreview = async () => {
+    setEmailPreviewState('sending');
+    setEmailMutationState('idle');
+    try {
+      await sendEmailBriefingPreview();
+      setEmailPreviewState('sent');
+    } catch {
+      setEmailPreviewState('error');
     }
   };
 
@@ -274,6 +312,97 @@ export function DailyBriefSection() {
               {timezoneError}
             </p>
           )}
+        </div>
+
+        <div
+          className="space-y-2 border-t border-border pt-4"
+          role="region"
+          aria-labelledby="email-briefing-heading"
+        >
+          <div id="email-briefing-heading" className="text-xs font-medium text-foreground">
+            Email briefing
+          </div>
+          {emailAddress && (
+            <p className="text-xs text-muted-foreground">
+              Daily briefing address: <span className="text-foreground">{emailAddress}</span>
+            </p>
+          )}
+
+          {!emailAvailable ? (
+            <p className="text-xs text-muted-foreground">
+              Add an email address to your account to use email briefing.
+            </p>
+          ) : !emailDeliveryConfigured ? (
+            <p className="text-xs text-muted-foreground">
+              Email delivery is not configured on this server.
+            </p>
+          ) : emailEnabled ? (
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="flex items-center gap-1.5 text-xs text-green-600 dark:text-green-400">
+                <Mail className="size-3" />
+                Enabled
+              </div>
+              <button
+                type="button"
+                onClick={() => void setEmailSubscription(false)}
+                disabled={emailMutationState === 'saving'}
+                aria-label="Disable email briefing"
+                className="text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground disabled:opacity-60"
+              >
+                Disable
+              </button>
+              <button
+                type="button"
+                onClick={() => void sendEmailPreview()}
+                disabled={emailPreviewState === 'sending'}
+                aria-label={
+                  emailPreviewState === 'sending' ? 'Sending preview email' : 'Send preview email'
+                }
+                className="flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-xs font-medium hover:bg-surface transition-colors disabled:opacity-60"
+              >
+                {emailPreviewState === 'sending' ? (
+                  <RefreshCw className="size-3 animate-spin" />
+                ) : (
+                  <Send className="size-3" />
+                )}
+                {emailPreviewState === 'sending' ? 'Sending…' : 'Send preview'}
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => void setEmailSubscription(true)}
+              disabled={emailMutationState === 'saving'}
+              aria-label="Enable email briefing"
+              className="flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-60"
+            >
+              {emailMutationState === 'saving' ? (
+                <RefreshCw className="size-3 animate-spin" />
+              ) : (
+                <Mail className="size-3" />
+              )}
+              {emailMutationState === 'saving' ? 'Enabling…' : 'Enable email briefing'}
+            </button>
+          )}
+
+          {emailMutationState === 'error' && (
+            <p className="text-xs text-destructive" role="alert">
+              Could not update email briefing. Please try again.
+            </p>
+          )}
+          {emailPreviewState === 'sent' && (
+            <p className="text-xs text-green-600 dark:text-green-400" role="status">
+              Preview email sent.
+            </p>
+          )}
+          {emailPreviewState === 'error' && (
+            <p className="text-xs text-destructive" role="alert">
+              Could not send preview email. Please try again.
+            </p>
+          )}
+          <p className="text-[11px] text-muted-foreground">
+            Receive your daily brief at the shared generation time and timezone above.
+          </p>
         </div>
 
         <div className="space-y-2">
