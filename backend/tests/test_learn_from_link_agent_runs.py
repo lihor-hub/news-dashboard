@@ -10,6 +10,11 @@ from unittest.mock import patch
 import pytest
 from langchain_core.callbacks import BaseCallbackHandler
 
+from news_dashboard.content_extraction import (
+    ExtractionAttempt,
+    ExtractionResult,
+    QualityEvidence,
+)
 from news_dashboard.db import connect
 from news_dashboard.learn_from_link import agent_runs, service
 from news_dashboard.learn_from_link.agent_runs import (
@@ -187,6 +192,44 @@ def test_extraction_failure_marks_run_failed_at_extraction_step(
         (STEP_FETCH, 1, "complete", None),
         (STEP_EXTRACTION, 2, "failed", "extract_public_content returned status='error'"),
     ]
+
+
+def test_extraction_step_persists_structured_attempt_diagnostics() -> None:
+    quality = QualityEvidence(420, 80, 3, True, ())
+    result = ExtractionResult.success(
+        text="A substantial extracted article body.",
+        method="selenium",
+        quality=quality,
+        attempts=(
+            ExtractionAttempt(
+                method="static",
+                status="rejected",
+                latency_ms=12,
+                quality=QualityEvidence(15, 3, 0, False, ("too_short",)),
+                failure_reason="no_readable_content",
+            ),
+            ExtractionAttempt(
+                method="selenium",
+                status="accepted",
+                latency_ms=34,
+                quality=quality,
+            ),
+        ),
+    )
+
+    with (
+        patch.object(service, "extract_public_content", return_value=result),
+        patch.object(agent_runs, "record_step") as record_step,
+    ):
+        body, error = service._run_extraction_step(None, 7, "https://example.com/article")
+
+    assert body == result.text
+    assert error is None
+    diagnostics = record_step.call_args.kwargs["error"]
+    assert "static:rejected:12ms" in diagnostics
+    assert "reason=no_readable_content" in diagnostics
+    assert "rejections=too_short" in diagnostics
+    assert "selenium:accepted:34ms" in diagnostics
 
 
 def test_citation_failure_marks_run_failed_at_citation_verification_step(

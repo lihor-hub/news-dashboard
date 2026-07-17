@@ -280,6 +280,19 @@ def test_request_safety_fails_unsafe_browser_request() -> None:
     request.fail.assert_called_once()
 
 
+def test_request_safety_records_interception_capability_failure() -> None:
+    driver = MagicMock()
+    blocked = _install_request_safety(driver)
+    callback = driver.network.add_request_handler.call_args.args[1]
+    request = MagicMock(url="https://example.com/article")
+    request.continue_request.side_effect = WebDriverException("unsupported")
+
+    with patch("news_dashboard.selenium_client.validate_server_fetch_url"):
+        callback(request)
+
+    assert blocked == ["interception-error:https://example.com/article"]
+
+
 def test_fetch_with_cleanup_rejects_unsafe_request_even_after_timeout() -> None:
     driver = MagicMock()
     driver.get.side_effect = TimeoutException("page load timed out")
