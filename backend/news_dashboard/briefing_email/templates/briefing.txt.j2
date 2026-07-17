@@ -1,0 +1,15 @@
+NEWS DASHBOARD
+{{ title }}
+{{ local_date }} · {{ timezone_name }} · {{ estimated_minutes }} min read
+
+EXECUTIVE SUMMARY
+{{ summary }}
+{% for story in stories %}
+{{ story.title }}
+{{ story.body }}
+{% for article in story.articles %}- {{ article.title }}{% if article.source_name %} — {{ article.source_name }}{% endif %}{% if article.url %}: {{ article.url }}{% endif %}
+{% endfor %}{% endfor %}
+{% if briefing_url %}Open web briefing: {{ briefing_url }}
+{% endif %}{% if preferences_url %}Email preferences: {{ preferences_url }}
+{% endif %}{% if unsubscribe_url %}Unsubscribe: {{ unsubscribe_url }}
+{% endif %}

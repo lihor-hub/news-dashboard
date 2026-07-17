@@ -13,14 +13,15 @@ import logging
 import os
 import smtplib
 import ssl
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
+from collections.abc import Mapping
+from email.message import EmailMessage
 from typing import NamedTuple
 
 logger = logging.getLogger(__name__)
 
 _GMAIL_HOST = "smtp.gmail.com"
 _DEFAULT_PORT = 587
+_SAFE_HEADERS = frozenset({"List-Unsubscribe", "List-Unsubscribe-Post"})
 
 
 class _SmtpConfig(NamedTuple):
@@ -61,10 +62,17 @@ def _smtp_config() -> _SmtpConfig:
     )
     port = int(port_raw) if port_raw else _DEFAULT_PORT
 
-    tls_raw = os.environ.get("OTP_SMTP_TLS", "").strip().lower()
+    tls_raw = (
+        os.environ.get("OTP_SMTP_TLS", "").strip().lower()
+        or os.environ.get("SMTP_TLS", "").strip().lower()
+    )
     tls_mode = tls_raw or ("ssl" if port == 465 else "starttls")
 
-    from_addr = os.environ.get("OTP_SMTP_FROM", "").strip() or username
+    from_addr = (
+        os.environ.get("OTP_SMTP_FROM", "").strip()
+        or os.environ.get("SMTP_FROM", "").strip()
+        or username
+    )
 
     return _SmtpConfig(host, port, username, password, tls_mode, from_addr)
 
@@ -82,6 +90,59 @@ def smtp_configured() -> bool:
         and 1 <= config.port <= 65535
         and config.tls_mode in {"none", "ssl", "starttls"}
     )
+
+
+def send_email(
+    *,
+    recipient: str,
+    subject: str,
+    text_body: str,
+    html_body: str,
+    headers: Mapping[str, str] | None = None,
+) -> str | None:
+    """Send a multipart message, returning a safe failure category on error."""
+    try:
+        config = _smtp_config()
+    except ValueError:
+        return "smtp_not_configured"
+    if (
+        not config.host
+        or not config.from_addr
+        or not 1 <= config.port <= 65535
+        or config.tls_mode not in {"none", "ssl", "starttls"}
+    ):
+        return "smtp_not_configured"
+
+    message = EmailMessage()
+    message["Subject"] = subject
+    message["From"] = config.from_addr
+    message["To"] = recipient
+    for name, value in (headers or {}).items():
+        if name in _SAFE_HEADERS:
+            message[name] = value
+    message.set_content(text_body)
+    message.add_alternative(html_body, subtype="html")
+
+    try:
+        if config.tls_mode == "ssl":
+            context = ssl.create_default_context()
+            with smtplib.SMTP_SSL(config.host, config.port, context=context, timeout=15) as server:
+                if config.username and config.password:
+                    server.login(config.username, config.password)
+                server.send_message(message)
+        else:
+            with smtplib.SMTP(config.host, config.port, timeout=15) as server:
+                server.ehlo()
+                if config.tls_mode == "starttls":
+                    server.starttls()
+                    server.ehlo()
+                if config.username and config.password:
+                    server.login(config.username, config.password)
+                server.send_message(message)
+    except (OSError, smtplib.SMTPException):
+        logger.warning("SMTP email delivery failed")
+        return "smtp_error"
+    return None
 
 
 def send_otp_email(to_email: str, otp: str) -> None:
@@ -174,27 +235,14 @@ def send_otp_email(to_email: str, otp: str) -> None:
 </body>
 </html>"""
 
-    msg = MIMEMultipart("alternative")
-    msg["Subject"] = "Your News Dashboard sign-in code"
-    msg["From"] = config.from_addr
-    msg["To"] = to_email
-    msg.attach(MIMEText(html_body, "html"))
+    result = send_email(
+        recipient=to_email,
+        subject="Your News Dashboard sign-in code",
+        text_body=f"Your News Dashboard sign-in code is {otp}. It expires in 10 minutes.",
+        html_body=html_body,
+    )
+    if result is not None:
+        err = "OTP email delivery failed"
+        raise RuntimeError(err)
 
-    if config.tls_mode == "ssl":
-        context = ssl.create_default_context()
-        with smtplib.SMTP_SSL(config.host, config.port, context=context, timeout=15) as server:
-            server.login(config.username, config.password)
-            server.sendmail(config.from_addr, to_email, msg.as_string())
-    elif config.tls_mode == "none":
-        with smtplib.SMTP(config.host, config.port, timeout=15) as server:
-            server.ehlo()
-            server.login(config.username, config.password)
-            server.sendmail(config.from_addr, to_email, msg.as_string())
-    else:
-        with smtplib.SMTP(config.host, config.port, timeout=15) as server:
-            server.ehlo()
-            server.starttls()
-            server.login(config.username, config.password)
-            server.sendmail(config.from_addr, to_email, msg.as_string())
-
-    logger.info("OTP email sent to %s", to_email)
+    logger.info("OTP email sent")
