@@ -75,6 +75,11 @@ def test_briefing_email_opt_in_defaults_false(pg_clean: str) -> None:
         "http://127.0.0.1:5173",
         "http://0.0.0.0:5173",
         "http://192.168.1.4",
+        "https://news.example:not-a-port",
+        "https://news.example:70000",
+        "https://reader:secret@news.example",
+        "https://news.example?tenant=one",
+        "https://news.example#mail",
         "/relative",
     ],
 )
@@ -278,6 +283,33 @@ def test_preparation_failure_is_sanitized_and_retryable(
     assert row["status"] == "retryable_failed"
     assert row["error_code"] == "preparation_failed"
     assert row["error_message"] == "preparation_failed"
+
+
+@pytest.mark.postgres
+def test_delivery_rejects_malformed_public_url(
+    pg_clean: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("APP_BASE_URL", "https://news.example:not-a-port")
+    user_id = _make_user(pg_clean, "email_bad_public_url")
+    now = datetime(2026, 7, 17, 18, 0, tzinfo=timezone.utc)
+    _seed_complete_briefing(pg_clean, user_id, now)
+    with connect(database_url=pg_clean) as conn:
+        conn.execute(
+            "UPDATE users SET email = %s, briefing_email_enabled = TRUE WHERE id = %s",
+            ("reader@example.com", user_id),
+        )
+
+    outcome = deliver_daily_briefing(user_id, now=now, database_url=pg_clean)
+
+    assert outcome.status == "retryable_failed"
+    assert outcome.delivery.attempt_count == 0
+    with connect(database_url=pg_clean) as conn:
+        row = conn.execute(
+            "SELECT error_code FROM briefing_email_deliveries WHERE id = %s",
+            (outcome.delivery.id,),
+        ).fetchone()
+    assert row is not None
+    assert row["error_code"] == "preparation_failed"
 
 
 @pytest.mark.postgres

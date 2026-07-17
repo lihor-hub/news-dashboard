@@ -7,10 +7,10 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Generator
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from types import SimpleNamespace
 from typing import Any
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, call, patch
 
 import pytest
 
@@ -319,6 +319,44 @@ def test_scheduler_revisits_due_retry_after_user_opts_out() -> None:
         now=now,
         email_local_date=now.date(),
     )
+
+
+def test_scheduler_runs_old_retry_and_current_schedule_as_distinct_work() -> None:
+    now = datetime(2026, 7, 18, 21, 0, tzinfo=timezone.utc)
+    old_date = date(2026, 7, 17)
+    fake_conn = _FakeRowsConn(
+        [
+            {
+                "id": 42,
+                "briefing_time": "21:00",
+                "briefing_timezone": "UTC",
+                "briefing_push_enabled": True,
+                "briefing_email_enabled": True,
+                "email_retry_date": old_date,
+            }
+        ]
+    )
+    with (
+        patch("news_dashboard.scheduler.service.datetime") as mock_dt,
+        patch("news_dashboard.db.connect", return_value=fake_conn),
+        patch(
+            "news_dashboard.scheduler.service._generate_briefing_for_user", return_value=True
+        ) as generate,
+    ):
+        mock_dt.now.return_value = now
+        result = _run_per_user_briefings()
+
+    assert generate.call_args_list == [
+        call(
+            42,
+            push_enabled=False,
+            email_enabled=True,
+            now=now,
+            email_local_date=old_date,
+        ),
+        call(42, push_enabled=True, email_enabled=True, now=now),
+    ]
+    assert result == ("success", "2 users targeted, 2 succeeded, 0 failed")
 
 
 def test_per_user_failure_does_not_stop_later_due_user() -> None:

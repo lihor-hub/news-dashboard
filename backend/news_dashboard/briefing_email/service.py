@@ -459,8 +459,17 @@ def _base_url() -> str:
         .rstrip("/")
     )
     parsed = urlsplit(value)
+    # Accessing ``port`` performs urllib's range and numeric validation.
+    _ = parsed.port
     hostname = parsed.hostname
-    invalid_host = not hostname or hostname.lower() == "localhost"
+    invalid_host = (
+        not hostname
+        or hostname.lower() == "localhost"
+        or parsed.username is not None
+        or parsed.password is not None
+        or bool(parsed.query)
+        or bool(parsed.fragment)
+    )
     if hostname and not invalid_host:
         try:
             address = ipaddress.ip_address(hostname)

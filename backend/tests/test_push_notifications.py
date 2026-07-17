@@ -547,6 +547,27 @@ def test_notification_email_requires_public_application_url(client: TestClient) 
     assert response.json()["detail"] == "public application URL is not configured"
 
 
+@pytest.mark.parametrize(
+    "unsafe_url",
+    ["https://news.example:bad", "https://user:pass@news.example", "https://news.example?q=1"],
+)
+def test_notification_email_opt_in_rejects_unsafe_public_origin(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch, unsafe_url: str
+) -> None:
+    monkeypatch.setenv("APP_BASE_URL", unsafe_url)
+    fake_row = {"email": "reader@example.com", "is_guest": False}
+    with (
+        patch("news_dashboard.user_settings.service.connect") as mock_connect,
+        patch("news_dashboard.user_settings.service.smtp_configured", return_value=True),
+    ):
+        ctx = mock_connect.return_value.__enter__.return_value
+        ctx.execute.return_value.fetchone.return_value = fake_row
+        response = client.put("/api/settings/notifications", json={"email_enabled": True})
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == "public application URL is not configured"
+
+
 def test_smtp_configured_returns_false_for_malformed_port(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

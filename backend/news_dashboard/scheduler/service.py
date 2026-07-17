@@ -246,15 +246,27 @@ def _run_per_user_briefings() -> tuple[str, str | None] | None:
             logger.warning("Per-user briefing: invalid timezone %s; using UTC", tz_name)
             tz = ZoneInfo("UTC")
         scheduled_now = now.astimezone(tz).strftime("%H:%M") == briefing_time
+        current_local_date = now.astimezone(tz).date()
         retry_date = row.get("email_retry_date")
         retry_due = isinstance(retry_date, date)
-        if scheduled_now or retry_due:
+        user_id = int(row["id"])
+        email_enabled = bool(row.get("briefing_email_enabled"))
+        if retry_due and (not scheduled_now or retry_date != current_local_date):
             scheduled_users.append(
                 (
-                    int(row["id"]),
-                    bool(row.get("briefing_push_enabled")) if scheduled_now else False,
-                    bool(row.get("briefing_email_enabled")) or retry_due,
-                    retry_date if retry_due else None,
+                    user_id,
+                    False,
+                    True,
+                    retry_date,
+                )
+            )
+        if scheduled_now:
+            scheduled_users.append(
+                (
+                    user_id,
+                    bool(row.get("briefing_push_enabled")),
+                    email_enabled,
+                    None,
                 )
             )
 
