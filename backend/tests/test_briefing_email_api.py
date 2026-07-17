@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from typing import Any
 
 import pytest
@@ -116,6 +117,55 @@ def test_preview_sends_latest_complete_briefing_without_changing_state(
     assert f"/briefings/{briefing_id}" in sent[0]["html_body"]
 
 
+def test_preview_hydrates_cited_article_links(pg_clean: str, monkeypatch: Any) -> None:
+    monkeypatch.setenv("DATABASE_URL", pg_clean)
+    monkeypatch.setenv("NEWS_DASHBOARD_URL", "https://news.example")
+    user_id = _user(pg_clean, "preview_sources")
+    with connect(database_url=pg_clean) as conn:
+        conn.execute(
+            """
+            INSERT INTO sources(slug, name, url, category, enabled, kind)
+            VALUES ('source-test', 'Source Test', 'https://source.example',
+                    'tech', TRUE, 'rss_feed')
+            """
+        )
+        article = conn.execute(
+            """
+            INSERT INTO articles(url, canonical_url, title, source_slug, source_name,
+                                 category, kind, state)
+            VALUES ('https://source.example/story', 'https://source.example/story',
+                    'Source story', 'source-test', 'Source Test', 'tech', 'rss_feed', 'today')
+            RETURNING id
+            """
+        ).fetchone()
+        assert article is not None
+        article_id = int(article["id"])
+        briefing = conn.execute(
+            """
+            INSERT INTO briefings(user_id, status, title, summary, content)
+            VALUES (%s, 'complete', 'Daily', 'Summary', %s::jsonb) RETURNING id
+            """,
+            (
+                user_id,
+                json.dumps(
+                    {"sections": [{"title": "AI", "body": "News", "citations": [article_id]}]}
+                ),
+            ),
+        ).fetchone()
+        assert briefing is not None
+        conn.execute(
+            "INSERT INTO briefing_articles(briefing_id, article_id) VALUES (%s, %s)",
+            (int(briefing["id"]), article_id),
+        )
+    sent: list[dict[str, Any]] = []
+    monkeypatch.setattr(service, "send_email", lambda **kwargs: sent.append(kwargs))
+
+    response = _client_for(pg_clean, user_id).post("/api/settings/notifications/email/preview")
+
+    assert response.status_code == 200
+    assert "https://source.example/story" in sent[0]["html_body"]
+
+
 def test_preview_requires_account_email(pg_clean: str, monkeypatch: Any) -> None:
     monkeypatch.setenv("DATABASE_URL", pg_clean)
     user_id = _user(pg_clean, "no_email", email=None)
@@ -142,6 +192,7 @@ def test_preview_requires_complete_briefing(pg_clean: str, monkeypatch: Any) -> 
 def test_preview_has_per_user_cooldown(pg_clean: str, monkeypatch: Any) -> None:
     monkeypatch.setattr(service, "_preview_sent_at", type(service._preview_sent_at)())
     monkeypatch.setenv("DATABASE_URL", pg_clean)
+    monkeypatch.setenv("NEWS_DASHBOARD_URL", "https://news.example")
     user_id = _user(pg_clean, "cooldown")
     _complete_briefing(pg_clean, user_id)
     monkeypatch.setattr(service, "send_email", lambda **_: None)
@@ -195,6 +246,7 @@ def test_preview_failure_releases_claim_after_database_environment_changes(
 ) -> None:
     monkeypatch.setattr(service, "_preview_sent_at", type(service._preview_sent_at)())
     monkeypatch.setenv("DATABASE_URL", pg_clean)
+    monkeypatch.setenv("NEWS_DASHBOARD_URL", "https://news.example")
     user_id = _user(pg_clean, "release_changed_environment")
     _complete_briefing(pg_clean, user_id)
 

@@ -470,6 +470,7 @@ def test_put_notification_settings_enables_email(
     monkeypatch.setenv("OTP_SMTP_HOST", "smtp.example.com")
     monkeypatch.setenv("OTP_SMTP_USER", "mailer@example.com")
     monkeypatch.setenv("OTP_SMTP_PASS", "secret")
+    monkeypatch.setenv("NEWS_DASHBOARD_URL", "https://news.example")
     fake_row: dict[str, Any] = {
         "briefing_time": "09:00",
         "briefing_push_enabled": False,
@@ -528,6 +529,24 @@ def test_notification_email_requires_smtp_configuration(client: TestClient) -> N
     assert response.json()["detail"] == "email delivery is not configured"
 
 
+def test_notification_email_requires_public_application_url(client: TestClient) -> None:
+    fake_row = {"email": "reader@example.com", "is_guest": False}
+    with (
+        patch("news_dashboard.user_settings.service.connect") as mock_connect,
+        patch("news_dashboard.user_settings.service.smtp_configured", return_value=True),
+        patch(
+            "news_dashboard.user_settings.service.public_base_url_configured",
+            return_value=False,
+        ),
+    ):
+        ctx = mock_connect.return_value.__enter__.return_value
+        ctx.execute.return_value.fetchone.return_value = fake_row
+        response = client.put("/api/settings/notifications", json={"email_enabled": True})
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == "public application URL is not configured"
+
+
 def test_smtp_configured_returns_false_for_malformed_port(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -547,6 +566,7 @@ def test_put_notification_settings_persists_email_opt_in(
     monkeypatch.setenv("OTP_SMTP_HOST", "smtp.example.com")
     monkeypatch.setenv("OTP_SMTP_USER", "mailer@example.com")
     monkeypatch.setenv("OTP_SMTP_PASS", "secret")
+    monkeypatch.setenv("NEWS_DASHBOARD_URL", "https://news.example")
     user = create_user(
         "email_settings_integration",
         "password123",

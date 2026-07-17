@@ -253,6 +253,74 @@ def test_scheduler_email_only_user_generates_and_delivers() -> None:
     assert result == ("success", "1 user targeted, 1 succeeded, 0 failed")
 
 
+def test_scheduler_revisits_due_email_retry_outside_scheduled_minute() -> None:
+    now = datetime(2026, 7, 17, 19, 16, tzinfo=timezone.utc)
+    fake_conn = _FakeRowsConn(
+        [
+            {
+                "id": 42,
+                "briefing_time": "21:00",
+                "briefing_timezone": "Europe/Bucharest",
+                "briefing_push_enabled": True,
+                "briefing_email_enabled": True,
+                "email_retry_date": now.date(),
+            }
+        ]
+    )
+    with (
+        patch("news_dashboard.scheduler.service.datetime") as mock_dt,
+        patch("news_dashboard.db.connect", return_value=fake_conn),
+        patch(
+            "news_dashboard.scheduler.service._generate_briefing_for_user", return_value=True
+        ) as generate,
+    ):
+        mock_dt.now.return_value = now
+        result = _run_per_user_briefings()
+
+    generate.assert_called_once_with(
+        42,
+        push_enabled=False,
+        email_enabled=True,
+        now=now,
+        email_local_date=now.date(),
+    )
+    assert "retryable_failed" in fake_conn.sql
+    assert result == ("success", "1 user targeted, 1 succeeded, 0 failed")
+
+
+def test_scheduler_revisits_due_retry_after_user_opts_out() -> None:
+    now = datetime(2026, 7, 17, 12, 16, tzinfo=timezone.utc)
+    fake_conn = _FakeRowsConn(
+        [
+            {
+                "id": 42,
+                "briefing_time": "21:00",
+                "briefing_timezone": "UTC",
+                "briefing_push_enabled": False,
+                "briefing_email_enabled": False,
+                "email_retry_date": now.date(),
+            }
+        ]
+    )
+    with (
+        patch("news_dashboard.scheduler.service.datetime") as mock_dt,
+        patch("news_dashboard.db.connect", return_value=fake_conn),
+        patch(
+            "news_dashboard.scheduler.service._generate_briefing_for_user", return_value=True
+        ) as generate,
+    ):
+        mock_dt.now.return_value = now
+        _run_per_user_briefings()
+
+    generate.assert_called_once_with(
+        42,
+        push_enabled=False,
+        email_enabled=True,
+        now=now,
+        email_local_date=now.date(),
+    )
+
+
 def test_per_user_failure_does_not_stop_later_due_user() -> None:
     fake_conn = _FakeRowsConn(
         [

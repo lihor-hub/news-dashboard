@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ipaddress
 import os
 import threading
 import time
@@ -9,7 +10,7 @@ from collections import OrderedDict
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone, tzinfo
 from typing import Any
-from urllib.parse import quote
+from urllib.parse import quote, urlsplit
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from news_dashboard.briefing_email.rendering import render_briefing_email
@@ -180,13 +181,18 @@ def _find_local_day_briefing(
             """,
             (user_id, start, end),
         ).fetchone()
-    return row_to_dict(row) if row is not None else None
+    if row is None:
+        return None
+    from news_dashboard.briefings.service import get_briefing
+
+    return get_briefing(int(row["id"]), database_url=database_url, user_id=user_id)
 
 
 def deliver_daily_briefing(  # noqa: PLR0911, PLR0912, PLR0915  # explicit ledger states
     user_id: int,
     *,
     now: datetime | None = None,
+    local_delivery_date: date | None = None,
     database_url: str | None = None,
 ) -> DeliveryOutcome:
     """Generate or reuse and deliver today's canonical briefing at most once."""
@@ -204,7 +210,7 @@ def deliver_daily_briefing(  # noqa: PLR0911, PLR0912, PLR0915  # explicit ledge
     except ZoneInfoNotFoundError:
         timezone_name = "UTC"
         zone = timezone.utc
-    local_date = instant.astimezone(zone).date()
+    local_date = local_delivery_date or instant.astimezone(zone).date()
     delivery = _acquire_delivery(user_id, local_date, instant, database_url)
     if delivery is None:
         with connect(database_url=database_url) as conn:
@@ -441,13 +447,45 @@ def _release_preview_cooldown(key: _PreviewCooldownKey) -> None:
 
 
 def _base_url() -> str:
-    """Resolve the public link base, preferring the deployment-wide contract."""
-    return (
-        os.getenv("APP_BASE_URL")
-        or os.getenv("NEWS_DASHBOARD_BASE_URL")
-        or os.getenv("NEWS_DASHBOARD_URL")
-        or "http://localhost:5173"
-    ).rstrip("/")
+    """Resolve and validate the public HTTP(S) link base."""
+    value = (
+        (
+            os.getenv("APP_BASE_URL")
+            or os.getenv("NEWS_DASHBOARD_BASE_URL")
+            or os.getenv("NEWS_DASHBOARD_URL")
+            or ""
+        )
+        .strip()
+        .rstrip("/")
+    )
+    parsed = urlsplit(value)
+    hostname = parsed.hostname
+    invalid_host = not hostname or hostname.lower() == "localhost"
+    if hostname and not invalid_host:
+        try:
+            address = ipaddress.ip_address(hostname)
+            invalid_host = (
+                address.is_loopback
+                or address.is_private
+                or address.is_link_local
+                or address.is_unspecified
+                or address.is_reserved
+            )
+        except ValueError:
+            invalid_host = False
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc or invalid_host:
+        msg = "a public absolute HTTP(S) application URL is required"
+        raise ValueError(msg)
+    return value
+
+
+def public_base_url_configured() -> bool:
+    """Return whether email links can safely target the public application."""
+    try:
+        _base_url()
+    except ValueError:
+        return False
+    return True
 
 
 def _load_preview(database_url: str | None, user_id: int) -> tuple[dict[str, Any], dict[str, Any]]:
@@ -458,7 +496,7 @@ def _load_preview(database_url: str | None, user_id: int) -> tuple[dict[str, Any
         ).fetchone()
         briefing_row = conn.execute(
             """
-            SELECT id, title, summary, content, created_at
+            SELECT id
             FROM briefings
             WHERE user_id = %s AND status = 'complete'
             ORDER BY created_at DESC, id DESC
@@ -472,7 +510,12 @@ def _load_preview(database_url: str | None, user_id: int) -> tuple[dict[str, Any
         raise PreviewUnavailableError(_GUEST_ACCOUNT)
     if briefing_row is None:
         raise PreviewUnavailableError(_MISSING_BRIEFING)
-    return row_to_dict(user_row), row_to_dict(briefing_row)
+    from news_dashboard.briefings.service import get_briefing
+
+    briefing = get_briefing(int(briefing_row["id"]), database_url=database_url, user_id=user_id)
+    if briefing is None:
+        raise PreviewUnavailableError(_MISSING_BRIEFING)
+    return row_to_dict(user_row), briefing
 
 
 def send_preview(user_id: int, *, database_url: str | None = None) -> bool:

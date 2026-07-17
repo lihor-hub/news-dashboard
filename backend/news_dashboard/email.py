@@ -78,15 +78,16 @@ def _smtp_config() -> _SmtpConfig:
 
 
 def smtp_configured() -> bool:
-    """Return whether the resolved SMTP transport has required credentials."""
+    """Return whether SMTP is usable, with either paired or no credentials."""
     try:
         config = _smtp_config()
     except ValueError:
         return False
+    credentials_valid = bool(config.username) == bool(config.password)
     return bool(
         config.host
-        and config.username
-        and config.password
+        and config.from_addr
+        and credentials_valid
         and 1 <= config.port <= 65535
         and config.tls_mode in {"none", "ssl", "starttls"}
     )
@@ -108,6 +109,7 @@ def send_email(
     if (
         not config.host
         or not config.from_addr
+        or bool(config.username) != bool(config.password)
         or not 1 <= config.port <= 65535
         or config.tls_mode not in {"none", "ssl", "starttls"}
     ):
@@ -147,12 +149,10 @@ def send_email(
 
 def send_otp_email(to_email: str, otp: str) -> None:
     """Send a 6-digit OTP to *to_email* via the configured SMTP relay."""
-    config = _smtp_config()
-    if not config.host or not config.username or not config.password:
+    if not smtp_configured():
         err = (
-            "OTP SMTP is not configured. Set OTP_SMTP_HOST/OTP_SMTP_USER/OTP_SMTP_PASS "
-            "(or the digest email's SMTP_HOST/SMTP_USER/SMTP_PASS, or the legacy "
-            "Gmail-only SMTP_USERNAME/SMTP_PASSWORD alias) to send OTP emails"
+            "OTP SMTP is not configured. Set a host and from address; credentials may be "
+            "omitted for an unauthenticated relay or supplied as a username/password pair."
         )
         raise RuntimeError(err)
 

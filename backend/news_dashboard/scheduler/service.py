@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 import os
 from collections.abc import Callable
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -139,6 +139,7 @@ def _generate_briefing_for_user(
     push_enabled: bool = True,
     email_enabled: bool = False,
     now: datetime | None = None,
+    email_local_date: date | None = None,
 ) -> bool:
     """Generate and push a briefing for one user. Returns True on success."""
     from news_dashboard.briefings.service import (
@@ -154,7 +155,10 @@ def _generate_briefing_for_user(
         if email_enabled:
             from news_dashboard.briefing_email.service import deliver_daily_briefing
 
-            outcome = deliver_daily_briefing(user_id, now=now)
+            delivery_kwargs: dict[str, Any] = {"now": now}
+            if email_local_date is not None:
+                delivery_kwargs["local_delivery_date"] = email_local_date
+            outcome = deliver_daily_briefing(user_id, **delivery_kwargs)
             email_ok = outcome.status in {"sent", "skipped", "unsubscribed"}
             if not email_ok:
                 logger.warning(
@@ -216,15 +220,23 @@ def _run_per_user_briefings() -> tuple[str, str | None] | None:
         with connect() as conn:
             rows = conn.execute(
                 "SELECT id, briefing_time, briefing_timezone, briefing_push_enabled,"
-                " briefing_email_enabled FROM users"
-                " WHERE briefing_push_enabled = TRUE OR briefing_email_enabled = TRUE",
+                " briefing_email_enabled, (SELECT d.local_delivery_date"
+                " FROM briefing_email_deliveries d"
+                " WHERE d.user_id = users.id AND d.status = 'retryable_failed'"
+                " AND d.next_attempt_at <= %s"
+                " ORDER BY d.next_attempt_at, d.id LIMIT 1) AS email_retry_date FROM users"
+                " WHERE briefing_push_enabled = TRUE OR briefing_email_enabled = TRUE"
+                " OR EXISTS (SELECT 1 FROM briefing_email_deliveries due"
+                " WHERE due.user_id = users.id AND due.status = 'retryable_failed'"
+                " AND due.next_attempt_at <= %s)",
+                (now, now),
             ).fetchall()
         user_rows = [row_to_dict(r) for r in rows]
     except Exception as exc:
         logger.exception("Per-user briefing: failed to query users")
         return "failure", str(exc)[:500]
 
-    scheduled_users: list[tuple[int, bool, bool]] = []
+    scheduled_users: list[tuple[int, bool, bool, date | None]] = []
     for row in user_rows:
         tz_name: str = row.get("briefing_timezone") or "UTC"
         briefing_time: str = row.get("briefing_time") or "09:00"
@@ -233,24 +245,32 @@ def _run_per_user_briefings() -> tuple[str, str | None] | None:
         except (ZoneInfoNotFoundError, KeyError):
             logger.warning("Per-user briefing: invalid timezone %s; using UTC", tz_name)
             tz = ZoneInfo("UTC")
-        if now.astimezone(tz).strftime("%H:%M") == briefing_time:
+        scheduled_now = now.astimezone(tz).strftime("%H:%M") == briefing_time
+        retry_date = row.get("email_retry_date")
+        retry_due = isinstance(retry_date, date)
+        if scheduled_now or retry_due:
             scheduled_users.append(
                 (
                     int(row["id"]),
-                    bool(row.get("briefing_push_enabled")),
-                    bool(row.get("briefing_email_enabled")),
+                    bool(row.get("briefing_push_enabled")) if scheduled_now else False,
+                    bool(row.get("briefing_email_enabled")) or retry_due,
+                    retry_date if retry_due else None,
                 )
             )
 
     if not scheduled_users:
         return None  # nothing scheduled this minute — skip recording
 
-    results = [
-        _generate_briefing_for_user(
-            uid, push_enabled=push_enabled, email_enabled=email_enabled, now=now
-        )
-        for uid, push_enabled, email_enabled in scheduled_users
-    ]
+    results = []
+    for uid, push_enabled, email_enabled, retry_date in scheduled_users:
+        kwargs: dict[str, Any] = {
+            "push_enabled": push_enabled,
+            "email_enabled": email_enabled,
+            "now": now,
+        }
+        if retry_date is not None:
+            kwargs["email_local_date"] = retry_date
+        results.append(_generate_briefing_for_user(uid, **kwargs))
     succeeded = sum(1 for ok in results if ok)
     failed = len(results) - succeeded
     total = len(scheduled_users)

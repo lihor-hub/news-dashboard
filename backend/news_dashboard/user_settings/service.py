@@ -7,6 +7,7 @@ from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from news_dashboard.analytics import analytics_globally_enabled
+from news_dashboard.briefing_email.service import public_base_url_configured
 from news_dashboard.db import connect
 from news_dashboard.email import smtp_configured
 from news_dashboard.user_settings.models import NotificationSettingsUpdate
@@ -38,7 +39,7 @@ def _notification_payload(row: Any, *, include_vapid_key: bool) -> dict[str, Any
         "email_enabled": bool(row["briefing_email_enabled"]),
         "email_address": email or None,
         "email_available": bool(email and not row["is_guest"]),
-        "email_delivery_configured": smtp_configured(),
+        "email_delivery_configured": smtp_configured() and public_base_url_configured(),
         "recap_enabled": bool(row["recap_enabled"]),
         "recap_day": row["recap_day"] or "mon",
         "briefing_include_reading_list": bool(row["briefing_include_reading_list"]),
@@ -117,6 +118,9 @@ def update_notification_settings(
             raise ValueError(msg)
         if not smtp_configured():
             msg = "email delivery is not configured"
+            raise ValueError(msg)
+        if not public_base_url_configured():
+            msg = "public application URL is not configured"
             raise ValueError(msg)
 
     updates = _notification_updates(payload)

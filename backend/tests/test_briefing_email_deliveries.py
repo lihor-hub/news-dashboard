@@ -7,6 +7,7 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime, timedelta, timezone
 from threading import Barrier
 from typing import Any
+from unittest.mock import patch
 
 import psycopg
 import pytest
@@ -19,8 +20,14 @@ from news_dashboard.briefing_email.service import (
     _transition_delivery,
     claim_delivery,
     deliver_daily_briefing,
+    public_base_url_configured,
 )
 from news_dashboard.db import connect
+
+
+@pytest.fixture(autouse=True)
+def _public_email_base_url(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("NEWS_DASHBOARD_URL", "https://news.example")
 
 
 def _make_user(database_url: str, username: str) -> int:
@@ -57,6 +64,76 @@ def test_briefing_email_opt_in_defaults_false(pg_clean: str) -> None:
 
     assert row is not None
     assert row["briefing_email_enabled"] is False
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        "",
+        "localhost:5173",
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://0.0.0.0:5173",
+        "http://192.168.1.4",
+        "/relative",
+    ],
+)
+def test_public_email_base_url_rejects_non_public_values(
+    value: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv("APP_BASE_URL", raising=False)
+    monkeypatch.delenv("NEWS_DASHBOARD_BASE_URL", raising=False)
+    monkeypatch.setenv("NEWS_DASHBOARD_URL", value)
+    assert public_base_url_configured() is False
+
+
+@pytest.mark.postgres
+def test_scheduler_tick_retries_due_delivery_outside_user_scheduled_minute(
+    pg_clean: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from news_dashboard.scheduler.service import _run_per_user_briefings
+
+    monkeypatch.setenv("DATABASE_URL", pg_clean)
+    monkeypatch.setenv("NEWS_DASHBOARD_URL", "https://news.example")
+    user_id = _make_user(pg_clean, "scheduler_due_retry")
+    now = datetime(2026, 7, 18, 0, 16, tzinfo=timezone.utc)
+    delivery_date = date(2026, 7, 17)
+    briefing_id = _seed_complete_briefing(pg_clean, user_id, now - timedelta(minutes=20))
+    with connect(database_url=pg_clean) as conn:
+        conn.execute(
+            """
+            UPDATE users SET email = 'reader@example.com', briefing_email_enabled = TRUE,
+                             briefing_time = '21:00', briefing_timezone = 'UTC'
+            WHERE id = %s
+            """,
+            (user_id,),
+        )
+        conn.execute(
+            """
+            INSERT INTO briefing_email_deliveries(
+                user_id, local_delivery_date, status, briefing_id, next_attempt_at
+            ) VALUES (%s, %s, 'retryable_failed', %s, %s)
+            """,
+            (user_id, delivery_date, briefing_id, now - timedelta(minutes=1)),
+        )
+
+    with (
+        patch("news_dashboard.scheduler.service.datetime") as scheduler_datetime,
+        patch("news_dashboard.briefing_email.service.smtp_configured", return_value=True),
+        patch("news_dashboard.briefing_email.service.send_email", return_value=None),
+    ):
+        scheduler_datetime.now.return_value = now
+        result = _run_per_user_briefings()
+
+    assert result == ("success", "1 user targeted, 1 succeeded, 0 failed")
+    with connect(database_url=pg_clean) as conn:
+        delivery = conn.execute(
+            "SELECT status, attempt_count FROM briefing_email_deliveries WHERE user_id = %s",
+            (user_id,),
+        ).fetchone()
+    assert delivery is not None
+    assert delivery["status"] == "sent"
+    assert delivery["attempt_count"] == 1
 
 
 @pytest.mark.postgres

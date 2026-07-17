@@ -10,7 +10,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from news_dashboard.email import send_email
+from news_dashboard.email import send_email, smtp_configured
 
 
 class _FakeSMTP:
@@ -150,6 +150,18 @@ def test_otp_email_falls_back_to_digest_generic_smtp_vars() -> None:
     assert msg["From"] == "digest-user"
 
 
+def test_otp_email_supports_unauthenticated_relay() -> None:
+    fake_cls = _fresh_fake_smtp()
+    env = {
+        "SMTP_HOST": "relay.internal",
+        "SMTP_FROM": "signin@example.com",
+        "SMTP_TLS": "none",
+    }
+    msg = _capture_sent_message("user@example.com", "121212", env=env, fake_cls=fake_cls)
+    assert msg["From"] == "signin@example.com"
+    assert not hasattr(fake_cls, "login_args")
+
+
 def test_otp_email_gmail_alias_still_works() -> None:
     """Legacy SMTP_USERNAME/SMTP_PASSWORD deployments keep defaulting to Gmail."""
     fake_cls = _fresh_fake_smtp()
@@ -216,6 +228,29 @@ def test_send_email_builds_plain_and_html_alternatives() -> None:
     assert html_part is not None
     assert plain_part.get_content().strip() == "plain text"
     assert html_part.get_content().strip() == "<p>html</p>"
+
+
+def test_smtp_configured_accepts_unauthenticated_relay() -> None:
+    env = {
+        "SMTP_HOST": "relay.internal",
+        "SMTP_FROM": "briefings@example.net",
+        "SMTP_PORT": "25",
+        "SMTP_TLS": "none",
+    }
+    with patch.dict("os.environ", env, clear=True):
+        assert smtp_configured() is True
+
+
+@pytest.mark.parametrize(("username", "password"), [("relay-user", ""), ("", "relay-pass")])
+def test_smtp_configured_rejects_partial_credentials(username: str, password: str) -> None:
+    env = {
+        "SMTP_HOST": "relay.internal",
+        "SMTP_FROM": "briefings@example.net",
+        "SMTP_USER": username,
+        "SMTP_PASS": password,
+    }
+    with patch.dict("os.environ", env, clear=True):
+        assert smtp_configured() is False
 
 
 def test_send_email_adds_one_click_headers() -> None:
