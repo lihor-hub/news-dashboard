@@ -23,7 +23,7 @@ _MISSING_EMAIL = "missing_email"
 _GUEST_ACCOUNT = "guest_account"
 _MISSING_BRIEFING = "missing_briefing"
 _DELIVERY_FAILED = "delivery_failed"
-_preview_sent_at: OrderedDict[tuple[str, int], float] = OrderedDict()
+_preview_sent_at: OrderedDict[tuple[str, str, int], float] = OrderedDict()
 _preview_lock = threading.Lock()
 _STALE_CLAIM_AFTER = timedelta(minutes=30)
 _RETRY_DELAY = timedelta(minutes=15)
@@ -414,8 +414,13 @@ def unsubscribe_user(user_id: int, *, database_url: str | None = None) -> bool:
     return row is not None
 
 
-def _claim_preview_cooldown(user_id: int) -> None:
-    key = ("briefing_email_preview", user_id)
+def _preview_cooldown_key(database_url: str | None, user_id: int) -> tuple[str, str, int]:
+    database_identity = database_url or os.getenv("DATABASE_URL") or ""
+    return ("briefing_email_preview", database_identity, user_id)
+
+
+def _claim_preview_cooldown(user_id: int, *, database_url: str | None = None) -> None:
+    key = _preview_cooldown_key(database_url, user_id)
     now = time.monotonic()
     with _preview_lock:
         previous = _preview_sent_at.get(key)
@@ -427,9 +432,9 @@ def _claim_preview_cooldown(user_id: int) -> None:
             _preview_sent_at.popitem(last=False)
 
 
-def _release_preview_cooldown(user_id: int) -> None:
+def _release_preview_cooldown(user_id: int, *, database_url: str | None = None) -> None:
     with _preview_lock:
-        _preview_sent_at.pop(("briefing_email_preview", user_id), None)
+        _preview_sent_at.pop(_preview_cooldown_key(database_url, user_id), None)
 
 
 def _base_url() -> str:
@@ -470,7 +475,7 @@ def _load_preview(database_url: str | None, user_id: int) -> tuple[dict[str, Any
 def send_preview(user_id: int, *, database_url: str | None = None) -> bool:
     """Render and send the latest complete briefing without touching schedule state."""
     user, briefing = _load_preview(database_url, user_id)
-    _claim_preview_cooldown(user_id)
+    _claim_preview_cooldown(user_id, database_url=database_url)
     try:
         timezone_name = str(user.get("briefing_timezone") or "UTC")
         try:
@@ -501,9 +506,9 @@ def send_preview(user_id: int, *, database_url: str | None = None) -> bool:
             },
         )
     except Exception:
-        _release_preview_cooldown(user_id)
+        _release_preview_cooldown(user_id, database_url=database_url)
         raise
     if error is not None:
-        _release_preview_cooldown(user_id)
+        _release_preview_cooldown(user_id, database_url=database_url)
         raise PreviewUnavailableError(_DELIVERY_FAILED)
     return True

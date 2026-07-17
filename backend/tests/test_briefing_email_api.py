@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
+import pytest
 from fastapi.testclient import TestClient
 
 from news_dashboard.auth import create_user, require_auth
@@ -139,6 +140,7 @@ def test_preview_requires_complete_briefing(pg_clean: str, monkeypatch: Any) -> 
 
 
 def test_preview_has_per_user_cooldown(pg_clean: str, monkeypatch: Any) -> None:
+    monkeypatch.setattr(service, "_preview_sent_at", type(service._preview_sent_at)())
     monkeypatch.setenv("DATABASE_URL", pg_clean)
     user_id = _user(pg_clean, "cooldown")
     _complete_briefing(pg_clean, user_id)
@@ -150,3 +152,21 @@ def test_preview_has_per_user_cooldown(pg_clean: str, monkeypatch: Any) -> None:
 
     assert first.status_code == 200
     assert second.status_code == 429
+
+
+def test_preview_cooldown_is_scoped_to_database_identity(monkeypatch: Any) -> None:
+    monkeypatch.setattr(service, "_preview_sent_at", type(service._preview_sent_at)())
+    user_id = 7
+    first_database = "postgresql://localhost/first"
+    second_database = "postgresql://localhost/second"
+
+    service._claim_preview_cooldown(user_id, database_url=first_database)
+    with pytest.raises(service.PreviewCooldownError):
+        service._claim_preview_cooldown(user_id, database_url=first_database)
+
+    service._claim_preview_cooldown(user_id, database_url=second_database)
+    service._release_preview_cooldown(user_id, database_url=first_database)
+
+    service._claim_preview_cooldown(user_id, database_url=first_database)
+    with pytest.raises(service.PreviewCooldownError):
+        service._claim_preview_cooldown(user_id, database_url=second_database)
