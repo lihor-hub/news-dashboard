@@ -19,7 +19,9 @@ from news_dashboard.body_fetch import (
     _AI_PROMPT,
     _crawl4ai_extract_body,
     _normalize_crawl4ai_result,
+    _static_extract_body,
     extract_body,
+    extract_public_content,
     fetch_and_cache_body,
     get_article,
     prefetch_article_bodies,
@@ -94,14 +96,17 @@ def test_extract_body_ok() -> None:
       <nav>skip nav</nav>
       <main>
         <p>This is a long enough paragraph that should be extracted by the body parser.</p>
-        <p>Another paragraph with sufficient content to pass the forty-char filter.</p>
+        <p>Another paragraph with sufficient content to pass the forty-char filter and
+        explain the technical topic with enough context for a useful generated lesson.</p>
+        <p>A final paragraph adds practical consequences, examples, and tradeoffs so the
+        extracted article is substantial rather than a title or navigation fragment.</p>
       </main>
       <footer>skip footer</footer>
     </body></html>
     """
     url, thread = _start_server(html)
     with _allow_local_body_fetches():
-        body, status = extract_body(url)
+        body, status, _reason = _static_extract_body(url)
     thread.join(timeout=2)
     assert status == "ok"
     assert "long enough paragraph" in body
@@ -123,7 +128,7 @@ def test_extract_body_resumes_after_void_elements_in_skipped_header() -> None:
     """
     url, thread = _start_server(html)
     with _allow_local_body_fetches():
-        body, status = extract_body(url)
+        body, status, _reason = _static_extract_body(url)
     thread.join(timeout=2)
     assert status == "ok"
     assert "article paragraph follows" in body
@@ -151,6 +156,99 @@ def test_extract_body_empty_page_returns_error() -> None:
     assert status == "error"
 
 
+def _substantial_extracted_text() -> str:
+    paragraph = (
+        "This extracted article paragraph explains a technical idea with detailed context, "
+        "examples, limitations, tradeoffs, and practical consequences for an interested reader."
+    )
+    return f"{paragraph}\n\n{paragraph}"
+
+
+def test_extract_public_content_stops_after_accepted_static_candidate() -> None:
+    text = _substantial_extracted_text()
+    with (
+        patch("news_dashboard.body_fetch._static_extract_body", return_value=(text, "ok", None)),
+        patch("news_dashboard.body_fetch._selenium_extract_body") as selenium,
+        patch("news_dashboard.body_fetch._crawl4ai_extract_body") as crawl,
+        patch("news_dashboard.body_fetch._ai_extract_body") as ai,
+    ):
+        result = extract_public_content("https://example.com/article")
+
+    assert result.status == "ok"
+    assert result.method == "static"
+    assert [attempt.method for attempt in result.attempts] == ["static"]
+    selenium.assert_not_called()
+    crawl.assert_not_called()
+    ai.assert_not_called()
+
+
+def test_extract_public_content_falls_back_when_static_candidate_is_too_short() -> None:
+    rendered = _substantial_extracted_text()
+    with (
+        patch(
+            "news_dashboard.body_fetch._static_extract_body",
+            return_value=("Page title", "ok", None),
+        ),
+        patch(
+            "news_dashboard.body_fetch._selenium_extract_body",
+            return_value=(rendered, "ok"),
+        ),
+    ):
+        result = extract_public_content(
+            "https://example.com/article", allow_ai=False, allow_crawl4ai=False
+        )
+
+    assert result.status == "ok"
+    assert result.method == "selenium"
+    assert [attempt.status for attempt in result.attempts] == ["rejected", "accepted"]
+
+
+def test_extract_public_content_uses_crawl4ai_then_optional_ai() -> None:
+    ai_text = _substantial_extracted_text()
+    with (
+        patch(
+            "news_dashboard.body_fetch._static_extract_body",
+            return_value=("", "error", "blocked"),
+        ),
+        patch("news_dashboard.body_fetch._selenium_extract_body", return_value=("", "error")),
+        patch("news_dashboard.body_fetch._crawl4ai_extract_body", return_value=("", "error")),
+        patch("news_dashboard.body_fetch._ai_extract_body", return_value=(ai_text, "ok")) as ai,
+    ):
+        result = extract_public_content("https://example.com/article", user_id=42)
+
+    assert result.status == "ok"
+    assert result.method == "ai"
+    assert [attempt.method for attempt in result.attempts] == [
+        "static",
+        "selenium",
+        "crawl4ai",
+        "ai",
+    ]
+    ai.assert_called_once_with("https://example.com/article", user_id=42)
+
+
+def test_extract_public_content_skips_ai_and_preserves_blocked_failure() -> None:
+    with (
+        patch(
+            "news_dashboard.body_fetch._static_extract_body",
+            return_value=("", "error", "blocked"),
+        ),
+        patch("news_dashboard.body_fetch._selenium_extract_body", return_value=("", "error")),
+        patch("news_dashboard.body_fetch._crawl4ai_extract_body", return_value=("", "error")),
+        patch("news_dashboard.body_fetch._ai_extract_body") as ai,
+    ):
+        result = extract_public_content("https://example.com/article", allow_ai=False)
+
+    assert result.status == "error"
+    assert result.failure_reason == "blocked"
+    assert [attempt.method for attempt in result.attempts] == [
+        "static",
+        "selenium",
+        "crawl4ai",
+    ]
+    ai.assert_not_called()
+
+
 # ── fetch_and_cache_body ──────────────────────────────────────────────────────
 
 
@@ -161,7 +259,10 @@ def test_fetch_and_cache_body_success(tmp_path: Path) -> None:
     html = b"""
     <html><body>
       <p>This article body has enough text content to be considered valid extraction.</p>
-      <p>Second paragraph with more meaningful content for the reader experience.</p>
+      <p>Second paragraph with more meaningful content for the reader experience and enough
+      technical explanation to ground a useful generated lesson in the original source.</p>
+      <p>A third paragraph supplies examples, tradeoffs, and practical consequences rather
+      than leaving the extractor with only a title or a short navigation fragment.</p>
     </body></html>
     """
     url, thread = _start_server(html)
@@ -420,7 +521,10 @@ def test_prefetch_article_bodies_fetches_missing(tmp_path: Path) -> None:
     html = b"""
     <html><body>
       <p>Prefetch test paragraph that is long enough to be extracted by the parser.</p>
-      <p>Another paragraph with enough content to make it past the forty-char minimum.</p>
+      <p>Another paragraph with enough content to explain the technical subject and provide
+      useful context for a reader who has not encountered the underlying idea before.</p>
+      <p>The final paragraph adds examples and practical consequences so the candidate passes
+      the same quality gate used for interactive article and lesson extraction.</p>
     </body></html>
     """
     url, thread = _start_server(html)
@@ -788,7 +892,12 @@ def test_fetch_and_cache_body_ai_fallback_result_is_cached(tmp_path: Path) -> No
 
 def test_extract_body_falls_back_to_selenium_when_static_empty() -> None:
     url, thread = _start_server(b"<html><body></body></html>")
-    spa_content = "SPA article content rendered by JavaScript and extracted by headless browser."
+    spa_content = (
+        "SPA article content rendered by JavaScript explains the technical topic in detail.\n\n"
+        "A second meaningful paragraph provides examples, tradeoffs, and enough context for "
+        "a generated lesson to remain grounded in the rendered source material while explaining "
+        "the important implementation details, limitations, and practical consequences clearly."
+    )
     with (
         _allow_local_body_fetches(),
         patch(
@@ -806,7 +915,10 @@ def test_extract_body_falls_back_to_selenium_when_static_empty() -> None:
 def test_extract_body_does_not_call_selenium_when_static_ok() -> None:
     html = b"""
     <html><body>
-      <p>This is a long enough paragraph that should be extracted by the body parser.</p>
+      <p>This is a long enough paragraph that should be extracted by the body parser and
+      includes enough technical context to make the first block meaningful to a learner.</p>
+      <p>A second paragraph explains examples and consequences so static extraction can pass
+      the shared quality gate without invoking the rendered browser fallback.</p>
     </body></html>
     """
     url, thread = _start_server(html)

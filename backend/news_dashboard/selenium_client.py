@@ -12,11 +12,12 @@ from selenium.common.exceptions import NoSuchElementException, TimeoutException
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
-from selenium.webdriver.support.expected_conditions import presence_of_element_located
 from selenium.webdriver.support.wait import WebDriverWait
 from webdriver_manager.chrome import ChromeDriverManager
 
+from news_dashboard.content_extraction import assess_extracted_text
 from news_dashboard.scraper import USER_AGENT
+from news_dashboard.url_safety import validate_server_fetch_url
 
 logger = logging.getLogger(__name__)
 
@@ -251,6 +252,15 @@ def fetch_spa_html(url: str, timeout: float = _DEFAULT_TIMEOUT) -> str:
     return _fetch_with_cleanup(url, timeout=timeout)
 
 
+def _meaningful_content_present(driver: webdriver.Chrome) -> bool:
+    """Return whether visible candidate elements contain substantial readable text."""
+    elements = driver.find_elements(By.CSS_SELECTOR, _ARTICLE_SELECTORS)
+    text = "\n\n".join(
+        element_text for element in elements if (element_text := str(element.text or "").strip())
+    )
+    return assess_extracted_text(text).accepted
+
+
 def _fetch_with_cleanup(url: str, timeout: float = _DEFAULT_TIMEOUT) -> str:
     """Fetch *url* with headless Chrome, run overlay dismissal, return page source."""
     with headless_browser() as driver:
@@ -259,6 +269,9 @@ def _fetch_with_cleanup(url: str, timeout: float = _DEFAULT_TIMEOUT) -> str:
         navigation_timed_out = False
         try:
             driver.get(url)
+            final_url = driver.current_url
+            if isinstance(final_url, str):
+                validate_server_fetch_url(final_url)
         except TimeoutException:
             navigation_timed_out = True
             logger.debug("selenium: page load timeout for %r — using partial page source", url)
@@ -269,9 +282,7 @@ def _fetch_with_cleanup(url: str, timeout: float = _DEFAULT_TIMEOUT) -> str:
 
         if not navigation_timed_out:
             try:
-                WebDriverWait(driver, timeout).until(
-                    presence_of_element_located((By.CSS_SELECTOR, _ARTICLE_SELECTORS))
-                )
+                WebDriverWait(driver, timeout).until(_meaningful_content_present)
             except TimeoutException:
                 logger.debug(
                     "selenium: article selector timeout for %r — using raw page source", url

@@ -17,6 +17,7 @@ from news_dashboard.selenium_client import (  # noqa: E402
     _dismiss_modal_close_buttons,
     _fetch_with_cleanup,
     _get_domain_handler,
+    _meaningful_content_present,
     _remove_overlays_js,
     _try_amp_url,
     dismiss_overlays,
@@ -209,6 +210,31 @@ def test_fetch_with_cleanup_configures_navigation_timeouts() -> None:
     ]
     wait_cls.assert_called_once_with(driver, 3.5)
     dismiss_mock.assert_called_once_with(driver, "https://example.com/article")
+
+
+def test_meaningful_content_present_rejects_title_only_dom() -> None:
+    driver = MagicMock()
+    element = MagicMock()
+    element.text = "The Python Tutorial — Python documentation"
+    driver.find_elements.return_value = [element]
+
+    assert _meaningful_content_present(driver) is False
+
+
+def test_meaningful_content_present_accepts_substantial_dom() -> None:
+    driver = MagicMock()
+    paragraph = (
+        "This rendered paragraph explains a technical topic with detailed examples, "
+        "limitations, tradeoffs, and practical consequences for an interested reader who "
+        "needs enough trustworthy source material to generate a grounded learning lesson."
+    )
+    first = MagicMock()
+    first.text = paragraph
+    second = MagicMock()
+    second.text = paragraph
+    driver.find_elements.return_value = [first, second]
+
+    assert _meaningful_content_present(driver) is True
 
 
 def test_fetch_with_cleanup_stops_loading_after_navigation_timeout() -> None:
