@@ -1,7 +1,7 @@
 # Public Web Content Extraction Design
 
 **Issue:** [#1259](https://github.com/lihor-hub/news-dashboard/issues/1259)
-**Status:** Draft for implementation review
+**Status:** Implemented
 **Date:** 2026-07-17
 
 ## Problem
@@ -230,6 +230,8 @@ the candidate body.
 - Land the shared pipeline and tests in one PR tied to issue #1259.
 - Validate locally with lint, all configured type checkers, the PostgreSQL-backed
   backend suite, frontend tests, and the opt-in live smoke corpus.
+- Run the opt-in corpus with
+  `PATH="$PWD/.venv/bin:$PATH" PYTHONPATH=backend python scripts/check_live_content_extraction.py`.
 - Queue the PR for auto-merge only after required CI succeeds.
 
 ## Acceptance Criteria
