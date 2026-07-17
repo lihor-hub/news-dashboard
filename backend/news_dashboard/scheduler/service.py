@@ -155,7 +155,6 @@ def _generate_briefing_for_user(
             from news_dashboard.briefing_email.service import deliver_daily_briefing
 
             outcome = deliver_daily_briefing(user_id, now=now)
-            result = outcome.briefing or {"status": outcome.status}
             email_ok = outcome.status in {"sent", "skipped", "unsubscribed"}
             if not email_ok:
                 logger.warning(
@@ -163,8 +162,12 @@ def _generate_briefing_for_user(
                     user_id,
                     outcome.status,
                 )
+            if outcome.briefing is None:
+                return False
+            result = outcome.briefing
         else:
             result = generate_briefing(user_id=user_id)
+        push_ok = True
         if result.get("status") == "no_candidates":
             logger.info("Per-user briefing: skipped for user_id=%s (no candidates)", user_id)
         else:
@@ -182,10 +185,11 @@ def _generate_briefing_for_user(
                         target_url=target_url,
                     )
                 except Exception:
+                    push_ok = False
                     logger.exception(
                         "Per-user briefing: push notification failed for user_id=%s", user_id
                     )
-        return email_ok or push_enabled
+        return email_ok and push_ok
     except BriefingAINotConfiguredError:
         logger.warning("Per-user briefing: skipped for user_id=%s (AI not configured)", user_id)
         return True

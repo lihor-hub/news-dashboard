@@ -158,6 +158,16 @@ def test_verify_citations_rejects_empty_summary_with_stories() -> None:
         verify_citations(raw, candidate_ids={1})
 
 
+def test_verify_citations_rejects_more_than_1800_words() -> None:
+    raw = {
+        "title": "T",
+        "summary": "Summary",
+        "sections": [{"title": "A", "body": " ".join(["word"] * 1_800), "citations": [1]}],
+    }
+    with pytest.raises(ValueError, match="1800-word"):
+        verify_citations(raw, candidate_ids={1})
+
+
 def test_stage_constants_cover_the_full_pipeline() -> None:
     assert STAGE_ORDER == (
         STAGE_CANDIDATE_SELECTION,

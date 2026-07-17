@@ -40,6 +40,7 @@ class Delivery:
     briefing_id: int | None
     attempt_count: int
     next_attempt_at: datetime | None
+    claim_token: datetime
 
 
 @dataclass(frozen=True)
@@ -49,6 +50,10 @@ class DeliveryOutcome:
     status: str
     delivery: Delivery
     briefing: dict[str, Any] | None = None
+
+
+class DeliveryClaimLostError(RuntimeError):
+    """Raised when a worker's delivery claim has been replaced or advanced."""
 
 
 def _delivery(row: Any) -> Delivery:
@@ -61,6 +66,7 @@ def _delivery(row: Any) -> Delivery:
         briefing_id=int(data["briefing_id"]) if data.get("briefing_id") is not None else None,
         attempt_count=int(data["attempt_count"]),
         next_attempt_at=data.get("next_attempt_at"),
+        claim_token=data["claimed_at"],
     )
 
 
@@ -78,7 +84,7 @@ def claim_delivery(
             VALUES (%s, %s)
             ON CONFLICT (user_id, local_delivery_date) DO NOTHING
             RETURNING id, user_id, local_delivery_date, status, briefing_id,
-                      attempt_count, next_attempt_at
+                      attempt_count, next_attempt_at, claimed_at
             """,
             (user_id, local_date),
         ).fetchone()
@@ -101,17 +107,18 @@ def _acquire_delivery(
               AND ((status = 'claimed' AND claimed_at <= %s)
                    OR (status = 'retryable_failed' AND next_attempt_at <= %s))
             RETURNING id, user_id, local_delivery_date, status, briefing_id,
-                      attempt_count, next_attempt_at
+                      attempt_count, next_attempt_at, claimed_at
             """,
             (now, now, user_id, local_date, now - _STALE_CLAIM_AFTER, now),
         ).fetchone()
     return _delivery(row) if row is not None else None
 
 
-def _set_delivery(  # noqa: PLR0913  # explicit transition fields keep SQL updates auditable
-    delivery_id: int,
+def _transition_delivery(  # noqa: PLR0913  # explicit transition fields keep SQL auditable
+    delivery: Delivery,
     status: str,
     *,
+    expected_status: str,
     database_url: str | None,
     briefing_id: int | None = None,
     now: datetime,
@@ -127,9 +134,9 @@ def _set_delivery(  # noqa: PLR0913  # explicit transition fields keep SQL updat
                 attempt_count = attempt_count + CASE WHEN %s = 'sending' THEN 1 ELSE 0 END,
                 next_attempt_at = %s, error_code = %s, error_message = %s,
                 sent_at = CASE WHEN %s THEN %s ELSE sent_at END, updated_at = %s
-            WHERE id = %s
+            WHERE id = %s AND claimed_at = %s AND status = %s
             RETURNING id, user_id, local_delivery_date, status, briefing_id,
-                      attempt_count, next_attempt_at
+                      attempt_count, next_attempt_at, claimed_at
             """,
             (
                 status,
@@ -141,12 +148,14 @@ def _set_delivery(  # noqa: PLR0913  # explicit transition fields keep SQL updat
                 sent,
                 now,
                 now,
-                delivery_id,
+                delivery.id,
+                delivery.claim_token,
+                expected_status,
             ),
         ).fetchone()
     if row is None:
-        msg = "Delivery state transition lost its row"
-        raise RuntimeError(msg)
+        msg = "Delivery claim was replaced or already advanced"
+        raise DeliveryClaimLostError(msg)
     return _delivery(row)
 
 
@@ -173,7 +182,7 @@ def _find_local_day_briefing(
     return row_to_dict(row) if row is not None else None
 
 
-def deliver_daily_briefing(  # noqa: PLR0911  # terminal ledger states return immediately
+def deliver_daily_briefing(  # noqa: PLR0911, PLR0912, PLR0915  # explicit ledger states
     user_id: int,
     *,
     now: datetime | None = None,
@@ -201,7 +210,7 @@ def deliver_daily_briefing(  # noqa: PLR0911  # terminal ledger states return im
             existing = conn.execute(
                 """
                 SELECT id, user_id, local_delivery_date, status, briefing_id,
-                       attempt_count, next_attempt_at
+                       attempt_count, next_attempt_at, claimed_at
                 FROM briefing_email_deliveries
                 WHERE user_id = %s AND local_delivery_date = %s
                 """,
@@ -225,9 +234,10 @@ def deliver_daily_briefing(  # noqa: PLR0911  # terminal ledger states return im
                 langfuse_tags=["daily-email", "briefing"],
             )
         except Exception:
-            failed = _set_delivery(
-                delivery.id,
+            failed = _transition_delivery(
+                delivery,
                 "retryable_failed",
+                expected_status="claimed",
                 database_url=database_url,
                 now=instant,
                 error_code="generation_failed",
@@ -235,43 +245,115 @@ def deliver_daily_briefing(  # noqa: PLR0911  # terminal ledger states return im
             )
             return DeliveryOutcome(failed.status, failed)
     if briefing.get("status") == "no_candidates":
-        skipped = _set_delivery(delivery.id, "skipped", database_url=database_url, now=instant)
+        skipped = _transition_delivery(
+            delivery,
+            "skipped",
+            expected_status="claimed",
+            database_url=database_url,
+            now=instant,
+        )
         return DeliveryOutcome(skipped.status, skipped, briefing)
 
     briefing_id = int(briefing["id"])
-    rendered_state = _set_delivery(
-        delivery.id, "rendered", database_url=database_url, now=instant, briefing_id=briefing_id
-    )
-    base_url = _base_url()
-    token = make_unsubscribe_token(user_id)
-    unsubscribe_url = f"{base_url}/email/briefing/unsubscribe?token={quote(token, safe='')}"
-    rendered = render_briefing_email(
-        briefing,
-        local_date=local_date,
-        timezone_name=timezone_name,
-        briefing_url=f"{base_url}/briefings/{briefing_id}",
-        preferences_url=f"{base_url}/settings/notifications",
-        unsubscribe_url=unsubscribe_url,
-    )
-    with connect(database_url=database_url) as conn:
-        consent = conn.execute(
-            "SELECT email, briefing_email_enabled FROM users WHERE id = %s", (user_id,)
-        ).fetchone()
-    if consent is None or not bool(consent["briefing_email_enabled"]):
-        stopped = _set_delivery(delivery.id, "unsubscribed", database_url=database_url, now=instant)
-        return DeliveryOutcome(stopped.status, stopped, briefing)
-    recipient = str(consent["email"] or "").strip()
-    if not recipient or not smtp_configured():
-        failed = _set_delivery(
-            delivery.id,
-            "permanent_failed",
+    try:
+        base_url = _base_url()
+        token = make_unsubscribe_token(user_id)
+        unsubscribe_url = f"{base_url}/email/briefing/unsubscribe?token={quote(token, safe='')}"
+        rendered = render_briefing_email(
+            briefing,
+            local_date=local_date,
+            timezone_name=timezone_name,
+            briefing_url=f"{base_url}/briefings/{briefing_id}",
+            preferences_url=f"{base_url}/settings/notifications",
+            unsubscribe_url=unsubscribe_url,
+        )
+    except Exception:
+        failed = _transition_delivery(
+            delivery,
+            "retryable_failed",
+            expected_status="claimed",
             database_url=database_url,
             now=instant,
-            error_code="smtp_not_configured" if recipient else "missing_email",
+            briefing_id=briefing_id,
+            error_code="preparation_failed",
+            next_attempt_at=instant + _RETRY_DELAY,
+        )
+        return DeliveryOutcome(failed.status, failed, briefing)
+    rendered_state = _transition_delivery(
+        delivery,
+        "rendered",
+        expected_status="claimed",
+        database_url=database_url,
+        now=instant,
+        briefing_id=briefing_id,
+    )
+    try:
+        with connect(database_url=database_url) as conn:
+            consent = conn.execute(
+                "SELECT email, briefing_email_enabled FROM users WHERE id = %s", (user_id,)
+            ).fetchone()
+    except Exception:
+        failed = _transition_delivery(
+            rendered_state,
+            "retryable_failed",
+            expected_status="rendered",
+            database_url=database_url,
+            now=instant,
+            error_code="pre_send_check_failed",
+            next_attempt_at=instant + _RETRY_DELAY,
+        )
+        return DeliveryOutcome(failed.status, failed, briefing)
+    if consent is None or not bool(consent["briefing_email_enabled"]):
+        stopped = _transition_delivery(
+            rendered_state,
+            "unsubscribed",
+            expected_status="rendered",
+            database_url=database_url,
+            now=instant,
+        )
+        return DeliveryOutcome(stopped.status, stopped, briefing)
+    recipient = str(consent["email"] or "").strip()
+    if not recipient:
+        failed = _transition_delivery(
+            rendered_state,
+            "permanent_failed",
+            expected_status="rendered",
+            database_url=database_url,
+            now=instant,
+            error_code="missing_email",
+        )
+        return DeliveryOutcome(failed.status, failed, briefing)
+    try:
+        configured = smtp_configured()
+    except Exception:
+        failed = _transition_delivery(
+            rendered_state,
+            "retryable_failed",
+            expected_status="rendered",
+            database_url=database_url,
+            now=instant,
+            error_code="pre_send_check_failed",
+            next_attempt_at=instant + _RETRY_DELAY,
+        )
+        return DeliveryOutcome(failed.status, failed, briefing)
+    if not configured:
+        failed = _transition_delivery(
+            rendered_state,
+            "permanent_failed",
+            expected_status="rendered",
+            database_url=database_url,
+            now=instant,
+            error_code="smtp_not_configured",
         )
         return DeliveryOutcome(failed.status, failed, briefing)
 
-    sending = _set_delivery(rendered_state.id, "sending", database_url=database_url, now=instant)
+    sending = _transition_delivery(
+        rendered_state,
+        "sending",
+        expected_status="rendered",
+        database_url=database_url,
+        now=instant,
+    )
     error = send_email(
         recipient=recipient,
         subject=rendered.subject,
@@ -283,14 +365,20 @@ def deliver_daily_briefing(  # noqa: PLR0911  # terminal ledger states return im
         },
     )
     if error is None:
-        complete = _set_delivery(
-            sending.id, "sent", database_url=database_url, now=instant, sent=True
+        complete = _transition_delivery(
+            sending,
+            "sent",
+            expected_status="sending",
+            database_url=database_url,
+            now=instant,
+            sent=True,
         )
         return DeliveryOutcome(complete.status, complete, briefing)
     retryable = error == "smtp_error"
-    failed = _set_delivery(
-        sending.id,
+    failed = _transition_delivery(
+        sending,
         "retryable_failed" if retryable else "permanent_failed",
+        expected_status="sending",
         database_url=database_url,
         now=instant,
         error_code=error,
