@@ -15,6 +15,12 @@ from news_dashboard.db import connect
 from news_dashboard.main import app
 
 
+@pytest.fixture(autouse=True)
+def _reset_preview_cooldown(monkeypatch: Any) -> None:
+    """Keep process-local preview rate limits isolated between tests."""
+    monkeypatch.setattr(service, "_preview_sent_at", type(service._preview_sent_at)())
+
+
 def _user(
     database_url: str,
     name: str,
