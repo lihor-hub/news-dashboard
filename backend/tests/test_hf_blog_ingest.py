@@ -79,7 +79,11 @@ def test_hf_blog_empty_description_triggers_snippet_fetch(tmp_path: Path, monkey
     snippet_text = (
         "Parameter-efficient fine-tuning lets you adapt large models with minimal compute."
     )
-    monkeypatch.setattr(body_fetch_module, "extract_body", lambda _url: (snippet_text, "ok"))
+    monkeypatch.setattr(
+        body_fetch_module,
+        "extract_public_content",
+        lambda _url, **_kwargs: (snippet_text, "ok"),
+    )
 
     ingest_all(db_path)
 
@@ -111,11 +115,11 @@ def test_hf_blog_non_empty_feed_description_skips_snippet_fetch(
 
     fetch_calls: list[str] = []
 
-    def _fail_if_called(url: str) -> tuple[str, str]:
+    def _fail_if_called(url: str, **_kwargs: Any) -> tuple[str, str]:
         fetch_calls.append(url)
         return "", "error"
 
-    monkeypatch.setattr(body_fetch_module, "extract_body", _fail_if_called)
+    monkeypatch.setattr(body_fetch_module, "extract_public_content", _fail_if_called)
 
     ingest_all(db_path)
 
@@ -143,12 +147,12 @@ def test_hf_blog_snippet_fetch_skipped_for_existing_articles(
 
     call_count = 0
 
-    def _count_calls(url: str) -> tuple[str, str]:
+    def _count_calls(url: str, **_kwargs: Any) -> tuple[str, str]:
         nonlocal call_count
         call_count += 1
         return "First-run snippet text for the article.", "ok"
 
-    monkeypatch.setattr(body_fetch_module, "extract_body", _count_calls)
+    monkeypatch.setattr(body_fetch_module, "extract_public_content", _count_calls)
 
     # First run — snippet should be fetched once
     ingest_all(db_path)
@@ -175,11 +179,11 @@ def test_hf_blog_snippet_fetch_capped_per_run(tmp_path: Path, monkeypatch: Any) 
 
     fetch_calls: list[str] = []
 
-    def _record_call(url: str) -> tuple[str, str]:
+    def _record_call(url: str, **_kwargs: Any) -> tuple[str, str]:
         fetch_calls.append(url)
         return f"Snippet for {url}", "ok"
 
-    monkeypatch.setattr(body_fetch_module, "extract_body", _record_call)
+    monkeypatch.setattr(body_fetch_module, "extract_public_content", _record_call)
 
     ingest_all(db_path)
 
@@ -200,7 +204,11 @@ def test_hf_blog_snippet_fetch_failure_still_inserts_article(
         lambda _url, **_kw: _ParsedFeed([_feed_entry("failed-snippet")]),
     )
 
-    monkeypatch.setattr(body_fetch_module, "extract_body", lambda _url: ("", "error"))
+    monkeypatch.setattr(
+        body_fetch_module,
+        "extract_public_content",
+        lambda _url, **_kwargs: ("", "error"),
+    )
 
     result = ingest_all(db_path)
 
@@ -236,7 +244,7 @@ def test_other_sources_not_affected_by_snippet_fetch(tmp_path: Path, monkeypatch
         fetch_calls.append(url)
         return "", "error"
 
-    monkeypatch.setattr(body_fetch_module, "extract_body", _fail_if_called)
+    monkeypatch.setattr(body_fetch_module, "extract_public_content", _fail_if_called)
 
     ingest_all(db_path)
 

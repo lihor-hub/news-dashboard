@@ -299,7 +299,7 @@ def test_fetch_and_cache_body_cache_hit(tmp_path: Path) -> None:
         called.append(url)
         return "new text", "ok"
 
-    with patch("news_dashboard.body_fetch.extract_body", fake_extract):
+    with patch("news_dashboard.body_fetch.extract_public_content", fake_extract):
         result = fetch_and_cache_body(article_id, db_path=db_path)
 
     assert called == [], "should not re-fetch when cache is warm"
@@ -312,7 +312,10 @@ def test_fetch_and_cache_body_fetch_error(tmp_path: Path) -> None:
     article_id = _seed_article(db_path)
 
     with (
-        patch("news_dashboard.body_fetch.extract_body", return_value=("", "error")),
+        patch(
+            "news_dashboard.body_fetch.extract_public_content",
+            return_value=("", "error"),
+        ),
         patch("news_dashboard.body_fetch._crawl4ai_extract_body", return_value=("", "error")),
     ):
         result = fetch_and_cache_body(article_id, db_path=db_path)
@@ -491,7 +494,7 @@ def test_fetch_and_cache_body_with_user_id_hides_other_users_private_source(
     other_id = _seed_user(db_path, "other")
     article_id = _seed_private_article(db_path, owner_user_id=owner_id)
 
-    with patch("news_dashboard.body_fetch.extract_body") as extract:
+    with patch("news_dashboard.body_fetch.extract_public_content") as extract:
         result = fetch_and_cache_body(article_id, db_path=db_path, user_id=other_id)
 
     assert result is None
@@ -563,7 +566,7 @@ def test_prefetch_article_bodies_skips_already_ok(tmp_path: Path) -> None:
         called.append(url)
         return "new", "ok"
 
-    with patch("news_dashboard.body_fetch.extract_body", fake_extract):
+    with patch("news_dashboard.body_fetch.extract_public_content", fake_extract):
         count = prefetch_article_bodies(db_path=db_path)
 
     assert count == 0
@@ -828,7 +831,10 @@ def test_fetch_and_cache_body_uses_ai_fallback_when_scraper_fails(tmp_path: Path
     article_id = _seed_article(db_path)
 
     with (
-        patch("news_dashboard.body_fetch.extract_body", return_value=("", "error")),
+        patch(
+            "news_dashboard.body_fetch.extract_public_content",
+            return_value=("AI extracted text", "ok"),
+        ),
         patch("news_dashboard.body_fetch._crawl4ai_extract_body", return_value=("", "error")),
         patch(
             "news_dashboard.body_fetch._ai_extract_body",
@@ -852,8 +858,10 @@ def test_fetch_and_cache_body_ai_fallback_not_called_when_scraper_ok(tmp_path: P
         return "ai text", "ok"
 
     with (
-        patch("news_dashboard.body_fetch.extract_body", return_value=("scraper text", "ok")),
-        patch("news_dashboard.body_fetch._ai_extract_body", side_effect=fake_ai),
+        patch(
+            "news_dashboard.body_fetch.extract_public_content", return_value=("scraper text", "ok")
+        ),
+        patch("news_dashboard.body_fetch._ai_extract_body"),
     ):
         result = fetch_and_cache_body(article_id, db_path=db_path)
 
@@ -873,9 +881,9 @@ def test_fetch_and_cache_body_ai_fallback_result_is_cached(tmp_path: Path) -> No
         return "AI body text", "ok"
 
     with (
-        patch("news_dashboard.body_fetch.extract_body", return_value=("", "error")),
+        patch("news_dashboard.body_fetch.extract_public_content", side_effect=fake_ai),
         patch("news_dashboard.body_fetch._crawl4ai_extract_body", return_value=("", "error")),
-        patch("news_dashboard.body_fetch._ai_extract_body", side_effect=fake_ai),
+        patch("news_dashboard.body_fetch._ai_extract_body"),
     ):
         result1 = fetch_and_cache_body(article_id, db_path=db_path)
         result2 = fetch_and_cache_body(article_id, db_path=db_path)
@@ -1127,7 +1135,10 @@ def test_fetch_and_cache_body_uses_crawl4ai_when_scraper_fails(tmp_path: Path) -
         return "AI text", "ok"
 
     with (
-        patch("news_dashboard.body_fetch.extract_body", return_value=("", "error")),
+        patch(
+            "news_dashboard.body_fetch.extract_public_content",
+            return_value=("Crawl4AI extracted text", "ok"),
+        ),
         patch(
             "news_dashboard.body_fetch._crawl4ai_extract_body",
             return_value=("Crawl4AI extracted text", "ok"),
@@ -1152,7 +1163,9 @@ def test_fetch_and_cache_body_crawl4ai_not_called_when_scraper_ok(tmp_path: Path
         return "crawl text", "ok"
 
     with (
-        patch("news_dashboard.body_fetch.extract_body", return_value=("scraper text", "ok")),
+        patch(
+            "news_dashboard.body_fetch.extract_public_content", return_value=("scraper text", "ok")
+        ),
         patch("news_dashboard.body_fetch._crawl4ai_extract_body", side_effect=fake_crawl),
     ):
         result = fetch_and_cache_body(article_id, db_path=db_path)
@@ -1167,7 +1180,10 @@ def test_fetch_and_cache_body_ai_fallback_after_crawl4ai_fails(tmp_path: Path) -
     article_id = _seed_article(db_path)
 
     with (
-        patch("news_dashboard.body_fetch.extract_body", return_value=("", "error")),
+        patch(
+            "news_dashboard.body_fetch.extract_public_content",
+            return_value=("AI extracted text", "ok"),
+        ),
         patch("news_dashboard.body_fetch._crawl4ai_extract_body", return_value=("", "error")),
         patch(
             "news_dashboard.body_fetch._ai_extract_body",
@@ -1191,7 +1207,7 @@ def test_fetch_and_cache_body_cache_hit_skips_all_extractors(tmp_path: Path) -> 
         )
 
     with (
-        patch("news_dashboard.body_fetch.extract_body") as mock_extract,
+        patch("news_dashboard.body_fetch.extract_public_content") as mock_extract,
         patch("news_dashboard.body_fetch._crawl4ai_extract_body") as mock_crawl,
         patch("news_dashboard.body_fetch._ai_extract_body") as mock_ai,
     ):

@@ -66,7 +66,7 @@ def _lesson_extraction_stubs(monkeypatch: pytest.MonkeyPatch) -> None:
     )
     monkeypatch.setattr(
         service,
-        "extract_body",
+        "extract_public_content",
         lambda url: (f"Body for {url}", "ok"),
         raising=False,
     )
@@ -170,7 +170,9 @@ def test_extraction_failure_marks_run_failed_at_extraction_step(
 ) -> None:
     monkeypatch.setenv("DATABASE_URL", pg_clean)
     user_id = _make_user(pg_clean)
-    monkeypatch.setattr(service, "extract_body", lambda _url: ("", "error"), raising=False)
+    monkeypatch.setattr(
+        service, "extract_public_content", lambda _url: ("", "error"), raising=False
+    )
 
     lesson = service.create_lesson(user_id, "https://example.com/a", database_url=pg_clean)
 
@@ -183,7 +185,7 @@ def test_extraction_failure_marks_run_failed_at_extraction_step(
     steps = _step_rows(pg_clean, int(run["id"]))
     assert [(step["step"], step["ordinal"], step["status"], step["error"]) for step in steps] == [
         (STEP_FETCH, 1, "complete", None),
-        (STEP_EXTRACTION, 2, "failed", "extract_body returned status='error'"),
+        (STEP_EXTRACTION, 2, "failed", "extract_public_content returned status='error'"),
     ]
 
 

@@ -691,11 +691,15 @@ def fetch_and_cache_body(
             return _article_from_row(row, conn, article_id, user_id)
 
     url = row_d["url"]
-    body, status = extract_body(url)
-    if status == "error":
-        body, status = _crawl4ai_extract_body(url)
-    if status == "error":
-        body, status = _ai_extract_body(url, user_id=user_id)
+    extraction: Any = (
+        extract_public_content(url, user_id=user_id)
+        if user_id is not None
+        else extract_public_content(url)
+    )
+    if isinstance(extraction, ExtractionResult):
+        body, status = extraction.text, extraction.status
+    else:
+        body, status = extraction
 
     original_body = None
     detected_lang = row_d.get("detected_lang") or "en"
