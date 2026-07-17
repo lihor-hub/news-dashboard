@@ -14,7 +14,7 @@ from jinja2 import Environment, PackageLoader, StrictUndefined, select_autoescap
 _WORDS_PER_MINUTE = 200
 _ENVIRONMENT = Environment(
     loader=PackageLoader("news_dashboard.briefing_email", "templates"),
-    autoescape=select_autoescape(enabled_extensions=("html", "j2")),
+    autoescape=select_autoescape(enabled_extensions=("html.j2",)),
     undefined=StrictUndefined,
 )
 
@@ -35,6 +35,7 @@ def _safe_link(value: object) -> str | None:
     try:
         parsed = urlparse(value.strip())
         hostname = parsed.hostname
+        _port = parsed.port
     except ValueError:
         return None
     if parsed.scheme.lower() not in {"http", "https"} or not hostname:
