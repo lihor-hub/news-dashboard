@@ -1441,8 +1441,9 @@ def test_generate_briefing_compiles_graph_without_checkpointer(
     assert compile_calls == [{}]
 
 
+@pytest.mark.parametrize("scheduled", [False, True])
 def test_generate_briefing_propagates_run_session_and_user(
-    pg_clean: str, monkeypatch: pytest.MonkeyPatch
+    pg_clean: str, monkeypatch: pytest.MonkeyPatch, scheduled: bool
 ) -> None:
     import langfuse
     import langfuse.langchain
@@ -1479,14 +1480,22 @@ def test_generate_briefing_propagates_run_session_and_user(
     monkeypatch.setattr("news_dashboard.ai_client.langfuse_enabled", lambda: True)
     monkeypatch.setattr(langfuse.langchain, "CallbackHandler", lambda: callback)
 
-    result = generate_briefing(database_url=pg_clean, ai_fn=_fake_ai, user_id=user_id)
+    overrides: dict[str, Any] = {}
+    if scheduled:
+        overrides = {
+            "langfuse_session_id": "daily-email:42:2026-07-17",
+            "langfuse_tags": ["daily-email", "briefing"],
+        }
+    result = generate_briefing(database_url=pg_clean, ai_fn=_fake_ai, user_id=user_id, **overrides)
     run = _fetch_agent_run(pg_clean, result["id"])
 
     assert propagated == [
         {
             "user_id": str(user_id),
-            "session_id": f"briefing-run:{run['id']}",
-            "tags": ["briefing"],
+            "session_id": (
+                "daily-email:42:2026-07-17" if scheduled else f"briefing-run:{run['id']}"
+            ),
+            "tags": ["daily-email", "briefing"] if scheduled else ["briefing"],
             "trace_name": "briefing-generation",
         }
     ]

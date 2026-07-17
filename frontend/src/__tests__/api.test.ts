@@ -640,4 +640,11 @@ describe('subscriptions & recommendations', () => {
     expect(calls[0].init?.method).toBe('DELETE');
     expect(calls[0].init?.body).toBeUndefined();
   });
+
+  it('sendEmailBriefingPreview POSTs to the authenticated preview endpoint', async () => {
+    const { calls } = stubFetch(() => jsonOk({ sent: true }));
+    expect(await api.sendEmailBriefingPreview()).toEqual({ sent: true });
+    expect(calls[0].url).toBe('/api/settings/notifications/email/preview');
+    expect(calls[0].init?.method).toBe('POST');
+  });
 });

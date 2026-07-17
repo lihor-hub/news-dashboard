@@ -381,6 +381,10 @@ export type BriefingCreateResponse = Briefing | { status: 'no_candidates' };
 export interface NotificationSettings {
   briefing_time: string;
   briefing_timezone: string;
+  email_enabled: boolean;
+  email_address: string | null;
+  email_available: boolean;
+  email_delivery_configured: boolean;
   push_enabled: boolean;
   recap_enabled: boolean;
   recap_day: string;
@@ -390,6 +394,7 @@ export interface NotificationSettings {
 export interface NotificationSettingsUpdate {
   briefing_time?: string;
   briefing_timezone?: string;
+  email_enabled?: boolean;
   push_enabled?: boolean;
   recap_enabled?: boolean;
   recap_day?: string;

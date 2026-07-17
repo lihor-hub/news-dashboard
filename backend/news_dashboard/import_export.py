@@ -577,6 +577,8 @@ def _restore_notification_settings(conn: Any, user_id: int, data: Any) -> bool:
             updates["briefing_timezone"] = briefing_timezone
     if isinstance(data.get("push_enabled"), bool):
         updates["briefing_push_enabled"] = data["push_enabled"]
+    if data.get("email_enabled") is False:
+        updates["briefing_email_enabled"] = False
     if isinstance(data.get("recap_enabled"), bool):
         updates["recap_enabled"] = data["recap_enabled"]
     recap_day = data.get("recap_day")

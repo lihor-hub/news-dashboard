@@ -179,6 +179,32 @@ export async function mockApi(page: Page) {
   await page.route('/api/auth/me', (r) => r.fulfill(json(SAMPLE_USER)));
   await page.route('/api/auth/logout', (r) => r.fulfill(json({ status: 'logged_out' })));
 
+  // Notification settings — stateful so settings flows can enable channels and preview them.
+  let notificationSettings = {
+    briefing_time: '09:00',
+    briefing_timezone: 'UTC',
+    email_enabled: false,
+    email_address: SAMPLE_USER.email,
+    email_available: true,
+    email_delivery_configured: true,
+    push_enabled: false,
+    recap_enabled: false,
+    recap_day: 'monday',
+    vapid_public_key: null,
+  };
+  await page.route('/api/settings/notifications**', async (r: Route) => {
+    const request = r.request();
+    const path = new URL(request.url()).pathname;
+    if (request.method() === 'POST' && path.endsWith('/email/preview')) {
+      return r.fulfill(json({ sent: true }));
+    }
+    if (request.method() === 'PUT') {
+      const update = request.postDataJSON() as Partial<typeof notificationSettings>;
+      notificationSettings = { ...notificationSettings, ...update };
+    }
+    return r.fulfill(json(notificationSettings));
+  });
+
   // Summary / counts
   await page.route('/api/summary', (r) => r.fulfill(json(SUMMARY_DATA)));
 

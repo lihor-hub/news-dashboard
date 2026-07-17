@@ -159,6 +159,7 @@ _PUBLIC_UNSAFE_PREFIXES = (
     "/api/auth/login",
     "/api/auth/otp/",
     "/auth/",
+    "/email/briefing/unsubscribe",
 )
 
 
@@ -386,6 +387,10 @@ from news_dashboard.ai_stats.router import router as ai_stats_router  # noqa: E4
 from news_dashboard.articles.router import public_router as articles_public_router  # noqa: E402
 from news_dashboard.articles.router import router as articles_router  # noqa: E402
 from news_dashboard.assistant.router import router as assistant_router  # noqa: E402
+from news_dashboard.briefing_email.router import (  # noqa: E402
+    public_router as briefing_email_public_router,
+)
+from news_dashboard.briefing_email.router import router as briefing_email_router  # noqa: E402
 from news_dashboard.briefings.router import public_router as briefings_public_router  # noqa: E402
 from news_dashboard.briefings.router import router as briefings_router  # noqa: E402
 from news_dashboard.events.router import router as events_router  # noqa: E402
@@ -416,6 +421,7 @@ from news_dashboard.watchlists.router import router as watchlists_router  # noqa
 api.include_router(articles_router)
 api.include_router(assistant_router)
 api.include_router(briefings_router)
+api.include_router(briefing_email_router)
 api.include_router(events_router)
 api.include_router(ingest_router)
 api.include_router(scheduler_router)
@@ -444,6 +450,7 @@ api.include_router(saved_searches_router)
 
 public_router.include_router(articles_public_router)
 public_router.include_router(briefings_public_router)
+public_router.include_router(briefing_email_public_router)
 admin.include_router(admin_routes_router)
 
 app.include_router(public_router)

@@ -458,7 +458,31 @@ POSTGRES_MULTIUSER_SCHEMA = [
     "ALTER TABLE users ADD COLUMN IF NOT EXISTS briefing_time TEXT DEFAULT '09:00'",
     "ALTER TABLE users ADD COLUMN IF NOT EXISTS briefing_push_enabled"
     " BOOLEAN NOT NULL DEFAULT FALSE",
+    "ALTER TABLE users ADD COLUMN IF NOT EXISTS briefing_email_enabled"
+    " BOOLEAN NOT NULL DEFAULT FALSE",
     "ALTER TABLE users ADD COLUMN IF NOT EXISTS briefing_timezone TEXT NOT NULL DEFAULT 'UTC'",
+    """
+    CREATE TABLE IF NOT EXISTS briefing_email_deliveries (
+      id                  BIGSERIAL PRIMARY KEY,
+      user_id             INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      briefing_id         INTEGER REFERENCES briefings(id) ON DELETE SET NULL,
+      local_delivery_date DATE NOT NULL,
+      status              TEXT NOT NULL DEFAULT 'claimed'
+        CHECK(status IN ('claimed', 'rendered', 'sending', 'sent',
+                         'retryable_failed', 'permanent_failed', 'skipped',
+                         'unsubscribed')),
+      attempt_count       INTEGER NOT NULL DEFAULT 0,
+      next_attempt_at     TIMESTAMPTZ,
+      provider_message_id TEXT,
+      error_code          TEXT,
+      error_message       TEXT,
+      claimed_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      sent_at             TIMESTAMPTZ,
+      created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE(user_id, local_delivery_date)
+    )
+    """,
     """
     CREATE TABLE IF NOT EXISTS user_push_subscriptions (
       id          SERIAL PRIMARY KEY,

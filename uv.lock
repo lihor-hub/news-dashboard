@@ -1534,7 +1534,7 @@ wheels = [
 
 [[package]]
 name = "news-dashboard"
-version = "1.150.0"
+version = "1.155.0"
 source = { editable = "." }
 dependencies = [
     { name = "apscheduler" },
@@ -1544,6 +1544,7 @@ dependencies = [
     { name = "feedparser" },
     { name = "httpx" },
     { name = "itsdangerous" },
+    { name = "jinja2" },
     { name = "langchain" },
     { name = "langchain-openai" },
     { name = "langfuse" },
@@ -1594,6 +1595,7 @@ requires-dist = [
     { name = "httpx", specifier = ">=0.27.0" },
     { name = "httpx", marker = "extra == 'dev'", specifier = ">=0.27.0" },
     { name = "itsdangerous", specifier = ">=2.2.0" },
+    { name = "jinja2", specifier = ">=3.1.6" },
     { name = "langchain", specifier = ">=1.3.12" },
     { name = "langchain-openai", specifier = ">=1.3.5" },
     { name = "langfuse", specifier = ">=4.14.0" },

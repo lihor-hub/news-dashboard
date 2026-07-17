@@ -21,6 +21,7 @@ from typing import Any
 from news_dashboard.db import connect, row_to_dict
 
 logger = logging.getLogger(__name__)
+MAX_BRIEFING_WORDS = 1_800
 
 STAGE_CANDIDATE_SELECTION = "candidate_selection"
 STAGE_THEME_CLUSTERING = "theme_clustering"
@@ -98,11 +99,23 @@ def verify_citations(
         msg = "AI response 'sections' must be a list"
         raise TypeError(msg)
 
+    summary = str(raw.get("summary", "")).strip()
+    if sections and not summary:
+        msg = "AI response summary must be non-empty when stories are present"
+        raise ValueError(msg)
+
     clean_sections = []
     unsupported_sections: list[str] = []
     for section in sections:
         proposed = section.get("citations") or []
-        citations = [c for c in proposed if int(c) in candidate_ids]
+        citations: list[int] = []
+        for proposed_id in proposed:
+            try:
+                citation = int(proposed_id)
+            except (TypeError, ValueError):
+                continue
+            if citation in candidate_ids and citation not in citations:
+                citations.append(citation)
         if proposed and not citations:
             unsupported_sections.append(str(section.get("title", "")))
         clean_sections.append(
@@ -113,14 +126,27 @@ def verify_citations(
             }
         )
 
-    worth_opening = [int(c) for c in (raw.get("worth_opening") or []) if int(c) in candidate_ids]
+    worth_opening: list[int] = []
+    for proposed_id in raw.get("worth_opening") or []:
+        try:
+            citation = int(proposed_id)
+        except (TypeError, ValueError):
+            continue
+        if citation in candidate_ids and citation not in worth_opening:
+            worth_opening.append(citation)
 
     content = {
         "title": str(raw.get("title", "")),
-        "summary": str(raw.get("summary", "")),
+        "summary": summary,
         "sections": clean_sections,
         "worth_opening": worth_opening,
     }
+    word_fields = [str(content["title"]), str(content["summary"])]
+    word_fields.extend(f"{section['title']} {section['body']}" for section in clean_sections)
+    words = " ".join(word_fields).split()
+    if len(words) > MAX_BRIEFING_WORDS:
+        msg = f"AI response exceeds {MAX_BRIEFING_WORDS}-word briefing limit"
+        raise ValueError(msg)
     return content, unsupported_sections
 
 

@@ -7,9 +7,10 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Generator
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
+from types import SimpleNamespace
 from typing import Any
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, call, patch
 
 import pytest
 
@@ -215,6 +216,253 @@ def test_run_per_user_briefings_generates_but_skips_push_when_disabled() -> None
     generate.assert_called_once_with(user_id=42)
     hook.assert_not_called()
     send_push.assert_not_called()
+
+
+def test_scheduler_email_only_user_generates_and_delivers() -> None:
+    fake_conn = _FakeRowsConn(
+        [
+            {
+                "id": 42,
+                "briefing_time": "21:00",
+                "briefing_timezone": "Europe/Bucharest",
+                "briefing_push_enabled": False,
+                "briefing_email_enabled": True,
+            }
+        ]
+    )
+    now = datetime(2026, 7, 17, 18, 0, tzinfo=timezone.utc)
+    outcome = SimpleNamespace(
+        status="sent", briefing={"id": 7, "status": "complete", "title": "Daily Brief"}
+    )
+
+    with (
+        patch("news_dashboard.scheduler.service.datetime") as mock_dt,
+        patch("news_dashboard.db.connect", return_value=fake_conn),
+        patch(
+            "news_dashboard.briefing_email.service.deliver_daily_briefing",
+            return_value=outcome,
+        ) as deliver,
+        patch(_GEN_PATH) as generate,
+    ):
+        mock_dt.now.return_value = now
+        result = _run_per_user_briefings()
+
+    assert "briefing_email_enabled" in fake_conn.sql
+    deliver.assert_called_once_with(42, now=now)
+    generate.assert_not_called()
+    assert result == ("success", "1 user targeted, 1 succeeded, 0 failed")
+
+
+def test_scheduler_revisits_due_email_retry_outside_scheduled_minute() -> None:
+    now = datetime(2026, 7, 17, 19, 16, tzinfo=timezone.utc)
+    fake_conn = _FakeRowsConn(
+        [
+            {
+                "id": 42,
+                "briefing_time": "21:00",
+                "briefing_timezone": "Europe/Bucharest",
+                "briefing_push_enabled": True,
+                "briefing_email_enabled": True,
+                "email_retry_date": now.date(),
+            }
+        ]
+    )
+    with (
+        patch("news_dashboard.scheduler.service.datetime") as mock_dt,
+        patch("news_dashboard.db.connect", return_value=fake_conn),
+        patch(
+            "news_dashboard.scheduler.service._generate_briefing_for_user", return_value=True
+        ) as generate,
+    ):
+        mock_dt.now.return_value = now
+        result = _run_per_user_briefings()
+
+    generate.assert_called_once_with(
+        42,
+        push_enabled=False,
+        email_enabled=True,
+        now=now,
+        email_local_date=now.date(),
+    )
+    assert "retryable_failed" in fake_conn.sql
+    assert result == ("success", "1 user targeted, 1 succeeded, 0 failed")
+
+
+def test_scheduler_revisits_due_retry_after_user_opts_out() -> None:
+    now = datetime(2026, 7, 17, 12, 16, tzinfo=timezone.utc)
+    fake_conn = _FakeRowsConn(
+        [
+            {
+                "id": 42,
+                "briefing_time": "21:00",
+                "briefing_timezone": "UTC",
+                "briefing_push_enabled": False,
+                "briefing_email_enabled": False,
+                "email_retry_date": now.date(),
+            }
+        ]
+    )
+    with (
+        patch("news_dashboard.scheduler.service.datetime") as mock_dt,
+        patch("news_dashboard.db.connect", return_value=fake_conn),
+        patch(
+            "news_dashboard.scheduler.service._generate_briefing_for_user", return_value=True
+        ) as generate,
+    ):
+        mock_dt.now.return_value = now
+        _run_per_user_briefings()
+
+    generate.assert_called_once_with(
+        42,
+        push_enabled=False,
+        email_enabled=True,
+        now=now,
+        email_local_date=now.date(),
+    )
+
+
+def test_scheduler_runs_old_retry_and_current_schedule_as_distinct_work() -> None:
+    now = datetime(2026, 7, 18, 21, 0, tzinfo=timezone.utc)
+    old_date = date(2026, 7, 17)
+    fake_conn = _FakeRowsConn(
+        [
+            {
+                "id": 42,
+                "briefing_time": "21:00",
+                "briefing_timezone": "UTC",
+                "briefing_push_enabled": True,
+                "briefing_email_enabled": True,
+                "email_retry_date": old_date,
+            }
+        ]
+    )
+    with (
+        patch("news_dashboard.scheduler.service.datetime") as mock_dt,
+        patch("news_dashboard.db.connect", return_value=fake_conn),
+        patch(
+            "news_dashboard.scheduler.service._generate_briefing_for_user", return_value=True
+        ) as generate,
+    ):
+        mock_dt.now.return_value = now
+        result = _run_per_user_briefings()
+
+    assert generate.call_args_list == [
+        call(
+            42,
+            push_enabled=False,
+            email_enabled=True,
+            now=now,
+            email_local_date=old_date,
+        ),
+        call(42, push_enabled=True, email_enabled=True, now=now),
+    ]
+    assert result == ("success", "2 users targeted, 2 succeeded, 0 failed")
+
+
+def test_per_user_failure_does_not_stop_later_due_user() -> None:
+    fake_conn = _FakeRowsConn(
+        [
+            {
+                "id": user_id,
+                "briefing_time": "09:00",
+                "briefing_timezone": "UTC",
+                "briefing_push_enabled": False,
+                "briefing_email_enabled": True,
+            }
+            for user_id in (41, 42)
+        ]
+    )
+    now = datetime(2026, 7, 17, 9, 0, tzinfo=timezone.utc)
+    with (
+        patch("news_dashboard.scheduler.service.datetime") as mock_dt,
+        patch("news_dashboard.db.connect", return_value=fake_conn),
+        patch(
+            "news_dashboard.scheduler.service._generate_briefing_for_user",
+            side_effect=[False, True],
+        ) as generate,
+    ):
+        mock_dt.now.return_value = now
+        result = _run_per_user_briefings()
+
+    assert generate.call_count == 2
+    assert result == ("success", "2 users targeted, 1 succeeded, 1 failed")
+
+
+def test_losing_email_claim_never_pushes_delivery_status_as_briefing() -> None:
+    outcome = SimpleNamespace(status="claimed", briefing=None)
+    with (
+        patch(
+            "news_dashboard.briefing_email.service.deliver_daily_briefing",
+            return_value=outcome,
+        ),
+        patch("news_dashboard.push.generate_push_hook") as hook,
+        patch("news_dashboard.push.send_push_for_user") as send_push,
+    ):
+        from news_dashboard.scheduler.service import _generate_briefing_for_user
+
+        result = _generate_briefing_for_user(42, push_enabled=True, email_enabled=True)
+
+    assert result is False
+    hook.assert_not_called()
+    send_push.assert_not_called()
+
+
+def test_repeated_scheduler_path_pushes_only_for_claim_winner() -> None:
+    outcomes = [
+        SimpleNamespace(status="sent", briefing={"id": 7, "status": "complete"}),
+        SimpleNamespace(status="sent", briefing=None),
+    ]
+    with (
+        patch(
+            "news_dashboard.briefing_email.service.deliver_daily_briefing",
+            side_effect=outcomes,
+        ),
+        patch("news_dashboard.push.generate_push_hook", return_value="Brief"),
+        patch("news_dashboard.push.send_push_for_user") as send_push,
+    ):
+        from news_dashboard.scheduler.service import _generate_briefing_for_user
+
+        first = _generate_briefing_for_user(42, push_enabled=True, email_enabled=True)
+        repeated = _generate_briefing_for_user(42, push_enabled=True, email_enabled=True)
+
+    assert first is True
+    assert repeated is True
+    send_push.assert_called_once()
+
+
+@pytest.mark.parametrize("terminal_status", ["sent", "skipped", "unsubscribed"])
+def test_repeated_terminal_email_outcome_is_success_without_push(terminal_status: str) -> None:
+    outcome = SimpleNamespace(status=terminal_status, briefing=None)
+    with (
+        patch(
+            "news_dashboard.briefing_email.service.deliver_daily_briefing",
+            return_value=outcome,
+        ),
+        patch("news_dashboard.push.send_push_for_user") as send_push,
+    ):
+        from news_dashboard.scheduler.service import _generate_briefing_for_user
+
+        result = _generate_briefing_for_user(42, push_enabled=True, email_enabled=True)
+
+    assert result is True
+    send_push.assert_not_called()
+
+
+def test_push_failure_is_reported_even_when_email_succeeds() -> None:
+    outcome = SimpleNamespace(status="sent", briefing={"id": 7, "status": "complete"})
+    with (
+        patch(
+            "news_dashboard.briefing_email.service.deliver_daily_briefing",
+            return_value=outcome,
+        ),
+        patch("news_dashboard.push.generate_push_hook", return_value="Brief"),
+        patch("news_dashboard.push.send_push_for_user", side_effect=RuntimeError("push down")),
+    ):
+        from news_dashboard.scheduler.service import _generate_briefing_for_user
+
+        result = _generate_briefing_for_user(42, push_enabled=True, email_enabled=True)
+
+    assert result is False
 
 
 # ── _run_weekly_recaps ────────────────────────────────────────────────────────
@@ -1186,6 +1434,29 @@ def test_per_user_briefings_null_timezone_falls_back_to_utc() -> None:
         _run_per_user_briefings()
 
     mock_generate.assert_called_once_with(user_id=5)
+
+
+def test_per_user_briefings_invalid_timezone_falls_back_to_utc(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    now = datetime(2026, 6, 29, 9, 0, 0, tzinfo=timezone.utc)
+    user_rows = [{"id": 5, "briefing_time": "09:00", "briefing_timezone": "Invalid/Zone"}]
+    mock_conn = _mock_conn_for_rows(user_rows)
+    mock_generate = MagicMock(return_value={"id": 1, "status": "complete"})
+
+    with (
+        caplog.at_level(logging.WARNING, logger="news_dashboard.scheduler.service"),
+        patch("news_dashboard.scheduler.service.datetime") as mock_dt,
+        patch(_CONNECT_PATH, return_value=mock_conn),
+        patch(_PER_USER_GEN_PATH, mock_generate),
+        patch(_SEND_PUSH_PATH),
+        patch(_GEN_PUSH_HOOK_PATH, return_value="Brief ready"),
+    ):
+        mock_dt.now.return_value = now
+        _run_per_user_briefings()
+
+    mock_generate.assert_called_once_with(user_id=5)
+    assert "invalid timezone" in caplog.text.lower()
 
 
 # ── entity extraction job ─────────────────────────────────────────────────────

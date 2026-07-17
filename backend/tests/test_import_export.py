@@ -619,6 +619,7 @@ def test_restores_preferences(pg_clean: str) -> None:
                 "briefing_time": "07:30",
                 "briefing_timezone": "America/New_York",
                 "push_enabled": True,
+                "email_enabled": True,
                 "recap_enabled": False,
                 "recap_day": "fri",
                 "analytics_enabled": False,
@@ -641,6 +642,7 @@ def test_restores_preferences(pg_clean: str) -> None:
         user_row = conn.execute(
             """
             SELECT briefing_time, briefing_timezone, briefing_push_enabled,
+                   briefing_email_enabled,
                    recap_enabled, recap_day, analytics_enabled
             FROM users WHERE id = %s
             """,
@@ -657,6 +659,7 @@ def test_restores_preferences(pg_clean: str) -> None:
     assert user_row["briefing_time"] == "07:30"
     assert user_row["briefing_timezone"] == "America/New_York"
     assert user_row["briefing_push_enabled"] is True
+    assert user_row["briefing_email_enabled"] is False
     assert user_row["recap_enabled"] is False
     assert user_row["recap_day"] == "fri"
     assert user_row["analytics_enabled"] is False

@@ -1,5 +1,5 @@
 # ruff: noqa: S101
-"""Chart render tests for wiring SMTP_USERNAME/SMTP_PASSWORD via app.email."""
+"""Chart render tests for wiring SMTP delivery configuration via app.email."""
 
 from __future__ import annotations
 
@@ -28,15 +28,21 @@ def _helm_template(extra_sets: list[str]) -> str:
 
 def test_email_env_absent_by_default() -> None:
     rendered = _helm_template([])
-    assert "SMTP_USERNAME" not in rendered
-    assert "SMTP_PASSWORD" not in rendered
+    assert "- name: SMTP_USER\n" not in rendered
+    assert "- name: SMTP_PASS\n" not in rendered
+    assert "- name: SMTP_USERNAME\n" not in rendered
+    assert "- name: SMTP_PASSWORD\n" not in rendered
 
 
 def test_email_env_wired_from_existing_secret() -> None:
     rendered = _helm_template(["--set", "app.email.existingSecret=news-dashboard-email"])
-    assert "SMTP_USERNAME" in rendered
-    assert "SMTP_PASSWORD" in rendered
+    assert "- name: SMTP_USER\n" in rendered
+    assert "- name: SMTP_PASS\n" in rendered
+    assert "- name: SMTP_USERNAME\n" in rendered
+    assert "- name: SMTP_PASSWORD\n" in rendered
     assert "news-dashboard-email" in rendered
+    assert rendered.count('key: "SMTP_USERNAME"') == 2
+    assert rendered.count('key: "SMTP_PASSWORD"') == 2
 
 
 def test_otp_smtp_generic_env_absent_by_default() -> None:
@@ -60,11 +66,30 @@ def test_otp_smtp_generic_env_wired_from_values() -> None:
             "app.email.smtpTlsMode=starttls",
         ]
     )
-    assert "OTP_SMTP_HOST" in rendered
+    assert "- name: SMTP_HOST\n" in rendered
+    assert "- name: OTP_SMTP_HOST\n" in rendered
     assert 'value: "smtp.example.net"' in rendered
-    assert "OTP_SMTP_PORT" in rendered
+    assert "- name: SMTP_PORT\n" in rendered
+    assert "- name: OTP_SMTP_PORT\n" in rendered
     assert 'value: "2525"' in rendered
-    assert "OTP_SMTP_FROM" in rendered
+    assert "- name: SMTP_FROM\n" in rendered
+    assert "- name: OTP_SMTP_FROM\n" in rendered
     assert 'value: "noreply@example.net"' in rendered
-    assert "OTP_SMTP_TLS" in rendered
+    assert "- name: SMTP_TLS\n" in rendered
+    assert "- name: OTP_SMTP_TLS\n" in rendered
     assert 'value: "starttls"' in rendered
+
+
+def test_public_base_url_is_independent_of_keycloak() -> None:
+    rendered = _helm_template(
+        [
+            "--set",
+            "app.auth.keycloak.enabled=false",
+            "--set",
+            "app.publicBaseUrl=https://news.example.net",
+        ]
+    )
+    assert "APP_BASE_URL" in rendered
+    assert 'value: "https://news.example.net"' in rendered
+    assert "NEWS_DASHBOARD_BASE_URL" not in rendered
+    assert "KEYCLOAK_SERVER_URL" not in rendered

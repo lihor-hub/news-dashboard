@@ -138,6 +138,49 @@ def test_verify_citations_handles_missing_worth_opening() -> None:
     assert content["worth_opening"] == []
 
 
+def test_verify_citations_removes_duplicates() -> None:
+    raw = {
+        "title": "T",
+        "summary": "Summary",
+        "sections": [{"title": "A", "body": "B", "citations": [1, 1, 2, 1]}],
+    }
+    content, _unsupported = verify_citations(raw, candidate_ids={1, 2})
+    assert content["sections"][0]["citations"] == [1, 2]
+
+
+def test_verify_citations_rejects_empty_summary_with_stories() -> None:
+    raw = {
+        "title": "T",
+        "summary": "  ",
+        "sections": [{"title": "A", "body": "B", "citations": [1]}],
+    }
+    with pytest.raises(ValueError, match="summary"):
+        verify_citations(raw, candidate_ids={1})
+
+
+@pytest.mark.parametrize(
+    ("body_word_count", "raises"),
+    [(1_797, False), (1_798, True)],
+    ids=["exactly-1800-accepted", "1801-rejected"],
+)
+def test_verify_citations_enforces_total_1800_word_budget(
+    body_word_count: int, raises: bool
+) -> None:
+    raw = {
+        "title": "T",
+        "summary": "Summary",
+        "sections": [
+            {"title": "A", "body": " ".join(["word"] * body_word_count), "citations": [1]}
+        ],
+    }
+    if raises:
+        with pytest.raises(ValueError, match="1800-word"):
+            verify_citations(raw, candidate_ids={1})
+    else:
+        content, _unsupported = verify_citations(raw, candidate_ids={1})
+        assert content["summary"] == "Summary"
+
+
 def test_stage_constants_cover_the_full_pipeline() -> None:
     assert STAGE_ORDER == (
         STAGE_CANDIDATE_SELECTION,

@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import smtplib
-from email import message_from_string
+from email import message_from_string, policy
 from email.message import Message
 from typing import ClassVar
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
+
+from news_dashboard.email import send_email, smtp_configured
 
 
 class _FakeSMTP:
@@ -35,10 +37,13 @@ class _FakeSMTP:
         pass
 
     def login(self, user: str, _pw: str) -> None:
-        pass
+        self.login_args = (user, _pw)
 
     def sendmail(self, frm: str, to: str, raw: str) -> None:
         type(self).captured.append((frm, to, raw))
+
+    def send_message(self, msg: Message) -> None:
+        type(self).captured.append((str(msg["From"]), str(msg["To"]), msg.as_string()))
 
 
 def _fresh_fake_smtp() -> type[_FakeSMTP]:
@@ -145,6 +150,18 @@ def test_otp_email_falls_back_to_digest_generic_smtp_vars() -> None:
     assert msg["From"] == "digest-user"
 
 
+def test_otp_email_supports_unauthenticated_relay() -> None:
+    fake_cls = _fresh_fake_smtp()
+    env = {
+        "SMTP_HOST": "relay.internal",
+        "SMTP_FROM": "signin@example.com",
+        "SMTP_TLS": "none",
+    }
+    msg = _capture_sent_message("user@example.com", "121212", env=env, fake_cls=fake_cls)
+    assert msg["From"] == "signin@example.com"
+    assert not hasattr(fake_cls, "login_args")
+
+
 def test_otp_email_gmail_alias_still_works() -> None:
     """Legacy SMTP_USERNAME/SMTP_PASSWORD deployments keep defaulting to Gmail."""
     fake_cls = _fresh_fake_smtp()
@@ -182,3 +199,161 @@ def test_otp_email_missing_config_raises_clear_error() -> None:
         pytest.raises(RuntimeError, match="OTP SMTP is not configured"),
     ):
         email_mod.send_otp_email("user@example.com", "123123")
+
+
+def test_send_email_builds_plain_and_html_alternatives() -> None:
+    fake_cls = _fresh_fake_smtp()
+    env = {
+        "SMTP_HOST": "smtp.example.net",
+        "SMTP_FROM": "briefings@example.net",
+        "SMTP_TLS": "none",
+    }
+    with patch.dict("os.environ", env, clear=True), patch.object(smtplib, "SMTP", fake_cls):
+        assert (
+            send_email(
+                recipient="reader@example.com",
+                subject="Daily brief",
+                text_body="plain text",
+                html_body="<p>html</p>",
+            )
+            is None
+        )
+
+    msg = message_from_string(fake_cls.captured[0][2], policy=policy.default)
+    assert msg["From"] == "briefings@example.net"
+    assert msg["To"] == "reader@example.com"
+    plain_part = msg.get_body(preferencelist=("plain",))
+    html_part = msg.get_body(preferencelist=("html",))
+    assert plain_part is not None
+    assert html_part is not None
+    assert plain_part.get_content().strip() == "plain text"
+    assert html_part.get_content().strip() == "<p>html</p>"
+
+
+def test_smtp_configured_accepts_unauthenticated_relay() -> None:
+    env = {
+        "SMTP_HOST": "relay.internal",
+        "SMTP_FROM": "briefings@example.net",
+        "SMTP_PORT": "25",
+        "SMTP_TLS": "none",
+    }
+    with patch.dict("os.environ", env, clear=True):
+        assert smtp_configured() is True
+
+
+@pytest.mark.parametrize(("username", "password"), [("relay-user", ""), ("", "relay-pass")])
+def test_smtp_configured_rejects_partial_credentials(username: str, password: str) -> None:
+    env = {
+        "SMTP_HOST": "relay.internal",
+        "SMTP_FROM": "briefings@example.net",
+        "SMTP_USER": username,
+        "SMTP_PASS": password,
+    }
+    with patch.dict("os.environ", env, clear=True):
+        assert smtp_configured() is False
+
+
+def test_send_email_adds_one_click_headers() -> None:
+    fake_cls = _fresh_fake_smtp()
+    env = {
+        "SMTP_HOST": "smtp.example.net",
+        "SMTP_FROM": "briefings@example.net",
+        "SMTP_TLS": "none",
+    }
+    with patch.dict("os.environ", env, clear=True), patch.object(smtplib, "SMTP", fake_cls):
+        send_email(
+            recipient="reader@example.com",
+            subject="Daily brief",
+            text_body="text",
+            html_body="<p>html</p>",
+            headers={
+                "List-Unsubscribe": "<https://news.example/unsubscribe/token>",
+                "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+            },
+        )
+
+    msg = message_from_string(fake_cls.captured[0][2])
+    assert msg["List-Unsubscribe"] == "<https://news.example/unsubscribe/token>"
+    assert msg["List-Unsubscribe-Post"] == "List-Unsubscribe=One-Click"
+
+
+def test_send_email_uses_starttls_and_optional_authentication() -> None:
+    env = {
+        "SMTP_HOST": "smtp.example.net",
+        "SMTP_FROM": "briefings@example.net",
+        "SMTP_USER": "relay-user",
+        "SMTP_PASS": "relay-pass",
+        "SMTP_TLS": "starttls",
+    }
+    server = MagicMock()
+    smtp = MagicMock()
+    smtp.return_value.__enter__.return_value = server
+    with patch.dict("os.environ", env, clear=True), patch.object(smtplib, "SMTP", smtp):
+        send_email(
+            recipient="reader@example.com",
+            subject="Daily brief",
+            text_body="text",
+            html_body="<p>html</p>",
+        )
+
+    smtp.assert_called_once_with("smtp.example.net", 587, timeout=15)
+    server.starttls.assert_called_once_with()
+    server.login.assert_called_once_with("relay-user", "relay-pass")
+
+
+def test_send_email_skips_authentication_without_credentials() -> None:
+    env = {
+        "SMTP_HOST": "smtp.example.net",
+        "SMTP_FROM": "briefings@example.net",
+        "SMTP_TLS": "none",
+    }
+    server = MagicMock()
+    smtp = MagicMock()
+    smtp.return_value.__enter__.return_value = server
+    with patch.dict("os.environ", env, clear=True), patch.object(smtplib, "SMTP", smtp):
+        send_email(
+            recipient="reader@example.com",
+            subject="Daily brief",
+            text_body="text",
+            html_body="<p>html</p>",
+        )
+    server.login.assert_not_called()
+
+
+def test_send_email_uses_implicit_tls() -> None:
+    fake_cls = _fresh_fake_smtp()
+    env = {
+        "SMTP_HOST": "smtp.example.net",
+        "SMTP_PORT": "465",
+        "SMTP_FROM": "briefings@example.net",
+        "SMTP_TLS": "ssl",
+    }
+    with patch.dict("os.environ", env, clear=True), patch.object(smtplib, "SMTP_SSL", fake_cls):
+        send_email(
+            recipient="reader@example.com",
+            subject="Daily brief",
+            text_body="text",
+            html_body="<p>html</p>",
+        )
+    assert fake_cls.init_args[0][:2] == ("smtp.example.net", 465)
+
+
+def test_send_email_returns_safe_error_text() -> None:
+    class _FailingSMTP(_FakeSMTP):
+        def __enter__(self) -> _FailingSMTP:
+            msg = "provider rejected reader@example.com with secret detail"
+            raise smtplib.SMTPException(msg)
+
+    env = {
+        "SMTP_HOST": "smtp.example.net",
+        "SMTP_FROM": "briefings@example.net",
+        "SMTP_TLS": "none",
+    }
+    with patch.dict("os.environ", env, clear=True), patch.object(smtplib, "SMTP", _FailingSMTP):
+        result = send_email(
+            recipient="reader@example.com",
+            subject="Daily brief",
+            text_body="text",
+            html_body="<p>html</p>",
+        )
+    assert result == "smtp_error"

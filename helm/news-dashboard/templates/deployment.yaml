@@ -111,6 +111,18 @@ spec:
 {{- end }}
 {{- if .Values.app.email }}
 {{- if .Values.app.email.existingSecret }}
+            - name: SMTP_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.app.email.existingSecret | quote }}
+                  key: {{ .Values.app.email.smtpUsernameKey | default "SMTP_USERNAME" | quote }}
+                  optional: true
+            - name: SMTP_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.app.email.existingSecret | quote }}
+                  key: {{ .Values.app.email.smtpPasswordKey | default "SMTP_PASSWORD" | quote }}
+                  optional: true
             - name: SMTP_USERNAME
               valueFrom:
                 secretKeyRef:
@@ -125,21 +137,33 @@ spec:
                   optional: true
 {{- end }}
 {{- if .Values.app.email.smtpHost }}
+            - name: SMTP_HOST
+              value: {{ .Values.app.email.smtpHost | quote }}
             - name: OTP_SMTP_HOST
               value: {{ .Values.app.email.smtpHost | quote }}
 {{- end }}
 {{- if .Values.app.email.smtpPort }}
+            - name: SMTP_PORT
+              value: {{ .Values.app.email.smtpPort | quote }}
             - name: OTP_SMTP_PORT
               value: {{ .Values.app.email.smtpPort | quote }}
 {{- end }}
 {{- if .Values.app.email.smtpFrom }}
+            - name: SMTP_FROM
+              value: {{ .Values.app.email.smtpFrom | quote }}
             - name: OTP_SMTP_FROM
               value: {{ .Values.app.email.smtpFrom | quote }}
 {{- end }}
 {{- if .Values.app.email.smtpTlsMode }}
+            - name: SMTP_TLS
+              value: {{ .Values.app.email.smtpTlsMode | quote }}
             - name: OTP_SMTP_TLS
               value: {{ .Values.app.email.smtpTlsMode | quote }}
 {{- end }}
+{{- end }}
+{{- if .Values.app.publicBaseUrl }}
+            - name: APP_BASE_URL
+              value: {{ .Values.app.publicBaseUrl | quote }}
 {{- end }}
             - name: SESSION_SECRET
               valueFrom:

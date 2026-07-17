@@ -1,0 +1,569 @@
+"""Database and transport operations for briefing-email actions."""
+
+from __future__ import annotations
+
+import ipaddress
+import os
+import threading
+import time
+from collections import OrderedDict
+from dataclasses import dataclass
+from datetime import date, datetime, timedelta, timezone, tzinfo
+from typing import Any
+from urllib.parse import quote, urlsplit
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
+from news_dashboard.briefing_email.rendering import render_briefing_email
+from news_dashboard.briefing_email.tokens import make_unsubscribe_token
+from news_dashboard.db import active_database_url, connect, row_to_dict
+from news_dashboard.email import send_email, smtp_configured
+
+_COOLDOWN_SECONDS = 60.0
+_COOLDOWN_MAX_ENTRIES = 10_000
+_MISSING_EMAIL = "missing_email"
+_GUEST_ACCOUNT = "guest_account"
+_MISSING_BRIEFING = "missing_briefing"
+_DELIVERY_FAILED = "delivery_failed"
+_PreviewCooldownKey = tuple[str, str, int]
+_preview_sent_at: OrderedDict[_PreviewCooldownKey, float] = OrderedDict()
+_preview_lock = threading.Lock()
+_STALE_CLAIM_AFTER = timedelta(minutes=30)
+_RETRY_DELAY = timedelta(minutes=15)
+
+
+@dataclass(frozen=True)
+class Delivery:
+    """Persistent scheduled-delivery state."""
+
+    id: int
+    user_id: int
+    local_delivery_date: date
+    status: str
+    briefing_id: int | None
+    attempt_count: int
+    next_attempt_at: datetime | None
+    claim_token: datetime
+
+
+@dataclass(frozen=True)
+class DeliveryOutcome:
+    """Safe result returned to the scheduler for one channel attempt."""
+
+    status: str
+    delivery: Delivery
+    briefing: dict[str, Any] | None = None
+
+
+class DeliveryClaimLostError(RuntimeError):
+    """Raised when a worker's delivery claim has been replaced or advanced."""
+
+
+def _delivery(row: Any) -> Delivery:
+    data = row_to_dict(row)
+    return Delivery(
+        id=int(data["id"]),
+        user_id=int(data["user_id"]),
+        local_delivery_date=data["local_delivery_date"],
+        status=str(data["status"]),
+        briefing_id=int(data["briefing_id"]) if data.get("briefing_id") is not None else None,
+        attempt_count=int(data["attempt_count"]),
+        next_attempt_at=data.get("next_attempt_at"),
+        claim_token=data["claimed_at"],
+    )
+
+
+def claim_delivery(
+    user_id: int,
+    local_date: date,
+    *,
+    database_url: str | None = None,
+) -> Delivery | None:
+    """Atomically claim a user's local delivery date once."""
+    with connect(database_url=database_url) as conn:
+        row = conn.execute(
+            """
+            INSERT INTO briefing_email_deliveries(user_id, local_delivery_date)
+            VALUES (%s, %s)
+            ON CONFLICT (user_id, local_delivery_date) DO NOTHING
+            RETURNING id, user_id, local_delivery_date, status, briefing_id,
+                      attempt_count, next_attempt_at, claimed_at
+            """,
+            (user_id, local_date),
+        ).fetchone()
+    return _delivery(row) if row is not None else None
+
+
+def _acquire_delivery(
+    user_id: int, local_date: date, now: datetime, database_url: str | None
+) -> Delivery | None:
+    claimed = claim_delivery(user_id, local_date, database_url=database_url)
+    if claimed is not None:
+        return claimed
+    with connect(database_url=database_url) as conn:
+        row = conn.execute(
+            """
+            UPDATE briefing_email_deliveries
+            SET status = 'claimed', claimed_at = %s, updated_at = %s,
+                next_attempt_at = NULL, error_code = NULL, error_message = NULL
+            WHERE user_id = %s AND local_delivery_date = %s
+              AND ((status = 'claimed' AND claimed_at <= %s)
+                   OR (status = 'retryable_failed' AND next_attempt_at <= %s))
+            RETURNING id, user_id, local_delivery_date, status, briefing_id,
+                      attempt_count, next_attempt_at, claimed_at
+            """,
+            (now, now, user_id, local_date, now - _STALE_CLAIM_AFTER, now),
+        ).fetchone()
+    return _delivery(row) if row is not None else None
+
+
+def _transition_delivery(  # noqa: PLR0913  # explicit transition fields keep SQL auditable
+    delivery: Delivery,
+    status: str,
+    *,
+    expected_status: str,
+    database_url: str | None,
+    briefing_id: int | None = None,
+    now: datetime,
+    error_code: str | None = None,
+    next_attempt_at: datetime | None = None,
+    sent: bool = False,
+) -> Delivery:
+    with connect(database_url=database_url) as conn:
+        row = conn.execute(
+            """
+            UPDATE briefing_email_deliveries
+            SET status = %s, briefing_id = COALESCE(%s, briefing_id),
+                attempt_count = attempt_count + CASE WHEN %s = 'sending' THEN 1 ELSE 0 END,
+                next_attempt_at = %s, error_code = %s, error_message = %s,
+                sent_at = CASE WHEN %s THEN %s ELSE sent_at END, updated_at = %s
+            WHERE id = %s AND claimed_at = %s AND status = %s
+            RETURNING id, user_id, local_delivery_date, status, briefing_id,
+                      attempt_count, next_attempt_at, claimed_at
+            """,
+            (
+                status,
+                briefing_id,
+                status,
+                next_attempt_at,
+                error_code,
+                error_code,
+                sent,
+                now,
+                now,
+                delivery.id,
+                delivery.claim_token,
+                expected_status,
+            ),
+        ).fetchone()
+    if row is None:
+        msg = "Delivery claim was replaced or already advanced"
+        raise DeliveryClaimLostError(msg)
+    return _delivery(row)
+
+
+def _local_day_bounds(local_date: date, zone: tzinfo) -> tuple[datetime, datetime]:
+    start = datetime.combine(local_date, datetime.min.time(), tzinfo=zone)
+    return start.astimezone(timezone.utc), (start + timedelta(days=1)).astimezone(timezone.utc)
+
+
+def _find_local_day_briefing(
+    user_id: int, local_date: date, zone: tzinfo, database_url: str | None
+) -> dict[str, Any] | None:
+    start, end = _local_day_bounds(local_date, zone)
+    with connect(database_url=database_url) as conn:
+        row = conn.execute(
+            """
+            SELECT id, title, summary, content, created_at, since_at, until_at, status
+            FROM briefings
+            WHERE user_id = %s AND status = 'complete'
+              AND until_at >= %s AND until_at < %s
+            ORDER BY until_at DESC, id DESC LIMIT 1
+            """,
+            (user_id, start, end),
+        ).fetchone()
+    if row is None:
+        return None
+    from news_dashboard.briefings.service import get_briefing
+
+    return get_briefing(int(row["id"]), database_url=database_url, user_id=user_id)
+
+
+def deliver_daily_briefing(  # noqa: PLR0911, PLR0912, PLR0915  # explicit ledger states
+    user_id: int,
+    *,
+    now: datetime | None = None,
+    local_delivery_date: date | None = None,
+    database_url: str | None = None,
+) -> DeliveryOutcome:
+    """Generate or reuse and deliver today's canonical briefing at most once."""
+    instant = now or datetime.now(timezone.utc)
+    if instant.tzinfo is None:
+        msg = "now must be timezone-aware"
+        raise ValueError(msg)
+    with connect(database_url=database_url) as conn:
+        user_row = conn.execute(
+            "SELECT email, briefing_timezone FROM users WHERE id = %s", (user_id,)
+        ).fetchone()
+    timezone_name = str(user_row["briefing_timezone"] or "UTC") if user_row else "UTC"
+    try:
+        zone: tzinfo = ZoneInfo(timezone_name)
+    except ZoneInfoNotFoundError:
+        timezone_name = "UTC"
+        zone = timezone.utc
+    local_date = local_delivery_date or instant.astimezone(zone).date()
+    delivery = _acquire_delivery(user_id, local_date, instant, database_url)
+    if delivery is None:
+        with connect(database_url=database_url) as conn:
+            existing = conn.execute(
+                """
+                SELECT id, user_id, local_delivery_date, status, briefing_id,
+                       attempt_count, next_attempt_at, claimed_at
+                FROM briefing_email_deliveries
+                WHERE user_id = %s AND local_delivery_date = %s
+                """,
+                (user_id, local_date),
+            ).fetchone()
+        if existing is None:
+            msg = "Delivery claim disappeared"
+            raise RuntimeError(msg)
+        current = _delivery(existing)
+        return DeliveryOutcome(current.status, current)
+
+    from news_dashboard.briefings.service import generate_briefing
+
+    briefing = _find_local_day_briefing(user_id, local_date, zone, database_url)
+    if briefing is None:
+        try:
+            briefing = generate_briefing(
+                database_url=database_url,
+                user_id=user_id,
+                langfuse_session_id=f"daily-email:{user_id}:{local_date.isoformat()}",
+                langfuse_tags=["daily-email", "briefing"],
+            )
+        except Exception:
+            failed = _transition_delivery(
+                delivery,
+                "retryable_failed",
+                expected_status="claimed",
+                database_url=database_url,
+                now=instant,
+                error_code="generation_failed",
+                next_attempt_at=instant + _RETRY_DELAY,
+            )
+            return DeliveryOutcome(failed.status, failed)
+    if briefing.get("status") == "no_candidates":
+        skipped = _transition_delivery(
+            delivery,
+            "skipped",
+            expected_status="claimed",
+            database_url=database_url,
+            now=instant,
+        )
+        return DeliveryOutcome(skipped.status, skipped, briefing)
+
+    briefing_id = int(briefing["id"])
+    try:
+        base_url = _base_url()
+        token = make_unsubscribe_token(user_id)
+        unsubscribe_url = f"{base_url}/email/briefing/unsubscribe?token={quote(token, safe='')}"
+        rendered = render_briefing_email(
+            briefing,
+            local_date=local_date,
+            timezone_name=timezone_name,
+            briefing_url=f"{base_url}/briefings/{briefing_id}",
+            preferences_url=f"{base_url}/settings/notifications",
+            unsubscribe_url=unsubscribe_url,
+        )
+    except Exception:
+        failed = _transition_delivery(
+            delivery,
+            "retryable_failed",
+            expected_status="claimed",
+            database_url=database_url,
+            now=instant,
+            briefing_id=briefing_id,
+            error_code="preparation_failed",
+            next_attempt_at=instant + _RETRY_DELAY,
+        )
+        return DeliveryOutcome(failed.status, failed, briefing)
+    rendered_state = _transition_delivery(
+        delivery,
+        "rendered",
+        expected_status="claimed",
+        database_url=database_url,
+        now=instant,
+        briefing_id=briefing_id,
+    )
+    try:
+        with connect(database_url=database_url) as conn:
+            consent = conn.execute(
+                "SELECT email, briefing_email_enabled FROM users WHERE id = %s", (user_id,)
+            ).fetchone()
+    except Exception:
+        failed = _transition_delivery(
+            rendered_state,
+            "retryable_failed",
+            expected_status="rendered",
+            database_url=database_url,
+            now=instant,
+            error_code="pre_send_check_failed",
+            next_attempt_at=instant + _RETRY_DELAY,
+        )
+        return DeliveryOutcome(failed.status, failed, briefing)
+    if consent is None or not bool(consent["briefing_email_enabled"]):
+        stopped = _transition_delivery(
+            rendered_state,
+            "unsubscribed",
+            expected_status="rendered",
+            database_url=database_url,
+            now=instant,
+        )
+        return DeliveryOutcome(stopped.status, stopped, briefing)
+    recipient = str(consent["email"] or "").strip()
+    if not recipient:
+        failed = _transition_delivery(
+            rendered_state,
+            "permanent_failed",
+            expected_status="rendered",
+            database_url=database_url,
+            now=instant,
+            error_code="missing_email",
+        )
+        return DeliveryOutcome(failed.status, failed, briefing)
+    try:
+        configured = smtp_configured()
+    except Exception:
+        failed = _transition_delivery(
+            rendered_state,
+            "retryable_failed",
+            expected_status="rendered",
+            database_url=database_url,
+            now=instant,
+            error_code="pre_send_check_failed",
+            next_attempt_at=instant + _RETRY_DELAY,
+        )
+        return DeliveryOutcome(failed.status, failed, briefing)
+    if not configured:
+        failed = _transition_delivery(
+            rendered_state,
+            "permanent_failed",
+            expected_status="rendered",
+            database_url=database_url,
+            now=instant,
+            error_code="smtp_not_configured",
+        )
+        return DeliveryOutcome(failed.status, failed, briefing)
+
+    sending = _transition_delivery(
+        rendered_state,
+        "sending",
+        expected_status="rendered",
+        database_url=database_url,
+        now=instant,
+    )
+    error = send_email(
+        recipient=recipient,
+        subject=rendered.subject,
+        text_body=rendered.text_body,
+        html_body=rendered.html_body,
+        headers={
+            "List-Unsubscribe": f"<{unsubscribe_url}>",
+            "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+        },
+    )
+    if error is None:
+        complete = _transition_delivery(
+            sending,
+            "sent",
+            expected_status="sending",
+            database_url=database_url,
+            now=instant,
+            sent=True,
+        )
+        return DeliveryOutcome(complete.status, complete, briefing)
+    retryable = error == "smtp_error"
+    failed = _transition_delivery(
+        sending,
+        "retryable_failed" if retryable else "permanent_failed",
+        expected_status="sending",
+        database_url=database_url,
+        now=instant,
+        error_code=error,
+        next_attempt_at=instant + _RETRY_DELAY if retryable else None,
+    )
+    return DeliveryOutcome(failed.status, failed, briefing)
+
+
+class PreviewUnavailableError(RuntimeError):
+    """Raised when a preview cannot be created from account state."""
+
+    def __init__(self, reason: str) -> None:
+        super().__init__(reason)
+        self.reason = reason
+
+
+class PreviewCooldownError(RuntimeError):
+    """Raised when a user requests another preview inside the cooldown."""
+
+
+def unsubscribe_user(user_id: int, *, database_url: str | None = None) -> bool:
+    """Disable scheduled briefing email for a user, idempotently."""
+    with connect(database_url=database_url) as conn:
+        row = conn.execute(
+            """
+            UPDATE users
+            SET briefing_email_enabled = FALSE
+            WHERE id = %s
+            RETURNING id
+            """,
+            (user_id,),
+        ).fetchone()
+    return row is not None
+
+
+def _preview_cooldown_key(database_url: str | None, user_id: int) -> _PreviewCooldownKey:
+    return ("briefing_email_preview", active_database_url(database_url), user_id)
+
+
+def _claim_preview_cooldown(
+    user_id: int, *, database_url: str | None = None
+) -> _PreviewCooldownKey:
+    key = _preview_cooldown_key(database_url, user_id)
+    now = time.monotonic()
+    with _preview_lock:
+        previous = _preview_sent_at.get(key)
+        if previous is not None and now - previous < _COOLDOWN_SECONDS:
+            raise PreviewCooldownError
+        _preview_sent_at[key] = now
+        _preview_sent_at.move_to_end(key)
+        while len(_preview_sent_at) > _COOLDOWN_MAX_ENTRIES:
+            _preview_sent_at.popitem(last=False)
+    return key
+
+
+def _release_preview_cooldown(key: _PreviewCooldownKey) -> None:
+    with _preview_lock:
+        _preview_sent_at.pop(key, None)
+
+
+def _base_url() -> str:
+    """Resolve and validate the public HTTP(S) link base."""
+    value = (
+        (
+            os.getenv("APP_BASE_URL")
+            or os.getenv("NEWS_DASHBOARD_BASE_URL")
+            or os.getenv("NEWS_DASHBOARD_URL")
+            or ""
+        )
+        .strip()
+        .rstrip("/")
+    )
+    parsed = urlsplit(value)
+    # Accessing ``port`` performs urllib's range and numeric validation.
+    _ = parsed.port
+    hostname = parsed.hostname
+    invalid_host = (
+        not hostname
+        or hostname.lower() == "localhost"
+        or parsed.username is not None
+        or parsed.password is not None
+        or bool(parsed.query)
+        or bool(parsed.fragment)
+    )
+    if hostname and not invalid_host:
+        try:
+            address = ipaddress.ip_address(hostname)
+            invalid_host = (
+                address.is_loopback
+                or address.is_private
+                or address.is_link_local
+                or address.is_unspecified
+                or address.is_reserved
+            )
+        except ValueError:
+            invalid_host = False
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc or invalid_host:
+        msg = "a public absolute HTTP(S) application URL is required"
+        raise ValueError(msg)
+    return value
+
+
+def public_base_url_configured() -> bool:
+    """Return whether email links can safely target the public application."""
+    try:
+        _base_url()
+    except ValueError:
+        return False
+    return True
+
+
+def _load_preview(database_url: str | None, user_id: int) -> tuple[dict[str, Any], dict[str, Any]]:
+    with connect(database_url=database_url) as conn:
+        user_row = conn.execute(
+            "SELECT email, briefing_timezone, is_guest FROM users WHERE id = %s",
+            (user_id,),
+        ).fetchone()
+        briefing_row = conn.execute(
+            """
+            SELECT id
+            FROM briefings
+            WHERE user_id = %s AND status = 'complete'
+            ORDER BY created_at DESC, id DESC
+            LIMIT 1
+            """,
+            (user_id,),
+        ).fetchone()
+    if user_row is None or not str(user_row["email"] or "").strip():
+        raise PreviewUnavailableError(_MISSING_EMAIL)
+    if bool(user_row["is_guest"]):
+        raise PreviewUnavailableError(_GUEST_ACCOUNT)
+    if briefing_row is None:
+        raise PreviewUnavailableError(_MISSING_BRIEFING)
+    from news_dashboard.briefings.service import get_briefing
+
+    briefing = get_briefing(int(briefing_row["id"]), database_url=database_url, user_id=user_id)
+    if briefing is None:
+        raise PreviewUnavailableError(_MISSING_BRIEFING)
+    return row_to_dict(user_row), briefing
+
+
+def send_preview(user_id: int, *, database_url: str | None = None) -> bool:
+    """Render and send the latest complete briefing without touching schedule state."""
+    user, briefing = _load_preview(database_url, user_id)
+    cooldown_key = _claim_preview_cooldown(user_id, database_url=database_url)
+    try:
+        timezone_name = str(user.get("briefing_timezone") or "UTC")
+        try:
+            zone: tzinfo = ZoneInfo(timezone_name)
+        except ZoneInfoNotFoundError:
+            timezone_name = "UTC"
+            zone = timezone.utc
+        base_url = _base_url()
+        token = make_unsubscribe_token(user_id)
+        unsubscribe_url = f"{base_url}/email/briefing/unsubscribe?token={quote(token, safe='')}"
+        briefing_id = int(briefing["id"])
+        rendered = render_briefing_email(
+            briefing,
+            local_date=datetime.now(zone).date(),
+            timezone_name=timezone_name,
+            briefing_url=f"{base_url}/briefings/{briefing_id}",
+            preferences_url=f"{base_url}/settings/notifications",
+            unsubscribe_url=unsubscribe_url,
+        )
+        error = send_email(
+            recipient=str(user["email"]).strip(),
+            subject=rendered.subject,
+            text_body=rendered.text_body,
+            html_body=rendered.html_body,
+            headers={
+                "List-Unsubscribe": f"<{unsubscribe_url}>",
+                "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+            },
+        )
+    except Exception:
+        _release_preview_cooldown(cooldown_key)
+        raise
+    if error is not None:
+        _release_preview_cooldown(cooldown_key)
+        raise PreviewUnavailableError(_DELIVERY_FAILED)
+    return True
