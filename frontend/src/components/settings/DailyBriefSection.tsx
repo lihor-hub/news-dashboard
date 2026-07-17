@@ -24,7 +24,7 @@ function arrayBufferToBase64Url(buffer: ArrayBuffer): string {
 
 type PushState = 'idle' | 'requesting' | 'subscribed' | 'denied' | 'unavailable' | 'error';
 type TimezoneSaveState = 'idle' | 'saving' | 'saved' | 'error';
-type EmailMutationState = 'idle' | 'saving' | 'error';
+type EmailMutationState = 'idle' | 'enabling' | 'disabling' | 'error';
 type EmailPreviewState = 'idle' | 'sending' | 'sent' | 'error';
 
 const FALLBACK_TIMEZONES = [
@@ -183,7 +183,7 @@ export function DailyBriefSection() {
   const setEmailSubscription = async (enabled: boolean) => {
     const previousEnabled = emailEnabled;
     setEmailEnabled(enabled);
-    setEmailMutationState('saving');
+    setEmailMutationState(enabled ? 'enabling' : 'disabling');
     setEmailPreviewState('idle');
     try {
       await updateNotificationSettings({ email_enabled: enabled });
@@ -336,6 +336,22 @@ export function DailyBriefSection() {
             <p className="text-xs text-muted-foreground">
               Email delivery is not configured on this server.
             </p>
+          ) : emailMutationState === 'enabling' || emailMutationState === 'disabling' ? (
+            <button
+              type="button"
+              disabled
+              aria-label={
+                emailMutationState === 'enabling'
+                  ? 'Enabling email briefing'
+                  : 'Disabling email briefing'
+              }
+              className="flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground disabled:opacity-60"
+            >
+              <RefreshCw className="size-3 animate-spin" />
+              {emailMutationState === 'enabling'
+                ? 'Enabling email briefing'
+                : 'Disabling email briefing'}
+            </button>
           ) : emailEnabled ? (
             <div className="flex flex-wrap items-center gap-3">
               <div className="flex items-center gap-1.5 text-xs text-green-600 dark:text-green-400">
@@ -345,7 +361,6 @@ export function DailyBriefSection() {
               <button
                 type="button"
                 onClick={() => void setEmailSubscription(false)}
-                disabled={emailMutationState === 'saving'}
                 aria-label="Disable email briefing"
                 className="text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground disabled:opacity-60"
               >
@@ -372,16 +387,11 @@ export function DailyBriefSection() {
             <button
               type="button"
               onClick={() => void setEmailSubscription(true)}
-              disabled={emailMutationState === 'saving'}
               aria-label="Enable email briefing"
               className="flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-60"
             >
-              {emailMutationState === 'saving' ? (
-                <RefreshCw className="size-3 animate-spin" />
-              ) : (
-                <Mail className="size-3" />
-              )}
-              {emailMutationState === 'saving' ? 'Enabling…' : 'Enable email briefing'}
+              <Mail className="size-3" />
+              Enable email briefing
             </button>
           )}
 

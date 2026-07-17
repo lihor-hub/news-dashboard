@@ -353,6 +353,42 @@ describe('DailyBriefSection — email briefing', () => {
     expect(within(region).getByRole('button', { name: 'Enable email briefing' })).toBeVisible();
   });
 
+  it('announces an enable mutation as pending in the correct direction', async () => {
+    const user = userEvent.setup();
+    mockUpdateSettings.mockReturnValueOnce(new Promise(() => undefined));
+    renderSettings({ email_enabled: false });
+
+    const region = await screen.findByRole('region', { name: 'Email briefing' });
+    await user.click(within(region).getByRole('button', { name: 'Enable email briefing' }));
+
+    const pendingButton = within(region).getByRole('button', {
+      name: 'Enabling email briefing',
+    });
+    expect(pendingButton).toBeDisabled();
+    expect(pendingButton).toHaveTextContent('Enabling email briefing');
+    expect(
+      within(region).queryByRole('button', { name: 'Disable email briefing' })
+    ).not.toBeInTheDocument();
+  });
+
+  it('announces a disable mutation as pending in the correct direction', async () => {
+    const user = userEvent.setup();
+    mockUpdateSettings.mockReturnValueOnce(new Promise(() => undefined));
+    renderSettings({ email_enabled: true });
+
+    const region = await screen.findByRole('region', { name: 'Email briefing' });
+    await user.click(within(region).getByRole('button', { name: 'Disable email briefing' }));
+
+    const pendingButton = within(region).getByRole('button', {
+      name: 'Disabling email briefing',
+    });
+    expect(pendingButton).toBeDisabled();
+    expect(pendingButton).toHaveTextContent('Disabling email briefing');
+    expect(
+      within(region).queryByRole('button', { name: 'Enable email briefing' })
+    ).not.toBeInTheDocument();
+  });
+
   it('shows pending and success feedback for a preview', async () => {
     const user = userEvent.setup();
     let resolvePreview!: (value: { sent: boolean }) => void;
