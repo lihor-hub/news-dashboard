@@ -109,6 +109,26 @@ def test_extract_body_ok() -> None:
     assert "skip footer" not in body
 
 
+def test_extract_body_resumes_after_void_elements_in_skipped_header() -> None:
+    html = b"""
+    <html><body>
+      <header>
+        <img src="logo.png">
+        <div><img src="banner.png"></div>
+      </header>
+      <main>
+        <p>This article paragraph follows a skipped header containing void elements.</p>
+      </main>
+    </body></html>
+    """
+    url, thread = _start_server(html)
+    with _allow_local_body_fetches():
+        body, status = extract_body(url)
+    thread.join(timeout=2)
+    assert status == "ok"
+    assert "article paragraph follows" in body
+
+
 def test_extract_body_error_on_network_failure() -> None:
     body, status = extract_body("http://127.0.0.1:1/")
     assert status == "error"
