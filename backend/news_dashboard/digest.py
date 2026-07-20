@@ -15,6 +15,12 @@ from email.mime.text import MIMEText
 from typing import Any
 
 from news_dashboard.db import init_db
+from news_dashboard.email_theme import (
+    EMAIL_COLORS,
+    FONT_SERIF,
+    render_action_link,
+    render_email_shell,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -97,41 +103,79 @@ def _base_url() -> str:
     return os.getenv("APP_BASE_URL", "http://localhost:8000")
 
 
+def _display_title(value: object, *, limit: int = 120) -> str:
+    """Return a normalized title bounded for compact email presentation."""
+    normalized = " ".join(str(value).split()) if value else "Untitled"
+    if len(normalized) <= limit:
+        return normalized
+
+    prefix = normalized[: limit - 1].rstrip()
+    if " " in prefix:
+        word_boundary = prefix.rsplit(" ", 1)[0]
+        if word_boundary:
+            prefix = word_boundary
+    return f"{prefix}…"
+
+
 def _render_html(articles: list[dict[str, Any]], *, user_id: int) -> str:
     base = _base_url()
     rows = ""
     for a in articles:
         token = _make_token(user_id, a["id"])
         mark_read_url = f"{base}/api/articles/{a['id']}/read?token={token}"
-        title = html.escape(a.get("title") or "Untitled")
+        title = html.escape(_display_title(a.get("title")))
         url = html.escape(a.get("url") or "#", quote=True)
         source = html.escape(a.get("source_name") or "")
         summary = html.escape(a.get("summary") or "")
-        score = a.get("importance_score", 0)
+        score = html.escape(str(a.get("importance_score", 0)))
+        summary_html = ""
+        if summary:
+            summary_html = f"""
+            <p style="margin:9px 0 12px;color:{EMAIL_COLORS["foreground"].email_hex};
+                      font-family:{FONT_SERIF};font-size:14px;line-height:1.55;">
+              {summary}
+            </p>"""
         rows += f"""
         <tr>
-          <td style="padding:12px 0;border-bottom:1px solid #eee;">
+          <td style="padding:20px 0;border-bottom:1px solid
+                     {EMAIL_COLORS["border"].email_hex};">
             <a href="{url}"
-               style="font-size:15px;font-weight:bold;color:#1a1a1a;text-decoration:none;"
+               style="color:{EMAIL_COLORS["primary"].email_hex};font-size:16px;
+                      font-weight:700;line-height:1.35;text-decoration:none;"
             >{title}</a><br>
-            <span style="font-size:12px;color:#888;">{source} &middot; score {score}</span><br>
-            <p style="margin:6px 0;font-size:13px;color:#444;">{summary}</p>
-            <a href="{mark_read_url}" style="font-size:12px;color:#0066cc;">Mark as read &rarr;</a>
+            <span style="display:inline-block;margin-top:6px;color:
+                         {EMAIL_COLORS["muted"].email_hex};font-size:11px;
+                         letter-spacing:.02em;text-transform:uppercase;">
+              {source} &middot; score {score}
+            </span>
+            {summary_html}
+            {render_action_link(url=mark_read_url, label="Mark as read")}
           </td>
         </tr>
         """
     date_str = datetime.now(timezone.utc).strftime("%A, %B %-d %Y")
-    return f"""
-    <html><body style="font-family:Arial,sans-serif;max-width:640px;margin:auto;padding:24px;">
-      <h2 style="color:#1a1a1a;">News Digest &mdash; {date_str}</h2>
-      <p style="color:#555;">Your top {len(articles)}
-        new article{"s" if len(articles) != 1 else ""} today:</p>
-      <table width="100%" cellpadding="0" cellspacing="0">{rows}</table>
-      <p style="margin-top:24px;font-size:12px;color:#aaa;">
+    article_word = f"article{'s' if len(articles) != 1 else ''}"
+    body_html = f"""
+      <div style="margin:0 0 8px;padding:16px 18px;border-radius:10px;
+                  background:{EMAIL_COLORS["surface_muted"].email_hex};">
+        <p style="margin:0;color:{EMAIL_COLORS["muted"].email_hex};
+                  font-size:13px;line-height:1.5;">Your top <strong style="color:
+                  {EMAIL_COLORS["foreground"].email_hex};">{len(articles)}
+        new {article_word} today</strong>, selected by importance.</p>
+      </div>
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+        {rows}
+      </table>
+      <p style="margin:22px 0 0;color:{EMAIL_COLORS["muted"].email_hex};
+                font-size:11px;line-height:1.5;">
         You received this because you set up the News Dashboard digest.
-      </p>
-    </body></html>
-    """
+      </p>"""
+    return render_email_shell(
+        preheader=f"Your top {len(articles)} {article_word} for today",
+        eyebrow="Daily briefing",
+        heading=f"News Digest — {date_str}",
+        body_html=body_html,
+    )
 
 
 def _render_text(articles: list[dict[str, Any]], *, user_id: int) -> str:
@@ -140,7 +184,7 @@ def _render_text(articles: list[dict[str, Any]], *, user_id: int) -> str:
     for i, a in enumerate(articles, 1):
         token = _make_token(user_id, a["id"])
         mark_read_url = f"{base}/api/articles/{a['id']}/read?token={token}"
-        title = a.get("title") or "Untitled"
+        title = _display_title(a.get("title"))
         url = a.get("url") or ""
         source = a.get("source_name") or ""
         summary = a.get("summary") or ""
