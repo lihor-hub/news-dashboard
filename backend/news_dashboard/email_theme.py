@@ -10,19 +10,20 @@ from typing import NamedTuple
 class EmailColor(NamedTuple):
     """An email-safe color paired with its canonical application token."""
 
+    css_variable: str
     app_token: str
     email_hex: str
 
 
 EMAIL_COLORS: Mapping[str, EmailColor] = {
-    "background": EmailColor("oklch(0.985 0.003 80)", "#faf8f5"),
-    "foreground": EmailColor("oklch(0.2 0.012 70)", "#312e29"),
-    "surface": EmailColor("oklch(1 0 0)", "#ffffff"),
-    "surface_muted": EmailColor("oklch(0.945 0.006 80)", "#f1ede8"),
-    "primary": EmailColor("oklch(0.32 0.04 60)", "#594532"),
-    "muted": EmailColor("oklch(0.5 0.012 70)", "#77716a"),
-    "accent": EmailColor("oklch(0.55 0.13 45)", "#a95125"),
-    "border": EmailColor("oklch(0.9 0.008 80)", "#e4ded7"),
+    "background": EmailColor("--background", "oklch(0.985 0.003 80)", "#faf8f5"),
+    "foreground": EmailColor("--foreground", "oklch(0.2 0.012 70)", "#312e29"),
+    "card": EmailColor("--card", "oklch(1 0 0)", "#ffffff"),
+    "surface_muted": EmailColor("--surface-2", "oklch(0.945 0.006 80)", "#f1ede8"),
+    "primary": EmailColor("--primary", "oklch(0.32 0.04 60)", "#594532"),
+    "muted": EmailColor("--muted-foreground", "oklch(0.5 0.012 70)", "#77716a"),
+    "accent": EmailColor("--accent", "oklch(0.55 0.13 45)", "#a95125"),
+    "border": EmailColor("--border", "oklch(0.9 0.008 80)", "#e4ded7"),
 }
 
 FONT_SANS = "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif"
@@ -30,12 +31,31 @@ FONT_SERIF = "'Source Serif 4', 'Iowan Old Style', Georgia, serif"
 FONT_MONO = "'JetBrains Mono', 'SFMono-Regular', Consolas, monospace"
 
 
+def _escape(value: str) -> str:
+    """Escape email text using the entity spelling Jinja emits."""
+    return html.escape(value, quote=True).replace("&#x27;", "&#39;")
+
+
+def compact_text(value: object, *, fallback: str, limit: int = 120) -> str:
+    """Normalize and bound user-facing text at the nearest word boundary."""
+    normalized = " ".join(str(value).split()) if value else fallback
+    if len(normalized) <= limit:
+        return normalized
+
+    prefix = normalized[: limit - 1].rstrip()
+    if " " in prefix:
+        word_boundary = prefix.rsplit(" ", 1)[0]
+        if word_boundary:
+            prefix = word_boundary
+    return f"{prefix}…"
+
+
 def render_email_shell(*, preheader: str, eyebrow: str, heading: str, body_html: str) -> str:
     """Wrap trusted message HTML in the shared News Dashboard email shell."""
     colors = EMAIL_COLORS
-    safe_preheader = html.escape(preheader, quote=True)
-    safe_eyebrow = html.escape(eyebrow, quote=True)
-    safe_heading = html.escape(heading, quote=True)
+    safe_preheader = _escape(preheader)
+    safe_eyebrow = _escape(eyebrow)
+    safe_heading = _escape(heading)
     return f"""\
 <!DOCTYPE html>
 <html lang="en">
@@ -73,7 +93,7 @@ def render_email_shell(*, preheader: str, eyebrow: str, heading: str, body_html:
             </td>
           </tr>
           <tr>
-            <td style="background:{colors["surface"].email_hex};
+            <td style="background:{colors["card"].email_hex};
                        border:1px solid {colors["border"].email_hex};border-radius:14px;
                        box-shadow:0 8px 28px rgba(49,46,41,.07);overflow:hidden;">
               <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
@@ -113,8 +133,8 @@ def render_email_shell(*, preheader: str, eyebrow: str, heading: str, body_html:
 def render_highlight_panel(*, label: str, value: str) -> str:
     """Render a warm highlighted value panel, escaping all caller content."""
     colors = EMAIL_COLORS
-    safe_label = html.escape(label, quote=True)
-    safe_value = html.escape(value, quote=True)
+    safe_label = _escape(label)
+    safe_value = _escape(value)
     return f"""
     <div style="margin:0 0 26px;padding:22px;text-align:center;
                 background:{colors["surface_muted"].email_hex};
@@ -131,8 +151,8 @@ def render_highlight_panel(*, label: str, value: str) -> str:
 
 def render_action_link(*, url: str, label: str) -> str:
     """Render the shared compact secondary action link."""
-    safe_url = html.escape(url, quote=True)
-    safe_label = html.escape(label, quote=True)
+    safe_url = _escape(url)
+    safe_label = _escape(label)
     return f"""<a href="{safe_url}"
       style="color:{EMAIL_COLORS["accent"].email_hex};font-size:12px;
              font-weight:600;text-decoration:none;">{safe_label} &rarr;</a>"""

@@ -1,16 +1,38 @@
-<!doctype html>
-<html lang="en">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width"></head>
-<body style="margin:0;background:#f1f5f9;font-family:Arial,sans-serif;color:#172033">
-<div style="display:none;max-height:0;overflow:hidden">{{ summary }}</div>
-<table role="presentation" width="100%" cellspacing="0" cellpadding="0"><tr><td align="center" style="padding:24px">
-<table role="presentation" width="640" cellspacing="0" cellpadding="0" style="max-width:640px;width:100%;background:#fff">
-<tr><td style="padding:28px;background:#172033;color:#fff"><strong>News Dashboard</strong><h1 style="margin:12px 0 0">{{ title }}</h1></td></tr>
-<tr><td style="padding:24px"><p>{{ local_date }} · {{ timezone_name }} · {{ estimated_minutes }} min read</p>
-<div style="padding:18px;background:#eff6ff;border-left:4px solid #2563eb"><strong>Executive summary</strong><p>{{ summary }}</p></div>
-{% for story in stories %}<div style="padding:22px 0;border-bottom:1px solid #e2e8f0"><h2>{{ story.title }}</h2><p style="line-height:1.6">{{ story.body }}</p>
-{% for article in story.articles %}<p>{% if article.url %}<a href="{{ article.url }}">{{ article.title }}</a>{% else %}{{ article.title }}{% endif %}{% if article.source_name %} — {{ article.source_name }}{% endif %}</p>{% endfor %}</div>{% endfor %}
-{% if briefing_url %}<p style="padding:20px 0"><a href="{{ briefing_url }}" style="background:#2563eb;color:#fff;padding:12px 18px;text-decoration:none">Open web briefing</a></p>{% endif %}
-</td></tr><tr><td style="padding:20px;background:#f8fafc;font-size:12px;color:#64748b">
-{% if preferences_url %}<a href="{{ preferences_url }}">Email preferences</a>{% endif %}{% if preferences_url and unsubscribe_url %} · {% endif %}{% if unsubscribe_url %}<a href="{{ unsubscribe_url }}">Unsubscribe</a>{% endif %}
-</td></tr></table></td></tr></table></body></html>
+<p style="margin:0 0 18px;color:{{ colors.muted }};font-size:12px;line-height:1.5;">
+  {{ local_date }} &middot; {{ timezone_name }} &middot; {{ estimated_minutes }} min read
+</p>
+<div style="margin:0 0 8px;padding:18px;background:{{ colors.surface_muted }};
+            border-left:4px solid {{ colors.accent }};border-radius:8px;">
+  <strong style="color:{{ colors.primary }};font-size:12px;letter-spacing:.08em;
+                 text-transform:uppercase;">Executive summary</strong>
+  <p style="margin:9px 0 0;color:{{ colors.foreground }};font-family:{{ font_serif }};
+            font-size:15px;line-height:1.6;">{{ summary }}</p>
+</div>
+{% for story in stories %}
+<div style="padding:22px 0;border-bottom:1px solid {{ colors.border }};">
+  <h2 style="margin:0 0 9px;color:{{ colors.primary }};font-size:18px;
+             line-height:1.35;">{{ story.title }}</h2>
+  <p style="margin:0;color:{{ colors.foreground }};font-family:{{ font_serif }};
+            font-size:14px;line-height:1.65;">{{ story.body }}</p>
+  {% for article in story.articles %}
+  <p style="margin:10px 0 0;color:{{ colors.muted }};font-size:11px;line-height:1.45;">
+    {% if article.url %}<a href="{{ article.url }}" style="color:{{ colors.accent }};
+      font-size:12px;font-weight:600;text-decoration:none;">{{ article.title }}</a>
+    {% else %}<span style="font-size:12px;font-weight:600;">{{ article.title }}</span>{% endif %}
+    {% if article.source_name %}<span> &middot; {{ article.source_name }}</span>{% endif %}
+  </p>
+  {% endfor %}
+</div>
+{% endfor %}
+{% if briefing_url %}
+<p style="margin:24px 0 8px;"><a href="{{ briefing_url }}"
+  style="display:inline-block;padding:11px 16px;background:{{ colors.primary }};
+         border-radius:8px;color:#ffffff;font-size:13px;font-weight:700;
+         text-decoration:none;">Open web briefing</a></p>
+{% endif %}
+<p style="margin:22px 0 0;padding-top:16px;border-top:1px solid {{ colors.border }};
+          color:{{ colors.muted }};font-size:11px;line-height:1.5;">
+  {% if preferences_url %}<a href="{{ preferences_url }}" style="color:{{ colors.muted }};">Email preferences</a>{% endif %}
+  {% if preferences_url and unsubscribe_url %} &middot; {% endif %}
+  {% if unsubscribe_url %}<a href="{{ unsubscribe_url }}" style="color:{{ colors.muted }};">Unsubscribe</a>{% endif %}
+</p>

@@ -5,7 +5,9 @@ from __future__ import annotations
 from datetime import date
 from typing import Any
 
+from news_dashboard import email_theme
 from news_dashboard.briefing_email.rendering import render_briefing_email
+from news_dashboard.email_theme import EMAIL_COLORS
 
 
 def _briefing(*, body: str = "First story body.") -> dict[str, Any]:
@@ -72,6 +74,30 @@ def test_rendering_includes_summary_reading_time_and_footer_links() -> None:
     assert "https://news.example/briefings/7" in rendered.text_body
     assert "https://news.example/settings/notifications" in rendered.text_body
     assert "https://news.example/unsubscribe/token" in rendered.text_body
+
+
+def test_rendering_uses_shared_warm_email_identity() -> None:
+    rendered = render_briefing_email(_briefing(), **_urls())
+
+    assert EMAIL_COLORS["background"].email_hex in rendered.html_body
+    assert EMAIL_COLORS["primary"].email_hex in rendered.html_body
+    assert "#2563eb" not in rendered.html_body
+    assert "#f1f5f9" not in rendered.html_body
+
+
+def test_rendering_bounds_article_titles_in_html_and_text() -> None:
+    briefing = _briefing()
+    long_title = "An excessively detailed article title " * 12
+    briefing["articles"][1]["title"] = long_title
+    displayed = email_theme.compact_text(long_title, fallback="Source")
+
+    rendered = render_briefing_email(briefing, **_urls())
+
+    assert len(displayed) <= 120
+    assert displayed in rendered.html_body
+    assert displayed in rendered.text_body
+    assert long_title.strip() not in rendered.html_body
+    assert long_title.strip() not in rendered.text_body
 
 
 def test_rendering_suppresses_unsafe_footer_links() -> None:

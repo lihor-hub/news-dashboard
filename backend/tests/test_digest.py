@@ -150,6 +150,8 @@ def test_digest_uses_shared_warm_shell_and_small_action_link() -> None:
     assert EMAIL_COLORS["background"].email_hex in rendered
     assert EMAIL_COLORS["primary"].email_hex in rendered
     assert "font-size:12px" in rendered
+    assert "Move to Done" in rendered
+    assert "Mark as read" not in rendered
 
 
 # ── _send_email ───────────────────────────────────────────────────────────────

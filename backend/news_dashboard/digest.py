@@ -18,6 +18,7 @@ from news_dashboard.db import init_db
 from news_dashboard.email_theme import (
     EMAIL_COLORS,
     FONT_SERIF,
+    compact_text,
     render_action_link,
     render_email_shell,
 )
@@ -105,16 +106,7 @@ def _base_url() -> str:
 
 def _display_title(value: object, *, limit: int = 120) -> str:
     """Return a normalized title bounded for compact email presentation."""
-    normalized = " ".join(str(value).split()) if value else "Untitled"
-    if len(normalized) <= limit:
-        return normalized
-
-    prefix = normalized[: limit - 1].rstrip()
-    if " " in prefix:
-        word_boundary = prefix.rsplit(" ", 1)[0]
-        if word_boundary:
-            prefix = word_boundary
-    return f"{prefix}…"
+    return compact_text(value, fallback="Untitled", limit=limit)
 
 
 def _render_html(articles: list[dict[str, Any]], *, user_id: int) -> str:
@@ -149,7 +141,7 @@ def _render_html(articles: list[dict[str, Any]], *, user_id: int) -> str:
               {source} &middot; score {score}
             </span>
             {summary_html}
-            {render_action_link(url=mark_read_url, label="Mark as read")}
+            {render_action_link(url=mark_read_url, label="Move to Done")}
           </td>
         </tr>
         """
@@ -194,7 +186,7 @@ def _render_text(articles: list[dict[str, Any]], *, user_id: int) -> str:
         lines.append(f"   {url}")
         if summary:
             lines.append(f"   {summary}")
-        lines.append(f"   Mark read: {mark_read_url}")
+        lines.append(f"   Move to Done: {mark_read_url}")
         lines.append("")
     return "\n".join(lines)
 
