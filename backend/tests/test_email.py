@@ -11,6 +11,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from news_dashboard.email import send_email, smtp_configured
+from news_dashboard.email_theme import EMAIL_COLORS
 
 
 class _FakeSMTP:
@@ -115,6 +116,25 @@ def test_otp_email_html_body_contains_otp_code() -> None:
     html_body = _extract_html_body(msg)
     assert html_body is not None, "No HTML part found in the email"
     assert otp in html_body, f"OTP code {otp!r} not found in HTML body"
+
+
+def test_otp_email_uses_shared_warm_identity() -> None:
+    msg = _capture_sent_message("user@example.com", "123456")
+    html_body = _extract_html_body(msg)
+
+    assert html_body is not None
+    assert EMAIL_COLORS["background"].email_hex in html_body
+    assert EMAIL_COLORS["primary"].email_hex in html_body
+    assert "#2563eb" not in html_body
+
+
+def test_otp_email_escapes_code() -> None:
+    msg = _capture_sent_message("user@example.com", "<12345")
+    html_body = _extract_html_body(msg)
+
+    assert html_body is not None
+    assert "<12345" not in html_body
+    assert "&lt;12345" in html_body
 
 
 def test_otp_email_from_header_uses_smtp_username() -> None:
