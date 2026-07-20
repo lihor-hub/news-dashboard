@@ -11,6 +11,13 @@ from urllib.parse import urlparse
 
 from jinja2 import Environment, PackageLoader, StrictUndefined, select_autoescape
 
+from news_dashboard.email_theme import (
+    EMAIL_COLORS,
+    FONT_SERIF,
+    compact_text,
+    render_email_shell,
+)
+
 _WORDS_PER_MINUTE = 200
 _ENVIRONMENT = Environment(
     loader=PackageLoader("news_dashboard.briefing_email", "templates"),
@@ -79,7 +86,7 @@ def render_briefing_email(
                 if article is not None:
                     cited_articles.append(
                         {
-                            "title": str(article.get("title") or "Source"),
+                            "title": compact_text(article.get("title"), fallback="Source"),
                             "source_name": str(article.get("source_name") or ""),
                             "url": _safe_link(article.get("url")),
                         }
@@ -100,10 +107,18 @@ def render_briefing_email(
         "briefing_url": _safe_link(briefing_url),
         "preferences_url": _safe_link(preferences_url),
         "unsubscribe_url": _safe_link(unsubscribe_url),
+        "colors": {name: color.email_hex for name, color in EMAIL_COLORS.items()},
+        "font_serif": FONT_SERIF,
     }
+    body_html = _ENVIRONMENT.get_template("briefing.html.j2").render(context)
     return RenderedEmail(
         subject=f"Daily briefing: {context['title']}",
-        html_body=_ENVIRONMENT.get_template("briefing.html.j2").render(context),
+        html_body=render_email_shell(
+            preheader=str(context["summary"]),
+            eyebrow="Current-day report",
+            heading=str(context["title"]),
+            body_html=body_html,
+        ),
         text_body=_ENVIRONMENT.get_template("briefing.txt.j2").render(context),
         estimated_minutes=estimated_minutes,
     )

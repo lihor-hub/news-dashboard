@@ -7,6 +7,7 @@ Postgres via the ``pg_clean`` fixture.
 
 from __future__ import annotations
 
+import html
 from typing import Any
 from unittest.mock import MagicMock, patch
 
@@ -16,6 +17,7 @@ from fastapi.testclient import TestClient
 
 from news_dashboard import digest
 from news_dashboard.auth import create_user
+from news_dashboard.email_theme import EMAIL_COLORS
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────
 
@@ -120,6 +122,36 @@ def test_render_text_lists_articles_in_order() -> None:
     assert "1. First Headline" in text
     assert "2. Untitled" in text
     assert "Source: Example News | Score: 90" in text
+
+
+def test_display_title_normalizes_and_truncates_at_word_boundary() -> None:
+    title = "  " + "word " * 40
+
+    rendered = digest._display_title(title)
+
+    assert len(rendered) <= 120
+    assert rendered.endswith("…")
+    assert "  " not in rendered
+    assert rendered.removesuffix("…").endswith("word")
+
+
+def test_renderers_use_the_same_bounded_title() -> None:
+    articles = [{**_ARTICLES[0], "title": "Headline " * 40}]
+    expected = digest._display_title(articles[0]["title"])
+
+    assert expected in digest._render_html(articles, user_id=7)
+    assert expected in digest._render_text(articles, user_id=7)
+    assert articles[0]["title"].strip() not in digest._render_html(articles, user_id=7)
+
+
+def test_digest_uses_shared_warm_shell_and_small_action_link() -> None:
+    rendered = digest._render_html(_ARTICLES, user_id=7)
+
+    assert EMAIL_COLORS["background"].email_hex in rendered
+    assert EMAIL_COLORS["primary"].email_hex in rendered
+    assert "font-size:12px" in rendered
+    assert "Move to Done" in rendered
+    assert "Mark as read" not in rendered
 
 
 # ── _send_email ───────────────────────────────────────────────────────────────
@@ -292,6 +324,18 @@ def test_render_html_escapes_script_in_title() -> None:
     html = digest._render_html(articles, user_id=7)
     assert "<script>" not in html
     assert "&lt;script&gt;" in html
+
+
+def test_render_html_escapes_long_title_before_displaying_it() -> None:
+    malicious_title = f"{'safe word ' * 13}<script>alert(1)</script>"
+    articles = [{**_ARTICLES[0], "title": malicious_title}]
+
+    rendered = digest._render_html(articles, user_id=7)
+    displayed_title = digest._display_title(malicious_title)
+
+    assert len(displayed_title) <= 120
+    assert "<script>" not in rendered
+    assert html.escape(displayed_title) in rendered
 
 
 def test_render_html_escapes_quotes_in_url() -> None:
