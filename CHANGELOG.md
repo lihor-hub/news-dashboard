@@ -3,6 +3,9 @@
 All notable changes to this project will be documented in this file.
 This project adheres to [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.158.0] — 2026-07-20
+- Emails from the news dashboard now have a unified, consistent appearance.
+
 ## [1.157.0] — 2026-07-17
 - **Daily briefing emails now arrive at the right time for you.** Your briefing will match your local timezone, so you no longer need to mentally adjust — it's ready when you wake up.
 
