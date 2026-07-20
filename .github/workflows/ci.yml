@@ -106,7 +106,7 @@ jobs:
       - name: vulture (dead code)
         run: vulture backend backend/vulture_whitelist.py --min-confidence 80
 
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@v7
         with:
           node-version: '26'
           cache: npm
@@ -145,7 +145,7 @@ jobs:
           fi
           pytest -m smoke -v
 
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@v7
         with:
           node-version: '26'
           cache: npm
@@ -217,7 +217,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@v7
         with:
           node-version: '26'
           cache: npm
@@ -249,7 +249,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@v7
         with:
           node-version: '26'
           cache: npm
