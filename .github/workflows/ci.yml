@@ -559,7 +559,7 @@ jobs:
       # Cryptographically ties the SBOM and the build to this repo's CI run.
       # Verify with: gh attestation verify --repo <owner>/<repo> --owner <owner> <image>
       - name: Attest SBOM
-        uses: actions/attest-sbom@v3
+        uses: actions/attest-sbom@v4
         with:
           subject-name: ${{ env.IMAGE }}
           subject-digest: ${{ steps.build.outputs.digest }}
