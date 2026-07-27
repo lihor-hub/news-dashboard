@@ -19,10 +19,14 @@ def test_unsubscribe_token_round_trip() -> None:
     assert verify_unsubscribe_token(make_unsubscribe_token(42)) == 42
 
 
-def test_unsubscribe_token_rejects_tampering() -> None:
+def test_unsubscribe_token_rejects_tampering(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(time, "time", lambda: 1_700_000_006.0)
     token = make_unsubscribe_token(42)
+    payload, timestamp, signature = token.split(".")
+    replacement = "A" if payload[0] != "A" else "B"
+    tampered_token = f"{replacement}{payload[1:]}.{timestamp}.{signature}"
     with pytest.raises(ValueError, match="Invalid unsubscribe token"):
-        verify_unsubscribe_token(f"{token[:-1]}x")
+        verify_unsubscribe_token(tampered_token)
 
 
 def test_unsubscribe_token_expires(monkeypatch: pytest.MonkeyPatch) -> None:
