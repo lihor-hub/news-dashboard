@@ -302,8 +302,10 @@ def client(api_db: str) -> TestClient:
         "?categories=python&categories=ai-llm",
         "?starred_only=true",
         "?include_archived=true",
-        "?q=python&states=today&categories=python"
-        "&starred_only=false&include_archived=false&date_range=week",
+        (
+            "?q=python&states=today&categories=python"
+            "&starred_only=false&include_archived=false&date_range=week"
+        ),
     ],
     ids=[
         "defaults",

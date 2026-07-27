@@ -872,7 +872,7 @@ def preview_source_entries(source: SourceDefinition) -> list[dict[str, Any]]:
     return _fetch_entries_by_kind(source)
 
 
-def _persist_entry(  # noqa: PLR0913
+def _persist_entry(  # noqa: PLR0913, PLR0917
     conn: Any,
     source: SourceDefinition,
     entry: dict[str, Any],
@@ -1449,7 +1449,7 @@ def _upsert_uas(  # noqa: PLR0913
     mark_user_recommendations_stale(conn, user_id)
 
 
-def list_articles(  # noqa: PLR0913
+def list_articles(  # noqa: PLR0913, PLR0917
     status: str | None = None,
     state: str | None = None,
     category: str | None = None,
@@ -1942,7 +1942,7 @@ def _user_article_from_row(row: Any) -> dict[str, Any]:
     return article
 
 
-def search_articles(  # noqa: PLR0912, PLR0913
+def search_articles(  # noqa: PLR0912, PLR0913, PLR0917
     q: str = "",
     limit: int = 50,
     offset: int = 0,
@@ -2051,7 +2051,7 @@ def search_articles(  # noqa: PLR0912, PLR0913
         return [_article_dict(row) for row in rows]
 
 
-def search_articles_page(  # noqa: PLR0913
+def search_articles_page(  # noqa: PLR0913, PLR0917
     q: str = "",
     limit: int = 50,
     offset: int = 0,
@@ -2220,7 +2220,7 @@ def _search_articles_page_for_user(  # noqa: PLR0913
     }
 
 
-def count_search_articles(  # noqa: PLR0913
+def count_search_articles(  # noqa: PLR0913, PLR0917
     q: str = "",
     db_path: Path | str | None = None,
     states: list[str] | None = None,

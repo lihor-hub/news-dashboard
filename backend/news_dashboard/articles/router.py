@@ -56,7 +56,7 @@ def mark_read_via_token(article_id: int, token: Annotated[str, Query()]) -> dict
 
 
 @router.get("/api/articles")
-def articles(  # noqa: PLR0913
+def articles(  # noqa: PLR0913, PLR0917
     current_user: Annotated[dict[str, Any], Depends(require_auth)],
     status: Annotated[str | None, Query()] = None,
     state: Annotated[str | None, Query()] = None,
@@ -85,7 +85,7 @@ def articles(  # noqa: PLR0913
 
 
 @router.get("/api/search")
-def search(  # noqa: PLR0913
+def search(  # noqa: PLR0913, PLR0917
     current_user: Annotated[dict[str, Any], Depends(require_auth)],
     q: Annotated[str, Query(description="Space-separated search terms")] = "",
     limit: Annotated[int, Query(ge=1, le=200)] = 50,
