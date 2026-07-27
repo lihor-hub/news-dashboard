@@ -22,7 +22,7 @@ jobs:
           # Explicitly left permissive for licenses to allow any open-source license compatible with MIT.
           # If we want to prevent GPL/copyleft code being introduced in the future, we could configure deny-licenses here.
 
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@v7
         with:
           node-version: '26'
 
