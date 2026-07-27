@@ -54,9 +54,11 @@ PROMPT_CATALOG: tuple[PromptCatalogEntry, ...] = (
         "translate-body",
         (
             "system",
-            "You are a translation assistant. Translate the following body text from language "
-            "code '{{from_lang}}' to English. Return only the translated plain text, preserving "
-            "paragraph breaks, and no additional commentary.",
+            (
+                "You are a translation assistant. Translate the following body text from language "
+                "code '{{from_lang}}' to English. Return only the translated plain text, "
+                "preserving paragraph breaks, and no additional commentary."
+            ),
         ),
         ("user", "{{body}}"),
     ),
@@ -64,8 +66,10 @@ PROMPT_CATALOG: tuple[PromptCatalogEntry, ...] = (
         "summarize-media-article",
         (
             "system",
-            "Summarize this podcast or video transcript as a concise readable article summary "
-            "for a news reader.",
+            (
+                "Summarize this podcast or video transcript as a concise readable article summary "
+                "for a news reader."
+            ),
         ),
         ("user", "Title: {{title}}\nDescription: {{description}}\nTranscript:\n{{transcript}}"),
     ),
@@ -73,13 +77,15 @@ PROMPT_CATALOG: tuple[PromptCatalogEntry, ...] = (
         "translate-article",
         (
             "system",
-            "You are a translation assistant. Detect the language of the following text. If it "
-            "is not English, translate both the title and the summary/description to English. "
-            "Return a JSON object with the following keys:\n"
-            '- "detected_lang": the 2-letter ISO 639-1 language code (e.g. "ja", "zh", "ru", '
-            '"fr", "de", "en")\n- "translated_title": the translated title in English\n'
-            '- "translated_summary": the translated summary/description in English\n'
-            '- "needs_translation": boolean indicating if it was translated\n',
+            (
+                "You are a translation assistant. Detect the language of the following text. If it "
+                "is not English, translate both the title and the summary/description to English. "
+                "Return a JSON object with the following keys:\n"
+                '- "detected_lang": the 2-letter ISO 639-1 language code (e.g. "ja", "zh", "ru", '
+                '"fr", "de", "en")\n- "translated_title": the translated title in English\n'
+                '- "translated_summary": the translated summary/description in English\n'
+                '- "needs_translation": boolean indicating if it was translated\n'
+            ),
         ),
         ("user", "Title: {{title}}\nSummary: {{summary}}"),
     ),
@@ -164,16 +170,20 @@ PROMPT_CATALOG: tuple[PromptCatalogEntry, ...] = (
         "podcast-script-generation",
         (
             "system",
-            "You are a podcast script writer. Given a news briefing containing a title, summary, "
-            "and several sections, rewrite the content into a natural, conversational dialogue "
-            "script between two co-hosts, Alex and Taylor. Alex is a friendly and curious host, "
-            "and Taylor is an insightful co-host. They alternate talking, explaining the news in "
-            "an engaging and lively way.\nProduce a JSON object with a single key 'script' "
-            "containing a list of dialogue turns. Each turn MUST be an object with these exact "
-            "keys:\n  speaker — either 'Alex' or 'Taylor'\n  voice   — 'onyx' for Alex, 'nova' for "
-            "Taylor\n  text    — the spoken text for this turn\nEnsure they talk about all the "
-            "main "
-            "topics in the sections. Return valid JSON only, no markdown wrapper.",
+            (
+                "You are a podcast script writer. Given a news briefing containing a title, "
+                "summary, and several sections, rewrite the content into a natural, conversational "
+                "dialogue script between two co-hosts, Alex and Taylor. Alex is a friendly and "
+                "curious host, and Taylor is an insightful co-host. They alternate talking, "
+                "explaining the news in "
+                "an engaging and lively way.\nProduce a JSON object with a single key 'script' "
+                "containing a list of dialogue turns. Each turn MUST be an object with these exact "
+                "keys:\n  speaker — either 'Alex' or 'Taylor'\n  voice   — 'onyx' for Alex, "
+                "'nova' for Taylor\n  text    — the spoken text for this turn\n"
+                "Ensure they talk about all the "
+                "main "
+                "topics in the sections. Return valid JSON only, no markdown wrapper."
+            ),
         ),
         ("user", "Please generate a podcast script for the following news:\n\n{{content}}"),
     ),
@@ -181,10 +191,12 @@ PROMPT_CATALOG: tuple[PromptCatalogEntry, ...] = (
         "lesson-slide-deck",
         (
             "system",
-            "You are the Lesson Slide Deck Generator. Produce a short teaching slide deck "
-            "summarizing the lesson below as a shareable learning artifact. Return JSON with a "
-            '"slides" array of 6 to 10 slides, each with a "title" and 1-6 "bullets". Ground '
-            "every slide in the supplied lesson detail; do not invent facts.\n",
+            (
+                "You are the Lesson Slide Deck Generator. Produce a short teaching slide deck "
+                "summarizing the lesson below as a shareable learning artifact. Return JSON with a "
+                '"slides" array of 6 to 10 slides, each with a "title" and 1-6 "bullets". Ground '
+                "every slide in the supplied lesson detail; do not invent facts.\n"
+            ),
         ),
         ("user", "{{lesson_content}}"),
     ),
@@ -192,11 +204,13 @@ PROMPT_CATALOG: tuple[PromptCatalogEntry, ...] = (
         "lesson-infographic",
         (
             "system",
-            "You are the Lesson Infographic Generator. Produce a deterministic, text-first "
-            "infographic artifact from the lesson below. Return JSON with title, subtitle, "
-            "sections, and footer fields. Each section needs a heading and body. Ground the "
-            "artifact only in the supplied lesson detail; do not invent facts, image URLs, or "
-            "external assets.\n",
+            (
+                "You are the Lesson Infographic Generator. Produce a deterministic, text-first "
+                "infographic artifact from the lesson below. Return JSON with title, subtitle, "
+                "sections, and footer fields. Each section needs a heading and body. Ground the "
+                "artifact only in the supplied lesson detail; do not invent facts, image URLs, or "
+                "external assets.\n"
+            ),
         ),
         ("user", "{{lesson_content}}"),
     ),
@@ -204,8 +218,10 @@ PROMPT_CATALOG: tuple[PromptCatalogEntry, ...] = (
         "lesson-relevance",
         (
             "system",
-            "Explain why a lesson is relevant using only the user's provided reading profile. "
-            "Return JSON with non-empty explanation and a signals array.",
+            (
+                "Explain why a lesson is relevant using only the user's provided reading profile. "
+                "Return JSON with non-empty explanation and a signals array."
+            ),
         ),
         ("user", "{{lesson_context}}\n{{profile_context}}"),
     ),
@@ -213,11 +229,13 @@ PROMPT_CATALOG: tuple[PromptCatalogEntry, ...] = (
         "lesson-chat",
         (
             "system",
-            "You are the Lesson Follow-up Assistant. Answer follow-up questions about the lesson "
-            "below, grounded in the lesson detail and source article content supplied. If "
-            "information is not present in the provided context, say so clearly rather than "
-            "guessing.\n\n--- LESSON ---\n{{lesson_context}}\n\n--- SOURCE ARTICLE ---\n"
-            "{{source_context}}\n",
+            (
+                "You are the Lesson Follow-up Assistant. Answer follow-up questions about the "
+                "lesson below, grounded in the lesson detail and source article content supplied. "
+                "If information is not present in the provided context, say so clearly rather than "
+                "guessing.\n\n--- LESSON ---\n{{lesson_context}}\n\n--- SOURCE ARTICLE ---\n"
+                "{{source_context}}\n"
+            ),
         ),
         ("user", "{{question}}"),
     ),
@@ -225,12 +243,15 @@ PROMPT_CATALOG: tuple[PromptCatalogEntry, ...] = (
         "briefing-chat",
         (
             "system",
-            "You are the Briefing Q&A Assistant. Your job is to answer follow-up questions about "
-            "the daily briefing provided below. Ground every answer in the briefing summary and "
-            "the full article texts supplied. If information is not present in the provided "
-            "context, say so clearly rather than guessing.\n\n--- BRIEFING ---\n"
-            "{{briefing_context}}\n\n"
-            "--- CITED ARTICLES ---\n{{articles_context}}\n",
+            (
+                "You are the Briefing Q&A Assistant. Your job is to answer follow-up questions "
+                "about the daily briefing provided below. Ground every answer in the briefing "
+                "summary and "
+                "the full article texts supplied. If information is not present in the provided "
+                "context, say so clearly rather than guessing.\n\n--- BRIEFING ---\n"
+                "{{briefing_context}}\n\n"
+                "--- CITED ARTICLES ---\n{{articles_context}}\n"
+            ),
         ),
         ("user", "{{question}}"),
     ),

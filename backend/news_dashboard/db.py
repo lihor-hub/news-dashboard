@@ -456,10 +456,14 @@ POSTGRES_MULTIUSER_SCHEMA = [
     )
     """,
     "ALTER TABLE users ADD COLUMN IF NOT EXISTS briefing_time TEXT DEFAULT '09:00'",
-    "ALTER TABLE users ADD COLUMN IF NOT EXISTS briefing_push_enabled"
-    " BOOLEAN NOT NULL DEFAULT FALSE",
-    "ALTER TABLE users ADD COLUMN IF NOT EXISTS briefing_email_enabled"
-    " BOOLEAN NOT NULL DEFAULT FALSE",
+    (
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS briefing_push_enabled"
+        " BOOLEAN NOT NULL DEFAULT FALSE"
+    ),
+    (
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS briefing_email_enabled"
+        " BOOLEAN NOT NULL DEFAULT FALSE"
+    ),
     "ALTER TABLE users ADD COLUMN IF NOT EXISTS briefing_timezone TEXT NOT NULL DEFAULT 'UTC'",
     """
     CREATE TABLE IF NOT EXISTS briefing_email_deliveries (
@@ -505,10 +509,14 @@ POSTGRES_MULTIUSER_SCHEMA = [
       read_at       TIMESTAMPTZ
     )
     """,
-    "CREATE INDEX IF NOT EXISTS idx_article_shares_recipient"
-    " ON article_shares(to_user_id, created_at DESC)",
-    "CREATE INDEX IF NOT EXISTS idx_article_shares_unread"
-    " ON article_shares(to_user_id) WHERE read_at IS NULL",
+    (
+        "CREATE INDEX IF NOT EXISTS idx_article_shares_recipient"
+        " ON article_shares(to_user_id, created_at DESC)"
+    ),
+    (
+        "CREATE INDEX IF NOT EXISTS idx_article_shares_unread"
+        " ON article_shares(to_user_id) WHERE read_at IS NULL"
+    ),
     "ALTER TABLE articles ADD COLUMN IF NOT EXISTS perspective_analysis JSONB",
     """
     CREATE TABLE IF NOT EXISTS user_goals (
@@ -542,8 +550,10 @@ POSTGRES_MULTIUSER_SCHEMA = [
       created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
     """,
-    "CREATE INDEX IF NOT EXISTS idx_share_annotations_share"
-    " ON share_annotations(share_id, created_at)",
+    (
+        "CREATE INDEX IF NOT EXISTS idx_share_annotations_share"
+        " ON share_annotations(share_id, created_at)"
+    ),
     """
     CREATE TABLE IF NOT EXISTS article_highlights (
       id               BIGSERIAL PRIMARY KEY,
@@ -555,8 +565,10 @@ POSTGRES_MULTIUSER_SCHEMA = [
       created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
     """,
-    "CREATE INDEX IF NOT EXISTS idx_article_highlights_user_article"
-    " ON article_highlights(user_id, article_id, created_at)",
+    (
+        "CREATE INDEX IF NOT EXISTS idx_article_highlights_user_article"
+        " ON article_highlights(user_id, article_id, created_at)"
+    ),
     """
     CREATE TABLE IF NOT EXISTS share_messages (
       id          BIGSERIAL PRIMARY KEY,
@@ -582,8 +594,10 @@ POSTGRES_MULTIUSER_SCHEMA = [
       UNIQUE(user_id, nudge_kind, nudge_target)
     )
     """,
-    "CREATE INDEX IF NOT EXISTS idx_nudge_dismissals_user"
-    " ON user_nudge_dismissals(user_id, cooldown_until)",
+    (
+        "CREATE INDEX IF NOT EXISTS idx_nudge_dismissals_user"
+        " ON user_nudge_dismissals(user_id, cooldown_until)"
+    ),
     "ALTER TABLE user_quizzes ADD COLUMN IF NOT EXISTS submitted_answers JSONB",
     "ALTER TABLE user_quizzes ADD COLUMN IF NOT EXISTS submitted_at TIMESTAMPTZ",
     """
@@ -607,8 +621,10 @@ POSTGRES_MULTIUSER_SCHEMA = [
       message      TEXT
     )
     """,
-    "CREATE INDEX IF NOT EXISTS idx_scheduled_job_runs_job_started"
-    " ON scheduled_job_runs(job_name, started_at DESC)",
+    (
+        "CREATE INDEX IF NOT EXISTS idx_scheduled_job_runs_job_started"
+        " ON scheduled_job_runs(job_name, started_at DESC)"
+    ),
     """
     CREATE TABLE IF NOT EXISTS user_otps (
       id         SERIAL PRIMARY KEY,
@@ -620,8 +636,10 @@ POSTGRES_MULTIUSER_SCHEMA = [
     """,
     "CREATE INDEX IF NOT EXISTS idx_user_otps_user ON user_otps(user_id, expires_at DESC)",
     "ALTER TABLE users ADD COLUMN IF NOT EXISTS is_guest BOOLEAN NOT NULL DEFAULT FALSE",
-    "ALTER TABLE users ADD COLUMN IF NOT EXISTS podcast_feed_token_version"
-    " INTEGER NOT NULL DEFAULT 1",
+    (
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS podcast_feed_token_version"
+        " INTEGER NOT NULL DEFAULT 1"
+    ),
     """
     CREATE TABLE IF NOT EXISTS user_tags (
       id         SERIAL PRIMARY KEY,
@@ -654,8 +672,10 @@ POSTGRES_MULTIUSER_SCHEMA = [
       UNIQUE (user_id, name)
     )
     """,
-    "CREATE INDEX IF NOT EXISTS idx_user_saved_searches_user"
-    " ON user_saved_searches(user_id, updated_at DESC)",
+    (
+        "CREATE INDEX IF NOT EXISTS idx_user_saved_searches_user"
+        " ON user_saved_searches(user_id, updated_at DESC)"
+    ),
     "ALTER TABLE users ADD COLUMN IF NOT EXISTS recap_enabled BOOLEAN NOT NULL DEFAULT TRUE",
     "ALTER TABLE users ADD COLUMN IF NOT EXISTS recap_day TEXT NOT NULL DEFAULT 'mon'",
     """
@@ -669,8 +689,10 @@ POSTGRES_MULTIUSER_SCHEMA = [
       UNIQUE (user_id, week_start)
     )
     """,
-    "CREATE INDEX IF NOT EXISTS idx_user_weekly_recaps_user"
-    " ON user_weekly_recaps(user_id, week_start DESC)",
+    (
+        "CREATE INDEX IF NOT EXISTS idx_user_weekly_recaps_user"
+        " ON user_weekly_recaps(user_id, week_start DESC)"
+    ),
     """
     CREATE TABLE IF NOT EXISTS reading_list_items (
       id             BIGSERIAL PRIMARY KEY,
@@ -696,13 +718,19 @@ POSTGRES_MULTIUSER_SCHEMA = [
       UNIQUE (user_id, normalized_url)
     )
     """,
-    "CREATE INDEX IF NOT EXISTS idx_reading_list_items_user_status"
-    " ON reading_list_items(user_id, status, priority)",
-    "CREATE INDEX IF NOT EXISTS idx_reading_list_items_fetch_status"
-    " ON reading_list_items(fetch_status)",
+    (
+        "CREATE INDEX IF NOT EXISTS idx_reading_list_items_user_status"
+        " ON reading_list_items(user_id, status, priority)"
+    ),
+    (
+        "CREATE INDEX IF NOT EXISTS idx_reading_list_items_fetch_status"
+        " ON reading_list_items(fetch_status)"
+    ),
     "ALTER TABLE reading_list_items ADD COLUMN IF NOT EXISTS summary TEXT",
-    "ALTER TABLE reading_list_items ADD COLUMN IF NOT EXISTS summary_status"
-    " TEXT NOT NULL DEFAULT 'pending'",
+    (
+        "ALTER TABLE reading_list_items ADD COLUMN IF NOT EXISTS summary_status"
+        " TEXT NOT NULL DEFAULT 'pending'"
+    ),
     """
     CREATE TABLE IF NOT EXISTS lessons (
       id BIGSERIAL PRIMARY KEY,
@@ -731,20 +759,30 @@ POSTGRES_MULTIUSER_SCHEMA = [
     "ALTER TABLE lessons ADD COLUMN IF NOT EXISTS personal_relevance JSONB",
     "ALTER TABLE lessons ADD COLUMN IF NOT EXISTS relevance_feedback BOOLEAN",
     "CREATE INDEX IF NOT EXISTS idx_lessons_user_created ON lessons(user_id, created_at DESC)",
-    "ALTER TABLE lessons ADD COLUMN IF NOT EXISTS depth TEXT NOT NULL DEFAULT 'normal'"
-    " CHECK(depth IN ('tiny','normal','deep','expert'))",
-    "ALTER TABLE lessons ADD COLUMN IF NOT EXISTS persona TEXT NOT NULL DEFAULT 'developer'"
-    " CHECK(persona IN ('developer','product_builder','new_to_ai','preparing_talk'))",
-    "ALTER TABLE lessons ADD COLUMN IF NOT EXISTS podcast_status TEXT"
-    " CHECK(podcast_status IN ('complete','failed'))",
+    (
+        "ALTER TABLE lessons ADD COLUMN IF NOT EXISTS depth TEXT NOT NULL DEFAULT 'normal'"
+        " CHECK(depth IN ('tiny','normal','deep','expert'))"
+    ),
+    (
+        "ALTER TABLE lessons ADD COLUMN IF NOT EXISTS persona TEXT NOT NULL DEFAULT 'developer'"
+        " CHECK(persona IN ('developer','product_builder','new_to_ai','preparing_talk'))"
+    ),
+    (
+        "ALTER TABLE lessons ADD COLUMN IF NOT EXISTS podcast_status TEXT"
+        " CHECK(podcast_status IN ('complete','failed'))"
+    ),
     "ALTER TABLE lessons ADD COLUMN IF NOT EXISTS podcast_error TEXT",
     "ALTER TABLE lessons ADD COLUMN IF NOT EXISTS slide_deck JSONB",
-    "ALTER TABLE lessons ADD COLUMN IF NOT EXISTS slide_deck_status TEXT"
-    " CHECK(slide_deck_status IN ('complete','failed'))",
+    (
+        "ALTER TABLE lessons ADD COLUMN IF NOT EXISTS slide_deck_status TEXT"
+        " CHECK(slide_deck_status IN ('complete','failed'))"
+    ),
     "ALTER TABLE lessons ADD COLUMN IF NOT EXISTS slide_deck_error TEXT",
     "ALTER TABLE lessons ADD COLUMN IF NOT EXISTS infographic JSONB",
-    "ALTER TABLE lessons ADD COLUMN IF NOT EXISTS infographic_status TEXT"
-    " CHECK(infographic_status IN ('complete','failed'))",
+    (
+        "ALTER TABLE lessons ADD COLUMN IF NOT EXISTS infographic_status TEXT"
+        " CHECK(infographic_status IN ('complete','failed'))"
+    ),
     "ALTER TABLE lessons ADD COLUMN IF NOT EXISTS infographic_error TEXT",
     """
     CREATE TABLE IF NOT EXISTS lesson_generations (
@@ -760,8 +798,10 @@ POSTGRES_MULTIUSER_SCHEMA = [
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
     """,
-    "CREATE INDEX IF NOT EXISTS idx_lesson_generations_lesson_created"
-    " ON lesson_generations(lesson_id, created_at DESC)",
+    (
+        "CREATE INDEX IF NOT EXISTS idx_lesson_generations_lesson_created"
+        " ON lesson_generations(lesson_id, created_at DESC)"
+    ),
     """
     CREATE TABLE IF NOT EXISTS lesson_graph_nodes (
       id BIGSERIAL PRIMARY KEY,
@@ -777,8 +817,10 @@ POSTGRES_MULTIUSER_SCHEMA = [
       UNIQUE(lesson_id, node_key)
     )
     """,
-    "CREATE INDEX IF NOT EXISTS idx_lesson_graph_nodes_user"
-    " ON lesson_graph_nodes(user_id, lesson_id)",
+    (
+        "CREATE INDEX IF NOT EXISTS idx_lesson_graph_nodes_user"
+        " ON lesson_graph_nodes(user_id, lesson_id)"
+    ),
     """
     CREATE TABLE IF NOT EXISTS lesson_graph_edges (
       id BIGSERIAL PRIMARY KEY,
@@ -793,8 +835,10 @@ POSTGRES_MULTIUSER_SCHEMA = [
       UNIQUE(lesson_id, source_key, target_key, relationship_type)
     )
     """,
-    "CREATE INDEX IF NOT EXISTS idx_lesson_graph_edges_user"
-    " ON lesson_graph_edges(user_id, lesson_id)",
+    (
+        "CREATE INDEX IF NOT EXISTS idx_lesson_graph_edges_user"
+        " ON lesson_graph_edges(user_id, lesson_id)"
+    ),
     """
     CREATE TABLE IF NOT EXISTS user_lesson_suggestion_dismissals (
       user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -815,8 +859,10 @@ POSTGRES_MULTIUSER_SCHEMA = [
       updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
     """,
-    "CREATE INDEX IF NOT EXISTS idx_agent_action_runs_user"
-    " ON agent_action_runs(user_id, created_at DESC)",
+    (
+        "CREATE INDEX IF NOT EXISTS idx_agent_action_runs_user"
+        " ON agent_action_runs(user_id, created_at DESC)"
+    ),
     """
     CREATE TABLE IF NOT EXISTS agent_action_steps (
       id             BIGSERIAL PRIMARY KEY,
@@ -848,8 +894,10 @@ POSTGRES_MULTIUSER_SCHEMA = [
       CHECK (threshold >= 0 AND threshold <= 1)
     )
     """,
-    "CREATE INDEX IF NOT EXISTS idx_user_ai_watchlists_user"
-    " ON user_ai_watchlists(user_id, enabled)",
+    (
+        "CREATE INDEX IF NOT EXISTS idx_user_ai_watchlists_user"
+        " ON user_ai_watchlists(user_id, enabled)"
+    ),
     """
     CREATE TABLE IF NOT EXISTS user_ai_nudges (
       id           BIGSERIAL PRIMARY KEY,
@@ -862,8 +910,10 @@ POSTGRES_MULTIUSER_SCHEMA = [
       UNIQUE (user_id, watchlist_id, article_id)
     )
     """,
-    "CREATE INDEX IF NOT EXISTS idx_user_ai_nudges_user"
-    " ON user_ai_nudges(user_id, created_at DESC)",
+    (
+        "CREATE INDEX IF NOT EXISTS idx_user_ai_nudges_user"
+        " ON user_ai_nudges(user_id, created_at DESC)"
+    ),
     """
     CREATE TABLE IF NOT EXISTS briefing_agent_runs (
       id           BIGSERIAL PRIMARY KEY,
@@ -877,8 +927,10 @@ POSTGRES_MULTIUSER_SCHEMA = [
       updated_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
     """,
-    "CREATE INDEX IF NOT EXISTS idx_briefing_agent_runs_briefing"
-    " ON briefing_agent_runs(briefing_id)",
+    (
+        "CREATE INDEX IF NOT EXISTS idx_briefing_agent_runs_briefing"
+        " ON briefing_agent_runs(briefing_id)"
+    ),
     """
     CREATE TABLE IF NOT EXISTS briefing_agent_steps (
       id           BIGSERIAL PRIMARY KEY,
@@ -894,8 +946,10 @@ POSTGRES_MULTIUSER_SCHEMA = [
       UNIQUE (run_id, ordinal)
     )
     """,
-    "CREATE INDEX IF NOT EXISTS idx_briefing_agent_steps_run"
-    " ON briefing_agent_steps(run_id, ordinal)",
+    (
+        "CREATE INDEX IF NOT EXISTS idx_briefing_agent_steps_run"
+        " ON briefing_agent_steps(run_id, ordinal)"
+    ),
     """
     CREATE TABLE IF NOT EXISTS user_ai_memories (
       id          BIGSERIAL PRIMARY KEY,
@@ -910,8 +964,10 @@ POSTGRES_MULTIUSER_SCHEMA = [
       CHECK (confidence >= 0 AND confidence <= 1)
     )
     """,
-    "CREATE INDEX IF NOT EXISTS idx_user_ai_memories_user_active"
-    " ON user_ai_memories(user_id, active, updated_at DESC)",
+    (
+        "CREATE INDEX IF NOT EXISTS idx_user_ai_memories_user_active"
+        " ON user_ai_memories(user_id, active, updated_at DESC)"
+    ),
     """
     CREATE TABLE IF NOT EXISTS user_ai_memory_events (
       id          BIGSERIAL PRIMARY KEY,
@@ -924,8 +980,10 @@ POSTGRES_MULTIUSER_SCHEMA = [
       created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
     """,
-    "CREATE INDEX IF NOT EXISTS idx_user_ai_memory_events_user"
-    " ON user_ai_memory_events(user_id, created_at DESC)",
+    (
+        "CREATE INDEX IF NOT EXISTS idx_user_ai_memory_events_user"
+        " ON user_ai_memory_events(user_id, created_at DESC)"
+    ),
     """
     CREATE TABLE IF NOT EXISTS ai_eval_examples (
       id                  BIGSERIAL PRIMARY KEY,
@@ -986,12 +1044,18 @@ POSTGRES_MULTIUSER_SCHEMA = [
     "CREATE INDEX IF NOT EXISTS idx_mcp_tokens_user ON mcp_tokens(user_id, created_at DESC)",
     "ALTER TABLE users ADD COLUMN IF NOT EXISTS analytics_enabled BOOLEAN NOT NULL DEFAULT TRUE",
     "ALTER TABLE article_shares ADD COLUMN IF NOT EXISTS revoked_at TIMESTAMPTZ",
-    "CREATE INDEX IF NOT EXISTS idx_article_shares_sender"
-    " ON article_shares(from_user_id, created_at DESC)",
-    "ALTER TABLE users ADD COLUMN IF NOT EXISTS briefing_include_reading_list"
-    " BOOLEAN NOT NULL DEFAULT FALSE",
-    "ALTER TABLE users ADD COLUMN IF NOT EXISTS briefing_reading_list_limit"
-    " INTEGER NOT NULL DEFAULT 3",
+    (
+        "CREATE INDEX IF NOT EXISTS idx_article_shares_sender"
+        " ON article_shares(from_user_id, created_at DESC)"
+    ),
+    (
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS briefing_include_reading_list"
+        " BOOLEAN NOT NULL DEFAULT FALSE"
+    ),
+    (
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS briefing_reading_list_limit"
+        " INTEGER NOT NULL DEFAULT 3"
+    ),
     """
     CREATE TABLE IF NOT EXISTS greader_tokens (
       id            BIGSERIAL PRIMARY KEY,
@@ -1027,11 +1091,15 @@ POSTGRES_MULTIUSER_SCHEMA = [
     # treats NULLs as distinct in a unique constraint, so a plain
     # UNIQUE(user_id, subject_type, subject_id, article_id) would let a user
     # insert unlimited duplicate whole-briefing rows (article_id IS NULL).
-    "CREATE UNIQUE INDEX IF NOT EXISTS idx_ai_feedback_unique_item"
-    " ON ai_feedback(user_id, subject_type, subject_id, article_id)"
-    " WHERE article_id IS NOT NULL",
-    "CREATE UNIQUE INDEX IF NOT EXISTS idx_ai_feedback_unique_subject"
-    " ON ai_feedback(user_id, subject_type, subject_id) WHERE article_id IS NULL",
+    (
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_ai_feedback_unique_item"
+        " ON ai_feedback(user_id, subject_type, subject_id, article_id)"
+        " WHERE article_id IS NOT NULL"
+    ),
+    (
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_ai_feedback_unique_subject"
+        " ON ai_feedback(user_id, subject_type, subject_id) WHERE article_id IS NULL"
+    ),
     "ALTER TABLE users ADD COLUMN IF NOT EXISTS lesson_recap_enabled BOOLEAN NOT NULL DEFAULT TRUE",
     """
     CREATE TABLE IF NOT EXISTS user_lesson_recaps (
@@ -1046,11 +1114,15 @@ POSTGRES_MULTIUSER_SCHEMA = [
       UNIQUE (user_id, week_start)
     )
     """,
-    "CREATE INDEX IF NOT EXISTS idx_user_lesson_recaps_user"
-    " ON user_lesson_recaps(user_id, week_start DESC)",
+    (
+        "CREATE INDEX IF NOT EXISTS idx_user_lesson_recaps_user"
+        " ON user_lesson_recaps(user_id, week_start DESC)"
+    ),
     "ALTER TABLE ai_feedback DROP CONSTRAINT IF EXISTS ai_feedback_subject_type_check",
-    "ALTER TABLE ai_feedback ADD CONSTRAINT ai_feedback_subject_type_check"
-    " CHECK (subject_type IN ('briefing', 'recommendation', 'lesson'))",
+    (
+        "ALTER TABLE ai_feedback ADD CONSTRAINT ai_feedback_subject_type_check"
+        " CHECK (subject_type IN ('briefing', 'recommendation', 'lesson'))"
+    ),
     """
     CREATE TABLE IF NOT EXISTS learning_agent_runs (
       id               BIGSERIAL PRIMARY KEY,
@@ -1071,10 +1143,14 @@ POSTGRES_MULTIUSER_SCHEMA = [
       updated_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
     """,
-    "CREATE INDEX IF NOT EXISTS idx_learning_agent_runs_lesson"
-    " ON learning_agent_runs(lesson_id, created_at DESC)",
-    "CREATE INDEX IF NOT EXISTS idx_learning_agent_runs_user"
-    " ON learning_agent_runs(user_id, created_at DESC)",
+    (
+        "CREATE INDEX IF NOT EXISTS idx_learning_agent_runs_lesson"
+        " ON learning_agent_runs(lesson_id, created_at DESC)"
+    ),
+    (
+        "CREATE INDEX IF NOT EXISTS idx_learning_agent_runs_user"
+        " ON learning_agent_runs(user_id, created_at DESC)"
+    ),
     """
     CREATE TABLE IF NOT EXISTS learning_agent_steps (
       id                 BIGSERIAL PRIMARY KEY,
@@ -1094,8 +1170,10 @@ POSTGRES_MULTIUSER_SCHEMA = [
       UNIQUE (run_id, ordinal)
     )
     """,
-    "CREATE INDEX IF NOT EXISTS idx_learning_agent_steps_run"
-    " ON learning_agent_steps(run_id, ordinal)",
+    (
+        "CREATE INDEX IF NOT EXISTS idx_learning_agent_steps_run"
+        " ON learning_agent_steps(run_id, ordinal)"
+    ),
 ]
 
 # Runs after POSTGRES_SCHEMA/POSTGRES_MULTIUSER_SCHEMA and the embedding_vec

@@ -374,7 +374,7 @@ def _reading_list_section(
     return [{field: item.get(field) for field in _READING_LIST_FIELDS} for item in items[:limit]]
 
 
-def _save_briefing(  # noqa: PLR0913
+def _save_briefing(  # noqa: PLR0913, PLR0917
     since_at: datetime,
     until_at: datetime,
     content: dict[str, Any],

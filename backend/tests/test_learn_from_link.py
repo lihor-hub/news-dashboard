@@ -186,8 +186,10 @@ def test_create_lesson_completes_with_extracted_content(
             "rationale": "Start with a skim: the source is short enough to inspect quickly.",
         },
         "who_should_read": [
-            "Readers deciding whether to spend more time with this source, "
-            "for developers weighing implementation details."
+            (
+                "Readers deciding whether to spend more time with this source, "
+                "for developers weighing implementation details."
+            )
         ],
         "questions_to_keep_in_mind": [
             "What evidence does the source provide for its central claim?"
