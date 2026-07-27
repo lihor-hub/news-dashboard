@@ -10,7 +10,9 @@
     "@fontsource-variable/jetbrains-mono",
     "@fontsource-variable/source-serif-4",
     "@resvg/resvg-js",
-    "axe-core"
+    "axe-core",
+    "@babel/plugin-syntax-jsx",
+    "@babel/preset-typescript"
   ],
   "ignoreExportsUsedInFile": true,
   "ignoreBinaries": ["python3"]

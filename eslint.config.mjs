@@ -1,6 +1,5 @@
 import js from '@eslint/js';
 import babelParser from '@babel/eslint-parser';
-import babelPresetTypescript from '@babel/preset-typescript';
 import reactHooks from 'eslint-plugin-react-hooks';
 import reactRefresh from 'eslint-plugin-react-refresh';
 import prettier from 'eslint-config-prettier';
@@ -27,7 +26,8 @@ export default [
       parserOptions: {
         requireConfigFile: false,
         babelOptions: {
-          presets: [[babelPresetTypescript, { allExtensions: true, isTSX: true }]],
+          presets: [['@babel/preset-typescript', { ignoreExtensions: true }]],
+          plugins: ['@babel/plugin-syntax-jsx'],
         },
       },
     },
@@ -57,7 +57,7 @@ export default [
       parserOptions: {
         requireConfigFile: false,
         babelOptions: {
-          presets: [[babelPresetTypescript, { allExtensions: true }]],
+          presets: [['@babel/preset-typescript', { ignoreExtensions: true }]],
         },
       },
     },
