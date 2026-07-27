@@ -526,7 +526,7 @@ jobs:
           fi
           printf '%s\n' "$BODY" | python3 scripts/update_changelog.py --version "$V"
 
-      - uses: docker/login-action@v3
+      - uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -825,7 +825,7 @@ jobs:
         uses: docker/setup-buildx-action@v4
 
       - name: Log in to GHCR
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
