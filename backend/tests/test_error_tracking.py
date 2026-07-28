@@ -101,7 +101,15 @@ def test_public_config_omits_dsn_by_default(monkeypatch: pytest.MonkeyPatch) -> 
     monkeypatch.delenv("SENTRY_DSN_FRONTEND", raising=False)
     resp = _client().get("/api/config")
     assert resp.status_code == 200
-    assert resp.json() == {"sentry_dsn": None}
+    assert resp.json() == {
+        "sentry_dsn": None,
+        "dify": {
+            "enabled": False,
+            "base_url": None,
+            "app_token": None,
+            "title": "News Assistant",
+        },
+    }
 
 
 @pytest.mark.smoke
@@ -109,4 +117,12 @@ def test_public_config_returns_frontend_dsn_when_set(monkeypatch: pytest.MonkeyP
     monkeypatch.setenv("SENTRY_DSN_FRONTEND", "https://example@o0.ingest.sentry.io/2")
     resp = _client().get("/api/config")
     assert resp.status_code == 200
-    assert resp.json() == {"sentry_dsn": "https://example@o0.ingest.sentry.io/2"}
+    assert resp.json() == {
+        "sentry_dsn": "https://example@o0.ingest.sentry.io/2",
+        "dify": {
+            "enabled": False,
+            "base_url": None,
+            "app_token": None,
+            "title": "News Assistant",
+        },
+    }
