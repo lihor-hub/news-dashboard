@@ -16,12 +16,17 @@ class EnabledUpdate(BaseModel):
     enabled: bool
 
 
+class HighPriorityUpdate(BaseModel):
+    high_priority: bool
+
+
 class CreateSourceRequest(BaseModel):
     url: str
     name: str
     category: str = "tech"
     slug: str | None = None
     kind: str = "rss_feed"
+    high_priority: bool = True
 
     def validate_kind(self) -> None:
         if self.kind in USER_CREATED_SOURCE_KINDS:

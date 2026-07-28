@@ -210,5 +210,11 @@
       "regenerate": "Vygenerovat znovu",
       "slideLabel": "Snímek {{number}}"
     }
+  },
+  "priorityFeeds": {
+    "highPriority": "High priority",
+    "priority": "Priority",
+    "description": "Make every article from this source stand out.",
+    "sourceLabel": "High priority {{source}}"
   }
 }

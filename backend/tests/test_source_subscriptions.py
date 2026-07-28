@@ -11,6 +11,7 @@ from fastapi.testclient import TestClient
 from news_dashboard.auth import create_user
 from news_dashboard.db import connect, row_to_dict
 from news_dashboard.ingest.service import list_articles, sync_sources
+from news_dashboard.sources.service import SourceDefinition
 
 # ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -476,6 +477,145 @@ def test_api_toggle_subscription(pg_clean: str, monkeypatch: pytest.MonkeyPatch)
         resp2 = client.patch(f"/api/sources/{slug}/enabled", json={"enabled": True})
         assert resp2.status_code == 200
         assert resp2.json()["subscribed"] is True
+
+
+def test_private_source_starts_high_priority_and_applies_to_all_its_articles(
+    pg_clean: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("DATABASE_URL", pg_clean)
+    sync_sources(pg_clean)
+    uid = _make_user(pg_clean)
+
+    with _api_client(pg_clean, uid) as client:
+        created = client.post(
+            "/api/sources",
+            json={
+                "url": "https://mariozechner.at/recommended-reading/rss.xml",
+                "name": "Mario Zechner Recommended Reading",
+                "slug": "mario-zechner-recommended-reading",
+            },
+        )
+        assert created.status_code == 200
+        source = created.json()
+        assert source["high_priority"] is True
+
+        article_id = _insert_article(pg_clean, source_slug=source["slug"])
+        article = next(
+            item
+            for item in list_articles(state="today", db_path=pg_clean, user_id=uid)
+            if item["id"] == article_id
+        )
+        assert article["high_priority"] is True
+        detail = client.get(f"/api/articles/{article_id}")
+        assert detail.status_code == 200
+        assert detail.json()["high_priority"] is True
+
+
+def test_priority_toggle_relabels_existing_articles(
+    pg_clean: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("DATABASE_URL", pg_clean)
+    sync_sources(pg_clean)
+    uid = _make_user(pg_clean)
+
+    with _api_client(pg_clean, uid) as client:
+        created = client.post(
+            "/api/sources",
+            json={
+                "url": "https://example.com/priority.xml",
+                "name": "Priority Source",
+                "high_priority": True,
+            },
+        ).json()
+        article_id = _insert_article(pg_clean, source_slug=created["slug"])
+
+        response = client.patch(
+            f"/api/sources/{created['slug']}/priority",
+            json={"high_priority": False},
+        )
+        assert response.status_code == 200
+        assert response.json()["high_priority"] is False
+
+        article = next(
+            item
+            for item in list_articles(state="today", db_path=pg_clean, user_id=uid)
+            if item["id"] == article_id
+        )
+        assert article["high_priority"] is False
+
+
+def test_global_source_priority_is_isolated_per_user(
+    pg_clean: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("DATABASE_URL", pg_clean)
+    sync_sources(pg_clean)
+    alice = _make_user(pg_clean, "alice")
+    bob = _make_user(pg_clean, "bob")
+    slug = _global_slug(pg_clean)
+    article_id = _insert_article(pg_clean, source_slug=slug)
+
+    with _api_client(pg_clean, alice) as client:
+        response = client.patch(
+            f"/api/sources/{slug}/priority",
+            json={"high_priority": True},
+        )
+        assert response.status_code == 200
+
+    alice_article = next(
+        item
+        for item in list_articles(state="today", db_path=pg_clean, user_id=alice)
+        if item["id"] == article_id
+    )
+    bob_article = next(
+        item
+        for item in list_articles(state="today", db_path=pg_clean, user_id=bob)
+        if item["id"] == article_id
+    )
+    assert alice_article["high_priority"] is True
+    assert bob_article["high_priority"] is False
+
+
+def test_private_rss_ingest_keeps_complete_feed_history(
+    pg_clean: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from unittest.mock import patch
+
+    from news_dashboard.ingest.service import _ingest_source
+
+    monkeypatch.setenv("DATABASE_URL", pg_clean)
+    sync_sources(pg_clean)
+    uid = _make_user(pg_clean)
+    source = SourceDefinition(
+        slug=f"user-{uid}-complete-feed",
+        name="Complete Feed",
+        url="https://example.com/complete.xml",
+        category="tech",
+        owner_user_id=uid,
+    )
+    _add_private_source(pg_clean, slug=source.slug, owner_user_id=uid)
+    entries = [
+        {
+            "url": f"https://example.com/article-{index}",
+            "title": f"Article {index}",
+            "description": "Full history item",
+            "date": "2026-01-01T00:00:00+00:00",
+        }
+        for index in range(75)
+    ]
+
+    with patch(
+        "news_dashboard.ingest.service._fetch_entries_by_kind",
+        return_value=entries,
+    ):
+        outcome = _ingest_source(source, pg_clean)
+
+    assert outcome.articles_found == 75
+    with connect(pg_clean) as conn:
+        count = conn.execute(
+            "SELECT COUNT(*) AS count FROM articles WHERE source_slug = %s",
+            (source.slug,),
+        ).fetchone()
+    assert count["count"] == 75
 
 
 # ── Validation ────────────────────────────────────────────────────────────────

@@ -34,6 +34,7 @@ export interface CreateSourcePayload {
   category?: string;
   slug?: string;
   kind?: string;
+  high_priority?: boolean;
 }
 
 export async function createSource(payload: CreateSourcePayload): Promise<Source> {
@@ -75,6 +76,13 @@ export async function updateSourceEnabled(slug: string, enabled: boolean): Promi
   return requestJson<Source>(`/api/sources/${slug}/enabled`, {
     method: 'PATCH',
     body: JSON.stringify({ enabled }),
+  });
+}
+
+export async function updateSourcePriority(slug: string, highPriority: boolean): Promise<Source> {
+  return requestJson<Source>(`/api/sources/${slug}/priority`, {
+    method: 'PATCH',
+    body: JSON.stringify({ high_priority: highPriority }),
   });
 }
 

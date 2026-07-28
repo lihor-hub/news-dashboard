@@ -1,6 +1,7 @@
 import { memo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
-import { Star, Info } from 'lucide-react';
+import { Star, Info, Siren } from 'lucide-react';
 import type { WorkflowArticle } from '@/lib/workflowTypes';
 import { relativeTime, signalLabel } from '@/lib/format';
 import { recommendationLabel, RECOMMENDATION_LABEL_TEXT } from '@/lib/recommendation';
@@ -24,6 +25,7 @@ function formatAlsoFrom(names: string[]): string {
 }
 
 function ArticleRowComponent({ article, focused, showLaterUntil }: Props) {
+  const { t } = useTranslation();
   const { setState, toggleStar } = useTriageMutations();
 
   const handleDone = () => setState(article, 'done', 'Read');
@@ -54,6 +56,8 @@ function ArticleRowComponent({ article, focused, showLaterUntil }: Props) {
           to={`/a/${article.id}`}
           className={cn(
             'motion-fade-up block px-4 py-3 border-b border-border transition-colors hover:bg-surface md:px-5',
+            article.highPriority &&
+              'border-l-4 border-l-[color:var(--err)] bg-[color:color-mix(in_srgb,var(--err)_7%,transparent)]',
             focused && 'bg-surface-2 focus-row'
           )}
         >
@@ -64,6 +68,15 @@ function ArticleRowComponent({ article, focused, showLaterUntil }: Props) {
               <span className="shrink-0">{relativeTime(article.publishedAt)}</span>
               <span>·</span>
               <span className="truncate">{article.category}</span>
+              {article.highPriority && (
+                <>
+                  <span>·</span>
+                  <span className="inline-flex shrink-0 items-center gap-1 font-semibold text-[color:var(--err)]">
+                    <Siren className="size-3" aria-hidden="true" />
+                    {t('priorityFeeds.highPriority')}
+                  </span>
+                </>
+              )}
               {article.detectedLang && article.detectedLang !== 'en' && article.originalTitle && (
                 <>
                   <span>·</span>

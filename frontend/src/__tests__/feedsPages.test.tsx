@@ -25,6 +25,7 @@ const apiMock = vi.hoisted(() => {
     fetchSources: vi.fn(),
     fetchSourceCleanupSuggestions: vi.fn(),
     updateSourceEnabled: vi.fn(),
+    updateSourcePriority: vi.fn(),
     applySourceCleanup: vi.fn(),
     createSource: vi.fn(),
     previewSource: vi.fn(),
@@ -56,6 +57,19 @@ vi.mock('sonner', () => ({
     warning: vi.fn(),
     error: vi.fn(),
     loading: vi.fn(() => 'id'),
+  }),
+}));
+vi.mock('react-i18next', () => ({
+  useTranslation: () => ({
+    t: (key: string, values?: { source?: string }) => {
+      if (key === 'priorityFeeds.highPriority') return 'High priority';
+      if (key === 'priorityFeeds.description') {
+        return 'Make every article from this source stand out.';
+      }
+      if (key === 'priorityFeeds.priority') return 'Priority';
+      if (key === 'priorityFeeds.sourceLabel') return `High priority ${values?.source ?? ''}`;
+      return key;
+    },
   }),
 }));
 
@@ -205,6 +219,17 @@ describe('SourcesPage', () => {
     await waitFor(() => expect(apiMock.updateSourceEnabled).toHaveBeenCalledWith('acme', false));
   });
 
+  it('toggles high priority independently from subscription state', async () => {
+    apiMock.fetchSources.mockResolvedValue([source({ high_priority: true })]);
+    apiMock.updateSourcePriority.mockResolvedValue(source({ high_priority: false }));
+    withProviders(<SourcesPage />);
+
+    const toggles = await screen.findAllByRole('switch', { name: /high priority acme news/i });
+    fireEvent.click(toggles[0]);
+
+    await waitFor(() => expect(apiMock.updateSourcePriority).toHaveBeenCalledWith('acme', false));
+  });
+
   it('notifies and reverts the switch when a toggle fails', async () => {
     apiMock.fetchSources.mockResolvedValue([source({ enabled: 1 })]);
     apiMock.updateSourceEnabled.mockRejectedValue(new Error('network down'));
@@ -228,6 +253,10 @@ describe('SourcesPage', () => {
     expect(await screen.findByRole('dialog')).toBeTruthy();
     expect(screen.getByLabelText(/name/i)).toBeTruthy();
     expect(screen.getByLabelText(/feed url/i)).toBeTruthy();
+    expect(screen.getByRole('switch', { name: /high priority/i })).toHaveAttribute(
+      'aria-checked',
+      'true'
+    );
   });
 
   it('calls createSource with form data and closes dialog on success', async () => {

@@ -34,10 +34,15 @@ from news_dashboard.source_health import (
 from news_dashboard.sources.models import (
     CreateSourceRequest,
     EnabledUpdate,
+    HighPriorityUpdate,
     PreviewSourceRequest,
     SourceCleanupRequest,
 )
-from news_dashboard.sources.service import SourceDefinition
+from news_dashboard.sources.service import (
+    SourceDefinition,
+    add_user_source_preference,
+    set_user_source_priority,
+)
 from news_dashboard.url_safety import UnsafeUrlError, validate_server_fetch_url
 
 router = APIRouter()
@@ -93,7 +98,8 @@ def sources(
             """
             SELECT s.*,
               CASE WHEN s.owner_user_id IS NULL THEN COALESCE(us.enabled, true)
-                   ELSE (s.enabled IS TRUE) END AS user_enabled
+                   ELSE (s.enabled IS TRUE) END AS user_enabled,
+              COALESCE(us.high_priority, false) AS high_priority
             FROM sources s
             LEFT JOIN user_sources us ON us.source_slug = s.slug AND us.user_id = %s
             WHERE (s.owner_user_id IS NULL OR s.owner_user_id = %s)
@@ -145,8 +151,14 @@ def create_source(
             """,
             (slug, payload.name.strip(), payload.url, payload.category, payload.kind, uid),
         )
+        add_user_source_preference(
+            conn,
+            user_id=int(uid),
+            source_slug=slug,
+            high_priority=payload.high_priority,
+        )
         row = conn.execute("SELECT * FROM sources WHERE slug = %s", (slug,)).fetchone()
-    return row_to_dict(row)
+    return {**row_to_dict(row), "subscribed": True, "high_priority": payload.high_priority}
 
 
 @router.post("/api/sources/preview")
@@ -458,3 +470,21 @@ def set_source_enabled(
             )
         row = conn.execute("SELECT * FROM sources WHERE slug = %s", (slug,)).fetchone()
     return {**row_to_dict(row), "subscribed": payload.enabled}
+
+
+@router.patch("/api/sources/{slug}/priority")
+def set_source_priority(
+    slug: str,
+    payload: HighPriorityUpdate,
+    current_user: Annotated[dict[str, Any], Depends(require_auth)],
+) -> dict[str, Any]:
+    """Set the current user's attention priority for a visible source."""
+    uid = int(current_user["id"])
+    source = set_user_source_priority(
+        user_id=uid,
+        source_slug=slug,
+        high_priority=payload.high_priority,
+    )
+    if source is None:
+        raise HTTPException(status_code=404, detail="source not found")
+    return source

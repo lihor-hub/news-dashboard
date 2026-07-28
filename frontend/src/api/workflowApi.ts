@@ -70,6 +70,7 @@ export function adaptArticle(a: LegacyArticle): WorkflowArticle {
     reason: a.reason,
     summary: a.summary,
     signal: scoreToSignal(a.importance_score),
+    highPriority: a.high_priority ?? false,
     recommendationScore: a.recommendation_score ?? undefined,
     recommendationModel: a.recommendation_model ?? undefined,
     recommendationSignals: a.recommendation_signals ?? undefined,

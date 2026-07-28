@@ -1,6 +1,59 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Any
+
+from news_dashboard.db import connect, init_db, row_to_dict
+
+
+def add_user_source_preference(
+    conn: Any,
+    *,
+    user_id: int,
+    source_slug: str,
+    high_priority: bool,
+) -> None:
+    """Create the current user's preference row for a newly added source."""
+    conn.execute(
+        """
+        INSERT INTO user_sources(user_id, source_slug, enabled, high_priority)
+        VALUES (%s, %s, TRUE, %s)
+        """,
+        (user_id, source_slug, high_priority),
+    )
+
+
+def set_user_source_priority(
+    *,
+    user_id: int,
+    source_slug: str,
+    high_priority: bool,
+) -> dict[str, Any] | None:
+    """Set a user's priority for a visible source, returning None when hidden."""
+    init_db()
+    with connect() as conn:
+        row = conn.execute(
+            """
+            SELECT *
+            FROM sources
+            WHERE slug = %s
+              AND (owner_user_id IS NULL OR owner_user_id = %s)
+              AND deleted_at IS NULL
+            """,
+            (source_slug, user_id),
+        ).fetchone()
+        if row is None:
+            return None
+        conn.execute(
+            """
+            INSERT INTO user_sources(user_id, source_slug, enabled, high_priority)
+            VALUES (%s, %s, TRUE, %s)
+            ON CONFLICT(user_id, source_slug)
+            DO UPDATE SET high_priority = excluded.high_priority
+            """,
+            (user_id, source_slug, high_priority),
+        )
+    return {**row_to_dict(row), "high_priority": high_priority}
 
 
 @dataclass(frozen=True)

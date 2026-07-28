@@ -28,7 +28,7 @@ def get_visible_article_row(conn: Any, article_id: int, user_id: int | None) -> 
 
     return conn.execute(
         f"""
-        SELECT a.*
+        SELECT a.*, COALESCE(a_us.high_priority, FALSE) AS high_priority
         FROM articles a
         JOIN sources a_src ON a_src.slug = a.source_slug
         LEFT JOIN user_sources a_us

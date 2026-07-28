@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import {
@@ -27,6 +28,7 @@ import {
   importOpml,
   previewSource,
   updateSourceEnabled,
+  updateSourcePriority,
 } from '@/api';
 import type { SourcePreviewResult } from '@/api';
 import { relativeTime } from '@/lib/format';
@@ -106,6 +108,7 @@ interface AddSourceFormState {
   category: string;
   slug: string;
   kind: string;
+  highPriority: boolean;
 }
 
 const EMPTY_FORM: AddSourceFormState = {
@@ -114,6 +117,7 @@ const EMPTY_FORM: AddSourceFormState = {
   category: 'tech',
   slug: '',
   kind: 'rss_feed',
+  highPriority: true,
 };
 
 function AddSourceDialog({
@@ -125,6 +129,7 @@ function AddSourceDialog({
   onClose: () => void;
   onCreated: () => void;
 }) {
+  const { t } = useTranslation();
   const [form, setForm] = useState<AddSourceFormState>(EMPTY_FORM);
   const [error, setError] = useState<string | null>(null);
   const [preview, setPreview] = useState<SourcePreviewResult | null>(null);
@@ -138,6 +143,7 @@ function AddSourceDialog({
         category: form.category || 'tech',
         slug: form.slug || undefined,
         kind: form.kind,
+        high_priority: form.highPriority,
       }),
     onSuccess: () => {
       setForm(EMPTY_FORM);
@@ -294,6 +300,19 @@ function AddSourceDialog({
               />
             </div>
           </div>
+          <div className="flex items-center justify-between gap-3 rounded-md border border-input px-3 py-2">
+            <div>
+              <div className="text-sm font-medium">{t('priorityFeeds.highPriority')}</div>
+              <div className="text-xs text-muted-foreground">{t('priorityFeeds.description')}</div>
+            </div>
+            <Switch
+              checked={form.highPriority}
+              onCheckedChange={(checked) =>
+                setForm((current) => ({ ...current, highPriority: checked }))
+              }
+              aria-label={t('priorityFeeds.highPriority')}
+            />
+          </div>
           {error && <p className="text-xs text-[color:var(--err)]">{error}</p>}
           <div className="flex justify-end gap-2 pt-1">
             <Button type="button" variant="outline" size="sm" onClick={handleClose}>
@@ -310,6 +329,7 @@ function AddSourceDialog({
 }
 
 export function SourcesPage() {
+  const { t } = useTranslation();
   const [wizardOpen, setWizardOpen] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
   const [importResult, setImportResult] = useState<OpmlImportResult | null>(null);
@@ -340,6 +360,27 @@ export function SourcesPage() {
             ? { ...s, subscribed: enabled, enabled: enabled ? 1 : 0 }
             : { ...s, enabled: enabled ? 1 : 0 };
         })
+      );
+      return { prev };
+    },
+    onError: (err, _vars, ctx) => {
+      if (ctx?.prev) qc.setQueryData([SOURCES_KEY], ctx.prev);
+      toast.error(sourceActionErrorMessage(err, 'toggle'));
+    },
+    onSettled: () => {
+      void qc.invalidateQueries({ queryKey: [SOURCES_KEY] });
+    },
+  });
+  const priorityMutation = useMutation({
+    mutationFn: ({ slug, highPriority }: { slug: string; highPriority: boolean }) =>
+      updateSourcePriority(slug, highPriority),
+    onMutate: async ({ slug, highPriority }) => {
+      await qc.cancelQueries({ queryKey: [SOURCES_KEY] });
+      const prev = qc.getQueryData<Source[]>([SOURCES_KEY]);
+      qc.setQueryData<Source[]>([SOURCES_KEY], (old = []) =>
+        old.map((source) =>
+          source.slug === slug ? { ...source, high_priority: highPriority } : source
+        )
       );
       return { prev };
     },
@@ -593,6 +634,7 @@ export function SourcesPage() {
               <th className="px-3 py-2 font-medium">Last success</th>
               <th className="px-3 py-2 font-medium text-right">Items (run)</th>
               <th className="px-3 py-2 font-medium text-right">On</th>
+              <th className="px-3 py-2 font-medium text-right">{t('priorityFeeds.priority')}</th>
               <th className="px-3 py-2 font-medium" />
             </tr>
           </thead>
@@ -643,6 +685,15 @@ export function SourcesPage() {
                     />
                   </td>
                   <td className="px-3 py-3 text-right">
+                    <Switch
+                      checked={!!s.high_priority}
+                      onCheckedChange={(checked) =>
+                        priorityMutation.mutate({ slug: s.slug, highPriority: checked })
+                      }
+                      aria-label={t('priorityFeeds.sourceLabel', { source: s.name })}
+                    />
+                  </td>
+                  <td className="px-3 py-3 text-right">
                     {isOwned && (
                       <Button
                         size="sm"
@@ -684,6 +735,13 @@ export function SourcesPage() {
                   </div>
                 </div>
                 <div className="flex items-center gap-1 shrink-0">
+                  <Switch
+                    checked={!!s.high_priority}
+                    onCheckedChange={(checked) =>
+                      priorityMutation.mutate({ slug: s.slug, highPriority: checked })
+                    }
+                    aria-label={t('priorityFeeds.sourceLabel', { source: s.name })}
+                  />
                   {isOwned && (
                     <Button
                       size="sm"

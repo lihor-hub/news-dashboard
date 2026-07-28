@@ -210,5 +210,11 @@
       "regenerate": "重新生成",
       "slideLabel": "幻灯片 {{number}}"
     }
+  },
+  "priorityFeeds": {
+    "highPriority": "High priority",
+    "priority": "Priority",
+    "description": "Make every article from this source stand out.",
+    "sourceLabel": "High priority {{source}}"
   }
 }

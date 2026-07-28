@@ -983,7 +983,12 @@ def _ingest_source(
         # Apply per-source item limit; tweets are short/frequent so cap lower by default
         noise_rule = NOISE_FILTERS.get(source.slug, {})
         default_max = 15 if source.kind == "nitter_feed" else 50
-        max_items = noise_rule.get("max_items", default_max)
+        max_items = noise_rule.get(
+            "max_items",
+            len(entries)
+            if source.owner_user_id is not None and source.kind == "rss_feed"
+            else default_max,
+        )
         entries = entries[:max_items]
         fetched = len(entries)
 
@@ -1629,6 +1634,7 @@ def _list_articles_for_user(  # noqa: PLR0913
           uar.model_version        AS _uar_recommendation_model,
           uar.signals              AS _uar_recommendation_signals,
           uar.explanation          AS _uar_recommendation_explanation,
+          COALESCE(us_src.high_priority, false) AS _source_high_priority,
           {_COLD_START_RECOMMENDATION_SCORE_SQL} AS _cold_start_score
         FROM articles a
         LEFT JOIN sources src ON src.slug = a.source_slug
@@ -1658,6 +1664,7 @@ def _list_articles_for_user(  # noqa: PLR0913
             d["archived_at"] = d.pop("_uas_archived_at", None)
             d["later_until"] = d.pop("_uas_later_until", None)
             d["restored_at"] = d.pop("_uas_restored_at", None)
+            d["high_priority"] = bool(d.pop("_source_high_priority", False))
             _apply_recommendation_fields(d)
             articles.append(d)
         _attach_also_from(conn, articles, user_id=user_id)
@@ -1706,6 +1713,7 @@ def _list_today_articles_for_user(
             uar.model_version        AS _uar_recommendation_model,
             uar.signals              AS _uar_recommendation_signals,
             uar.explanation          AS _uar_recommendation_explanation,
+            COALESCE(us_src.high_priority, false) AS _source_high_priority,
             NULL::double precision AS _cold_start_score
           FROM user_article_recommendations uar
           JOIN articles a ON a.id = uar.article_id
@@ -1723,7 +1731,7 @@ def _list_today_articles_for_user(
           LIMIT %s
         ),
         cold_candidate_ids AS (
-          SELECT a.id
+          SELECT a.id, COALESCE(us_src.high_priority, false) AS high_priority
           FROM articles a
           LEFT JOIN sources src ON src.slug = a.source_slug
           LEFT JOIN user_sources us_src
@@ -1754,6 +1762,7 @@ def _list_today_articles_for_user(
             NULL::text             AS _uar_recommendation_model,
             NULL::jsonb            AS _uar_recommendation_signals,
             NULL::text             AS _uar_recommendation_explanation,
+            c.high_priority        AS _source_high_priority,
             {_COLD_START_RECOMMENDATION_SCORE_SQL} AS _cold_start_score
           FROM cold_candidate_ids c
           JOIN articles a ON a.id = c.id
@@ -1784,6 +1793,7 @@ def _list_today_articles_for_user(
             d["archived_at"] = d.pop("_uas_archived_at", None)
             d["later_until"] = d.pop("_uas_later_until", None)
             d["restored_at"] = d.pop("_uas_restored_at", None)
+            d["high_priority"] = bool(d.pop("_source_high_priority", False))
             _apply_recommendation_fields(d)
             articles.append(d)
         _attach_also_from(conn, articles, user_id=user_id)
