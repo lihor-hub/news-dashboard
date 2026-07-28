@@ -27,6 +27,16 @@ from news_dashboard.sources import service
             "https://pragmaticengineer.substack.com/feed",
             "Pragmaticengineer",
         ),
+        (
+            "https://www.platformer.news/p/a-post?utm_source=post-email-title",
+            "https://www.platformer.news/feed",
+            "Platformer",
+        ),
+        (
+            "https://newsletter.example.com",
+            "https://newsletter.example.com/feed",
+            "Newsletter",
+        ),
     ],
 )
 def test_normalize_substack_feed_url_accepts_publication_and_post_links(
@@ -44,10 +54,11 @@ def test_normalize_substack_feed_url_accepts_publication_and_post_links(
     "submitted_url",
     [
         "",
-        "https://example.com/feed",
+        "https://[",
         "https://substack.com/@writer",
+        "https://user:password@writer.example.com/p/post",
         "ftp://writer.substack.com/feed",
-        "https://evil.test/?next=writer.substack.com",
+        "https://localhost/p/post",
     ],
 )
 def test_normalize_substack_feed_url_rejects_non_publication_links(submitted_url: str) -> None:
@@ -111,13 +122,31 @@ def test_substack_preview_explains_invalid_publication_link() -> None:
         with TestClient(app) as client:
             response = client.post(
                 "/api/sources/substack/preview",
-                json={"url": "https://example.com/not-substack"},
+                json={"url": "http://writer.example.com/p/post"},
             )
     finally:
         app.dependency_overrides.pop(require_auth, None)
 
     assert response.status_code == 400
     assert response.json()["detail"] == "Enter a Substack publication or post link."
+
+
+def test_substack_preview_blocks_unsafe_custom_domain_feed() -> None:
+    from news_dashboard.auth import require_auth
+    from news_dashboard.main import app
+
+    app.dependency_overrides[require_auth] = lambda: {"id": 7, "username": "alice"}
+    try:
+        with TestClient(app) as client:
+            response = client.post(
+                "/api/sources/substack/preview",
+                json={"url": "https://127.0.0.1/p/post"},
+            )
+    finally:
+        app.dependency_overrides.pop(require_auth, None)
+
+    assert response.status_code == 400
+    assert "unsafe host address" in response.json()["detail"].lower()
 
 
 def test_substack_preview_explains_unreachable_feed(monkeypatch: pytest.MonkeyPatch) -> None:

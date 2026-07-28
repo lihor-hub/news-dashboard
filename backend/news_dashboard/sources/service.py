@@ -8,7 +8,7 @@ from news_dashboard.db import connect, init_db, row_to_dict
 
 
 class SubstackUrlError(ValueError):
-    """Raised when a submitted URL is not a Substack publication URL."""
+    """Raised when a submitted URL cannot identify a Substack publication."""
 
 
 @dataclass(frozen=True)
@@ -26,21 +26,32 @@ def normalize_substack_feed_url(submitted_url: str) -> SubstackFeed:
     if "://" not in candidate:
         candidate = f"https://{candidate}"
 
-    parsed = urlsplit(candidate)
+    try:
+        parsed = urlsplit(candidate)
+    except ValueError as exc:
+        message = "Enter a Substack publication or post link."
+        raise SubstackUrlError(message) from exc
     hostname = (parsed.hostname or "").lower().rstrip(".")
     labels = hostname.split(".")
-    if parsed.scheme != "https" or len(labels) != 3 or labels[1:] != ["substack", "com"]:
+    if (
+        parsed.scheme != "https"
+        or parsed.username is not None
+        or parsed.password is not None
+        or len(labels) < 2
+        or any(not label for label in labels)
+    ):
         message = "Enter a Substack publication or post link."
         raise SubstackUrlError(message)
 
-    publication = labels[0]
-    if not publication or publication in {"www", "api"}:
+    is_substack_host = labels[-2:] == ["substack", "com"]
+    if is_substack_host and (len(labels) != 3 or labels[0] in {"www", "api"}):
         message = "Enter a Substack publication or post link."
         raise SubstackUrlError(message)
 
+    publication = labels[1] if labels[0] == "www" else labels[0]
     suggested_name = publication.replace("-", " ").title()
     return SubstackFeed(
-        feed_url=f"https://{publication}.substack.com/feed",
+        feed_url=f"https://{hostname}/feed",
         suggested_name=suggested_name,
     )
 
