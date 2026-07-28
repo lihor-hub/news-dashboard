@@ -37,6 +37,7 @@
 ### Task 1: Capture and curate hosted-release screenshots
 
 **Files:**
+
 - Create: `website/static/img/user-guide/generated-brief.webp`
 - Create: `website/static/img/user-guide/today-feed.webp`
 - Create: `website/static/img/user-guide/application-navigation.webp`
@@ -45,6 +46,7 @@
 - Create if privacy-safe: `website/static/img/user-guide/operations.webp`
 
 **Interfaces:**
+
 - Consumes: authenticated official hosted instance at `https://news.lihor.ro`.
 - Produces: stable `/img/user-guide/<name>.webp` paths for Tasks 2 and 3.
 
@@ -85,6 +87,7 @@ git commit -m "docs: add hosted product screenshots (#1285)"
 ### Task 2: Add hosted and end-user workflow guides
 
 **Files:**
+
 - Create: `website/docs/getting-started/hosted-or-self-hosted.md`
 - Create: `website/docs/user-guide/application-tour.md`
 - Create: `website/docs/user-guide/personalization-and-ai.md`
@@ -98,6 +101,7 @@ git commit -m "docs: add hosted product screenshots (#1285)"
 - Modify: `docs/user-guide/README.md`
 
 **Interfaces:**
+
 - Consumes: screenshot paths from Task 1 and existing focused guides under `website/docs/user-guide/`.
 - Produces: task-oriented hosted/user documentation and mirror-equivalent repository copies.
 
@@ -139,6 +143,7 @@ git commit -m "docs: explain hosted product workflows (#1285)"
 ### Task 3: Add administration, configuration, and self-hosted guidance
 
 **Files:**
+
 - Create: `website/docs/user-guide/administration-and-operations.md`
 - Create: `docs/user-guide/administration-and-operations.md`
 - Modify: `website/docs/user-guide/index.md`
@@ -148,6 +153,7 @@ git commit -m "docs: explain hosted product workflows (#1285)"
 - Modify: `docs/SELF_HOSTING.md`
 
 **Interfaces:**
+
 - Consumes: current routes, permissions, environment-variable references, deployment guides, and optional `operations.webp` from Task 1.
 - Produces: role-correct operational guidance and discoverable links to existing integration configuration.
 
