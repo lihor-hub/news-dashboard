@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import type { User } from '@/types';
 import { fetchPublicConfig } from '@/lib/publicConfig';
+import type { PublicDifyConfig } from '@/lib/publicConfig';
 
 const SCRIPT_ID = 'news-dashboard-dify-chatbot-script';
 const DIFY_BUBBLE_ID = 'dify-chatbot-bubble-button';
@@ -53,6 +54,20 @@ function hideSession(widgetSession: DifyWidgetSession): void {
   detachDifyDomState(widgetSession);
 }
 
+function matchesCurrentConfig(
+  widgetSession: DifyWidgetSession,
+  userId: string,
+  dify: PublicDifyConfig
+): boolean {
+  return (
+    widgetSession.userId === userId &&
+    dify.enabled &&
+    widgetSession.config.baseUrl === dify.base_url &&
+    widgetSession.config.token === dify.app_token &&
+    widgetSession.config.containerProps.title === dify.title
+  );
+}
+
 function createSession(
   userId: string,
   config: DifyChatbotConfig,
@@ -93,21 +108,16 @@ export function DifyChatWidget({ user }: { user: User }) {
             hideSession(session);
             return;
           }
-          if (session.canRestore) {
-            session.active = true;
-            (window as DifyWindow).difyChatbotConfig = session.config;
-            restoreDifyDomState(session);
-          }
-          return;
+          if (!session.canRestore) return;
         }
 
         const { dify } = await fetchPublicConfig();
-        if (!mounted || !dify.enabled || !dify.app_token || !dify.base_url || !dify.title) return;
+        if (!mounted) return;
 
         if (session) {
           // Dify's embed captures its config and installs global listeners without a teardown API.
           // A second execution would retain the first user's closure, so this document fails closed.
-          if (session.userId !== userId) {
+          if (!matchesCurrentConfig(session, userId, dify)) {
             session.canRestore = false;
             hideSession(session);
             return;
@@ -119,6 +129,8 @@ export function DifyChatWidget({ user }: { user: User }) {
           }
           return;
         }
+
+        if (!dify.enabled || !dify.app_token || !dify.base_url || !dify.title) return;
 
         const config: DifyChatbotConfig = {
           token: dify.app_token,
