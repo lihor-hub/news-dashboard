@@ -1,22 +1,39 @@
 # User Guide
 
-Day-to-day usage of News Dashboard: concepts, the Today Feed, sources,
-search, briefings, and sharing.
+Use News Dashboard to understand the day, triage articles, personalize the
+corpus, organize material, and revisit what you learned.
 
 ## Start here
 
-| Page | What it covers |
-|------|----------------|
-| [Concepts and terminology](concepts) | The product language: articles, workflow state, Today Feed, Current-Day Report, and source subscriptions. |
-| [Today Feed and triage](today-feed-triage) | How to process the active queue and what each triage state means. |
-| [Sources and subscriptions](sources) | Where articles come from and how to manage the feeds available to your account. |
-| [Search](search) | Finding articles across your history with PostgreSQL full-text search. |
-| [Briefings](briefings) | Current-Day Reports, scheduled delivery, and optional audio. |
-| [Recommendations](recommendations) | How personalized suggestions are scored and controlled. |
-| [Knowledge Graph](knowledge-graph) | Exploring entities, typed relationships, and Ask AI graph context. |
-| [Saved and read history](saved-history) | Later, Done, Starred, Archived, Reading DNA, and export behavior. |
-| [Sharing articles](sharing) | Sending articles to other users on the same instance. |
+| Page                                       | What it covers                                                                                            |
+| ------------------------------------------ | --------------------------------------------------------------------------------------------------------- |
+| [Application tour](application-tour.md)    | Brief, Today, article reading, Search, and navigation on large and small screens.                         |
+| [Concepts and terminology](concepts)       | The product language: articles, workflow state, Today Feed, Current-Day Report, and source subscriptions. |
+| [Today Feed and triage](today-feed-triage) | How to process the active queue and what each triage state means.                                         |
 
-If you do not have an account yet, begin with [Create a web account](/docs/getting-started/create-web-account).
+## Make it yours
+
+| Page                                                 | What it covers                                                                                               |
+| ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| [Personalization and AI](personalization-and-ai.md)  | Recommendations, Ask, AI Watchlists, AI Memory, Topic Map, and AI Stats, including optional-provider limits. |
+| [Organize and learn](organize-and-learn.md)          | Later, Starred, Reading List, Collections, lessons, recaps, and offline saves.                               |
+| [Settings and account data](settings-and-account.md) | Interface, delivery, privacy, export/restore, updates, and account deletion.                                 |
+
+## Focus on a workflow
+
+| Page                                    | What it covers                                                                  |
+| --------------------------------------- | ------------------------------------------------------------------------------- |
+| [Sources and subscriptions](sources)    | Where articles come from and how to manage the feeds available to your account. |
+| [Search](search)                        | Finding articles across your history with PostgreSQL full-text search.          |
+| [Briefings](briefings)                  | Current-Day Reports, scheduled delivery, and optional audio.                    |
+| [Recommendations](recommendations)      | How personalized suggestions are scored and controlled.                         |
+| [Knowledge Graph](knowledge-graph)      | Exploring entities, typed relationships, and Ask AI graph context.              |
+| [Saved and read history](saved-history) | Later, Done, Starred, Archived, Reading DNA, and export behavior.               |
+| [Sharing articles](sharing)             | Sending articles to other users on the same instance.                           |
+
+If you have not chosen how to run or access the app, start with
+[Hosted or self-hosted?](/docs/getting-started/hosted-or-self-hosted).
+If you already know which instance you use, continue with
+[Create a web account](/docs/getting-started/create-web-account).
 If you operate your own instance, read the [Self-Hosting guide](/docs/self-hosting)
 after the README quick start.
