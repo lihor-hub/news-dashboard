@@ -7,6 +7,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/co
 import { AppLogo } from './AppLogo';
 import { ErrorBoundary } from './ErrorBoundary';
 import { ListenQueuePlayer } from './ListenQueuePlayer';
+import { DifyChatWidget } from './DifyChatWidget';
 import { NavLink } from './NavLink';
 import { useWhatsNew } from '@/hooks/useWhatsNew';
 import { useOnboardingWizard } from '@/hooks/useOnboardingWizard';
@@ -217,6 +218,7 @@ export function AppShell() {
           />
           <ShortcutOverlay open={shortcutsOpen} onOpenChange={setShortcutsOpen} />
         </Suspense>
+        {user && <DifyChatWidget user={user} />}
       </>
     );
   }
@@ -354,6 +356,7 @@ export function AppShell() {
         </Suspense>
       </ErrorBoundary>
       <ListenQueuePlayer />
+      {user && <DifyChatWidget user={user} />}
     </div>
   );
 }
