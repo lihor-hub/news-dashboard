@@ -688,6 +688,59 @@ def test_api_create_source_duplicate_slug_returns_409(
         assert "already exists" in resp2.json()["detail"]
 
 
+def test_api_create_source_duplicate_url_for_same_user_returns_409(
+    pg_clean: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("DATABASE_URL", str(pg_clean))
+    sync_sources(pg_clean)
+    uid = _make_user(pg_clean)
+
+    with _api_client(pg_clean, uid) as client:
+        first = client.post(
+            "/api/sources",
+            json={
+                "url": "https://writer.substack.com/feed",
+                "name": "Writer",
+                "slug": "writer",
+                "provider": "substack",
+            },
+        )
+        duplicate = client.post(
+            "/api/sources",
+            json={
+                "url": "https://writer.substack.com/feed",
+                "name": "Writer Renamed",
+                "slug": "writer-renamed",
+                "provider": "substack",
+            },
+        )
+
+    assert first.status_code == 200
+    assert duplicate.status_code == 409
+    assert duplicate.json()["detail"] == "This feed is already in your sources."
+
+
+def test_api_create_source_preserves_duplicate_url_support_for_generic_sources(
+    pg_clean: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("DATABASE_URL", str(pg_clean))
+    sync_sources(pg_clean)
+    uid = _make_user(pg_clean)
+
+    with _api_client(pg_clean, uid) as client:
+        first = client.post(
+            "/api/sources",
+            json={"url": "https://example.com/feed", "name": "First", "slug": "first"},
+        )
+        second = client.post(
+            "/api/sources",
+            json={"url": "https://example.com/feed", "name": "Second", "slug": "second"},
+        )
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+
+
 def test_api_create_source_allows_cross_user_slug_reuse(
     pg_clean: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:

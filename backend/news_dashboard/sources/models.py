@@ -27,6 +27,7 @@ class CreateSourceRequest(BaseModel):
     slug: str | None = None
     kind: str = "rss_feed"
     high_priority: bool = True
+    provider: str | None = None
 
     def validate_kind(self) -> None:
         if self.kind in USER_CREATED_SOURCE_KINDS:
@@ -64,6 +65,10 @@ class PreviewSourceRequest(BaseModel):
             status_code=400,
             detail=f"unsupported source kind '{self.kind}'. Supported kinds: {allowed}",
         )
+
+
+class SubstackPreviewRequest(BaseModel):
+    url: str
 
 
 class SourceCleanupRequest(BaseModel):

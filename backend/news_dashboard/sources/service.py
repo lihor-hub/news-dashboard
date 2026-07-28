@@ -2,8 +2,47 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Any
+from urllib.parse import urlsplit
 
 from news_dashboard.db import connect, init_db, row_to_dict
+
+
+class SubstackUrlError(ValueError):
+    """Raised when a submitted URL is not a Substack publication URL."""
+
+
+@dataclass(frozen=True)
+class SubstackFeed:
+    feed_url: str
+    suggested_name: str
+
+
+def normalize_substack_feed_url(submitted_url: str) -> SubstackFeed:
+    """Turn a Substack publication or post URL into its canonical RSS feed URL."""
+    candidate = submitted_url.strip()
+    if not candidate:
+        message = "Enter a Substack publication or post link."
+        raise SubstackUrlError(message)
+    if "://" not in candidate:
+        candidate = f"https://{candidate}"
+
+    parsed = urlsplit(candidate)
+    hostname = (parsed.hostname or "").lower().rstrip(".")
+    labels = hostname.split(".")
+    if parsed.scheme != "https" or len(labels) != 3 or labels[1:] != ["substack", "com"]:
+        message = "Enter a Substack publication or post link."
+        raise SubstackUrlError(message)
+
+    publication = labels[0]
+    if not publication or publication in {"www", "api"}:
+        message = "Enter a Substack publication or post link."
+        raise SubstackUrlError(message)
+
+    suggested_name = publication.replace("-", " ").title()
+    return SubstackFeed(
+        feed_url=f"https://{publication}.substack.com/feed",
+        suggested_name=suggested_name,
+    )
 
 
 def add_user_source_preference(

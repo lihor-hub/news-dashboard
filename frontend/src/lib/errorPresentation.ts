@@ -183,6 +183,7 @@ export type SourceActionKind = 'add' | 'toggle' | 'cleanup' | 'delete';
 /** Friendly copy for source management failures, without leaking raw backend/server strings as the primary message. */
 export function sourceActionErrorMessage(err: unknown, action: SourceActionKind): string {
   if (err instanceof HttpError && err.status === 409) {
+    if (/already in your sources/i.test(err.message)) return err.message;
     return 'That slug is already in use — choose a different slug or source.';
   }
   if (action === 'add' && err instanceof HttpError && (err.status === 400 || err.status === 422)) {

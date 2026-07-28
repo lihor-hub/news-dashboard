@@ -29,6 +29,7 @@ const apiMock = vi.hoisted(() => {
     applySourceCleanup: vi.fn(),
     createSource: vi.fn(),
     previewSource: vi.fn(),
+    previewSubstackSource: vi.fn(),
     deleteSource: vi.fn(),
     fetchSchedulerStatus: vi.fn(),
     setSchedulerInterval: vi.fn(),
@@ -61,13 +62,29 @@ vi.mock('sonner', () => ({
 }));
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
-    t: (key: string, values?: { source?: string }) => {
+    t: (key: string, values?: { source?: string; count?: number; name?: string }) => {
       if (key === 'priorityFeeds.highPriority') return 'High priority';
       if (key === 'priorityFeeds.description') {
         return 'Make every article from this source stand out.';
       }
       if (key === 'priorityFeeds.priority') return 'Priority';
       if (key === 'priorityFeeds.sourceLabel') return `High priority ${values?.source ?? ''}`;
+      const substackCopy: Record<string, string> = {
+        'substackWizard.open': 'Follow Substack',
+        'substackWizard.title': 'Follow a Substack publication',
+        'substackWizard.description':
+          'Paste the publication homepage or any post link. We’ll find and test its public RSS feed.',
+        'substackWizard.linkLabel': 'Substack link',
+        'substackWizard.linkPlaceholder': 'https://writer.substack.com/p/a-post',
+        'substackWizard.finding': 'Finding publication…',
+        'substackWizard.find': 'Find publication',
+        'substackWizard.nameLabel': 'Publication name',
+        'substackWizard.following': 'Following…',
+        'substackWizard.cancel': 'Cancel',
+      };
+      if (key === 'substackWizard.latestPosts') return `Latest posts (${values?.count ?? 0})`;
+      if (key === 'substackWizard.follow') return `Follow ${values?.name ?? ''}`;
+      if (key in substackCopy) return substackCopy[key];
       return key;
     },
   }),
@@ -394,6 +411,92 @@ describe('SourcesPage', () => {
     expect(await screen.findByText('Found 2 entries')).toBeTruthy();
     expect(screen.getByText('First post')).toBeTruthy();
     expect(screen.getByText('Second post')).toBeTruthy();
+  });
+
+  it('guides a user from a Substack post link to a saved private RSS source', async () => {
+    apiMock.fetchSources.mockResolvedValue([source()]);
+    apiMock.previewSubstackSource.mockResolvedValue({
+      feed_url: 'https://writer.substack.com/feed',
+      suggested_name: 'Writer',
+      entry_count: 1,
+      items: [{ title: 'A useful post', url: 'https://writer.substack.com/p/useful', date: null }],
+    });
+    apiMock.createSource.mockResolvedValue(
+      source({
+        slug: 'u2-writer',
+        name: 'Writer',
+        url: 'https://writer.substack.com/feed',
+        owner_user_id: regularUser.id,
+      })
+    );
+    withProviders(<SourcesPage />, '/', regularUser);
+    await screen.findAllByText('Acme News');
+
+    fireEvent.click(screen.getByRole('button', { name: /follow substack/i }));
+    fireEvent.change(screen.getByLabelText(/substack link/i), {
+      target: { value: 'https://writer.substack.com/p/useful?utm_source=email' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /find publication/i }));
+
+    expect(await screen.findByText('A useful post')).toBeTruthy();
+    expect(screen.getByDisplayValue('Writer')).toBeTruthy();
+    expect(screen.getByText('https://writer.substack.com/feed')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: /follow writer/i }));
+
+    await waitFor(() =>
+      expect(apiMock.createSource).toHaveBeenCalledWith({
+        name: 'Writer',
+        url: 'https://writer.substack.com/feed',
+        category: 'newsletter',
+        kind: 'rss_feed',
+        high_priority: true,
+        provider: 'substack',
+      })
+    );
+  });
+
+  it.each([
+    [400, 'Enter a Substack publication or post link.'],
+    [422, 'The publication feed could not be reached.'],
+  ])('explains a Substack preview error with status %s', async (status, message) => {
+    apiMock.fetchSources.mockResolvedValue([source()]);
+    apiMock.previewSubstackSource.mockRejectedValue(new apiMock.HttpError(status, message));
+    withProviders(<SourcesPage />, '/', regularUser);
+    await screen.findAllByText('Acme News');
+
+    fireEvent.click(screen.getByRole('button', { name: /follow substack/i }));
+    fireEvent.change(screen.getByLabelText(/substack link/i), {
+      target: { value: 'https://example.com/not-a-publication' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /find publication/i }));
+
+    expect(await screen.findByText(message)).toBeTruthy();
+  });
+
+  it('explains when the Substack feed is already followed', async () => {
+    apiMock.fetchSources.mockResolvedValue([source()]);
+    apiMock.previewSubstackSource.mockResolvedValue({
+      feed_url: 'https://writer.substack.com/feed',
+      suggested_name: 'Writer',
+      entry_count: 1,
+      items: [{ title: 'A post', url: 'https://writer.substack.com/p/a-post', date: null }],
+    });
+    apiMock.createSource.mockRejectedValue(
+      new apiMock.HttpError(409, 'This feed is already in your sources.')
+    );
+    withProviders(<SourcesPage />, '/', regularUser);
+    await screen.findAllByText('Acme News');
+
+    fireEvent.click(screen.getByRole('button', { name: /follow substack/i }));
+    fireEvent.change(screen.getByLabelText(/substack link/i), {
+      target: { value: 'https://writer.substack.com' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /find publication/i }));
+    await screen.findByText('A post');
+    fireEvent.click(screen.getByRole('button', { name: /follow writer/i }));
+
+    expect(await screen.findByText('This feed is already in your sources.')).toBeTruthy();
   });
 
   it('shows an empty-feed message when preview finds no entries', async () => {

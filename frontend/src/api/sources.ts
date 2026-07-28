@@ -35,6 +35,7 @@ export interface CreateSourcePayload {
   slug?: string;
   kind?: string;
   high_priority?: boolean;
+  provider?: string;
 }
 
 export async function createSource(payload: CreateSourcePayload): Promise<Source> {
@@ -65,6 +66,18 @@ export async function previewSource(payload: PreviewSourcePayload): Promise<Sour
   return requestJson<SourcePreviewResult>('/api/sources/preview', {
     method: 'POST',
     body: JSON.stringify(payload),
+  });
+}
+
+export interface SubstackPreviewResult extends SourcePreviewResult {
+  feed_url: string;
+  suggested_name: string;
+}
+
+export async function previewSubstackSource(url: string): Promise<SubstackPreviewResult> {
+  return requestJson<SubstackPreviewResult>('/api/sources/substack/preview', {
+    method: 'POST',
+    body: JSON.stringify({ url }),
   });
 }
 
