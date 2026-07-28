@@ -23,11 +23,11 @@ def _disabled_config() -> dict[str, object]:
 
 
 def _is_valid_text(value: str, *, max_length: int) -> bool:
-    return (
-        bool(value)
-        and len(value) <= max_length
-        and not any(category(char) in {"Cc", "Cf"} for char in value)
-    )
+    return bool(value) and len(value) <= max_length and not _contains_unsafe_characters(value)
+
+
+def _contains_unsafe_characters(value: str) -> bool:
+    return any(category(char) in {"Cc", "Cf"} for char in value)
 
 
 def _normalized_base_url(value: str) -> str | None:
@@ -63,9 +63,17 @@ def public_dify_config() -> dict[str, object]:
     if os.getenv("DIFY_CHAT_ENABLED", "").strip().lower() != "true":
         return _disabled_config()
 
-    base_url = _normalized_base_url(os.getenv("DIFY_CHAT_BASE_URL", ""))
-    app_token = os.getenv("DIFY_CHAT_APP_TOKEN", "").strip()
-    title = os.getenv("DIFY_CHAT_TITLE", _DEFAULT_TITLE).strip()
+    raw_base_url = os.getenv("DIFY_CHAT_BASE_URL", "")
+    raw_app_token = os.getenv("DIFY_CHAT_APP_TOKEN", "")
+    raw_title = os.getenv("DIFY_CHAT_TITLE", _DEFAULT_TITLE)
+    if any(
+        _contains_unsafe_characters(value) for value in (raw_base_url, raw_app_token, raw_title)
+    ):
+        return _disabled_config()
+
+    base_url = _normalized_base_url(raw_base_url)
+    app_token = raw_app_token.strip()
+    title = raw_title.strip()
     if (
         base_url is None
         or not _is_valid_text(app_token, max_length=_MAX_APP_TOKEN_LENGTH)
