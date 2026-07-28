@@ -233,6 +233,28 @@ describe('DifyChatWidget', () => {
     expect(difyConfig()).toBeUndefined();
   });
 
+  it('completes a pending Dify load after the same user remounts', async () => {
+    mockScriptLoading();
+    const spy = appendSpy();
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(configResponse(enabledConfig())));
+
+    const firstMount = render(<DifyChatWidget user={user} />);
+
+    await waitFor(() => expect(appendedScripts(spy)).toHaveLength(1));
+    firstMount.unmount();
+    expect(difyConfig()).toBeUndefined();
+
+    render(<DifyChatWidget user={user} />);
+
+    await waitFor(() => expect(difyConfig()).not.toBeUndefined());
+    addDifyDom();
+    markScriptLoaded();
+
+    expect(appendedScripts(spy)).toHaveLength(1);
+    expect(document.getElementById('dify-chatbot-bubble-button')).not.toBeNull();
+    expect(document.getElementById('dify-chatbot-bubble-window')).not.toBeNull();
+  });
+
   it('does not execute Dify again after a same-document user switch', async () => {
     mockScriptLoading();
     const spy = appendSpy();

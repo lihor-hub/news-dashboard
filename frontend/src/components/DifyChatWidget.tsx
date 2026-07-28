@@ -87,6 +87,20 @@ export function DifyChatWidget({ user }: { user: User }) {
 
     const loadWidget = async (): Promise<void> => {
       try {
+        if (session && !session.loaded) {
+          if (session.userId !== userId) {
+            session.canRestore = false;
+            hideSession(session);
+            return;
+          }
+          if (session.canRestore) {
+            session.active = true;
+            (window as DifyWindow).difyChatbotConfig = session.config;
+            restoreDifyDomState(session);
+          }
+          return;
+        }
+
         const { dify } = await fetchPublicConfig();
         if (!mounted || !dify.enabled || !dify.app_token || !dify.base_url || !dify.title) return;
 
@@ -126,7 +140,10 @@ export function DifyChatWidget({ user }: { user: User }) {
           'load',
           () => {
             widgetSession.loaded = true;
-            if (!widgetSession.active) hideSession(widgetSession);
+            if (!widgetSession.active) {
+              widgetSession.canRestore = false;
+              hideSession(widgetSession);
+            }
           },
           { once: true }
         );
@@ -153,7 +170,6 @@ export function DifyChatWidget({ user }: { user: User }) {
     return () => {
       mounted = false;
       if (session?.userId === userId) {
-        if (!session.loaded) session.canRestore = false;
         hideSession(session);
       }
     };
