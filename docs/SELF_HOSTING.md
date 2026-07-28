@@ -1,6 +1,7 @@
 # Self-Hosting
 
 **Note**: The GHCR package must be made public (or accessible via pull secret) for this to work.
+
 > This is a one-time maintainer action: go to the repository's Packages settings,
 > select the `ghcr.io/lihor-hub/news-dashboard` package, and change its visibility to Public.
 > If the package stays private, configure the production `GHCR_TOKEN` Actions
@@ -10,6 +11,7 @@
 
 This guide explains how to deploy News Dashboard for production use using the published Docker image from GitHub Container Registry (GHCR).
 
+- [Know Your Role](#know-your-role)
 - [Docker Compose: Dev vs Production](#docker-compose-dev-vs-production)
 - [Running with Docker Compose (Production)](#running-with-docker-compose-production)
 - [Image Tags and Versioning](#image-tags-and-versioning)
@@ -23,13 +25,26 @@ This guide explains how to deploy News Dashboard for production use using the pu
 - [Backups](#backups)
 - [Next Steps](#next-steps)
 
+## Know Your Role
+
+A **deployment operator** chooses a deployment method, supplies secrets and
+environment configuration, operates PostgreSQL and persistent storage,
+monitors health, and performs backups and upgrades. An **application
+administrator** signs in to manage users and review ingest operations,
+statistics, and analytics.
+
+One person can hold both roles, but host or cluster access does not grant
+application administrator access. After deployment, continue with
+[Administration and operations](user-guide/administration-and-operations.md)
+for the in-app controls.
+
 ## Docker Compose: Dev vs Production
 
 The repository provides two Docker Compose files:
 
-| File | Purpose |
-|------|---------|
-| `docker-compose.yml` | Local development only (builds from source, insecure dev defaults) |
+| File                      | Purpose                                                                     |
+| ------------------------- | --------------------------------------------------------------------------- |
+| `docker-compose.yml`      | Local development only (builds from source, insecure dev defaults)          |
 | `docker-compose.prod.yml` | Production deployment (uses published image, requires secure configuration) |
 
 > **Warning**: Never use `docker-compose.yml` for production. It contains insecure defaults suitable only for local development.
@@ -107,7 +122,7 @@ Edit the `image` line in `docker-compose.prod.yml`:
 ```yaml
 services:
   news-dashboard:
-    image: ghcr.io/lihor-hub/news-dashboard:v1.21.0  # Pin to specific version
+    image: ghcr.io/lihor-hub/news-dashboard:v1.21.0 # Pin to specific version
     # ...
 ```
 
@@ -146,20 +161,20 @@ See the [README Configuration section](../README.md#configuration) for the compl
 
 ### Required Variables
 
-| Variable | Description |
-|----------|-------------|
-| `SESSION_SECRET` | Signed session key. Generate with: `python -c "import secrets; print(secrets.token_hex(32))"` |
-| `BOOTSTRAP_ADMIN_USERNAME` | Initial admin username (created on first run) |
-| `BOOTSTRAP_ADMIN_PASSWORD` | Initial admin password |
-| `POSTGRES_PASSWORD` | PostgreSQL database password |
+| Variable                   | Description                                                                                   |
+| -------------------------- | --------------------------------------------------------------------------------------------- |
+| `SESSION_SECRET`           | Signed session key. Generate with: `python -c "import secrets; print(secrets.token_hex(32))"` |
+| `BOOTSTRAP_ADMIN_USERNAME` | Initial admin username (created on first run)                                                 |
+| `BOOTSTRAP_ADMIN_PASSWORD` | Initial admin password                                                                        |
+| `POSTGRES_PASSWORD`        | PostgreSQL database password                                                                  |
 
 ### Optional AI Features
 
-| Variable | Description |
-|----------|-------------|
-| `OPENAI_API_KEY` | OpenAI API key for summaries, insights, TTS |
-| `FREE_LLM_API_KEY` | Alternative LLM API key |
-| `FREE_LLM_BASE_URL` | Custom LLM endpoint |
+| Variable            | Description                                 |
+| ------------------- | ------------------------------------------- |
+| `OPENAI_API_KEY`    | OpenAI API key for summaries, insights, TTS |
+| `FREE_LLM_API_KEY`  | Alternative LLM API key                     |
+| `FREE_LLM_BASE_URL` | Custom LLM endpoint                         |
 
 ### Optional Email Delivery
 
@@ -167,14 +182,14 @@ Email delivery remains disabled until the deployment provides a complete SMTP
 configuration and an absolute, browser-facing `APP_BASE_URL`. Enabling email
 controls in a user's settings does not make delivery available by itself.
 
-| Variable | Description |
-|----------|-------------|
-| `SMTP_HOST` | SMTP relay hostname. |
-| `SMTP_PORT` | SMTP relay port. |
-| `SMTP_USER` | SMTP login username. |
-| `SMTP_PASS` | SMTP login password. Store this outside version control. |
-| `SMTP_FROM` | Sender address used for outbound messages. |
-| `SMTP_TLS` | Transport mode: `starttls`, `ssl`, or `none`. |
+| Variable       | Description                                                                         |
+| -------------- | ----------------------------------------------------------------------------------- |
+| `SMTP_HOST`    | SMTP relay hostname.                                                                |
+| `SMTP_PORT`    | SMTP relay port.                                                                    |
+| `SMTP_USER`    | SMTP login username.                                                                |
+| `SMTP_PASS`    | SMTP login password. Store this outside version control.                            |
+| `SMTP_FROM`    | Sender address used for outbound messages.                                          |
+| `SMTP_TLS`     | Transport mode: `starttls`, `ssl`, or `none`.                                       |
 | `APP_BASE_URL` | Absolute public URL used for links in email, independent of Keycloak configuration. |
 
 `SMTP_USERNAME` and `SMTP_PASSWORD` remain supported for legacy OTP email
@@ -188,25 +203,25 @@ variables `NEWS_DASHBOARD_BASE_URL` and `NEWS_DASHBOARD_URL`, in that order.
 
 ### Optional Observability
 
-| Variable | Description |
-|----------|-------------|
-| `METRICS_ENABLED` | Set to `true` to expose the Prometheus `/metrics` endpoint. Off by default. |
-| `SENTRY_DSN` | Backend error tracking. Point at a Sentry or GlitchTip-compatible DSN to capture unhandled exceptions. Off by default — no SDK initializes and no network calls are made when unset. |
-| `SENTRY_ENVIRONMENT` | Environment tag attached to backend events (e.g. `staging`, `production`). Defaults to `production` when `SENTRY_DSN` is set. |
-| `SENTRY_DSN_FRONTEND` | Frontend error tracking. Served to the SPA via `GET /api/config`; safe to expose since Sentry DSNs are send-only. Off by default. |
+| Variable              | Description                                                                                                                                                                          |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `METRICS_ENABLED`     | Set to `true` to expose the Prometheus `/metrics` endpoint. Off by default.                                                                                                          |
+| `SENTRY_DSN`          | Backend error tracking. Point at a Sentry or GlitchTip-compatible DSN to capture unhandled exceptions. Off by default — no SDK initializes and no network calls are made when unset. |
+| `SENTRY_ENVIRONMENT`  | Environment tag attached to backend events (e.g. `staging`, `production`). Defaults to `production` when `SENTRY_DSN` is set.                                                        |
+| `SENTRY_DSN_FRONTEND` | Frontend error tracking. Served to the SPA via `GET /api/config`; safe to expose since Sentry DSNs are send-only. Off by default.                                                    |
 
 ### Privacy
 
-| Variable | Description |
-|----------|-------------|
+| Variable            | Description                                                                                                                                                                                                                                                                                                                                   |
+| ------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `ANALYTICS_ENABLED` | Instance-wide analytics kill switch. Set to `false` to stop ingesting `user_events` (route views, time-on-app, article dwell, feature usage) for every user regardless of their individual preference. Defaults to `true`. Users can additionally opt out for themselves from Settings → Privacy, enforced server-side in `POST /api/events`. |
 
 ### Optional Security
 
-| Variable | Description |
-|----------|-------------|
+| Variable          | Description                                                                                                                                                                                                                                   |
+| ----------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `ENABLE_API_DOCS` | Set to `true` to serve the interactive API docs (`/docs`, `/redoc`, `/openapi.json`). Off by default so a public deployment doesn't leak its full API surface to anonymous visitors; enable it for local development or trusted environments. |
-| `ENABLE_HSTS` | Set to `true` to have the app send `Strict-Transport-Security` itself. Off by default, since HSTS is only correct behind HTTPS — leave it unset for local HTTP dev, or when a TLS-terminating proxy (e.g. Caddy, see below) already sets it. |
+| `ENABLE_HSTS`     | Set to `true` to have the app send `Strict-Transport-Security` itself. Off by default, since HSTS is only correct behind HTTPS — leave it unset for local HTTP dev, or when a TLS-terminating proxy (e.g. Caddy, see below) already sets it.  |
 
 > **Important**: Never commit secrets to version control. Use environment variables or a `.env` file (not committed to Git) to manage sensitive values.
 
@@ -270,17 +285,17 @@ News Dashboard exposes several health and readiness endpoints for monitoring and
 
 ### Endpoint Reference
 
-| Endpoint | Auth | Purpose |
-|----------|------|---------|
-| `GET /api/live` | Public | Lightweight liveness — returns `{"status":"ok"}` with no database dependency. Use for Kubernetes `livenessProbe`. |
-| `GET /api/ready` | Public | Readiness — checks database connectivity by running `SELECT 1`. Returns 200 on success, 503 on failure. Use for Kubernetes `readinessProbe`. |
-| `GET /api/health` | Public | Full health — calls `init_db()` and returns `{"status":"ok"}`. Suitable for load-balancer checks. |
-| `GET /api/health/details` | Admin-only | Detailed diagnostics — returns `status`, `database` info, and `next_ingest_at`. Requires admin authentication. |
-| `GET /api/sources/health` | Authenticated | Per-source health status for the current user — shows last-checked time, last error, and fetch counts for each source. |
-| `GET /api/scheduler/status` | Admin-only | Scheduler state — whether the in-process scheduler is running, its interval, and configured jobs. |
-| `GET /metrics` | Public (opt-in) | Prometheus exposition format. Only served when `METRICS_ENABLED=true`; returns 404 otherwise. See [Prometheus Metrics](#prometheus-metrics). |
-| `GET /api/config` | Public | Non-sensitive runtime config the SPA needs before login — currently just the frontend Sentry DSN, if configured. See [Error Tracking](#error-tracking). |
-| `GET /docs`, `GET /redoc`, `GET /openapi.json` | Public (opt-in) | Interactive API docs / OpenAPI schema. Only served when `ENABLE_API_DOCS=true`; returns 404 otherwise. |
+| Endpoint                                       | Auth            | Purpose                                                                                                                                                 |
+| ---------------------------------------------- | --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /api/live`                                | Public          | Lightweight liveness — returns `{"status":"ok"}` with no database dependency. Use for Kubernetes `livenessProbe`.                                       |
+| `GET /api/ready`                               | Public          | Readiness — checks database connectivity by running `SELECT 1`. Returns 200 on success, 503 on failure. Use for Kubernetes `readinessProbe`.            |
+| `GET /api/health`                              | Public          | Full health — calls `init_db()` and returns `{"status":"ok"}`. Suitable for load-balancer checks.                                                       |
+| `GET /api/health/details`                      | Admin-only      | Detailed diagnostics — returns `status`, `database` info, and `next_ingest_at`. Requires admin authentication.                                          |
+| `GET /api/sources/health`                      | Authenticated   | Per-source health status for the current user — shows last-checked time, last error, and fetch counts for each source.                                  |
+| `GET /api/scheduler/status`                    | Admin-only      | Scheduler state — whether the in-process scheduler is running, its interval, and configured jobs.                                                       |
+| `GET /metrics`                                 | Public (opt-in) | Prometheus exposition format. Only served when `METRICS_ENABLED=true`; returns 404 otherwise. See [Prometheus Metrics](#prometheus-metrics).            |
+| `GET /api/config`                              | Public          | Non-sensitive runtime config the SPA needs before login — currently just the frontend Sentry DSN, if configured. See [Error Tracking](#error-tracking). |
+| `GET /docs`, `GET /redoc`, `GET /openapi.json` | Public (opt-in) | Interactive API docs / OpenAPI schema. Only served when `ENABLE_API_DOCS=true`; returns 404 otherwise.                                                  |
 
 ### Docker Probe Configuration
 
@@ -293,9 +308,9 @@ healthcheck that calls `/api/ready` with the Python standard library instead:
 healthcheck:
   test:
     [
-      "CMD",
-      "python",
-      "-c",
+      'CMD',
+      'python',
+      '-c',
       "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/api/ready', timeout=5).read()",
     ]
   interval: 30s
@@ -381,7 +396,7 @@ scrape_configs:
   - job_name: news-dashboard
     metrics_path: /metrics
     static_configs:
-      - targets: ["news-dashboard:8080"]
+      - targets: ['news-dashboard:8080']
 ```
 
 ### Error Tracking
@@ -394,7 +409,7 @@ a Sentry SaaS project if you prefer.
   initializes and no network calls are made.
 - `SENTRY_DSN_FRONTEND` enables frontend error capture. It's served to the
   SPA via the public `GET /api/config` endpoint — this is safe because a
-  Sentry DSN only lets a client *send* events, not read any data.
+  Sentry DSN only lets a client _send_ events, not read any data.
 
 Both are off independently, so you can enable backend-only, frontend-only,
 or both. PII is scrubbed before events are sent: `send_default_pii` is
@@ -524,12 +539,12 @@ Rollback is the reason backups are important — always back up the database
 
 News Dashboard runs several background jobs that an operator should be aware of:
 
-| Job | When | What it does |
-|-----|------|-------------|
-| **Ingest** | Every 30 minutes (configurable via `INGEST_INTERVAL_SCHEDULER_ENABLED` / in-process scheduler, or as a Kubernetes CronJob) | Fetches new articles from all enabled sources, parses feeds, creates article records, fetches full bodies, and scores articles for importance. |
-| **Daily Briefing** | Once daily (scheduled time varies) | Generates an AI-summarized briefing of top articles. Skipped when no AI key is configured (`FREE_LLM_API_KEY` / `OPENAI_API_KEY`). |
-| **Analytics Cleanup** | Daily | Prunes `user_events` older than `ANALYTICS_RETENTION_DAYS` (default: 180). Configurable with the `ANALYTICS_RETENTION_DAYS` env var. |
-| **Recommendation Recalculation** | During ingest + daily full recalculation | Refreshes the article similarity / recommendation model. The ingest-time pass repairs stale scores; the daily pass does a full recalc. |
+| Job                              | When                                                                                                                       | What it does                                                                                                                                   |
+| -------------------------------- | -------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Ingest**                       | Every 30 minutes (configurable via `INGEST_INTERVAL_SCHEDULER_ENABLED` / in-process scheduler, or as a Kubernetes CronJob) | Fetches new articles from all enabled sources, parses feeds, creates article records, fetches full bodies, and scores articles for importance. |
+| **Daily Briefing**               | Once daily (scheduled time varies)                                                                                         | Generates an AI-summarized briefing of top articles. Skipped when no AI key is configured (`FREE_LLM_API_KEY` / `OPENAI_API_KEY`).             |
+| **Analytics Cleanup**            | Daily                                                                                                                      | Prunes `user_events` older than `ANALYTICS_RETENTION_DAYS` (default: 180). Configurable with the `ANALYTICS_RETENTION_DAYS` env var.           |
+| **Recommendation Recalculation** | During ingest + daily full recalculation                                                                                   | Refreshes the article similarity / recommendation model. The ingest-time pass repairs stale scores; the daily pass does a full recalc.         |
 
 ### In-Process Scheduler vs. Kubernetes CronJob
 
@@ -560,7 +575,7 @@ neo4j:
   enabled: true
   auth:
     user: neo4j
-    password: "replace-with-a-long-random-password"
+    password: 'replace-with-a-long-random-password'
   persistence:
     size: 10Gi
     storageClassName: fast-storage
@@ -608,11 +623,11 @@ guidelines for a typical instance (1–5 users, ~50 sources, ~500 new articles/d
 
 ### Container Resources
 
-| Component | CPU (request / limit) | Memory (request / limit) |
-|-----------|-----------------------|--------------------------|
-| App (news-dashboard) | 50m / 500m | 128Mi / 512Mi |
-| Ingest CronJob (if separate) | 100m / 500m | 256Mi / 512Mi |
-| PostgreSQL | 100m / 500m | 256Mi / 512Mi |
+| Component                    | CPU (request / limit) | Memory (request / limit) |
+| ---------------------------- | --------------------- | ------------------------ |
+| App (news-dashboard)         | 50m / 500m            | 128Mi / 512Mi            |
+| Ingest CronJob (if separate) | 100m / 500m           | 256Mi / 512Mi            |
+| PostgreSQL                   | 100m / 500m           | 256Mi / 512Mi            |
 
 These are the defaults shipped in the Helm chart. A personal instance usually
 runs comfortably at these levels. During ingest, CPU and memory spike briefly as
@@ -620,11 +635,11 @@ feeds are fetched and parsed.
 
 ### Storage
 
-| Data | Expected size | Notes |
-|------|---------------|-------|
+| Data                                 | Expected size                            | Notes                                                                                                                                       |
+| ------------------------------------ | ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
 | **PostgreSQL (articles + metadata)** | ~1–2 GB per year for a personal instance | Article bodies are stored in the database as text. 50 sources × ~10 new articles/day × ~50 KB average body → ~250 MB/year for bodies alone. |
-| **PostgreSQL WAL** | Temporary; varies | Depends on checkpoint settings and ingest cadence. Usually under 1 GB. |
-| **Analytics events** | Pruned automatically | Cleaned daily per `ANALYTICS_RETENTION_DAYS`. At ~1 KB/event and ~100 events/user/day, ~50 MB retained at 180-day retention. |
+| **PostgreSQL WAL**                   | Temporary; varies                        | Depends on checkpoint settings and ingest cadence. Usually under 1 GB.                                                                      |
+| **Analytics events**                 | Pruned automatically                     | Cleaned daily per `ANALYTICS_RETENTION_DAYS`. At ~1 KB/event and ~100 events/user/day, ~50 MB retained at 180-day retention.                |
 
 **Total storage estimate**: 5–10 GB should be comfortable for a personal
 instance running for several years. A cheap 20 GB volume leaves plenty of headroom.
@@ -665,6 +680,15 @@ Regularly back up your PostgreSQL database. See [PostgreSQL Backup and Restore](
 
 ## Next Steps
 
-- **Set up HTTPS** with a reverse proxy (see [HTTPS with Caddy](https://docs.lihor.ro/docs/configuration/https-caddy))
-- Configure optional features like AI capabilities, Keycloak SSO, or Web Push notifications
-- Set up regular backups of your PostgreSQL data
+- Choose a deployment method in [Quick Start](../README.md#quick-start) or the
+  [Deployment](../README.md#deployment) reference.
+- Use the [README Configuration section](../README.md#configuration) as the
+  canonical environment-variable reference.
+- **Set up HTTPS** with a reverse proxy (see
+  [HTTPS with Caddy](https://docs.lihor.ro/docs/configuration/https-caddy)).
+- Configure authentication and optional integrations through the
+  [Configuration guides](https://docs.lihor.ro/docs/configuration).
+- Sign in as an application administrator and follow
+  [Administration and operations](user-guide/administration-and-operations.md).
+- Set up and verify regular
+  [PostgreSQL backups](https://docs.lihor.ro/docs/configuration/postgres-backup).

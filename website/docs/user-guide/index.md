@@ -31,6 +31,13 @@ corpus, organize material, and revisit what you learned.
 | [Saved and read history](saved-history) | Later, Done, Starred, Archived, Reading DNA, and export behavior.               |
 | [Sharing articles](sharing)             | Sending articles to other users on the same instance.                           |
 
+## Administer or operate an instance
+
+| Page                                                              | Role and task                                                                                                       |
+| ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| [Administration and operations](administration-and-operations.md) | Application administrators manage users and inspect feeds, runs, logs, statistics, and analytics.                   |
+| [Self-Hosting guide](/docs/self-hosting)                          | Deployment operators configure authentication and integrations, monitor services, back up data, and deploy updates. |
+
 If you have not chosen how to run or access the app, start with
 [Hosted or self-hosted?](/docs/getting-started/hosted-or-self-hosted).
 If you already know which instance you use, continue with
