@@ -13,7 +13,17 @@ News Dashboard.
 
 Start with the root
 [README local-development guide](https://github.com/lihor-hub/news-dashboard#local-development)
-for the full setup flow.
+for the full setup flow, then see
+[Development → Environment setup](../development/environment-setup.md) for the
+test-database wiring and worktree bootstrap.
+
+:::tip Working on the code
+The [Development](../development/index.md) section covers the
+[codebase map](../development/codebase-map.md), the
+[feature-module convention](../development/feature-modules.md) every backend
+domain follows, and [testing](../development/testing.md). The
+[API reference](../api/index.md) documents the HTTP surface.
+:::
 
 ## Quality gate
 
