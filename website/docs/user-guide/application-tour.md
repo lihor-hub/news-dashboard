@@ -40,11 +40,13 @@ report, delivery, and provider limits.
 headline, or use the article actions to move an item to Done, Later, Skipped,
 Starred, Snoozed, or Archived.
 
+![Today feed with category filters and an article list](/img/user-guide/today-feed.webp)
+
 The screenshot below shows the article reader after opening an item from Today.
 Its bottom triage action bar provides **Star**, **Done**, **Later**, **Skip**,
 and **Archive**.
 
-![Article reader with the Star, Done, Later, Skip, and Archive triage actions](/img/user-guide/today-feed.webp)
+![Article reader with the Star, Done, Later, Skip, and Archive triage action bar](/img/user-guide/triage-controls.webp)
 
 Use [Today Feed and triage](today-feed-triage.md) for the state meanings and
 keyboard shortcuts.
