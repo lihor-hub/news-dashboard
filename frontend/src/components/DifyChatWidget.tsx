@@ -21,23 +21,36 @@ interface DifyWidgetSession {
   config: DifyChatbotConfig;
   script: HTMLScriptElement;
   observer: MutationObserver;
+  detachedNodes: HTMLElement[];
   active: boolean;
+  loaded: boolean;
+  canRestore: boolean;
 }
 
 let session: DifyWidgetSession | null = null;
 
-function removeDifyDomState(): void {
-  document.getElementById(DIFY_BUBBLE_ID)?.remove();
-  document.getElementById(DIFY_WINDOW_ID)?.remove();
+function detachDifyDomState(widgetSession: DifyWidgetSession): void {
+  [DIFY_BUBBLE_ID, DIFY_WINDOW_ID].forEach((id) => {
+    const node = document.getElementById(id);
+    if (node && !widgetSession.detachedNodes.includes(node)) {
+      widgetSession.detachedNodes.push(node);
+      node.remove();
+    }
+  });
+}
+
+function restoreDifyDomState(widgetSession: DifyWidgetSession): void {
+  document.body.append(...widgetSession.detachedNodes);
+  widgetSession.detachedNodes = [];
 }
 
 function hideSession(widgetSession: DifyWidgetSession): void {
   widgetSession.active = false;
   const difyWindow = window as DifyWindow;
-  if (difyWindow.difyChatbotConfig === widgetSession.config) {
+  if (widgetSession.loaded && difyWindow.difyChatbotConfig === widgetSession.config) {
     delete difyWindow.difyChatbotConfig;
   }
-  removeDifyDomState();
+  detachDifyDomState(widgetSession);
 }
 
 function createSession(
@@ -45,15 +58,24 @@ function createSession(
   config: DifyChatbotConfig,
   script: HTMLScriptElement
 ): DifyWidgetSession {
-  const widgetSession = {
+  let widgetSession: DifyWidgetSession;
+  const observer = new MutationObserver(() => {
+    if (!widgetSession.script.isConnected) {
+      widgetSession.observer.disconnect();
+      return;
+    }
+    if (!widgetSession.active) detachDifyDomState(widgetSession);
+  });
+  widgetSession = {
     userId,
     config,
     script,
+    observer,
+    detachedNodes: [],
     active: true,
-  } as DifyWidgetSession;
-  widgetSession.observer = new MutationObserver(() => {
-    if (!widgetSession.active) removeDifyDomState();
-  });
+    loaded: false,
+    canRestore: true,
+  };
   widgetSession.observer.observe(document.body, { childList: true, subtree: true });
   return widgetSession;
 }
@@ -71,7 +93,16 @@ export function DifyChatWidget({ user }: { user: User }) {
         if (session) {
           // Dify's embed captures its config and installs global listeners without a teardown API.
           // A second execution would retain the first user's closure, so this document fails closed.
-          if (session.userId !== userId) hideSession(session);
+          if (session.userId !== userId) {
+            session.canRestore = false;
+            hideSession(session);
+            return;
+          }
+          if (session.canRestore) {
+            session.active = true;
+            (window as DifyWindow).difyChatbotConfig = session.config;
+            restoreDifyDomState(session);
+          }
           return;
         }
 
@@ -94,7 +125,8 @@ export function DifyChatWidget({ user }: { user: User }) {
         script.addEventListener(
           'load',
           () => {
-            if (!widgetSession.active) removeDifyDomState();
+            widgetSession.loaded = true;
+            if (!widgetSession.active) hideSession(widgetSession);
           },
           { once: true }
         );

@@ -78,6 +78,10 @@ function addDifyDom(): void {
   document.body.append(windowElement);
 }
 
+function markScriptLoaded(): void {
+  document.querySelector<HTMLScriptElement>(scriptSelector)?.dispatchEvent(new Event('load'));
+}
+
 beforeEach(async () => {
   vi.resetModules();
   ({ DifyChatWidget } = await import('./DifyChatWidget'));
@@ -158,6 +162,7 @@ describe('DifyChatWidget', () => {
     const { unmount } = render(<DifyChatWidget user={user} />);
 
     await waitFor(() => expect(document.querySelector(scriptSelector)).not.toBeNull());
+    markScriptLoaded();
     unmount();
     addDifyDom();
 
@@ -166,6 +171,41 @@ describe('DifyChatWidget', () => {
     await waitFor(() => {
       expect(document.getElementById('dify-chatbot-bubble-button')).toBeNull();
       expect(document.getElementById('dify-chatbot-bubble-window')).toBeNull();
+    });
+  });
+
+  it('restores the detached Dify DOM for a same-user remount without a second script', async () => {
+    mockScriptLoading();
+    const spy = appendSpy();
+    const fetchMock = vi
+      .fn()
+      .mockImplementation(() => Promise.resolve(configResponse(enabledConfig())));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const firstMount = render(<DifyChatWidget user={user} />);
+
+    await waitFor(() => expect(appendedScripts(spy)).toHaveLength(1));
+    markScriptLoaded();
+    addDifyDom();
+    firstMount.unmount();
+    expect(document.getElementById('dify-chatbot-bubble-button')).toBeNull();
+    expect(document.getElementById('dify-chatbot-bubble-window')).toBeNull();
+
+    render(<DifyChatWidget user={user} />);
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(difyConfig()).not.toBeUndefined());
+    await waitFor(() => {
+      expect(document.getElementById('dify-chatbot-bubble-button')).not.toBeNull();
+      expect(document.getElementById('dify-chatbot-bubble-window')).not.toBeNull();
+    });
+    expect(appendedScripts(spy)).toHaveLength(1);
+    expect(difyConfig()).toEqual({
+      token: 'public-embed-token',
+      baseUrl: 'https://dify.example.test',
+      dynamicScript: true,
+      systemVariables: { user_id: '42' },
+      containerProps: { title: 'News Assistant' },
     });
   });
 
@@ -178,6 +218,7 @@ describe('DifyChatWidget', () => {
     const { rerender } = render(<DifyChatWidget user={user} />);
 
     await waitFor(() => expect(appendedScripts(spy)).toHaveLength(1));
+    markScriptLoaded();
     addDifyDom();
     rerender(<DifyChatWidget user={anotherUser} />);
 
