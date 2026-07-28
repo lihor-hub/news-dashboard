@@ -58,7 +58,8 @@ actions.
 
 **Search** queries the article corpus available to your account, including
 items outside Today. Use it for a keyword, topic, or phrase, then open a result
-in the same article reader. The `/` shortcut focuses search.
+in the same article reader. On desktop, open the command palette with
+**Command+K** or **Ctrl+K** to navigate to Search without leaving the keyboard.
 
 See [Search](search.md) for indexed fields, workflow-state coverage, and the
 optional full-body index.

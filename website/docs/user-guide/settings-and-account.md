@@ -6,8 +6,9 @@ sidebar_position: 10
 # Settings and account data
 
 Open **Settings** to control the app for your account. Some switches depend on
-server or device support; the page tells you when an administrator must
-configure a capability first.
+server configuration owned by the deployment operator; others depend on
+permissions and support in your browser or device. An app administrator does
+not necessarily control either layer.
 
 ![Settings showing theme, language, recommendation refresh, AI Watchlists, and AI Memory](/img/user-guide/settings-personalization.webp)
 
@@ -88,6 +89,11 @@ reading history, starred articles, highlights, shares, and preferences. The
 app requires the current username as confirmation and signs you out after
 deletion.
 
-This action cannot be undone. Download and verify an archive first if you may
-need the data later, then confirm that you are signed into the intended
-account before deleting it.
+This action cannot be undone. If you may need the data supported by export,
+download and verify an archive first, then confirm that you are signed into the
+intended account before deleting it.
+
+The archive is a partial backup, not an undo for deletion. Restore covers
+articles and workflow state, briefings, AI memories, source subscriptions, and
+preferences; it does not restore highlights, shares, or every other
+account-associated record.

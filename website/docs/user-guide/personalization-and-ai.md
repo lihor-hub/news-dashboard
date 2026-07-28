@@ -13,7 +13,7 @@ must configure the server-side provider or storage they use.
 
 Recommendations score candidate articles from local signals such as source,
 category, tags, discovery time, and your previous actions. Starred and Done
-articles are positive signals, Skip is negative, and Later is mildly positive.
+articles are positive signals, Skip is negative, and Later is neutral.
 Recommended items can appear in Today with a relevance indicator and a reason.
 
 Open **Settings → Personalization** and select **Refresh recommendations** to
@@ -32,8 +32,10 @@ changing article state.
 
 Ask requires the deployment operator to configure a supported server-side AI
 provider. If it is unavailable, contact the instance operator; adding a key is
-not a reader setting. Ask also needs enough saved or completed material to
-answer from.
+not a reader setting. By default, Ask searches your Starred and Done articles
+and needs enough material in that corpus. Select **Include all non-archived
+articles** on the Ask page to widen the corpus when you want Today, Later,
+Skipped, and other non-archived articles considered too.
 
 ## AI Watchlists
 

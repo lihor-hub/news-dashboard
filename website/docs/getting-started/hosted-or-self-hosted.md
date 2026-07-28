@@ -9,11 +9,11 @@ Choose an on-ramp based on who should operate the server. The reading workflow
 is the same after you sign in, but account creation and server configuration
 belong to different people.
 
-| Option                                                                | Best for                                                                     | Who creates accounts?                                                        | Who controls the server?                                               |
-| --------------------------------------------------------------------- | ---------------------------------------------------------------------------- | ---------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
-| **Official hosted service** at [news.lihor.ro](https://news.lihor.ro) | Reading without operating infrastructure                                     | A hosted-service administrator, or the configured Keycloak registration flow | The hosted-service deployment operator                                 |
-| **Local demo**                                                        | Trying the interface with sample data                                        | Nobody; use the bundled read-only `guest` account                            | You run the temporary demo stack, but it needs no manual configuration |
-| **Self-hosted deployment**                                            | Owning the infrastructure, data location, integrations, and release schedule | Your instance administrator                                                  | You or your deployment operator                                        |
+| Option                                                                | Best for                                                                     | Who creates accounts?                                                                             | Who controls the server?                                               |
+| --------------------------------------------------------------------- | ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| **Official hosted service** at [news.lihor.ro](https://news.lihor.ro) | Reading without operating infrastructure                                     | A hosted-service administrator, configured email-code auto-registration, or Keycloak registration | The hosted-service deployment operator                                 |
+| **Local demo**                                                        | Trying the interface with sample data                                        | Nobody; use the bundled read-only `guest` account                                                 | You run the temporary demo stack, but it needs no manual configuration |
+| **Self-hosted deployment**                                            | Owning the infrastructure, data location, integrations, and release schedule | Your instance administrator                                                                       | You or your deployment operator                                        |
 
 ## Know which role you have
 
@@ -33,9 +33,17 @@ official hosted service, a reader does not need deployment access.
 
 Open [news.lihor.ro](https://news.lihor.ro) if you have an account for the
 official service. Account creation depends on the authentication mode selected
-by its operator: local accounts are created by an administrator, while a
-**Create Account** link appears only when Keycloak registration is enabled.
-Do not assume public registration is available; follow
+by its operator:
+
+- local password accounts are created by an administrator;
+- email-code login creates an account for an unknown email when outbound email
+  works and the deployment operator enables `OTP_AUTO_REGISTER` (enabled by
+  default); and
+- a **Create Account** link appears when Keycloak registration is enabled.
+
+Email-code login remains available alongside Keycloak, so an instance can
+offer both email auto-registration and Keycloak registration. Do not assume
+either public path is available on a particular deployment; follow
 [Create a web account](create-web-account.md) for the sign-in paths.
 
 The hosted operator, not the reader, decides which optional server capabilities
