@@ -3,13 +3,26 @@
 Running your own instance of News Dashboard via Docker, Docker Compose, or
 Helm.
 
+## Know your role
+
+A **deployment operator** chooses a deployment method, supplies secrets and
+environment configuration, operates PostgreSQL and persistent storage,
+monitors health, and performs backups and upgrades. An **application
+administrator** signs in to manage users and review ingest operations,
+statistics, and analytics.
+
+One person can hold both roles, but host or cluster access does not grant
+application administrator access. After deployment, continue with
+[Administration and operations](/docs/user-guide/administration-and-operations)
+for the in-app controls.
+
 ## Deployment options
 
-| Option | Best for |
-|--------|----------|
-| Docker Compose | Single-node deployments using the published GHCR image. |
-| Docker run | Small installations where you already manage PostgreSQL separately. |
-| Helm | Kubernetes deployments with bundled or external PostgreSQL. |
+| Option         | Best for                                                            |
+| -------------- | ------------------------------------------------------------------- |
+| Docker Compose | Single-node deployments using the published GHCR image.             |
+| Docker run     | Small installations where you already manage PostgreSQL separately. |
+| Helm           | Kubernetes deployments with bundled or external PostgreSQL.         |
 
 For local development, use the root `docker-compose.yml`. For production, use
 `docker-compose.prod.yml` or Helm; the development compose file contains
@@ -61,16 +74,18 @@ the split `POSTGRES_HOST`, `POSTGRES_PORT`, `POSTGRES_DB`, `POSTGRES_USER`, and
 
 At minimum, a production instance also needs:
 
-| Variable | Purpose |
-|----------|---------|
-| `SESSION_SECRET` | Signs sessions and, unless overridden, digest mark-read tokens. |
-| `BOOTSTRAP_ADMIN_USERNAME` | First admin username when no users exist. |
-| `BOOTSTRAP_ADMIN_PASSWORD` | First admin password when no users exist. |
-| `POSTGRES_PASSWORD` | Password for the bundled or configured PostgreSQL user. |
-| `NEO4J_PASSWORD` | Password for the bundled Neo4j graph store. |
+| Variable                   | Purpose                                                         |
+| -------------------------- | --------------------------------------------------------------- |
+| `SESSION_SECRET`           | Signs sessions and, unless overridden, digest mark-read tokens. |
+| `BOOTSTRAP_ADMIN_USERNAME` | First admin username when no users exist.                       |
+| `BOOTSTRAP_ADMIN_PASSWORD` | First admin password when no users exist.                       |
+| `POSTGRES_PASSWORD`        | Password for the bundled or configured PostgreSQL user.         |
+| `NEO4J_PASSWORD`           | Password for the bundled Neo4j graph store.                     |
 
 See [Configuration](/docs/configuration) for authentication, HTTPS, backup, and
-integration guides.
+integration guides. The root
+[README Configuration section](https://github.com/lihor-hub/news-dashboard#configuration)
+is the canonical environment-variable reference.
 
 ## Operations
 
@@ -94,6 +109,8 @@ same pull/up commands.
 
 ## More guides
 
+- [Administration and operations](/docs/user-guide/administration-and-operations)
+- [Configuration and integrations](/docs/configuration)
 - [CI Runner Setup](ci-runner-setup)
 - [Authentication](/docs/configuration/authentication)
 - [Neo4j Knowledge Graph](/docs/configuration/neo4j-knowledge-graph)

@@ -1,94 +1,62 @@
 # Recommendations
 
-Discover articles you might have missed with **Recommendations** — personalized
-suggestions that learn from your triage behavior to surface relevant, older, or
-related content in your Today Feed.
+Recommendations rank articles in Today according to their general importance
+and the preferences learned for your account.
 
-## How recommendations work
+## How scores are formed
 
-News Dashboard watches how you triage articles (Done, Skip, Star, etc.) and
-uses those signals to score unseen articles in your database. Articles with
-high scores appear in your Today Feed with a **"Why recommended"** explanation
-and a relevance indicator.
+The starting score uses article metadata, including importance, category,
+tags, and discovery time. Personalization then adjusts it from:
 
-The recommender does **not** look at article content or use external services.
-It operates purely on:
-- Your past actions (which articles you did/didn't engage with)
-- Article metadata (source, category, tags, discovery time)
-- Simple collaborative filtering (users with similar behavior patterns)
+- your affinity for sources, categories, and tags, learned from article
+  actions;
+- semantic similarity to embedded articles you have starred or marked Done,
+  when stored embeddings are available;
+- freshness, article importance, and a bounded novelty contribution; and
+- active learning goals.
 
-No machine learning models, no external APIs, no data leaves your instance.
+Starring is the strongest positive article action and Done is positive. Skip
+and Archive are negative, while Later is neutral. Thumbs-up or thumbs-down
+feedback beside **Why recommended?** is a separate, stronger signal.
 
-## Where you see recommendations
+## Where recommendations appear
 
-Recommendations appear mixed into your **Today Feed** alongside new
-ingestions. Recommended articles are marked with:
+Today ranks available articles by their personalized score, falling back to a
+general score when personalization is not available yet. Recommendation labels
+summarize the score as **Recommended**, **Relevant**, or **Low signal**. Open an
+article and select **Why recommended?** to see the factors that contributed,
+then use the adjacent thumbs controls if the result was or was not useful.
 
-1. **A relevance badge** — a colored dot indicating how strongly the article
-   matches your interests (calculated from your history)
-2. **A "Why recommended" button** — tap to see a short explanation like:
-   - "You often star articles from this source"
-   - "You read similar articles about this topic"
-   - "This matches your saved article patterns"
-   - "You skipped fewer articles from this category recently"
+Normal triage still applies: you can Star, mark Done, send to Later, Skip, or
+Archive an article regardless of its recommendation label.
 
-## Training the recommender
+## Reader controls
 
-The system learns implicitly from your normal usage — no explicit training
-required. Signals that strengthen recommendations:
+You control recommendations in two places:
 
-- **Starring** an article → strong positive signal
-- **Marking Done** → positive signal (you found it worth reading)
-- **Skipping** an article → negative signal (less relevant to you)
-- **Saving to Later** → mild positive signal (interested but not now)
-- **Time spent** (if available) — longer reads suggest higher interest
+- In **Settings → Personalization**, select **Refresh recommendations** to
+  recompute your scores immediately.
+- In **Reading DNA → Active nudges**, adjust the per-category weights and
+  novelty weight from 0.0× to 3.0×. Changes save and recompute immediately.
 
-The recommender adapts continuously. If you start skipping articles you used
-to star, the weights shift and those topics appear less frequently.
+A category weight changes that category's direct contribution. The novelty
+weight changes the lift for plausible articles that differ from your valued
+history; it has no effect when the required stored embeddings are unavailable.
 
-## Recommendations in the Today Feed
+## When scores change
 
-When recommendations are active:
-- Your Today Feed blends **new articles** (from the latest ingest) with
-  **recommended articles** (from your existing database)
-- The mix aims to balance freshness with relevance
-- You can tell an article is recommended by the presence of:
-  - The relevance indicator (dot or bar)
-  - The "Why recommended" button (tapping shows the explanation)
-- Recommended articles still follow normal triage — you can Done, Skip,
-  Star, etc. them just like new articles
+Article actions and explicit recommendation feedback update the signals used
+for later scoring. The instance can recalculate stale scores in the background,
+and a reader can request an immediate recalculation from Settings. A new
+account may initially see general scores until it has useful action history.
 
-## Controlling recommendations
+## Privacy and optional AI
 
-You can adjust recommendation behavior in Settings → Recommendations:
+Recommendation scoring uses data stored in the instance's PostgreSQL database
+and does not require an external AI provider. It is calculated for one reader's
+account rather than by comparing that reader with other users.
 
-- **Mix ratio** — what percentage of your Today Feed should be recommendations
-  (default: 30%, range: 0%–100%)
-- **Minimum age** — how old an article must be to be considered for
-  recommendation (default: 2 days, prevents brand-new items from being
-  labeled as "recommended")
-- **Feature toggle** — turn recommendations off entirely to see only new
-  ingestions in your Today Feed
-
-## Where recommendations pull from
-
-The recommender scans your entire article database (excluding items you've
-already interacted with in the current session) to find:
-- Articles you haven't seen yet (status: `new`)
-- Articles you previously skipped but might now find relevant
-- Older saved/articles you haven't read
-- Items from sources/categories you engage with frequently
-
-It does **not** recommend:
-- Articles you've already triaged (Done/Skipped/Starred) in this session
-- Archived items (unless restored)
-- Items from disabled sources
-
-## Privacy
-
-Recommendations are 100% local and private:
-- No user behavior leaves your server
-- No external model calls or API keys needed
-- No collaborative filtering with other users (the "similar users" pattern
-  is computed entirely from your local data)
-- All scoring happens in-memory using your PostgreSQL data
+If the deployment operator configures a supported AI provider, the instance can
+generate a short explanation for highly ranked articles from article metadata
+and recent Starred or Done history. Without that provider, **Why recommended?**
+uses the stored score factors instead.

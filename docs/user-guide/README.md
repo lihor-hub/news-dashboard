@@ -1,34 +1,46 @@
 # User Guide
 
-Welcome to **News Dashboard** — your private news platform. This guide explains the
-core concepts and features so you can get the most out of your reading workflow.
+Use News Dashboard to understand the day, triage articles, personalize the
+corpus, organize material, and revisit what you learned.
 
-## What you'll find here
+## Start here
 
-| Page                                                              | What it covers                                                  |
-| ----------------------------------------------------------------- | --------------------------------------------------------------- |
-| [Concepts & terminology](concepts.md)                             | The language the app uses: Article, Workflow State, Today Feed, Current-Day Report, Source Subscription |
-| [The Today Feed & triage states](today-feed-triage.md)            | How to process your daily queue and what each state means       |
-| [Sources & subscriptions](sources.md)                             | Where your news comes from and how to manage subscriptions      |
-| [Search](search.md)                                               | Finding articles across your history                            |
-| [Briefings](briefings.md)                                         | The Current-Day Report, scheduled delivery, and podcast audio   |
-| [Recommendations](recommendations.md)                             | How the app learns what matters to you                          |
-| [Knowledge Graph](knowledge-graph.md)                              | Exploring entities, typed relationships, and Ask AI graph context |
-| [Saved & read history](saved-history.md)                          | Your personal reading archive and Reading DNA                   |
-| [Sharing articles](sharing.md)                                    | Sending articles to other users on the same instance            |
+| Page                                          | What it covers                                                                                            |
+| --------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| [Application tour](application-tour.md)       | Brief, Today, article reading, Search, and navigation on large and small screens.                         |
+| [Concepts and terminology](concepts.md)       | The product language: articles, workflow state, Today Feed, Current-Day Report, and source subscriptions. |
+| [Today Feed and triage](today-feed-triage.md) | How to process the active queue and what each triage state means.                                         |
 
-## Before you start
+## Make it yours
 
-If you haven't set up News Dashboard yet, start with the
-[Getting Started guide](../../website/docs/getting-started/index.md).
-It covers the three ways to begin:
+| Page                                                 | What it covers                                                                                               |
+| ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| [Personalization and AI](personalization-and-ai.md)  | Recommendations, Ask, AI Watchlists, AI Memory, Topic Map, and AI Stats, including optional-provider limits. |
+| [Organize and learn](organize-and-learn.md)          | Later, Starred, Reading List, Collections, lessons, recaps, and offline saves.                               |
+| [Settings and account data](settings-and-account.md) | Interface, delivery, privacy, export/restore, updates, and account deletion.                                 |
 
-- [Install the Android APK](../../website/docs/getting-started/install-android-apk.md)
-  — native app for Android phones and tablets
-- [Create a web account](../../website/docs/getting-started/create-web-account.md)
-  — sign in from any browser
-- [Self-host your own instance](../../README.md#quick-start)
-  — run News Dashboard on your own infrastructure
+## Focus on a workflow
 
-For detailed self-hosting instructions, see the
-[Self-Hosting guide](../SELF_HOSTING.md).
+| Page                                       | What it covers                                                                  |
+| ------------------------------------------ | ------------------------------------------------------------------------------- |
+| [Sources and subscriptions](sources.md)    | Where articles come from and how to manage the feeds available to your account. |
+| [Search](search.md)                        | Finding articles across your history with PostgreSQL full-text search.          |
+| [Briefings](briefings.md)                  | Current-Day Reports, scheduled delivery, and optional audio.                    |
+| [Recommendations](recommendations.md)      | How personalized suggestions are scored and controlled.                         |
+| [Knowledge Graph](knowledge-graph.md)      | Exploring entities, typed relationships, and Ask AI graph context.              |
+| [Saved and read history](saved-history.md) | Later, Done, Starred, Archived, Reading DNA, and export behavior.               |
+| [Sharing articles](sharing.md)             | Sending articles to other users on the same instance.                           |
+
+## Administer or operate an instance
+
+| Page                                                              | Role and task                                                                                                       |
+| ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| [Administration and operations](administration-and-operations.md) | Application administrators manage users and inspect feeds, runs, logs, statistics, and analytics.                   |
+| [Self-Hosting guide](../SELF_HOSTING.md)                          | Deployment operators configure authentication and integrations, monitor services, back up data, and deploy updates. |
+
+If you have not chosen how to run or access the app, start with
+[Hosted or self-hosted?](../../website/docs/getting-started/hosted-or-self-hosted.md).
+If you already know which instance you use, continue with
+[Create a web account](../../website/docs/getting-started/create-web-account.md).
+If you operate your own instance, read the [Self-Hosting guide](../SELF_HOSTING.md)
+after the README quick start.
