@@ -1,12 +1,21 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, waitFor } from '@testing-library/react';
-import { DifyChatWidget } from './DifyChatWidget';
+import { StrictMode } from 'react';
 import type { User } from '@/types';
+
+let DifyChatWidget: typeof import('./DifyChatWidget').DifyChatWidget;
 
 const user: User = {
   id: 42,
   username: 'alice',
   email: 'alice@example.com',
+  is_admin: false,
+};
+
+const anotherUser: User = {
+  id: 99,
+  username: 'bob',
+  email: 'bob@example.com',
   is_admin: false,
 };
 
@@ -47,11 +56,39 @@ function mockScriptLoading(): void {
   });
 }
 
+function appendSpy() {
+  const append = document.body.append.bind(document.body);
+  return vi
+    .spyOn(document.body, 'append')
+    .mockImplementation((...nodes: (Node | string)[]) => append(...nodes));
+}
+
+function appendedScripts(spy: ReturnType<typeof appendSpy>): HTMLScriptElement[] {
+  return spy.mock.calls
+    .flat()
+    .filter((node): node is HTMLScriptElement => node instanceof HTMLScriptElement);
+}
+
+function addDifyDom(): void {
+  const bubble = document.createElement('div');
+  bubble.id = 'dify-chatbot-bubble-button';
+  document.body.append(bubble);
+  const windowElement = document.createElement('iframe');
+  windowElement.id = 'dify-chatbot-bubble-window';
+  document.body.append(windowElement);
+}
+
+beforeEach(async () => {
+  vi.resetModules();
+  ({ DifyChatWidget } = await import('./DifyChatWidget'));
+});
+
 afterEach(() => {
   cleanup();
   document.querySelectorAll(scriptSelector).forEach((script) => script.remove());
   document.getElementById('dify-chatbot-bubble-button')?.remove();
   document.getElementById('dify-chatbot-bubble-window')?.remove();
+  document.getElementById('host-dify-style')?.remove();
   delete (window as typeof window & { difyChatbotConfig?: unknown }).difyChatbotConfig;
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
@@ -114,25 +151,72 @@ describe('DifyChatWidget', () => {
     });
   });
 
-  it('removes its script, global configuration, and Dify DOM after unmounting', async () => {
+  it('keeps the singleton script installed but hides Dify after unmounting', async () => {
     mockScriptLoading();
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(configResponse(enabledConfig())));
 
     const { unmount } = render(<DifyChatWidget user={user} />);
 
     await waitFor(() => expect(document.querySelector(scriptSelector)).not.toBeNull());
-    const bubble = document.createElement('div');
-    bubble.id = 'dify-chatbot-bubble-button';
-    document.body.append(bubble);
-    const windowElement = document.createElement('iframe');
-    windowElement.id = 'dify-chatbot-bubble-window';
-    document.body.append(windowElement);
-
     unmount();
+    addDifyDom();
 
-    expect(document.querySelector(scriptSelector)).toBeNull();
+    expect(document.querySelector(scriptSelector)).not.toBeNull();
+    expect(difyConfig()).toBeUndefined();
+    await waitFor(() => {
+      expect(document.getElementById('dify-chatbot-bubble-button')).toBeNull();
+      expect(document.getElementById('dify-chatbot-bubble-window')).toBeNull();
+    });
+  });
+
+  it('does not execute Dify again after a same-document user switch', async () => {
+    mockScriptLoading();
+    const spy = appendSpy();
+    const fetchMock = vi.fn().mockResolvedValue(configResponse(enabledConfig()));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const { rerender } = render(<DifyChatWidget user={user} />);
+
+    await waitFor(() => expect(appendedScripts(spy)).toHaveLength(1));
+    addDifyDom();
+    rerender(<DifyChatWidget user={anotherUser} />);
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(appendedScripts(spy)).toHaveLength(1);
     expect(difyConfig()).toBeUndefined();
     expect(document.getElementById('dify-chatbot-bubble-button')).toBeNull();
     expect(document.getElementById('dify-chatbot-bubble-window')).toBeNull();
+  });
+
+  it('does not duplicate the singleton script in React StrictMode', async () => {
+    mockScriptLoading();
+    const spy = appendSpy();
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(configResponse(enabledConfig())));
+
+    render(
+      <StrictMode>
+        <DifyChatWidget user={user} />
+      </StrictMode>
+    );
+
+    await waitFor(() => expect(appendedScripts(spy)).toHaveLength(1));
+    expect(document.querySelectorAll(scriptSelector)).toHaveLength(1);
+  });
+
+  it('preserves host styles that target Dify bubble elements', async () => {
+    mockScriptLoading();
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(configResponse(enabledConfig())));
+    const hostStyle = document.createElement('style');
+    hostStyle.id = 'host-dify-style';
+    hostStyle.textContent = '#dify-chatbot-bubble-button { color: red; }';
+    document.head.append(hostStyle);
+
+    const { unmount } = render(<DifyChatWidget user={user} />);
+
+    await waitFor(() => expect(document.querySelector(scriptSelector)).not.toBeNull());
+    unmount();
+
+    expect(document.getElementById('host-dify-style')).toBe(hostStyle);
   });
 });
