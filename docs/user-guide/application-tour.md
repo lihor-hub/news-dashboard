@@ -9,7 +9,9 @@ use the rest of the navigation for focused tasks.
 On a desktop-sized screen, the navigation rail stays beside the current page.
 On a smaller screen, the bottom bar keeps Brief, Today, Shared, Starred, and
 Search visible; open **More** for Later, Ask, sources, learning, settings, and
-the other destinations.
+the other destinations. The screenshot uses an administrator account:
+**Stats**, **Analytics**, and **Users** are administrator-only and do not appear
+in a reader's navigation.
 
 ![News Dashboard navigation with Brief, Today, Search, Ask, learning, and settings destinations](../../website/static/img/user-guide/application-navigation.webp)
 
@@ -33,7 +35,11 @@ report, delivery, and provider limits.
 headline, or use the article actions to move an item to Done, Later, Skipped,
 Starred, Snoozed, or Archived.
 
-![Today Feed with category filters and a queue of article headlines](../../website/static/img/user-guide/today-feed.webp)
+The screenshot below shows the article reader after opening an item from Today.
+Its bottom triage action bar provides **Star**, **Done**, **Later**, **Skip**,
+and **Archive**.
+
+![Article reader with the Star, Done, Later, Skip, and Archive triage actions](../../website/static/img/user-guide/today-feed.webp)
 
 Use [Today Feed and triage](today-feed-triage.md) for the state meanings and
 keyboard shortcuts.

@@ -16,7 +16,21 @@ recompute your scores immediately. If you have little history, read, star, or
 skip a few articles first. Recommendation scoring itself uses data in the
 instance's PostgreSQL database and does not require an external AI provider.
 
-See [Recommendations](recommendations.md) for scoring and feed controls.
+See [Recommendations](recommendations.md) for scoring and reader controls.
+
+## Reading DNA controls
+
+Open **Reading DNA** from the navigation to review your recent category and
+source mix, average dwell time, streak, and achievements. Under **Active
+nudges**, each category slider adjusts how strongly that category contributes
+to your recommendation scores. The **novelty** slider adjusts the lift for
+plausible articles that differ from your starred and Done history.
+
+Each slider ranges from 0.0× to 3.0×. Changes belong to your account, save
+immediately, and trigger a recommendation recalculation; an administrator does
+not set these weights for you. Novelty needs stored article embeddings to
+contribute to a score, so changing it has no effect on articles whose novelty
+cannot be assessed.
 
 ## Ask
 
@@ -84,11 +98,11 @@ provenance, and how graph context can support Ask.
 
 ## Who controls what
 
-| Capability                    | Reader control                                           | Instance control                                     |
-| ----------------------------- | -------------------------------------------------------- | ---------------------------------------------------- |
-| Recommendations               | Reading actions and manual refresh                       | Recommendation feature settings                      |
-| Ask                           | Question, corpus scope, and approval of proposed actions | AI provider credentials                              |
-| AI Watchlists                 | Query, label, enabled state, and deletion                | Background evaluation and notification support       |
-| AI Memory                     | Add, learn, edit, and deactivate memories                | Availability of generated features that consume them |
-| Topic Map and embedding views | Time range or selected cluster                           | AI embedding provider and processing                 |
-| Knowledge Graph               | Time range, filters, and selected entity                 | Entity extraction and optional graph storage         |
+| Capability                      | Reader control                                                      | Instance control                                             |
+| ------------------------------- | ------------------------------------------------------------------- | ------------------------------------------------------------ |
+| Recommendations and Reading DNA | Actions, feedback, category and novelty weights, and manual refresh | Background recalculation and optional generated explanations |
+| Ask                             | Question, corpus scope, and approval of proposed actions            | AI provider credentials                                      |
+| AI Watchlists                   | Query, label, enabled state, and deletion                           | Background evaluation and notification support               |
+| AI Memory                       | Add, learn, edit, and deactivate memories                           | Availability of generated features that consume them         |
+| Topic Map and embedding views   | Time range or selected cluster                                      | AI embedding provider and processing                         |
+| Knowledge Graph                 | Time range, filters, and selected entity                            | Entity extraction and optional graph storage                 |

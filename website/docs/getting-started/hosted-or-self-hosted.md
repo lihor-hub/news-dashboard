@@ -6,8 +6,10 @@ sidebar_position: 1
 # Hosted or self-hosted?
 
 Choose an on-ramp based on who should operate the server. The reading workflow
-is the same after you sign in, but account creation and server configuration
-belong to different people.
+is the same after you sign in to a writable hosted or self-hosted account. The
+local demo is the exception: its read-only guest account lets you explore the
+workflow but rejects changes. Account creation and server configuration belong
+to different people.
 
 | Option                                                                | Best for                                                                     | Who creates accounts?                                                                             | Who controls the server?                                               |
 | --------------------------------------------------------------------- | ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
