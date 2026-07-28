@@ -218,7 +218,7 @@ export function AppShell() {
           />
           <ShortcutOverlay open={shortcutsOpen} onOpenChange={setShortcutsOpen} />
         </Suspense>
-        {user && <DifyChatWidget user={user} />}
+        {user && <DifyChatWidget key={user.id} />}
       </>
     );
   }
@@ -356,7 +356,7 @@ export function AppShell() {
         </Suspense>
       </ErrorBoundary>
       <ListenQueuePlayer />
-      {user && <DifyChatWidget user={user} />}
+      {user && <DifyChatWidget key={user.id} />}
     </div>
   );
 }

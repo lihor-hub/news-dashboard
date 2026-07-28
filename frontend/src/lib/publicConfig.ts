@@ -13,11 +13,10 @@ const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]']);
 const CONTROL_OR_FORMAT_CHARACTER = /[\p{Cc}\p{Cf}]/u;
 
 function isValidText(value: unknown, maxLength: number): value is string {
+  if (typeof value !== 'string') return false;
+  const codePointLength = Array.from(value).length;
   return (
-    typeof value === 'string' &&
-    value.length > 0 &&
-    value.length <= maxLength &&
-    !CONTROL_OR_FORMAT_CHARACTER.test(value)
+    codePointLength > 0 && codePointLength <= maxLength && !CONTROL_OR_FORMAT_CHARACTER.test(value)
   );
 }
 
@@ -29,6 +28,7 @@ function isValidBaseUrl(value: unknown): value is string {
     return (
       (url.protocol === 'https:' ||
         (url.protocol === 'http:' && LOOPBACK_HOSTS.has(url.hostname))) &&
+      url.origin !== window.location.origin &&
       !url.username &&
       !url.password &&
       !url.search &&

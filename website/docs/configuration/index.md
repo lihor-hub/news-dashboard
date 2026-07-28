@@ -6,7 +6,7 @@ authentication, Caddy/HTTPS, and Postgres backups.
 | Guide                                                 | Use it to                                                                     |
 | ----------------------------------------------------- | ----------------------------------------------------------------------------- |
 | [Authentication (Keycloak)](authentication)           | Choose local-password or Keycloak sign-in and configure administrator access. |
-| [Dify assistant](dify-assistant)                      | Embed an optional Dify chat assistant safely in the signed-in web app.        |
+| [Dify assistant](dify-assistant)                      | Add a host-owned launcher for an optional Dify WebApp iframe.                 |
 | [HTTPS with Caddy](https-caddy)                       | Terminate TLS and publish a self-hosted instance safely.                      |
 | [PostgreSQL Backup and Restore](postgres-backup)      | Schedule, create, verify, and restore database backups.                       |
 | [Newsletter ingestion via IMAP](newsletter-ingestion) | Add newsletters to user feeds through a configured mailbox.                   |

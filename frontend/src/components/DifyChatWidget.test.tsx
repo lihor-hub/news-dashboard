@@ -1,25 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, waitFor } from '@testing-library/react';
-import { StrictMode } from 'react';
-import type { User } from '@/types';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { DifyChatWidget } from './DifyChatWidget';
 
-let DifyChatWidget: typeof import('./DifyChatWidget').DifyChatWidget;
-
-const user: User = {
-  id: 42,
-  username: 'alice',
-  email: 'alice@example.com',
-  is_admin: false,
-};
-
-const anotherUser: User = {
-  id: 99,
-  username: 'bob',
-  email: 'bob@example.com',
-  is_admin: false,
-};
-
-const scriptSelector = 'script[data-news-dashboard-dify="true"]';
+let previousFetchInterceptor: unknown;
 
 function configResponse(dify: unknown): Response {
   return new Response(JSON.stringify({ dify }), {
@@ -37,399 +21,162 @@ function enabledConfig() {
   };
 }
 
-function difyConfig(): unknown {
-  return (window as typeof window & { difyChatbotConfig?: unknown }).difyChatbotConfig;
+function renderWidget() {
+  return render(<DifyChatWidget />);
 }
 
-function mockScriptLoading(): void {
-  const sources = new WeakMap<HTMLScriptElement, string>();
-  vi.spyOn(HTMLScriptElement.prototype, 'src', 'set').mockImplementation(function (
-    this: HTMLScriptElement,
-    value: string
-  ) {
-    sources.set(this, value);
-  });
-  vi.spyOn(HTMLScriptElement.prototype, 'src', 'get').mockImplementation(function (
-    this: HTMLScriptElement
-  ) {
-    return sources.get(this) ?? '';
-  });
+async function renderEnabledWidget() {
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue(configResponse(enabledConfig())));
+  const view = renderWidget();
+  const launcher = await screen.findByRole('button', { name: 'Open News Assistant' });
+  return { ...view, launcher };
 }
 
-function appendSpy() {
-  const append = document.body.append.bind(document.body);
-  return vi
-    .spyOn(document.body, 'append')
-    .mockImplementation((...nodes: (Node | string)[]) => append(...nodes));
-}
-
-function appendedScripts(spy: ReturnType<typeof appendSpy>): HTMLScriptElement[] {
-  return spy.mock.calls
-    .flat()
-    .filter((node): node is HTMLScriptElement => node instanceof HTMLScriptElement);
-}
-
-function addDifyDom(): void {
-  const bubble = document.createElement('div');
-  bubble.id = 'dify-chatbot-bubble-button';
-  document.body.append(bubble);
-  const windowElement = document.createElement('iframe');
-  windowElement.id = 'dify-chatbot-bubble-window';
-  document.body.append(windowElement);
-}
-
-function markScriptLoaded(): void {
-  document.querySelector<HTMLScriptElement>(scriptSelector)?.dispatchEvent(new Event('load'));
-}
-
-beforeEach(async () => {
-  vi.resetModules();
-  ({ DifyChatWidget } = await import('./DifyChatWidget'));
+beforeEach(() => {
+  const happyDom = (
+    window as typeof window & {
+      happyDOM?: { settings: { fetch: { interceptor: unknown } } };
+    }
+  ).happyDOM;
+  previousFetchInterceptor = happyDom?.settings.fetch.interceptor;
+  if (happyDom) {
+    happyDom.settings.fetch.interceptor = {
+      beforeAsyncRequest: async () =>
+        new Response('<!doctype html><html><body></body></html>', {
+          status: 200,
+          headers: { 'Content-Type': 'text/html' },
+        }),
+    };
+  }
 });
 
 afterEach(() => {
   cleanup();
-  document.querySelectorAll(scriptSelector).forEach((script) => script.remove());
-  document.getElementById('dify-chatbot-bubble-button')?.remove();
-  document.getElementById('dify-chatbot-bubble-window')?.remove();
-  document.getElementById('host-dify-style')?.remove();
-  delete (window as typeof window & { difyChatbotConfig?: unknown }).difyChatbotConfig;
+  const happyDom = (
+    window as typeof window & {
+      happyDOM?: { settings: { fetch: { interceptor: unknown } } };
+    }
+  ).happyDOM;
+  if (happyDom) {
+    happyDom.settings.fetch.interceptor = previousFetchInterceptor;
+  }
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
 
 describe('DifyChatWidget', () => {
-  it('keeps Dify inert when the public configuration is disabled', async () => {
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValue(
-        configResponse({ enabled: false, base_url: null, app_token: null, title: 'News Assistant' })
-      );
-    vi.stubGlobal('fetch', fetchMock);
-
-    render(<DifyChatWidget user={user} />);
-
-    await waitFor(() =>
-      expect(fetchMock).toHaveBeenCalledWith('/api/config', { credentials: 'same-origin' })
-    );
-    expect(document.querySelector(scriptSelector)).toBeNull();
-    expect(difyConfig()).toBeUndefined();
-  });
-
-  it('keeps Dify inert when an enabled response has an unsafe base URL', async () => {
-    const fetchMock = vi.fn().mockResolvedValue(
-      configResponse({
+  it.each([
+    ['disabled', { enabled: false, base_url: null, app_token: null, title: 'News Assistant' }],
+    [
+      'malformed',
+      {
         enabled: true,
         base_url: 'http://dify.example.test',
         app_token: 'public-embed-token',
         title: 'News Assistant',
-      })
+      },
+    ],
+  ])('shows no launcher when public configuration is %s', async (_case, dify) => {
+    const fetchMock = vi.fn().mockResolvedValue(configResponse(dify));
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderWidget();
+
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith('/api/config', { credentials: 'same-origin' })
     );
-    vi.stubGlobal('fetch', fetchMock);
-
-    render(<DifyChatWidget user={user} />);
-
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
-    expect(document.querySelector(scriptSelector)).toBeNull();
-    expect(difyConfig()).toBeUndefined();
+    expect(screen.queryByRole('button', { name: /News Assistant/ })).not.toBeInTheDocument();
+    expect(document.querySelector('iframe')).toBeNull();
   });
 
-  it('loads Dify once with the opaque user ID as its only system context', async () => {
-    mockScriptLoading();
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(configResponse(enabledConfig())));
+  it('shows a launcher without loading Dify until the launcher is opened', async () => {
+    const { launcher } = await renderEnabledWidget();
 
-    const { rerender } = render(<DifyChatWidget user={user} />);
-
-    await waitFor(() => expect(document.querySelector(scriptSelector)).not.toBeNull());
-    rerender(<DifyChatWidget user={{ ...user }} />);
-
-    const script = document.querySelector<HTMLScriptElement>(scriptSelector);
-    expect(document.querySelectorAll(scriptSelector)).toHaveLength(1);
-    expect(script?.src).toBe('https://dify.example.test/embed.min.js');
-    expect(difyConfig()).toEqual({
-      token: 'public-embed-token',
-      baseUrl: 'https://dify.example.test',
-      dynamicScript: true,
-      systemVariables: { user_id: '42' },
-      containerProps: { title: 'News Assistant' },
-    });
+    expect(launcher).toHaveAttribute('title', 'Open News Assistant');
+    expect(document.querySelector('iframe')).toBeNull();
   });
 
-  it('keeps the singleton script installed but hides Dify after unmounting', async () => {
-    mockScriptLoading();
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(configResponse(enabledConfig())));
+  it('opens an accessibly named popup and exact Dify WebApp iframe from the keyboard', async () => {
+    const keyboard = userEvent.setup();
+    const { launcher } = await renderEnabledWidget();
 
-    const { unmount } = render(<DifyChatWidget user={user} />);
+    await keyboard.tab();
+    expect(launcher).toHaveFocus();
+    await keyboard.keyboard('{Enter}');
 
-    await waitFor(() => expect(document.querySelector(scriptSelector)).not.toBeNull());
-    markScriptLoaded();
-    unmount();
-    addDifyDom();
-
-    expect(document.querySelector(scriptSelector)).not.toBeNull();
-    expect(difyConfig()).toBeUndefined();
-    await waitFor(() => {
-      expect(document.getElementById('dify-chatbot-bubble-button')).toBeNull();
-      expect(document.getElementById('dify-chatbot-bubble-window')).toBeNull();
-    });
+    expect(screen.getByRole('dialog', { name: 'News Assistant' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Close News Assistant' })).toBeInTheDocument();
+    const iframe = screen.getByTitle<HTMLIFrameElement>('News Assistant conversation');
+    expect(iframe.src).toBe('https://dify.example.test/chatbot/public-embed-token');
   });
 
-  it('restores the detached Dify DOM for a same-user remount without a second script', async () => {
-    mockScriptLoading();
-    const spy = appendSpy();
-    const fetchMock = vi
-      .fn()
-      .mockImplementation(() => Promise.resolve(configResponse(enabledConfig())));
-    vi.stubGlobal('fetch', fetchMock);
+  it('removes the iframe when the popup closes', async () => {
+    const pointer = userEvent.setup();
+    const { launcher } = await renderEnabledWidget();
+    await pointer.click(launcher);
 
-    const firstMount = render(<DifyChatWidget user={user} />);
+    await pointer.click(screen.getByRole('button', { name: 'Close News Assistant' }));
 
-    await waitFor(() => expect(appendedScripts(spy)).toHaveLength(1));
-    markScriptLoaded();
-    addDifyDom();
-    firstMount.unmount();
-    expect(document.getElementById('dify-chatbot-bubble-button')).toBeNull();
-    expect(document.getElementById('dify-chatbot-bubble-window')).toBeNull();
-
-    render(<DifyChatWidget user={user} />);
-
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
-    await waitFor(() => expect(difyConfig()).not.toBeUndefined());
-    await waitFor(() => {
-      expect(document.getElementById('dify-chatbot-bubble-button')).not.toBeNull();
-      expect(document.getElementById('dify-chatbot-bubble-window')).not.toBeNull();
-    });
-    expect(appendedScripts(spy)).toHaveLength(1);
-    expect(difyConfig()).toEqual({
-      token: 'public-embed-token',
-      baseUrl: 'https://dify.example.test',
-      dynamicScript: true,
-      systemVariables: { user_id: '42' },
-      containerProps: { title: 'News Assistant' },
-    });
+    expect(screen.queryByRole('dialog', { name: 'News Assistant' })).not.toBeInTheDocument();
+    expect(screen.queryByTitle('News Assistant conversation')).not.toBeInTheDocument();
   });
 
-  it('clears the global configuration when Dify fails before loading', async () => {
-    mockScriptLoading();
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(configResponse(enabledConfig())));
+  it('removes an open iframe when the component unmounts', async () => {
+    const pointer = userEvent.setup();
+    const { launcher, unmount } = await renderEnabledWidget();
+    await pointer.click(launcher);
+    expect(screen.getByTitle('News Assistant conversation')).toBeInTheDocument();
 
-    render(<DifyChatWidget user={user} />);
-
-    await waitFor(() => expect(document.querySelector(scriptSelector)).not.toBeNull());
-    document.querySelector<HTMLScriptElement>(scriptSelector)?.dispatchEvent(new Event('error'));
-
-    expect(difyConfig()).toBeUndefined();
-  });
-
-  it('clears the global configuration when unmounted before Dify loads', async () => {
-    mockScriptLoading();
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(configResponse(enabledConfig())));
-
-    const { unmount } = render(<DifyChatWidget user={user} />);
-
-    await waitFor(() => expect(document.querySelector(scriptSelector)).not.toBeNull());
     unmount();
 
-    expect(difyConfig()).toBeUndefined();
+    expect(screen.queryByTitle('News Assistant conversation')).not.toBeInTheDocument();
   });
 
-  it('completes a pending Dify load after the same user remounts', async () => {
-    mockScriptLoading();
-    const spy = appendSpy();
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce(configResponse(enabledConfig()))
-      .mockResolvedValueOnce(configResponse(enabledConfig()));
-    vi.stubGlobal('fetch', fetchMock);
+  it('creates a fresh iframe when reopened after a load failure', async () => {
+    const pointer = userEvent.setup();
+    const { launcher } = await renderEnabledWidget();
+    await pointer.click(launcher);
+    const failedIframe = screen.getByTitle<HTMLIFrameElement>('News Assistant conversation');
+    fireEvent.error(failedIframe);
 
-    const firstMount = render(<DifyChatWidget user={user} />);
+    await pointer.click(screen.getByRole('button', { name: 'Close News Assistant' }));
+    const retryLauncher = screen.getByRole('button', { name: 'Open News Assistant' });
+    await pointer.click(retryLauncher);
 
-    await waitFor(() => expect(appendedScripts(spy)).toHaveLength(1));
-    firstMount.unmount();
-    expect(difyConfig()).toBeUndefined();
-
-    render(<DifyChatWidget user={user} />);
-
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
-    await waitFor(() => expect(difyConfig()).not.toBeUndefined());
-    addDifyDom();
-    markScriptLoaded();
-
-    expect(appendedScripts(spy)).toHaveLength(1);
-    expect(document.getElementById('dify-chatbot-bubble-button')).not.toBeNull();
-    expect(document.getElementById('dify-chatbot-bubble-window')).not.toBeNull();
+    const retryIframe = screen.getByTitle<HTMLIFrameElement>('News Assistant conversation');
+    expect(retryIframe).not.toBe(failedIframe);
+    expect(retryIframe.src).toBe('https://dify.example.test/chatbot/public-embed-token');
   });
 
-  it('keeps a pending Dify load hidden when the current configuration is disabled', async () => {
-    mockScriptLoading();
-    const spy = appendSpy();
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce(configResponse(enabledConfig()))
-      .mockResolvedValueOnce(
-        configResponse({ enabled: false, base_url: null, app_token: null, title: 'News Assistant' })
-      );
-    vi.stubGlobal('fetch', fetchMock);
+  it('uses native button keyboard semantics and restores launcher focus after closing', async () => {
+    const keyboard = userEvent.setup();
+    const { launcher } = await renderEnabledWidget();
+    expect(launcher.tagName).toBe('BUTTON');
 
-    const firstMount = render(<DifyChatWidget user={user} />);
+    launcher.focus();
+    await keyboard.keyboard(' ');
+    const closeButton = screen.getByRole('button', { name: 'Close News Assistant' });
+    expect(closeButton.tagName).toBe('BUTTON');
+    expect(closeButton).toHaveAttribute('title', 'Close News Assistant');
+    expect(closeButton).toHaveFocus();
 
-    await waitFor(() => expect(appendedScripts(spy)).toHaveLength(1));
-    firstMount.unmount();
-    render(<DifyChatWidget user={user} />);
+    await keyboard.keyboard('{Escape}');
 
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(appendedScripts(spy)).toHaveLength(1);
-    expect(difyConfig()).toBeUndefined();
-
-    cleanup();
-    render(<DifyChatWidget user={user} />);
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    addDifyDom();
-    markScriptLoaded();
-
-    expect(fetchMock).toHaveBeenCalledTimes(2);
-    expect(appendedScripts(spy)).toHaveLength(1);
-    expect(difyConfig()).toBeUndefined();
-    await waitFor(() => {
-      expect(document.getElementById('dify-chatbot-bubble-button')).toBeNull();
-      expect(document.getElementById('dify-chatbot-bubble-window')).toBeNull();
-    });
+    const restoredLauncher = screen.getByRole('button', { name: 'Open News Assistant' });
+    expect(restoredLauncher).toHaveFocus();
   });
 
-  it.each([
-    ['base URL', { base_url: 'https://rotated-dify.example.test' }],
-    ['app token', { app_token: 'rotated-public-embed-token' }],
-    ['title', { title: 'Rotated News Assistant' }],
-  ])(
-    'keeps a pending Dify load hidden when the current %s differs',
-    async (_field, changedConfig) => {
-      mockScriptLoading();
-      const spy = appendSpy();
-      const fetchMock = vi
-        .fn()
-        .mockResolvedValueOnce(configResponse(enabledConfig()))
-        .mockResolvedValueOnce(configResponse({ ...enabledConfig(), ...changedConfig }));
-      vi.stubGlobal('fetch', fetchMock);
+  it('sends no News Dashboard identity or context in the iframe URL', async () => {
+    const pointer = userEvent.setup();
+    const { launcher } = await renderEnabledWidget();
+    await pointer.click(launcher);
 
-      const firstMount = render(<DifyChatWidget user={user} />);
-
-      await waitFor(() => expect(appendedScripts(spy)).toHaveLength(1));
-      firstMount.unmount();
-      render(<DifyChatWidget user={user} />);
-
-      await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
-      await new Promise((resolve) => setTimeout(resolve, 0));
-      expect(appendedScripts(spy)).toHaveLength(1);
-      expect(difyConfig()).toBeUndefined();
-
-      cleanup();
-      render(<DifyChatWidget user={user} />);
-      await new Promise((resolve) => setTimeout(resolve, 0));
-      addDifyDom();
-      markScriptLoaded();
-
-      expect(fetchMock).toHaveBeenCalledTimes(2);
-      expect(appendedScripts(spy)).toHaveLength(1);
-      expect(difyConfig()).toBeUndefined();
-      await waitFor(() => {
-        expect(document.getElementById('dify-chatbot-bubble-button')).toBeNull();
-        expect(document.getElementById('dify-chatbot-bubble-window')).toBeNull();
-      });
-    }
-  );
-
-  it('fails closed if the pending script loads while its current config is revalidated', async () => {
-    mockScriptLoading();
-    const spy = appendSpy();
-    let resolveCurrentConfig!: (response: Response) => void;
-    const currentConfig = new Promise<Response>((resolve) => {
-      resolveCurrentConfig = resolve;
-    });
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce(configResponse(enabledConfig()))
-      .mockImplementationOnce(() => currentConfig)
-      .mockResolvedValueOnce(configResponse(enabledConfig()));
-    vi.stubGlobal('fetch', fetchMock);
-
-    const firstMount = render(<DifyChatWidget user={user} />);
-
-    await waitFor(() => expect(appendedScripts(spy)).toHaveLength(1));
-    firstMount.unmount();
-    const secondMount = render(<DifyChatWidget user={user} />);
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
-    expect(difyConfig()).toBeUndefined();
-
-    addDifyDom();
-    markScriptLoaded();
-    resolveCurrentConfig(configResponse(enabledConfig()));
-    await new Promise((resolve) => setTimeout(resolve, 0));
-
-    expect(difyConfig()).toBeUndefined();
-    await waitFor(() => {
-      expect(document.getElementById('dify-chatbot-bubble-button')).toBeNull();
-      expect(document.getElementById('dify-chatbot-bubble-window')).toBeNull();
-    });
-
-    secondMount.unmount();
-    render(<DifyChatWidget user={user} />);
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3));
-    await new Promise((resolve) => setTimeout(resolve, 0));
-
-    expect(appendedScripts(spy)).toHaveLength(1);
-    expect(difyConfig()).toBeUndefined();
-  });
-
-  it('does not execute Dify again after a same-document user switch', async () => {
-    mockScriptLoading();
-    const spy = appendSpy();
-    const fetchMock = vi.fn().mockResolvedValue(configResponse(enabledConfig()));
-    vi.stubGlobal('fetch', fetchMock);
-
-    const { rerender } = render(<DifyChatWidget user={user} />);
-
-    await waitFor(() => expect(appendedScripts(spy)).toHaveLength(1));
-    markScriptLoaded();
-    addDifyDom();
-    rerender(<DifyChatWidget user={anotherUser} />);
-
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(appendedScripts(spy)).toHaveLength(1);
-    expect(difyConfig()).toBeUndefined();
-    expect(document.getElementById('dify-chatbot-bubble-button')).toBeNull();
-    expect(document.getElementById('dify-chatbot-bubble-window')).toBeNull();
-  });
-
-  it('does not duplicate the singleton script in React StrictMode', async () => {
-    mockScriptLoading();
-    const spy = appendSpy();
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(configResponse(enabledConfig())));
-
-    render(
-      <StrictMode>
-        <DifyChatWidget user={user} />
-      </StrictMode>
-    );
-
-    await waitFor(() => expect(appendedScripts(spy)).toHaveLength(1));
-    expect(document.querySelectorAll(scriptSelector)).toHaveLength(1);
-  });
-
-  it('preserves host styles that target Dify bubble elements', async () => {
-    mockScriptLoading();
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(configResponse(enabledConfig())));
-    const hostStyle = document.createElement('style');
-    hostStyle.id = 'host-dify-style';
-    hostStyle.textContent = '#dify-chatbot-bubble-button { color: red; }';
-    document.head.append(hostStyle);
-
-    const { unmount } = render(<DifyChatWidget user={user} />);
-
-    await waitFor(() => expect(document.querySelector(scriptSelector)).not.toBeNull());
-    unmount();
-
-    expect(document.getElementById('host-dify-style')).toBe(hostStyle);
+    const iframe = screen.getByTitle<HTMLIFrameElement>('News Assistant conversation');
+    const iframeUrl = new URL(iframe.src);
+    expect(iframeUrl.origin).toBe('https://dify.example.test');
+    expect(iframeUrl.pathname).toBe('/chatbot/public-embed-token');
+    expect(iframeUrl.search).toBe('');
+    expect(iframeUrl.hash).toBe('');
+    expect(iframe).toHaveAttribute('referrerpolicy', 'no-referrer');
   });
 });

@@ -4,15 +4,16 @@
 
 **Goal:** Add a secure-by-default, optional Dify floating assistant to authenticated News Dashboard pages.
 
-**Architecture:** The backend validates environment configuration and exposes only the public embed settings through `/api/config`. A focused React component owns the third-party script lifecycle and is mounted by `AppShell`; deployment manifests and operator documentation carry the same configuration contract.
+**Architecture:** The backend validates environment configuration and exposes only the public embed settings through `/api/config`. A focused React component owns an accessible launcher and disposable Dify WebApp iframe and is mounted by `AppShell`; deployment manifests and operator documentation carry the same configuration contract.
 
 **Tech Stack:** FastAPI, Python 3.14, React 19, TypeScript, Vitest, Docker Compose, Helm
 
 ## Global Constraints
 
 - Disabled by default and inert unless the explicit flag, base URL, and embed token are valid.
-- Never expose a Dify service API key or treat browser-provided user context as authorization.
-- Allow HTTPS URLs in production and HTTP only for loopback development hosts.
+- Never expose a Dify service API key or send News Dashboard identity, account, or page context to the public WebApp. Dify WebApp identity remains separate.
+- Allow HTTPS URLs in production and HTTP only for `localhost`, `127.0.0.1`, and `[::1]` development hosts.
+- Require Dify to use an origin separate from News Dashboard so the iframe cannot read the authenticated parent DOM.
 - Preserve all existing News Dashboard behavior when Dify is unavailable.
 - Use PostgreSQL-specific runtime behavior; this feature adds no database changes.
 
@@ -21,12 +22,14 @@
 ### Task 1: Public runtime configuration
 
 **Files:**
+
 - Create: `backend/news_dashboard/dify.py`
 - Modify: `backend/news_dashboard/system/service.py`
 - Test: `backend/tests/test_dify_config.py`
 - Modify: `backend/tests/test_error_tracking.py`
 
 **Interfaces:**
+
 - Produces: `public_dify_config() -> dict[str, object]`
 - Produces `/api/config.dify` with `enabled`, `base_url`, `app_token`, and `title`
 
@@ -59,49 +62,63 @@ Invalid input must return the same disabled object as an unset environment.
 
 Run the Step 2 command. Expected: all selected tests pass.
 
-### Task 2: Dify widget lifecycle
+### Task 2: Dify iframe assistant lifecycle
 
 **Files:**
+
 - Create: `frontend/src/lib/publicConfig.ts`
+- Create: `frontend/src/lib/publicConfig.test.ts`
 - Create: `frontend/src/components/DifyChatWidget.tsx`
 - Create: `frontend/src/components/DifyChatWidget.test.tsx`
+- Create: `frontend/src/components/AppShell.dify.test.tsx`
 - Modify: `frontend/src/components/AppShell.tsx`
 - Modify: `frontend/src/globals.css`
 
 **Interfaces:**
+
 - Produces: `fetchPublicConfig(): Promise<PublicConfig>`
-- Produces: `DifyChatWidget({ user }: { user: User })`
+- Produces: `DifyChatWidget()`
 - Consumes `/api/config.dify` from Task 1
 
 - [ ] **Step 1: Write failing component tests**
 
-Mock `/api/config` and script loading. Assert that disabled and invalid
-configurations add no script; enabled configuration sets
-`window.difyChatbotConfig`, uses `{baseUrl}/embed.min.js`, supplies stable user
-display context, avoids duplicate scripts, and cleans up after unmount.
+Mock `/api/config`. Assert that disabled and malformed configurations show no
+launcher; enabled configuration shows a native accessible button but creates
+no iframe until opened. Assert the exact `{baseUrl}/chatbot/{appToken}` iframe
+URL, accessible panel/close/iframe names, keyboard activation and focus
+restoration and Escape dismissal, iframe removal on close/unmount, fresh iframe
+creation on reopen, and the absence of News Dashboard identity or context in
+the URL and AppShell props. Add browser-validation tests for non-BMP Unicode
+length parity and same-origin rejection.
 
 - [ ] **Step 2: Run the focused Vitest file and confirm red**
 
 Run:
 
 ```bash
-npm run test:frontend -- frontend/src/components/DifyChatWidget.test.tsx
+npm run test:frontend -- frontend/src/components/DifyChatWidget.test.tsx frontend/src/components/AppShell.dify.test.tsx frontend/src/lib/publicConfig.test.ts
 ```
 
-Expected: failure because the widget does not exist.
+Expected: failure because the host-owned launcher and iframe lifecycle do not
+exist and JavaScript counts non-BMP strings differently from Python.
 
 - [ ] **Step 3: Implement the focused component**
 
-Fetch public config with same-origin credentials, validate the response shape
-again at the browser boundary, set the documented Dify global, load the script
-once, and remove owned global/script/DOM state during cleanup. Mount the
-component inside `AppShell` only when an authenticated user exists.
+Fetch public config with same-origin credentials and validate the response
+shape again at the browser boundary using Unicode code-point lengths. Render a
+News Dashboard-owned launcher and create the official Dify WebApp iframe only
+while its panel is open. Reject a Dify URL whose origin equals the News
+Dashboard origin. Do not load a Dify parent-document script or install Dify
+window globals, listeners, styles, or identity/context variables. Mount the
+component inside `AppShell` only when an authenticated user exists, keyed so an
+account change destroys any open iframe.
 
 - [ ] **Step 4: Add mobile-safe styling**
 
-Set Dify's documented bubble offset variables so the button clears the fixed
-mobile navigation and `env(safe-area-inset-bottom)`, with the desktop offset
-restored at the `md` breakpoint.
+Give the host launcher and close control at least 44-by-44-pixel targets and
+visible focus styles. Size and position the mobile panel above fixed navigation
+and `env(safe-area-inset-bottom)`; use a bounded desktop chat layout at the `md`
+breakpoint. Escape closes the panel and restores launcher focus.
 
 - [ ] **Step 5: Re-run the focused frontend tests**
 
@@ -110,6 +127,7 @@ Run the Step 2 command. Expected: all selected tests pass.
 ### Task 3: Deployment configuration
 
 **Files:**
+
 - Modify: `.env.example`
 - Modify: `docker-compose.yml`
 - Modify: `docker-compose.prod.yml`
@@ -120,6 +138,7 @@ Run the Step 2 command. Expected: all selected tests pass.
 - Test: `backend/tests/test_dify_deployment_config.py`
 
 **Interfaces:**
+
 - Consumes the four environment variables from Task 1
 - Produces matching Compose and Helm operator settings
 
@@ -152,20 +171,24 @@ Run the Step 2 command. Expected: all selected tests pass.
 ### Task 4: Operator documentation
 
 **Files:**
+
 - Create: `website/docs/configuration/dify-assistant.md`
 - Modify: `website/docs/configuration/index.md`
 - Modify: `docs/SELF_HOSTING.md`
 - Modify: `README.md`
 
 **Interfaces:**
+
 - Documents the exact variables and behavior produced by Tasks 1–3
 
 - [ ] **Step 1: Write the operator guide**
 
 Document Dify Chatbot/Agent/Chatflow suitability, Publish → Embed, the four
-News Dashboard variables, Dify `ALLOW_EMBED`, browser-reachable HTTPS URLs,
-CORS and reverse-proxy CSP requirements, public WebApp/token behavior,
-identity limitations, the existing read-only MCP boundary, and troubleshooting.
+News Dashboard variables, Dify `ALLOW_EMBED`, HTTPS production URLs and the
+three loopback HTTP exceptions, the separate-origin requirement, reverse-proxy
+`frame-src`, public WebApp/token behavior, the explicit zero-context privacy
+decision, Dify's separate WebApp identity, the existing read-only MCP boundary,
+and troubleshooting.
 
 - [ ] **Step 2: Link the guide**
 
@@ -186,9 +209,11 @@ Expected: formatting passes and every variable is consistently documented.
 ### Task 5: Verification and delivery
 
 **Files:**
+
 - Review all files changed by Tasks 1–4
 
 **Interfaces:**
+
 - Produces a merge-ready branch for issue #1292
 
 - [ ] **Step 1: Run Python gates**
@@ -214,9 +239,10 @@ npm run build
 
 - [ ] **Step 3: Review and fix confirmed findings**
 
-Inspect `git diff --check`, the complete diff, secret exposure, script cleanup,
-URL validation, third-party failure isolation, Helm renders, and documentation
-accuracy. Fix confirmed issues and re-run affected gates.
+Inspect `git diff --check`, the complete diff, secret exposure, iframe URL
+construction, close/unmount/account cleanup, accessibility, privacy leaks,
+third-party failure isolation, Helm renders, and documentation accuracy. Fix
+confirmed issues and re-run affected gates.
 
 - [ ] **Step 4: Rebase, commit, push, and open the PR**
 
