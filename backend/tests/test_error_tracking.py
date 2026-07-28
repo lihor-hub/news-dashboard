@@ -99,6 +99,13 @@ def test_scrub_pii_strips_cookies_headers_and_user() -> None:
 @pytest.mark.smoke
 def test_public_config_omits_dsn_by_default(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("SENTRY_DSN_FRONTEND", raising=False)
+    for name in (
+        "DIFY_CHAT_ENABLED",
+        "DIFY_CHAT_BASE_URL",
+        "DIFY_CHAT_APP_TOKEN",
+        "DIFY_CHAT_TITLE",
+    ):
+        monkeypatch.delenv(name, raising=False)
     resp = _client().get("/api/config")
     assert resp.status_code == 200
     assert resp.json() == {
@@ -115,6 +122,13 @@ def test_public_config_omits_dsn_by_default(monkeypatch: pytest.MonkeyPatch) -> 
 @pytest.mark.smoke
 def test_public_config_returns_frontend_dsn_when_set(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("SENTRY_DSN_FRONTEND", "https://example@o0.ingest.sentry.io/2")
+    for name in (
+        "DIFY_CHAT_ENABLED",
+        "DIFY_CHAT_BASE_URL",
+        "DIFY_CHAT_APP_TOKEN",
+        "DIFY_CHAT_TITLE",
+    ):
+        monkeypatch.delenv(name, raising=False)
     resp = _client().get("/api/config")
     assert resp.status_code == 200
     assert resp.json() == {

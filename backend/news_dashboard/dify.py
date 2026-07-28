@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from unicodedata import category
 from urllib.parse import urlsplit, urlunsplit
 
 _DEFAULT_TITLE = "News Assistant"
@@ -25,7 +26,7 @@ def _is_valid_text(value: str, *, max_length: int) -> bool:
     return (
         bool(value)
         and len(value) <= max_length
-        and not any(ord(char) < 32 or ord(char) == 127 for char in value)
+        and not any(category(char) in {"Cc", "Cf"} for char in value)
     )
 
 
