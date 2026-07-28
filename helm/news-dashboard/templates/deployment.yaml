@@ -82,6 +82,9 @@ spec:
   {{- end }}
 {{- end }}
 {{ include "news-dashboard.aiEnv" . | indent 12 }}
+{{- if .Values.app.dify.enabled }}
+{{ include "news-dashboard.difyEnv" . | indent 12 }}
+{{- end }}
 {{ include "news-dashboard.sentryEnv" . | indent 12 }}
 {{- if .Values.app.newsletter.imapHost }}
 {{ include "news-dashboard.newsletterEnv" . | indent 12 }}

@@ -73,6 +73,28 @@
 {{- end }}
 {{- end -}}
 
+{{- define "news-dashboard.difyEnv" -}}
+{{- if .Values.app.dify.enabled }}
+{{- if not .Values.app.dify.baseUrl }}
+{{- fail "app.dify.baseUrl is required when app.dify.enabled=true" }}
+{{- end }}
+{{- if not .Values.app.dify.existingSecret }}
+{{- fail "app.dify.existingSecret is required when app.dify.enabled=true" }}
+{{- end }}
+- name: DIFY_CHAT_ENABLED
+  value: "true"
+- name: DIFY_CHAT_BASE_URL
+  value: {{ .Values.app.dify.baseUrl | quote }}
+- name: DIFY_CHAT_APP_TOKEN
+  valueFrom:
+    secretKeyRef:
+      name: {{ .Values.app.dify.existingSecret | quote }}
+      key: {{ .Values.app.dify.appTokenKey | quote }}
+- name: DIFY_CHAT_TITLE
+  value: {{ .Values.app.dify.title | quote }}
+{{- end }}
+{{- end -}}
+
 {{- define "news-dashboard.sentryEnv" -}}
 {{- if .Values.app.sentry.existingSecret }}
 - name: SENTRY_DSN

@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from news_dashboard.db import connect, init_db
+from news_dashboard.dify import public_dify_config
 from news_dashboard.error_tracking import frontend_error_tracking_dsn
 
 logger = logging.getLogger(__name__)
@@ -67,7 +68,7 @@ def public_config() -> dict[str, Any]:
     ``sentry_dsn`` is a Sentry/GlitchTip DSN, which is designed to be
     exposed to clients — it only lets a client *send* events, not read data.
     """
-    return {"sentry_dsn": frontend_error_tracking_dsn()}
+    return {"sentry_dsn": frontend_error_tracking_dsn(), "dify": public_dify_config()}
 
 
 def parse_changelog() -> list[dict[str, object]]:
