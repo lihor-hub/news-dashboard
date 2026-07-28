@@ -210,5 +210,11 @@
       "regenerate": "पुनः उत्पन्न करें",
       "slideLabel": "स्लाइड {{number}}"
     }
+  },
+  "priorityFeeds": {
+    "highPriority": "High priority",
+    "priority": "Priority",
+    "description": "Make every article from this source stand out.",
+    "sourceLabel": "High priority {{source}}"
   }
 }

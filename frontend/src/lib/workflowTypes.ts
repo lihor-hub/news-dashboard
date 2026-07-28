@@ -30,6 +30,7 @@ export interface WorkflowArticle {
   reason: string;
   summary: string;
   signal: Signal;
+  highPriority?: boolean;
   /** Per-user recommendation score (0–100); undefined when not yet ranked. */
   recommendationScore?: number;
   /** Model version that produced the score; undefined when not yet ranked. */

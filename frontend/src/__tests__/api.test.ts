@@ -390,6 +390,13 @@ describe('sources, summary, ingest', () => {
     expect(calls[0].init?.body).toBe(JSON.stringify({ enabled: false }));
   });
 
+  it('updateSourcePriority PATCHes high priority', async () => {
+    const { calls } = stubFetch(() => jsonOk({ slug: 's', high_priority: false }));
+    await api.updateSourcePriority('s', false);
+    expect(calls[0].url).toBe('/api/sources/s/priority');
+    expect(calls[0].init?.body).toBe(JSON.stringify({ high_priority: false }));
+  });
+
   it('previewSource POSTs url and kind and returns the preview result', async () => {
     const { calls } = stubFetch(() =>
       jsonOk({ kind: 'rss_feed', entry_count: 2, items: [{ title: 'A', url: 'u', date: null }] })

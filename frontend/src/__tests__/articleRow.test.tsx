@@ -9,6 +9,11 @@ vi.mock('../hooks/useTriageMutations', () => ({
   useTriageMutations: () => ({ setState: vi.fn(), toggleStar: vi.fn(), sendLater: vi.fn() }),
   ARTICLES_KEY: 'articles',
 }));
+vi.mock('react-i18next', () => ({
+  useTranslation: () => ({
+    t: (key: string) => (key === 'priorityFeeds.highPriority' ? 'High priority' : key),
+  }),
+}));
 
 function makeArticle(overrides: Partial<WorkflowArticle> = {}): WorkflowArticle {
   return {
@@ -76,5 +81,21 @@ describe('ArticleRow — also covered by duplicate sources (#929)', () => {
     expect(screen.getByText('Readable article')).toBeTruthy();
     expect(screen.getByTestId('recommendation-label')).toBeTruthy();
     expect(screen.getByText('Also covered by The Verge')).toBeTruthy();
+  });
+});
+
+describe('ArticleRow — high-priority sources', () => {
+  it('renders an accessible urgent treatment for a high-priority source', () => {
+    renderRow(makeArticle({ highPriority: true }));
+
+    const row = screen.getByRole('link', { name: /high priority.*readable article/i });
+    expect(row.className).toContain('border-l');
+    expect(screen.getByText('High priority')).toBeTruthy();
+  });
+
+  it('does not render urgent treatment for a normal source', () => {
+    renderRow(makeArticle({ highPriority: false }));
+
+    expect(screen.queryByText('High priority')).toBeNull();
   });
 });

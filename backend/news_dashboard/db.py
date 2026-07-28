@@ -341,6 +341,7 @@ POSTGRES_MULTIUSER_SCHEMA = [
       user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       source_slug TEXT    NOT NULL REFERENCES sources(slug) ON DELETE CASCADE,
       enabled     BOOLEAN NOT NULL DEFAULT TRUE,
+      high_priority BOOLEAN NOT NULL DEFAULT FALSE,
       added_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       PRIMARY KEY (user_id, source_slug)
     )
@@ -360,6 +361,10 @@ POSTGRES_MULTIUSER_SCHEMA = [
       END IF;
       ALTER TABLE user_sources ALTER COLUMN enabled SET DEFAULT TRUE;
     END $$;
+    """,
+    """
+    ALTER TABLE user_sources
+    ADD COLUMN IF NOT EXISTS high_priority BOOLEAN NOT NULL DEFAULT FALSE
     """,
     "CREATE INDEX IF NOT EXISTS idx_user_sources_user ON user_sources(user_id, enabled)",
     """

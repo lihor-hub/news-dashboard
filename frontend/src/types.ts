@@ -46,6 +46,7 @@ export interface Article {
   recommendation_model?: string | null;
   recommendation_signals?: RecommendationSignals | null;
   recommendation_explanation?: string | null;
+  high_priority?: boolean;
 }
 
 export interface User {
@@ -134,6 +135,7 @@ export interface Source {
   priority: number;
   enabled: number;
   subscribed?: boolean;
+  high_priority?: boolean;
   owner_user_id?: number | null;
   last_checked_at?: string | null;
   last_success_at?: string | null;
