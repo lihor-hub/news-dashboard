@@ -210,6 +210,17 @@ variables `NEWS_DASHBOARD_BASE_URL` and `NEWS_DASHBOARD_URL`, in that order.
 | `SENTRY_ENVIRONMENT`  | Environment tag attached to backend events (e.g. `staging`, `production`). Defaults to `production` when `SENTRY_DSN` is set.                                                        |
 | `SENTRY_DSN_FRONTEND` | Frontend error tracking. Served to the SPA via `GET /api/config`; safe to expose since Sentry DSNs are send-only. Off by default.                                                    |
 
+### Optional Dify assistant
+
+News Dashboard can show an optional Dify chat bubble to signed-in users. Set
+`DIFY_CHAT_ENABLED=true`, a browser-reachable HTTPS `DIFY_CHAT_BASE_URL`, and
+the `DIFY_CHAT_APP_TOKEN` from Dify **Publish → Embed**; `DIFY_CHAT_TITLE`
+defaults to `News Assistant`. The embed token is deliberately delivered to the
+browser, so it is not a service/API key and cannot secure private Dify tools or
+data. For the Dify app choice, self-hosted `ALLOW_EMBED=true`, reverse-proxy
+CORS/CSP/SSE requirements, Helm values, and verification, see the [Dify
+assistant guide](https://docs.lihor.ro/docs/configuration/dify-assistant).
+
 ### Privacy
 
 | Variable            | Description                                                                                                                                                                                                                                                                                                                                   |
@@ -465,6 +476,13 @@ manifest overlay: `app.config.metricsEnabled` (`METRICS_ENABLED`),
 the app's own defaults. Sentry DSNs and other secret-bearing values are
 supplied via `app.sentry.existingSecret` (a pre-existing Secret), never
 committed to `values.yaml`.
+
+The optional Dify widget is configured separately under `app.dify`: set
+`app.dify.enabled`, `app.dify.baseUrl`, and `app.dify.title`, and provide the
+Publish → Embed token via `app.dify.existingSecret` and
+`app.dify.appTokenKey`. The chart requires the base URL and Secret when
+enabled, and never accepts a Dify service/API key. See the [Dify assistant
+guide](https://docs.lihor.ro/docs/configuration/dify-assistant) for an example.
 
 Newsletter IMAP ingest can also be enabled through structured Helm values.
 Create a Secret for mailbox credentials, then set the non-secret mailbox
