@@ -60,7 +60,8 @@ def _normalized_base_url(value: str) -> str | None:
 
 def public_dify_config() -> dict[str, object]:
     """Return safe-to-expose Dify embed settings, or a disabled object."""
-    if os.getenv("DIFY_CHAT_ENABLED", "").strip().lower() != "true":
+    raw_enabled = os.getenv("DIFY_CHAT_ENABLED", "")
+    if _contains_unsafe_characters(raw_enabled) or raw_enabled.strip().lower() != "true":
         return _disabled_config()
 
     raw_base_url = os.getenv("DIFY_CHAT_BASE_URL", "")

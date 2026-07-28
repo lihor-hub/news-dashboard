@@ -93,6 +93,8 @@ def test_public_dify_config_rejects_non_loopback_or_unsafe_urls(
     ("name", "value"),
     [
         ("DIFY_CHAT_APP_TOKEN", "token\nwith-control"),
+        ("DIFY_CHAT_ENABLED", "\u0085true"),
+        ("DIFY_CHAT_ENABLED", "true\u0085"),
         ("DIFY_CHAT_TITLE", "title\x1fwith-control"),
         ("DIFY_CHAT_TITLE", "News\u0085Assistant"),
         ("DIFY_CHAT_APP_TOKEN", "\u0085public-embed-token"),
