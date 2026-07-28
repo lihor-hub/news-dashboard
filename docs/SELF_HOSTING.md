@@ -218,13 +218,15 @@ signed-in users. Set `DIFY_CHAT_ENABLED=true`, a browser-reachable
 Embed**; `DIFY_CHAT_TITLE` controls the accessible label. Production URLs must
 use HTTPS; HTTP is accepted only at `localhost`, `127.0.0.1`, and `[::1]` for
 development. Dify must use an origin separate from News Dashboard; same-origin
-configuration is rejected to protect the authenticated parent page. The embed
-token is intentionally sent to the browser, so it is not a service/API key and
-cannot secure private Dify tools or data. News Dashboard sends no username,
-email, user ID, or page context; Dify's WebApp identity is separate. For the
-Dify app choice, self-hosted `ALLOW_EMBED=true`, reverse-proxy `frame-src` and
-SSE requirements, Helm values, and verification, see the [Dify assistant
-guide](https://docs.lihor.ro/docs/configuration/dify-assistant).
+configuration is rejected to protect the authenticated parent page. The iframe
+is additionally sandboxed for Dify's required scripts, origin storage, forms,
+downloads, and constrained popups, without top-navigation permission. The
+embed token is intentionally sent to the browser, so it is not a service/API
+key and cannot secure private Dify tools or data. News Dashboard sends no
+username, email, user ID, or page context; Dify's WebApp identity is separate.
+For the Dify app choice, self-hosted `ALLOW_EMBED=true`, reverse-proxy
+`frame-src` and SSE requirements, Helm values, and verification, see the [Dify
+assistant guide](https://docs.lihor.ro/docs/configuration/dify-assistant).
 
 ### Privacy
 

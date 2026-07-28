@@ -95,6 +95,7 @@ export function DifyChatWidget() {
         src={iframeUrl}
         title={iframeTitle}
         referrerPolicy="no-referrer"
+        sandbox="allow-scripts allow-same-origin allow-forms allow-downloads allow-popups"
       />
     </section>
   );

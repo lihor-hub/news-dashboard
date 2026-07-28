@@ -42,6 +42,13 @@ No Dify script executes in the News Dashboard parent document. The integration
 sets no Dify window globals, installs no Dify window listeners, and adds no
 Dify-owned parent styles or DOM artifacts.
 
+The iframe sandbox allows only scripts, Dify-origin storage, forms, downloads,
+and sandbox-constrained popups. It grants no top-navigation permission and
+does not let popups escape the sandbox. Because browser validation also rejects
+a Dify URL on the News Dashboard origin, the combination of `allow-scripts`
+and `allow-same-origin` preserves Dify WebApp functionality without exposing
+the authenticated parent document.
+
 News Dashboard sends no username, email address, News Dashboard user ID,
 article/page context, Dify input variables, system variables, or user variables
 to the public WebApp. The iframe URL has no query string or fragment. Dify
@@ -75,7 +82,10 @@ When enabled, News Dashboard's floating assistant button appears in the
 lower-right corner on authenticated pages. It is a keyboard-accessible native
 button with a visible focus indicator and a target of at least 44 by 44 CSS
 pixels. The named panel and its close button are keyboard accessible, and the
-Dify iframe has an accessible title.
+Dify iframe has an accessible title. Escape closes the panel only while focus
+is in the parent-document portion of the dialog. Keyboard events inside the
+cross-origin iframe cannot bubble to News Dashboard; after entering the
+WebApp, use Shift+Tab to return to the persistent close button and activate it.
 
 On mobile, the launcher and panel clear News Dashboard's fixed navigation and
 safe-area inset; the panel uses the remaining viewport. On desktop, the panel
@@ -113,10 +123,11 @@ unsafe URL configuration. A frontend parity test proves the browser uses
 Python's Unicode code-point length metric, and a browser-boundary test rejects a
 same-origin frame. Component tests prove that disabled or malformed
 configuration has no launcher, enabled configuration has no iframe until
-opened, the exact context-free WebApp URL is used, native controls have
-accessible names and keyboard semantics including Escape dismissal, and
-close/unmount remove the iframe. An AppShell boundary test proves no user prop
-is passed. Tests also prove a failed iframe can be retried by reopening.
-Deployment tests cover Docker Compose and Helm configuration. Repository lint,
-format, typecheck, tests, docs build, and frontend build remain required before
-delivery.
+opened, the exact context-free WebApp URL is used, and the sandbox grants the
+required Dify capabilities without top navigation or popup escape. Native
+controls have accessible names and keyboard semantics, including Escape
+dismissal while focus is on the parent close control; close/unmount remove the
+iframe. An AppShell boundary test proves no user prop is passed. Tests also
+prove a failed iframe can be retried by reopening. Deployment tests cover
+Docker Compose and Helm configuration. Repository lint, format, typecheck,
+tests, docs build, and frontend build remain required before delivery.

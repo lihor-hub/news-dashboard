@@ -14,6 +14,7 @@
 - Never expose a Dify service API key or send News Dashboard identity, account, or page context to the public WebApp. Dify WebApp identity remains separate.
 - Allow HTTPS URLs in production and HTTP only for `localhost`, `127.0.0.1`, and `[::1]` development hosts.
 - Require Dify to use an origin separate from News Dashboard so the iframe cannot read the authenticated parent DOM.
+- Sandbox the iframe for scripts, Dify-origin storage, forms, downloads, and constrained popups without any top-navigation or popup-escape permission.
 - Preserve all existing News Dashboard behavior when Dify is unavailable.
 - Use PostgreSQL-specific runtime behavior; this feature adds no database changes.
 
@@ -86,7 +87,9 @@ Mock `/api/config`. Assert that disabled and malformed configurations show no
 launcher; enabled configuration shows a native accessible button but creates
 no iframe until opened. Assert the exact `{baseUrl}/chatbot/{appToken}` iframe
 URL, accessible panel/close/iframe names, keyboard activation and focus
-restoration and Escape dismissal, iframe removal on close/unmount, fresh iframe
+restoration, and Escape dismissal while focus is on the parent close control.
+Assert the required sandbox capabilities and the absence of top-navigation and
+popup-escape permissions, iframe removal on close/unmount, fresh iframe
 creation on reopen, and the absence of News Dashboard identity or context in
 the URL and AppShell props. Add browser-validation tests for non-BMP Unicode
 length parity and same-origin rejection.
@@ -108,17 +111,23 @@ Fetch public config with same-origin credentials and validate the response
 shape again at the browser boundary using Unicode code-point lengths. Render a
 News Dashboard-owned launcher and create the official Dify WebApp iframe only
 while its panel is open. Reject a Dify URL whose origin equals the News
-Dashboard origin. Do not load a Dify parent-document script or install Dify
-window globals, listeners, styles, or identity/context variables. Mount the
-component inside `AppShell` only when an authenticated user exists, keyed so an
-account change destroys any open iframe.
+Dashboard origin. Apply an iframe sandbox that allows scripts,
+`allow-same-origin` for Dify's own storage, forms, downloads, and constrained
+popups, but no top-navigation or popup sandbox escape. Do not load a Dify
+parent-document script or install Dify window globals, listeners, styles, or
+identity/context variables. Mount the component inside `AppShell` only when an
+authenticated user exists, keyed so an account change destroys any open
+iframe.
 
 - [ ] **Step 4: Add mobile-safe styling**
 
 Give the host launcher and close control at least 44-by-44-pixel targets and
 visible focus styles. Size and position the mobile panel above fixed navigation
 and `env(safe-area-inset-bottom)`; use a bounded desktop chat layout at the `md`
-breakpoint. Escape closes the panel and restores launcher focus.
+breakpoint. Escape closes the panel and restores launcher focus only while
+focus remains in the parent-document portion of the dialog. Once focus enters
+the cross-origin WebApp, its events cannot bubble; the persistent close button
+is reached by Shift+Tab back from the iframe.
 
 - [ ] **Step 5: Re-run the focused frontend tests**
 
@@ -239,10 +248,11 @@ npm run build
 
 - [ ] **Step 3: Review and fix confirmed findings**
 
-Inspect `git diff --check`, the complete diff, secret exposure, iframe URL
-construction, close/unmount/account cleanup, accessibility, privacy leaks,
-third-party failure isolation, Helm renders, and documentation accuracy. Fix
-confirmed issues and re-run affected gates.
+Inspect `git diff --check`, the complete diff, secret exposure, iframe URL and
+sandbox construction, absence of top-navigation permission,
+close/unmount/account cleanup, accessibility, privacy leaks, third-party
+failure isolation, Helm renders, and documentation accuracy. Fix confirmed
+issues and re-run affected gates.
 
 - [ ] **Step 4: Rebase, commit, push, and open the PR**
 

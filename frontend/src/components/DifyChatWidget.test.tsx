@@ -110,6 +110,26 @@ describe('DifyChatWidget', () => {
     expect(iframe.src).toBe('https://dify.example.test/chatbot/public-embed-token');
   });
 
+  it('sandboxes Dify capabilities without granting top navigation', async () => {
+    const pointer = userEvent.setup();
+    const { launcher } = await renderEnabledWidget();
+    await pointer.click(launcher);
+
+    const iframe = screen.getByTitle<HTMLIFrameElement>('News Assistant conversation');
+    const sandboxTokens = iframe.sandbox;
+    expect([...sandboxTokens]).toEqual([
+      'allow-scripts',
+      'allow-same-origin',
+      'allow-forms',
+      'allow-downloads',
+      'allow-popups',
+    ]);
+    expect([...sandboxTokens].some((token) => token.startsWith('allow-top-navigation'))).toBe(
+      false
+    );
+    expect(sandboxTokens).not.toContain('allow-popups-to-escape-sandbox');
+  });
+
   it('removes the iframe when the popup closes', async () => {
     const pointer = userEvent.setup();
     const { launcher } = await renderEnabledWidget();
@@ -148,7 +168,7 @@ describe('DifyChatWidget', () => {
     expect(retryIframe.src).toBe('https://dify.example.test/chatbot/public-embed-token');
   });
 
-  it('uses native button keyboard semantics and restores launcher focus after closing', async () => {
+  it('handles Escape while focus is in the parent dialog and restores launcher focus', async () => {
     const keyboard = userEvent.setup();
     const { launcher } = await renderEnabledWidget();
     expect(launcher.tagName).toBe('BUTTON');

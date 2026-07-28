@@ -56,7 +56,7 @@ when omitted.
 Dify must use an origin separate from News Dashboard, including a different
 port during loopback development. Do not reverse-proxy Dify under a path on the
 News Dashboard origin. Browser validation rejects same-origin configuration so
-an unsandboxed Dify WebApp cannot read the authenticated parent page.
+the Dify WebApp cannot read the authenticated parent page.
 
 `DIFY_CHAT_APP_TOKEN` is the **Publish → Embed token**. It is not a Dify
 service/API key and must never be replaced with one. The token is returned by
@@ -83,6 +83,14 @@ does not authenticate the News Dashboard user, map a Dify conversation to that
 user, or authorize access to private News Dashboard data. Closing the panel
 destroys the iframe runtime, but Dify's own server-side or browser-storage
 lifecycle remains governed by the Dify deployment.
+
+### Keyboard controls
+
+Opening the assistant focuses News Dashboard's persistent close button. Escape
+closes the panel only while focus remains in the parent-document portion of the
+dialog. After focus enters the cross-origin Dify WebApp, its keyboard events
+cannot bubble to News Dashboard; use Shift+Tab to return to the close button,
+then activate it. Closing restores focus to the launcher.
 
 ### Helm
 
@@ -132,6 +140,13 @@ and streaming requests. A proxy in front of Dify must not buffer or cache
 `text/event-stream` responses and must allow enough response-read time for a
 chat response to complete.
 
+News Dashboard also sandboxes the iframe. The policy permits scripts,
+Dify-origin storage, forms, downloads, and sandbox-constrained popups so the
+published WebApp can operate, but it grants no top-navigation permission and
+does not let popups escape the sandbox. Since same-origin-to-parent
+configuration is rejected, allowing scripts and Dify's own origin inside the
+sandbox does not grant access to the authenticated News Dashboard document.
+
 ## Private-data boundary
 
 This iframe integration does not grant Dify access to News Dashboard articles,
@@ -151,9 +166,11 @@ integration and must preserve its per-user authorization and scope checks.
 3. Open it and confirm an iframe requests `<base URL>/chatbot/<token>` without a
    query string or fragment.
 4. Send a harmless test message and confirm the response streams to completion.
-5. Close the panel and confirm the iframe disappears. Reopen it to retry a
+5. Before entering the WebApp, press Escape and confirm the panel closes. After
+   entering it, use Shift+Tab to return to the persistent close button.
+6. Close the panel and confirm the iframe disappears. Reopen it to retry a
    transient network failure.
-6. For Helm, inspect `helm template` output and confirm that the token comes
+7. For Helm, inspect `helm template` output and confirm that the token comes
    from the selected Secret rather than a literal value.
 
 | Symptom                                      | Check                                                                                                                                                                                                                                                                                                |
