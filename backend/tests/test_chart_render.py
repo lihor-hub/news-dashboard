@@ -98,6 +98,80 @@ def test_helm_template_default() -> None:
 
 
 @pytest.mark.skipif(HELM_BIN is None, reason="helm binary not found on path")
+def test_helm_template_dify_chat_is_disabled_by_default() -> None:
+    output = _render_chart()
+    deployment_env = _env_block(_manifest_for_kind(output, "Deployment"))
+
+    assert "DIFY_CHAT_ENABLED" not in deployment_env
+    assert "DIFY_CHAT_BASE_URL" not in deployment_env
+    assert "DIFY_CHAT_APP_TOKEN" not in deployment_env
+    assert "DIFY_CHAT_TITLE" not in deployment_env
+
+
+@pytest.mark.skipif(HELM_BIN is None, reason="helm binary not found on path")
+def test_helm_template_enabled_dify_chat_uses_existing_secret() -> None:
+    output = _render_chart(
+        "app.dify.enabled=true",
+        "app.dify.baseUrl=https://dify.example.test",
+        "app.dify.title=Research Assistant",
+        "app.dify.existingSecret=dify-chat-credentials",
+        "app.dify.appTokenKey=CUSTOM_DIFY_APP_TOKEN",
+    )
+    deployment_env = _env_block(_manifest_for_kind(output, "Deployment"))
+
+    assert _env_entry(deployment_env, "DIFY_CHAT_ENABLED") == (
+        '- name: DIFY_CHAT_ENABLED\n  value: "true"'
+    )
+    assert _env_entry(deployment_env, "DIFY_CHAT_BASE_URL") == (
+        '- name: DIFY_CHAT_BASE_URL\n  value: "https://dify.example.test"'
+    )
+    assert _env_entry(deployment_env, "DIFY_CHAT_TITLE").rstrip() == (
+        '- name: DIFY_CHAT_TITLE\n  value: "Research Assistant"'
+    )
+    app_token = _env_entry(deployment_env, "DIFY_CHAT_APP_TOKEN")
+    assert 'name: "dify-chat-credentials"' in app_token
+    assert 'key: "CUSTOM_DIFY_APP_TOKEN"' in app_token
+    assert "DIFY_API_KEY" not in deployment_env
+
+
+@pytest.mark.skipif(HELM_BIN is None, reason="helm binary not found on path")
+@pytest.mark.parametrize(
+    ("set_value", "error"),
+    [
+        ("app.dify.enabled=true", "app.dify.baseUrl is required when app.dify.enabled=true"),
+        (
+            "app.dify.enabled=true,app.dify.baseUrl=https://dify.example.test",
+            "app.dify.existingSecret is required when app.dify.enabled=true",
+        ),
+    ],
+)
+def test_helm_template_enabled_dify_chat_requires_complete_configuration(
+    set_value: str, error: str
+) -> None:
+    assert HELM_BIN is not None
+    res = subprocess.run(  # noqa: S603
+        [
+            HELM_BIN,
+            "template",
+            "news-dashboard",
+            str(CHART_DIR),
+            "--set",
+            "app.auth.sessionSecret=dummy-session-secret",
+            "--set-string",
+            "postgresql.password=dummy-postgres-password-for-render-only",
+            "--set",
+            set_value,
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert res.returncode != 0
+    assert error in res.stderr
+
+
+@pytest.mark.skipif(HELM_BIN is None, reason="helm binary not found on path")
 def test_helm_template_neo4j_can_use_existing_secret_and_claim() -> None:
     output = _render_chart(
         "neo4j.enabled=true",

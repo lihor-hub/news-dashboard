@@ -122,6 +122,15 @@ app:
       # Keys within `app.ai.existingSecret` holding the Langfuse credentials.
       publicKeyKey: LANGFUSE_PUBLIC_KEY
       secretKeyKey: LANGFUSE_SECRET_KEY
+  dify:
+    # Opt-in browser chat widget. Enabling it requires baseUrl and a
+    # pre-existing Secret containing the Dify embed token; no service API key
+    # is accepted by this chart.
+    enabled: false
+    baseUrl: ""
+    title: News Assistant
+    existingSecret: ""
+    appTokenKey: DIFY_CHAT_APP_TOKEN
   push:
     # Optional: pre-existing Secret with VAPID keys.
     existingSecret: ""
