@@ -47,7 +47,7 @@ function restoreDifyDomState(widgetSession: DifyWidgetSession): void {
 function hideSession(widgetSession: DifyWidgetSession): void {
   widgetSession.active = false;
   const difyWindow = window as DifyWindow;
-  if (widgetSession.loaded && difyWindow.difyChatbotConfig === widgetSession.config) {
+  if (difyWindow.difyChatbotConfig === widgetSession.config) {
     delete difyWindow.difyChatbotConfig;
   }
   detachDifyDomState(widgetSession);
@@ -133,6 +133,7 @@ export function DifyChatWidget({ user }: { user: User }) {
         script.addEventListener(
           'error',
           () => {
+            widgetSession.canRestore = false;
             hideSession(widgetSession);
           },
           { once: true }
@@ -151,7 +152,10 @@ export function DifyChatWidget({ user }: { user: User }) {
 
     return () => {
       mounted = false;
-      if (session?.userId === userId) hideSession(session);
+      if (session?.userId === userId) {
+        if (!session.loaded) session.canRestore = false;
+        hideSession(session);
+      }
     };
   }, [user.id]);
 

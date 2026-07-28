@@ -209,6 +209,30 @@ describe('DifyChatWidget', () => {
     });
   });
 
+  it('clears the global configuration when Dify fails before loading', async () => {
+    mockScriptLoading();
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(configResponse(enabledConfig())));
+
+    render(<DifyChatWidget user={user} />);
+
+    await waitFor(() => expect(document.querySelector(scriptSelector)).not.toBeNull());
+    document.querySelector<HTMLScriptElement>(scriptSelector)?.dispatchEvent(new Event('error'));
+
+    expect(difyConfig()).toBeUndefined();
+  });
+
+  it('clears the global configuration when unmounted before Dify loads', async () => {
+    mockScriptLoading();
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(configResponse(enabledConfig())));
+
+    const { unmount } = render(<DifyChatWidget user={user} />);
+
+    await waitFor(() => expect(document.querySelector(scriptSelector)).not.toBeNull());
+    unmount();
+
+    expect(difyConfig()).toBeUndefined();
+  });
+
   it('does not execute Dify again after a same-document user switch', async () => {
     mockScriptLoading();
     const spy = appendSpy();
