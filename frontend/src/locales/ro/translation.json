@@ -216,5 +216,19 @@
     "priority": "Priority",
     "description": "Make every article from this source stand out.",
     "sourceLabel": "High priority {{source}}"
+  },
+  "substackWizard": {
+    "open": "Follow Substack",
+    "title": "Follow a Substack publication",
+    "description": "Paste the publication homepage or any post link. We’ll find and test its public RSS feed.",
+    "linkLabel": "Substack link",
+    "linkPlaceholder": "https://writer.substack.com/p/a-post",
+    "finding": "Finding publication…",
+    "find": "Find publication",
+    "nameLabel": "Publication name",
+    "latestPosts": "Latest posts ({{count}})",
+    "following": "Following…",
+    "follow": "Follow {{name}}",
+    "cancel": "Cancel"
   }
 }

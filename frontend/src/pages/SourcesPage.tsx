@@ -12,6 +12,7 @@ import {
   Plus,
   Download,
   Upload,
+  Rss,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
@@ -35,6 +36,7 @@ import { relativeTime } from '@/lib/format';
 import { sourceActionErrorMessage } from '@/lib/errorPresentation';
 import type { Source, SourceCleanupSuggestion, OpmlImportResult } from '@/types';
 import { OnboardingWizard } from '@/components/OnboardingWizard';
+import { SubstackSourceWizard } from '@/components/SubstackSourceWizard';
 import { useAuth } from '@/contexts/auth';
 
 type HealthState = 'ok' | 'stale' | 'error';
@@ -332,6 +334,7 @@ export function SourcesPage() {
   const { t } = useTranslation();
   const [wizardOpen, setWizardOpen] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
+  const [substackOpen, setSubstackOpen] = useState(false);
   const [importResult, setImportResult] = useState<OpmlImportResult | null>(null);
   const [importError, setImportError] = useState<string | null>(null);
   const [isImporting, setIsImporting] = useState(false);
@@ -500,6 +503,10 @@ export function SourcesPage() {
             <Plus className="size-4" />
             Add source
           </Button>
+          <Button size="sm" variant="outline" onClick={() => setSubstackOpen(true)}>
+            <Rss className="size-4" />
+            {t('substackWizard.open')}
+          </Button>
           <Button size="sm" variant="outline" onClick={() => setWizardOpen(true)}>
             <Wand2 className="size-4" />
             Personalize
@@ -509,6 +516,11 @@ export function SourcesPage() {
       <AddSourceDialog
         open={addOpen}
         onClose={() => setAddOpen(false)}
+        onCreated={() => void qc.invalidateQueries({ queryKey: [SOURCES_KEY] })}
+      />
+      <SubstackSourceWizard
+        open={substackOpen}
+        onClose={() => setSubstackOpen(false)}
         onCreated={() => void qc.invalidateQueries({ queryKey: [SOURCES_KEY] })}
       />
       <OnboardingWizard

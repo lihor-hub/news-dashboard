@@ -37,10 +37,13 @@ from news_dashboard.sources.models import (
     HighPriorityUpdate,
     PreviewSourceRequest,
     SourceCleanupRequest,
+    SubstackPreviewRequest,
 )
 from news_dashboard.sources.service import (
     SourceDefinition,
+    SubstackUrlError,
     add_user_source_preference,
+    normalize_substack_feed_url,
     set_user_source_priority,
 )
 from news_dashboard.url_safety import UnsafeUrlError, validate_server_fetch_url
@@ -139,10 +142,32 @@ def create_source(
 
     init_db()
     with connect() as conn:
-        existing = conn.execute("SELECT 1 FROM sources WHERE slug = %s", (slug,)).fetchone()
+        if payload.provider == "substack":
+            existing = conn.execute(
+                """
+                SELECT slug, url
+                FROM sources
+                WHERE deleted_at IS NULL
+                  AND (
+                    slug = %s
+                    OR (url = %s AND (owner_user_id IS NULL OR owner_user_id = %s))
+                  )
+                """,
+                (slug, payload.url, uid),
+            ).fetchone()
+        else:
+            existing = conn.execute(
+                "SELECT slug, url FROM sources WHERE slug = %s",
+                (slug,),
+            ).fetchone()
         if existing:
+            if existing["slug"] == slug:
+                raise HTTPException(
+                    status_code=409, detail=f"source slug '{requested_slug}' already exists"
+                )
             raise HTTPException(
-                status_code=409, detail=f"source slug '{requested_slug}' already exists"
+                status_code=409,
+                detail="This feed is already in your sources.",
             )
         conn.execute(
             """
@@ -194,6 +219,45 @@ def preview_source(
         "kind": payload.kind,
         "entry_count": len(entries),
         "items": items,
+    }
+
+
+@router.post("/api/sources/substack/preview")
+def preview_substack_source(
+    payload: SubstackPreviewRequest,
+    _current_user: Annotated[dict[str, Any], Depends(require_auth)],
+) -> dict[str, Any]:
+    """Normalize and preview a Substack publication without saving it."""
+    try:
+        substack_feed = normalize_substack_feed_url(payload.url)
+        validate_server_fetch_url(substack_feed.feed_url)
+    except (SubstackUrlError, UnsafeUrlError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    source = SourceDefinition(
+        slug="preview-substack",
+        name=substack_feed.suggested_name,
+        url=substack_feed.feed_url,
+        category="newsletter",
+        kind="rss_feed",
+    )
+    try:
+        entries = preview_source_entries(source)
+    except FeedFetchError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    return {
+        "feed_url": substack_feed.feed_url,
+        "suggested_name": substack_feed.suggested_name,
+        "entry_count": len(entries),
+        "items": [
+            {
+                "title": clean_html(entry.get("title") or "Untitled")[:200],
+                "url": entry.get("url", ""),
+                "date": entry.get("date"),
+            }
+            for entry in entries[:_PREVIEW_MAX_ITEMS]
+        ],
     }
 
 

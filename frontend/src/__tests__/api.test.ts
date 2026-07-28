@@ -413,6 +413,26 @@ describe('sources, summary, ingest', () => {
     expect(result.entry_count).toBe(2);
     expect(result.items).toEqual([{ title: 'A', url: 'u', date: null }]);
   });
+
+  it('previewSubstackSource submits a publication link for normalization and preview', async () => {
+    const { calls } = stubFetch(() =>
+      jsonOk({
+        feed_url: 'https://writer.substack.com/feed',
+        suggested_name: 'Writer',
+        entry_count: 1,
+        items: [{ title: 'A post', url: 'https://writer.substack.com/p/a-post', date: null }],
+      })
+    );
+
+    const result = await api.previewSubstackSource('https://writer.substack.com/p/a-post');
+
+    expect(calls[0].url).toBe('/api/sources/substack/preview');
+    expect(calls[0].init?.method).toBe('POST');
+    expect(calls[0].init?.body).toBe(
+      JSON.stringify({ url: 'https://writer.substack.com/p/a-post' })
+    );
+    expect(result.feed_url).toBe('https://writer.substack.com/feed');
+  });
 });
 
 describe('scheduler endpoints', () => {

@@ -177,6 +177,7 @@ EXPECTED_METHOD_PATHS = {
     ("GET", "/api/sources/health"),
     ("POST", "/api/sources/import"),
     ("POST", "/api/sources/preview"),
+    ("POST", "/api/sources/substack/preview"),
     ("DELETE", "/api/sources/{slug}"),
     ("PATCH", "/api/sources/{slug}/enabled"),
     ("PATCH", "/api/sources/{slug}/priority"),
