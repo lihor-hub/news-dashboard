@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { DifyChatWidget } from './DifyChatWidget';
 
@@ -108,6 +108,15 @@ describe('DifyChatWidget', () => {
     expect(screen.getByRole('button', { name: 'Close News Assistant' })).toBeInTheDocument();
     const iframe = screen.getByTitle<HTMLIFrameElement>('News Assistant conversation');
     expect(iframe.src).toBe('https://dify.example.test/chatbot/public-embed-token');
+  });
+
+  it('does not render a second host heading above Dify', async () => {
+    const pointer = userEvent.setup();
+    const { launcher } = await renderEnabledWidget();
+    await pointer.click(launcher);
+
+    const dialog = screen.getByRole('dialog', { name: 'News Assistant' });
+    expect(within(dialog).queryByRole('heading')).not.toBeInTheDocument();
   });
 
   it('sandboxes Dify capabilities without granting top navigation', async () => {
