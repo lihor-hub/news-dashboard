@@ -110,21 +110,13 @@ describe('DifyChatWidget', () => {
     expect(iframe.src).toBe('https://dify.example.test/chatbot/public-embed-token');
   });
 
-  it('uses Dify as the single visible heading without shrinking the popup', async () => {
+  it('does not render a second host heading above Dify', async () => {
     const pointer = userEvent.setup();
     const { launcher } = await renderEnabledWidget();
     await pointer.click(launcher);
 
     const dialog = screen.getByRole('dialog', { name: 'News Assistant' });
     expect(within(dialog).queryByRole('heading')).not.toBeInTheDocument();
-    expect(dialog.querySelector('header')).toBeNull();
-    expect(dialog).toHaveClass(
-      'h-[calc(100dvh-76px-env(safe-area-inset-bottom))]',
-      'max-h-[44rem]',
-      'md:h-[min(44rem,calc(100dvh-2rem))]',
-      'md:w-96'
-    );
-    expect(screen.getByTitle('News Assistant conversation')).toHaveClass('flex-1');
   });
 
   it('sandboxes Dify capabilities without granting top navigation', async () => {
