@@ -651,6 +651,9 @@ jobs:
           SENTRY_DSN_FRONTEND: ${{ secrets.SENTRY_DSN_FRONTEND }}
           SMTP_USERNAME: ${{ secrets.SMTP_USERNAME }}
           SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+          DIFY_CHAT_APP_TOKEN: ${{ secrets.DIFY_CHAT_APP_TOKEN }}
+          DIFY_CHAT_BASE_URL: ${{ vars.DIFY_CHAT_BASE_URL }}
+          DIFY_CHAT_TITLE: ${{ vars.DIFY_CHAT_TITLE }}
         run: |
           set -euo pipefail
 
@@ -768,6 +771,25 @@ jobs:
             sentry_helm_args+=(--set-string "app.sentry.release=news-dashboard@$SHA")
           fi
 
+          # Optional Dify assistant. Both the embed token and a browser-reachable
+          # base URL are required; the chart refuses to render with only one of
+          # them, so skip the feature entirely unless both are configured.
+          # DIFY_CHAT_APP_TOKEN is the Publish -> Embed token, not a service key.
+          dify_helm_args=()
+          if [ -n "$DIFY_CHAT_APP_TOKEN" ] && [ -n "$DIFY_CHAT_BASE_URL" ]; then
+            kubectl -n news-dashboard create secret generic news-dashboard-dify \
+              --from-literal=DIFY_CHAT_APP_TOKEN="$DIFY_CHAT_APP_TOKEN" \
+              --dry-run=client -o yaml | kubectl apply -f -
+            dify_helm_args+=(--set app.dify.enabled=true)
+            dify_helm_args+=(--set-string "app.dify.baseUrl=$DIFY_CHAT_BASE_URL")
+            dify_helm_args+=(--set app.dify.existingSecret=news-dashboard-dify)
+            if [ -n "$DIFY_CHAT_TITLE" ]; then
+              dify_helm_args+=(--set-string "app.dify.title=$DIFY_CHAT_TITLE")
+            fi
+          elif [ -n "$DIFY_CHAT_APP_TOKEN" ] || [ -n "$DIFY_CHAT_BASE_URL" ]; then
+            echo "Dify assistant needs both DIFY_CHAT_APP_TOKEN and DIFY_CHAT_BASE_URL; leaving it disabled." >&2
+          fi
+
           # Sync Helm chart changes from main. Avoid relying on the deploy
           # host clone's branch/upstream config, which may point at a deleted
           # feature branch.
@@ -793,6 +815,7 @@ jobs:
             "${push_helm_args[@]}"
             "${email_helm_args[@]}"
             "${sentry_helm_args[@]}"
+            "${dify_helm_args[@]}"
           )
           helm "${helm_args[@]}"
 
