@@ -53,6 +53,17 @@ HTTP is accepted only for local development at `localhost`, `127.0.0.1`, or
 reader's browser cannot resolve. `DIFY_CHAT_TITLE` defaults to `News Assistant`
 when omitted.
 
+### Use one professional assistant name
+
+Set both `DIFY_CHAT_TITLE` and the Dify application's display name to
+`News Assistant`. The News Dashboard popup intentionally has no second visible
+title; Dify renders the single heading inside its cross-origin iframe.
+
+In Dify, open the application's settings, change its display name to
+`News Assistant`, and publish the application again. News Dashboard cannot
+override that internal heading because the embedded application remains
+cross-origin and sandboxed.
+
 Dify must use an origin separate from News Dashboard, including a different
 port during loopback development. Do not reverse-proxy Dify under a path on the
 News Dashboard origin. Browser validation rejects same-origin configuration so
