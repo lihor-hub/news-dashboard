@@ -17,10 +17,11 @@ WORKFLOW_DIRECTORY = ROOT / ".github" / "workflows"
 DOCKERFILE = ROOT / "Dockerfile"
 COMPOSE_PROD = ROOT / "docker-compose.prod.yml"
 HELM_CHART = ROOT / "helm" / "news-dashboard"
+HELM_PRODUCTION_VALUES = HELM_CHART / "values-production.yaml"
 CI_BUILT_APP_IMAGE = "ghcr.io/lihor-hub/news-dashboard:7d01027c3c2b21a537ab3264ce485d4fea6ba48d"
 IMAGE_DIGEST = re.compile(r"^[^\s@]+@sha256:[0-9a-f]{64}$")
 
-# Each entry is a reviewed upstream repository and the exact executable commit.
+# Each entry is a reviewed exact action identity and its executable commit.
 # Updating or adding an action therefore requires an explicit mapping change.
 APPROVED_ACTION_COMMITS = {
     "actions/attest-build-provenance": "0f67c3f4856b2e3261c31976d6725780e5e4c373",
@@ -47,7 +48,10 @@ APPROVED_ACTION_COMMITS = {
     "docker/login-action": "dbcb813823bdd20940b903addbd779551569679f",
     "docker/setup-buildx-action": "bb05f3f5519dd87d3ba754cc423b652a5edd6d2c",
     "dorny/paths-filter": "7b450fff21473bca461d4b92ce414b9d0420d706",
-    "github/codeql-action": "f205ea1c3313d32999d8d6a48b4f6530d4437b38",
+    "github/codeql-action/analyze": "f205ea1c3313d32999d8d6a48b4f6530d4437b38",
+    "github/codeql-action/autobuild": "f205ea1c3313d32999d8d6a48b4f6530d4437b38",
+    "github/codeql-action/init": "f205ea1c3313d32999d8d6a48b4f6530d4437b38",
+    "github/codeql-action/upload-sarif": "f205ea1c3313d32999d8d6a48b4f6530d4437b38",
 }
 
 
@@ -96,12 +100,11 @@ def assert_no_floating_action_refs(workflow: Path) -> None:
             continue
 
         action, separator, commit = reference.rpartition("@")
-        repository = "/".join(action.split("/")[:2])
-        approved_commit = APPROVED_ACTION_COMMITS.get(repository)
+        approved_commit = APPROVED_ACTION_COMMITS.get(action)
         if not separator or approved_commit is None or commit != approved_commit:
             msg = (
                 f"{display_path(workflow)} action {reference!r} must use the explicitly "
-                f"approved commit for repository {repository!r}"
+                f"approved commit for action identity {action!r}"
             )
             raise AssertionError(msg)
         external_actions.append(reference)
@@ -201,7 +204,7 @@ def extract_rendered_workload_images(rendered: str) -> list[str]:
     return images
 
 
-def render_helm_chart() -> str:
+def render_helm_chart(values_file: Path | None = None) -> str:
     helm = shutil.which("helm")
     if helm is None:
         msg = "helm is required to validate rendered production workload images"
@@ -211,17 +214,33 @@ def render_helm_chart() -> str:
         "template",
         "news-dashboard",
         str(HELM_CHART),
-        "--set-string",
-        "app.auth.sessionSecret=pin-test-session-secret",
-        "--set-string",
-        "postgresql.password=pin-test-postgres-password",
-        "--set",
-        "neo4j.enabled=true",
-        "--set-string",
-        "neo4j.auth.password=pin-test-neo4j-password",
     ]
+    if values_file is not None:
+        command.extend(["--values", str(values_file)])
+    command.extend(
+        [
+            "--set-string",
+            "app.auth.sessionSecret=pin-test-session-secret",
+            "--set-string",
+            "postgresql.password=pin-test-postgres-password",
+            "--set",
+            "neo4j.enabled=true",
+            "--set-string",
+            "neo4j.auth.password=pin-test-neo4j-password",
+        ]
+    )
     result = subprocess.run(command, check=True, capture_output=True, text=True)  # noqa: S603
     return result.stdout
+
+
+def assert_helm_renderings_are_immutable(renderings: Mapping[Path, str]) -> None:
+    for source, rendered in renderings.items():
+        images = extract_rendered_workload_images(rendered)
+        if not images:
+            msg = f"{display_path(source)} must render at least one workload image"
+            raise AssertionError(msg)
+        for image in images:
+            assert_immutable_image(image, source)
 
 
 def extract_workflow_service_images(workflow: Path) -> list[str]:
@@ -259,12 +278,12 @@ def test_production_container_references_are_immutable() -> None:
     for image in extract_compose_images(COMPOSE_PROD):
         assert_immutable_image(image, COMPOSE_PROD)
 
-    rendered_images = extract_rendered_workload_images(render_helm_chart())
-    if not rendered_images:
-        msg = "Helm chart must render at least one workload image"
-        raise AssertionError(msg)
-    for image in rendered_images:
-        assert_immutable_image(image, HELM_CHART)
+    assert_helm_renderings_are_immutable(
+        {
+            HELM_CHART / "values.yaml": render_helm_chart(),
+            HELM_PRODUCTION_VALUES: render_helm_chart(HELM_PRODUCTION_VALUES),
+        }
+    )
 
     for workflow in WORKFLOWS:
         for image in extract_workflow_service_images(workflow):
@@ -299,6 +318,29 @@ def test_wrong_full_action_sha_is_rejected(tmp_path: Path) -> None:
 
     with pytest.raises(AssertionError, match="approved commit"):
         assert_no_floating_action_refs(workflow)
+
+
+def test_only_approved_sub_action_identities_are_allowed(tmp_path: Path) -> None:
+    codeql_commit = APPROVED_ACTION_COMMITS["github/codeql-action/init"]
+    approved_workflow = tmp_path / "approved-sub-actions.yml"
+    approved_workflow.write_text(
+        "jobs:\n"
+        "  check:\n"
+        "    steps:\n"
+        f"      - uses: github/codeql-action/init@{codeql_commit} # v4\n"
+        f"      - uses: github/codeql-action/analyze@{codeql_commit} # v4\n"
+    )
+    assert_no_floating_action_refs(approved_workflow)
+
+    unapproved_workflow = tmp_path / "unapproved-sub-action.yml"
+    unapproved_workflow.write_text(
+        "jobs:\n"
+        "  check:\n"
+        "    steps:\n"
+        f"      - uses: github/codeql-action/not-approved@{codeql_commit} # v4\n"
+    )
+    with pytest.raises(AssertionError, match="approved commit"):
+        assert_no_floating_action_refs(unapproved_workflow)
 
 
 def test_each_action_occurrence_needs_a_version_comment(tmp_path: Path) -> None:
@@ -397,3 +439,32 @@ spec:
     ]
     if extract_rendered_workload_images(rendered) != expected:
         pytest.fail("Rendered workload parser missed container images")
+
+
+def test_production_only_mutable_helm_image_is_rejected() -> None:
+    default_render = """
+apiVersion: apps/v1
+kind: Deployment
+spec:
+  template:
+    spec:
+      containers:
+        - image: app:1@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+"""
+    production_render = """
+apiVersion: apps/v1
+kind: Deployment
+spec:
+  template:
+    spec:
+      containers:
+        - image: app:latest
+"""
+
+    with pytest.raises(AssertionError, match=r"production-overlay.*mutable"):
+        assert_helm_renderings_are_immutable(
+            {
+                Path("default-values"): default_render,
+                Path("production-overlay"): production_render,
+            }
+        )
