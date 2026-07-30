@@ -53,10 +53,14 @@ def _fetch_capped_html(url: str, *, byte_cap: int) -> str:
     full response before truncating, so a large HTML page can't be pulled
     entirely into memory just to be sliced down afterward.
     """
-    request = urllib.request.Request(  # noqa: S310 - scheme validated by central opener
-        url,
-        headers={"User-Agent": USER_AGENT},
-    )
+    try:
+        request = urllib.request.Request(  # noqa: S310 - scheme validated by central opener
+            url,
+            headers={"User-Agent": USER_AGENT},
+        )
+    except ValueError as exc:
+        message = f"Refusing server-side fetch to malformed URL: {url!r}"
+        raise UnsafeUrlError(message) from exc
     with open_server_fetch_url(request, timeout=15) as response:
         charset = response.headers.get_content_charset("utf-8") or "utf-8"
         raw: bytes = response.read(byte_cap)
@@ -356,7 +360,7 @@ def _static_extract_body(  # noqa: PLR0911 - each bounded fetch failure has a di
             raw: bytes = resp.read(500_000)  # cap at ~500 KB
             charset = resp.headers.get_content_charset("utf-8") or "utf-8"
             html = raw.decode(str(charset), errors="replace")
-    except UnsafeUrlError as exc:
+    except (UnsafeUrlError, ValueError) as exc:
         logger.warning("body_fetch: unsafe URL %r: %s", url, exc)
         return "", "error", "unsafe_url"
     except urllib.error.HTTPError as exc:

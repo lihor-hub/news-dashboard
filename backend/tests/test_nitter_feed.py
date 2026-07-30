@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import socket
 import urllib.error
+import urllib.request
 from http.client import HTTPMessage
 from typing import ClassVar
 
@@ -23,6 +25,7 @@ from news_dashboard.ingest.service import (
     sync_sources,
 )
 from news_dashboard.sources.service import DEFAULT_SOURCES, SourceDefinition
+from news_dashboard.url_safety import UnsafeUrlError, validate_server_fetch_url
 
 # ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -90,13 +93,38 @@ def test_fetch_feed_content_rejects_private_network_url(
     def fake_open(_req: object, *, timeout: float) -> None:
         nonlocal called
         called = True
+        message = "Refusing server-side fetch to unsafe host"
+        raise UnsafeUrlError(message)
 
     monkeypatch.setattr("news_dashboard.ingest.service.open_server_fetch_url", fake_open)
 
     with pytest.raises(FeedFetchError, match="unsafe host"):
         _fetch_feed_content("http://127.0.0.1/feed.xml")
 
-    assert called is False
+    assert called is True
+
+
+def test_fetch_feed_content_resolves_hostname_once(monkeypatch: pytest.MonkeyPatch) -> None:
+    resolutions: list[tuple[str, int]] = []
+
+    def fake_getaddrinfo(
+        host: str,
+        port: int,
+        **_kwargs: object,
+    ) -> list[tuple[socket.AddressFamily, socket.SocketKind, int, str, tuple[str, int]]]:
+        resolutions.append((host, port))
+        return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.216.34", port))]
+
+    def fake_open(req: object, *, timeout: float) -> _SizedFakeResp:
+        assert isinstance(req, urllib.request.Request)
+        validate_server_fetch_url(req.full_url)
+        return _SizedFakeResp(b"<rss/>")
+
+    monkeypatch.setattr("news_dashboard.url_safety.socket.getaddrinfo", fake_getaddrinfo)
+    monkeypatch.setattr("news_dashboard.ingest.service.open_server_fetch_url", fake_open)
+
+    assert _fetch_feed_content("https://example.com/feed.xml") == b"<rss/>"
+    assert resolutions == [("example.com", 443)]
 
 
 def test_fetch_feed_content_sends_user_agent(monkeypatch: pytest.MonkeyPatch) -> None:

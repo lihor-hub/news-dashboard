@@ -27,12 +27,14 @@ class ScrapeFetchError(RuntimeError):
 
 
 def _fetch_html(url: str, *, use_selenium: bool = False) -> str:
-    validate_server_fetch_url(url)
     if use_selenium:
+        validate_server_fetch_url(url)
         from news_dashboard.selenium_client import fetch_spa_html
 
         return fetch_spa_html(url)
-    req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})  # noqa: S310 - scheme validated above
+    req = urllib.request.Request(  # noqa: S310 - scheme validated by central opener
+        url, headers={"User-Agent": USER_AGENT}
+    )
     with open_server_fetch_url(req, timeout=TIMEOUT_SECS) as resp:
         content_length = resp.headers.get("Content-Length")
         if content_length is not None:

@@ -820,6 +820,24 @@ def test_ai_extract_body_maps_central_opener_unsafe_url_to_error() -> None:
     assert called is True
 
 
+def test_ai_extract_body_classifies_malformed_initial_url_as_unsafe(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    from news_dashboard.body_fetch import _ai_extract_body
+
+    with (
+        patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}),
+        patch("news_dashboard.body_fetch.open_server_fetch_url") as open_url,
+        caplog.at_level("WARNING"),
+    ):
+        body, status = _ai_extract_body("http://[::1")
+
+    assert (body, status) == ("", "error")
+    assert "ai_body_fetch: unsafe URL" in caplog.text
+    assert "HTTP fetch failed" not in caplog.text
+    open_url.assert_not_called()
+
+
 def test_ai_extract_body_calls_openai_on_html(tmp_path: Path) -> None:
     from news_dashboard.body_fetch import _ai_extract_body
 

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import socket
+import urllib.request
 from typing import Any
 
 import pytest
@@ -15,6 +17,7 @@ from news_dashboard.scraper import (
     scrape_source,
 )
 from news_dashboard.sources.service import SourceDefinition
+from news_dashboard.url_safety import UnsafeUrlError, validate_server_fetch_url
 
 # Minimal static HTML that mimics the Anthropic news page structure
 ANTHROPIC_FIXTURE = """
@@ -83,17 +86,36 @@ def test_scrape_source_uses_fixture(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_fetch_html_rejects_private_network_url(monkeypatch: pytest.MonkeyPatch) -> None:
-
     called = False
 
-    def fake_urlopen(_req: object, timeout: float) -> None:
+    def fake_open(_req: object, *, timeout: float) -> None:
         nonlocal called
         called = True
+        message = "Refusing server-side fetch to unsafe host"
+        raise UnsafeUrlError(message)
 
-    monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
+    monkeypatch.setattr("news_dashboard.scraper.open_server_fetch_url", fake_open)
 
     with pytest.raises(ValueError, match="unsafe host"):
         _fetch_html("http://127.0.0.1/admin")
+
+    assert called is True
+
+
+def test_fetch_html_selenium_path_keeps_preflight_validation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    called = False
+
+    def fake_fetch(_url: str) -> str:
+        nonlocal called
+        called = True
+        return ""
+
+    monkeypatch.setattr("news_dashboard.selenium_client.fetch_spa_html", fake_fetch)
+
+    with pytest.raises(ValueError, match="unsafe host"):
+        _fetch_html("http://127.0.0.1/admin", use_selenium=True)
 
     assert called is False
 
@@ -221,6 +243,29 @@ class _FakeResponse:
 
     def __exit__(self, *exc_info: object) -> None:
         return None
+
+
+def test_fetch_html_resolves_hostname_once(monkeypatch: pytest.MonkeyPatch) -> None:
+    resolutions: list[tuple[str, int]] = []
+
+    def fake_getaddrinfo(
+        host: str,
+        port: int,
+        **_kwargs: object,
+    ) -> list[tuple[socket.AddressFamily, socket.SocketKind, int, str, tuple[str, int]]]:
+        resolutions.append((host, port))
+        return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.216.34", port))]
+
+    def fake_open(req: object, *, timeout: float) -> _FakeResponse:
+        assert isinstance(req, urllib.request.Request)
+        validate_server_fetch_url(req.full_url)
+        return _FakeResponse(b"<html>ok</html>", None)
+
+    monkeypatch.setattr("news_dashboard.url_safety.socket.getaddrinfo", fake_getaddrinfo)
+    monkeypatch.setattr("news_dashboard.scraper.open_server_fetch_url", fake_open)
+
+    assert _fetch_html("https://example.com/news") == "<html>ok</html>"
+    assert resolutions == [("example.com", 443)]
 
 
 def test_fetch_html_under_limit_succeeds(monkeypatch: pytest.MonkeyPatch) -> None:
