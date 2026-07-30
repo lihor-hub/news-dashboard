@@ -125,7 +125,7 @@ def test_codecov_upload_uses_current_action_major() -> None:
     ]
     assert codecov_uses, "No codecov/codecov-action steps found in ci.yml"
     assert all(
-        uses == "codecov/codecov-action@04b047e8bb82a0c002c8312c1c880fbc6a999d45"
+        uses == "codecov/codecov-action@0fb7174895f61a3b6b78fc075e0cd60383518dac"
         for uses in codecov_uses
     )
 

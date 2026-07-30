@@ -11,7 +11,7 @@ WORKFLOWS = [
 ]
 DOCKERFILE = ROOT / "Dockerfile"
 TRIVY_ACTION_REFERENCE = (
-    "aquasecurity/trivy-action@a9c7b0f06e461e9d4b4d1711f154ee024b8d7ab8 # v0.36.0"
+    "aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0"
 )
 RUNTIME_STAGE = re.compile(
     r"^FROM python:3.14-slim@sha256:[0-9a-f]{64} AS runtime$",
