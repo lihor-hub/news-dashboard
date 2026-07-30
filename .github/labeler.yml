@@ -1,0 +1,51 @@
+frontend:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'frontend/**'
+          - 'e2e/**'
+          - 'index.html'
+          - 'vite.config.ts'
+          - 'eslint.config.mjs'
+          - 'tsconfig.json'
+          - 'playwright.config.ts'
+
+backend:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'backend/**'
+          - 'pyproject.toml'
+
+i18n:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'frontend/src/locales/**'
+
+documentation:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'docs/**'
+          - 'website/**'
+          - '*.md'
+
+deploy:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'helm/**'
+          - 'deploy/**'
+          - 'Dockerfile'
+          - 'docker-compose*.yml'
+
+android:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'android/**'
+
+desktop:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'desktop/**'
+
+ci-cd:
+  - changed-files:
+      - any-glob-to-any-file:
+          - '.github/**'
