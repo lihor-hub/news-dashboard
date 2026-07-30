@@ -54,26 +54,14 @@ def _fetch_capped_html(url: str, *, byte_cap: int) -> str:
     full response before truncating, so a large HTML page can't be pulled
     entirely into memory just to be sliced down afterward.
     """
-    import httpx  # lazy import — optional at module load time
-
-    chunks: list[bytes] = []
-    total = 0
-    with httpx.stream(
-        "GET",
+    request = urllib.request.Request(  # noqa: S310 - scheme validated by central opener
         url,
-        timeout=15,
         headers={"User-Agent": USER_AGENT},
-        follow_redirects=False,
-    ) as resp:
-        resp.raise_for_status()
-        encoding = resp.encoding or "utf-8"
-        for chunk in resp.iter_bytes():
-            chunks.append(chunk)
-            total += len(chunk)
-            if total >= byte_cap:
-                break
-    raw = b"".join(chunks)[:byte_cap]
-    return raw.decode(encoding, errors="replace")
+    )
+    with open_server_fetch_url(request, timeout=15) as response:
+        charset = response.headers.get_content_charset("utf-8") or "utf-8"
+        raw: bytes = response.read(byte_cap)
+    return raw.decode(str(charset), errors="replace")
 
 
 def _ai_extract_body(url: str, *, user_id: int | None = None) -> tuple[str, str]:

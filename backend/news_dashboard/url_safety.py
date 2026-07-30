@@ -7,9 +7,13 @@ reach localhost, private networks, or cloud metadata services from the server.
 
 from __future__ import annotations
 
+import functools
+import http.client
 import ipaddress
 import socket
+import ssl
 import urllib.request
+from dataclasses import dataclass, field
 from http.client import HTTPMessage
 from typing import IO, Any
 from urllib.parse import urlparse
@@ -19,32 +23,82 @@ class UnsafeUrlError(ValueError):
     """Raised when a URL is not safe for server-side fetching."""
 
 
+@dataclass(frozen=True, slots=True)
+class ResolvedTarget:
+    """A validated numeric endpoint for one HTTP request."""
+
+    hostname: str
+    address: str
+    port: int
+    family: int
+
+
 def validate_server_fetch_url(url: str) -> None:
     """Raise UnsafeUrlError if ``url`` is not safe for backend network fetches."""
-    parsed = urlparse(url.strip())
+    _resolve_server_fetch_target(url)
+
+
+def _parse_server_fetch_url(url: str) -> tuple[str, str, int]:
+    """Return the original host, normalized DNS host, and effective port."""
+    if any(ord(character) < 32 or ord(character) == 127 for character in url):
+        msg = f"Refusing to fetch URL containing control characters: {url!r}"
+        raise UnsafeUrlError(msg)
+
+    try:
+        parsed = urlparse(url.strip())
+        hostname = parsed.hostname
+        parsed_port = parsed.port
+        username = parsed.username
+        password = parsed.password
+    except ValueError as exc:
+        msg = f"Refusing to fetch malformed URL: {url!r}"
+        raise UnsafeUrlError(msg) from exc
+
     if parsed.scheme not in {"http", "https"}:
         msg = f"Refusing to fetch non-HTTP URL: {url!r}"
         raise UnsafeUrlError(msg)
 
-    hostname = parsed.hostname
     if not hostname:
         msg = f"Refusing to fetch URL without a host: {url!r}"
         raise UnsafeUrlError(msg)
 
+    if username is not None or password is not None:
+        msg = f"Refusing to fetch URL containing user information: {url!r}"
+        raise UnsafeUrlError(msg)
+
     normalized_host = hostname.rstrip(".").lower()
+    if not normalized_host:
+        msg = f"Refusing to fetch URL without a valid host: {url!r}"
+        raise UnsafeUrlError(msg)
+
     if normalized_host in {"localhost", "localhost.localdomain"} or normalized_host.endswith(
         ".localhost"
     ):
         msg = f"Refusing to fetch local host: {hostname!r}"
         raise UnsafeUrlError(msg)
 
+    port = parsed_port or (443 if parsed.scheme == "https" else 80)
+    if port <= 0:
+        msg = f"Refusing to fetch URL with invalid port: {url!r}"
+        raise UnsafeUrlError(msg)
+    return hostname, normalized_host, port
+
+
+def _resolve_server_fetch_target(url: str) -> ResolvedTarget:
+    """Resolve and validate every answer, then select one numeric endpoint."""
+    hostname, normalized_host, port = _parse_server_fetch_url(url)
     try:
-        addresses = socket.getaddrinfo(normalized_host, parsed.port, type=socket.SOCK_STREAM)
+        addresses = socket.getaddrinfo(normalized_host, port, type=socket.SOCK_STREAM)
     except socket.gaierror as exc:
         msg = f"Could not resolve fetch host: {hostname!r}"
         raise UnsafeUrlError(msg) from exc
 
+    selected: ResolvedTarget | None = None
     for family, _, _, _, sockaddr in addresses:
+        if family not in {socket.AF_INET, socket.AF_INET6}:
+            msg = f"Refusing to fetch unsupported address family: {family}"
+            raise UnsafeUrlError(msg)
+
         raw_address = sockaddr[0]
         try:
             ip = ipaddress.ip_address(raw_address)
@@ -56,9 +110,33 @@ def validate_server_fetch_url(url: str) -> None:
             msg = f"Refusing to fetch unsafe host address: {ip}"
             raise UnsafeUrlError(msg)
 
-        if family not in {socket.AF_INET, socket.AF_INET6}:
-            msg = f"Refusing to fetch unsupported address family: {family}"
-            raise UnsafeUrlError(msg)
+        if selected is None:
+            selected = ResolvedTarget(
+                hostname=hostname,
+                address=str(ip),
+                port=port,
+                family=family,
+            )
+
+    if selected is None:
+        msg = f"Could not resolve fetch host: {hostname!r}"
+        raise UnsafeUrlError(msg)
+    return selected
+
+
+@dataclass(slots=True)
+class _ResolvedTargetStore:
+    targets: dict[urllib.request.Request, ResolvedTarget] = field(default_factory=dict)
+
+    def add(self, request: urllib.request.Request, target: ResolvedTarget) -> None:
+        self.targets[request] = target
+
+    def get(self, request: urllib.request.Request) -> ResolvedTarget:
+        target = self.targets.get(request)
+        if target is None:
+            target = _resolve_server_fetch_target(request.full_url)
+            self.add(request, target)
+        return target
 
 
 class _ValidatingRedirectHandler(urllib.request.HTTPRedirectHandler):
@@ -72,6 +150,10 @@ class _ValidatingRedirectHandler(urllib.request.HTTPRedirectHandler):
     host. urllib's built-in redirect cap (``max_redirections``) still applies.
     """
 
+    def __init__(self, targets: _ResolvedTargetStore | None = None) -> None:
+        super().__init__()
+        self._targets = targets or _ResolvedTargetStore()
+
     def redirect_request(
         self,
         req: urllib.request.Request,
@@ -81,14 +163,96 @@ class _ValidatingRedirectHandler(urllib.request.HTTPRedirectHandler):
         headers: HTTPMessage,
         newurl: str,
     ) -> urllib.request.Request | None:
-        validate_server_fetch_url(newurl)
-        return super().redirect_request(req, fp, code, msg, headers, newurl)
+        target = _resolve_server_fetch_target(newurl)
+        redirected = super().redirect_request(req, fp, code, msg, headers, newurl)
+        if redirected is not None:
+            self._targets.add(redirected, target)
+        return redirected
+
+
+class _PinnedHTTPConnection(http.client.HTTPConnection):
+    def __init__(
+        self,
+        host: str,
+        *,
+        resolved_target: ResolvedTarget,
+        **kwargs: Any,
+    ) -> None:
+        super().__init__(host, **kwargs)
+        self._resolved_target = resolved_target
+
+    def connect(self) -> None:
+        """Connect to the validated numeric address, retaining ``self.host``."""
+        self.sock = socket.create_connection(
+            (self._resolved_target.address, self._resolved_target.port),
+            self.timeout,
+        )
+        self.sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+
+
+class _PinnedHTTPSConnection(http.client.HTTPSConnection):
+    def __init__(
+        self,
+        host: str,
+        *,
+        resolved_target: ResolvedTarget,
+        context: ssl.SSLContext | None = None,
+        **kwargs: Any,
+    ) -> None:
+        ssl_context = context or ssl.create_default_context()
+        super().__init__(host, context=ssl_context, **kwargs)
+        self._resolved_target = resolved_target
+        self._ssl_context = ssl_context
+
+    def connect(self) -> None:
+        """Dial the numeric address and authenticate the original hostname."""
+        self.sock = socket.create_connection(
+            (self._resolved_target.address, self._resolved_target.port),
+            self.timeout,
+        )
+        self.sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+        self.sock = self._ssl_context.wrap_socket(self.sock, server_hostname=self.host)
+
+
+class _PinnedHTTPHandler(urllib.request.HTTPHandler):
+    def __init__(self, targets: _ResolvedTargetStore) -> None:
+        super().__init__()
+        self._targets = targets
+
+    def http_open(self, req: urllib.request.Request) -> http.client.HTTPResponse:
+        target = self._targets.get(req)
+        connection = functools.partial(_PinnedHTTPConnection, resolved_target=target)
+        return self.do_open(connection, req)
+
+
+class _PinnedHTTPSHandler(urllib.request.HTTPSHandler):
+    def __init__(
+        self,
+        targets: _ResolvedTargetStore,
+        context: ssl.SSLContext | None = None,
+    ) -> None:
+        ssl_context = context or ssl.create_default_context()
+        super().__init__(context=ssl_context)
+        self._targets = targets
+        self._ssl_context = ssl_context
+
+    def https_open(self, req: urllib.request.Request) -> http.client.HTTPResponse:
+        target = self._targets.get(req)
+        connection = functools.partial(_PinnedHTTPSConnection, resolved_target=target)
+        return self.do_open(connection, req, context=self._ssl_context)
 
 
 def open_server_fetch_url(request: urllib.request.Request, *, timeout: float) -> Any:
     """Open a prevalidated server-side fetch request, following only safe redirects."""
-    validate_server_fetch_url(request.full_url)
-    opener = urllib.request.build_opener(_ValidatingRedirectHandler)
+    target = _resolve_server_fetch_target(request.full_url)
+    targets = _ResolvedTargetStore()
+    targets.add(request, target)
+    opener = urllib.request.build_opener(
+        urllib.request.ProxyHandler({}),
+        _PinnedHTTPHandler(targets),
+        _PinnedHTTPSHandler(targets),
+        _ValidatingRedirectHandler(targets),
+    )
     return opener.open(request, timeout=timeout)
 
 
