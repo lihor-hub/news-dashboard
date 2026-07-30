@@ -3,6 +3,9 @@
 All notable changes to this project will be documented in this file.
 This project adheres to [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.161.3] — 2026-07-30
+- Security and stability improvements for the desktop app.
+
 ## [1.158.0] — 2026-07-20
 - Emails from the news dashboard now have a unified, consistent appearance.
 
