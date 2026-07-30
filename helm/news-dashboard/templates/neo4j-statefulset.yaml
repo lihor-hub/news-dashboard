@@ -36,10 +36,15 @@ spec:
         app.kubernetes.io/name: {{ include "news-dashboard.name" . }}-neo4j
         app.kubernetes.io/instance: {{ .Release.Name }}
     spec:
+      automountServiceAccountToken: false
+      securityContext:
+{{ toYaml .Values.neo4j.podSecurityContext | indent 8 }}
       containers:
         - name: neo4j
           image: "{{ .Values.neo4j.image.repository }}:{{ .Values.neo4j.image.tag }}"
           imagePullPolicy: {{ .Values.neo4j.image.pullPolicy }}
+          securityContext:
+{{ toYaml .Values.neo4j.containerSecurityContext | indent 12 }}
           ports:
             - name: bolt
               containerPort: {{ .Values.neo4j.service.port }}

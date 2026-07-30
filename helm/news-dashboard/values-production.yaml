@@ -1,0 +1,22 @@
+production: true
+
+service:
+  type: ClusterIP
+
+ingress:
+  enabled: true
+  className: traefik
+  host: news.lihor.ro
+  tls:
+    - secretName: news-dashboard-tls
+      hosts: [news.lihor.ro]
+
+networkPolicy:
+  enabled: true
+  ingressController:
+    namespaceSelector:
+      matchLabels:
+        kubernetes.io/metadata.name: traefik
+    podSelector:
+      matchLabels:
+        app.kubernetes.io/name: traefik

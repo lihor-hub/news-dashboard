@@ -21,6 +21,30 @@ service:
   # Example override: helm upgrade --set service.type=NodePort,service.nodePort=30088
   nodePort: ""
 
+# Enables production-only render safeguards, such as rejecting externally
+# reachable Service types. Set only by values-production.yaml.
+production: false
+
+networkPolicy:
+  # Opt in only in clusters whose CNI enforces NetworkPolicy resources.
+  enabled: false
+  ingressController:
+    # Both selectors are required when NetworkPolicies are enabled so only the
+    # configured ingress-controller pods can reach the public app Service.
+    namespaceSelector: {}
+    podSelector: {}
+  # Applied to app and ingest pods in addition to their required database,
+  # DNS, and HTTPS routes. Each list item is a Kubernetes NetworkPolicy egress
+  # rule, for example an ipBlock and its allowed ports.
+  additionalEgress: []
+  publicHttpsEgress:
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+      ports:
+        - protocol: TCP
+          port: 443
+
 app:
   # Absolute browser-facing URL used in outbound links. Configure this even
   # when Keycloak authentication is disabled; leave empty to disable email delivery.
@@ -305,6 +329,16 @@ neo4j:
     storageClassName: ""
     hostPath: ""
   resources: {}
+  podSecurityContext:
+    fsGroup: 7474
+    seccompProfile:
+      type: RuntimeDefault
+  # Neo4j must retain write access to /data, so do not use a read-only root
+  # filesystem without mounting all image write paths explicitly.
+  containerSecurityContext:
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop: ["ALL"]
 
 ingress:
   enabled: false

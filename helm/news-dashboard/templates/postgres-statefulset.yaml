@@ -33,6 +33,7 @@ spec:
         app.kubernetes.io/name: {{ include "news-dashboard.name" . }}-postgres
         app.kubernetes.io/instance: {{ .Release.Name }}
     spec:
+      automountServiceAccountToken: false
       securityContext:
 {{ toYaml .Values.postgresql.podSecurityContext | indent 8 }}
       containers:

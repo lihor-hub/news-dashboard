@@ -17,6 +17,7 @@ spec:
         app.kubernetes.io/name: {{ include "news-dashboard.name" . }}
         app.kubernetes.io/instance: {{ .Release.Name }}
     spec:
+      automountServiceAccountToken: false
       securityContext:
 {{ toYaml .Values.app.podSecurityContext | indent 8 }}
       {{- if .Values.image.pullSecretName }}
