@@ -1,0 +1,75 @@
+name: Greet first-time contributors
+
+on:
+  issues:
+    types: [opened]
+  # pull_request_target runs with repo permissions but this job never checks
+  # out or executes PR code — it only posts a comment.
+  pull_request_target:
+    types: [opened]
+
+permissions:
+  issues: write
+  pull-requests: write
+
+jobs:
+  greet:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/github-script@v9
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const isPr = !!context.payload.pull_request;
+            const author = isPr
+              ? context.payload.pull_request.user.login
+              : context.payload.issue.user.login;
+            const number = isPr
+              ? context.payload.pull_request.number
+              : context.payload.issue.number;
+
+            if (context.payload.sender.type === 'Bot') {
+              core.info(`Skipping bot account ${author}.`);
+              return;
+            }
+
+            const typeFilter = isPr ? 'type:pr' : 'type:issue';
+            const { data: search } = await github.rest.search.issuesAndPullRequests({
+              q: `repo:${owner}/${repo} ${typeFilter} author:${author}`,
+              per_page: 2,
+            });
+            if (search.total_count > 1) {
+              core.info(`${author} has contributed before; no greeting needed.`);
+              return;
+            }
+
+            const contributing = `https://github.com/${owner}/${repo}/blob/main/CONTRIBUTING.md`;
+            const goodFirst = `https://github.com/${owner}/${repo}/issues?q=is%3Aopen+label%3A%22good+first+issue%22`;
+            const discussions = `https://github.com/${owner}/${repo}/discussions`;
+
+            const body = isPr
+              ? [
+                  `Thanks for opening your first pull request here, @${author}! 🎉`,
+                  '',
+                  `A maintainer will review it soon. In the meantime:`,
+                  '',
+                  `- Run \`make check\` locally — it mirrors CI, so a clean run means green checks.`,
+                  `- [CONTRIBUTING.md](${contributing}) covers conventions and the review flow.`,
+                  `- Stuck or unsure about scope? Ask right here in the PR or in [Discussions](${discussions}) — happy to help.`,
+                ].join('\n')
+              : [
+                  `Thanks for opening your first issue here, @${author}! 👋`,
+                  '',
+                  `A maintainer will triage it soon. If you'd like to try fixing it yourself, we'd love that:`,
+                  '',
+                  `- [CONTRIBUTING.md](${contributing}) walks through setup and landing your first PR.`,
+                  `- [Good first issues](${goodFirst}) lists other beginner-friendly tasks.`,
+                  `- Questions are always welcome in [Discussions](${discussions}).`,
+                ].join('\n');
+
+            await github.rest.issues.createComment({
+              owner,
+              repo,
+              issue_number: number,
+              body,
+            });

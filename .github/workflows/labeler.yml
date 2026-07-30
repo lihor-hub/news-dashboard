@@ -1,0 +1,19 @@
+name: Label PRs by area
+
+on:
+  # pull_request_target runs with repo permissions but this job never checks
+  # out or executes PR code — actions/labeler only reads the diff file list.
+  pull_request_target:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  label:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/labeler@v5
+        with:
+          sync-labels: false
