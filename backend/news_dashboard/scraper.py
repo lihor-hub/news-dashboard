@@ -33,8 +33,19 @@ class ScrapeFetchError(RuntimeError):
 def _fetch_html(url: str, *, use_selenium: bool = False) -> str:
     if use_selenium:
         validate_server_fetch_url(url)
-        from news_dashboard.selenium_client import fetch_spa_html
+        from news_dashboard.selenium_client import (
+            fetch_spa_html,
+            public_renderer_egress_proxy,
+        )
 
+        try:
+            proxy = public_renderer_egress_proxy()
+        except ValueError as exc:
+            message = "Public renderer egress proxy configuration is invalid"
+            raise ScrapeFetchError(message) from exc
+        if proxy is None:
+            message = "Public renderer requires a validating egress proxy"
+            raise ScrapeFetchError(message)
         return fetch_spa_html(url)
     try:
         req = urllib.request.Request(  # noqa: S310 - scheme validated by central opener

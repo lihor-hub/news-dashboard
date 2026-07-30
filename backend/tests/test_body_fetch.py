@@ -1150,12 +1150,15 @@ def test_extract_body_skips_selenium_on_network_failure() -> None:
 
 
 def _make_selenium_client_mock(fetch_spa_html_impl: object) -> object:
-    """Build a minimal sys.modules mock for news_dashboard.selenium_client."""
+    """Build a configured sys.modules mock for news_dashboard.selenium_client."""
     from types import ModuleType
     from unittest.mock import MagicMock
 
     mod = ModuleType("news_dashboard.selenium_client")
     mod.fetch_spa_html = fetch_spa_html_impl  # type: ignore[attr-defined]  # ty: ignore[unresolved-attribute]
+    mod.public_renderer_egress_proxy = (  # type: ignore[attr-defined]  # ty: ignore[unresolved-attribute]
+        lambda: "http://renderer-proxy.example"
+    )
     mod.__spec__ = MagicMock()
     return mod
 

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import socket
+import urllib.error
 from collections.abc import Generator
 from typing import Any
 from unittest.mock import MagicMock, patch
@@ -173,6 +175,88 @@ def test_send_push_notification_calls_webpush(monkeypatch: pytest.MonkeyPatch) -
     call_kwargs = mock_webpush.call_args.kwargs
     assert call_kwargs["subscription_info"]["endpoint"] == "https://ep.example.com"
     assert call_kwargs["vapid_claims"]["sub"] == "mailto:test@example.com"
+
+
+def test_push_delivery_fails_closed_without_pinned_transport(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("VAPID_PRIVATE_KEY", "fake-private-key")
+    mock_webpush = MagicMock()
+
+    class _FakeWebPushError(Exception):
+        pass
+
+    fake_module: dict[str, Any] = {
+        "webpush": mock_webpush,
+        "WebPushException": _FakeWebPushError,
+    }
+    with patch.dict("sys.modules", {"pywebpush": MagicMock(**fake_module)}):
+        send_push_notification(
+            endpoint="https://push.example.com/delivery",
+            p256dh="abc",
+            auth="xyz",
+            title="Test",
+            body="Hello",
+        )
+
+    pinned_session = mock_webpush.call_args.kwargs.get("requests_session")
+    assert pinned_session is not None
+
+    def private_dns_answer(
+        _host: str,
+        port: int,
+        _family: int = 0,
+        _socket_type: int = 0,
+        _protocol: int = 0,
+        _flags: int = 0,
+        **kwargs: int,
+    ) -> list[tuple[int, int, int, str, tuple[str, int]]]:
+        del _family, _protocol, _flags
+        socket_type = kwargs.get("type", _socket_type)
+        return [(socket.AF_INET, socket_type, socket.IPPROTO_TCP, "", ("10.0.0.8", port))]
+
+    monkeypatch.setattr("news_dashboard.url_safety.socket.getaddrinfo", private_dns_answer)
+    with pytest.raises(ValueError, match="unsafe host address"):
+        pinned_session.post("https://push.example.com/delivery", data=b"encrypted")
+
+
+def test_push_delivery_classifies_pinned_transport_error_as_temporary(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("VAPID_PRIVATE_KEY", "fake-private-key")
+
+    class _FakeWebPushError(Exception):
+        pass
+
+    def fake_webpush(**kwargs: Any) -> None:
+        subscription_info = kwargs["subscription_info"]
+        kwargs["requests_session"].post(
+            subscription_info["endpoint"],
+            data=b"encrypted",
+            timeout=kwargs["timeout"],
+        )
+
+    fake_module: dict[str, Any] = {
+        "webpush": fake_webpush,
+        "WebPushException": _FakeWebPushError,
+    }
+    transport_error = urllib.error.URLError("push service unavailable")
+    with (
+        patch.dict("sys.modules", {"pywebpush": MagicMock(**fake_module)}),
+        patch(
+            "news_dashboard.push.open_server_fetch_url",
+            side_effect=transport_error,
+        ),
+    ):
+        result = send_push_notification(
+            endpoint="https://push.example.com/delivery",
+            p256dh="abc",
+            auth="xyz",
+            title="Test",
+            body="Hello",
+        )
+
+    assert result == "temporary_failure"
 
 
 def test_send_push_notification_payload_without_url(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -687,7 +771,24 @@ def test_put_notification_settings_invalid_time(client: TestClient) -> None:
     assert resp.status_code == 422
 
 
-def test_push_subscribe_endpoint(client: TestClient) -> None:
+def test_push_subscribe_endpoint(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def public_dns_answer(
+        _host: str,
+        port: int,
+        _family: int = 0,
+        _socket_type: int = 0,
+        _protocol: int = 0,
+        _flags: int = 0,
+        **kwargs: int,
+    ) -> list[tuple[int, int, int, str, tuple[str, int]]]:
+        del _family, _protocol, _flags
+        socket_type = kwargs.get("type", _socket_type)
+        return [(socket.AF_INET, socket_type, socket.IPPROTO_TCP, "", ("93.184.216.34", port))]
+
+    monkeypatch.setattr("news_dashboard.url_safety.socket.getaddrinfo", public_dns_answer)
     with patch("news_dashboard.push.save_push_subscription") as mock_save:
         resp = client.post(
             "/api/notifications/subscribe",
@@ -723,7 +824,21 @@ def test_push_unsubscribe_without_endpoint_preserves_all_endpoint_cleanup(
 # ── validate_push_subscription unit tests ─────────────────────────────────────
 
 
-def test_validate_push_subscription_accepts_valid() -> None:
+def test_validate_push_subscription_accepts_valid(monkeypatch: pytest.MonkeyPatch) -> None:
+    def public_dns_answer(
+        _host: str,
+        port: int,
+        _family: int = 0,
+        _socket_type: int = 0,
+        _protocol: int = 0,
+        _flags: int = 0,
+        **kwargs: int,
+    ) -> list[tuple[int, int, int, str, tuple[str, int]]]:
+        del _family, _protocol, _flags
+        socket_type = kwargs.get("type", _socket_type)
+        return [(socket.AF_INET, socket_type, socket.IPPROTO_TCP, "", ("93.184.216.34", port))]
+
+    monkeypatch.setattr("news_dashboard.url_safety.socket.getaddrinfo", public_dns_answer)
     # Real-shaped Chrome FCM and Firefox Mozilla push endpoints
     validate_push_subscription(
         "https://fcm.googleapis.com/fcm/send/abcdefgh",
@@ -735,6 +850,32 @@ def test_validate_push_subscription_accepts_valid() -> None:
         "BNQtHLiP_xyz-base64url",
         "authkeyABC",
     )
+
+
+def test_push_subscription_rejects_hostname_that_resolves_private(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def private_dns_answer(
+        _host: str,
+        port: int,
+        _family: int = 0,
+        _socket_type: int = 0,
+        _protocol: int = 0,
+        _flags: int = 0,
+        **kwargs: int,
+    ) -> list[tuple[int, int, int, str, tuple[str, int]]]:
+        del _family, _protocol, _flags
+        socket_type = kwargs.get("type", _socket_type)
+        return [(socket.AF_INET, socket_type, socket.IPPROTO_TCP, "", ("192.168.1.20", port))]
+
+    monkeypatch.setattr("news_dashboard.url_safety.socket.getaddrinfo", private_dns_answer)
+
+    with pytest.raises(ValueError, match="non-public"):
+        validate_push_subscription(
+            "https://push.example.com/delivery",
+            "BNQtHLiP_xyz-base64url",
+            "authkeyABC",
+        )
 
 
 @pytest.mark.parametrize(

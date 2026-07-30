@@ -5,6 +5,7 @@ from __future__ import annotations
 import socket
 import urllib.request
 from typing import Any
+from unittest.mock import patch
 
 import pytest
 
@@ -16,6 +17,7 @@ from news_dashboard.scraper import (
     _LinkListParser,
     scrape_source,
 )
+from news_dashboard.selenium_client import _build_options
 from news_dashboard.sources.service import SourceDefinition
 from news_dashboard.url_safety import UnsafeUrlError, validate_server_fetch_url
 
@@ -123,6 +125,58 @@ def test_fetch_html_selenium_path_keeps_preflight_validation(
         _fetch_html("http://127.0.0.1/admin", use_selenium=True)
 
     assert called is False
+
+
+def test_fetch_html_selenium_path_requires_egress_proxy(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("PUBLIC_RENDERER_EGRESS_PROXY", raising=False)
+    monkeypatch.setattr("news_dashboard.scraper.validate_server_fetch_url", lambda _url: None)
+
+    with (
+        patch("news_dashboard.selenium_client.fetch_spa_html") as fetch_spa_html,
+        pytest.raises(ScrapeFetchError, match="egress proxy"),
+    ):
+        _fetch_html("https://example.com/article", use_selenium=True)
+
+    fetch_spa_html.assert_not_called()
+
+
+def test_selenium_options_use_configured_egress_proxy(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    proxy = "https://proxy-user:proxy-password@proxy.example:8443"
+    monkeypatch.setenv("PUBLIC_RENDERER_EGRESS_PROXY", proxy)
+
+    options = _build_options()
+
+    assert f"--proxy-server={proxy}" in options.arguments
+
+
+def test_selenium_options_accept_proxy_with_default_port(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    proxy = "http://proxy.example"
+    monkeypatch.setenv("PUBLIC_RENDERER_EGRESS_PROXY", proxy)
+
+    options = _build_options()
+
+    assert f"--proxy-server={proxy}" in options.arguments
+
+
+def test_selenium_options_reject_invalid_proxy_without_exposing_credentials(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    credential = "credential-value"
+    monkeypatch.setenv(
+        "PUBLIC_RENDERER_EGRESS_PROXY",
+        f"socks5://proxy-user:{credential}@proxy.example:1080",
+    )
+
+    with pytest.raises(ValueError, match="PUBLIC_RENDERER_EGRESS_PROXY") as exc_info:
+        _build_options()
+
+    assert credential not in str(exc_info.value)
 
 
 # Mimics Meta AI / Cohere card layout: several anchors around one post URL

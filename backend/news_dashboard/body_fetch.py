@@ -326,10 +326,18 @@ def _selenium_extract_body(url: str) -> tuple[str, str]:
     Returns ('', 'error') if selenium is unavailable or rendering fails.
     """
     try:
-        from news_dashboard.selenium_client import fetch_spa_html
+        from news_dashboard.selenium_client import (
+            fetch_spa_html,
+            public_renderer_egress_proxy,
+        )
 
+        if public_renderer_egress_proxy() is None:
+            logger.info(
+                "selenium_body_fetch: disabled because validating egress proxy is not configured"
+            )
+            return "", "error"
         html = fetch_spa_html(url)
-    except ImportError:
+    except (ImportError, ValueError):
         return "", "error"
     except Exception as exc:
         logger.warning("selenium_body_fetch: fetch failed for %r: %s", url, exc)

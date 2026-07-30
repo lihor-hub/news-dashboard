@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import urllib.parse
 from collections.abc import Callable, Generator
 from contextlib import contextmanager
@@ -86,6 +87,41 @@ class _BrowserRequest(Protocol):
     def continue_request(self) -> None: ...
 
 
+def public_renderer_egress_proxy() -> str | None:
+    """Return the explicitly configured validating proxy, or ``None``.
+
+    The proxy is operator-controlled and may itself be on a private network.
+    Only its URL shape is validated here; the proxy is responsible for
+    validating and pinning every public destination reached by Chrome.
+    """
+    proxy = os.getenv("PUBLIC_RENDERER_EGRESS_PROXY", "").strip()
+    if not proxy:
+        return None
+
+    valid = False
+    if not any(ord(character) < 32 or ord(character) == 127 for character in proxy):
+        try:
+            parsed = urllib.parse.urlparse(proxy)
+            port = parsed.port
+        except ValueError:
+            valid = False
+        else:
+            valid = (
+                parsed.scheme in {"http", "https"}
+                and bool(parsed.hostname)
+                and (port is None or port > 0)
+                and parsed.path in {"", "/"}
+                and not parsed.params
+                and not parsed.query
+                and not parsed.fragment
+            )
+
+    if not valid:
+        message = "PUBLIC_RENDERER_EGRESS_PROXY must be a valid HTTP or HTTPS proxy URL"
+        raise ValueError(message)
+    return proxy
+
+
 def _build_options() -> Options:
     opts = Options()
     opts.enable_bidi = True
@@ -94,6 +130,9 @@ def _build_options() -> Options:
     opts.add_argument("--disable-dev-shm-usage")
     opts.add_argument("--disable-gpu")
     opts.add_argument(f"--user-agent={USER_AGENT}")
+    proxy = public_renderer_egress_proxy()
+    if proxy is not None:
+        opts.add_argument(f"--proxy-server={proxy}")
     opts.add_experimental_option("excludeSwitches", ["enable-automation"])
     opts.add_experimental_option("useAutomationExtension", False)
     prefs: dict[str, int] = {

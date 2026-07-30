@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+from unittest.mock import patch
+
 import pytest
 
+from news_dashboard.body_fetch import extract_public_content
 from news_dashboard.content_extraction import (
     ExtractionAttempt,
     ExtractionResult,
@@ -94,3 +97,28 @@ def test_extraction_result_failure_has_no_text_or_method() -> None:
     assert result.method is None
     assert result.quality is None
     assert result.failure_reason == "not_found"
+
+
+def test_public_url_does_not_fall_back_to_selenium_without_egress_proxy(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("PUBLIC_RENDERER_EGRESS_PROXY", raising=False)
+
+    with (
+        patch(
+            "news_dashboard.body_fetch._static_extract_body",
+            return_value=("Page title", "ok", None),
+        ),
+        patch(
+            "news_dashboard.selenium_client.fetch_spa_html",
+            return_value="<html><body></body></html>",
+        ) as fetch_spa_html,
+    ):
+        result = extract_public_content(
+            "https://example.com/article",
+            allow_ai=False,
+            allow_crawl4ai=False,
+        )
+
+    assert result.status == "error"
+    fetch_spa_html.assert_not_called()

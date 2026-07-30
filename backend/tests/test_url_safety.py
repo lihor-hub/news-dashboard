@@ -11,6 +11,7 @@ from typing import Any
 
 import pytest
 
+from news_dashboard.push import _PinnedPushSession
 from news_dashboard.url_safety import (
     UnsafeUrlError,
     _ValidatingRedirectHandler,
@@ -311,6 +312,58 @@ def test_https_uses_canonical_hostname_for_sni(
     assert responder.dials == [("93.184.216.34", 8443)]
     assert server_hostnames == [expected_sni]
     assert expected_host in responder.requests[0]
+
+
+def test_push_transport_pins_address_and_preserves_tls_hostname(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    resolver_calls: list[tuple[str, int | None]] = []
+    server_hostnames: list[str | None] = []
+    response = b"HTTP/1.1 201 Created\r\nContent-Length: 0\r\n\r\n"
+    responder = _SocketResponder([response])
+
+    def resolve(
+        host: str, port: int | None, **kwargs: int
+    ) -> list[tuple[int, int, int, str, tuple[str, int]]]:
+        resolver_calls.append((host, port))
+        return [
+            (
+                socket.AF_INET,
+                kwargs["type"],
+                socket.IPPROTO_TCP,
+                "",
+                ("93.184.216.34", port or 0),
+            )
+        ]
+
+    def wrap_socket(
+        _context: ssl.SSLContext,
+        sock: _SocketAdapter,
+        *,
+        server_hostname: str | None = None,
+        **_kwargs: Any,
+    ) -> _SocketAdapter:
+        server_hostnames.append(server_hostname)
+        return sock
+
+    monkeypatch.setattr(socket, "getaddrinfo", resolve)
+    monkeypatch.setattr(socket, "socket", responder.create_socket)
+    monkeypatch.setattr(ssl.SSLContext, "wrap_socket", wrap_socket)
+
+    with _PinnedPushSession() as session:
+        result = session.post(
+            "https://push.example.test:8443/delivery",
+            data=b"encrypted",
+            timeout=1,
+        )
+    responder.join()
+
+    assert result.status_code == 201
+    assert resolver_calls == [("push.example.test", 8443)]
+    assert responder.dials == [("93.184.216.34", 8443)]
+    assert server_hostnames == ["push.example.test"]
+    assert b"POST /delivery HTTP/1.1\r\n" in responder.requests[0]
+    assert b"Host: push.example.test:8443\r\n" in responder.requests[0]
 
 
 def test_redirect_resolves_validates_and_pins_each_hop(
