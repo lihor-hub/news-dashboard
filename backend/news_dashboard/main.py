@@ -88,6 +88,16 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
 
 
 app = FastAPI(title="News Dashboard", version=_read_app_version(), lifespan=lifespan)
+
+
+async def unhandled_server_error(_request: Request, _exception: Exception) -> StarletteResponse:
+    """Return a generic, security-header-complete response for unhandled errors."""
+    from news_dashboard.security_headers import internal_server_error_response
+
+    return internal_server_error_response()
+
+
+app.add_exception_handler(Exception, unhandled_server_error)
 _cors_origins_env = os.getenv("CORS_ORIGINS", "")
 _cors_origins = (
     [o.strip() for o in _cors_origins_env.split(",") if o.strip()]
@@ -112,11 +122,19 @@ async def gate_api_docs(request: Request, call_next: Any) -> Any:
     ``/docs``, ``/redoc``, and ``/openapi.json`` expose the full API surface,
     so they're 404'd for anonymous visitors unless ENABLE_API_DOCS is set.
     """
-    from news_dashboard.api_docs import DOCS_PATHS, api_docs_enabled
+    from news_dashboard.api_docs import DOCS_PATHS, INTERACTIVE_DOCS_PATHS, api_docs_enabled
 
     if request.url.path in DOCS_PATHS and not api_docs_enabled():
         return JSONResponse(status_code=404, content={"detail": "Not Found"})
-    return await call_next(request)
+    response = await call_next(request)
+    if request.url.path in INTERACTIVE_DOCS_PATHS:
+        from news_dashboard.security_headers import api_docs_content_security_policy
+
+        response.headers.setdefault(
+            "Content-Security-Policy",
+            api_docs_content_security_policy(request.url.path),
+        )
+    return response
 
 
 # ── Optional Prometheus metrics ─────────────────────────────────────────────

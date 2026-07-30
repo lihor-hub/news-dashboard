@@ -11,6 +11,7 @@ from __future__ import annotations
 import os
 
 DOCS_PATHS = frozenset({"/docs", "/redoc", "/openapi.json"})
+INTERACTIVE_DOCS_PATHS = frozenset({"/docs", "/redoc"})
 
 
 def api_docs_enabled() -> bool:

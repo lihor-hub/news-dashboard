@@ -49,6 +49,28 @@ def test_default_csp_is_applied_to_success_and_not_found_responses(
     assert "'unsafe-inline'" not in _directive(policy, "script-src")
 
 
+def test_unhandled_server_error_gets_security_headers_without_leaking_exception(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from news_dashboard.system import service
+
+    exception_detail = "private exception detail"
+
+    def raise_unhandled_error() -> dict[str, object]:
+        raise RuntimeError(exception_detail)
+
+    monkeypatch.setattr(service, "public_config", raise_unhandled_error)
+    resp = TestClient(app, raise_server_exceptions=False).get("/api/config")
+
+    assert resp.status_code == 500
+    assert resp.text == "Internal Server Error"
+    assert exception_detail not in resp.text
+    assert "default-src 'self'" in resp.headers["Content-Security-Policy"]
+    assert resp.headers["X-Content-Type-Options"] == "nosniff"
+    with pytest.raises(RuntimeError, match=exception_detail):
+        TestClient(app, raise_server_exceptions=True).get("/api/config")
+
+
 def test_csp_allows_required_github_blob_and_data_resources() -> None:
     from news_dashboard.security_headers import content_security_policy
 
@@ -60,6 +82,52 @@ def test_csp_allows_required_github_blob_and_data_resources() -> None:
     assert _directive(policy, "worker-src") == "worker-src 'self' blob:"
     assert _directive(policy, "style-src") == "style-src 'self' 'unsafe-inline'"
     assert _directive(policy, "manifest-src") == "manifest-src 'self'"
+
+
+@pytest.mark.parametrize(
+    ("dsn", "origin"),
+    [
+        ("https://public-key@o0.ingest.sentry.io/42", "https://o0.ingest.sentry.io"),
+        (
+            "http://public@glitchtip.example.test:8080/sentry/7",
+            "http://glitchtip.example.test:8080",
+        ),
+    ],
+)
+def test_csp_allows_only_normalized_frontend_error_tracking_origin(
+    monkeypatch: pytest.MonkeyPatch, dsn: str, origin: str
+) -> None:
+    from news_dashboard.security_headers import content_security_policy
+
+    monkeypatch.setenv("SENTRY_DSN_FRONTEND", dsn)
+
+    connect_src = _directive(content_security_policy(), "connect-src")
+
+    assert connect_src == f"connect-src 'self' https://api.github.com {origin}"
+    assert "public-key" not in connect_src
+    assert "/sentry/7" not in connect_src
+
+
+@pytest.mark.parametrize(
+    "dsn",
+    [
+        "javascript://public@errors.example.test/1",
+        "https://errors.example.test/1",
+        "https://public@errors example.test/1",
+        "https://public@errors.example.test/1?connect-src=https://evil.test",
+        "https://public@errors.example.test/1 connect-src https://evil.test",
+    ],
+)
+def test_csp_rejects_unsafe_frontend_error_tracking_dsn(
+    monkeypatch: pytest.MonkeyPatch, dsn: str
+) -> None:
+    from news_dashboard.security_headers import content_security_policy
+
+    monkeypatch.setenv("SENTRY_DSN_FRONTEND", dsn)
+
+    assert _directive(content_security_policy(), "connect-src") == (
+        "connect-src 'self' https://api.github.com"
+    )
 
 
 def test_csp_allows_only_normalized_dify_origin_when_enabled(
@@ -141,15 +209,74 @@ def test_setdefault_does_not_override_existing_headers() -> None:
     assert response.headers["Content-Security-Policy"] == "default-src 'none'"
 
 
-@pytest.mark.parametrize("path", ["/docs", "/redoc", "/openapi.json"])
-def test_enabled_api_docs_are_served_with_the_strict_application_csp(
+def test_enabled_swagger_docs_get_only_the_required_docs_csp(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("ENABLE_API_DOCS", "true")
+
+    resp = _client().get("/docs")
+    policy = resp.headers["Content-Security-Policy"]
+
+    assert resp.status_code == 200
+    assert 'src="https://cdn.jsdelivr.net/' in resp.text
+    assert 'href="https://cdn.jsdelivr.net/' in resp.text
+    assert 'href="https://fastapi.tiangolo.com/' in resp.text
+    assert _directive(policy, "script-src") == (
+        "script-src 'self' https://cdn.jsdelivr.net 'unsafe-inline'"
+    )
+    assert _directive(policy, "style-src") == (
+        "style-src 'self' https://cdn.jsdelivr.net 'unsafe-inline'"
+    )
+    assert _directive(policy, "img-src") == (
+        "img-src 'self' data: blob: https://fastapi.tiangolo.com"
+    )
+
+
+def test_enabled_redoc_gets_only_the_required_docs_csp(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("ENABLE_API_DOCS", "true")
+
+    resp = _client().get("/redoc")
+    policy = resp.headers["Content-Security-Policy"]
+
+    assert resp.status_code == 200
+    assert 'src="https://cdn.jsdelivr.net/' in resp.text
+    assert 'href="https://fonts.googleapis.com/' in resp.text
+    assert 'href="https://fastapi.tiangolo.com/' in resp.text
+    assert _directive(policy, "script-src") == "script-src 'self' https://cdn.jsdelivr.net"
+    assert _directive(policy, "style-src") == (
+        "style-src 'self' https://fonts.googleapis.com 'unsafe-inline'"
+    )
+    assert _directive(policy, "font-src") == "font-src 'self' data: https://fonts.gstatic.com"
+    assert _directive(policy, "img-src") == (
+        "img-src 'self' data: blob: https://fastapi.tiangolo.com"
+    )
+
+
+@pytest.mark.parametrize("path", ["/openapi.json", "/docs/", "/redoc/"])
+def test_docs_exception_does_not_escape_exact_interactive_docs_paths(
     monkeypatch: pytest.MonkeyPatch, path: str
 ) -> None:
     monkeypatch.setenv("ENABLE_API_DOCS", "true")
 
     resp = _client().get(path)
+    policy = resp.headers["Content-Security-Policy"]
 
-    assert resp.status_code == 200
-    assert "'unsafe-inline'" not in _directive(
-        resp.headers["Content-Security-Policy"], "script-src"
-    )
+    assert "https://cdn.jsdelivr.net" not in policy
+    assert "https://fonts.googleapis.com" not in policy
+    assert "'unsafe-inline'" not in _directive(policy, "script-src")
+
+
+@pytest.mark.parametrize("path", ["/docs", "/redoc"])
+def test_disabled_docs_get_not_found_with_strict_default_csp(
+    monkeypatch: pytest.MonkeyPatch, path: str
+) -> None:
+    monkeypatch.delenv("ENABLE_API_DOCS", raising=False)
+
+    resp = _client().get(path)
+    policy = resp.headers["Content-Security-Policy"]
+
+    assert resp.status_code == 404
+    assert "https://cdn.jsdelivr.net" not in policy
+    assert "'unsafe-inline'" not in _directive(policy, "script-src")
