@@ -122,9 +122,9 @@ git push origin main
        ├─ docker pull <image>:<sha>
        ├─ kubectl apply imagePullSecret
        ├─ git fetch origin main + checkout FETCH_HEAD (sync chart changes)
-       ├─ helm upgrade --set image.tag=<sha>
+       ├─ helm upgrade --values values-production.yaml --set image.tag=<sha>
        ├─ kubectl rollout status --timeout=120s
-       └─ curl http://localhost:30088/api/health smoke test
+       └─ curl https://news.lihor.ro/api/health smoke test
 ```
 
 The deploy job uses `concurrency: group=deploy-production, cancel-in-progress: false`
@@ -160,6 +160,7 @@ The Helm release name `news-dashboard` + chart name `news-dashboard` produces
 `news-dashboard-news-dashboard` for pods and deployments. This is expected
 (Helm double-name pattern).
 
-Production HTTPS routing on the runner's host is documented against the single
-source-of-truth Caddy config at `deploy/Caddyfile` — see
-[HTTPS with Caddy](/docs/configuration/https-caddy).
+Production application HTTPS routing is owned by the Kubernetes Ingress.
+`deploy/Caddyfile` retains only the existing Keycloak migration boundary; it
+must not compete with the ingress controller for ports 80 and 443. See
+[Ingress HTTPS and Caddy migration](/docs/configuration/https-caddy).

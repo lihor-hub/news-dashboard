@@ -1,13 +1,13 @@
 # Configuration
 
 Environment variables, feature flags, and integrations such as Keycloak
-authentication, Caddy/HTTPS, and Postgres backups.
+authentication, Ingress HTTPS, and Postgres backups.
 
 | Guide                                                 | Use it to                                                                     |
 | ----------------------------------------------------- | ----------------------------------------------------------------------------- |
 | [Authentication (Keycloak)](authentication)           | Choose local-password or Keycloak sign-in and configure administrator access. |
 | [Dify assistant](dify-assistant)                      | Add a host-owned launcher for an optional Dify WebApp iframe.                 |
-| [HTTPS with Caddy](https-caddy)                       | Terminate TLS and publish a self-hosted instance safely.                      |
+| [Ingress HTTPS and Caddy migration](https-caddy)      | Publish through the TLS Ingress and migrate the legacy Caddy route safely.    |
 | [PostgreSQL Backup and Restore](postgres-backup)      | Schedule, create, verify, and restore database backups.                       |
 | [Newsletter ingestion via IMAP](newsletter-ingestion) | Add newsletters to user feeds through a configured mailbox.                   |
 | [Neo4j Knowledge Graph](neo4j-knowledge-graph)        | Enable graph storage and backfill entities and relationships.                 |

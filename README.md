@@ -425,8 +425,15 @@ For Kubernetes:
 
 ```bash
 helm upgrade --install news-dashboard ./helm/news-dashboard \
-  --set-string postgresql.password=<choose-a-secure-password>
+  --values ./helm/news-dashboard/values-production.yaml \
+  --set-string app.auth.sessionSecret='<long-random-value>' \
+  --set-string postgresql.password='<choose-a-secure-password>'
 ```
+
+The production values expose the app only through a TLS Ingress backed by a
+`ClusterIP` Service. Supply secrets and installation-specific persistence as
+runtime overrides; do not commit them to a values file. Pull-request CI renders
+this contract without requiring access to the production appliance.
 
 When bundled PostgreSQL is enabled (the default), `postgresql.password` is
 required. Helm will fail to render if it is empty. For CI/chart rendering
@@ -446,7 +453,10 @@ the published image with persistent storage.
 
 Enable auth before exposing an instance outside a trusted network. See
 [Authentication (Keycloak)](https://docs.lihor.ro/docs/configuration/authentication) and
-[HTTPS with Caddy](https://docs.lihor.ro/docs/configuration/https-caddy).
+[Ingress HTTPS and Caddy migration](https://docs.lihor.ro/docs/configuration/https-caddy).
+The live DNS/TLS, Keycloak-route, firewall, and rollback rehearsal requires
+appliance access and is tracked in
+[human rollout issue #1302](https://github.com/lihor-hub/news-dashboard/issues/1302).
 
 ## Contributing
 

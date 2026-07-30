@@ -1,214 +1,174 @@
 ---
-title: HTTPS with Caddy
+title: Ingress HTTPS and Caddy migration
 sidebar_position: 3
 ---
 
-# Caddy HTTPS setup for news.lihor.ro
+# Publish News Dashboard through the TLS Ingress
 
-This document covers everything needed to put `news.lihor.ro` behind Caddy on
-the mini PC so the app is served over HTTPS.  HTTPS is required for:
+The production Helm contract publishes the application through a TLS-enabled
+Kubernetes Ingress:
 
-- Chrome/Android PWA install prompt ("Add to Home Screen" → standalone app)
-- iOS Safari "Add to Home Screen" fullscreen mode
-- Service worker registration (browsers enforce secure context)
-
-The app already runs as a Kubernetes NodePort service on `localhost:30088`.
-Caddy runs on the host (outside Kubernetes), listens on ports 80/443, obtains a
-free Let's Encrypt certificate automatically, and forwards requests to the app.
-
-Authentication is handled by the application itself (see `POST /api/auth/login`).
-
----
-
-## Prerequisites — things only you can do
-
-Before running any commands on the mini PC you need to complete these steps
-through your router and domain registrar.  They cannot be scripted.
-
-### Step 1 — Find your home's public IP address
-
-On the mini PC (or any device on the same network):
-
-```bash
-curl -s https://ifconfig.me
+```text
+Internet → ingress controller :443 → Ingress → ClusterIP Service → app :8080
 ```
 
-Write this IP down — you will need it for Step 2.  If your ISP changes it
-periodically (dynamic IP), see the DDNS note at the bottom of this document.
+`helm/news-dashboard/values-production.yaml` is the application routing source
+of truth. It enables the Ingress for `news.lihor.ro`, requires the
+`news-dashboard-tls` Secret, restricts the Service to `ClusterIP`, and enables
+NetworkPolicies for the configured ingress-controller labels. Pull-request CI
+lints and renders this contract without connecting to the production appliance.
 
-### Step 2 — Create a DNS A record for news.lihor.ro
+Caddy is no longer the application's TLS or routing source of truth.
+`deploy/Caddyfile` retains only the existing same-host `/keycloak` proxy as an
+explicit migration boundary. Do not run Caddy and an ingress controller that
+both bind host ports 80 and 443.
 
-Log in to wherever you manage the `lihor.ro` domain (your DNS registrar or
-hosting panel) and add:
+The live appliance work requires operator access to DNS, TLS, the host firewall,
+and the existing identity provider. Track and record that work in
+[human rollout issue #1302](https://github.com/lihor-hub/news-dashboard/issues/1302);
+do not place appliance addresses, credentials, or certificate material in the
+repository.
 
-| Type | Name | Value               | TTL  |
-|------|------|---------------------|------|
-| A    | news | `<your-public-IP>`  | 300  |
+## Prerequisites
 
-`news` is the subdomain; `lihor.ro` is added automatically by the registrar.
-TTL 300 (5 minutes) lets you update it quickly if the IP changes.
+Before changing the public route:
 
-To verify the record has propagated (wait a few minutes, then run):
+- Confirm the cluster has an Ingress controller whose namespace and pod labels
+  match `networkPolicy.ingressController` in the production values.
+- Provision or validate the TLS Secret named by `ingress.tls[].secretName`.
+- Confirm DNS can be moved to the Ingress endpoint and that ports 80 and 443
+  will have only one owner after cutover.
+- Export the current Helm values and note the current release revision.
+- Back up PostgreSQL and complete a restore verification on a separate
+  database or disposable instance.
+- Save the live Caddy configuration outside the repository. The repository
+  Caddyfile is Keycloak-only and is not an application rollback configuration.
+- Decide how `/keycloak` will reach the existing identity provider after the
+  Ingress takes ports 80 and 443. You must preserve the existing Keycloak route
+  and test its health and OAuth redirect URI before moving application traffic.
 
-```bash
-dig +short news.lihor.ro          # should print your public IP
-# or on Windows:
-nslookup news.lihor.ro
-```
+Never expose the application Service temporarily to make testing easier. Use
+the Ingress address with hostname and TLS validation.
 
-### Step 3 — Open port 443 on your router (port forwarding)
+## Stage the Ingress
 
-Log in to your home router admin panel (usually `http://192.168.1.1` or
-`http://192.168.0.1`) and add a port-forwarding rule:
-
-| Setting          | Value                              |
-|------------------|------------------------------------|
-| External port    | 443 (HTTPS)                        |
-| Internal IP      | the mini PC's LAN IP               |
-| Internal port    | 443                                |
-| Protocol         | TCP                                |
-
-You can find the mini PC's LAN IP with `hostname -I` on the mini PC.
-
-Also forward port **80** (HTTP → 80) — Caddy needs it to complete the Let's
-Encrypt HTTP-01 challenge on the first run, then redirects all traffic to HTTPS
-automatically.
-
-> **Note:** Some ISPs block inbound port 80/443 on residential connections.
-> If Let's Encrypt fails with a timeout, see the "Troubleshooting" section.
-
----
-
-## Installing and configuring Caddy on the mini PC
-
-Run all commands below **on the mini PC** (not in the cluster or a container).
-
-### Step 4 — Install Caddy
+Deploy the chart with the production values plus secrets and installation-
+specific storage values. CI and `scripts/deploy-local-k8s.sh` use the same
+contract:
 
 ```bash
-sudo apt install -y debian-keyring debian-archive-keyring apt-transport-https curl
-curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' \
-    | sudo gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
-curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' \
-    | sudo tee /etc/apt/sources.list.d/caddy-stable.list
-sudo apt update
-sudo apt install caddy
+helm upgrade --install news-dashboard ./helm/news-dashboard \
+  --namespace news-dashboard --create-namespace \
+  --values ./helm/news-dashboard/values-production.yaml \
+  --set image.tag='<immutable-source-sha>' \
+  --set-string app.auth.sessionSecret='<from-secret-manager>' \
+  --set-string postgresql.password='<from-secret-manager>'
 ```
 
-Verify the install:
+Do not copy literal secrets into a values file or an issue. If the installation
+uses the repository's production CI or `scripts/deploy-local-k8s.sh`, configure
+`POSTGRES_HOST_PATH` at runtime for the existing host-backed PostgreSQL data.
+Both entry points fail before Helm when it is missing, so a cutover cannot
+silently initialize an empty volume. Other installations can use a chart
+persistent-volume configuration appropriate to their cluster.
+
+Inspect the staged resources before changing the public route:
 
 ```bash
-caddy version
-sudo systemctl status caddy    # should show "active (running)"
+kubectl -n news-dashboard get service news-dashboard-news-dashboard \
+  -o jsonpath='{.spec.type}{"\n"}'
+kubectl -n news-dashboard get ingress news-dashboard-news-dashboard
+kubectl -n news-dashboard describe ingress news-dashboard-news-dashboard
+kubectl -n news-dashboard rollout status \
+  deployment/news-dashboard-news-dashboard --timeout=120s
 ```
 
-### Step 5 — Deploy the Caddyfile
+The Service must report `ClusterIP`. The Ingress must show the intended
+hostname, TLS Secret, and controller class.
 
-Copy the production Caddyfile from the repo to the system Caddy config location:
+Test the staged controller without publishing private inventory. Replace the
+placeholder locally and do not paste the resulting address into the issue:
 
 ```bash
-# From the repo root on the mini PC:
-sudo cp deploy/Caddyfile /etc/caddy/Caddyfile
+curl --resolve 'news.lihor.ro:443:<ingress-address>' \
+  https://news.lihor.ro/api/health
 ```
 
-### Step 6 — Reload Caddy
+Require an HTTP 200 response whose body contains `"status":"ok"` and a valid
+certificate for `news.lihor.ro`.
+
+## Prepare rollback
+
+Complete this before touching the old public route:
+
+1. Record the current and staged revisions from
+   `helm -n news-dashboard history news-dashboard`.
+2. Retain the pre-cutover Caddy configuration and its service enablement state.
+3. Confirm the previous release can restore its former application route.
+4. Record the DNS or port-owner reversal needed to return traffic to Caddy.
+5. Confirm the pre-cutover PostgreSQL backup and restore verification.
+6. Set explicit rollback triggers: failed health, failed login/callback,
+   invalid TLS, missing Keycloak route, or unexpected public listening ports.
+
+Do not remove the previous release or saved Caddy configuration during the
+observation window.
+
+## Remove the old application route
+
+Only continue after the staged health check and rollback rehearsal succeed.
+
+1. Install and verify the equivalent Ingress route for `/keycloak`, including
+   the existing public base URL and callback behavior.
+2. Recheck that the application Ingress cannot capture `/keycloak` before the
+   identity-provider route.
+3. Stop the public Caddy listener and let the ingress controller become the sole
+   owner of ports 80 and 443.
+4. Move DNS or the router forwarding target to the Ingress endpoint.
+5. Keep the saved pre-cutover Caddy configuration until the observation window
+   and rollback rehearsal are complete.
+
+If Keycloak must remain behind Caddy, stop here. Caddy and the ingress
+controller cannot safely compete for the same public sockets; migrate the
+Keycloak route first rather than accepting an authentication outage.
+
+## Verify the public deployment
+
+Run these checks from outside the appliance network:
 
 ```bash
-sudo systemctl reload caddy
-# or, to apply config changes and watch for errors:
-sudo caddy reload --config /etc/caddy/Caddyfile
+curl --fail --show-error --silent https://news.lihor.ro/api/health
+curl --fail --show-error --silent --head https://news.lihor.ro/
+curl --show-error --silent --dump-header - --output /dev/null \
+  https://news.lihor.ro/auth/login
 ```
 
-Caddy will immediately request a Let's Encrypt certificate for `news.lihor.ro`.
-Watch the logs to confirm:
+Also verify:
 
-```bash
-sudo journalctl -u caddy -f
-```
+- the certificate hostname, issuer, and expiry;
+- HTTP redirects to HTTPS;
+- local-password login and the Keycloak redirect/callback flow, when enabled;
+- `/keycloak` does not fall through to the application SPA;
+- security headers, including the application-generated Content Security
+  Policy;
+- `kubectl get service` shows no externally reachable application Service;
+- the host firewall exposes only the intended public ports.
 
-You should see a line like `certificate obtained successfully`.  This takes
-10–30 seconds on the first run.
+Record results in issue #1302 without including secrets or private addresses.
 
-### Step 7 — Verify
+## Roll back
 
-```bash
-curl https://news.lihor.ro/api/health
-# Expected: {"status":"ok","database":"PostgreSQL",...}
-```
+Trigger rollback immediately if any prepared condition fails:
 
-Open `https://news.lihor.ro` in Chrome on your phone — you should see a padlock
-and the login page.  After logging in, you should see the dashboard, and after a
-few seconds, an install prompt or the option in the browser menu to "Add to Home
-Screen" as a standalone app (no browser chrome).
+1. Reverse the DNS or port-owner change so traffic returns to the saved Caddy
+   route.
+2. Run `helm -n news-dashboard rollback news-dashboard <previous-revision>`.
+3. Restore and validate the saved pre-cutover Caddy configuration, then restart
+   its service.
+4. Verify the application health endpoint and both authentication modes through
+   the old route.
+5. Restore PostgreSQL only when the application rollback requires a
+   data-incompatible schema reversal. Preserve the failed state and logs first.
 
----
-
-## Keeping the Caddyfile in sync with the repo
-
-The `deploy/Caddyfile` in this repo is the only production source of truth for
-the `news.lihor.ro` Caddy config. It includes the app NodePort proxy, the
-same-host `/keycloak` proxy, compression, and browser security headers.
-After any change, copy it to the mini PC and reload:
-
-```bash
-sudo cp deploy/Caddyfile /etc/caddy/Caddyfile
-sudo systemctl reload caddy
-```
-
----
-
-## Dynamic IP / DDNS (if your public IP changes)
-
-Residential ISPs often assign a new public IP when the router reboots.  If the
-DNS A record goes stale, the certificate renewal and site access both break.
-
-Options:
-
-1. **Check periodically**: run `curl -s https://ifconfig.me` and update the DNS
-   record if it changed.
-2. **DDNS client**: most routers have a built-in DDNS client that updates a
-   provider (DuckDNS, No-IP, Cloudflare) automatically.  If `lihor.ro` is on
-   Cloudflare, the Cloudflare DDNS client can keep the A record current with
-   zero manual effort.
-3. **Static IP**: ask your ISP for a static residential IP (usually a small
-   monthly fee).
-
----
-
-## Troubleshooting
-
-**`/auth/login` shows the dashboard login shell instead of redirecting to Keycloak**
-The service worker is probably serving the SPA fallback for an auth route. Keep `vite.config.ts` configured with `navigateFallbackDenylist` entries for `/api/`, `/auth/`, and `/keycloak/`, then rebuild/redeploy. On a phone/PWA, close and reopen the installed app or clear site data once so the new service worker activates.
-
-**Caddy logs ACME errors for `keycloak.lihor.ro`**
-Do not import a separate `keycloak.lihor.ro` site unless DNS exists. The supported local deployment exposes Keycloak at `https://news.lihor.ro/keycloak`, so disable or rename the separate Caddyfile, validate, and reload Caddy:
-
-```bash
-sudo mv /etc/caddy/Caddyfile.d/keycloak.lihor.ro.caddyfile \
-  /etc/caddy/Caddyfile.d/keycloak.lihor.ro.caddyfile.disabled
-sudo caddy validate --config /etc/caddy/Caddyfile
-sudo systemctl reload caddy
-```
-
-**`caddy reload` shows a config error**
-Run `caddy validate --config /etc/caddy/Caddyfile` to see the exact error.
-
-**Let's Encrypt certificate request times out**
-Caddy uses HTTP-01 challenge by default, which requires port 80 to be reachable
-from the internet.  Check:
-- Port 80 is forwarded on the router (Step 3)
-- Your ISP doesn't block inbound port 80 (try `curl http://news.lihor.ro` from
-  a mobile data connection, not Wi-Fi)
-- The DNS A record has propagated (`dig +short news.lihor.ro` returns your IP)
-
-If port 80 is blocked, switch to DNS-01 challenge — this requires a Cloudflare
-API token if `lihor.ro` is on Cloudflare.  See
-https://caddyserver.com/docs/automatic-https#dns-challenge.
-
-**Chrome still shows "Add to Bookmark" instead of "Install"**
-Open DevTools → Application → Manifest and check the "Installability" section.
-Common remaining issues:
-- The service worker hasn't activated yet — visit the page, wait 10 seconds,
-  then close and reopen it
-- A previous visit cached a non-HTTPS version — clear site data in Chrome
-  settings and try again
+Do not delete the staged Ingress evidence until the failure is understood. A
+Helm rollback does not reverse DNS, host listeners, firewall rules, or database
+changes; each must be restored and verified separately.

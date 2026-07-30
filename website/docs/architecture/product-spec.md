@@ -146,7 +146,9 @@ Privacy/security:
 - No article content leaves the server unless the relevant feature-specific AI provider variables are configured.
 - Search index uses PostgreSQL full-text search.
 - Local password auth is built into the app, and production can enable Keycloak SSO while preserving local `user_id` authorization boundaries. See [Authentication (Keycloak)](/docs/configuration/authentication).
-- Caddy is a reverse proxy for the app and Keycloak paths, not the primary authentication layer.
+- The TLS Ingress is the production application route. Caddy is retained only
+  as a transitional boundary for the existing same-host Keycloak route and
+  cannot bind public ports alongside the ingress controller.
 
 ## Deployment
 
@@ -162,18 +164,24 @@ ghcr.io/lihor-hub/news-dashboard:<sha>
 ### Kubernetes (Helm)
 
 ```bash
-# Deploy with NodePort for host-side Caddy proxying
 helm upgrade --install news-dashboard ./helm/news-dashboard \
-  --set service.type=NodePort \
-  --set service.nodePort=30088
-
-# Caddy proxies to 127.0.0.1:30088 (never to a mutable ClusterIP)
+  --values ./helm/news-dashboard/values-production.yaml \
+  --set image.tag='<immutable-source-sha>' \
+  --set-string app.auth.sessionSecret='<from-secret-manager>' \
+  --set-string postgresql.password='<from-secret-manager>'
 ```
 
-### Caddyfile pattern
+Production renders a TLS-enabled Ingress and a ClusterIP-only application
+Service. CI validates the rendered contract without appliance access; the
+self-hosted production job verifies the public HTTPS hostname after rollout.
 
-Use `reverse_proxy 127.0.0.1:<nodePort>` with a fixed NodePort value.
-Do NOT use a ClusterIP — it can change when the Service is recreated.
+### Caddy and Keycloak migration boundary
 
-The NodePort value (e.g., 30088) is stable across pod restarts and Helm upgrades
-as long as the `service.nodePort` value in values.yaml stays the same.
+`deploy/Caddyfile` no longer routes the application. Its remaining
+`/keycloak` proxy records the route that operators must preserve while moving
+ports 80 and 443 to the ingress controller. Prepare rollback to the previous
+Helm revision and saved live Caddy configuration before removing the old
+application route. Follow
+[Ingress HTTPS and Caddy migration](/docs/configuration/https-caddy) and record
+the appliance-only work in
+[human rollout issue #1302](https://github.com/lihor-hub/news-dashboard/issues/1302).

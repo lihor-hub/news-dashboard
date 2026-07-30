@@ -66,6 +66,30 @@ ghcr.io/lihor-hub/news-dashboard:<commit-sha>
 
 Pin a version or commit SHA for production instead of tracking `latest`.
 
+## Production Helm quick start
+
+The production Helm contract terminates application TLS at the Ingress and
+keeps the application Service private:
+
+```bash
+helm upgrade --install news-dashboard ./helm/news-dashboard \
+  --namespace news-dashboard --create-namespace \
+  --values ./helm/news-dashboard/values-production.yaml \
+  --set image.tag='<immutable-source-sha>' \
+  --set-string app.auth.sessionSecret='<from-secret-manager>' \
+  --set-string postgresql.password='<from-secret-manager>'
+```
+
+Supply secrets and installation-specific persistence at runtime. Do not commit
+them to a values file. Before public cutover, verify the ClusterIP Service, TLS
+Ingress, backups and restore, rollback revision, and the existing `/keycloak`
+route. Caddy cannot share ports 80 and 443 with the ingress controller.
+
+The live appliance procedure requires human access and is tracked in
+[issue #1302](https://github.com/lihor-hub/news-dashboard/issues/1302). Follow
+[Ingress HTTPS and Caddy migration](/docs/configuration/https-caddy) for the
+staged verification and rollback order.
+
 ## Required configuration
 
 News Dashboard uses PostgreSQL at runtime. Configure either `DATABASE_URL` or
@@ -114,5 +138,5 @@ same pull/up commands.
 - [CI Runner Setup](ci-runner-setup)
 - [Authentication](/docs/configuration/authentication)
 - [Neo4j Knowledge Graph](/docs/configuration/neo4j-knowledge-graph)
-- [HTTPS with Caddy](/docs/configuration/https-caddy)
+- [Ingress HTTPS and Caddy migration](/docs/configuration/https-caddy)
 - [PostgreSQL Backup and Restore](/docs/configuration/postgres-backup)

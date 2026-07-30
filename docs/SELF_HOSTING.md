@@ -17,6 +17,7 @@ This guide explains how to deploy News Dashboard for production use using the pu
 - [Image Tags and Versioning](#image-tags-and-versioning)
 - [Environment Variables](#environment-variables)
 - [Healthchecks](#healthchecks)
+- [Production Kubernetes Ingress](#production-kubernetes-ingress)
 - [Upgrading](#upgrading)
 - [Rolling Back](#rolling-back)
 - [Background Jobs](#background-jobs)
@@ -239,7 +240,7 @@ assistant guide](https://docs.lihor.ro/docs/configuration/dify-assistant).
 | Variable          | Description                                                                                                                                                                                                                                   |
 | ----------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `ENABLE_API_DOCS` | Set to `true` to serve the interactive API docs (`/docs`, `/redoc`, `/openapi.json`). Off by default so a public deployment doesn't leak its full API surface to anonymous visitors; enable it for local development or trusted environments. |
-| `ENABLE_HSTS`     | Set to `true` to have the app send `Strict-Transport-Security` itself. Off by default, since HSTS is only correct behind HTTPS — leave it unset for local HTTP dev, or when a TLS-terminating proxy (e.g. Caddy, see below) already sets it.  |
+| `ENABLE_HSTS`     | Set to `true` to have the app send `Strict-Transport-Security` itself. Off by default, since HSTS is only correct behind HTTPS — leave it unset for local HTTP dev or when the TLS Ingress already sets it. |
 
 > **Important**: Never commit secrets to version control. Use environment variables or a `.env` file (not committed to Git) to manage sensitive values.
 
@@ -248,15 +249,11 @@ assistant guide](https://docs.lihor.ro/docs/configuration/dify-assistant).
 The app itself sets `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`,
 `Referrer-Policy: no-referrer`, and a conservative `Permissions-Policy` on
 every response (API and static frontend alike), so this baseline applies
-regardless of which front door is used — `docker run`, `docker-compose.prod.yml`,
-or a reverse proxy other than Caddy. `Strict-Transport-Security` stays opt-in
-via `ENABLE_HSTS` above.
-
-The documented Caddy deployment ([HTTPS with Caddy](https://docs.lihor.ro/docs/configuration/https-caddy),
-config in `deploy/Caddyfile`) also sets these headers at the edge, including
-HSTS. The two layers are compatible — headers the app already set are left
-alone (`setdefault` semantics), so the edge proxy can still enforce a
-stricter policy.
+regardless of which front door is used — `docker run`,
+`docker-compose.prod.yml`, or Kubernetes Ingress.
+`Strict-Transport-Security` stays opt-in via `ENABLE_HSTS` above. The
+production Ingress provides the static edge baseline; the application remains
+the source of truth for its dynamic Content Security Policy.
 
 ### Optional article body extraction (Crawl4AI)
 
@@ -434,6 +431,73 @@ or both. PII is scrubbed before events are sent: `send_default_pii` is
 disabled on both SDKs, and the backend additionally strips cookies and
 `Authorization`/`Cookie` headers via a `before_send` hook.
 
+## Production Kubernetes Ingress
+
+The production architecture is:
+
+```text
+Internet → TLS Ingress → ClusterIP Service → News Dashboard
+```
+
+Use `helm/news-dashboard/values-production.yaml`. It enables the hostname and
+TLS Ingress, restricts the application Service to `ClusterIP`, and enables
+NetworkPolicies for the configured ingress-controller selectors. Caddy is not
+the application TLS source of truth. The repository Caddyfile retains only the
+legacy same-host Keycloak route so its separate migration boundary stays
+visible.
+
+Live appliance installation and cutover are intentionally not automated from
+pull-request CI. Complete the DNS/TLS, ingress-controller, firewall, Keycloak,
+and rollback rehearsal in
+[human rollout issue #1302](https://github.com/lihor-hub/news-dashboard/issues/1302).
+Do not add credentials or private inventory to that issue or this repository.
+The detailed staged procedure is in
+[Ingress HTTPS and Caddy migration](https://docs.lihor.ro/docs/configuration/https-caddy).
+
+Before removing the old application route:
+
+1. Back up PostgreSQL and verify a restore on a separate instance.
+2. Save the current Helm revision and live Caddy configuration.
+3. Configure the production `POSTGRES_HOST_PATH` runtime variable for the
+   existing data directory, then stage the production values. Verify the
+   Ingress through its target address while preserving the public hostname and
+   TLS validation.
+4. Prepare and rehearse rollback to the previous Helm revision and Caddy route.
+5. Preserve the existing Keycloak route behind an equivalent higher-priority
+   Ingress route. Verify its login and callback flow.
+6. Only then make the ingress controller the sole owner of ports 80 and 443.
+
+### Host PostgreSQL controls
+
+When Kubernetes connects to PostgreSQL running on the host, the database must
+be reachable from the selected cluster network without becoming a public
+service:
+
+- Set PostgreSQL `listen_addresses` to the specific host or cluster-facing
+  interface. Avoid `*`; if it is temporarily unavoidable, the firewall and
+  `pg_hba.conf` rules below must still restrict every connection.
+- Add the narrowest `pg_hba.conf` `hostssl` rule for the application database,
+  role, and actual pod or node source CIDR. Use `scram-sha-256`; never use
+  `trust` or a public `0.0.0.0/0` rule.
+- Restrict the host firewall to TCP 5432 from that same cluster source network.
+  Confirm expected connections succeed and connections from an unrelated
+  network are denied.
+- Enable PostgreSQL TLS with operator-managed server certificates and protect
+  the private key with PostgreSQL-readable file permissions. Configure the
+  application DSN with certificate verification (`sslmode=verify-full` and the
+  trusted CA) when names and certificates are available; do not commit
+  certificate material.
+- Keep encrypted, access-controlled backups outside the database host and
+  define retention for both logical dumps and any WAL/base-backup strategy.
+- Perform restore verification regularly: restore a current backup into an
+  isolated PostgreSQL instance, run integrity/application queries, and confirm
+  `/api/ready` succeeds against the restored copy before calling the backup
+  usable.
+
+After the cutover, inspect the PostgreSQL listener, `pg_hba.conf`, firewall,
+TLS negotiation, backup job, and most recent restore verification as one
+control set. Record sanitized evidence in issue #1302.
+
 ## Upgrading
 
 Upgrade safely by following these steps in order.
@@ -465,6 +529,7 @@ docker compose -f docker-compose.prod.yml run --rm news-dashboard news-dashboard
 ```bash
 # 1. Update the image tag and pull policy
 helm upgrade news-dashboard ./helm/news-dashboard \
+  --values ./helm/news-dashboard/values-production.yaml \
   --set image.tag=v1.22.0 \
   --set image.pullPolicy=Always \
   --reuse-values
@@ -709,8 +774,8 @@ Regularly back up your PostgreSQL database. See [PostgreSQL Backup and Restore](
   [Deployment](../README.md#deployment) reference.
 - Use the [README Configuration section](../README.md#configuration) as the
   canonical environment-variable reference.
-- **Set up HTTPS** with a reverse proxy (see
-  [HTTPS with Caddy](https://docs.lihor.ro/docs/configuration/https-caddy)).
+- **Set up HTTPS** with the production Ingress (see
+  [Ingress HTTPS and Caddy migration](https://docs.lihor.ro/docs/configuration/https-caddy)).
 - Configure authentication and optional integrations through the
   [Configuration guides](https://docs.lihor.ro/docs/configuration).
 - Sign in as an application administrator and follow
