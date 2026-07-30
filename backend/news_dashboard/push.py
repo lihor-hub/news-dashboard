@@ -3,15 +3,17 @@
 from __future__ import annotations
 
 import concurrent.futures
+import functools
 import http.client
 import json
 import logging
 import os
 import re
+import threading
 import time
 import urllib.error
 import urllib.request
-from typing import Any, Literal
+from typing import Any, Literal, cast
 from urllib.parse import urlparse
 
 import requests
@@ -34,6 +36,7 @@ _PUSH_RESPONSE_EXECUTOR = concurrent.futures.ThreadPoolExecutor(
     max_workers=4,
     thread_name_prefix="push-response",
 )
+_PUSH_WORK_ADMISSION = threading.BoundedSemaphore(value=4)
 
 # Base64url alphabet (no padding required)
 _BASE64URL_RE = re.compile(r"^[A-Za-z0-9_\-]+=*$")
@@ -279,15 +282,14 @@ class _PinnedPushSession(requests.Session):
         )
         deadline = time.monotonic() + float(timeout_value)
         try:
-            with _open_push_before_deadline(
+            opened = _open_push_before_deadline(
                 url_request,
                 float(timeout_value),
                 deadline,
-            ) as opened:
-                return _push_response_before_deadline(opened, request, deadline)
+            )
+            return _push_response_before_deadline(opened, request, deadline)
         except urllib.error.HTTPError as exc:
-            with exc:
-                return _push_response_before_deadline(exc, request, deadline)
+            return _push_response_before_deadline(exc, request, deadline)
 
 
 def _open_push_before_deadline(
@@ -300,7 +302,7 @@ def _open_push_before_deadline(
     if remaining <= 0:
         message = "Push delivery deadline exceeded"
         raise TimeoutError(message)
-    future = _PUSH_RESPONSE_EXECUTOR.submit(
+    future = _submit_push_work(
         open_server_fetch_url,
         request,
         timeout=timeout,
@@ -308,10 +310,11 @@ def _open_push_before_deadline(
         follow_redirects=False,
     )
     try:
-        return future.result(timeout=remaining)
+        return cast("requests.Response", future.result(timeout=remaining))
     except concurrent.futures.TimeoutError as exc:
         future.add_done_callback(_close_late_push_response)
-        future.cancel()
+        if future.cancel():
+            _PUSH_WORK_ADMISSION.release()
         message = "Push delivery deadline exceeded"
         raise TimeoutError(message) from exc
 
@@ -323,6 +326,45 @@ def _close_late_push_response(future: concurrent.futures.Future[Any]) -> None:
     future.result().close()
 
 
+def _submit_push_work(
+    function: Any,
+    *args: Any,
+    **kwargs: Any,
+) -> concurrent.futures.Future[Any]:
+    """Submit transport work only when a worker slot is immediately available."""
+    if not _PUSH_WORK_ADMISSION.acquire(blocking=False):
+        message = "Push transport capacity exhausted"
+        raise TimeoutError(message)
+    try:
+        return _PUSH_RESPONSE_EXECUTOR.submit(
+            _run_admitted_push_work,
+            function,
+            args,
+            kwargs,
+        )
+    except RuntimeError:
+        _PUSH_WORK_ADMISSION.release()
+        raise
+
+
+def _run_admitted_push_work(
+    function: Any,
+    args: tuple[Any, ...],
+    kwargs: dict[str, Any],
+) -> Any:
+    try:
+        return function(*args, **kwargs)
+    finally:
+        _PUSH_WORK_ADMISSION.release()
+
+
+def _close_push_source_after_completion(
+    _future: concurrent.futures.Future[Any],
+    source: Any,
+) -> None:
+    source.close()
+
+
 def _push_response_before_deadline(
     source: Any,
     request: requests.PreparedRequest,
@@ -331,14 +373,25 @@ def _push_response_before_deadline(
     """Read and adapt a response without exceeding the delivery wall clock."""
     remaining = deadline - time.monotonic()
     if remaining <= 0:
+        source.close()
         message = "Push delivery deadline exceeded"
         raise TimeoutError(message)
-    future = _PUSH_RESPONSE_EXECUTOR.submit(_push_response, source, request)
     try:
-        return future.result(timeout=remaining)
-    except concurrent.futures.TimeoutError as exc:
+        future = _submit_push_work(_push_response, source, request)
+    except (RuntimeError, TimeoutError):
         source.close()
-        future.cancel()
+        raise
+    future.add_done_callback(
+        functools.partial(
+            _close_push_source_after_completion,
+            source=source,
+        )
+    )
+    try:
+        return cast("requests.Response", future.result(timeout=remaining))
+    except concurrent.futures.TimeoutError as exc:
+        if future.cancel():
+            _PUSH_WORK_ADMISSION.release()
         message = "Push delivery deadline exceeded"
         raise TimeoutError(message) from exc
 

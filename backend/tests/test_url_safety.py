@@ -15,6 +15,7 @@ import pytest
 from news_dashboard.push import _PinnedPushSession
 from news_dashboard.url_safety import (
     UnsafeUrlError,
+    _resolve_server_fetch_target,
     _ValidatingRedirectHandler,
     open_server_fetch_url,
     validate_server_fetch_url,
@@ -198,6 +199,62 @@ def test_open_server_fetch_url_bounds_dns_by_absolute_deadline(
 
     assert resolver_started.is_set()
     assert time.monotonic() - started < 0.5
+
+
+def test_dns_resolution_rejects_work_when_executor_is_saturated(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    resolver_started = threading.Event()
+    release_resolvers = threading.Event()
+    start_lock = threading.Lock()
+    started_count = 0
+
+    def blocked_resolver(*_args: object, **_kwargs: object) -> list[_AddrInfo]:
+        nonlocal started_count
+        with start_lock:
+            started_count += 1
+            if started_count == 4:
+                resolver_started.set()
+        release_resolvers.wait(timeout=2)
+        return _fake_getaddrinfo(["93.184.216.34"])("example.test", 443)
+
+    monkeypatch.setattr(socket, "getaddrinfo", blocked_resolver)
+    results: list[object] = []
+
+    def resolve() -> None:
+        results.append(
+            _resolve_server_fetch_target(
+                "https://example.test/feed.xml",
+                deadline=time.monotonic() + 1,
+            )
+        )
+
+    workers = [threading.Thread(target=resolve) for _ in range(4)]
+    for worker in workers:
+        worker.start()
+    assert resolver_started.wait(timeout=0.5)
+
+    started = time.monotonic()
+    try:
+        with pytest.raises(TimeoutError, match="capacity"):
+            _resolve_server_fetch_target(
+                "https://example.test/feed.xml",
+                deadline=time.monotonic() + 0.2,
+            )
+    finally:
+        release_resolvers.set()
+    assert time.monotonic() - started < 0.1
+
+    for worker in workers:
+        worker.join(timeout=1)
+    assert all(not worker.is_alive() for worker in workers)
+    assert len(results) == 4
+
+    recovered = _resolve_server_fetch_target(
+        "https://example.test/feed.xml",
+        deadline=time.monotonic() + 1,
+    )
+    assert recovered.sockaddr == ("93.184.216.34", 443)
 
 
 @pytest.mark.parametrize(

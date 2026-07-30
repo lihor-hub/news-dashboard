@@ -13,6 +13,7 @@ import http.client
 import ipaddress
 import socket
 import ssl
+import threading
 import time
 import urllib.request
 from dataclasses import dataclass, field
@@ -30,6 +31,7 @@ _DNS_EXECUTOR = concurrent.futures.ThreadPoolExecutor(
     max_workers=4,
     thread_name_prefix="server-fetch-dns",
 )
+_DNS_ADMISSION = threading.BoundedSemaphore(value=4)
 
 
 @dataclass(frozen=True, slots=True)
@@ -112,25 +114,11 @@ def _resolve_server_fetch_target(
     """Resolve and validate every answer, then select one numeric endpoint."""
     hostname, normalized_host, port = _parse_server_fetch_url(url)
     try:
-        if deadline is None:
-            addresses = socket.getaddrinfo(
-                normalized_host,
-                port,
-                type=socket.SOCK_STREAM,
-            )
-        else:
-            future = _DNS_EXECUTOR.submit(
-                socket.getaddrinfo,
-                normalized_host,
-                port,
-                type=socket.SOCK_STREAM,
-            )
-            try:
-                addresses = future.result(timeout=_remaining_timeout(deadline, None))
-            except concurrent.futures.TimeoutError as exc:
-                future.cancel()
-                message = "Server fetch deadline exceeded"
-                raise TimeoutError(message) from exc
+        addresses = _getaddrinfo_before_deadline(
+            normalized_host,
+            port,
+            deadline,
+        )
     except socket.gaierror as exc:
         msg = f"Could not resolve fetch host: {hostname!r}"
         raise UnsafeUrlError(msg) from exc
@@ -171,6 +159,63 @@ def _resolve_server_fetch_target(
         msg = f"Could not resolve fetch host: {hostname!r}"
         raise UnsafeUrlError(msg)
     return selected
+
+
+def _getaddrinfo_before_deadline(
+    hostname: str,
+    port: int,
+    deadline: float | None,
+) -> list[tuple[Any, ...]]:
+    if deadline is None:
+        return socket.getaddrinfo(hostname, port, type=socket.SOCK_STREAM)
+    future = _submit_dns_resolution(
+        socket.getaddrinfo,
+        hostname,
+        port,
+        type=socket.SOCK_STREAM,
+    )
+    try:
+        return cast(
+            "list[tuple[Any, ...]]",
+            future.result(timeout=_remaining_timeout(deadline, None)),
+        )
+    except concurrent.futures.TimeoutError as exc:
+        if future.cancel():
+            _DNS_ADMISSION.release()
+        message = "Server fetch deadline exceeded"
+        raise TimeoutError(message) from exc
+
+
+def _submit_dns_resolution(
+    function: Any,
+    *args: Any,
+    **kwargs: Any,
+) -> concurrent.futures.Future[Any]:
+    """Submit DNS work only when a worker slot is immediately available."""
+    if not _DNS_ADMISSION.acquire(blocking=False):
+        message = "Server fetch DNS capacity exhausted"
+        raise TimeoutError(message)
+    try:
+        return _DNS_EXECUTOR.submit(
+            _run_admitted_dns_resolution,
+            function,
+            args,
+            kwargs,
+        )
+    except RuntimeError:
+        _DNS_ADMISSION.release()
+        raise
+
+
+def _run_admitted_dns_resolution(
+    function: Any,
+    args: tuple[Any, ...],
+    kwargs: dict[str, Any],
+) -> Any:
+    try:
+        return function(*args, **kwargs)
+    finally:
+        _DNS_ADMISSION.release()
 
 
 @dataclass(slots=True)

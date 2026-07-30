@@ -12,6 +12,7 @@ from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
+import requests
 from fastapi.testclient import TestClient
 
 from news_dashboard.auth import create_user, require_auth
@@ -291,26 +292,112 @@ class _SlowPushResponse:
         return "https://push.example.com/delivery"
 
 
+class _LockingPushResponse(_SlowPushResponse):
+    def __init__(self) -> None:
+        super().__init__()
+        self.release_read = threading.Event()
+        self._reader_lock = threading.Lock()
+
+    def read(self, _size: int) -> bytes:
+        with self._reader_lock:
+            self.read_started.set()
+            self.release_read.wait(timeout=2)
+            return b""
+
+    def close(self) -> None:
+        with self._reader_lock:
+            self.closed.set()
+
+
+class _ImmediatePushResponse(_SlowPushResponse):
+    def read(self, _size: int) -> bytes:
+        self.read_started.set()
+        return b""
+
+
 def test_push_transport_bounds_slow_response_by_absolute_deadline() -> None:
-    slow_response = _SlowPushResponse()
+    slow_response = _LockingPushResponse()
     started = time.monotonic()
-    with (
-        patch(
-            "news_dashboard.push.open_server_fetch_url",
-            return_value=slow_response,
-        ),
-        _PinnedPushSession() as session,
-        pytest.raises(TimeoutError, match="deadline"),
-    ):
-        session.post(
-            "https://push.example.com/delivery",
-            data=b"encrypted",
-            timeout=0.05,
-        )
+    try:
+        with (
+            patch(
+                "news_dashboard.push.open_server_fetch_url",
+                return_value=slow_response,
+            ),
+            _PinnedPushSession() as session,
+            pytest.raises(TimeoutError, match="deadline"),
+        ):
+            session.post(
+                "https://push.example.com/delivery",
+                data=b"encrypted",
+                timeout=0.05,
+            )
+    finally:
+        slow_response.release_read.set()
 
     assert slow_response.read_started.is_set()
-    assert slow_response.closed.is_set()
     assert time.monotonic() - started < 0.5
+    assert slow_response.closed.wait(timeout=0.5)
+
+
+def test_push_transport_rejects_work_when_executor_is_saturated() -> None:
+    stalled_responses = [_LockingPushResponse() for _ in range(4)]
+    results: list[requests.Response] = []
+
+    def send_stalled(response: _LockingPushResponse) -> None:
+        with _PinnedPushSession() as session:
+            results.append(
+                session.post(
+                    "https://push.example.com/delivery",
+                    data=b"encrypted",
+                    timeout=1,
+                )
+            )
+
+    with patch(
+        "news_dashboard.push.open_server_fetch_url",
+        side_effect=stalled_responses,
+    ) as opener:
+        workers = [
+            threading.Thread(target=send_stalled, args=(response,))
+            for response in stalled_responses
+        ]
+        for worker in workers:
+            worker.start()
+        assert all(response.read_started.wait(timeout=0.5) for response in stalled_responses)
+
+        started = time.monotonic()
+        with (
+            _PinnedPushSession() as session,
+            pytest.raises(TimeoutError, match="capacity") as caught,
+        ):
+            session.post(
+                "https://push.example.com/delivery",
+                data=b"encrypted",
+                headers={"Authorization": "Bearer secret-token"},
+                timeout=1,
+            )
+        assert time.monotonic() - started < 0.2
+        assert "secret-token" not in str(caught.value)
+        assert opener.call_count == 4
+
+        for response in stalled_responses:
+            response.release_read.set()
+        for worker in workers:
+            worker.join(timeout=1)
+        assert all(not worker.is_alive() for worker in workers)
+        assert len(results) == 4
+
+        opener.side_effect = None
+        opener.return_value = _ImmediatePushResponse()
+        with _PinnedPushSession() as session:
+            recovered = session.post(
+                "https://push.example.com/delivery",
+                data=b"encrypted",
+                timeout=1,
+            )
+
+    assert recovered.status_code == 201
 
 
 def test_push_transport_bounds_response_open_by_absolute_deadline() -> None:
