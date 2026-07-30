@@ -13,7 +13,11 @@ from html.parser import HTMLParser
 from typing import Any
 from urllib.parse import urljoin, urlparse
 
-from news_dashboard.url_safety import open_server_fetch_url, validate_server_fetch_url
+from news_dashboard.url_safety import (
+    UnsafeUrlError,
+    open_server_fetch_url,
+    validate_server_fetch_url,
+)
 
 USER_AGENT = "news-dashboard/0.1 (personal RSS reader; contact@lihor.ro)"
 TIMEOUT_SECS = 15
@@ -32,9 +36,13 @@ def _fetch_html(url: str, *, use_selenium: bool = False) -> str:
         from news_dashboard.selenium_client import fetch_spa_html
 
         return fetch_spa_html(url)
-    req = urllib.request.Request(  # noqa: S310 - scheme validated by central opener
-        url, headers={"User-Agent": USER_AGENT}
-    )
+    try:
+        req = urllib.request.Request(  # noqa: S310 - scheme validated by central opener
+            url, headers={"User-Agent": USER_AGENT}
+        )
+    except ValueError as exc:
+        message = f"Refusing server-side fetch to malformed URL: {url!r}"
+        raise UnsafeUrlError(message) from exc
     with open_server_fetch_url(req, timeout=TIMEOUT_SECS) as resp:
         content_length = resp.headers.get("Content-Length")
         if content_length is not None:

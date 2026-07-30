@@ -244,6 +244,30 @@ def test_static_extract_classifies_unsafe_redirect() -> None:
     assert (body, status, reason) == ("", "error", "unsafe_url")
 
 
+def test_static_extract_does_not_classify_response_value_error_as_unsafe() -> None:
+    class _ValueErrorHeaders:
+        def get_content_type(self) -> str:
+            message = "malformed response header"
+            raise ValueError(message)
+
+    class _ValueErrorResponse:
+        headers = _ValueErrorHeaders()
+
+        def __enter__(self) -> _ValueErrorResponse:
+            return self
+
+        def __exit__(self, *exc_info: object) -> None:
+            return None
+
+    with patch(
+        "news_dashboard.body_fetch.open_server_fetch_url",
+        return_value=_ValueErrorResponse(),
+    ):
+        body, status, reason = _static_extract_body("https://example.com/article")
+
+    assert (body, status, reason) == ("", "error", "fetch_failed")
+
+
 def test_extract_public_content_skips_ai_and_preserves_blocked_failure() -> None:
     with (
         patch(

@@ -46,6 +46,17 @@ _AI_PROMPT = (
 )
 
 
+def _server_fetch_request(url: str) -> urllib.request.Request:
+    try:
+        return urllib.request.Request(  # noqa: S310 - scheme validated by central opener
+            url,
+            headers={"User-Agent": USER_AGENT},
+        )
+    except ValueError as exc:
+        message = f"Refusing server-side fetch to malformed URL: {url!r}"
+        raise UnsafeUrlError(message) from exc
+
+
 def _fetch_capped_html(url: str, *, byte_cap: int) -> str:
     """Stream ``url`` and decode at most ``byte_cap`` bytes of the response body.
 
@@ -53,14 +64,7 @@ def _fetch_capped_html(url: str, *, byte_cap: int) -> str:
     full response before truncating, so a large HTML page can't be pulled
     entirely into memory just to be sliced down afterward.
     """
-    try:
-        request = urllib.request.Request(  # noqa: S310 - scheme validated by central opener
-            url,
-            headers={"User-Agent": USER_AGENT},
-        )
-    except ValueError as exc:
-        message = f"Refusing server-side fetch to malformed URL: {url!r}"
-        raise UnsafeUrlError(message) from exc
+    request = _server_fetch_request(url)
     with open_server_fetch_url(request, timeout=15) as response:
         charset = response.headers.get_content_charset("utf-8") or "utf-8"
         raw: bytes = response.read(byte_cap)
@@ -350,9 +354,7 @@ def _static_extract_body(  # noqa: PLR0911 - each bounded fetch failure has a di
 ) -> tuple[str, str, FailureReason | None]:
     """Fetch and parse static HTML without invoking a rendered fallback."""
     try:
-        req = urllib.request.Request(  # noqa: S310 - scheme validated by central opener
-            url, headers={"User-Agent": USER_AGENT}
-        )
+        req = _server_fetch_request(url)
         with open_server_fetch_url(req, timeout=TIMEOUT_SECS) as resp:
             content_type = resp.headers.get_content_type()
             if content_type not in {"text/html", "application/xhtml+xml"}:
@@ -360,7 +362,7 @@ def _static_extract_body(  # noqa: PLR0911 - each bounded fetch failure has a di
             raw: bytes = resp.read(500_000)  # cap at ~500 KB
             charset = resp.headers.get_content_charset("utf-8") or "utf-8"
             html = raw.decode(str(charset), errors="replace")
-    except (UnsafeUrlError, ValueError) as exc:
+    except UnsafeUrlError as exc:
         logger.warning("body_fetch: unsafe URL %r: %s", url, exc)
         return "", "error", "unsafe_url"
     except urllib.error.HTTPError as exc:

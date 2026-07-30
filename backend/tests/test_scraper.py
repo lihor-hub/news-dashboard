@@ -102,6 +102,11 @@ def test_fetch_html_rejects_private_network_url(monkeypatch: pytest.MonkeyPatch)
     assert called is True
 
 
+def test_fetch_html_classifies_malformed_initial_url_as_unsafe() -> None:
+    with pytest.raises(UnsafeUrlError, match="malformed URL"):
+        _fetch_html("http://[::1")
+
+
 def test_fetch_html_selenium_path_keeps_preflight_validation(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
