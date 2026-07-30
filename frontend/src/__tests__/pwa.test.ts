@@ -69,6 +69,28 @@ describe('PWA production build — Content Security Policy compatibility', () =>
     expect(result.status).toBe(1);
     expect(result.stderr).toContain('inline script');
   });
+
+  it('rejects inline HTML event handlers', () => {
+    const result = runCspBuildCheck(
+      '<button onclick="navigator.serviceWorker.register(\'/sw.js\')">Enable</button>' +
+        '<script src="/registerSW.js"></script>',
+      "navigator.serviceWorker.register('/sw.js');"
+    );
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain('inline event handler');
+  });
+
+  it('rejects javascript URLs', () => {
+    const result = runCspBuildCheck(
+      '<a href="javascript:navigator.serviceWorker.register(\'/sw.js\')">Enable</a>' +
+        '<script src="/registerSW.js"></script>',
+      "navigator.serviceWorker.register('/sw.js');"
+    );
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain('javascript URL');
+  });
 });
 
 describe('PWA manifest — identity', () => {

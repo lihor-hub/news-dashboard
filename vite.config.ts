@@ -10,8 +10,8 @@ export default defineConfig({
     tailwindcss(),
     VitePWA({
       registerType: 'autoUpdate',
-      // Inline the service worker registration so it works with the non-standard
-      // root setup (index.html at repo root, not frontend/).
+      // Let the plugin emit its external registration helper for the non-standard
+      // root setup (index.html at repo root, not frontend/) and CSP script-src 'self'.
       injectRegister: 'auto',
       // Only apply PWA in production builds — dev mode uses Vite HMR.
       devOptions: { enabled: false },

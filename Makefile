@@ -87,10 +87,12 @@ helm-validate:
 		--set-string "postgresql.password=dummy-postgres-password-for-render-only"
 	helm lint ./helm/news-dashboard \
 		--values helm/news-dashboard/values-production.yaml \
+		--set-string "image.digest=sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" \
 		--set-string "app.auth.sessionSecret=dummy-session-secret-for-render-only" \
 		--set-string "postgresql.password=dummy-postgres-password-for-render-only"
 	helm template news-dashboard ./helm/news-dashboard \
 		--values helm/news-dashboard/values-production.yaml \
+		--set-string "image.digest=sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" \
 		--set-string "app.auth.sessionSecret=dummy-session-secret-for-render-only" \
 		--set-string "postgresql.password=dummy-postgres-password-for-render-only"
 	helm template news-dashboard ./helm/news-dashboard \

@@ -94,6 +94,7 @@ Runtime storage is PostgreSQL only. Set `DATABASE_URL` or the split
 | `ANALYTICS_RETENTION_DAYS`                                                                                       | Days to retain `user_events` before the daily cleanup job prunes them. Defaults to `180`.                                                                                                                                                                                                                                                                                        |
 | `ANALYTICS_ENABLED`                                                                                              | Instance-wide analytics kill switch. Set to `false` to stop ingesting `user_events` for every user regardless of their individual Settings preference. Defaults to `true`. Users can opt out individually from Settings → Privacy.                                                                                                                                               |
 | `ENABLE_API_DOCS`                                                                                                | Serves the interactive API docs (`/docs`, `/redoc`, `/openapi.json`) when truthy. Off by default so a public deployment doesn't leak its full API surface.                                                                                                                                                                                                                       |
+| `PUBLIC_RENDERER_EGRESS_PROXY`                                                                                   | Credential-free HTTP(S) validating proxy for optional Selenium fallback. Direct browser egress must be blocked; use IP/network allowlisting or external proxy authentication instead of URL userinfo.                                                                                                                                                                             |
 | `NEWSLETTER_IMAP_HOST`, `NEWSLETTER_IMAP_PORT`, `NEWSLETTER_IMAP_USERNAME`, `NEWSLETTER_IMAP_PASSWORD`           | Shared IMAP mailbox polled for newsletter emails (`newsletter_ingest.py`). Feature is fully inert unless host, username, and password are all set. Port defaults to `993`.                                                                                                                                                                                                       |
 | `NEWSLETTER_IMAP_FOLDER`                                                                                         | Mailbox folder to poll for newsletters. Defaults to `INBOX`.                                                                                                                                                                                                                                                                                                                     |
 | `NEWSLETTER_POLL_MINUTES`                                                                                        | Interval in minutes between newsletter mailbox polls. Defaults to `15`.                                                                                                                                                                                                                                                                                                          |
@@ -217,6 +218,7 @@ docker run --rm -d \
 Then run the application:
 
 ```bash
+IMAGE_DIGEST="${IMAGE_DIGEST:?set IMAGE_DIGEST to the published sha256 digest}"
 docker run -d \
   --name news-dashboard \
   -p 8080:8080 \
@@ -232,10 +234,15 @@ docker run -d \
   -e DATA_DIR=/data \
   -v news-dashboard-data:/data \
   --restart unless-stopped \
-  ghcr.io/lihor-hub/news-dashboard:latest
+  "ghcr.io/lihor-hub/news-dashboard@${IMAGE_DIGEST}"
 ```
 
-**Note**: Replace `latest` with a specific version tag (e.g., `v1.21.0`) or commit SHA for pinned deployments. The `news-dashboard-data:/data` volume keeps generated audio and other app data across container recreates; without it, optional TTS and podcast MP3 caches are lost during upgrades. See [Configuration](#configuration) for all required environment variables.
+Resolve the digest from the published image or CI build output; a tag or commit
+SHA can move or resolve to a different manifest. The
+`news-dashboard-data:/data` volume keeps generated audio and other app data
+across container recreates; without it, optional TTS and podcast MP3 caches are
+lost during upgrades. See [Configuration](#configuration) for all required
+environment variables.
 
 If you also want the knowledge graph enabled in a manual `docker run`
 deployment, run a Neo4j container and pass `NEO4J_URI`, `NEO4J_USER`,
@@ -426,6 +433,7 @@ For Kubernetes:
 ```bash
 (
 set -euo pipefail
+IMAGE_DIGEST="${IMAGE_DIGEST:?set IMAGE_DIGEST to sha256:<64 lowercase hex>}"
 : "${SESSION_SECRET:?set SESSION_SECRET}"
 : "${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}"
 : "${POSTGRES_HOST_PATH:?set POSTGRES_HOST_PATH}"
@@ -434,7 +442,9 @@ production_cutover_enabled || { echo "Ingress cutover is not enabled" >&2; exit 
 prepare_production_helm_secret_files
 
 helm upgrade --install news-dashboard ./helm/news-dashboard \
+  --namespace news-dashboard --create-namespace \
   --values ./helm/news-dashboard/values-production.yaml \
+  --set-string image.digest="${IMAGE_DIGEST}" \
   --set-string postgresql.persistence.hostPath="$POSTGRES_HOST_PATH" \
   --set-file app.auth.sessionSecret="$PRODUCTION_SESSION_SECRET_FILE" \
   --set-file postgresql.password="$PRODUCTION_POSTGRES_PASSWORD_FILE"
@@ -447,6 +457,15 @@ runtime overrides; do not commit them to a values file. The shared helper writes
 the secrets to mode-0600 temporary files, removes them on exit, and keeps secret
 values out of Helm's process arguments. Pull-request CI renders this contract
 without requiring access to the production appliance.
+
+Public egress excludes private and other non-global networks. For an external
+PostgreSQL, SMTP, Keycloak, or other private/custom endpoint, copy
+`deploy/additional-egress-values.example.yaml` outside the repository and set
+`ADDITIONAL_EGRESS_VALUES_FILE` to that path for every manual deployment. CI
+operators can instead store the same non-secret YAML in the production
+environment variable `ADDITIONAL_EGRESS_VALUES`; both inputs are re-applied on
+every Helm upgrade. Keep credentials in Kubernetes/GitHub secrets, never in
+this policy-only values input.
 
 Automated and local live application of this overlay is disabled until the
 operator sets `INGRESS_CUTOVER_ENABLED=true` after completing the readiness

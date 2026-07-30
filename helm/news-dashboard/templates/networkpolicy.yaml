@@ -112,6 +112,29 @@ spec:
       ports:
         - protocol: TCP
           port: {{ .Values.postgresql.port }}
+{{- if and .Values.postgresql.enabled .Values.postgresql.backup.enabled }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "news-dashboard.fullname" . }}-postgres-backup
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: {{ $name }}-postgres-backup
+      app.kubernetes.io/instance: {{ $instance }}
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: {{ $name }}-postgres
+              app.kubernetes.io/instance: {{ $instance }}
+      ports:
+        - protocol: TCP
+          port: {{ .Values.postgresql.port }}
+{{- end }}
 ---
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
@@ -158,7 +181,7 @@ spec:
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
-  name: {{ include "news-dashboard.fullname" . }}-https
+  name: {{ include "news-dashboard.fullname" . }}-public-egress
 spec:
   podSelector:
     matchExpressions:
@@ -173,7 +196,16 @@ spec:
   policyTypes:
     - Egress
   egress:
-{{ toYaml .Values.networkPolicy.publicHttpsEgress | indent 4 }}
+    - to:
+{{- range .Values.networkPolicy.publicEgress.ipBlocks }}
+        - ipBlock:
+{{ toYaml . | indent 12 }}
+{{- end }}
+      ports:
+{{- range .Values.networkPolicy.publicEgress.ports }}
+        - protocol: TCP
+          port: {{ . }}
+{{- end }}
 {{- if .Values.networkPolicy.additionalEgress }}
 ---
 apiVersion: networking.k8s.io/v1

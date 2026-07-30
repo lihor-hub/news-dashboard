@@ -397,7 +397,7 @@ jobs:
           helm template news-dashboard ./helm/news-dashboard \
             --values ./helm/news-dashboard/values-production.yaml \
             --set "image.repository=ghcr.io/lihor-hub/news-dashboard" \
-            --set "image.tag=abc1234" \
+            --set-string "image.digest=sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" \
             --set "image.pullSecretName=ghcr-pull-secret" \
             --set-string "postgresql.persistence.hostPath=" \
             "${PRODUCTION_HELM_SECRET_ARGS[@]}" \
@@ -422,12 +422,13 @@ jobs:
 
   # ── 9. PUBLISH ─────────────────────────────────────────────────────────────
   # Builds one image and pushes two tags:
-  #   :<sha>    — immutable, pinned to this exact commit; used by the deploy step
+  #   :<sha>    — source-discovery alias for the exact commit
   #   :latest   — floating convenience tag for manual pulls / rollback reference
   #
   # Why two tags? "latest" alone is not enough: if the tag name hasn't changed,
   # a node with imagePullPolicy: IfNotPresent won't re-pull it.  Pinning to the
-  # SHA guarantees a fresh pull for every deploy without setting Always.
+  # deployment uses the registry digest output, so tag movement cannot change
+  # the manifest selected by Kubernetes.
   #
   # No secrets needed here — GITHUB_TOKEN is provided automatically and has
   # packages:write by default for the repo that owns the package.
@@ -444,6 +445,7 @@ jobs:
       attestations: write
     outputs:
       image_tag: ${{ github.sha }}
+      image_digest: ${{ steps.build.outputs.digest }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -643,6 +645,7 @@ jobs:
         env:
           SHA: ${{ github.sha }}
           IMG: ${{ env.IMAGE }}
+          IMAGE_DIGEST: ${{ needs.publish.outputs.image_digest }}
           GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
           GHCR_ACTOR: ${{ github.actor }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
@@ -666,6 +669,9 @@ jobs:
           DIFY_CHAT_APP_TOKEN: ${{ secrets.DIFY_CHAT_APP_TOKEN }}
           DIFY_CHAT_BASE_URL: ${{ vars.DIFY_CHAT_BASE_URL }}
           DIFY_CHAT_TITLE: ${{ vars.DIFY_CHAT_TITLE }}
+          # Non-secret YAML containing only networkPolicy.additionalEgress.
+          # A repository/environment variable persists this input across upgrades.
+          ADDITIONAL_EGRESS_VALUES: ${{ vars.ADDITIONAL_EGRESS_VALUES }}
         run: |
           set -euo pipefail
           echo "applied=false" >> "$GITHUB_OUTPUT"
@@ -696,8 +702,18 @@ jobs:
             echo "POSTGRES_HOST_PATH GitHub Actions variable is required to preserve production data." >&2
             exit 1
           fi
+          if [[ ! "$IMAGE_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+            echo "Published IMAGE_DIGEST must be sha256:<64 lowercase hex characters>." >&2
+            exit 1
+          fi
 
           prepare_production_helm_secret_files
+          additional_egress_helm_args=()
+          if [ -n "$ADDITIONAL_EGRESS_VALUES" ]; then
+            PRODUCTION_ADDITIONAL_EGRESS_FILE="${PRODUCTION_HELM_SECRET_DIR}/additional-egress-values.yaml"
+            printf '%s\n' "$ADDITIONAL_EGRESS_VALUES" >"$PRODUCTION_ADDITIONAL_EGRESS_FILE"
+            additional_egress_helm_args+=(--values "$PRODUCTION_ADDITIONAL_EGRESS_FILE")
+          fi
 
           kubectl create namespace news-dashboard --dry-run=client -o yaml | kubectl apply -f -
 
@@ -713,12 +729,12 @@ jobs:
 
             pull_secret_helm_args=(--set-string image.pullSecretName=ghcr-pull-secret)
           else
-            echo "GHCR_TOKEN is empty; treating ${IMG}:${SHA} as a public GHCR image."
+            echo "GHCR_TOKEN is empty; treating ${IMG}@${IMAGE_DIGEST} as a public GHCR image."
             pull_secret_helm_args=(--set-string image.pullSecretName=)
           fi
 
           # Pull eagerly — surfaces auth or visibility failures before touching the rollout.
-          docker pull "${IMG}:${SHA}"
+          docker pull "${IMG}@${IMAGE_DIGEST}"
 
           ai_secret_args=()
           if [ -n "$OPENAI_API_KEY" ]; then
@@ -835,7 +851,8 @@ jobs:
             --namespace news-dashboard --create-namespace
             --values ./helm/news-dashboard/values-production.yaml
             --set "image.repository=${IMG}"
-            --set "image.tag=${SHA}"
+            --set-string "image.digest=${IMAGE_DIGEST}"
+            "${additional_egress_helm_args[@]}"
             "${pull_secret_helm_args[@]}"
             "${postgres_helm_args[@]}"
             "${PRODUCTION_HELM_SECRET_ARGS[@]}"
@@ -888,7 +905,7 @@ jobs:
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
-          image-ref: ${{ env.IMAGE }}:${{ github.sha }}
+          image-ref: ${{ env.IMAGE }}@${{ needs.publish.outputs.image_digest }}
           format: sarif
           output: trivy-results.sarif
           exit-code: '1'  # Fail on any vulnerabilities

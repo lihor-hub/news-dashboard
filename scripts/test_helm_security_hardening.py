@@ -12,6 +12,30 @@ import yaml
 ROOT = Path(__file__).resolve().parents[1]
 CHART = ROOT / "helm" / "news-dashboard"
 PRODUCTION_VALUES = CHART / "values-production.yaml"
+ADDITIONAL_EGRESS_EXAMPLE = ROOT / "deploy" / "additional-egress-values.example.yaml"
+TEST_APP_DIGEST = f"sha256:{'a' * 64}"
+PUBLIC_EGRESS_IPV4_EXCEPTIONS = {
+    "0.0.0.0/8",
+    "10.0.0.0/8",
+    "100.64.0.0/10",
+    "127.0.0.0/8",
+    "169.254.0.0/16",
+    "172.16.0.0/12",
+    "192.0.0.0/24",
+    "192.0.2.0/24",
+    "192.168.0.0/16",
+    "198.18.0.0/15",
+    "198.51.100.0/24",
+    "203.0.113.0/24",
+    "224.0.0.0/4",
+    "240.0.0.0/4",
+}
+PUBLIC_EGRESS_IPV6_EXCEPTIONS = {
+    "2001::/23",
+    "2001:db8::/32",
+    "2002::/16",
+    "3fff::/20",
+}
 
 
 def render_chart(*arguments: str) -> list[dict[str, object]]:
@@ -27,6 +51,8 @@ def render_chart(*arguments: str) -> list[dict[str, object]]:
         "postgresql.password=render-only-postgres-password",
         "--set-string",
         "neo4j.auth.password=render-only-neo4j-password",
+        "--set-string",
+        f"image.digest={TEST_APP_DIGEST}",
         *arguments,
     ]
     result = subprocess.run(command, check=True, capture_output=True, text=True)  # noqa: S603
@@ -90,6 +116,41 @@ def test_production_service_is_cluster_ip_without_node_port() -> None:
     assert "NodePort" not in yaml.safe_dump_all(rendered)
 
 
+def test_production_renders_application_images_by_digest() -> None:
+    rendered = render_chart("--values", str(PRODUCTION_VALUES))
+    expected = f"ghcr.io/lihor-hub/news-dashboard@{TEST_APP_DIGEST}"
+    deployment = find_resource(rendered, "Deployment", "release-news-dashboard")
+    ingest = find_resource(rendered, "CronJob", "release-news-dashboard-ingest")
+
+    assert container(deployment, "news-dashboard")["image"] == expected
+    assert container(ingest, "ingest")["image"] == expected
+
+
+def test_production_rejects_missing_or_invalid_application_digest() -> None:
+    for arguments in (
+        [],
+        ["--set-string", "image.digest=sha256:not-a-digest"],
+        ["--set-string", f"image.digest=sha512:{'a' * 64}"],
+    ):
+        command = [
+            "helm",
+            "template",
+            "release",
+            str(CHART),
+            "--values",
+            str(PRODUCTION_VALUES),
+            "--set-string",
+            "app.auth.sessionSecret=render-only-session-secret",
+            "--set-string",
+            "postgresql.password=render-only-postgres-password",
+            *arguments,
+        ]
+        result = subprocess.run(command, check=False, capture_output=True, text=True)  # noqa: S603
+
+        assert result.returncode != 0
+        assert "image.digest must be a sha256 digest in production" in result.stderr
+
+
 def test_production_rejects_non_cluster_ip_service_configuration() -> None:
     command = [
         "helm",
@@ -106,6 +167,8 @@ def test_production_rejects_non_cluster_ip_service_configuration() -> None:
         "postgresql.password=render-only-postgres-password",
         "--set-string",
         "neo4j.auth.password=render-only-neo4j-password",
+        "--set-string",
+        f"image.digest={TEST_APP_DIGEST}",
     ]
     result = subprocess.run(command, check=False, capture_output=True, text=True)  # noqa: S603
     assert result.returncode != 0
@@ -136,6 +199,84 @@ def test_production_ingress_requires_tls() -> None:
     assert ingress["spec"]["tls"][0]["hosts"] == ["news.lihor.ro"]
 
 
+def test_production_traefik_enforces_redirect_and_baseline_headers() -> None:
+    rendered = render_chart("--values", str(PRODUCTION_VALUES))
+    ingress = find_kind(rendered, "Ingress")
+    redirect = find_resource(
+        rendered,
+        "Middleware",
+        "release-news-dashboard-redirect-https",
+    )
+    headers = find_resource(
+        rendered,
+        "Middleware",
+        "release-news-dashboard-security-headers",
+    )
+
+    assert ingress["spec"]["ingressClassName"] == "traefik"
+    assert ingress["spec"]["tls"][0]["secretName"] == "news-dashboard-tls"
+    assert ingress["metadata"]["annotations"] == {
+        "traefik.ingress.kubernetes.io/router.entrypoints": "web,websecure",
+        "traefik.ingress.kubernetes.io/router.middlewares": (
+            "default-release-news-dashboard-redirect-https@kubernetescrd,"
+            "default-release-news-dashboard-security-headers@kubernetescrd"
+        ),
+    }
+    assert redirect["spec"]["redirectScheme"] == {"scheme": "https", "permanent": True}
+    assert headers["spec"]["headers"] == {
+        "contentTypeNosniff": True,
+        "frameDeny": True,
+        "referrerPolicy": "no-referrer",
+        "permissionsPolicy": "camera=(), microphone=(), geolocation=()",
+        "stsSeconds": 31536000,
+        "stsIncludeSubdomains": True,
+        "stsPreload": True,
+    }
+    assert "contentSecurityPolicy" not in headers["spec"]["headers"]
+    assert "customResponseHeaders" not in headers["spec"]["headers"]
+
+
+def test_production_enables_application_hsts() -> None:
+    rendered = render_chart("--values", str(PRODUCTION_VALUES))
+    deployment = find_resource(rendered, "Deployment", "release-news-dashboard")
+    app_env = {
+        entry["name"]: entry.get("value")
+        for entry in container(deployment, "news-dashboard")["env"]
+    }
+
+    assert app_env["ENABLE_HSTS"] == "true"
+
+
+def test_production_rejects_disabled_transport_hardening() -> None:
+    for override, expected_error in (
+        (
+            "ingress.traefik.middlewareEnabled=false",
+            "Traefik middleware must be enabled in production",
+        ),
+        ("app.config.enableHsts=false", "application HSTS must be enabled in production"),
+    ):
+        command = [
+            "helm",
+            "template",
+            "release",
+            str(CHART),
+            "--values",
+            str(PRODUCTION_VALUES),
+            "--set",
+            override,
+            "--set-string",
+            "app.auth.sessionSecret=render-only-session-secret",
+            "--set-string",
+            "postgresql.password=render-only-postgres-password",
+            "--set-string",
+            f"image.digest={TEST_APP_DIGEST}",
+        ]
+        result = subprocess.run(command, check=False, capture_output=True, text=True)  # noqa: S603
+
+        assert result.returncode != 0
+        assert expected_error in result.stderr
+
+
 def test_production_rejects_ingress_without_tls() -> None:
     command = [
         "helm",
@@ -150,6 +291,8 @@ def test_production_rejects_ingress_without_tls() -> None:
         "app.auth.sessionSecret=render-only-session-secret",
         "--set-string",
         "postgresql.password=render-only-postgres-password",
+        "--set-string",
+        f"image.digest={TEST_APP_DIGEST}",
     ]
     result = subprocess.run(command, check=False, capture_output=True, text=True)  # noqa: S603
     assert result.returncode != 0
@@ -172,7 +315,7 @@ def test_production_renders_default_deny_and_required_allow_policies() -> None:
         "release-news-dashboard-postgres",
         "release-news-dashboard-neo4j",
         "release-news-dashboard-dns",
-        "release-news-dashboard-https",
+        "release-news-dashboard-public-egress",
     } <= policy_names
 
 
@@ -193,7 +336,7 @@ def test_network_policies_allow_controller_dns_https_and_configured_egress() -> 
     egress = (
         policies["release-news-dashboard-app"]["spec"]["egress"]
         + policies["release-news-dashboard-dns"]["spec"]["egress"]
-        + policies["release-news-dashboard-https"]["spec"]["egress"]
+        + policies["release-news-dashboard-public-egress"]["spec"]["egress"]
     )
     ports = {
         (port["protocol"], port["port"]) for entry in egress for port in entry.get("ports", [])
@@ -202,7 +345,10 @@ def test_network_policies_allow_controller_dns_https_and_configured_egress() -> 
     ip_blocks = [
         peer["ipBlock"] for entry in egress for peer in entry.get("to", []) if "ipBlock" in peer
     ]
-    assert {"cidr": "0.0.0.0/0"} in ip_blocks
+    assert any(
+        block["cidr"] == "0.0.0.0/0" and set(block["except"]) == PUBLIC_EGRESS_IPV4_EXCEPTIONS
+        for block in ip_blocks
+    )
 
     configured = render_chart(
         "--values",
@@ -214,6 +360,83 @@ def test_network_policies_allow_controller_dns_https_and_configured_egress() -> 
         configured, "NetworkPolicy", "release-news-dashboard-additional-egress"
     )
     assert additional["spec"]["egress"][0]["to"][0]["ipBlock"] == {"cidr": "10.0.0.0/8"}
+
+
+def test_operator_additional_egress_example_renders_private_custom_service() -> None:
+    rendered = render_chart(
+        "--values",
+        str(PRODUCTION_VALUES),
+        "--values",
+        str(ADDITIONAL_EGRESS_EXAMPLE),
+    )
+    policy = find_resource(
+        rendered,
+        "NetworkPolicy",
+        "release-news-dashboard-additional-egress",
+    )
+
+    assert policy["spec"]["egress"] == [
+        {
+            "to": [{"ipBlock": {"cidr": "10.20.0.0/24"}}],
+            "ports": [{"protocol": "TCP", "port": 5432}],
+        }
+    ]
+
+
+def test_production_public_egress_excludes_non_global_networks() -> None:
+    rendered = render_chart("--values", str(PRODUCTION_VALUES))
+    policy = find_resource(rendered, "NetworkPolicy", "release-news-dashboard-public-egress")
+    entries = policy["spec"]["egress"]
+
+    assert {(port["protocol"], port["port"]) for entry in entries for port in entry["ports"]} == {
+        ("TCP", 443),
+        ("TCP", 465),
+        ("TCP", 587),
+        ("TCP", 993),
+    }
+    ip_blocks = {
+        peer["ipBlock"]["cidr"]: set(peer["ipBlock"]["except"])
+        for entry in entries
+        for peer in entry["to"]
+    }
+    assert ip_blocks["0.0.0.0/0"] == PUBLIC_EGRESS_IPV4_EXCEPTIONS
+    assert ip_blocks["2000::/3"] == PUBLIC_EGRESS_IPV6_EXCEPTIONS
+
+
+def test_backup_policy_allows_backup_to_bundled_postgres() -> None:
+    rendered = render_chart(
+        "--values",
+        str(PRODUCTION_VALUES),
+        "--set",
+        "postgresql.backup.enabled=true",
+        "--set",
+        "postgresql.backup.hostPath=/var/backups/news-dashboard",
+    )
+    policy = find_resource(
+        rendered,
+        "NetworkPolicy",
+        "release-news-dashboard-postgres-backup",
+    )
+
+    assert policy["spec"]["podSelector"]["matchLabels"] == {
+        "app.kubernetes.io/name": "news-dashboard-postgres-backup",
+        "app.kubernetes.io/instance": "release",
+    }
+    assert policy["spec"]["egress"] == [
+        {
+            "to": [
+                {
+                    "podSelector": {
+                        "matchLabels": {
+                            "app.kubernetes.io/name": "news-dashboard-postgres",
+                            "app.kubernetes.io/instance": "release",
+                        }
+                    }
+                }
+            ],
+            "ports": [{"protocol": "TCP", "port": 5432}],
+        }
+    ]
 
 
 def test_production_workloads_have_image_compatible_restrictive_security_contexts() -> None:

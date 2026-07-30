@@ -41,7 +41,7 @@ spec:
           {{- end }}
           containers:
             - name: ingest
-              image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+              image: {{ include "news-dashboard.image" . | quote }}
               imagePullPolicy: {{ .Values.image.pullPolicy }}
               securityContext:
 {{ toYaml .Values.ingestCronJob.containerSecurityContext | indent 16 }}

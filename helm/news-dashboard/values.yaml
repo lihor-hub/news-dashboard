@@ -2,11 +2,11 @@ replicaCount: 1
 
 image:
   repository: ghcr.io/lihor-hub/news-dashboard
-  # CI overrides this with the commit SHA. This default is a successful CI-built
-  # source SHA because the deploy job receives that SHA, not the build digest.
+  # Local/default installs may use a tag. Production ignores it and requires
+  # image.digest so Kubernetes resolves an exact registry manifest.
   tag: 7d01027c3c2b21a537ab3264ce485d4fea6ba48d
-  # IfNotPresent is correct because CI pins an immutable SHA tag.
-  # Never use 'latest' + 'IfNotPresent' together — Kubernetes won't re-pull.
+  digest: ""
+  # IfNotPresent is correct for an immutable digest.
   pullPolicy: IfNotPresent
   # Name of a pre-existing kubernetes.io/dockerconfigjson Secret that gives the
   # cluster pull access to GHCR.  The CI deploy job creates/refreshes this
@@ -37,13 +37,36 @@ networkPolicy:
   # DNS, and HTTPS routes. Each list item is a Kubernetes NetworkPolicy egress
   # rule, for example an ipBlock and its allowed ports.
   additionalEgress: []
-  publicHttpsEgress:
-    - to:
-        - ipBlock:
-            cidr: 0.0.0.0/0
-      ports:
-        - protocol: TCP
-          port: 443
+  # Public-only TCP egress for app and ingest workloads. Keep non-global ranges
+  # excluded here; private/custom services belong in additionalEgress.
+  publicEgress:
+    ports:
+      - 443
+    ipBlocks:
+      - cidr: 0.0.0.0/0
+        except:
+          - 0.0.0.0/8
+          - 10.0.0.0/8
+          - 100.64.0.0/10
+          - 127.0.0.0/8
+          - 169.254.0.0/16
+          - 172.16.0.0/12
+          - 192.0.0.0/24
+          - 192.0.2.0/24
+          - 192.168.0.0/16
+          - 198.18.0.0/15
+          - 198.51.100.0/24
+          - 203.0.113.0/24
+          - 224.0.0.0/4
+          - 240.0.0.0/4
+      # IANA's currently allocated global-unicast space. Translation, local,
+      # multicast, and otherwise unallocated IPv6 ranges stay outside it.
+      - cidr: 2000::/3
+        except:
+          - 2001::/23
+          - 2001:db8::/32
+          - 2002::/16
+          - 3fff::/20
 
 app:
   # Absolute browser-facing URL used in outbound links. Configure this even
@@ -212,6 +235,8 @@ app:
     # Comma-separated browser origins allowed by CORS. Leave empty to use the
     # app's built-in default.
     corsOrigins: ""
+    # Enable only when every public request reaches the app over HTTPS.
+    enableHsts: false
 
 ingestCronJob:
   enabled: true
@@ -345,6 +370,11 @@ ingress:
   className: ""
   host: news.lihor.ro
   annotations: {}
+  traefik:
+    # Render Traefik CRD middlewares for HTTPS redirect, HSTS, and static
+    # baseline headers. The application remains the only CSP source.
+    middlewareEnabled: false
+    entryPoints: web,websecure
   tls: []
 
 resources:

@@ -203,7 +203,7 @@ set -euo pipefail
 : "${SESSION_SECRET:?set SESSION_SECRET}"
 : "${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}"
 : "${POSTGRES_HOST_PATH:?set POSTGRES_HOST_PATH}"
-: "${ROLLBACK_IMAGE_TAG:?set ROLLBACK_IMAGE_TAG}"
+: "${ROLLBACK_IMAGE_DIGEST:?set ROLLBACK_IMAGE_DIGEST from the saved release}"
 : "${ROLLBACK_NODE_PORT:?set ROLLBACK_NODE_PORT from the saved release}"
 : "${ROLLBACK_VALUES_FILE:?set the saved values path}"
 test -r "$ROLLBACK_VALUES_FILE"
@@ -219,7 +219,7 @@ helm upgrade --install news-dashboard ./helm/news-dashboard \
   --set networkPolicy.enabled=false \
   --set service.type=NodePort \
   --set service.nodePort="$ROLLBACK_NODE_PORT" \
-  --set image.tag="$ROLLBACK_IMAGE_TAG" \
+  --set-string image.digest="$ROLLBACK_IMAGE_DIGEST" \
   --set-string postgresql.persistence.hostPath="$POSTGRES_HOST_PATH" \
   --set-file app.auth.sessionSecret="$PRODUCTION_SESSION_SECRET_FILE" \
   --set-file postgresql.password="$PRODUCTION_POSTGRES_PASSWORD_FILE"

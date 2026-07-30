@@ -62,9 +62,11 @@ The application image is published as:
 ghcr.io/lihor-hub/news-dashboard:latest
 ghcr.io/lihor-hub/news-dashboard:v<version>
 ghcr.io/lihor-hub/news-dashboard:<commit-sha>
+ghcr.io/lihor-hub/news-dashboard@sha256:<digest>
 ```
 
-Pin a version or commit SHA for production instead of tracking `latest`.
+Resolve and deploy the published `sha256` digest in production instead of
+tracking a mutable tag.
 
 ## Production Helm quick start
 
@@ -74,6 +76,7 @@ keeps the application Service private:
 ```bash
 (
 set -euo pipefail
+IMAGE_DIGEST="${IMAGE_DIGEST:?set IMAGE_DIGEST to sha256:<64 lowercase hex>}"
 : "${SESSION_SECRET:?set SESSION_SECRET}"
 : "${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}"
 : "${POSTGRES_HOST_PATH:?set POSTGRES_HOST_PATH}"
@@ -84,7 +87,7 @@ prepare_production_helm_secret_files
 helm upgrade --install news-dashboard ./helm/news-dashboard \
   --namespace news-dashboard --create-namespace \
   --values ./helm/news-dashboard/values-production.yaml \
-  --set image.tag='<immutable-source-sha>' \
+  --set-string image.digest="${IMAGE_DIGEST}" \
   --set-string postgresql.persistence.hostPath="$POSTGRES_HOST_PATH" \
   --set-file app.auth.sessionSecret="$PRODUCTION_SESSION_SECRET_FILE" \
   --set-file postgresql.password="$PRODUCTION_POSTGRES_PASSWORD_FILE"
@@ -94,6 +97,11 @@ helm upgrade --install news-dashboard ./helm/news-dashboard \
 Supply secrets and installation-specific persistence at runtime. Do not commit
 them to a values file or pass their values through Helm's `--set` arguments.
 The shared helper uses protected temporary files and removes them on exit.
+Private/custom endpoints require a policy-only additional-egress values file.
+Use `deploy/additional-egress-values.example.yaml` as the shape and persist it
+through `ADDITIONAL_EGRESS_VALUES_FILE` for manual deploys or the production
+GitHub environment variable `ADDITIONAL_EGRESS_VALUES` for CI. Never put
+credentials in this non-secret NetworkPolicy input.
 Before public cutover, verify the ClusterIP Service, TLS Ingress, backups and
 restore, rollback revision, and the existing `/keycloak` route. Caddy cannot
 share ports 80 and 443 with the ingress controller.

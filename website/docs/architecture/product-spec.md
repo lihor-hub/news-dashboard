@@ -159,6 +159,7 @@ Built via `Dockerfile` at repo root. Published to GHCR via GitHub Actions on eve
 ```
 ghcr.io/lihor-hub/news-dashboard:latest
 ghcr.io/lihor-hub/news-dashboard:<sha>
+ghcr.io/lihor-hub/news-dashboard@sha256:<digest>  # production runtime
 ```
 
 ### Kubernetes (Helm)
@@ -166,6 +167,7 @@ ghcr.io/lihor-hub/news-dashboard:<sha>
 ```bash
 (
 set -euo pipefail
+IMAGE_DIGEST="${IMAGE_DIGEST:?set IMAGE_DIGEST to sha256:<64 lowercase hex>}"
 : "${SESSION_SECRET:?set SESSION_SECRET}"
 : "${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}"
 : "${POSTGRES_HOST_PATH:?set POSTGRES_HOST_PATH}"
@@ -174,8 +176,9 @@ production_cutover_enabled || { echo "Ingress cutover is not enabled" >&2; exit 
 prepare_production_helm_secret_files
 
 helm upgrade --install news-dashboard ./helm/news-dashboard \
+  --namespace news-dashboard --create-namespace \
   --values ./helm/news-dashboard/values-production.yaml \
-  --set image.tag='<immutable-source-sha>' \
+  --set-string image.digest="${IMAGE_DIGEST}" \
   --set-string postgresql.persistence.hostPath="$POSTGRES_HOST_PATH" \
   --set-file app.auth.sessionSecret="$PRODUCTION_SESSION_SECRET_FILE" \
   --set-file postgresql.password="$PRODUCTION_POSTGRES_PASSWORD_FILE"

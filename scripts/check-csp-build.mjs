@@ -19,6 +19,15 @@ try {
   fail(`could not read ${INDEX_PATH}: ${error.message}`);
 }
 
+if (/<[^>]+\son[a-z][\w:-]*\s*=/i.test(html)) {
+  fail('index.html contains an inline event handler blocked by script-src self');
+}
+if (
+  /<[^>]+\s[\w:-]+\s*=\s*(?:"\s*javascript:|'\s*javascript:|javascript:[^\s>]*)/i.test(html)
+) {
+  fail('index.html contains a javascript URL blocked by script-src self');
+}
+
 const scriptTags = [...html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi)];
 let externalRegistration;
 

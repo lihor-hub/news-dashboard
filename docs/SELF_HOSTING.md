@@ -74,7 +74,9 @@ See the [.env.example reference](#environment-variables) below for all available
 docker compose -f docker-compose.prod.yml up -d
 ```
 
-The compose file will fail fast if required secrets (`SESSION_SECRET`, `BOOTSTRAP_ADMIN_USERNAME`, `BOOTSTRAP_ADMIN_PASSWORD`, `POSTGRES_PASSWORD`, `NEO4J_PASSWORD`) are not set.
+The compose file will fail fast if `IMAGE_DIGEST` or required secrets
+(`SESSION_SECRET`, `BOOTSTRAP_ADMIN_USERNAME`, `BOOTSTRAP_ADMIN_PASSWORD`,
+`POSTGRES_PASSWORD`, `NEO4J_PASSWORD`) are not set.
 
 `docker-compose.prod.yml` also mounts the named `news-dashboard-data` volume at
 `/data` and sets `DATA_DIR=/data`. Generated article audio and briefing podcast
@@ -114,18 +116,14 @@ The image is available with the following tags:
 - `ghcr.io/lihor-hub/news-dashboard:v<version>` - Specific version (e.g., `v1.21.0`)
 - `ghcr.io/lihor-hub/news-dashboard:<commit-sha>` - Exact commit (e.g., `a1b2c3d4e5f6`)
 
-For production deployments, we recommend pinning to a specific version or commit SHA to ensure consistency and prevent unexpected updates.
+For production deployments, resolve the published manifest digest and set
+`IMAGE_DIGEST=sha256:<64 lowercase hex characters>`. Tags and commit-SHA tags
+are useful discovery aliases, but the production entry points deploy the digest.
 
-### Updating docker-compose.prod.yml to Pin a Version
+### Selecting the production Compose image
 
-Edit the `image` line in `docker-compose.prod.yml`:
-
-```yaml
-services:
-  news-dashboard:
-    image: ghcr.io/lihor-hub/news-dashboard:v1.21.0 # Pin to specific version
-    # ...
-```
+`docker-compose.prod.yml` requires `IMAGE_DIGEST` and builds the reference as
+`ghcr.io/lihor-hub/news-dashboard@${IMAGE_DIGEST}`.
 
 Then pull and restart:
 
@@ -240,7 +238,7 @@ assistant guide](https://docs.lihor.ro/docs/configuration/dify-assistant).
 | Variable          | Description                                                                                                                                                                                                                                   |
 | ----------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `ENABLE_API_DOCS` | Set to `true` to serve the interactive API docs (`/docs`, `/redoc`, `/openapi.json`). Off by default so a public deployment doesn't leak its full API surface to anonymous visitors; enable it for local development or trusted environments. |
-| `ENABLE_HSTS`     | Set to `true` to have the app send `Strict-Transport-Security` itself. Off by default, since HSTS is only correct behind HTTPS — leave it unset for local HTTP dev or when the TLS Ingress already sets it. |
+| `ENABLE_HSTS`     | Set to `true` to have the app send `Strict-Transport-Security` itself. Off by default for local HTTP development; the production Helm overlay enables it alongside the TLS Ingress middleware. |
 
 > **Important**: Never commit secrets to version control. Use environment variables or a `.env` file (not committed to Git) to manage sensitive values.
 
@@ -251,9 +249,22 @@ The app itself sets `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`,
 every response (API and static frontend alike), so this baseline applies
 regardless of which front door is used — `docker run`,
 `docker-compose.prod.yml`, or Kubernetes Ingress.
-`Strict-Transport-Security` stays opt-in via `ENABLE_HSTS` above. The
-production Ingress provides the static edge baseline; the application remains
-the source of truth for its dynamic Content Security Policy.
+`Strict-Transport-Security` stays opt-in via `ENABLE_HSTS` above, and the
+production Helm overlay opts in. The production Ingress provides the static
+edge baseline; the application remains the source of truth for its dynamic
+Content Security Policy.
+
+### Public browser renderer proxy
+
+Selenium fallback for user-controlled public URLs stays disabled unless
+`PUBLIC_RENDERER_EGRESS_PROXY` names an HTTP or HTTPS proxy that validates and
+pins every public destination. Direct renderer egress must also be blocked.
+The URL must contain only a host and optional usable port; whitespace, paths,
+query strings, and username/password userinfo are rejected. Proxy credentials
+are deliberately unsupported in this URL so they cannot reach Chrome's process
+arguments. Authenticate the renderer by source-IP/network allowlisting or an
+external proxy authentication mechanism that does not embed secrets in the
+Chrome command line.
 
 ### Optional article body extraction (Crawl4AI)
 
@@ -341,6 +352,7 @@ liveness, swap the path for `/api/live` in the snippet above.
 For `docker run`, use the same Python-based probe:
 
 ```bash
+IMAGE_DIGEST="${IMAGE_DIGEST:?set IMAGE_DIGEST to the published sha256 digest}"
 docker run -d \
   --name news-dashboard \
   --health-cmd "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/api/ready', timeout=5).read()\"" \
@@ -349,7 +361,7 @@ docker run -d \
   --health-retries 3 \
   --health-start-period 30s \
   # ... other options ...
-  ghcr.io/lihor-hub/news-dashboard:latest
+  "ghcr.io/lihor-hub/news-dashboard@${IMAGE_DIGEST}"
 ```
 
 ### Kubernetes Probe Configuration
@@ -446,6 +458,15 @@ the application TLS source of truth. The repository Caddyfile retains only the
 legacy same-host Keycloak route so its separate migration boundary stays
 visible.
 
+The public egress policy allows HTTPS and standard authenticated mail ports only
+to globally routable addresses. Private/custom endpoints require
+`networkPolicy.additionalEgress`. Copy
+`deploy/additional-egress-values.example.yaml` to a protected operator path and
+set `ADDITIONAL_EGRESS_VALUES_FILE` on every manual deployment. For CI, store
+the same policy-only YAML in the production environment variable
+`ADDITIONAL_EGRESS_VALUES`; it persists across Helm upgrades and must not
+contain credentials.
+
 Live appliance installation and cutover are intentionally not automated from
 pull-request CI. Complete the DNS/TLS, ingress-controller, firewall, Keycloak,
 and rollback rehearsal in
@@ -533,7 +554,8 @@ docker compose -f docker-compose.prod.yml run --rm news-dashboard news-dashboard
 ```bash
 (
 set -euo pipefail
-# 1. Update the image tag and pull policy
+IMAGE_DIGEST="${IMAGE_DIGEST:?set IMAGE_DIGEST to sha256:<64 lowercase hex>}"
+# 1. Deploy the exact published image manifest
 : "${SESSION_SECRET:?set SESSION_SECRET}"
 : "${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}"
 : "${POSTGRES_HOST_PATH:?set POSTGRES_HOST_PATH}"
@@ -542,9 +564,9 @@ production_cutover_enabled || { echo "Ingress cutover is not enabled" >&2; exit 
 prepare_production_helm_secret_files
 
 helm upgrade news-dashboard ./helm/news-dashboard \
+  --namespace news-dashboard --create-namespace \
   --values ./helm/news-dashboard/values-production.yaml \
-  --set image.tag=v1.22.0 \
-  --set image.pullPolicy=Always \
+  --set-string image.digest="${IMAGE_DIGEST}" \
   --set-string postgresql.persistence.hostPath="$POSTGRES_HOST_PATH" \
   --set-file app.auth.sessionSecret="$PRODUCTION_SESSION_SECRET_FILE" \
   --set-file postgresql.password="$PRODUCTION_POSTGRES_PASSWORD_FILE" \

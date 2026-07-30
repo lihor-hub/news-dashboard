@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import ipaddress
 import logging
 import os
+import re
 import urllib.parse
 from collections.abc import Callable, Generator
 from contextlib import contextmanager
@@ -25,6 +27,7 @@ logger = logging.getLogger(__name__)
 
 _ARTICLE_SELECTORS = "article, main, .post-content, .entry-content, p"
 _DEFAULT_TIMEOUT = 10.0
+_DNS_LABEL = re.compile(r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?")
 
 # Button text substrings for cookie/consent banners (matched case-insensitively)
 _CONSENT_BUTTON_TEXTS = [
@@ -87,6 +90,59 @@ class _BrowserRequest(Protocol):
     def continue_request(self) -> None: ...
 
 
+def _canonical_proxy_host(host: str) -> str:
+    if "%" in host:
+        message = "Scoped proxy addresses are not supported"
+        raise ValueError(message)
+    try:
+        address = ipaddress.ip_address(host)
+    except ValueError:
+        dns_host = host.rstrip(".")
+        try:
+            canonical = dns_host.encode("idna").decode("ascii").lower()
+        except UnicodeError as exc:
+            message = "Proxy hostname is invalid"
+            raise ValueError(message) from exc
+        labels = canonical.split(".")
+        if (
+            not canonical
+            or len(canonical) > 253
+            or any(_DNS_LABEL.fullmatch(label) is None for label in labels)
+        ):
+            message = "Proxy hostname is invalid"
+            raise ValueError(message) from None
+        return canonical
+    if isinstance(address, ipaddress.IPv6Address):
+        return f"[{address.compressed}]"
+    return address.compressed
+
+
+def _validated_proxy_authority(proxy: str) -> tuple[str, str, int | None]:
+    has_invalid_character = any(
+        character.isspace() or ord(character) < 32 or ord(character) == 127 for character in proxy
+    )
+    if has_invalid_character:
+        message = "Proxy URL contains whitespace or control characters"
+        raise ValueError(message)
+
+    parsed = urllib.parse.urlsplit(proxy)
+    port = parsed.port
+    if (
+        parsed.scheme not in {"http", "https"}
+        or not parsed.netloc
+        or parsed.hostname is None
+        or parsed.username is not None
+        or parsed.password is not None
+        or (port is not None and not 1 <= port <= 65535)
+        or parsed.path not in {"", "/"}
+        or parsed.query
+        or parsed.fragment
+    ):
+        message = "Proxy URL shape is invalid"
+        raise ValueError(message)
+    return parsed.scheme, _canonical_proxy_host(parsed.hostname), port
+
+
 def public_renderer_egress_proxy() -> str | None:
     """Return the explicitly configured validating proxy, or ``None``.
 
@@ -94,32 +150,19 @@ def public_renderer_egress_proxy() -> str | None:
     Only its URL shape is validated here; the proxy is responsible for
     validating and pinning every public destination reached by Chrome.
     """
-    proxy = os.getenv("PUBLIC_RENDERER_EGRESS_PROXY", "").strip()
-    if not proxy:
+    proxy = os.getenv("PUBLIC_RENDERER_EGRESS_PROXY", "")
+    if proxy == "":
         return None
 
-    valid = False
-    if not any(ord(character) < 32 or ord(character) == 127 for character in proxy):
-        try:
-            parsed = urllib.parse.urlparse(proxy)
-            port = parsed.port
-        except ValueError:
-            valid = False
-        else:
-            valid = (
-                parsed.scheme in {"http", "https"}
-                and bool(parsed.hostname)
-                and (port is None or port > 0)
-                and parsed.path in {"", "/"}
-                and not parsed.params
-                and not parsed.query
-                and not parsed.fragment
-            )
-
-    if not valid:
+    try:
+        scheme, host, port = _validated_proxy_authority(proxy)
+    except ValueError as exc:
         message = "PUBLIC_RENDERER_EGRESS_PROXY must be a valid HTTP or HTTPS proxy URL"
-        raise ValueError(message)
-    return proxy
+        raise ValueError(message) from exc
+
+    default_port = 80 if scheme == "http" else 443
+    authority = host if port is None or port == default_port else f"{host}:{port}"
+    return urllib.parse.urlunsplit((scheme, authority, "", "", ""))
 
 
 def _build_options() -> Options:

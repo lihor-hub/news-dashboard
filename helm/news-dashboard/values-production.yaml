@@ -7,12 +7,19 @@ ingress:
   enabled: true
   className: traefik
   host: news.lihor.ro
+  traefik:
+    middlewareEnabled: true
   tls:
     - secretName: news-dashboard-tls
       hosts: [news.lihor.ro]
 
 networkPolicy:
   enabled: true
+  # HTTPS plus common authenticated mail transports used by the app (465/587)
+  # and newsletter ingestion (993). Private/custom destinations still require
+  # networkPolicy.additionalEgress in a persistent operator values file.
+  publicEgress:
+    ports: [443, 465, 587, 993]
   ingressController:
     namespaceSelector:
       matchLabels:
@@ -20,3 +27,7 @@ networkPolicy:
     podSelector:
       matchLabels:
         app.kubernetes.io/name: traefik
+
+app:
+  config:
+    enableHsts: true

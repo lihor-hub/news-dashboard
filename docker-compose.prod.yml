@@ -23,9 +23,8 @@ services:
     restart: unless-stopped
 
   news-dashboard:
-    # CI-built application exception: this successful CI source SHA is immutable;
-    # the deploy job receives the source SHA but not the registry digest output.
-    image: ghcr.io/lihor-hub/news-dashboard:7d01027c3c2b21a537ab3264ce485d4fea6ba48d
+    # Fail closed unless the operator supplies the exact published manifest digest.
+    image: ghcr.io/lihor-hub/news-dashboard@${IMAGE_DIGEST:?IMAGE_DIGEST must be sha256 digest}
     ports:
       - "8080:8080"
     environment:

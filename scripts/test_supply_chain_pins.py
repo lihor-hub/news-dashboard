@@ -20,6 +20,7 @@ HELM_CHART = ROOT / "helm" / "news-dashboard"
 HELM_PRODUCTION_VALUES = HELM_CHART / "values-production.yaml"
 CI_BUILT_APP_IMAGE = "ghcr.io/lihor-hub/news-dashboard:7d01027c3c2b21a537ab3264ce485d4fea6ba48d"
 IMAGE_DIGEST = re.compile(r"^[^\s@]+@sha256:[0-9a-f]{64}$")
+REQUIRED_IMAGE_DIGEST = re.compile(r"^[^\s@]+@\$\{IMAGE_DIGEST:\?[^}\n]+\}$")
 
 # Each entry is a reviewed exact action identity and its executable commit.
 # Updating or adding an action therefore requires an explicit mapping change.
@@ -84,7 +85,11 @@ def find_uses(node: object) -> Iterator[str]:
 
 
 def count_version_comments(workflow_text: str, reference: str) -> int:
-    pattern = re.compile(rf"{re.escape(reference)}[^\n#]*#\s+v\d+[^\s,\]}}]*")
+    pattern = re.compile(
+        rf"^[^\n#]*\buses\s*:\s*['\"]?{re.escape(reference)}['\"]?"
+        rf"[^\n#]*#\s+v\d+[^\s,\]}}]*",
+        re.MULTILINE,
+    )
     return len(pattern.findall(workflow_text))
 
 
@@ -120,12 +125,7 @@ def assert_no_floating_action_refs(workflow: Path) -> None:
 
 
 def assert_immutable_image(image: str, source: Path) -> None:
-    # The deploy job gets github.sha, but publish does not expose its digest as
-    # a job output. This is deliberately the only non-digest production image.
-    if image == CI_BUILT_APP_IMAGE:
-        return
-
-    if IMAGE_DIGEST.fullmatch(image) is None:
+    if IMAGE_DIGEST.fullmatch(image) is None and REQUIRED_IMAGE_DIGEST.fullmatch(image) is None:
         msg = f"{display_path(source)} has mutable production image reference: {image}"
         raise AssertionError(msg)
 
@@ -227,6 +227,8 @@ def render_helm_chart(values_file: Path | None = None) -> str:
             "neo4j.enabled=true",
             "--set-string",
             "neo4j.auth.password=pin-test-neo4j-password",
+            "--set-string",
+            "image.digest=sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         ]
     )
     result = subprocess.run(command, check=True, capture_output=True, text=True)  # noqa: S603
@@ -356,6 +358,26 @@ def test_each_action_occurrence_needs_a_version_comment(tmp_path: Path) -> None:
 
     with pytest.raises(AssertionError, match="2 version comments"):
         assert_no_floating_action_refs(workflow)
+
+
+def test_version_comment_must_share_the_uses_occurrence(tmp_path: Path) -> None:
+    checkout = APPROVED_ACTION_COMMITS["actions/checkout"]
+    workflow = tmp_path / "detached-comment.yml"
+    workflow.write_text(
+        f"# actions/checkout@{checkout} # v7\n"
+        "jobs:\n"
+        "  check:\n"
+        "    steps:\n"
+        f"      - uses: actions/checkout@{checkout}\n"
+    )
+
+    with pytest.raises(AssertionError, match="version comment"):
+        assert_no_floating_action_refs(workflow)
+
+
+def test_ci_built_application_tag_is_not_an_immutable_image() -> None:
+    with pytest.raises(AssertionError, match="mutable production image"):
+        assert_immutable_image(CI_BUILT_APP_IMAGE, Path("production-source"))
 
 
 def test_digest_pinned_docker_action_is_allowed(tmp_path: Path) -> None:

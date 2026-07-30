@@ -53,7 +53,7 @@ def test_deploy_creates_namespace_before_secrets() -> None:
     pull_index = workflow.index(pull_command)
     ai_index = workflow.index(ai_command)
     gate_index = workflow.index("if ! production_cutover_enabled; then")
-    docker_pull_index = workflow.index('docker pull "${IMG}:${SHA}"')
+    docker_pull_index = workflow.index('docker pull "${IMG}@${IMAGE_DIGEST}"')
 
     assert gate_index < docker_pull_index  # noqa: S101
     assert namespace_index < pull_index  # noqa: S101
@@ -64,7 +64,7 @@ def test_deploy_creates_namespace_before_secrets() -> None:
 def test_deploy_supports_public_ghcr_without_token() -> None:
     workflow = CI_WORKFLOW.read_text()
     public_image_message = (
-        'echo "GHCR_TOKEN is empty; treating ${IMG}:${SHA} as a public GHCR image."'
+        'echo "GHCR_TOKEN is empty; treating ${IMG}@${IMAGE_DIGEST} as a public GHCR image."'
     )
     empty_image_pull_arg = "pull_secret_helm_args=(--set-string image.pullSecretName=)"
 
@@ -102,6 +102,48 @@ def test_production_deploy_uses_cluster_ip_and_ingress() -> None:
         assert "service.type=NodePort" not in source  # noqa: S101
         assert "service.nodePort=30088" not in source  # noqa: S101
         assert "values-production.yaml" in source  # noqa: S101
+
+
+def test_publish_exposes_and_deploys_the_exact_application_digest() -> None:
+    workflow = yaml.safe_load(CI_WORKFLOW.read_text())
+    publish = workflow["jobs"]["publish"]
+    deploy = workflow["jobs"]["deploy"]
+    deploy_step = next(step for step in deploy["steps"] if step["name"] == "Deploy (Helm)")
+
+    assert publish["outputs"]["image_digest"] == "${{ steps.build.outputs.digest }}"  # noqa: S101
+    assert deploy_step["env"]["IMAGE_DIGEST"] == (  # noqa: S101
+        "${{ needs.publish.outputs.image_digest }}"
+    )
+    script = deploy_step["run"]
+    assert 'docker pull "${IMG}@${IMAGE_DIGEST}"' in script  # noqa: S101
+    assert '--set-string "image.digest=${IMAGE_DIGEST}"' in script  # noqa: S101
+    assert "--set image.tag=" not in script  # noqa: S101
+
+
+def test_manual_production_helper_requires_and_deploys_image_digest() -> None:
+    helper = DEPLOY_HELPER.read_text()
+
+    assert 'if [[ -z "${IMAGE_DIGEST:-}" ]]; then' in helper  # noqa: S101
+    assert "IMAGE_DIGEST must be sha256:" in helper  # noqa: S101
+    assert '--set-string "image.digest=${IMAGE_DIGEST}"' in helper  # noqa: S101
+    assert "--set image.tag=" not in helper  # noqa: S101
+
+
+def test_deploy_supports_persistent_non_secret_additional_egress_values() -> None:
+    workflow = yaml.safe_load(CI_WORKFLOW.read_text())
+    deploy_step = next(
+        step for step in workflow["jobs"]["deploy"]["steps"] if step["name"] == "Deploy (Helm)"
+    )
+    script = deploy_step["run"]
+    helper = DEPLOY_HELPER.read_text()
+
+    assert deploy_step["env"]["ADDITIONAL_EGRESS_VALUES"] == (  # noqa: S101
+        "${{ vars.ADDITIONAL_EGRESS_VALUES }}"
+    )
+    assert "additional-egress-values.yaml" in script  # noqa: S101
+    assert '"${additional_egress_helm_args[@]}"' in script  # noqa: S101
+    assert "ADDITIONAL_EGRESS_VALUES_FILE" in helper  # noqa: S101
+    assert '"${ADDITIONAL_EGRESS_HELM_ARGS[@]}"' in helper  # noqa: S101
 
 
 def test_public_smoke_check_uses_https_hostname() -> None:
@@ -187,6 +229,7 @@ for argument in "${{PRODUCTION_HELM_SECRET_ARGS[@]}}"; do
 done
 helm template secret-test {shlex.quote(str(CHART))} \
   --values {shlex.quote(str(PRODUCTION_VALUES))} \
+  --set-string image.digest=sha256:{"a" * 64} \
   --set-string postgresql.persistence.hostPath= \
   "${{PRODUCTION_HELM_SECRET_ARGS[@]}}"
 """
@@ -255,6 +298,9 @@ def test_direct_production_helm_examples_choose_storage_and_secret_files() -> No
             assert "postgresql.persistence.hostPath" in command  # noqa: S101
             assert "--set-file app.auth.sessionSecret=" in command  # noqa: S101
             assert "--set-file postgresql.password=" in command  # noqa: S101
+            assert 'IMAGE_DIGEST="${IMAGE_DIGEST:?' in command  # noqa: S101
+            assert '--set-string image.digest="${IMAGE_DIGEST}"' in command  # noqa: S101
+            assert "--namespace news-dashboard --create-namespace" in command  # noqa: S101
             assert "--set-string app.auth.sessionSecret=" not in command  # noqa: S101
             assert "--set-string postgresql.password=" not in command  # noqa: S101
 
