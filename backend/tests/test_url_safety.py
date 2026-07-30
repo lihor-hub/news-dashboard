@@ -23,9 +23,18 @@ _AddrInfo = tuple[int, int, int, str, _SockAddr]
 
 
 def _fake_getaddrinfo(addresses: list[str]) -> Callable[..., list[_AddrInfo]]:
-    def fake_getaddrinfo(_host: str, _port: int | None, **kwargs: int) -> list[_AddrInfo]:
-        socket_type = kwargs["type"]
-        port = _port or 0
+    def fake_getaddrinfo(
+        _host: str,
+        _port: int | None,
+        _family: int = 0,
+        _socket_type: int = 0,
+        _protocol: int = 0,
+        _flags: int = 0,
+        **kwargs: int,
+    ) -> list[_AddrInfo]:
+        del _family, _protocol, _flags
+        socket_type = kwargs.get("type", _socket_type)
+        port = _port if _port is not None else 0
         return [
             (
                 socket.AF_INET6 if ":" in address else socket.AF_INET,
@@ -42,23 +51,23 @@ def _fake_getaddrinfo(addresses: list[str]) -> Callable[..., list[_AddrInfo]]:
 
 class _SocketResponder:
     def __init__(self, responses: list[bytes]) -> None:
-        self._responses = iter(responses)
-        self.dials: list[tuple[str, int]] = []
+        self._connections = [(*socket.socketpair(), response) for response in responses]
+        self.dials: list[_SockAddr] = []
+        self.socket_families: list[int] = []
         self.requests: list[bytes] = []
         self._threads: list[threading.Thread] = []
 
-    def create_connection(
+    def create_socket(
         self,
-        address: tuple[str, int],
-        timeout: object | None = None,
-        source_address: tuple[str, int] | None = None,
-        *,
-        all_errors: bool = False,
+        family: int = -1,
+        socket_type: int = -1,
+        protocol: int = -1,
+        fileno: int | None = None,
     ) -> _SocketAdapter:
-        del timeout, source_address, all_errors
-        self.dials.append(address)
-        response = next(self._responses)
-        client, server = socket.socketpair()
+        del socket_type, protocol
+        assert fileno is None
+        self.socket_families.append(family)
+        client, server, response = self._connections.pop(0)
 
         def respond() -> None:
             request = b""
@@ -73,7 +82,7 @@ class _SocketResponder:
         thread = threading.Thread(target=respond, daemon=True)
         thread.start()
         self._threads.append(thread)
-        return _SocketAdapter(client)
+        return _SocketAdapter(client, self.dials)
 
     def join(self) -> None:
         for thread in self._threads:
@@ -83,8 +92,15 @@ class _SocketResponder:
 class _SocketAdapter:
     """Socketpair endpoint that tolerates HTTPConnection's TCP_NODELAY setup."""
 
-    def __init__(self, sock: socket.socket) -> None:
+    def __init__(self, sock: socket.socket, dials: list[_SockAddr]) -> None:
         self._sock = sock
+        self._dials = dials
+
+    def settimeout(self, _timeout: object | None) -> None:
+        return None
+
+    def connect(self, address: _SockAddr) -> None:
+        self._dials.append(address)
 
     def setsockopt(self, _level: int, _option: int, _value: int) -> None:
         return None
@@ -141,24 +157,27 @@ def test_validate_server_fetch_url_rejects_any_unsafe_resolved_address(
 
 
 @pytest.mark.parametrize(
-    ("url", "resolved_address", "expected_dial", "expected_host"),
+    ("url", "resolved_address", "expected_dial", "expected_family", "expected_host"),
     [
         (
             "http://example.test/feed.xml",
             "93.184.216.34",
             ("93.184.216.34", 80),
+            socket.AF_INET,
             b"Host: example.test\r\n",
         ),
         (
             "http://example.test:8080/feed.xml",
             "93.184.216.34",
             ("93.184.216.34", 8080),
+            socket.AF_INET,
             b"Host: example.test:8080\r\n",
         ),
         (
             "http://[2606:4700:4700::1111]:8080/feed.xml",
             "2606:4700:4700::1111",
-            ("2606:4700:4700::1111", 8080),
+            ("2606:4700:4700::1111", 8080, 0, 0),
+            socket.AF_INET6,
             b"Host: [2606:4700:4700::1111]:8080\r\n",
         ),
     ],
@@ -166,22 +185,39 @@ def test_validate_server_fetch_url_rejects_any_unsafe_resolved_address(
 def test_open_dials_the_validated_numeric_address_without_second_dns_lookup(
     url: str,
     resolved_address: str,
-    expected_dial: tuple[str, int],
+    expected_dial: _SockAddr,
+    expected_family: int,
     expected_host: bytes,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     resolver_calls: list[tuple[str, int | None]] = []
 
-    def resolve_once(host: str, port: int | None, **kwargs: int) -> list[_AddrInfo]:
+    def resolve_once(
+        host: str,
+        port: int | None,
+        family: int = 0,
+        socket_type: int = 0,
+        protocol: int = 0,
+        flags: int = 0,
+        **kwargs: int,
+    ) -> list[_AddrInfo]:
         resolver_calls.append((host, port))
         if len(resolver_calls) > 1:
             msg = "hostname was resolved more than once"
             raise AssertionError(msg)
-        return _fake_getaddrinfo([resolved_address])(host, port, **kwargs)
+        return _fake_getaddrinfo([resolved_address])(
+            host,
+            port,
+            family,
+            socket_type,
+            protocol,
+            flags,
+            **kwargs,
+        )
 
     responder = _SocketResponder([_ok_response()])
     monkeypatch.setattr(socket, "getaddrinfo", resolve_once)
-    monkeypatch.setattr(socket, "create_connection", responder.create_connection)
+    monkeypatch.setattr(socket, "socket", responder.create_socket)
     monkeypatch.setenv("HTTP_PROXY", "http://127.0.0.1:3128")
     monkeypatch.setenv("http_proxy", "http://127.0.0.1:3128")
 
@@ -192,6 +228,7 @@ def test_open_dials_the_validated_numeric_address_without_second_dns_lookup(
 
     assert len(resolver_calls) == 1
     assert responder.dials == [expected_dial]
+    assert responder.socket_families == [expected_family]
     assert expected_host in responder.requests[0]
 
 
@@ -216,7 +253,7 @@ def test_trailing_dot_is_canonicalized_only_for_resolution(
 
     responder = _SocketResponder([_ok_response()])
     monkeypatch.setattr(socket, "getaddrinfo", resolve)
-    monkeypatch.setattr(socket, "create_connection", responder.create_connection)
+    monkeypatch.setattr(socket, "socket", responder.create_socket)
 
     request = urllib.request.Request("http://Example.Test.:8080/feed.xml")
     with open_server_fetch_url(request, timeout=1) as response:
@@ -228,7 +265,27 @@ def test_trailing_dot_is_canonicalized_only_for_resolution(
     assert b"Host: Example.Test.:8080\r\n" in responder.requests[0]
 
 
-def test_https_uses_original_hostname_for_sni(monkeypatch: pytest.MonkeyPatch) -> None:
+@pytest.mark.parametrize(
+    ("url", "expected_sni", "expected_host"),
+    [
+        (
+            "https://example.test:8443/feed.xml",
+            "example.test",
+            b"Host: example.test:8443\r\n",
+        ),
+        (
+            "https://Example.Test.:8443/feed.xml",
+            "example.test",
+            b"Host: Example.Test.:8443\r\n",
+        ),
+    ],
+)
+def test_https_uses_canonical_hostname_for_sni(
+    url: str,
+    expected_sni: str,
+    expected_host: bytes,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     responder = _SocketResponder([_ok_response()])
     server_hostnames: list[str | None] = []
 
@@ -243,17 +300,17 @@ def test_https_uses_original_hostname_for_sni(monkeypatch: pytest.MonkeyPatch) -
         return sock
 
     monkeypatch.setattr(socket, "getaddrinfo", _fake_getaddrinfo(["93.184.216.34"]))
-    monkeypatch.setattr(socket, "create_connection", responder.create_connection)
+    monkeypatch.setattr(socket, "socket", responder.create_socket)
     monkeypatch.setattr(ssl.SSLContext, "wrap_socket", wrap_socket)
 
-    request = urllib.request.Request("https://example.test:8443/feed.xml")
+    request = urllib.request.Request(url)  # noqa: S310 - validated by open_server_fetch_url
     with open_server_fetch_url(request, timeout=1) as response:
         response.read()
     responder.join()
 
     assert responder.dials == [("93.184.216.34", 8443)]
-    assert server_hostnames == ["example.test"]
-    assert b"Host: example.test:8443\r\n" in responder.requests[0]
+    assert server_hostnames == [expected_sni]
+    assert expected_host in responder.requests[0]
 
 
 def test_redirect_resolves_validates_and_pins_each_hop(
@@ -275,7 +332,7 @@ def test_redirect_resolves_validates_and_pins_each_hop(
     )
     responder = _SocketResponder([redirect])
     monkeypatch.setattr(socket, "getaddrinfo", resolve)
-    monkeypatch.setattr(socket, "create_connection", responder.create_connection)
+    monkeypatch.setattr(socket, "socket", responder.create_socket)
 
     request = urllib.request.Request("http://example.test/feed.xml")
     with pytest.raises(UnsafeUrlError):
@@ -290,6 +347,7 @@ def test_redirect_resolves_validates_and_pins_each_hop(
     "url",
     [
         "http://example.test:not-a-port/feed.xml",
+        "http://example.test:0/feed.xml",
         "http://user:password@example.test/feed.xml",
         "http://example.test/\nheader",
         "http://example.test/\x00control",

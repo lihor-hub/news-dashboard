@@ -31,7 +31,6 @@ from news_dashboard.social_posts import canonical_x_status_url
 from news_dashboard.url_safety import (
     UnsafeUrlError,
     open_server_fetch_url,
-    validate_server_fetch_url,
 )
 
 logger = logging.getLogger(__name__)
@@ -65,7 +64,7 @@ def _fetch_capped_html(url: str, *, byte_cap: int) -> str:
 
 
 def _ai_extract_body(url: str, *, user_id: int | None = None) -> tuple[str, str]:
-    """Fallback: fetch raw HTML via httpx and extract body text via the free LLM gateway.
+    """Fetch bounded HTML centrally and extract body text via the free LLM gateway.
 
     Returns (text, 'ok') on success or ('', 'error') if no API key is
     configured, the HTTP fetch fails, or the AI call fails.
@@ -79,7 +78,6 @@ def _ai_extract_body(url: str, *, user_id: int | None = None) -> tuple[str, str]
     model = os.getenv("OPENAI_BRIEFING_MODEL", _AI_MODEL)
 
     try:
-        validate_server_fetch_url(url)
         html = _fetch_capped_html(url, byte_cap=_AI_FETCH_BYTE_CAP)[:_AI_HTML_LIMIT]
     except UnsafeUrlError as exc:
         logger.warning("ai_body_fetch: unsafe URL %r: %s", url, exc)
@@ -348,8 +346,7 @@ def _static_extract_body(  # noqa: PLR0911 - each bounded fetch failure has a di
 ) -> tuple[str, str, FailureReason | None]:
     """Fetch and parse static HTML without invoking a rendered fallback."""
     try:
-        validate_server_fetch_url(url)
-        req = urllib.request.Request(  # noqa: S310 - scheme validated above
+        req = urllib.request.Request(  # noqa: S310 - scheme validated by central opener
             url, headers={"User-Agent": USER_AGENT}
         )
         with open_server_fetch_url(req, timeout=TIMEOUT_SECS) as resp:

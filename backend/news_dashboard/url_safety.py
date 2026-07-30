@@ -15,7 +15,7 @@ import ssl
 import urllib.request
 from dataclasses import dataclass, field
 from http.client import HTTPMessage
-from typing import IO, Any
+from typing import IO, Any, cast
 from urllib.parse import urlparse
 
 
@@ -23,14 +23,18 @@ class UnsafeUrlError(ValueError):
     """Raised when a URL is not safe for server-side fetching."""
 
 
+_SockAddr = tuple[str, int] | tuple[str, int, int, int]
+
+
 @dataclass(frozen=True, slots=True)
 class ResolvedTarget:
     """A validated numeric endpoint for one HTTP request."""
 
     hostname: str
-    address: str
-    port: int
+    dns_hostname: str
+    sockaddr: _SockAddr
     family: int
+    protocol: int
 
 
 def validate_server_fetch_url(url: str) -> None:
@@ -77,7 +81,7 @@ def _parse_server_fetch_url(url: str) -> tuple[str, str, int]:
         msg = f"Refusing to fetch local host: {hostname!r}"
         raise UnsafeUrlError(msg)
 
-    port = parsed_port or (443 if parsed.scheme == "https" else 80)
+    port = (443 if parsed.scheme == "https" else 80) if parsed_port is None else parsed_port
     if port <= 0:
         msg = f"Refusing to fetch URL with invalid port: {url!r}"
         raise UnsafeUrlError(msg)
@@ -94,7 +98,7 @@ def _resolve_server_fetch_target(url: str) -> ResolvedTarget:
         raise UnsafeUrlError(msg) from exc
 
     selected: ResolvedTarget | None = None
-    for family, _, _, _, sockaddr in addresses:
+    for family, _, protocol, _, sockaddr in addresses:
         if family not in {socket.AF_INET, socket.AF_INET6}:
             msg = f"Refusing to fetch unsupported address family: {family}"
             raise UnsafeUrlError(msg)
@@ -111,11 +115,18 @@ def _resolve_server_fetch_target(url: str) -> ResolvedTarget:
             raise UnsafeUrlError(msg)
 
         if selected is None:
+            pinned_sockaddr: _SockAddr
+            if family == socket.AF_INET6:
+                ipv6_sockaddr = cast("tuple[str, int, int, int]", sockaddr)
+                pinned_sockaddr = (str(ip), port, ipv6_sockaddr[2], ipv6_sockaddr[3])
+            else:
+                pinned_sockaddr = (str(ip), port)
             selected = ResolvedTarget(
                 hostname=hostname,
-                address=str(ip),
-                port=port,
+                dns_hostname=normalized_host,
+                sockaddr=pinned_sockaddr,
                 family=family,
+                protocol=protocol,
             )
 
     if selected is None:
@@ -183,11 +194,7 @@ class _PinnedHTTPConnection(http.client.HTTPConnection):
 
     def connect(self) -> None:
         """Connect to the validated numeric address, retaining ``self.host``."""
-        self.sock = socket.create_connection(
-            (self._resolved_target.address, self._resolved_target.port),
-            self.timeout,
-        )
-        self.sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+        self.sock = _connect_resolved_target(self._resolved_target, self.timeout)
 
 
 class _PinnedHTTPSConnection(http.client.HTTPSConnection):
@@ -206,12 +213,27 @@ class _PinnedHTTPSConnection(http.client.HTTPSConnection):
 
     def connect(self) -> None:
         """Dial the numeric address and authenticate the original hostname."""
-        self.sock = socket.create_connection(
-            (self._resolved_target.address, self._resolved_target.port),
-            self.timeout,
+        self.sock = _connect_resolved_target(self._resolved_target, self.timeout)
+        self.sock = self._ssl_context.wrap_socket(
+            self.sock,
+            server_hostname=self._resolved_target.dns_hostname,
         )
-        self.sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
-        self.sock = self._ssl_context.wrap_socket(self.sock, server_hostname=self.host)
+
+
+def _connect_resolved_target(
+    target: ResolvedTarget,
+    timeout: float | None,
+) -> socket.socket:
+    """Connect a socket directly to the validated sockaddr without name lookup."""
+    sock = socket.socket(target.family, socket.SOCK_STREAM, target.protocol)
+    try:
+        sock.settimeout(timeout)
+        sock.connect(target.sockaddr)
+        sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+    except OSError:
+        sock.close()
+        raise
+    return sock
 
 
 class _PinnedHTTPHandler(urllib.request.HTTPHandler):

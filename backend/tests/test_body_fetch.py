@@ -83,10 +83,7 @@ def _allow_local_body_fetches() -> Iterator[None]:
     def local_open(req: urllib.request.Request, *, timeout: float) -> object:
         return urllib.request.urlopen(req, timeout=timeout)  # noqa: S310
 
-    with (
-        patch("news_dashboard.body_fetch.validate_server_fetch_url", return_value=None),
-        patch("news_dashboard.body_fetch.open_server_fetch_url", side_effect=local_open),
-    ):
+    with patch("news_dashboard.body_fetch.open_server_fetch_url", side_effect=local_open):
         yield
 
 
@@ -232,7 +229,11 @@ def test_extract_public_content_uses_crawl4ai_then_optional_ai() -> None:
 
 def test_static_extract_classifies_unsafe_redirect() -> None:
     with (
-        patch("news_dashboard.body_fetch.validate_server_fetch_url"),
+        patch(
+            "news_dashboard.body_fetch.validate_server_fetch_url",
+            side_effect=AssertionError("body fetch performed redundant URL validation"),
+            create=True,
+        ),
         patch(
             "news_dashboard.body_fetch.open_server_fetch_url",
             side_effect=UnsafeUrlError("unsafe redirect"),
@@ -797,7 +798,7 @@ def test_extract_body_rejects_private_network_url_before_fetch(
     assert called is False
 
 
-def test_ai_extract_body_rejects_private_network_url_before_fetch() -> None:
+def test_ai_extract_body_maps_central_opener_unsafe_url_to_error() -> None:
     from news_dashboard.body_fetch import _ai_extract_body
 
     called = False
@@ -805,6 +806,8 @@ def test_ai_extract_body_rejects_private_network_url_before_fetch() -> None:
     def fake_open(*_: object, **__: object) -> None:
         nonlocal called
         called = True
+        message = "unsafe URL"
+        raise UnsafeUrlError(message)
 
     with (
         patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}),
@@ -814,7 +817,7 @@ def test_ai_extract_body_rejects_private_network_url_before_fetch() -> None:
 
     assert status == "error"
     assert body == ""
-    assert called is False
+    assert called is True
 
 
 def test_ai_extract_body_calls_openai_on_html(tmp_path: Path) -> None:
@@ -832,7 +835,11 @@ def test_ai_extract_body_calls_openai_on_html(tmp_path: Path) -> None:
 
     with (
         patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}),
-        patch("news_dashboard.body_fetch.validate_server_fetch_url"),
+        patch(
+            "news_dashboard.body_fetch.validate_server_fetch_url",
+            side_effect=AssertionError("AI body fetch performed redundant URL validation"),
+            create=True,
+        ),
         patch("news_dashboard.body_fetch.open_server_fetch_url", return_value=response),
         patch("news_dashboard.ai_client.get_chat_model", return_value=model),
     ):
@@ -851,7 +858,6 @@ def test_ai_extract_body_uses_managed_prompt() -> None:
     managed = ManagedPrompt(text="compiled extraction prompt", langfuse_prompt=object())
     with (
         patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}),
-        patch("news_dashboard.body_fetch.validate_server_fetch_url"),
         patch(
             "news_dashboard.body_fetch.open_server_fetch_url",
             return_value=_FakeOpenResponse(html),
@@ -880,7 +886,6 @@ def test_ai_extract_body_returns_error_on_http_failure(tmp_path: Path) -> None:
 
     with (
         patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}),
-        patch("news_dashboard.body_fetch.validate_server_fetch_url"),
         patch(
             "news_dashboard.body_fetch.open_server_fetch_url",
             side_effect=RuntimeError("connection refused"),
@@ -899,7 +904,6 @@ def test_ai_extract_body_returns_error_on_non_2xx_status(tmp_path: Path) -> None
 
     with (
         patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}),
-        patch("news_dashboard.body_fetch.validate_server_fetch_url"),
         patch("news_dashboard.body_fetch.open_server_fetch_url", return_value=response),
     ):
         body, status = _ai_extract_body("https://example.com/missing")
@@ -919,7 +923,6 @@ def test_ai_extract_body_returns_error_when_openai_returns_empty(tmp_path: Path)
 
     with (
         patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}),
-        patch("news_dashboard.body_fetch.validate_server_fetch_url"),
         patch("news_dashboard.body_fetch.open_server_fetch_url", return_value=response),
         patch("news_dashboard.ai_client.get_chat_model", return_value=model),
     ):
@@ -946,7 +949,6 @@ def test_ai_extract_body_truncates_html_to_limit(tmp_path: Path) -> None:
 
     with (
         patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}),
-        patch("news_dashboard.body_fetch.validate_server_fetch_url"),
         patch("news_dashboard.body_fetch.open_server_fetch_url", return_value=response),
         patch("news_dashboard.ai_client.get_chat_model", return_value=model),
     ):
