@@ -8,8 +8,10 @@
  * We read public/manifest.webmanifest directly so CI catches drift in the
  * install metadata served by both dev and production builds.
  */
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
+import { spawnSync } from 'node:child_process';
 import { describe, it, expect } from 'vitest';
 
 const MANIFEST = JSON.parse(
@@ -28,6 +30,46 @@ const MANIFEST = JSON.parse(
     params: { title: string; text: string; url: string };
   };
 };
+
+function runCspBuildCheck(indexHtml: string, registrationScript?: string) {
+  const buildDir = mkdtempSync(join(tmpdir(), 'news-dashboard-csp-build-'));
+  try {
+    writeFileSync(join(buildDir, 'index.html'), indexHtml);
+    if (registrationScript !== undefined) {
+      writeFileSync(join(buildDir, 'registerSW.js'), registrationScript);
+    }
+    mkdirSync(join(buildDir, 'assets'));
+    writeFileSync(join(buildDir, 'assets', 'index.js'), 'export {};');
+    writeFileSync(join(buildDir, 'sw.js'), 'self.skipWaiting();');
+    writeFileSync(join(buildDir, 'manifest.webmanifest'), '{}');
+    return spawnSync(
+      process.execPath,
+      [resolve(process.cwd(), 'scripts/check-csp-build.mjs'), buildDir],
+      { encoding: 'utf-8' }
+    );
+  } finally {
+    rmSync(buildDir, { recursive: true, force: true });
+  }
+}
+
+describe('PWA production build — Content Security Policy compatibility', () => {
+  it('accepts external same-origin service-worker registration', () => {
+    const result = runCspBuildCheck(
+      '<script type="module" src="/assets/index.js"></script>' +
+        '<script src="/registerSW.js"></script>',
+      "navigator.serviceWorker.register('/sw.js');"
+    );
+
+    expect(result.status, result.stderr).toBe(0);
+  });
+
+  it('rejects inline service-worker registration', () => {
+    const result = runCspBuildCheck("<script>navigator.serviceWorker.register('/sw.js');</script>");
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain('inline script');
+  });
+});
 
 describe('PWA manifest — identity', () => {
   it('has a human-readable name', () => {

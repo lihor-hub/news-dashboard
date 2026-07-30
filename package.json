@@ -26,7 +26,7 @@
   },
   "scripts": {
     "dev": "vite --host 0.0.0.0",
-    "build": "tsc -b && vite build && node scripts/check-bundle-budget.mjs",
+    "build": "tsc -b && vite build && node scripts/check-bundle-budget.mjs && node scripts/check-csp-build.mjs",
     "preview": "vite preview --host 0.0.0.0",
     "typecheck": "tsc -b --noEmit",
     "lint": "eslint . --max-warnings 0",
