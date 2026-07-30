@@ -9,6 +9,7 @@ By participating in this project, you agree to abide by our
 
 - **[Good first issues](https://github.com/lihor-hub/news-dashboard/issues?q=is%3Aopen+label%3A%22good+first+issue%22)** — beginner-friendly tasks you can pick up cold.
 - **[Help wanted](https://github.com/lihor-hub/news-dashboard/issues?q=is%3Aopen+label%3A%22help+wanted%22)** — issues the maintainers would love help with.
+- **[Contributor announcement](https://github.com/lihor-hub/news-dashboard/discussions/1331)** — where we're looking for help right now, and the place to ask questions.
 - **[docs.lihor.ro](https://docs.lihor.ro)** — the published documentation site (source in `website/`, preview with `cd website && npm install && npm run start`).
 - **[GOVERNANCE.md](GOVERNANCE.md)** — how decisions are made and how releases ship.
 - **[MAINTAINERS.md](MAINTAINERS.md)** — who maintains this project and how to become one.
@@ -20,7 +21,8 @@ Not sure which part of the codebase to touch? Here is a quick map:
 
 | I want to… | Where to look |
 |---|---|
-| Add a new feed source or scraper | `backend/news_dashboard/ingest/` |
+| Add a new feed source | `backend/news_dashboard/sources/service.py` (`DEFAULT_SOURCES`) |
+| Add or fix a scraper | `backend/news_dashboard/scraper.py` (`_SCRAPERS`) |
 | Work on the UI / React components | `frontend/src/` |
 | Add or improve translations (i18n) | `frontend/src/locales/` |
 | Write or fix backend tests | `backend/tests/` |

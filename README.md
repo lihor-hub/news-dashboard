@@ -457,7 +457,10 @@ The project is maintainer-led — see [MAINTAINERS.md](MAINTAINERS.md) for who's
 involved, [GOVERNANCE.md](GOVERNANCE.md) for how decisions get made, and
 [ROADMAP.md](ROADMAP.md) for near-term direction.
 
-New to the project? Browse [good first issues](https://github.com/lihor-hub/news-dashboard/issues?q=is%3Aopen+label%3A%22good+first+issue%22) — beginner-friendly tasks with clear scope.
+New to the project? Browse [good first issues](https://github.com/lihor-hub/news-dashboard/issues?q=is%3Aopen+label%3A%22good+first+issue%22) — beginner-friendly tasks with clear scope — or the meatier
+[help wanted](https://github.com/lihor-hub/news-dashboard/issues?q=is%3Aopen+label%3A%22help+wanted%22) projects.
+The [contributor announcement](https://github.com/lihor-hub/news-dashboard/discussions/1331)
+sums up where help is most wanted right now.
 
 Have a question or an open-ended feature idea? Use
 [GitHub Discussions](https://github.com/lihor-hub/news-dashboard/discussions) instead of
