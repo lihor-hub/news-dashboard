@@ -25,6 +25,7 @@ from news_dashboard.db import connect, init_db, insert_article_sql, placeholders
 from news_dashboard.ingest_events import ingest_events
 from news_dashboard.prompt_catalog import get_chat_prompt
 from news_dashboard.recommendations import COLD_START_MODEL_VERSION
+from news_dashboard.social_posts import canonical_x_status_url
 from news_dashboard.sources.service import DEFAULT_SOURCES, SourceDefinition
 from news_dashboard.url_safety import (
     UnsafeUrlError,
@@ -610,6 +611,14 @@ def _nitter_handle(url: str) -> str:
     return url.rstrip("/").split("/")[-1]
 
 
+def _nitter_feed_body(entry: dict[str, Any]) -> str:
+    """Return complete post text already supplied by the Nitter RSS entry."""
+    description = clean_html(str(entry.get("description") or ""))
+    if description:
+        return description
+    return clean_html(str(entry.get("title") or ""))
+
+
 def _fetch_nitter_feed(source: SourceDefinition) -> list[dict[str, Any]]:
     """Fetch an X/Twitter account via Nitter RSS, trying instances in order."""
     handle = _nitter_handle(source.url)
@@ -627,6 +636,9 @@ def _fetch_nitter_feed(source: SourceDefinition) -> list[dict[str, Any]]:
         # as failed and try the next rather than ingesting the placeholder.
         tweets = [e for e in entries if "/status/" in (e.get("url") or "")]
         if tweets:
+            for tweet in tweets:
+                tweet["feed_body"] = _nitter_feed_body(tweet)
+                tweet["url"] = canonical_x_status_url(str(tweet["url"]))
             return tweets
         msg = f"Nitter {instance} returned no tweets for @{handle} (placeholder or blocked)"
         logger.warning(msg)
@@ -958,6 +970,16 @@ def _persist_entry(  # noqa: PLR0913, PLR0917
                     detected_lang,
                 ),
             )
+            feed_body = clean_html(str(entry.get("feed_body") or ""))
+            if cursor.rowcount and feed_body:
+                conn.execute(
+                    """
+                    UPDATE articles
+                       SET body = %s, original_body = %s, body_status = 'ok'
+                     WHERE url = %s
+                    """,
+                    (feed_body, entry.get("original_feed_body"), url),
+                )
             return int(cursor.rowcount)
     except psycopg.Error as exc:
         logger.warning(
@@ -1022,6 +1044,14 @@ def _ingest_source(
                 translated_title, translated_desc, detected_lang, original_title = (
                     detect_and_translate_article(title, description, source.lang)
                 )
+                feed_body = clean_html(str(entry.get("feed_body") or ""))
+                if feed_body:
+                    entry["feed_body"] = (
+                        translated_desc if clean_html(description) else translated_title
+                    )
+                    entry["original_feed_body"] = (
+                        feed_body if detected_lang not in {None, "en"} else None
+                    )
 
                 if not _should_include(translated_title, translated_desc, source.slug):
                     continue

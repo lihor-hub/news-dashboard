@@ -8,6 +8,7 @@ from typing import ClassVar
 
 import pytest
 
+from news_dashboard.db import connect
 from news_dashboard.ingest.service import (
     _FEED_AGENT,
     _NITTER_INSTANCES,
@@ -17,7 +18,9 @@ from news_dashboard.ingest.service import (
     FeedFetchError,
     _fetch_feed_content,
     _fetch_nitter_feed,
+    _ingest_source,
     _nitter_handle,
+    sync_sources,
 )
 from news_dashboard.sources.service import DEFAULT_SOURCES, SourceDefinition
 
@@ -311,6 +314,86 @@ def test_fetch_nitter_succeeds_on_first_instance(monkeypatch: pytest.MonkeyPatch
     # Only one network call — no unnecessary fallback
     assert len(calls) == 1
     assert f"{_NITTER_INSTANCES[0]}/AnthropicAI/rss" in calls[0]
+
+
+def test_fetch_nitter_normalizes_status_url_and_preserves_feed_body(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    post = (
+        "This is a willfully misleading narrative from OpenAI. "
+        "The complete social post is already present in the RSS entry."
+    )
+
+    def fake_parse_url(_url: str) -> list[dict[str, object]]:
+        return [
+            {
+                "url": "https://nitter.net/pentagoniac/status/2082297695591710911#m",
+                "title": f"RT by @ylecun: {post}",
+                "description": f"<p>{post}</p>",
+                "date": None,
+            }
+        ]
+
+    monkeypatch.setattr("news_dashboard.ingest.service._parse_feed_url", fake_parse_url)
+
+    entries = _fetch_nitter_feed(_make_source("ylecun"))
+
+    assert entries[0]["url"] == "https://x.com/pentagoniac/status/2082297695591710911"
+    assert entries[0]["feed_body"] == post
+
+
+def test_fetch_nitter_preserves_short_feed_body(monkeypatch: pytest.MonkeyPatch) -> None:
+    def fake_parse_url(_url: str) -> list[dict[str, object]]:
+        return [
+            {
+                "url": "https://xcancel.com/sama/status/42",
+                "title": "A short but complete post.",
+                "description": "",
+                "date": None,
+            }
+        ]
+
+    monkeypatch.setattr("news_dashboard.ingest.service._parse_feed_url", fake_parse_url)
+
+    entries = _fetch_nitter_feed(_make_source("sama"))
+
+    assert entries[0]["feed_body"] == "A short but complete post."
+
+
+def test_ingest_nitter_stores_feed_body_without_webpage_fetch(
+    pg_clean: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source = next(item for item in DEFAULT_SOURCES if item.slug == "x-ylecun")
+    sync_sources(pg_clean)
+    monkeypatch.setattr(
+        "news_dashboard.ingest.service._fetch_entries_by_kind",
+        lambda _source: [
+            {
+                "url": "https://x.com/pentagoniac/status/2082297695591710911",
+                "title": "RT by @ylecun: Complete post from the feed.",
+                "description": "<p>Complete post from the feed.</p>",
+                "feed_body": "Complete post from the feed.",
+                "date": None,
+            }
+        ],
+    )
+
+    outcome = _ingest_source(source, pg_clean)
+
+    assert outcome.articles_new == 1
+    with connect(pg_clean) as conn:
+        row = conn.execute(
+            """
+            SELECT body, body_status
+              FROM articles
+             WHERE url = %s
+            """,
+            ("https://x.com/pentagoniac/status/2082297695591710911",),
+        ).fetchone()
+    assert row is not None
+    assert row["body"] == "Complete post from the feed."
+    assert row["body_status"] == "ok"
 
 
 def test_fetch_nitter_normalises_missing_title(monkeypatch: pytest.MonkeyPatch) -> None:

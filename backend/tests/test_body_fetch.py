@@ -339,6 +339,119 @@ def test_fetch_and_cache_body_fetch_error(tmp_path: Path) -> None:
     assert result["body"] is None
 
 
+def test_fetch_and_cache_body_recovers_nitter_post_from_stored_title(tmp_path: Path) -> None:
+    db_path = _db(tmp_path)
+    article_id = _seed_article(db_path)
+    post = (
+        "This is a willfully misleading narrative from OpenAI. "
+        "The guards on AI were lowered by humans, and this complete social post "
+        "was already preserved by the feed before the item page became unavailable."
+    )
+    with connect(db_path) as conn:
+        conn.execute(
+            """
+            UPDATE articles
+               SET kind = 'nitter_feed',
+                   url = 'https://nitter.net/pentagoniac/status/2082297695591710911',
+                   canonical_url = 'https://nitter.net/pentagoniac/status/2082297695591710911',
+                   title = %s,
+                   summary = 'This is a willfully misleading narrative…',
+                   body = NULL,
+                   body_status = 'error'
+             WHERE id = %s
+            """,
+            (f"RT by @ylecun: {post}", article_id),
+        )
+
+    with patch("news_dashboard.body_fetch.extract_public_content") as extract:
+        result = fetch_and_cache_body(article_id, db_path=db_path)
+
+    assert result is not None
+    assert result["body_status"] == "ok"
+    assert result["body"] == f"RT by @ylecun: {post}"
+    assert result["url"] == "https://x.com/pentagoniac/status/2082297695591710911"
+    extract.assert_not_called()
+
+
+def test_fetch_and_cache_body_accepts_short_stored_nitter_post(tmp_path: Path) -> None:
+    db_path = _db(tmp_path)
+    article_id = _seed_article(db_path)
+    with connect(db_path) as conn:
+        conn.execute(
+            """
+            UPDATE articles
+               SET kind = 'nitter_feed',
+                   title = 'A short but complete post.',
+                   summary = '',
+                   body = NULL,
+                   body_status = 'missing'
+             WHERE id = %s
+            """,
+            (article_id,),
+        )
+
+    with patch("news_dashboard.body_fetch.extract_public_content") as extract:
+        result = fetch_and_cache_body(article_id, db_path=db_path)
+
+    assert result is not None
+    assert result["body_status"] == "ok"
+    assert result["body"] == "A short but complete post."
+    extract.assert_not_called()
+
+
+def test_fetch_and_cache_body_prefers_complete_nitter_summary(tmp_path: Path) -> None:
+    db_path = _db(tmp_path)
+    article_id = _seed_article(db_path)
+    with connect(db_path) as conn:
+        conn.execute(
+            """
+            UPDATE articles
+               SET kind = 'nitter_feed',
+                   title = 'Title copy from the feed.',
+                   summary = 'Complete summary copy from the feed.',
+                   body = NULL,
+                   body_status = 'missing'
+             WHERE id = %s
+            """,
+            (article_id,),
+        )
+
+    with patch("news_dashboard.body_fetch.extract_public_content") as extract:
+        result = fetch_and_cache_body(article_id, db_path=db_path)
+
+    assert result is not None
+    assert result["body"] == "Complete summary copy from the feed."
+    extract.assert_not_called()
+
+
+def test_fetch_and_cache_body_rejects_truncated_stored_nitter_text(tmp_path: Path) -> None:
+    db_path = _db(tmp_path)
+    article_id = _seed_article(db_path)
+    with connect(db_path) as conn:
+        conn.execute(
+            """
+            UPDATE articles
+               SET kind = 'nitter_feed',
+                   title = 'Truncated title…',
+                   summary = 'Truncated summary...',
+                   body = NULL,
+                   body_status = 'missing'
+             WHERE id = %s
+            """,
+            (article_id,),
+        )
+
+    with patch(
+        "news_dashboard.body_fetch.extract_public_content",
+        return_value=("Fetched fallback body.", "ok"),
+    ) as extract:
+        result = fetch_and_cache_body(article_id, db_path=db_path)
+
+    assert result is not None
+    assert result["body"] == "Fetched fallback body."
+    extract.assert_called_once()
+
+
 def test_fetch_and_cache_body_not_found(tmp_path: Path) -> None:
     db_path = _db(tmp_path)
     init_db(db_path)
