@@ -212,9 +212,12 @@ flowchart LR
   Image --> GHCR["Push ghcr.io/lihor-hub/news-dashboard:<sha>"]
 
   GHCR --> Runner["Self-hosted runner<br/>mini PC"]
-  Runner --> Pull["docker pull image"]
-  Runner --> Secret["kubectl create/update<br/>GHCR pull secret"]
-  Runner --> Helm["helm upgrade --install"]
+  Runner --> Sync["Sync deployment logic<br/>from main"]
+  Sync --> Gate{"Ingress cutover<br/>explicitly enabled?"}
+  Gate -->|yes| Pull["docker pull image"]
+  Pull --> Secret["kubectl create/update<br/>GHCR pull secret"]
+  Secret --> Helm["helm upgrade --install"]
+  Gate -->|no| Preserve["Leave live release unchanged"]
   Helm --> K8s["Kubernetes namespace<br/>news-dashboard"]
   CI --> Render["PR: lint and render<br/>production values"]
   K8s --> Smoke["main: curl HTTPS hostname<br/>/api/health"]
@@ -258,9 +261,11 @@ For production, GitHub Actions tests the Python backend, builds the frontend,
 builds a Docker image, pushes it to GHCR, and deploys it on a self-hosted runner
 with Helm. Pull requests render `values-production.yaml` without contacting the
 appliance. The production Ingress terminates application TLS and routes to the
-ClusterIP Service. Authentication is enforced by FastAPI through local password
-sessions or optional Keycloak SSO; an operator must preserve the existing
-`/keycloak` route during the Caddy-to-Ingress cutover. See
+ClusterIP Service. Main CI builds and publishes but does not apply that overlay
+unless the operator sets `INGRESS_CUTOVER_ENABLED` to exactly `true`.
+Authentication is enforced by FastAPI through local password sessions or
+optional Keycloak SSO; an operator must preserve the existing `/keycloak` route
+during the Caddy-to-Ingress cutover. See
 [Authentication (Keycloak)](/docs/configuration/authentication) and
 [Ingress HTTPS and Caddy migration](/docs/configuration/https-caddy).
 

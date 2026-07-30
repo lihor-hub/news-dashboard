@@ -424,20 +424,36 @@ The production image serves the built frontend through FastAPI on port `8080`.
 For Kubernetes:
 
 ```bash
+: "${SESSION_SECRET:?set SESSION_SECRET}"
+: "${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}"
+: "${POSTGRES_HOST_PATH:?set POSTGRES_HOST_PATH}"
+source ./scripts/production-deploy-lib.sh
+production_cutover_enabled || { echo "Ingress cutover is not enabled" >&2; exit 2; }
+prepare_production_helm_secret_files
+
 helm upgrade --install news-dashboard ./helm/news-dashboard \
   --values ./helm/news-dashboard/values-production.yaml \
-  --set-string app.auth.sessionSecret='<long-random-value>' \
-  --set-string postgresql.password='<choose-a-secure-password>'
+  --set-string postgresql.persistence.hostPath="$POSTGRES_HOST_PATH" \
+  --set-file app.auth.sessionSecret="$PRODUCTION_SESSION_SECRET_FILE" \
+  --set-file postgresql.password="$PRODUCTION_POSTGRES_PASSWORD_FILE"
 ```
 
 The production values expose the app only through a TLS Ingress backed by a
 `ClusterIP` Service. Supply secrets and installation-specific persistence as
-runtime overrides; do not commit them to a values file. Pull-request CI renders
-this contract without requiring access to the production appliance.
+runtime overrides; do not commit them to a values file. The shared helper writes
+the secrets to mode-0600 temporary files, removes them on exit, and keeps secret
+values out of Helm's process arguments. Pull-request CI renders this contract
+without requiring access to the production appliance.
+
+Automated and local live application of this overlay is disabled until the
+operator sets `INGRESS_CUTOVER_ENABLED=true` after completing the readiness
+checks in issue #1302. `scripts/deploy-local-k8s.sh --render` remains available
+without that activation.
 
 When bundled PostgreSQL is enabled (the default), `postgresql.password` is
 required. Helm will fail to render if it is empty. For CI/chart rendering
-only, pass a dummy value like `--set-string postgresql.password=dummy`.
+only, use `scripts/deploy-local-k8s.sh --render`, which supplies protected
+temporary dummy files and never applies the result.
 An existing Kubernetes Secret can be used instead of the Helm value;
 see `values.yaml` for the `app.postgresExternal` or `app.databaseUrl` paths.
 

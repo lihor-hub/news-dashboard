@@ -453,6 +453,10 @@ and rollback rehearsal in
 Do not add credentials or private inventory to that issue or this repository.
 The detailed staged procedure is in
 [Ingress HTTPS and Caddy migration](https://docs.lihor.ro/docs/configuration/https-caddy).
+Until that procedure is ready, leave `INGRESS_CUTOVER_ENABLED` unset: main CI
+will still build, publish, and scan the image but will exit before any live
+release or cluster mutation. Set it to exactly `true` only in the approved
+cutover window.
 
 Before removing the old application route:
 
@@ -528,10 +532,20 @@ docker compose -f docker-compose.prod.yml run --rm news-dashboard news-dashboard
 
 ```bash
 # 1. Update the image tag and pull policy
+: "${SESSION_SECRET:?set SESSION_SECRET}"
+: "${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}"
+: "${POSTGRES_HOST_PATH:?set POSTGRES_HOST_PATH}"
+source ./scripts/production-deploy-lib.sh
+production_cutover_enabled || { echo "Ingress cutover is not enabled" >&2; exit 2; }
+prepare_production_helm_secret_files
+
 helm upgrade news-dashboard ./helm/news-dashboard \
   --values ./helm/news-dashboard/values-production.yaml \
   --set image.tag=v1.22.0 \
   --set image.pullPolicy=Always \
+  --set-string postgresql.persistence.hostPath="$POSTGRES_HOST_PATH" \
+  --set-file app.auth.sessionSecret="$PRODUCTION_SESSION_SECRET_FILE" \
+  --set-file postgresql.password="$PRODUCTION_POSTGRES_PASSWORD_FILE" \
   --reuse-values
 
 # 2. Rollout restarts the deployment automatically.
@@ -616,11 +630,14 @@ docker compose -f docker-compose.prod.yml down
 docker compose -f docker-compose.prod.yml up -d
 ```
 
-For Helm, rollback directly:
-
-```bash
-helm rollback news-dashboard 1
-```
+For an application-only Helm revision rollback, restore the recorded revision
+while leaving the current edge unchanged, then verify health before changing
+traffic. For the Ingress-to-Caddy edge rollback, do not use `helm rollback`
+alone: first restore a guard-compatible NodePort backend, verify it locally,
+prepare the saved Caddy application route, release the Ingress listener, start
+and verify Caddy locally, and only then reverse DNS or port forwarding. Follow
+the exact ordered procedure in
+[Ingress HTTPS and Caddy migration](https://docs.lihor.ro/docs/configuration/https-caddy#roll-back).
 
 Rollback is the reason backups are important — always back up the database
 **before** starting an upgrade (see the [Pre-Upgrade Checklist](#pre-upgrade-checklist)).

@@ -381,20 +381,26 @@ jobs:
 
       - name: helm template (defaults)
         run: |
+          SESSION_SECRET=dummy-session-secret-for-render-only
+          POSTGRES_PASSWORD=dummy-postgres-password-for-render-only
+          source ./scripts/production-deploy-lib.sh
+          prepare_production_helm_secret_files
           helm template news-dashboard ./helm/news-dashboard \
-            --set-string "app.auth.sessionSecret=dummy-session-secret-for-render-only" \
-            --set-string "postgresql.password=dummy-postgres-password-for-render-only"
+            "${PRODUCTION_HELM_SECRET_ARGS[@]}"
 
       - name: helm template (production-like overrides)
         run: |
+          SESSION_SECRET=dummy-session-secret-for-render-only
+          POSTGRES_PASSWORD=dummy-postgres-password-for-render-only
+          source ./scripts/production-deploy-lib.sh
+          prepare_production_helm_secret_files
           helm template news-dashboard ./helm/news-dashboard \
             --values ./helm/news-dashboard/values-production.yaml \
             --set "image.repository=ghcr.io/lihor-hub/news-dashboard" \
             --set "image.tag=abc1234" \
             --set "image.pullSecretName=ghcr-pull-secret" \
             --set-string "postgresql.persistence.hostPath=" \
-            --set-string "app.auth.sessionSecret=dummy-session-secret-for-render-only" \
-            --set-string "postgresql.password=dummy-postgres-password-for-render-only" \
+            "${PRODUCTION_HELM_SECRET_ARGS[@]}" \
             --set "app.ai.existingSecret=news-dashboard-ai" \
             --set "app.push.existingSecret=news-dashboard-push" \
             --set "app.email.existingSecret=news-dashboard-email" \
@@ -405,10 +411,14 @@ jobs:
 
       - name: helm template (external postgresql)
         run: |
+          SESSION_SECRET=dummy-session-secret-for-render-only
+          POSTGRES_PASSWORD=dummy-postgres-password-for-render-only
+          source ./scripts/production-deploy-lib.sh
+          prepare_production_helm_secret_files
           helm template news-dashboard ./helm/news-dashboard \
             --set "postgresql.enabled=false" \
             --set "app.databaseUrl.existingSecret=news-dashboard-db" \
-            --set-string "app.auth.sessionSecret=dummy-session-secret-for-render-only"
+            "${PRODUCTION_HELM_SECRET_ARGS[@]}"
 
   # ── 9. PUBLISH ─────────────────────────────────────────────────────────────
   # Builds one image and pushes two tags:
@@ -644,6 +654,7 @@ jobs:
           SESSION_SECRET: ${{ secrets.SESSION_SECRET }}
           POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
           POSTGRES_HOST_PATH: ${{ vars.POSTGRES_HOST_PATH }}
+          INGRESS_CUTOVER_ENABLED: ${{ vars.INGRESS_CUTOVER_ENABLED }}
           VAPID_PUBLIC_KEY: ${{ secrets.VAPID_PUBLIC_KEY }}
           VAPID_PRIVATE_KEY: ${{ secrets.VAPID_PRIVATE_KEY }}
           VAPID_EMAIL: ${{ vars.VAPID_EMAIL }}
@@ -656,6 +667,18 @@ jobs:
           DIFY_CHAT_TITLE: ${{ vars.DIFY_CHAT_TITLE }}
         run: |
           set -euo pipefail
+
+          # Sync repository-controlled deployment logic before any cluster,
+          # registry, or release mutation.
+          cd ~/news-dashboard
+          git fetch --prune origin main
+          git checkout --detach FETCH_HEAD
+          source ./scripts/production-deploy-lib.sh
+
+          if ! production_cutover_enabled; then
+            echo "Ingress cutover is not activated; published image retained and live release unchanged."
+            exit 0
+          fi
 
           if [ -z "$SESSION_SECRET" ]; then
             echo "SESSION_SECRET GitHub Actions secret is required for production auth." >&2
@@ -671,6 +694,8 @@ jobs:
             echo "POSTGRES_HOST_PATH GitHub Actions variable is required to preserve production data." >&2
             exit 1
           fi
+
+          prepare_production_helm_secret_files
 
           kubectl create namespace news-dashboard --dry-run=client -o yaml | kubectl apply -f -
 
@@ -795,13 +820,6 @@ jobs:
             echo "Dify assistant needs both DIFY_CHAT_APP_TOKEN and DIFY_CHAT_BASE_URL; leaving it disabled." >&2
           fi
 
-          # Sync Helm chart changes from main. Avoid relying on the deploy
-          # host clone's branch/upstream config, which may point at a deleted
-          # feature branch.
-          cd ~/news-dashboard
-          git fetch --prune origin main
-          git checkout --detach FETCH_HEAD
-
           # Clear the chart's legacy single-node default, then supply the
           # required installation-specific path only from runtime configuration.
           postgres_helm_args=(--set-string postgresql.persistence.hostPath=)
@@ -818,8 +836,7 @@ jobs:
             --set "image.tag=${SHA}"
             "${pull_secret_helm_args[@]}"
             "${postgres_helm_args[@]}"
-            --set-string app.auth.sessionSecret="$SESSION_SECRET"
-            --set-string postgresql.password="$POSTGRES_PASSWORD"
+            "${PRODUCTION_HELM_SECRET_ARGS[@]}"
             "${ai_helm_args[@]}"
             "${push_helm_args[@]}"
             "${email_helm_args[@]}"

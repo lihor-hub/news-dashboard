@@ -164,16 +164,26 @@ ghcr.io/lihor-hub/news-dashboard:<sha>
 ### Kubernetes (Helm)
 
 ```bash
+: "${SESSION_SECRET:?set SESSION_SECRET}"
+: "${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}"
+: "${POSTGRES_HOST_PATH:?set POSTGRES_HOST_PATH}"
+source ./scripts/production-deploy-lib.sh
+production_cutover_enabled || { echo "Ingress cutover is not enabled" >&2; exit 2; }
+prepare_production_helm_secret_files
+
 helm upgrade --install news-dashboard ./helm/news-dashboard \
   --values ./helm/news-dashboard/values-production.yaml \
   --set image.tag='<immutable-source-sha>' \
-  --set-string app.auth.sessionSecret='<from-secret-manager>' \
-  --set-string postgresql.password='<from-secret-manager>'
+  --set-string postgresql.persistence.hostPath="$POSTGRES_HOST_PATH" \
+  --set-file app.auth.sessionSecret="$PRODUCTION_SESSION_SECRET_FILE" \
+  --set-file postgresql.password="$PRODUCTION_POSTGRES_PASSWORD_FILE"
 ```
 
 Production renders a TLS-enabled Ingress and a ClusterIP-only application
 Service. CI validates the rendered contract without appliance access; the
-self-hosted production job verifies the public HTTPS hostname after rollout.
+self-hosted production job leaves the existing release untouched unless
+`INGRESS_CUTOVER_ENABLED` is exactly `true`, then verifies the public HTTPS
+hostname after rollout.
 
 ### Caddy and Keycloak migration boundary
 

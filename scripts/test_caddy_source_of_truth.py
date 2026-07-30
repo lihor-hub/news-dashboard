@@ -1,6 +1,10 @@
 # ruff: noqa: S101
 
+import subprocess
+import tempfile
 from pathlib import Path
+
+import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
 PRODUCTION_CADDYFILE = ROOT / "deploy" / "Caddyfile"
@@ -9,6 +13,8 @@ HTTPS_CADDY = ROOT / "website" / "docs" / "configuration" / "https-caddy.md"
 ARCHITECTURE = ROOT / "website" / "docs" / "architecture" / "index.md"
 PRODUCT_SPEC = ROOT / "website" / "docs" / "architecture" / "product-spec.md"
 POSTGRES_BACKUP = ROOT / "website" / "docs" / "configuration" / "postgres-backup.md"
+CHART = ROOT / "helm" / "news-dashboard"
+PRODUCTION_VALUES = CHART / "values-production.yaml"
 
 
 def test_caddyfile_preserves_keycloak_but_no_longer_routes_the_application() -> None:
@@ -70,3 +76,68 @@ def test_operator_docs_do_not_publish_private_inventory() -> None:
         text = doc.read_text()
         assert "ioachim-minipc" not in text
         assert "192.168." not in text
+
+
+def test_rollback_restores_and_verifies_backend_before_switching_listeners() -> None:
+    runbook = HTTPS_CADDY.read_text()
+    ordered_steps = (
+        "### Restore the rollback backend",
+        "### Verify the rollback backend locally",
+        "### Prepare the saved Caddy application route",
+        "### Release the Ingress listener",
+        "### Start Caddy",
+        "### Verify Caddy locally",
+        "### Change DNS or port ownership",
+    )
+
+    indices = [runbook.index(step) for step in ordered_steps]
+    assert indices == sorted(indices)
+
+
+def test_documented_rollback_overrides_render_a_local_node_port_backend() -> None:
+    with tempfile.TemporaryDirectory() as directory:
+        session_file = Path(directory) / "session"
+        postgres_file = Path(directory) / "postgres"
+        session_file.write_text("rollback-session")
+        postgres_file.write_text("rollback-postgres")
+        command = [
+            "helm",
+            "template",
+            "rollback",
+            str(CHART),
+            "--values",
+            str(PRODUCTION_VALUES),
+            "--set",
+            "production=false",
+            "--set",
+            "ingress.enabled=false",
+            "--set",
+            "networkPolicy.enabled=false",
+            "--set",
+            "service.type=NodePort",
+            "--set",
+            "service.nodePort=31080",
+            "--set-string",
+            "postgresql.persistence.hostPath=",
+            "--set-file",
+            f"app.auth.sessionSecret={session_file}",
+            "--set-file",
+            f"postgresql.password={postgres_file}",
+        ]
+        result = subprocess.run(  # noqa: S603
+            command,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+
+    rendered = [document for document in yaml.safe_load_all(result.stdout) if document]
+    service = next(
+        resource
+        for resource in rendered
+        if resource["kind"] == "Service"
+        and resource["metadata"]["name"] == "rollback-news-dashboard"
+    )
+    assert service["spec"]["type"] == "NodePort"
+    assert service["spec"]["ports"][0]["nodePort"] == 31080
+    assert not any(resource["kind"] == "Ingress" for resource in rendered)

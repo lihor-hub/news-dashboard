@@ -50,29 +50,36 @@ Before changing the public route:
 Never expose the application Service temporarily to make testing easier. Use
 the Ingress address with hostname and TLS validation.
 
-## Stage the Ingress
+## Render and inspect the Ingress
 
-Deploy the chart with the production values plus secrets and installation-
-specific storage values. CI and `scripts/deploy-local-k8s.sh` use the same
-contract:
+Do not apply the production overlay while the live Caddy route still depends on
+the current release's backend. Render it without cluster access or activation:
 
 ```bash
-helm upgrade --install news-dashboard ./helm/news-dashboard \
-  --namespace news-dashboard --create-namespace \
-  --values ./helm/news-dashboard/values-production.yaml \
-  --set image.tag='<immutable-source-sha>' \
-  --set-string app.auth.sessionSecret='<from-secret-manager>' \
-  --set-string postgresql.password='<from-secret-manager>'
+./scripts/deploy-local-k8s.sh --render > /tmp/news-dashboard-production.yaml
 ```
 
-Do not copy literal secrets into a values file or an issue. If the installation
-uses the repository's production CI or `scripts/deploy-local-k8s.sh`, configure
-`POSTGRES_HOST_PATH` at runtime for the existing host-backed PostgreSQL data.
-Both entry points fail before Helm when it is missing, so a cutover cannot
-silently initialize an empty volume. Other installations can use a chart
-persistent-volume configuration appropriate to their cluster.
+Render mode uses dummy secret files and explicitly clears the legacy host path
+to exercise the PVC branch. It never builds, pushes, or calls `kubectl`. Inspect
+the result and render any installation-specific storage overlay separately
+without committing its path.
 
-Inspect the staged resources before changing the public route:
+For live apply, do not copy literal secrets into a values file, an issue, or
+Helm's argument list. The shared helper writes exact secret bytes to mode-0600
+temporary files, including commas, braces, backslashes, and embedded newlines,
+then removes them on exit. Configure `POSTGRES_HOST_PATH` at runtime for the
+existing host-backed PostgreSQL data. Both apply entry points fail before Helm
+when it is missing, so a cutover cannot silently initialize an empty volume.
+
+The production workflow defaults to publishing the image without applying this
+overlay. Set `INGRESS_CUTOVER_ENABLED=true` only after every prerequisite,
+staged check, Keycloak route, listener, and rollback check in issue #1302 is
+ready. The local helper enforces the same gate for live apply;
+`scripts/deploy-local-k8s.sh --render` renders the target manifests with dummy
+secrets and an explicit PVC selection without requiring activation.
+
+During the approved cutover window, apply through the gated workflow or local
+helper. Then inspect the resources before changing the public route:
 
 ```bash
 kubectl -n news-dashboard get service news-dashboard-news-dashboard \
@@ -123,8 +130,15 @@ Only continue after the staged health check and rollback rehearsal succeed.
    identity-provider route.
 3. Stop the public Caddy listener and let the ingress controller become the sole
    owner of ports 80 and 443.
-4. Move DNS or the router forwarding target to the Ingress endpoint.
-5. Keep the saved pre-cutover Caddy configuration until the observation window
+4. Set `INGRESS_CUTOVER_ENABLED=true` in the protected production environment
+   and rerun the main deployment, or invoke the local helper with that exact
+   value. This is the first point at which automation may replace the live
+   release with the production overlay.
+5. Verify the Ingress health and Keycloak route locally through the intended
+   hostname.
+6. Move DNS or the router forwarding target to the Ingress endpoint only after
+   the local checks pass.
+7. Keep the saved pre-cutover Caddy configuration until the observation window
    and rollback rehearsal are complete.
 
 If Keycloak must remain behind Caddy, stop here. Caddy and the ingress
@@ -159,15 +173,92 @@ Record results in issue #1302 without including secrets or private addresses.
 
 Trigger rollback immediately if any prepared condition fails:
 
-1. Reverse the DNS or port-owner change so traffic returns to the saved Caddy
-   route.
-2. Run `helm -n news-dashboard rollback news-dashboard <previous-revision>`.
-3. Restore and validate the saved pre-cutover Caddy configuration, then restart
-   its service.
-4. Verify the application health endpoint and both authentication modes through
-   the old route.
-5. Restore PostgreSQL only when the application rollback requires a
-   data-incompatible schema reversal. Preserve the failed state and logs first.
+### Restore the rollback backend
+
+Keep public traffic on the current Ingress while restoring the old backend.
+Use the current chart with explicit guard-compatible rollback overrides; do not
+apply `values-production.yaml` without `production=false`, because its
+ClusterIP guard rejects the required temporary NodePort:
+
+```bash
+: "${SESSION_SECRET:?set SESSION_SECRET}"
+: "${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}"
+: "${POSTGRES_HOST_PATH:?set POSTGRES_HOST_PATH}"
+: "${ROLLBACK_IMAGE_TAG:?set ROLLBACK_IMAGE_TAG}"
+: "${ROLLBACK_NODE_PORT:?set ROLLBACK_NODE_PORT from the saved release}"
+source ./scripts/production-deploy-lib.sh
+prepare_production_helm_secret_files
+
+helm upgrade --install news-dashboard ./helm/news-dashboard \
+  --namespace news-dashboard \
+  --values ./helm/news-dashboard/values-production.yaml \
+  --set production=false \
+  --set ingress.enabled=false \
+  --set networkPolicy.enabled=false \
+  --set service.type=NodePort \
+  --set service.nodePort="$ROLLBACK_NODE_PORT" \
+  --set image.tag="$ROLLBACK_IMAGE_TAG" \
+  --set-string postgresql.persistence.hostPath="$POSTGRES_HOST_PATH" \
+  --set-file app.auth.sessionSecret="$PRODUCTION_SESSION_SECRET_FILE" \
+  --set-file postgresql.password="$PRODUCTION_POSTGRES_PASSWORD_FILE"
+```
+
+### Verify the rollback backend locally
+
+Do not redirect traffic yet:
+
+```bash
+curl --fail --show-error --silent \
+  "http://127.0.0.1:${ROLLBACK_NODE_PORT}/api/health"
+```
+
+Require `"status":"ok"` and verify the expected database before continuing.
+
+### Prepare the saved Caddy application route
+
+Confirm the saved pre-cutover configuration contains both the application
+backend and `/keycloak`, then validate it without starting its listener:
+
+```bash
+sudo caddy validate --config "$SAVED_CADDY_CONFIG"
+```
+
+### Release the Ingress listener
+
+Stop or detach the ingress controller from host ports 80 and 443 using the
+controller-specific command recorded during rollback preparation. Confirm both
+ports are free before starting Caddy. Do not change DNS or router forwarding.
+
+### Start Caddy
+
+Install the saved application configuration, then start or reload Caddy:
+
+```bash
+sudo install -m 0644 "$SAVED_CADDY_CONFIG" /etc/caddy/Caddyfile
+sudo systemctl start caddy
+sudo systemctl reload caddy
+```
+
+### Verify Caddy locally
+
+Keep external routing unchanged until the old edge is healthy:
+
+```bash
+curl --fail --show-error --silent \
+  --resolve 'news.lihor.ro:443:127.0.0.1' \
+  https://news.lihor.ro/api/health
+```
+
+Also verify `/keycloak` and the login callback through the local Caddy listener.
+
+### Change DNS or port ownership
+
+Only after both local checks pass, reverse any DNS, load-balancer, or router
+change that is still needed to send public traffic to Caddy. Then repeat the
+external health and authentication checks.
+
+Restore PostgreSQL only when the application rollback requires a
+data-incompatible schema reversal. Preserve the failed state and logs first.
 
 Do not delete the staged Ingress evidence until the failure is understood. A
 Helm rollback does not reverse DNS, host listeners, firewall rules, or database

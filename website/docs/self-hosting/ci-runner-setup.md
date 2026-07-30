@@ -118,17 +118,22 @@ git push origin main
   └─ test job      (ubuntu-latest)    pytest + tsc/vite build
   └─ publish job   (ubuntu-latest)    docker build + push to GHCR with :<sha>
   └─ deploy job    (self-hosted)
+       ├─ git fetch origin main + checkout FETCH_HEAD (sync deployment logic)
+       ├─ require INGRESS_CUTOVER_ENABLED=true (otherwise stop unchanged)
        ├─ docker login ghcr.io
        ├─ docker pull <image>:<sha>
        ├─ kubectl apply imagePullSecret
-       ├─ git fetch origin main + checkout FETCH_HEAD (sync chart changes)
-       ├─ helm upgrade --values values-production.yaml --set image.tag=<sha>
+       ├─ helm upgrade with production values, explicit storage, and secret files
        ├─ kubectl rollout status --timeout=120s
        └─ curl https://news.lihor.ro/api/health smoke test
 ```
 
 The deploy job uses `concurrency: group=deploy-production, cancel-in-progress: false`
 so rapid pushes queue rather than race.
+
+The cutover gate is evaluated before Docker, Kubernetes, Secret, or Helm
+mutation. Leave `INGRESS_CUTOVER_ENABLED` unset until human rollout issue #1302
+has validated the controller, TLS, Keycloak route, port ownership, and rollback.
 
 ## Troubleshooting
 

@@ -72,23 +72,35 @@ The production Helm contract terminates application TLS at the Ingress and
 keeps the application Service private:
 
 ```bash
+: "${SESSION_SECRET:?set SESSION_SECRET}"
+: "${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}"
+: "${POSTGRES_HOST_PATH:?set POSTGRES_HOST_PATH}"
+source ./scripts/production-deploy-lib.sh
+production_cutover_enabled || { echo "Ingress cutover is not enabled" >&2; exit 2; }
+prepare_production_helm_secret_files
+
 helm upgrade --install news-dashboard ./helm/news-dashboard \
   --namespace news-dashboard --create-namespace \
   --values ./helm/news-dashboard/values-production.yaml \
   --set image.tag='<immutable-source-sha>' \
-  --set-string app.auth.sessionSecret='<from-secret-manager>' \
-  --set-string postgresql.password='<from-secret-manager>'
+  --set-string postgresql.persistence.hostPath="$POSTGRES_HOST_PATH" \
+  --set-file app.auth.sessionSecret="$PRODUCTION_SESSION_SECRET_FILE" \
+  --set-file postgresql.password="$PRODUCTION_POSTGRES_PASSWORD_FILE"
 ```
 
 Supply secrets and installation-specific persistence at runtime. Do not commit
-them to a values file. Before public cutover, verify the ClusterIP Service, TLS
-Ingress, backups and restore, rollback revision, and the existing `/keycloak`
-route. Caddy cannot share ports 80 and 443 with the ingress controller.
+them to a values file or pass their values through Helm's `--set` arguments.
+The shared helper uses protected temporary files and removes them on exit.
+Before public cutover, verify the ClusterIP Service, TLS Ingress, backups and
+restore, rollback revision, and the existing `/keycloak` route. Caddy cannot
+share ports 80 and 443 with the ingress controller.
 
 The live appliance procedure requires human access and is tracked in
 [issue #1302](https://github.com/lihor-hub/news-dashboard/issues/1302). Follow
 [Ingress HTTPS and Caddy migration](/docs/configuration/https-caddy) for the
-staged verification and rollback order.
+staged verification and backend-first rollback order. Leave
+`INGRESS_CUTOVER_ENABLED` unset until that procedure is ready; the main workflow
+will publish and scan without touching the live release.
 
 ## Required configuration
 

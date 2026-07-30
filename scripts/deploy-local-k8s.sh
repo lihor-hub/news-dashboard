@@ -4,8 +4,11 @@
 #
 # Usage:
 #   ./scripts/deploy-local-k8s.sh [TAG]
+#   ./scripts/deploy-local-k8s.sh --render
 #
 # Required environment:
+#   INGRESS_CUTOVER_ENABLED
+#                        must be exactly "true" before a live apply
 #   SESSION_SECRET       long random session-signing value
 #   POSTGRES_PASSWORD    password for the bundled PostgreSQL role
 #   POSTGRES_HOST_PATH   existing host-backed PostgreSQL data path
@@ -17,6 +20,28 @@
 # testing — never rely on 'latest' for real deploys (imagePullPolicy won't
 # re-pull if the tag is already cached).
 set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+# shellcheck disable=SC1091 # Resolved from this script's absolute directory.
+source "${SCRIPT_DIR}/production-deploy-lib.sh"
+cd "${ROOT}"
+
+if [[ "${1:-}" == "--render" ]]; then
+  SESSION_SECRET="render-only-session-secret"
+  POSTGRES_PASSWORD="render-only-postgres-password"
+  prepare_production_helm_secret_files
+  helm template news-dashboard ./helm/news-dashboard \
+    --values ./helm/news-dashboard/values-production.yaml \
+    --set-string postgresql.persistence.hostPath= \
+    "${PRODUCTION_HELM_SECRET_ARGS[@]}"
+  exit 0
+fi
+
+if ! production_cutover_enabled; then
+  echo "Set INGRESS_CUTOVER_ENABLED=true only after completing human rollout issue #1302." >&2
+  exit 2
+fi
 
 if [[ -z "${SESSION_SECRET:-}" ]]; then
   echo "SESSION_SECRET is required for production auth." >&2
@@ -32,6 +57,8 @@ if [[ -z "${POSTGRES_HOST_PATH:-}" ]]; then
   echo "POSTGRES_HOST_PATH is required to preserve production data." >&2
   exit 1
 fi
+
+prepare_production_helm_secret_files
 
 AI_HELM_ARGS=()
 if [[ -n "${OPENAI_API_KEY:-}" ]]; then
@@ -68,9 +95,8 @@ helm upgrade --install news-dashboard ./helm/news-dashboard \
   --set image.repository="${REPO}" \
   --set image.tag="${TAG}" \
   --set-string image.pullSecretName="${PULL_SECRET_NAME:-}" \
-  --set-string app.auth.sessionSecret="${SESSION_SECRET}" \
-  --set-string postgresql.password="${POSTGRES_PASSWORD}" \
   "${POSTGRES_HELM_ARGS[@]}" \
+  "${PRODUCTION_HELM_SECRET_ARGS[@]}" \
   "${AI_HELM_ARGS[@]}" \
   --set-string app.publicBaseUrl="https://news.lihor.ro"
 

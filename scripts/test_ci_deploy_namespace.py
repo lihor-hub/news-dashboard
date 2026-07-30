@@ -1,10 +1,42 @@
 from __future__ import annotations
 
+import os
+import re
+import shlex
+import subprocess
 from pathlib import Path
+
+import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
 CI_WORKFLOW = ROOT / ".github" / "workflows" / "ci.yml"
 DEPLOY_HELPER = ROOT / "scripts" / "deploy-local-k8s.sh"
+DEPLOY_LIBRARY = ROOT / "scripts" / "production-deploy-lib.sh"
+PRODUCTION_VALUES = ROOT / "helm" / "news-dashboard" / "values-production.yaml"
+CHART = ROOT / "helm" / "news-dashboard"
+PRODUCTION_DOCS = (
+    ROOT / "README.md",
+    ROOT / "docs" / "SELF_HOSTING.md",
+    ROOT / "website" / "docs" / "architecture" / "product-spec.md",
+    ROOT / "website" / "docs" / "configuration" / "https-caddy.md",
+    ROOT / "website" / "docs" / "self-hosting" / "index.md",
+)
+
+
+def run_cutover_gate(value: str | None) -> subprocess.CompletedProcess[str]:
+    env = os.environ.copy()
+    if value is None:
+        env.pop("INGRESS_CUTOVER_ENABLED", None)
+    else:
+        env["INGRESS_CUTOVER_ENABLED"] = value
+    command = f"source {shlex.quote(str(DEPLOY_LIBRARY))}; production_cutover_enabled"
+    return subprocess.run(  # noqa: S603
+        ["/bin/bash", "-c", command],
+        check=False,
+        capture_output=True,
+        text=True,
+        env=env,
+    )
 
 
 def test_deploy_creates_namespace_before_secrets() -> None:
@@ -19,9 +51,13 @@ def test_deploy_creates_namespace_before_secrets() -> None:
     namespace_index = workflow.index(namespace_command)
     pull_index = workflow.index(pull_command)
     ai_index = workflow.index(ai_command)
+    gate_index = workflow.index("if ! production_cutover_enabled; then")
+    docker_pull_index = workflow.index('docker pull "${IMG}:${SHA}"')
 
+    assert gate_index < docker_pull_index  # noqa: S101
     assert namespace_index < pull_index  # noqa: S101
     assert namespace_index < ai_index  # noqa: S101
+    assert gate_index < namespace_index  # noqa: S101
 
 
 def test_deploy_supports_public_ghcr_without_token() -> None:
@@ -96,3 +132,123 @@ def test_mini_pc_deploy_requires_runtime_storage_path() -> None:
 
     assert 'if [ -z "$POSTGRES_HOST_PATH" ]; then' in workflow  # noqa: S101
     assert 'if [[ -z "${POSTGRES_HOST_PATH:-}" ]]; then' in helper  # noqa: S101
+
+
+def test_cutover_gate_requires_exact_explicit_activation() -> None:
+    assert run_cutover_gate(None).returncode != 0  # noqa: S101
+    assert run_cutover_gate("").returncode != 0  # noqa: S101
+    assert run_cutover_gate("false").returncode != 0  # noqa: S101
+    assert run_cutover_gate("TRUE").returncode != 0  # noqa: S101
+    assert run_cutover_gate("true").returncode == 0  # noqa: S101
+
+
+def test_file_based_helm_secrets_preserve_hostile_values_without_argv_exposure() -> None:
+    workflow = CI_WORKFLOW.read_text()
+    helper = DEPLOY_HELPER.read_text()
+    for source in (workflow, helper):
+        assert "--set-string app.auth.sessionSecret=" not in source  # noqa: S101
+        assert "--set-string postgresql.password=" not in source  # noqa: S101
+        assert "PRODUCTION_HELM_SECRET_ARGS" in source  # noqa: S101
+
+    session_value = "session,with{braces}\\slashes\nand-newline"
+    postgres_value = "postgres,with{braces}\\slashes\nand-newline"
+    env = os.environ.copy()
+    env.update(
+        {
+            "SESSION_SECRET": session_value,
+            "POSTGRES_PASSWORD": postgres_value,
+        }
+    )
+    script = f"""
+source {shlex.quote(str(DEPLOY_LIBRARY))}
+prepare_production_helm_secret_files
+for argument in "${{PRODUCTION_HELM_SECRET_ARGS[@]}}"; do
+  [[ "$argument" != *"$SESSION_SECRET"* ]]
+  [[ "$argument" != *"$POSTGRES_PASSWORD"* ]]
+done
+helm template secret-test {shlex.quote(str(CHART))} \
+  --values {shlex.quote(str(PRODUCTION_VALUES))} \
+  --set-string postgresql.persistence.hostPath= \
+  "${{PRODUCTION_HELM_SECRET_ARGS[@]}}"
+"""
+    result = subprocess.run(  # noqa: S603
+        ["/bin/bash", "-c", script],
+        check=False,
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+
+    assert result.returncode == 0, result.stderr  # noqa: S101
+    rendered = [document for document in yaml.safe_load_all(result.stdout) if document]
+    secrets = {
+        resource["metadata"]["name"]: resource["stringData"]
+        for resource in rendered
+        if resource["kind"] == "Secret"
+    }
+    assert secrets["secret-test-news-dashboard-auth"]["SESSION_SECRET"] == session_value  # noqa: S101
+    assert (  # noqa: S101
+        secrets["secret-test-news-dashboard-postgres"]["POSTGRES_PASSWORD"] == postgres_value
+    )
+
+
+def test_direct_production_helm_examples_choose_storage_and_secret_files() -> None:
+    for document in PRODUCTION_DOCS:
+        blocks = re.findall(r"```(?:bash|sh)\n(.*?)```", document.read_text(), re.DOTALL)
+        production_commands = [
+            block
+            for block in blocks
+            if "helm upgrade" in block and "values-production.yaml" in block
+        ]
+        for command in production_commands:
+            assert "postgresql.persistence.hostPath" in command  # noqa: S101
+            assert "--set-file app.auth.sessionSecret=" in command  # noqa: S101
+            assert "--set-file postgresql.password=" in command  # noqa: S101
+            assert "--set-string app.auth.sessionSecret=" not in command  # noqa: S101
+            assert "--set-string postgresql.password=" not in command  # noqa: S101
+
+
+def test_local_render_mode_does_not_require_cutover_activation() -> None:
+    env = os.environ.copy()
+    env.pop("INGRESS_CUTOVER_ENABLED", None)
+    result = subprocess.run(  # noqa: S603
+        [str(DEPLOY_HELPER), "--render"],
+        check=False,
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+
+    assert result.returncode == 0, result.stderr  # noqa: S101
+    rendered = [document for document in yaml.safe_load_all(result.stdout) if document]
+    app_service = next(
+        resource
+        for resource in rendered
+        if resource["kind"] == "Service"
+        and resource["metadata"]["name"] == "news-dashboard-news-dashboard"
+    )
+    assert app_service["spec"]["type"] == "ClusterIP"  # noqa: S101
+
+
+def test_local_live_deploy_rejects_inactive_cutover_before_external_commands() -> None:
+    for value in (None, "", "false", "TRUE"):
+        env = os.environ.copy()
+        env.pop("SESSION_SECRET", None)
+        env.pop("POSTGRES_PASSWORD", None)
+        env.pop("POSTGRES_HOST_PATH", None)
+        if value is None:
+            env.pop("INGRESS_CUTOVER_ENABLED", None)
+        else:
+            env["INGRESS_CUTOVER_ENABLED"] = value
+
+        result = subprocess.run(  # noqa: S603
+            [str(DEPLOY_HELPER), "test-tag"],
+            check=False,
+            capture_output=True,
+            text=True,
+            env=env,
+        )
+
+        assert result.returncode == 2  # noqa: S101
+        assert "INGRESS_CUTOVER_ENABLED=true" in result.stderr  # noqa: S101
+        assert "Building" not in result.stdout  # noqa: S101
