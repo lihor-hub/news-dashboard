@@ -27,6 +27,7 @@ from news_dashboard.content_extraction import (
 )
 from news_dashboard.db import connect, init_db, row_to_dict
 from news_dashboard.scraper import TIMEOUT_SECS, USER_AGENT
+from news_dashboard.social_posts import canonical_x_status_url
 from news_dashboard.url_safety import (
     UnsafeUrlError,
     open_server_fetch_url,
@@ -584,10 +585,21 @@ def _article_from_row(row: Any, conn: Any, article_id: int, user_id: int | None)
     d = row_to_dict(row)
     d.pop("embedding_vec", None)
     d.pop("fts_vector", None)
+    if d.get("kind") == "nitter_feed":
+        d["url"] = canonical_x_status_url(str(d.get("url") or ""))
     if user_id is not None:
         _merge_user_state(d, conn, article_id, user_id)
         _merge_user_recommendation(d, conn, article_id, user_id)
     return d
+
+
+def _complete_stored_nitter_post(article: dict[str, Any]) -> str:
+    """Select complete feed-derived text without accepting truncated UI copy."""
+    for field in ("summary", "title"):
+        candidate = str(article.get(field) or "").strip()
+        if candidate and candidate != "Untitled" and not candidate.endswith(("…", "...")):
+            return candidate
+    return ""
 
 
 def get_article(
@@ -674,6 +686,34 @@ def fetch_and_cache_body(
         row_d = row_to_dict(row)
         if row_d.get("body_status") == "ok":
             return _article_from_row(row, conn, article_id, user_id)
+        if row_d.get("kind") == "nitter_feed":
+            stored_post = _complete_stored_nitter_post(row_d)
+            if stored_post:
+                conn.execute(
+                    """
+                    UPDATE articles
+                       SET body = %s,
+                           original_body = %s,
+                           body_status = 'ok',
+                           updated_at = CURRENT_TIMESTAMP
+                     WHERE id = %s
+                    """,
+                    (
+                        stored_post,
+                        row_d.get("original_title")
+                        if row_d.get("detected_lang") not in {None, "en"}
+                        else None,
+                        article_id,
+                    ),
+                )
+                row_d["body"] = stored_post
+                row_d["original_body"] = (
+                    row_d.get("original_title")
+                    if row_d.get("detected_lang") not in {None, "en"}
+                    else None
+                )
+                row_d["body_status"] = "ok"
+                return _article_from_row(row_d, conn, article_id, user_id)
 
     url = row_d["url"]
     extraction: Any = (
