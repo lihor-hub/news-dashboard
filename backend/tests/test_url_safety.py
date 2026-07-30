@@ -4,6 +4,7 @@ import io
 import socket
 import ssl
 import threading
+import time
 import urllib.request
 from collections.abc import Callable
 from http.client import HTTPMessage
@@ -155,6 +156,48 @@ def test_validate_server_fetch_url_rejects_any_unsafe_resolved_address(
 
     with pytest.raises(UnsafeUrlError):
         validate_server_fetch_url("https://example.com/feed.xml")
+
+
+@pytest.mark.parametrize(
+    "address",
+    ["100.64.0.1", "192.0.2.1", "198.18.0.1", "2001:db8::1"],
+)
+def test_validate_server_fetch_url_rejects_non_global_special_use_address(
+    address: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(socket, "getaddrinfo", _fake_getaddrinfo([address]))
+
+    with pytest.raises(UnsafeUrlError, match="unsafe host address"):
+        validate_server_fetch_url("https://example.test/feed.xml")
+
+
+def test_open_server_fetch_url_bounds_dns_by_absolute_deadline(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    resolver_started = threading.Event()
+    release_resolver = threading.Event()
+
+    def blocked_resolver(*_args: object, **_kwargs: object) -> list[_AddrInfo]:
+        resolver_started.set()
+        release_resolver.wait(timeout=2)
+        return _fake_getaddrinfo(["93.184.216.34"])("example.test", 443)
+
+    monkeypatch.setattr(socket, "getaddrinfo", blocked_resolver)
+    request = urllib.request.Request("https://example.test/feed.xml")
+    started = time.monotonic()
+    try:
+        with pytest.raises(TimeoutError, match="deadline"):
+            open_server_fetch_url(
+                request,
+                timeout=5,
+                deadline=time.monotonic() + 0.05,
+            )
+    finally:
+        release_resolver.set()
+
+    assert resolver_started.is_set()
+    assert time.monotonic() - started < 0.5
 
 
 @pytest.mark.parametrize(
@@ -364,6 +407,50 @@ def test_push_transport_pins_address_and_preserves_tls_hostname(
     assert server_hostnames == ["push.example.test"]
     assert b"POST /delivery HTTP/1.1\r\n" in responder.requests[0]
     assert b"Host: push.example.test:8443\r\n" in responder.requests[0]
+
+
+@pytest.mark.parametrize("status_code", [301, 302, 303, 307, 308])
+def test_push_transport_rejects_redirect_without_sending_second_request(
+    status_code: int,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    resolver_calls: list[tuple[str, int | None]] = []
+    response = (
+        f"HTTP/1.1 {status_code} Redirect\r\n"
+        "Location: https://redirect.example.test/delivery\r\n"
+        "Content-Length: 0\r\n\r\n"
+    ).encode()
+    responder = _SocketResponder([response])
+
+    def resolve(
+        host: str, port: int | None, **kwargs: int
+    ) -> list[tuple[int, int, int, str, tuple[str, int]]]:
+        resolver_calls.append((host, port))
+        return [
+            (
+                socket.AF_INET,
+                kwargs["type"],
+                socket.IPPROTO_TCP,
+                "",
+                ("93.184.216.34", port or 0),
+            )
+        ]
+
+    monkeypatch.setattr(socket, "getaddrinfo", resolve)
+    monkeypatch.setattr(socket, "socket", responder.create_socket)
+    with _PinnedPushSession() as session:
+        result = session.post(
+            "http://push.example.test/delivery",
+            data=b"encrypted",
+            timeout=1,
+        )
+    responder.join()
+
+    assert result.status_code == status_code
+    assert resolver_calls == [("push.example.test", 80)]
+    assert responder.dials == [("93.184.216.34", 80)]
+    assert len(responder.requests) == 1
+    assert b"POST /delivery HTTP/1.1\r\n" in responder.requests[0]
 
 
 def test_redirect_resolves_validates_and_pins_each_hop(

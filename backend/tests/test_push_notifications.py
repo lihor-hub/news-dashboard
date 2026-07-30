@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import http.client
 import socket
+import threading
+import time
 import urllib.error
 from collections.abc import Generator
 from typing import Any
@@ -16,6 +19,7 @@ from news_dashboard.db import POSTGRES_MULTIUSER_SCHEMA, connect, init_db
 from news_dashboard.email import smtp_configured
 from news_dashboard.main import app
 from news_dashboard.push import (
+    _PinnedPushSession,
     delete_push_subscriptions,
     generate_push_hook,
     generate_recap_push_hook,
@@ -246,6 +250,135 @@ def test_push_delivery_classifies_pinned_transport_error_as_temporary(
         patch(
             "news_dashboard.push.open_server_fetch_url",
             side_effect=transport_error,
+        ),
+    ):
+        result = send_push_notification(
+            endpoint="https://push.example.com/delivery",
+            p256dh="abc",
+            auth="xyz",
+            title="Test",
+            body="Hello",
+        )
+
+    assert result == "temporary_failure"
+
+
+class _SlowPushResponse:
+    status = 201
+    code = 201
+    reason = "Created"
+
+    def __init__(self) -> None:
+        self.headers: dict[str, str] = {}
+        self.read_started = threading.Event()
+        self.closed = threading.Event()
+
+    def __enter__(self) -> _SlowPushResponse:
+        return self
+
+    def __exit__(self, *_args: object) -> None:
+        self.close()
+
+    def read(self, _size: int) -> bytes:
+        self.read_started.set()
+        self.closed.wait(timeout=2)
+        return b""
+
+    def close(self) -> None:
+        self.closed.set()
+
+    def geturl(self) -> str:
+        return "https://push.example.com/delivery"
+
+
+def test_push_transport_bounds_slow_response_by_absolute_deadline() -> None:
+    slow_response = _SlowPushResponse()
+    started = time.monotonic()
+    with (
+        patch(
+            "news_dashboard.push.open_server_fetch_url",
+            return_value=slow_response,
+        ),
+        _PinnedPushSession() as session,
+        pytest.raises(TimeoutError, match="deadline"),
+    ):
+        session.post(
+            "https://push.example.com/delivery",
+            data=b"encrypted",
+            timeout=0.05,
+        )
+
+    assert slow_response.read_started.is_set()
+    assert slow_response.closed.is_set()
+    assert time.monotonic() - started < 0.5
+
+
+def test_push_transport_bounds_response_open_by_absolute_deadline() -> None:
+    open_started = threading.Event()
+    release_open = threading.Event()
+
+    def blocked_open(*_args: object, **_kwargs: object) -> _SlowPushResponse:
+        open_started.set()
+        release_open.wait(timeout=2)
+        return _SlowPushResponse()
+
+    started = time.monotonic()
+    try:
+        with (
+            patch("news_dashboard.push.open_server_fetch_url", side_effect=blocked_open),
+            _PinnedPushSession() as session,
+            pytest.raises(TimeoutError, match="deadline"),
+        ):
+            session.post(
+                "https://push.example.com/delivery",
+                data=b"encrypted",
+                timeout=0.05,
+            )
+    finally:
+        release_open.set()
+
+    assert open_started.is_set()
+    assert time.monotonic() - started < 0.5
+
+
+@pytest.mark.parametrize(
+    "read_error",
+    [
+        TimeoutError("response read timed out"),
+        http.client.IncompleteRead(b"partial", 20),
+        ConnectionResetError("push service reset connection"),
+    ],
+)
+def test_push_delivery_classifies_response_read_error_as_temporary(
+    monkeypatch: pytest.MonkeyPatch,
+    read_error: BaseException,
+) -> None:
+    monkeypatch.setenv("VAPID_PRIVATE_KEY", "fake-private-key")
+
+    class _ReadFailureResponse(_SlowPushResponse):
+        def read(self, _size: int) -> bytes:
+            raise read_error
+
+    class _FakeWebPushError(Exception):
+        pass
+
+    def fake_webpush(**kwargs: Any) -> None:
+        subscription_info = kwargs["subscription_info"]
+        kwargs["requests_session"].post(
+            subscription_info["endpoint"],
+            data=b"encrypted",
+            timeout=kwargs["timeout"],
+        )
+
+    fake_module: dict[str, Any] = {
+        "webpush": fake_webpush,
+        "WebPushException": _FakeWebPushError,
+    }
+    with (
+        patch.dict("sys.modules", {"pywebpush": MagicMock(**fake_module)}),
+        patch(
+            "news_dashboard.push.open_server_fetch_url",
+            return_value=_ReadFailureResponse(),
         ),
     ):
         result = send_push_notification(

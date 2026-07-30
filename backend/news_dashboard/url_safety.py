@@ -7,11 +7,13 @@ reach localhost, private networks, or cloud metadata services from the server.
 
 from __future__ import annotations
 
+import concurrent.futures
 import functools
 import http.client
 import ipaddress
 import socket
 import ssl
+import time
 import urllib.request
 from dataclasses import dataclass, field
 from http.client import HTTPMessage
@@ -24,6 +26,10 @@ class UnsafeUrlError(ValueError):
 
 
 _SockAddr = tuple[str, int] | tuple[str, int, int, int]
+_DNS_EXECUTOR = concurrent.futures.ThreadPoolExecutor(
+    max_workers=4,
+    thread_name_prefix="server-fetch-dns",
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -88,11 +94,43 @@ def _parse_server_fetch_url(url: str) -> tuple[str, str, int]:
     return hostname, normalized_host, port
 
 
-def _resolve_server_fetch_target(url: str) -> ResolvedTarget:
+def _remaining_timeout(deadline: float | None, timeout: float | None) -> float | None:
+    if deadline is None:
+        return timeout
+    remaining = deadline - time.monotonic()
+    if remaining <= 0:
+        message = "Server fetch deadline exceeded"
+        raise TimeoutError(message)
+    return remaining if timeout is None else min(timeout, remaining)
+
+
+def _resolve_server_fetch_target(
+    url: str,
+    *,
+    deadline: float | None = None,
+) -> ResolvedTarget:
     """Resolve and validate every answer, then select one numeric endpoint."""
     hostname, normalized_host, port = _parse_server_fetch_url(url)
     try:
-        addresses = socket.getaddrinfo(normalized_host, port, type=socket.SOCK_STREAM)
+        if deadline is None:
+            addresses = socket.getaddrinfo(
+                normalized_host,
+                port,
+                type=socket.SOCK_STREAM,
+            )
+        else:
+            future = _DNS_EXECUTOR.submit(
+                socket.getaddrinfo,
+                normalized_host,
+                port,
+                type=socket.SOCK_STREAM,
+            )
+            try:
+                addresses = future.result(timeout=_remaining_timeout(deadline, None))
+            except concurrent.futures.TimeoutError as exc:
+                future.cancel()
+                message = "Server fetch deadline exceeded"
+                raise TimeoutError(message) from exc
     except socket.gaierror as exc:
         msg = f"Could not resolve fetch host: {hostname!r}"
         raise UnsafeUrlError(msg) from exc
@@ -138,6 +176,7 @@ def _resolve_server_fetch_target(url: str) -> ResolvedTarget:
 @dataclass(slots=True)
 class _ResolvedTargetStore:
     targets: dict[urllib.request.Request, ResolvedTarget] = field(default_factory=dict)
+    deadline: float | None = None
 
     def add(self, request: urllib.request.Request, target: ResolvedTarget) -> None:
         self.targets[request] = target
@@ -145,7 +184,10 @@ class _ResolvedTargetStore:
     def get(self, request: urllib.request.Request) -> ResolvedTarget:
         target = self.targets.get(request)
         if target is None:
-            target = _resolve_server_fetch_target(request.full_url)
+            target = _resolve_server_fetch_target(
+                request.full_url,
+                deadline=self.deadline,
+            )
             self.add(request, target)
         return target
 
@@ -174,11 +216,29 @@ class _ValidatingRedirectHandler(urllib.request.HTTPRedirectHandler):
         headers: HTTPMessage,
         newurl: str,
     ) -> urllib.request.Request | None:
-        target = _resolve_server_fetch_target(newurl)
+        target = _resolve_server_fetch_target(
+            newurl,
+            deadline=self._targets.deadline,
+        )
         redirected = super().redirect_request(req, fp, code, msg, headers, newurl)
         if redirected is not None:
             self._targets.add(redirected, target)
         return redirected
+
+
+class _RejectRedirectHandler(urllib.request.HTTPRedirectHandler):
+    """Return redirect responses to the caller instead of following them."""
+
+    def redirect_request(
+        self,
+        req: urllib.request.Request,
+        fp: IO[bytes],
+        code: int,
+        msg: str,
+        headers: HTTPMessage,
+        newurl: str,
+    ) -> None:
+        _ = req, fp, code, msg, headers, newurl
 
 
 class _PinnedHTTPConnection(http.client.HTTPConnection):
@@ -187,14 +247,19 @@ class _PinnedHTTPConnection(http.client.HTTPConnection):
         host: str,
         *,
         resolved_target: ResolvedTarget,
+        deadline: float | None,
         **kwargs: Any,
     ) -> None:
         super().__init__(host, **kwargs)
         self._resolved_target = resolved_target
+        self._deadline = deadline
 
     def connect(self) -> None:
         """Connect to the validated numeric address, retaining ``self.host``."""
-        self.sock = _connect_resolved_target(self._resolved_target, self.timeout)
+        self.sock = _connect_resolved_target(
+            self._resolved_target,
+            _remaining_timeout(self._deadline, self.timeout),
+        )
 
 
 class _PinnedHTTPSConnection(http.client.HTTPSConnection):
@@ -203,17 +268,22 @@ class _PinnedHTTPSConnection(http.client.HTTPSConnection):
         host: str,
         *,
         resolved_target: ResolvedTarget,
+        deadline: float | None,
         context: ssl.SSLContext | None = None,
         **kwargs: Any,
     ) -> None:
         ssl_context = context or ssl.create_default_context()
         super().__init__(host, context=ssl_context, **kwargs)
         self._resolved_target = resolved_target
+        self._deadline = deadline
         self._ssl_context = ssl_context
 
     def connect(self) -> None:
         """Dial the numeric address and authenticate the original hostname."""
-        self.sock = _connect_resolved_target(self._resolved_target, self.timeout)
+        self.sock = _connect_resolved_target(
+            self._resolved_target,
+            _remaining_timeout(self._deadline, self.timeout),
+        )
         self.sock = self._ssl_context.wrap_socket(
             self.sock,
             server_hostname=self._resolved_target.dns_hostname,
@@ -243,7 +313,11 @@ class _PinnedHTTPHandler(urllib.request.HTTPHandler):
 
     def http_open(self, req: urllib.request.Request) -> http.client.HTTPResponse:
         target = self._targets.get(req)
-        connection = functools.partial(_PinnedHTTPConnection, resolved_target=target)
+        connection = functools.partial(
+            _PinnedHTTPConnection,
+            resolved_target=target,
+            deadline=self._targets.deadline,
+        )
         return self.do_open(connection, req)
 
 
@@ -260,27 +334,41 @@ class _PinnedHTTPSHandler(urllib.request.HTTPSHandler):
 
     def https_open(self, req: urllib.request.Request) -> http.client.HTTPResponse:
         target = self._targets.get(req)
-        connection = functools.partial(_PinnedHTTPSConnection, resolved_target=target)
+        connection = functools.partial(
+            _PinnedHTTPSConnection,
+            resolved_target=target,
+            deadline=self._targets.deadline,
+        )
         return self.do_open(connection, req, context=self._ssl_context)
 
 
-def open_server_fetch_url(request: urllib.request.Request, *, timeout: float) -> Any:
+def open_server_fetch_url(
+    request: urllib.request.Request,
+    *,
+    timeout: float,
+    deadline: float | None = None,
+    follow_redirects: bool = True,
+) -> Any:
     """Open a prevalidated server-side fetch request, following only safe redirects."""
-    target = _resolve_server_fetch_target(request.full_url)
-    targets = _ResolvedTargetStore()
+    target = _resolve_server_fetch_target(request.full_url, deadline=deadline)
+    targets = _ResolvedTargetStore(deadline=deadline)
     targets.add(request, target)
     opener = urllib.request.build_opener(
         urllib.request.ProxyHandler({}),
         _PinnedHTTPHandler(targets),
         _PinnedHTTPSHandler(targets),
-        _ValidatingRedirectHandler(targets),
+        (_ValidatingRedirectHandler(targets) if follow_redirects else _RejectRedirectHandler()),
     )
-    return opener.open(request, timeout=timeout)
+    return opener.open(
+        request,
+        timeout=_remaining_timeout(deadline, timeout),
+    )
 
 
 def _is_unsafe_ip(ip: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
     return (
-        ip.is_loopback
+        not ip.is_global
+        or ip.is_loopback
         or ip.is_private
         or ip.is_link_local
         or ip.is_multicast

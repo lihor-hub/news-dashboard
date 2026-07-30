@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import concurrent.futures
+import http.client
 import json
 import logging
 import os
 import re
+import time
 import urllib.error
 import urllib.request
 from typing import Any, Literal
@@ -27,6 +30,10 @@ _MAX_ENDPOINT_LEN = 2083
 _MAX_KEY_LEN = 256
 _PUSH_DELIVERY_TIMEOUT_SECONDS = 15.0
 _PUSH_RESPONSE_BYTE_CAP = 64 * 1024
+_PUSH_RESPONSE_EXECUTOR = concurrent.futures.ThreadPoolExecutor(
+    max_workers=4,
+    thread_name_prefix="push-response",
+)
 
 # Base64url alphabet (no padding required)
 _BASE64URL_RE = re.compile(r"^[A-Za-z0-9_\-]+=*$")
@@ -270,12 +277,70 @@ class _PinnedPushSession(requests.Session):
             headers=request_headers,
             method=request.method,
         )
+        deadline = time.monotonic() + float(timeout_value)
         try:
-            with open_server_fetch_url(url_request, timeout=float(timeout_value)) as opened:
-                return _push_response(opened, request)
+            with _open_push_before_deadline(
+                url_request,
+                float(timeout_value),
+                deadline,
+            ) as opened:
+                return _push_response_before_deadline(opened, request, deadline)
         except urllib.error.HTTPError as exc:
             with exc:
-                return _push_response(exc, request)
+                return _push_response_before_deadline(exc, request, deadline)
+
+
+def _open_push_before_deadline(
+    request: urllib.request.Request,
+    timeout: float,
+    deadline: float,
+) -> Any:
+    """Open a push response without letting handshake/header reads overrun."""
+    remaining = deadline - time.monotonic()
+    if remaining <= 0:
+        message = "Push delivery deadline exceeded"
+        raise TimeoutError(message)
+    future = _PUSH_RESPONSE_EXECUTOR.submit(
+        open_server_fetch_url,
+        request,
+        timeout=timeout,
+        deadline=deadline,
+        follow_redirects=False,
+    )
+    try:
+        return future.result(timeout=remaining)
+    except concurrent.futures.TimeoutError as exc:
+        future.add_done_callback(_close_late_push_response)
+        future.cancel()
+        message = "Push delivery deadline exceeded"
+        raise TimeoutError(message) from exc
+
+
+def _close_late_push_response(future: concurrent.futures.Future[Any]) -> None:
+    """Close a response produced after its caller's deadline."""
+    if future.cancelled() or future.exception() is not None:
+        return
+    future.result().close()
+
+
+def _push_response_before_deadline(
+    source: Any,
+    request: requests.PreparedRequest,
+    deadline: float,
+) -> requests.Response:
+    """Read and adapt a response without exceeding the delivery wall clock."""
+    remaining = deadline - time.monotonic()
+    if remaining <= 0:
+        message = "Push delivery deadline exceeded"
+        raise TimeoutError(message)
+    future = _PUSH_RESPONSE_EXECUTOR.submit(_push_response, source, request)
+    try:
+        return future.result(timeout=remaining)
+    except concurrent.futures.TimeoutError as exc:
+        source.close()
+        future.cancel()
+        message = "Push delivery deadline exceeded"
+        raise TimeoutError(message) from exc
 
 
 def _push_response(source: Any, request: requests.PreparedRequest) -> requests.Response:
@@ -363,7 +428,11 @@ def send_push_notification(
                 requests_session=session,
             )
         return "sent"
-    except (UnsafeUrlError, urllib.error.URLError) as exc:
+    except (
+        UnsafeUrlError,
+        OSError,
+        http.client.HTTPException,
+    ) as exc:
         logger.warning("Push notification blocked or failed before delivery: %s", exc)
         return "temporary_failure"
     except WebPushException as exc:
