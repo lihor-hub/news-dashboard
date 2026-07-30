@@ -96,6 +96,8 @@ def test_rollback_restores_and_verifies_backend_before_switching_listeners() -> 
     assert "helm get values" in runbook
     assert "saved values" in runbook
     assert "--reuse-values" in runbook
+    rollback_command = runbook.split("### Restore the rollback backend", 1)[1].split("```", 2)[1]
+    assert '--values "$ROLLBACK_VALUES_FILE"' in rollback_command
 
 
 def test_documented_rollback_overrides_render_a_local_node_port_backend() -> None:

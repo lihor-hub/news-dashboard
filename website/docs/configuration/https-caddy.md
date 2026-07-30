@@ -115,6 +115,7 @@ Complete this before touching the old public route:
 
    ```bash
    (
+   set -euo pipefail
    umask 077
    : "${ROLLBACK_VALUES_FILE:?set a protected local rollback values path}"
    helm get values news-dashboard --namespace news-dashboard --output yaml \
@@ -198,6 +199,7 @@ file as the recovery reference if the live release metadata is unavailable:
 
 ```bash
 (
+set -euo pipefail
 : "${SESSION_SECRET:?set SESSION_SECRET}"
 : "${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}"
 : "${POSTGRES_HOST_PATH:?set POSTGRES_HOST_PATH}"
@@ -211,6 +213,7 @@ prepare_production_helm_secret_files
 helm upgrade --install news-dashboard ./helm/news-dashboard \
   --namespace news-dashboard \
   --reuse-values \
+  --values "$ROLLBACK_VALUES_FILE" \
   --set production=false \
   --set ingress.enabled=true \
   --set networkPolicy.enabled=false \

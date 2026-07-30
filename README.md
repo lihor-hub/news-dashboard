@@ -425,6 +425,7 @@ For Kubernetes:
 
 ```bash
 (
+set -euo pipefail
 : "${SESSION_SECRET:?set SESSION_SECRET}"
 : "${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}"
 : "${POSTGRES_HOST_PATH:?set POSTGRES_HOST_PATH}"

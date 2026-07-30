@@ -532,6 +532,7 @@ docker compose -f docker-compose.prod.yml run --rm news-dashboard news-dashboard
 
 ```bash
 (
+set -euo pipefail
 # 1. Update the image tag and pull policy
 : "${SESSION_SECRET:?set SESSION_SECRET}"
 : "${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}"

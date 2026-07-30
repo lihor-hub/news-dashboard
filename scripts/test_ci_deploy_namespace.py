@@ -4,6 +4,7 @@ import os
 import re
 import shlex
 import subprocess
+import tempfile
 from pathlib import Path
 
 import yaml
@@ -268,8 +269,70 @@ def test_documented_secret_file_commands_cleanup_at_the_end_of_a_subshell() -> N
         ]
         assert secret_commands, document  # noqa: S101
         for command in secret_commands:
-            assert command.strip().startswith("(")  # noqa: S101
+            assert command.strip().startswith("(\nset -euo pipefail")  # noqa: S101
             assert command.strip().endswith(")")  # noqa: S101
+
+
+def test_documented_operational_subshells_enable_strict_mode_first() -> None:
+    for document in PRODUCTION_DOCS:
+        blocks = re.findall(r"```(?:bash|sh)\n(.*?)```", document.read_text(), re.DOTALL)
+        operational_subshells = [
+            block
+            for block in blocks
+            if block.strip().startswith("(")
+            and any(
+                operation in block
+                for operation in (
+                    "prepare_production_helm_secret_files",
+                    "helm ",
+                    "kubectl ",
+                )
+            )
+        ]
+        for command in operational_subshells:
+            lines = [line.strip() for line in command.strip().splitlines()]
+            assert lines[:2] == ["(", "set -euo pipefail"]  # noqa: S101
+
+
+def test_strict_operational_subshell_propagates_helm_failure_and_cleans_secrets() -> None:
+    with tempfile.TemporaryDirectory() as directory:
+        temp_dir = Path(directory)
+        fake_bin = temp_dir / "bin"
+        fake_bin.mkdir()
+        fake_helm = fake_bin / "helm"
+        fake_helm.write_text("#!/usr/bin/env bash\nexit 42\n")
+        fake_helm.chmod(0o755)
+        tracked_dir_file = temp_dir / "tracked-dir"
+        env = os.environ.copy()
+        env.update(
+            {
+                "PATH": f"{fake_bin}:{env['PATH']}",
+                "SESSION_SECRET": "session-secret",
+                "POSTGRES_PASSWORD": "postgres-password",
+                "TRACKED_DIR_FILE": str(tracked_dir_file),
+            }
+        )
+        command = f"""
+(
+set -euo pipefail
+source {shlex.quote(str(DEPLOY_LIBRARY))}
+prepare_production_helm_secret_files
+printf %s "$PRODUCTION_HELM_SECRET_DIR" >"$TRACKED_DIR_FILE"
+helm upgrade representative-failure
+:
+)
+"""
+        result = subprocess.run(  # noqa: S603
+            ["/bin/bash", "-c", command],
+            check=False,
+            capture_output=True,
+            text=True,
+            env=env,
+        )
+
+        assert result.returncode == 42  # noqa: S101
+        tracked_dir = Path(tracked_dir_file.read_text())
+        assert not tracked_dir.exists()  # noqa: S101
 
 
 def test_local_render_mode_does_not_require_cutover_activation() -> None:
