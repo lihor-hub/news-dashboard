@@ -2,9 +2,9 @@ replicaCount: 1
 
 image:
   repository: ghcr.io/lihor-hub/news-dashboard
-  # CI overrides this with the commit SHA so Kubernetes always pulls the exact
-  # image that was just built.  'latest' is only used for manual local deploys.
-  tag: latest
+  # CI overrides this with the commit SHA. This default is a successful CI-built
+  # source SHA because the deploy job receives that SHA, not the build digest.
+  tag: 7d01027c3c2b21a537ab3264ce485d4fea6ba48d
   # IfNotPresent is correct because CI pins an immutable SHA tag.
   # Never use 'latest' + 'IfNotPresent' together — Kubernetes won't re-pull.
   pullPolicy: IfNotPresent
@@ -252,7 +252,7 @@ ingestCronJob:
 
 postgresql:
   enabled: true
-  image: pgvector/pgvector:pg16
+  image: pgvector/pgvector:pg16@sha256:a36250871de0833b8757561c72f2477ef1ddd1101afa4e617fb552e0de514c6b
   podSecurityContext:
     fsGroup: 999
     seccompProfile:
@@ -308,7 +308,7 @@ neo4j:
   enabled: false
   image:
     repository: neo4j
-    tag: 5-community
+    tag: 5-community@sha256:362542416de6c09a971484d1893878016cc3b5cdec166e54b1c824a220ecd6b9
     pullPolicy: IfNotPresent
   auth:
     # Name of a pre-existing Secret containing the passwordKey below. When

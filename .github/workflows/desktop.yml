@@ -16,7 +16,7 @@ jobs:
     runs-on: macos-latest
 
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0
 
@@ -29,7 +29,7 @@ jobs:
           VERSION: ${{ steps.version.outputs.version }}
         run: bash scripts/inject_app_version.sh desktop
 
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: '20'
           cache: 'npm'
@@ -52,13 +52,13 @@ jobs:
           MANIFEST=$(find desktop/dist -name "latest-mac.yml" | head -1)
           echo "manifest=$MANIFEST" >> "$GITHUB_OUTPUT"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: news-dashboard-dmg-v${{ steps.version.outputs.version }}-manual
           path: ${{ steps.dmg.outputs.path }}
           retention-days: 7
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: steps.dmg.outputs.manifest != ''
         with:
           name: latest-mac-v${{ steps.version.outputs.version }}-manual
