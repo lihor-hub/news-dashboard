@@ -72,6 +72,7 @@ The production Helm contract terminates application TLS at the Ingress and
 keeps the application Service private:
 
 ```bash
+(
 : "${SESSION_SECRET:?set SESSION_SECRET}"
 : "${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}"
 : "${POSTGRES_HOST_PATH:?set POSTGRES_HOST_PATH}"
@@ -86,6 +87,7 @@ helm upgrade --install news-dashboard ./helm/news-dashboard \
   --set-string postgresql.persistence.hostPath="$POSTGRES_HOST_PATH" \
   --set-file app.auth.sessionSecret="$PRODUCTION_SESSION_SECRET_FILE" \
   --set-file postgresql.password="$PRODUCTION_POSTGRES_PASSWORD_FILE"
+)
 ```
 
 Supply secrets and installation-specific persistence at runtime. Do not commit

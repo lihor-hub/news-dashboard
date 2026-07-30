@@ -88,10 +88,14 @@ def test_rollback_restores_and_verifies_backend_before_switching_listeners() -> 
         "### Start Caddy",
         "### Verify Caddy locally",
         "### Change DNS or port ownership",
+        "### Disable the old Ingress",
     )
 
     indices = [runbook.index(step) for step in ordered_steps]
     assert indices == sorted(indices)
+    assert "helm get values" in runbook
+    assert "saved values" in runbook
+    assert "--reuse-values" in runbook
 
 
 def test_documented_rollback_overrides_render_a_local_node_port_backend() -> None:
@@ -110,7 +114,7 @@ def test_documented_rollback_overrides_render_a_local_node_port_backend() -> Non
             "--set",
             "production=false",
             "--set",
-            "ingress.enabled=false",
+            "ingress.enabled=true",
             "--set",
             "networkPolicy.enabled=false",
             "--set",
@@ -140,4 +144,4 @@ def test_documented_rollback_overrides_render_a_local_node_port_backend() -> Non
     )
     assert service["spec"]["type"] == "NodePort"
     assert service["spec"]["ports"][0]["nodePort"] == 31080
-    assert not any(resource["kind"] == "Ingress" for resource in rendered)
+    assert any(resource["kind"] == "Ingress" for resource in rendered)

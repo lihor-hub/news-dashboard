@@ -424,6 +424,7 @@ The production image serves the built frontend through FastAPI on port `8080`.
 For Kubernetes:
 
 ```bash
+(
 : "${SESSION_SECRET:?set SESSION_SECRET}"
 : "${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}"
 : "${POSTGRES_HOST_PATH:?set POSTGRES_HOST_PATH}"
@@ -436,6 +437,7 @@ helm upgrade --install news-dashboard ./helm/news-dashboard \
   --set-string postgresql.persistence.hostPath="$POSTGRES_HOST_PATH" \
   --set-file app.auth.sessionSecret="$PRODUCTION_SESSION_SECRET_FILE" \
   --set-file postgresql.password="$PRODUCTION_POSTGRES_PASSWORD_FILE"
+)
 ```
 
 The production values expose the app only through a TLS Ingress backed by a

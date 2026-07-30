@@ -164,6 +164,7 @@ ghcr.io/lihor-hub/news-dashboard:<sha>
 ### Kubernetes (Helm)
 
 ```bash
+(
 : "${SESSION_SECRET:?set SESSION_SECRET}"
 : "${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}"
 : "${POSTGRES_HOST_PATH:?set POSTGRES_HOST_PATH}"
@@ -177,6 +178,7 @@ helm upgrade --install news-dashboard ./helm/news-dashboard \
   --set-string postgresql.persistence.hostPath="$POSTGRES_HOST_PATH" \
   --set-file app.auth.sessionSecret="$PRODUCTION_SESSION_SECRET_FILE" \
   --set-file postgresql.password="$PRODUCTION_POSTGRES_PASSWORD_FILE"
+)
 ```
 
 Production renders a TLS-enabled Ingress and a ClusterIP-only application

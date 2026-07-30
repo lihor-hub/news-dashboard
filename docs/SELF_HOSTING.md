@@ -531,6 +531,7 @@ docker compose -f docker-compose.prod.yml run --rm news-dashboard news-dashboard
 ### Kubernetes (Helm)
 
 ```bash
+(
 # 1. Update the image tag and pull policy
 : "${SESSION_SECRET:?set SESSION_SECRET}"
 : "${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}"
@@ -551,6 +552,7 @@ helm upgrade news-dashboard ./helm/news-dashboard \
 # 2. Rollout restarts the deployment automatically.
 #    The app runs init_db() on startup.
 kubectl -n news-dashboard rollout status deployment/news-dashboard
+)
 ```
 
 The `app.config` values in `helm/news-dashboard/values.yaml` expose the

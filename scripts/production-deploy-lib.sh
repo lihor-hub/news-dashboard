@@ -14,9 +14,15 @@ cleanup_production_helm_secret_files() {
       "${PRODUCTION_POSTGRES_PASSWORD_FILE:-}"
     rmdir "${PRODUCTION_HELM_SECRET_DIR}"
   fi
+  unset PRODUCTION_HELM_SECRET_DIR
+  unset PRODUCTION_SESSION_SECRET_FILE
+  unset PRODUCTION_POSTGRES_PASSWORD_FILE
+  unset PRODUCTION_HELM_SECRET_ARGS
 }
 
 prepare_production_helm_secret_files() {
+  cleanup_production_helm_secret_files
+
   if [[ -z "${SESSION_SECRET:-}" ]]; then
     echo "SESSION_SECRET is required for production auth." >&2
     return 1

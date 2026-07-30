@@ -112,6 +112,23 @@ def test_public_smoke_check_uses_https_hostname() -> None:
     assert "https://news.lihor.ro/api/health" in helper  # noqa: S101
 
 
+def test_public_smoke_runs_only_after_the_deploy_step_reports_an_apply() -> None:
+    workflow = yaml.safe_load(CI_WORKFLOW.read_text())
+    steps = workflow["jobs"]["deploy"]["steps"]
+    deploy_step = next(step for step in steps if step["name"] == "Deploy (Helm)")
+    smoke_step = next(step for step in steps if step["name"] == "Smoke test public TLS Ingress")
+
+    assert deploy_step["id"] == "deploy"  # noqa: S101
+    assert smoke_step["if"] == "steps.deploy.outputs.applied == 'true'"  # noqa: S101
+
+    script = deploy_step["run"]
+    default_index = script.index('echo "applied=false" >> "$GITHUB_OUTPUT"')
+    gate_index = script.index("if ! production_cutover_enabled; then")
+    helm_index = script.index('helm "${helm_args[@]}"')
+    applied_index = script.index('echo "applied=true" >> "$GITHUB_OUTPUT"')
+    assert default_index < gate_index < helm_index < applied_index  # noqa: S101
+
+
 def test_production_deploy_does_not_inherit_host_inventory() -> None:
     workflow = CI_WORKFLOW.read_text()
     helper = DEPLOY_HELPER.read_text()
@@ -160,6 +177,7 @@ def test_file_based_helm_secrets_preserve_hostile_values_without_argv_exposure()
         }
     )
     script = f"""
+set -euo pipefail
 source {shlex.quote(str(DEPLOY_LIBRARY))}
 prepare_production_helm_secret_files
 for argument in "${{PRODUCTION_HELM_SECRET_ARGS[@]}}"; do
@@ -192,6 +210,36 @@ helm template secret-test {shlex.quote(str(CHART))} \
     )
 
 
+def test_repeated_secret_preparation_removes_the_previous_directory() -> None:
+    env = os.environ.copy()
+    env.update(
+        {
+            "SESSION_SECRET": "session-secret",
+            "POSTGRES_PASSWORD": "postgres-password",
+        }
+    )
+    script = f"""
+set -euo pipefail
+source {shlex.quote(str(DEPLOY_LIBRARY))}
+prepare_production_helm_secret_files
+first_dir="$PRODUCTION_HELM_SECRET_DIR"
+prepare_production_helm_secret_files
+[[ ! -e "$first_dir" ]]
+second_dir="$PRODUCTION_HELM_SECRET_DIR"
+cleanup_production_helm_secret_files
+[[ ! -e "$second_dir" ]]
+"""
+    result = subprocess.run(  # noqa: S603
+        ["/bin/bash", "-c", script],
+        check=False,
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+
+    assert result.returncode == 0, result.stderr  # noqa: S101
+
+
 def test_direct_production_helm_examples_choose_storage_and_secret_files() -> None:
     for document in PRODUCTION_DOCS:
         blocks = re.findall(r"```(?:bash|sh)\n(.*?)```", document.read_text(), re.DOTALL)
@@ -201,11 +249,27 @@ def test_direct_production_helm_examples_choose_storage_and_secret_files() -> No
             if "helm upgrade" in block and "values-production.yaml" in block
         ]
         for command in production_commands:
+            assert command.strip().startswith("(")  # noqa: S101
+            assert command.strip().endswith(")")  # noqa: S101
             assert "postgresql.persistence.hostPath" in command  # noqa: S101
             assert "--set-file app.auth.sessionSecret=" in command  # noqa: S101
             assert "--set-file postgresql.password=" in command  # noqa: S101
             assert "--set-string app.auth.sessionSecret=" not in command  # noqa: S101
             assert "--set-string postgresql.password=" not in command  # noqa: S101
+
+
+def test_documented_secret_file_commands_cleanup_at_the_end_of_a_subshell() -> None:
+    for document in PRODUCTION_DOCS:
+        blocks = re.findall(r"```(?:bash|sh)\n(.*?)```", document.read_text(), re.DOTALL)
+        secret_commands = [
+            block
+            for block in blocks
+            if "prepare_production_helm_secret_files" in block and "helm upgrade" in block
+        ]
+        assert secret_commands, document  # noqa: S101
+        for command in secret_commands:
+            assert command.strip().startswith("(")  # noqa: S101
+            assert command.strip().endswith(")")  # noqa: S101
 
 
 def test_local_render_mode_does_not_require_cutover_activation() -> None:

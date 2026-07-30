@@ -639,6 +639,7 @@ jobs:
 
     steps:
       - name: Deploy (Helm)
+        id: deploy
         env:
           SHA: ${{ github.sha }}
           IMG: ${{ env.IMAGE }}
@@ -667,6 +668,7 @@ jobs:
           DIFY_CHAT_TITLE: ${{ vars.DIFY_CHAT_TITLE }}
         run: |
           set -euo pipefail
+          echo "applied=false" >> "$GITHUB_OUTPUT"
 
           # Sync repository-controlled deployment logic before any cluster,
           # registry, or release mutation.
@@ -844,6 +846,7 @@ jobs:
             "${dify_helm_args[@]}"
           )
           helm "${helm_args[@]}"
+          echo "applied=true" >> "$GITHUB_OUTPUT"
 
           # Wait for the new pods to become ready.
           kubectl -n news-dashboard rollout status \
@@ -852,6 +855,7 @@ jobs:
       # Pull-request CI validates rendered Ingress manifests in helm-validate
       # and never assumes access to the private production appliance.
       - name: Smoke test public TLS Ingress
+        if: steps.deploy.outputs.applied == 'true'
         run: |
           curl -sf --max-time 10 --retry 6 --retry-delay 5 \
             https://news.lihor.ro/api/health | grep '"status":"ok"'

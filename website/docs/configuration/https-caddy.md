@@ -110,11 +110,25 @@ Complete this before touching the old public route:
 
 1. Record the current and staged revisions from
    `helm -n news-dashboard history news-dashboard`.
-2. Retain the pre-cutover Caddy configuration and its service enablement state.
-3. Confirm the previous release can restore its former application route.
-4. Record the DNS or port-owner reversal needed to return traffic to Caddy.
-5. Confirm the pre-cutover PostgreSQL backup and restore verification.
-6. Set explicit rollback triggers: failed health, failed login/callback,
+2. Save the current release values in a protected local file so authentication
+   and integration settings are available during rollback:
+
+   ```bash
+   (
+   umask 077
+   : "${ROLLBACK_VALUES_FILE:?set a protected local rollback values path}"
+   helm get values news-dashboard --namespace news-dashboard --output yaml \
+     >"$ROLLBACK_VALUES_FILE"
+   chmod 600 "$ROLLBACK_VALUES_FILE"
+   )
+   ```
+
+   Treat this file as a secret, because release values can contain credentials.
+3. Retain the pre-cutover Caddy configuration and its service enablement state.
+4. Confirm the previous release can restore its former application route.
+5. Record the DNS or port-owner reversal needed to return traffic to Caddy.
+6. Confirm the pre-cutover PostgreSQL backup and restore verification.
+7. Set explicit rollback triggers: failed health, failed login/callback,
    invalid TLS, missing Keycloak route, or unexpected public listening ports.
 
 Do not remove the previous release or saved Caddy configuration during the
@@ -176,24 +190,29 @@ Trigger rollback immediately if any prepared condition fails:
 ### Restore the rollback backend
 
 Keep public traffic on the current Ingress while restoring the old backend.
-Use the current chart with explicit guard-compatible rollback overrides; do not
-apply `values-production.yaml` without `production=false`, because its
-ClusterIP guard rejects the required temporary NodePort:
+Reuse the live release values to preserve authentication and integrations, and
+keep `ingress.enabled=true` so the Ingress and temporary NodePort coexist. The
+explicit `production=false` override is required because production mode's
+ClusterIP guard rejects the temporary NodePort. Keep the protected saved values
+file as the recovery reference if the live release metadata is unavailable:
 
 ```bash
+(
 : "${SESSION_SECRET:?set SESSION_SECRET}"
 : "${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}"
 : "${POSTGRES_HOST_PATH:?set POSTGRES_HOST_PATH}"
 : "${ROLLBACK_IMAGE_TAG:?set ROLLBACK_IMAGE_TAG}"
 : "${ROLLBACK_NODE_PORT:?set ROLLBACK_NODE_PORT from the saved release}"
+: "${ROLLBACK_VALUES_FILE:?set the saved values path}"
+test -r "$ROLLBACK_VALUES_FILE"
 source ./scripts/production-deploy-lib.sh
 prepare_production_helm_secret_files
 
 helm upgrade --install news-dashboard ./helm/news-dashboard \
   --namespace news-dashboard \
-  --values ./helm/news-dashboard/values-production.yaml \
+  --reuse-values \
   --set production=false \
-  --set ingress.enabled=false \
+  --set ingress.enabled=true \
   --set networkPolicy.enabled=false \
   --set service.type=NodePort \
   --set service.nodePort="$ROLLBACK_NODE_PORT" \
@@ -201,6 +220,7 @@ helm upgrade --install news-dashboard ./helm/news-dashboard \
   --set-string postgresql.persistence.hostPath="$POSTGRES_HOST_PATH" \
   --set-file app.auth.sessionSecret="$PRODUCTION_SESSION_SECRET_FILE" \
   --set-file postgresql.password="$PRODUCTION_POSTGRES_PASSWORD_FILE"
+)
 ```
 
 ### Verify the rollback backend locally
@@ -213,6 +233,13 @@ curl --fail --show-error --silent \
 ```
 
 Require `"status":"ok"` and verify the expected database before continuing.
+Then confirm the still-live Ingress remains healthy:
+
+```bash
+curl --fail --show-error --silent https://news.lihor.ro/api/health
+```
+
+Both checks must pass at the same time before changing listeners.
 
 ### Prepare the saved Caddy application route
 
@@ -250,12 +277,26 @@ curl --fail --show-error --silent \
 ```
 
 Also verify `/keycloak` and the login callback through the local Caddy listener.
+For example, check the Keycloak route without changing public DNS:
+
+```bash
+curl --fail --show-error --silent --head \
+  --resolve 'news.lihor.ro:443:127.0.0.1' \
+  https://news.lihor.ro/keycloak/
+```
 
 ### Change DNS or port ownership
 
 Only after both local checks pass, reverse any DNS, load-balancer, or router
 change that is still needed to send public traffic to Caddy. Then repeat the
 external health and authentication checks.
+
+### Disable the old Ingress
+
+Only after Caddy owns and serves application and Keycloak traffic, disable or
+delete the application Ingress and verify that doing so does not disturb the
+Caddy route. Do not remove the saved values or Caddy configuration until the
+rollback observation window closes.
 
 Restore PostgreSQL only when the application rollback requires a
 data-incompatible schema reversal. Preserve the failed state and logs first.
