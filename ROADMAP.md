@@ -7,31 +7,36 @@ Dashboard. It's not a commitment or a schedule — see
 For granular, up-to-date status, the GitHub issue tracker is the source of
 truth. This roadmap gives the high-level "why" behind the current epics.
 
-## Now: OSS readiness
+## Now: growing the contributor community
 
-Tracked in [epic: OSS readiness](https://github.com/lihor-hub/news-dashboard/issues/640).
-The project recently moved to the public `lihor-hub` org under the MIT
-license, and the current focus is making it a genuinely welcoming,
-self-hostable open source project:
+The OSS-readiness push
+([epic #640](https://github.com/lihor-hub/news-dashboard/issues/640)) is
+done: the project is MIT-licensed, self-hostable from a published image,
+documented at [docs.lihor.ro](https://docs.lihor.ro), covered by
+security/supply-chain CI, and ready for Dev Containers/Codespaces. The
+current focus is turning that foundation into an active contributor
+community:
 
-- **Community health** — CONTRIBUTING, CODE_OF_CONDUCT, SECURITY, issue/PR
-  templates, CODEOWNERS, and this governance trio.
-- **Documentation site** — a Docusaurus site at [docs.lihor.ro](https://docs.lihor.ro)
-  with a Getting Started guide and user guide, replacing scattered `docs/`
-  markdown.
-- **Security & supply-chain CI** — CodeQL, dependency review, container
-  scanning, and SBOM/provenance for releases.
-- **Self-host adoption** — a publicly published container image, a
-  production `docker-compose` quickstart, an operations guide, and a demo
-  mode with seed data and a read-only guest account so people can try the
-  app before self-hosting it.
-- **Contributor onboarding** — Dev Containers/Codespaces, a curated `good
-  first issue` backlog, and Architecture Decision Records for larger
-  decisions.
+- **A curated, always-stocked backlog** — every
+  [good first issue](https://github.com/lihor-hub/news-dashboard/issues?q=is%3Aopen+label%3A%22good+first+issue%22)
+  and [help wanted](https://github.com/lihor-hub/news-dashboard/issues?q=is%3Aopen+label%3A%22help+wanted%22)
+  item is grounded in the code with file references and acceptance
+  criteria, so it can be picked up cold. Area labels (`frontend`,
+  `backend`, `documentation`, `i18n`, `deploy`, `android`, `desktop`)
+  let you filter by what you know.
+- **Broadening the platforms** — help-wanted projects cover ARM64
+  container images, Linux/Windows desktop builds, and a published Helm
+  chart, so more self-hosters can run the app on their hardware.
+- **Reaching more users** — more UI languages, RTL layout support, and
+  closing the gaps between the app and its documentation.
+- **Direction from real users** — the
+  [contributor announcement](https://github.com/lihor-hub/news-dashboard/discussions/1331)
+  asks self-hosters what would make them switch; that feedback feeds
+  this roadmap.
 
-## Later: beyond OSS readiness
+## Later: product work
 
-Once the OSS-readiness epic is substantially done, expect the roadmap to
+As the community grows, expect the roadmap to
 shift back toward product work — reader experience, AI-powered features, and
 automation/delivery. Browse the `epic: *` labels
 ([reader-ux](https://github.com/lihor-hub/news-dashboard/issues?q=is%3Aissue+is%3Aopen+label%3A%22epic%3A+reader-ux%22),
