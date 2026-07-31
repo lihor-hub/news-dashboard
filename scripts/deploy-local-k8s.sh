@@ -73,10 +73,11 @@ prepare_production_helm_secret_files
 ADDITIONAL_EGRESS_HELM_ARGS=()
 if [[ -n "${ADDITIONAL_EGRESS_VALUES_FILE:-}" ]]; then
   if [[ ! -f "${ADDITIONAL_EGRESS_VALUES_FILE}" ]]; then
-    echo "ADDITIONAL_EGRESS_VALUES_FILE must name a readable Helm values file." >&2
+    echo "ADDITIONAL_EGRESS_VALUES_FILE must name a readable YAML file." >&2
     exit 1
   fi
-  ADDITIONAL_EGRESS_HELM_ARGS+=(--values "${ADDITIONAL_EGRESS_VALUES_FILE}")
+  prepare_production_additional_egress_file "${ADDITIONAL_EGRESS_VALUES_FILE}"
+  ADDITIONAL_EGRESS_HELM_ARGS+=(--values "${PRODUCTION_ADDITIONAL_EGRESS_FILE}")
 fi
 
 AI_HELM_ARGS=()

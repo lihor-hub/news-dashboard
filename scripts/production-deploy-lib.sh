@@ -22,6 +22,19 @@ cleanup_production_helm_secret_files() {
   unset PRODUCTION_HELM_SECRET_ARGS
 }
 
+prepare_production_additional_egress_file() {
+  if [[ -z "${PRODUCTION_HELM_SECRET_DIR:-}" ]]; then
+    echo "Prepare production Helm files before additional egress values." >&2
+    return 1
+  fi
+
+  local input_file="${1:?additional egress input path is required}"
+  PRODUCTION_ADDITIONAL_EGRESS_FILE="${PRODUCTION_HELM_SECRET_DIR}/additional-egress-values.yaml"
+  python3 ./scripts/normalize_additional_egress_values.py \
+    "${input_file}" "${PRODUCTION_ADDITIONAL_EGRESS_FILE}"
+  chmod 600 "${PRODUCTION_ADDITIONAL_EGRESS_FILE}"
+}
+
 prepare_production_helm_secret_files() {
   cleanup_production_helm_secret_files
 

@@ -710,8 +710,7 @@ jobs:
           prepare_production_helm_secret_files
           additional_egress_helm_args=()
           if [ -n "$ADDITIONAL_EGRESS_VALUES" ]; then
-            PRODUCTION_ADDITIONAL_EGRESS_FILE="${PRODUCTION_HELM_SECRET_DIR}/additional-egress-values.yaml"
-            printf '%s\n' "$ADDITIONAL_EGRESS_VALUES" >"$PRODUCTION_ADDITIONAL_EGRESS_FILE"
+            prepare_production_additional_egress_file - <<<"$ADDITIONAL_EGRESS_VALUES"
             additional_egress_helm_args+=(--values "$PRODUCTION_ADDITIONAL_EGRESS_FILE")
           fi
 

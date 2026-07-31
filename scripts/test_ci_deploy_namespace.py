@@ -129,7 +129,7 @@ def test_manual_production_helper_requires_and_deploys_image_digest() -> None:
     assert "--set image.tag=" not in helper  # noqa: S101
 
 
-def test_deploy_supports_persistent_non_secret_additional_egress_values() -> None:
+def test_deploy_normalizes_persistent_non_secret_additional_egress_values() -> None:
     workflow = yaml.safe_load(CI_WORKFLOW.read_text())
     deploy_step = next(
         step for step in workflow["jobs"]["deploy"]["steps"] if step["name"] == "Deploy (Helm)"
@@ -140,9 +140,19 @@ def test_deploy_supports_persistent_non_secret_additional_egress_values() -> Non
     assert deploy_step["env"]["ADDITIONAL_EGRESS_VALUES"] == (  # noqa: S101
         "${{ vars.ADDITIONAL_EGRESS_VALUES }}"
     )
-    assert "additional-egress-values.yaml" in script  # noqa: S101
+    ci_normalize_index = script.index("prepare_production_additional_egress_file")
+    ci_helm_index = script.index('helm "${helm_args[@]}"')
+    assert ci_normalize_index < ci_helm_index  # noqa: S101
+    assert '--values "$PRODUCTION_ADDITIONAL_EGRESS_FILE"' in script  # noqa: S101
+    assert "printf '%s\\n' \"$ADDITIONAL_EGRESS_VALUES\" >" not in script  # noqa: S101
     assert '"${additional_egress_helm_args[@]}"' in script  # noqa: S101
+
     assert "ADDITIONAL_EGRESS_VALUES_FILE" in helper  # noqa: S101
+    helper_normalize_index = helper.index("prepare_production_additional_egress_file")
+    helper_helm_index = helper.index("helm upgrade --install")
+    assert helper_normalize_index < helper_helm_index  # noqa: S101
+    assert '--values "${PRODUCTION_ADDITIONAL_EGRESS_FILE}"' in helper  # noqa: S101
+    assert '--values "${ADDITIONAL_EGRESS_VALUES_FILE}"' not in helper  # noqa: S101
     assert '"${ADDITIONAL_EGRESS_HELM_ARGS[@]}"' in helper  # noqa: S101
 
 
