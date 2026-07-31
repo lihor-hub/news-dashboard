@@ -478,9 +478,7 @@ def send_push_notification(
                 vapid_private_key=_vapid_private_key(),
                 vapid_claims=_vapid_claims(),
                 timeout=_PUSH_DELIVERY_TIMEOUT_SECONDS,
-                # pyrefly on Linux does not currently preserve the requests.Session
-                # base type for this context-managed subclass.
-                requests_session=cast("requests.Session", session),
+                requests_session=session,  # pyrefly: ignore[bad-argument-type]
             )
         return "sent"
     except (

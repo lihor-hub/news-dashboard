@@ -77,6 +77,21 @@ class _SocketResponder:
             try:
                 while b"\r\n\r\n" not in request:
                     request += server.recv(4096)
+                headers, _, body = request.partition(b"\r\n\r\n")
+                content_length = next(
+                    (
+                        int(line.partition(b":")[2].strip())
+                        for line in headers.split(b"\r\n")
+                        if line.lower().startswith(b"content-length:")
+                    ),
+                    0,
+                )
+                while len(body) < content_length:
+                    chunk = server.recv(4096)
+                    if not chunk:
+                        break
+                    request += chunk
+                    body += chunk
                 self.requests.append(request)
                 server.sendall(response)
             finally:
