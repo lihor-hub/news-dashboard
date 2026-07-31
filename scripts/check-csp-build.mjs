@@ -22,13 +22,13 @@ try {
 if (/<[^>]+\son[a-z][\w:-]*\s*=/i.test(html)) {
   fail('index.html contains an inline event handler blocked by script-src self');
 }
-if (
-  /<[^>]+\s[\w:-]+\s*=\s*(?:"\s*javascript:|'\s*javascript:|javascript:[^\s>]*)/i.test(html)
-) {
+if (/<[^>]+\s[\w:-]+\s*=\s*(?:"\s*javascript:|'\s*javascript:|javascript:[^\s>]*)/i.test(html)) {
   fail('index.html contains a javascript URL blocked by script-src self');
 }
 
-const scriptTags = [...html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script[ \t\n\f\r]*>/gi)];
+const scriptTags = [
+  ...html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script(?:[ \t\n\f\r][^>]*)?>/gi),
+];
 let externalRegistration;
 
 for (const [, attributes, body] of scriptTags) {

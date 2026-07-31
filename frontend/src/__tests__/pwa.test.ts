@@ -70,6 +70,8 @@ describe('PWA production build — Content Security Policy compatibility', () =>
     ['form feed before the closing bracket', '</script\f>'],
     ['carriage return before the closing bracket', '</script\r>'],
     ['mixed case and ASCII whitespace', '</ScRiPt \t\n\f\r>'],
+    ['parse-error attributes after ASCII whitespace', '</script\t\n bar>'],
+    ['mixed-case parse-error attributes', '</ScRiPt data-ignored>'],
   ])('accepts external scripts with %s', (_description, closingTag) => {
     const result = runCspBuildCheck(
       `<script type="module" src="/assets/index.js">${closingTag}` +
