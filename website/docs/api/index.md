@@ -43,7 +43,7 @@ behavior:
 | `/api/admin/*` | `admin` router | Requires a session belonging to an admin user. |
 | `/api/auth/*`, `/auth/*` | public router | Login, registration, and SSO callbacks. |
 | `/api/mcp/*` | public MCP router | Bearer-token authenticated, opt-in. |
-| `/reader/api/0/*`, `/accounts/ClientLogin` | public GReader router | Google Reader-compatible sync. |
+| `/api/greader/*` | public GReader router | Google Reader-compatible sync (`/api/greader/accounts/ClientLogin`, `/api/greader/reader/api/0/*`). |
 | `/api/health`, `/api/live`, `/api/ready`, `/metrics` | system router | Unauthenticated probes. |
 
 ## Response conventions

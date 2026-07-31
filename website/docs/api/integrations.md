@@ -61,15 +61,17 @@ Authenticate with a GReader token from
 
 | Route | Method | Purpose |
 |-------|--------|---------|
-| `/accounts/ClientLogin` | POST | Exchange credentials for a session. |
-| `/reader/api/0/token` | GET | Fetch the write token. |
-| `/reader/api/0/user-info` | GET | Account metadata. |
-| `/reader/api/0/subscription/list` | GET | Subscribed feeds. |
-| `/reader/api/0/stream/contents/{stream_id}` | GET | Items in a stream. |
-| `/reader/api/0/stream/items/ids` | GET | Item IDs in a stream. |
-| `/reader/api/0/stream/items/contents` | POST | Fetch items by ID. |
-| `/reader/api/0/edit-tag` | POST | Add or remove tags — read/starred state. |
+| `/api/greader/accounts/ClientLogin` | POST | Exchange credentials for a session. |
+| `/api/greader/reader/api/0/token` | GET | Fetch the write token. |
+| `/api/greader/reader/api/0/user-info` | GET | Account metadata. |
+| `/api/greader/reader/api/0/subscription/list` | GET | Subscribed feeds. |
+| `/api/greader/reader/api/0/stream/contents/{stream_id}` | GET | Items in a stream (`stream_id` path param, e.g. `user/-/state/com.google/reading-list`). |
+| `/api/greader/reader/api/0/stream/items/ids` | GET | Item IDs in a stream. |
+| `/api/greader/reader/api/0/stream/items/contents` | POST | Fetch items by ID. |
+| `/api/greader/reader/api/0/edit-tag` | POST | Add or remove tags — read/starred state. |
 
+
+All Google Reader sync routes are mounted under `/api/greader` (see [GReader sync](../configuration/greader-sync.md)).
 `edit-tag` is how third-party readers mark items read or starred; those changes
 map onto the same triage state used by the web UI, so the two stay in sync.
 
