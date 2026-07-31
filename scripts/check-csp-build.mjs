@@ -28,7 +28,7 @@ if (
   fail('index.html contains a javascript URL blocked by script-src self');
 }
 
-const scriptTags = [...html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi)];
+const scriptTags = [...html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script\s*>/gi)];
 let externalRegistration;
 
 for (const [, attributes, body] of scriptTags) {

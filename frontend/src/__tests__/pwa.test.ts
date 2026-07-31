@@ -63,6 +63,31 @@ describe('PWA production build — Content Security Policy compatibility', () =>
     expect(result.status, result.stderr).toBe(0);
   });
 
+  it.each([
+    ['space before the closing bracket', '</script >'],
+    ['mixed-case closing tag', '</ScRiPt>'],
+    ['whitespace and mixed case in the closing tag', '</SCRIPT\n\t >'],
+  ])('accepts external scripts with %s', (_description, closingTag) => {
+    const result = runCspBuildCheck(
+      `<script type="module" src="/assets/index.js">${closingTag}` +
+        `<script src="/registerSW.js">${closingTag}`,
+      "navigator.serviceWorker.register('/sw.js');"
+    );
+
+    expect(result.status, result.stderr).toBe(0);
+  });
+
+  it('rejects inline script bodies even when the closing tag has whitespace', () => {
+    const result = runCspBuildCheck(
+      `<script src="/assets/index.js">window.untrusted = true;</script >` +
+        '<script src="/registerSW.js"></script>',
+      "navigator.serviceWorker.register('/sw.js');"
+    );
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain('inline script');
+  });
+
   it('rejects inline service-worker registration', () => {
     const result = runCspBuildCheck("<script>navigator.serviceWorker.register('/sw.js');</script>");
 
