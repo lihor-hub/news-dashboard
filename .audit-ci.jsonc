@@ -1,0 +1,22 @@
+{
+  "$schema": "https://github.com/IBM/audit-ci/raw/main/docs/schema.json",
+  // Fail the CI gate on moderate or higher advisories, matching the old
+  // `npm audit --audit-level=moderate` behavior.
+  "moderate": true,
+  // Each allowlist entry must state why it is excluded and where it is
+  // tracked. Remove the entry to re-arm the gate for that advisory.
+  "allowlist": [
+    // Blanket advisory: every brace-expansion release <= 5.0.7 is marked
+    // vulnerable (DoS via unbounded expansion). Our copies sit under
+    // dev-only build tooling (vite-plugin-pwa -> workbox-build -> jake /
+    // ejs / minimatch) whose version constraints have no patched release
+    // yet. Not shipped to production. Remove once the upstream chain
+    // publishes patched lines.
+    "GHSA-mh99-v99m-4gvg",
+    // react-router RSC-mode CSRF; only patched in react-router 8.3.0.
+    // This Vite SPA does not use RSC mode. The v7 -> v8 migration is
+    // tracked in https://github.com/lihor-hub/news-dashboard/issues/1329
+    // — remove this entry when it lands.
+    "GHSA-qwww-vcr4-c8h2",
+  ],
+}

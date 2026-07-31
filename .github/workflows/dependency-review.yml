@@ -26,9 +26,12 @@ jobs:
         with:
           node-version: '26'
 
+      # audit-ci wraps `npm audit` so known-unfixable advisories can be
+      # allowlisted with a tracked justification in .audit-ci.jsonc instead
+      # of leaving the gate permanently red. New advisories still fail.
       - name: npm audit (root, moderate+)
-        run: npm audit --audit-level=moderate
+        run: npx audit-ci@^7 --config .audit-ci.jsonc
 
       - name: npm audit (website, moderate+)
         working-directory: website
-        run: npm audit --audit-level=moderate
+        run: npx audit-ci@^7 --config ../.audit-ci.jsonc
