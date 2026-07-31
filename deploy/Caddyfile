@@ -1,18 +1,14 @@
 news.lihor.ro {
-	# Authentication is enforced by the app. Keycloak is mounted under the same
-	# hostname so OAuth redirect URIs do not require a separate DNS record.
+	# Transitional Keycloak-only configuration. The Kubernetes Ingress owns
+	# application routing and TLS after the staged appliance cutover. Do not run
+	# this listener at the same time as an ingress controller that binds host
+	# ports 80 and 443.
+	#
+	# Preserve the existing /keycloak route until an equivalent ingress route
+	# has been tested; Keycloak migration is a separate operator boundary.
 	handle /keycloak* {
 		reverse_proxy 127.0.0.1:8081
 	}
-
-	# Proxy to the Kubernetes NodePort instead of a mutable ClusterIP.
-	# Deploy with: helm upgrade news-dashboard ./helm/news-dashboard \
-	#   --set service.type=NodePort,service.nodePort=30088
-	# The NodePort (30088) is stable across pod restarts and Helm upgrades
-	# as long as the value stays the same. Never hardcode a ClusterIP here.
-	reverse_proxy 127.0.0.1:30088
-
-	encode zstd gzip
 
 	header {
 		X-Content-Type-Options nosniff

@@ -30,7 +30,6 @@ from news_dashboard.sources.service import DEFAULT_SOURCES, SourceDefinition
 from news_dashboard.url_safety import (
     UnsafeUrlError,
     open_server_fetch_url,
-    validate_server_fetch_url,
 )
 
 _MEDIA_SUMMARY_PROMPT = get_chat_prompt("summarize-media-article")
@@ -501,14 +500,17 @@ def _fetch_feed_content(url: str) -> bytes:
     Raises FeedFetchError on failure.
     """
     try:
-        validate_server_fetch_url(url)
-    except UnsafeUrlError as exc:
+        req = urllib.request.Request(  # noqa: S310 - scheme validated by central opener
+            url, headers={"User-Agent": _FEED_AGENT}
+        )
+    except ValueError as exc:
         raise FeedFetchError(str(exc)) from exc
-    req = urllib.request.Request(url, headers={"User-Agent": _FEED_AGENT})  # noqa: S310
     attempt = 0
     while True:
         try:
             return _read_feed_response(url, req)
+        except UnsafeUrlError as exc:
+            raise FeedFetchError(str(exc)) from exc
         except urllib.error.HTTPError as exc:
             if exc.code in _RETRYABLE_STATUS and attempt < FEED_FETCH_MAX_RETRIES:
                 attempt += 1

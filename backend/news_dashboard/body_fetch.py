@@ -31,7 +31,6 @@ from news_dashboard.social_posts import canonical_x_status_url
 from news_dashboard.url_safety import (
     UnsafeUrlError,
     open_server_fetch_url,
-    validate_server_fetch_url,
 )
 
 logger = logging.getLogger(__name__)
@@ -47,6 +46,17 @@ _AI_PROMPT = (
 )
 
 
+def _server_fetch_request(url: str) -> urllib.request.Request:
+    try:
+        return urllib.request.Request(  # noqa: S310 - scheme validated by central opener
+            url,
+            headers={"User-Agent": USER_AGENT},
+        )
+    except ValueError as exc:
+        message = f"Refusing server-side fetch to malformed URL: {url!r}"
+        raise UnsafeUrlError(message) from exc
+
+
 def _fetch_capped_html(url: str, *, byte_cap: int) -> str:
     """Stream ``url`` and decode at most ``byte_cap`` bytes of the response body.
 
@@ -54,30 +64,15 @@ def _fetch_capped_html(url: str, *, byte_cap: int) -> str:
     full response before truncating, so a large HTML page can't be pulled
     entirely into memory just to be sliced down afterward.
     """
-    import httpx  # lazy import — optional at module load time
-
-    chunks: list[bytes] = []
-    total = 0
-    with httpx.stream(
-        "GET",
-        url,
-        timeout=15,
-        headers={"User-Agent": USER_AGENT},
-        follow_redirects=False,
-    ) as resp:
-        resp.raise_for_status()
-        encoding = resp.encoding or "utf-8"
-        for chunk in resp.iter_bytes():
-            chunks.append(chunk)
-            total += len(chunk)
-            if total >= byte_cap:
-                break
-    raw = b"".join(chunks)[:byte_cap]
-    return raw.decode(encoding, errors="replace")
+    request = _server_fetch_request(url)
+    with open_server_fetch_url(request, timeout=15) as response:
+        charset = response.headers.get_content_charset("utf-8") or "utf-8"
+        raw: bytes = response.read(byte_cap)
+    return raw.decode(str(charset), errors="replace")
 
 
 def _ai_extract_body(url: str, *, user_id: int | None = None) -> tuple[str, str]:
-    """Fallback: fetch raw HTML via httpx and extract body text via the free LLM gateway.
+    """Fetch bounded HTML centrally and extract body text via the free LLM gateway.
 
     Returns (text, 'ok') on success or ('', 'error') if no API key is
     configured, the HTTP fetch fails, or the AI call fails.
@@ -91,7 +86,6 @@ def _ai_extract_body(url: str, *, user_id: int | None = None) -> tuple[str, str]
     model = os.getenv("OPENAI_BRIEFING_MODEL", _AI_MODEL)
 
     try:
-        validate_server_fetch_url(url)
         html = _fetch_capped_html(url, byte_cap=_AI_FETCH_BYTE_CAP)[:_AI_HTML_LIMIT]
     except UnsafeUrlError as exc:
         logger.warning("ai_body_fetch: unsafe URL %r: %s", url, exc)
@@ -332,10 +326,18 @@ def _selenium_extract_body(url: str) -> tuple[str, str]:
     Returns ('', 'error') if selenium is unavailable or rendering fails.
     """
     try:
-        from news_dashboard.selenium_client import fetch_spa_html
+        from news_dashboard.selenium_client import (
+            fetch_spa_html,
+            public_renderer_egress_proxy,
+        )
 
+        if public_renderer_egress_proxy() is None:
+            logger.info(
+                "selenium_body_fetch: disabled because validating egress proxy is not configured"
+            )
+            return "", "error"
         html = fetch_spa_html(url)
-    except ImportError:
+    except (ImportError, ValueError):
         return "", "error"
     except Exception as exc:
         logger.warning("selenium_body_fetch: fetch failed for %r: %s", url, exc)
@@ -360,10 +362,7 @@ def _static_extract_body(  # noqa: PLR0911 - each bounded fetch failure has a di
 ) -> tuple[str, str, FailureReason | None]:
     """Fetch and parse static HTML without invoking a rendered fallback."""
     try:
-        validate_server_fetch_url(url)
-        req = urllib.request.Request(  # noqa: S310 - scheme validated above
-            url, headers={"User-Agent": USER_AGENT}
-        )
+        req = _server_fetch_request(url)
         with open_server_fetch_url(req, timeout=TIMEOUT_SECS) as resp:
             content_type = resp.headers.get_content_type()
             if content_type not in {"text/html", "application/xhtml+xml"}:

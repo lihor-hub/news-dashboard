@@ -51,9 +51,9 @@ jobs:
       frontend: ${{ steps.filter.outputs.frontend }}
       a11y: ${{ steps.filter.outputs.a11y }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
-      - uses: dorny/paths-filter@v4
+      - uses: dorny/paths-filter@7b450fff21473bca461d4b92ce414b9d0420d706 # v4
         id: filter
         with:
           filters: |
@@ -86,9 +86,9 @@ jobs:
     name: Lint & typecheck
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
-      - uses: actions/setup-python@v7
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
         with:
           python-version: '3.14'
           cache: pip
@@ -106,7 +106,7 @@ jobs:
       - name: vulture (dead code)
         run: vulture backend backend/vulture_whitelist.py --min-confidence 80
 
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: '26'
           cache: npm
@@ -129,9 +129,9 @@ jobs:
     # Skip on push to main — the full test job already covers it.
     if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
-      - uses: actions/setup-python@v7
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
         with:
           python-version: '3.14'
           cache: pip
@@ -145,7 +145,7 @@ jobs:
           fi
           pytest -m smoke -v
 
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: '26'
           cache: npm
@@ -168,7 +168,7 @@ jobs:
       (github.event_name == 'pull_request' && needs.detect-changes.outputs.backend == 'true')
     services:
       postgres:
-        image: pgvector/pgvector:pg16
+        image: pgvector/pgvector:pg16@sha256:a36250871de0833b8757561c72f2477ef1ddd1101afa4e617fb552e0de514c6b
         env:
           POSTGRES_DB: news_dashboard
           POSTGRES_USER: news_dashboard
@@ -181,9 +181,9 @@ jobs:
           --health-timeout 5s
           --health-retries 5
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
-      - uses: actions/setup-python@v7
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
         with:
           python-version: '3.14'
           cache: pip
@@ -197,7 +197,7 @@ jobs:
           TEST_DATABASE_URL: postgresql://news_dashboard:news_dashboard@127.0.0.1:5432/news_dashboard
       - name: Save backend coverage report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: backend-coverage
           path: coverage.xml
@@ -215,9 +215,9 @@ jobs:
       (github.event_name == 'workflow_dispatch' && inputs.full_suite == 'true') ||
       (github.event_name == 'pull_request' && needs.detect-changes.outputs.frontend == 'true')
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: '26'
           cache: npm
@@ -226,7 +226,7 @@ jobs:
         run: npm run test:frontend:coverage --silent
       - name: Save frontend coverage report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: frontend-coverage
           path: coverage/lcov.info
@@ -247,16 +247,16 @@ jobs:
       (github.event_name == 'workflow_dispatch' && inputs.full_suite == 'true') ||
       (github.event_name == 'pull_request' && needs.detect-changes.outputs.a11y == 'true')
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: '26'
           cache: npm
       - run: npm ci
 
       - name: Cache Playwright browsers
-        uses: actions/cache@v6
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
@@ -306,11 +306,11 @@ jobs:
       contents: read
       pull-requests: write
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Download backend coverage
         if: needs.test-backend.result == 'success' || needs.test-backend.result == 'failure'
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           name: backend-coverage
           path: ./coverage-backend
@@ -326,7 +326,7 @@ jobs:
 
       - name: Download frontend coverage
         if: needs.test-frontend.result == 'success' || needs.test-frontend.result == 'failure'
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           name: frontend-coverage
           path: ./coverage-frontend
@@ -342,7 +342,7 @@ jobs:
 
       - name: Upload Backend to Codecov
         if: steps.backend-coverage.outputs.exists == 'true'
-        uses: codecov/codecov-action@v5
+        uses: codecov/codecov-action@0fb7174895f61a3b6b78fc075e0cd60383518dac # v5
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: ./coverage-backend/*.xml
@@ -353,7 +353,7 @@ jobs:
 
       - name: Upload Frontend to Codecov
         if: steps.frontend-coverage.outputs.exists == 'true'
-        uses: codecov/codecov-action@v5
+        uses: codecov/codecov-action@0fb7174895f61a3b6b78fc075e0cd60383518dac # v5
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: ./coverage-frontend/lcov.info
@@ -370,9 +370,9 @@ jobs:
     name: Helm chart validation
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
-      - uses: azure/setup-helm@v5
+      - uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5
         with:
           version: latest
 
@@ -381,44 +381,54 @@ jobs:
 
       - name: helm template (defaults)
         run: |
+          SESSION_SECRET=dummy-session-secret-for-render-only
+          POSTGRES_PASSWORD=dummy-postgres-password-for-render-only
+          source ./scripts/production-deploy-lib.sh
+          prepare_production_helm_secret_files
           helm template news-dashboard ./helm/news-dashboard \
-            --set-string "app.auth.sessionSecret=dummy-session-secret-for-render-only" \
-            --set-string "postgresql.password=dummy-postgres-password-for-render-only"
+            "${PRODUCTION_HELM_SECRET_ARGS[@]}"
 
       - name: helm template (production-like overrides)
         run: |
+          SESSION_SECRET=dummy-session-secret-for-render-only
+          POSTGRES_PASSWORD=dummy-postgres-password-for-render-only
+          source ./scripts/production-deploy-lib.sh
+          prepare_production_helm_secret_files
           helm template news-dashboard ./helm/news-dashboard \
+            --values ./helm/news-dashboard/values-production.yaml \
             --set "image.repository=ghcr.io/lihor-hub/news-dashboard" \
-            --set "image.tag=abc1234" \
+            --set-string "image.digest=sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" \
             --set "image.pullSecretName=ghcr-pull-secret" \
-            --set "service.type=NodePort" \
-            --set "service.nodePort=30088" \
-            --set "postgresql.persistence.hostPath=/home/ioachim-minipc/news-dashboard-postgres-data" \
-            --set-string "app.auth.sessionSecret=dummy-session-secret-for-render-only" \
-            --set-string "postgresql.password=dummy-postgres-password-for-render-only" \
+            --set-string "postgresql.persistence.hostPath=" \
+            "${PRODUCTION_HELM_SECRET_ARGS[@]}" \
             --set "app.ai.existingSecret=news-dashboard-ai" \
             --set "app.push.existingSecret=news-dashboard-push" \
             --set "app.email.existingSecret=news-dashboard-email" \
-            --set-string "app.ai.freeLlmBaseUrl=http://192.168.0.75:9130/v1" \
+            --set-string "app.ai.freeLlmBaseUrl=https://llm-gateway.example.test/v1" \
             --set-string "app.ai.briefingModel=gpt-4o" \
             --set-string "app.ai.langfuse.host=http://langfuse.local" \
             --set-string "app.push.email=test@example.com"
 
       - name: helm template (external postgresql)
         run: |
+          SESSION_SECRET=dummy-session-secret-for-render-only
+          POSTGRES_PASSWORD=dummy-postgres-password-for-render-only
+          source ./scripts/production-deploy-lib.sh
+          prepare_production_helm_secret_files
           helm template news-dashboard ./helm/news-dashboard \
             --set "postgresql.enabled=false" \
             --set "app.databaseUrl.existingSecret=news-dashboard-db" \
-            --set-string "app.auth.sessionSecret=dummy-session-secret-for-render-only"
+            "${PRODUCTION_HELM_SECRET_ARGS[@]}"
 
   # ── 9. PUBLISH ─────────────────────────────────────────────────────────────
   # Builds one image and pushes two tags:
-  #   :<sha>    — immutable, pinned to this exact commit; used by the deploy step
+  #   :<sha>    — source-discovery alias for the exact commit
   #   :latest   — floating convenience tag for manual pulls / rollback reference
   #
   # Why two tags? "latest" alone is not enough: if the tag name hasn't changed,
   # a node with imagePullPolicy: IfNotPresent won't re-pull it.  Pinning to the
-  # SHA guarantees a fresh pull for every deploy without setting Always.
+  # deployment uses the registry digest output, so tag movement cannot change
+  # the manifest selected by Kubernetes.
   #
   # No secrets needed here — GITHUB_TOKEN is provided automatically and has
   # packages:write by default for the repo that owns the package.
@@ -435,8 +445,9 @@ jobs:
       attestations: write
     outputs:
       image_tag: ${{ github.sha }}
+      image_digest: ${{ steps.build.outputs.digest }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0 # tags + history for version computation
 
@@ -526,15 +537,15 @@ jobs:
           fi
           printf '%s\n' "$BODY" | python3 scripts/update_changelog.py --version "$V"
 
-      - uses: docker/login-action@v4
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - uses: docker/setup-buildx-action@v4
+      - uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4
 
-      - uses: docker/build-push-action@v7
+      - uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
         id: build
         with:
           context: .
@@ -548,7 +559,7 @@ jobs:
       # SBOM (SPDX) for the exact image digest just pushed. Kept as a build
       # artifact and attested below so consumers can verify contents.
       - name: Generate SBOM
-        uses: anchore/sbom-action@v0
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0
         with:
           image: ${{ env.IMAGE }}@${{ steps.build.outputs.digest }}
           format: spdx-json
@@ -559,7 +570,7 @@ jobs:
       # Cryptographically ties the SBOM and the build to this repo's CI run.
       # Verify with: gh attestation verify --repo <owner>/<repo> --owner <owner> <image>
       - name: Attest SBOM
-        uses: actions/attest-sbom@v4
+        uses: actions/attest-sbom@c604332985a26aa8cf1bdc465b92731239ec6b9e # v4
         with:
           subject-name: ${{ env.IMAGE }}
           subject-digest: ${{ steps.build.outputs.digest }}
@@ -567,7 +578,7 @@ jobs:
           push-to-registry: true
 
       - name: Attest build provenance
-        uses: actions/attest-build-provenance@v4
+        uses: actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373 # v4
         with:
           subject-name: ${{ env.IMAGE }}
           subject-digest: ${{ steps.build.outputs.digest }}
@@ -630,9 +641,11 @@ jobs:
 
     steps:
       - name: Deploy (Helm)
+        id: deploy
         env:
           SHA: ${{ github.sha }}
           IMG: ${{ env.IMAGE }}
+          IMAGE_DIGEST: ${{ needs.publish.outputs.image_digest }}
           GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
           GHCR_ACTOR: ${{ github.actor }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
@@ -644,6 +657,8 @@ jobs:
           LANGFUSE_HOST: ${{ vars.LANGFUSE_HOST }}
           SESSION_SECRET: ${{ secrets.SESSION_SECRET }}
           POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+          POSTGRES_HOST_PATH: ${{ vars.POSTGRES_HOST_PATH }}
+          INGRESS_CUTOVER_ENABLED: ${{ vars.INGRESS_CUTOVER_ENABLED }}
           VAPID_PUBLIC_KEY: ${{ secrets.VAPID_PUBLIC_KEY }}
           VAPID_PRIVATE_KEY: ${{ secrets.VAPID_PRIVATE_KEY }}
           VAPID_EMAIL: ${{ vars.VAPID_EMAIL }}
@@ -654,8 +669,24 @@ jobs:
           DIFY_CHAT_APP_TOKEN: ${{ secrets.DIFY_CHAT_APP_TOKEN }}
           DIFY_CHAT_BASE_URL: ${{ vars.DIFY_CHAT_BASE_URL }}
           DIFY_CHAT_TITLE: ${{ vars.DIFY_CHAT_TITLE }}
+          # Non-secret strict JSON containing only networkPolicy.additionalEgress.
+          # A repository/environment variable persists this input across upgrades.
+          ADDITIONAL_EGRESS_VALUES: ${{ vars.ADDITIONAL_EGRESS_VALUES }}
         run: |
           set -euo pipefail
+          echo "applied=false" >> "$GITHUB_OUTPUT"
+
+          # Sync repository-controlled deployment logic before any cluster,
+          # registry, or release mutation.
+          cd ~/news-dashboard
+          git fetch --prune origin main
+          git checkout --detach FETCH_HEAD
+          source ./scripts/production-deploy-lib.sh
+
+          if ! production_cutover_enabled; then
+            echo "Ingress cutover is not activated; published image retained and live release unchanged."
+            exit 0
+          fi
 
           if [ -z "$SESSION_SECRET" ]; then
             echo "SESSION_SECRET GitHub Actions secret is required for production auth." >&2
@@ -665,6 +696,22 @@ jobs:
           if [ -z "$POSTGRES_PASSWORD" ]; then
             echo "POSTGRES_PASSWORD GitHub Actions secret is required for production DB." >&2
             exit 1
+          fi
+
+          if [ -z "$POSTGRES_HOST_PATH" ]; then
+            echo "POSTGRES_HOST_PATH GitHub Actions variable is required to preserve production data." >&2
+            exit 1
+          fi
+          if [[ ! "$IMAGE_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+            echo "Published IMAGE_DIGEST must be sha256:<64 lowercase hex characters>." >&2
+            exit 1
+          fi
+
+          prepare_production_helm_secret_files
+          additional_egress_helm_args=()
+          if [ -n "$ADDITIONAL_EGRESS_VALUES" ]; then
+            prepare_production_additional_egress_file - <<<"$ADDITIONAL_EGRESS_VALUES"
+            additional_egress_helm_args+=(--values "$PRODUCTION_ADDITIONAL_EGRESS_FILE")
           fi
 
           kubectl create namespace news-dashboard --dry-run=client -o yaml | kubectl apply -f -
@@ -681,12 +728,12 @@ jobs:
 
             pull_secret_helm_args=(--set-string image.pullSecretName=ghcr-pull-secret)
           else
-            echo "GHCR_TOKEN is empty; treating ${IMG}:${SHA} as a public GHCR image."
+            echo "GHCR_TOKEN is empty; treating ${IMG}@${IMAGE_DIGEST} as a public GHCR image."
             pull_secret_helm_args=(--set-string image.pullSecretName=)
           fi
 
           # Pull eagerly — surfaces auth or visibility failures before touching the rollout.
-          docker pull "${IMG}:${SHA}"
+          docker pull "${IMG}@${IMAGE_DIGEST}"
 
           ai_secret_args=()
           if [ -n "$OPENAI_API_KEY" ]; then
@@ -790,27 +837,24 @@ jobs:
             echo "Dify assistant needs both DIFY_CHAT_APP_TOKEN and DIFY_CHAT_BASE_URL; leaving it disabled." >&2
           fi
 
-          # Sync Helm chart changes from main. Avoid relying on the deploy
-          # host clone's branch/upstream config, which may point at a deleted
-          # feature branch.
-          cd ~/news-dashboard
-          git fetch --prune origin main
-          git checkout --detach FETCH_HEAD
+          # Clear the chart's legacy single-node default, then supply the
+          # required installation-specific path only from runtime configuration.
+          postgres_helm_args=(--set-string postgresql.persistence.hostPath=)
+          postgres_helm_args+=(--set-string "postgresql.persistence.hostPath=$POSTGRES_HOST_PATH")
 
-          # Upgrade (or install on first run). Keep the host Caddy route stable
-          # by preserving the NodePort and local durable hostPath storage.
+          # Production values keep the application behind a ClusterIP and make
+          # the TLS Ingress the only public application route. Host-specific
+          # storage remains a runtime override rather than repository inventory.
           helm_args=(
             upgrade --install news-dashboard ./helm/news-dashboard
             --namespace news-dashboard --create-namespace
+            --values ./helm/news-dashboard/values-production.yaml
             --set "image.repository=${IMG}"
-            --set "image.tag=${SHA}"
+            --set-string "image.digest=${IMAGE_DIGEST}"
+            "${additional_egress_helm_args[@]}"
             "${pull_secret_helm_args[@]}"
-            --set service.type=NodePort
-            --set service.nodePort=30088
-            --set postgresql.persistence.hostPath=/home/ioachim-minipc/news-dashboard-postgres-data
-            --set ingress.enabled=false
-            --set-string app.auth.sessionSecret="$SESSION_SECRET"
-            --set-string postgresql.password="$POSTGRES_PASSWORD"
+            "${postgres_helm_args[@]}"
+            "${PRODUCTION_HELM_SECRET_ARGS[@]}"
             "${ai_helm_args[@]}"
             "${push_helm_args[@]}"
             "${email_helm_args[@]}"
@@ -818,16 +862,19 @@ jobs:
             "${dify_helm_args[@]}"
           )
           helm "${helm_args[@]}"
+          echo "applied=true" >> "$GITHUB_OUTPUT"
 
           # Wait for the new pods to become ready.
           kubectl -n news-dashboard rollout status \
             deployment/news-dashboard-news-dashboard --timeout=120s
 
-      # Basic liveness check — verifies the new container is actually serving.
-      - name: Smoke test
+      # Pull-request CI validates rendered Ingress manifests in helm-validate
+      # and never assumes access to the private production appliance.
+      - name: Smoke test public TLS Ingress
+        if: steps.deploy.outputs.applied == 'true'
         run: |
           curl -sf --max-time 10 --retry 6 --retry-delay 5 \
-            http://localhost:30088/api/health | grep '"status":"ok"'
+            https://news.lihor.ro/api/health | grep '"status":"ok"'
 
   # ── 11. TRIVY SCAN ─────────────────────────────────────────────────────────
   # Scans the container image for vulnerabilities using Trivy and uploads
@@ -842,22 +889,22 @@ jobs:
       packages: read
       security-events: write
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4
 
       - name: Log in to GHCR
-        uses: docker/login-action@v4
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Run Trivy vulnerability scanner
-        uses: aquasecurity/trivy-action@v0.36.0
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
-          image-ref: ${{ env.IMAGE }}:${{ github.sha }}
+          image-ref: ${{ env.IMAGE }}@${{ needs.publish.outputs.image_digest }}
           format: sarif
           output: trivy-results.sarif
           exit-code: '1'  # Fail on any vulnerabilities
@@ -865,7 +912,7 @@ jobs:
           severity: CRITICAL,HIGH
 
       - name: Upload Trivy scan results to GitHub Security tab
-        uses: github/codeql-action/upload-sarif@v4
+        uses: github/codeql-action/upload-sarif@f205ea1c3313d32999d8d6a48b4f6530d4437b38 # v4
         with:
           sarif_file: trivy-results.sarif
           category: trivy

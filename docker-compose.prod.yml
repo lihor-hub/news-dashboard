@@ -1,6 +1,6 @@
 services:
   postgres:
-    image: pgvector/pgvector:pg16
+    image: pgvector/pgvector:pg16@sha256:a36250871de0833b8757561c72f2477ef1ddd1101afa4e617fb552e0de514c6b
     environment:
       POSTGRES_DB: news_dashboard
       POSTGRES_USER: news_dashboard
@@ -15,7 +15,7 @@ services:
     restart: unless-stopped
 
   neo4j:
-    image: neo4j:5-community
+    image: neo4j:5-community@sha256:362542416de6c09a971484d1893878016cc3b5cdec166e54b1c824a220ecd6b9
     environment:
       NEO4J_AUTH: neo4j/${NEO4J_PASSWORD:?NEO4J_PASSWORD is required}
     volumes:
@@ -23,7 +23,8 @@ services:
     restart: unless-stopped
 
   news-dashboard:
-    image: ghcr.io/lihor-hub/news-dashboard:latest
+    # Fail closed unless the operator supplies the exact published manifest digest.
+    image: ghcr.io/lihor-hub/news-dashboard@${IMAGE_DIGEST:?IMAGE_DIGEST must be sha256 digest}
     ports:
       - "8080:8080"
     environment:

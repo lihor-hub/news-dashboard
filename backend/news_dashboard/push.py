@@ -2,19 +2,41 @@
 
 from __future__ import annotations
 
-import ipaddress
+import concurrent.futures
+import functools
+import http.client
 import json
 import logging
 import os
 import re
-from typing import Any, Literal
+import threading
+import time
+import urllib.error
+import urllib.request
+from typing import Any, Literal, cast
 from urllib.parse import urlparse
+
+import requests
+from requests.structures import CaseInsensitiveDict
+
+from news_dashboard.url_safety import (
+    UnsafeUrlError,
+    open_server_fetch_url,
+    validate_server_fetch_url,
+)
 
 logger = logging.getLogger(__name__)
 
 # Maximum lengths for push subscription fields
 _MAX_ENDPOINT_LEN = 2083
 _MAX_KEY_LEN = 256
+_PUSH_DELIVERY_TIMEOUT_SECONDS = 15.0
+_PUSH_RESPONSE_BYTE_CAP = 64 * 1024
+_PUSH_RESPONSE_EXECUTOR = concurrent.futures.ThreadPoolExecutor(
+    max_workers=4,
+    thread_name_prefix="push-response",
+)
+_PUSH_WORK_ADMISSION = threading.BoundedSemaphore(value=4)
 
 # Base64url alphabet (no padding required)
 _BASE64URL_RE = re.compile(r"^[A-Za-z0-9_\-]+=*$")
@@ -25,7 +47,7 @@ def validate_push_subscription(endpoint: str, p256dh: str, auth: str) -> None:
 
     Checks performed:
     - endpoint is an HTTPS URL with a non-empty hostname
-    - endpoint does not target localhost, loopback, link-local or private IPs (IP literals only)
+    - every endpoint DNS answer is publicly routable
     - endpoint and key lengths are within reasonable Web Push bounds
     - p256dh and auth are non-empty base64url-like strings
     """
@@ -48,17 +70,6 @@ def validate_push_subscription(endpoint: str, p256dh: str, auth: str) -> None:
         msg = "endpoint must have a non-empty hostname"
         raise ValueError(msg)
 
-    # Reject IP-literal hosts that are not publicly routable (no DNS lookup)
-    _non_public_ip = False
-    try:
-        ip = ipaddress.ip_address(hostname)
-        _non_public_ip = not ip.is_global or ip.is_loopback or ip.is_link_local or ip.is_private
-    except ValueError:
-        pass  # hostname is not an IP literal; skip IP-range check
-    if _non_public_ip:
-        msg = "endpoint hostname resolves to a non-public IP address"
-        raise ValueError(msg)
-
     if not p256dh:
         msg = "p256dh must not be empty"
         raise ValueError(msg)
@@ -71,6 +82,12 @@ def validate_push_subscription(endpoint: str, p256dh: str, auth: str) -> None:
     if not _BASE64URL_RE.match(auth):
         msg = "auth must be a base64url string"
         raise ValueError(msg)
+
+    try:
+        validate_server_fetch_url(endpoint)
+    except UnsafeUrlError as exc:
+        msg = "endpoint hostname resolves to a non-public address or cannot be proven public"
+        raise ValueError(msg) from exc
 
 
 _DEFAULT_PUSH_TITLE = "Your daily brief is ready"
@@ -219,6 +236,186 @@ def generate_recap_push_hook(recap: dict[str, Any]) -> str:
 PushDeliveryResult = Literal["sent", "skipped_not_configured", "temporary_failure", "gone"]
 
 
+class _PinnedPushSession(requests.Session):
+    """Requests-compatible pywebpush session backed by the pinned URL opener."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.trust_env = False
+
+    def send(self, request: requests.PreparedRequest, **kwargs: Any) -> requests.Response:
+        """Send one prepared request without a hostname-based second resolution."""
+        if not isinstance(request.url, str):
+            message = "Push request URL must be a string"
+            raise UnsafeUrlError(message)
+        if request.method != "POST":
+            message = "Pinned push transport only supports POST"
+            raise UnsafeUrlError(message)
+
+        body = request.body
+        if isinstance(body, str):
+            request_data: bytes | None = body.encode()
+        elif isinstance(body, bytes) or body is None:
+            request_data = body
+        else:
+            message = "Pinned push transport requires an in-memory request body"
+            raise UnsafeUrlError(message)
+
+        timeout_value = kwargs.get("timeout", _PUSH_DELIVERY_TIMEOUT_SECONDS)
+        if timeout_value is None:
+            timeout_value = _PUSH_DELIVERY_TIMEOUT_SECONDS
+        if not isinstance(timeout_value, int | float):
+            message = "Pinned push transport requires a numeric timeout"
+            raise UnsafeUrlError(message)
+
+        request_headers: dict[str, str] = {}
+        for name, value in request.headers.items():
+            request_headers[str(name)] = (
+                value.decode("latin-1") if isinstance(value, bytes) else str(value)
+            )
+
+        url_request = urllib.request.Request(  # noqa: S310 - central opener validates and pins
+            request.url,
+            data=request_data,
+            headers=request_headers,
+            method=request.method,
+        )
+        deadline = time.monotonic() + float(timeout_value)
+        try:
+            opened = _open_push_before_deadline(
+                url_request,
+                float(timeout_value),
+                deadline,
+            )
+            return _push_response_before_deadline(opened, request, deadline)
+        except urllib.error.HTTPError as exc:
+            return _push_response_before_deadline(exc, request, deadline)
+
+
+def _open_push_before_deadline(
+    request: urllib.request.Request,
+    timeout: float,
+    deadline: float,
+) -> Any:
+    """Open a push response without letting handshake/header reads overrun."""
+    remaining = deadline - time.monotonic()
+    if remaining <= 0:
+        message = "Push delivery deadline exceeded"
+        raise TimeoutError(message)
+    future = _submit_push_work(
+        open_server_fetch_url,
+        request,
+        timeout=timeout,
+        deadline=deadline,
+        follow_redirects=False,
+    )
+    try:
+        return cast("requests.Response", future.result(timeout=remaining))
+    except concurrent.futures.TimeoutError as exc:
+        future.add_done_callback(_close_late_push_response)
+        if future.cancel():
+            _PUSH_WORK_ADMISSION.release()
+        message = "Push delivery deadline exceeded"
+        raise TimeoutError(message) from exc
+
+
+def _close_late_push_response(future: concurrent.futures.Future[Any]) -> None:
+    """Close a response produced after its caller's deadline."""
+    if future.cancelled() or future.exception() is not None:
+        return
+    future.result().close()
+
+
+def _submit_push_work(
+    function: Any,
+    *args: Any,
+    **kwargs: Any,
+) -> concurrent.futures.Future[Any]:
+    """Submit transport work only when a worker slot is immediately available."""
+    if not _PUSH_WORK_ADMISSION.acquire(blocking=False):
+        message = "Push transport capacity exhausted"
+        raise TimeoutError(message)
+    try:
+        return _PUSH_RESPONSE_EXECUTOR.submit(
+            _run_admitted_push_work,
+            function,
+            args,
+            kwargs,
+        )
+    except RuntimeError:
+        _PUSH_WORK_ADMISSION.release()
+        raise
+
+
+def _run_admitted_push_work(
+    function: Any,
+    args: tuple[Any, ...],
+    kwargs: dict[str, Any],
+) -> Any:
+    try:
+        return function(*args, **kwargs)
+    finally:
+        _PUSH_WORK_ADMISSION.release()
+
+
+def _close_push_source_after_completion(
+    _future: concurrent.futures.Future[Any],
+    source: Any,
+) -> None:
+    source.close()
+
+
+def _push_response_before_deadline(
+    source: Any,
+    request: requests.PreparedRequest,
+    deadline: float,
+) -> requests.Response:
+    """Read and adapt a response without exceeding the delivery wall clock."""
+    remaining = deadline - time.monotonic()
+    if remaining <= 0:
+        source.close()
+        message = "Push delivery deadline exceeded"
+        raise TimeoutError(message)
+    try:
+        future = _submit_push_work(_push_response, source, request)
+    except (RuntimeError, TimeoutError):
+        source.close()
+        raise
+    future.add_done_callback(
+        functools.partial(
+            _close_push_source_after_completion,
+            source=source,
+        )
+    )
+    try:
+        return cast("requests.Response", future.result(timeout=remaining))
+    except concurrent.futures.TimeoutError as exc:
+        if future.cancel():
+            _PUSH_WORK_ADMISSION.release()
+        message = "Push delivery deadline exceeded"
+        raise TimeoutError(message) from exc
+
+
+def _push_response(source: Any, request: requests.PreparedRequest) -> requests.Response:
+    """Adapt a bounded urllib response to the subset pywebpush consumes."""
+    content: bytes = source.read(_PUSH_RESPONSE_BYTE_CAP + 1)
+    status_code = getattr(source, "status", None)
+    if not isinstance(status_code, int):
+        status_code = getattr(source, "code", None)
+    if not isinstance(status_code, int):
+        message = "Push service response did not include an HTTP status"
+        raise UnsafeUrlError(message)
+    response = requests.Response()
+    response.status_code = status_code
+    response.reason = str(getattr(source, "reason", ""))
+    response.headers = CaseInsensitiveDict(source.headers.items())
+    response.url = str(source.geturl())
+    response.request = request
+    response.encoding = requests.utils.get_encoding_from_headers(response.headers)
+    response._content = content[:_PUSH_RESPONSE_BYTE_CAP]
+    return response
+
+
 def _is_permanent_push_failure(exc: Exception) -> bool:
     """Return True if the exception represents a permanent failure (e.g. HTTP 404 or 410)."""
     response = getattr(exc, "response", None)
@@ -271,16 +468,26 @@ def send_push_notification(
         data["tag"] = tag
     payload = json.dumps(data)
     try:
-        webpush(
-            subscription_info={
-                "endpoint": endpoint,
-                "keys": {"p256dh": p256dh, "auth": auth},
-            },
-            data=payload,
-            vapid_private_key=_vapid_private_key(),
-            vapid_claims=_vapid_claims(),
-        )
+        with _PinnedPushSession() as session:
+            webpush(
+                subscription_info={
+                    "endpoint": endpoint,
+                    "keys": {"p256dh": p256dh, "auth": auth},
+                },
+                data=payload,
+                vapid_private_key=_vapid_private_key(),
+                vapid_claims=_vapid_claims(),
+                timeout=_PUSH_DELIVERY_TIMEOUT_SECONDS,
+                requests_session=session,  # pyrefly: ignore[bad-argument-type]
+            )
         return "sent"
+    except (
+        UnsafeUrlError,
+        OSError,
+        http.client.HTTPException,
+    ) as exc:
+        logger.warning("Push notification blocked or failed before delivery: %s", exc)
+        return "temporary_failure"
     except WebPushException as exc:
         if _is_permanent_push_failure(exc):
             logger.warning("Push notification to %s failed permanently: %s", endpoint[:40], exc)

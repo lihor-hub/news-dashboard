@@ -3,6 +3,9 @@ apiVersion: batch/v1
 kind: CronJob
 metadata:
   name: {{ include "news-dashboard.fullname" . }}-ingest
+  labels:
+    app.kubernetes.io/name: {{ include "news-dashboard.name" . }}-ingest
+    app.kubernetes.io/instance: {{ .Release.Name }}
 spec:
   schedule: {{ .Values.ingestCronJob.schedule | quote }}
   concurrencyPolicy: {{ .Values.ingestCronJob.concurrencyPolicy | default "Forbid" }}
@@ -23,7 +26,12 @@ spec:
       ttlSecondsAfterFinished: {{ . }}
       {{- end }}
       template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: {{ include "news-dashboard.name" . }}-ingest
+            app.kubernetes.io/instance: {{ .Release.Name }}
         spec:
+          automountServiceAccountToken: false
           restartPolicy: OnFailure
           securityContext:
 {{ toYaml .Values.ingestCronJob.podSecurityContext | indent 12 }}
@@ -33,7 +41,7 @@ spec:
           {{- end }}
           containers:
             - name: ingest
-              image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+              image: {{ include "news-dashboard.image" . | quote }}
               imagePullPolicy: {{ .Values.image.pullPolicy }}
               securityContext:
 {{ toYaml .Values.ingestCronJob.containerSecurityContext | indent 16 }}

@@ -169,3 +169,14 @@
   value: {{ .Values.app.config.corsOrigins | quote }}
 {{- end }}
 {{- end -}}
+
+{{- define "news-dashboard.image" -}}
+{{- if and .Values.production (not (regexMatch "^sha256:[0-9a-f]{64}$" .Values.image.digest)) -}}
+{{- fail "image.digest must be a sha256 digest in production" -}}
+{{- end -}}
+{{- if .Values.image.digest -}}
+{{- printf "%s@%s" .Values.image.repository .Values.image.digest -}}
+{{- else -}}
+{{- printf "%s:%s" .Values.image.repository .Values.image.tag -}}
+{{- end -}}
+{{- end -}}

@@ -115,7 +115,7 @@ def test_coverage_upload_runs_for_prs_and_merge_groups() -> None:
 
 
 def test_codecov_upload_uses_current_action_major() -> None:
-    """Pin the reviewed Codecov action major so accidental downgrades fail tests."""
+    """Pin the reviewed Codecov action revision so accidental changes fail tests."""
     ci = _load_ci()
     codecov_uses = [
         step.get("uses", "")
@@ -124,7 +124,10 @@ def test_codecov_upload_uses_current_action_major() -> None:
         if "codecov/codecov-action" in step.get("uses", "")
     ]
     assert codecov_uses, "No codecov/codecov-action steps found in ci.yml"
-    assert all(uses == "codecov/codecov-action@v5" for uses in codecov_uses)
+    assert all(
+        uses == "codecov/codecov-action@0fb7174895f61a3b6b78fc075e0cd60383518dac"
+        for uses in codecov_uses
+    )
 
 
 def test_codecov_uploads_are_guarded_by_report_existence() -> None:

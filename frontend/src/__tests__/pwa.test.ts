@@ -8,8 +8,10 @@
  * We read public/manifest.webmanifest directly so CI catches drift in the
  * install metadata served by both dev and production builds.
  */
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
+import { spawnSync } from 'node:child_process';
 import { describe, it, expect } from 'vitest';
 
 const MANIFEST = JSON.parse(
@@ -28,6 +30,113 @@ const MANIFEST = JSON.parse(
     params: { title: string; text: string; url: string };
   };
 };
+
+function runCspBuildCheck(indexHtml: string, registrationScript?: string) {
+  const buildDir = mkdtempSync(join(tmpdir(), 'news-dashboard-csp-build-'));
+  try {
+    writeFileSync(join(buildDir, 'index.html'), indexHtml);
+    if (registrationScript !== undefined) {
+      writeFileSync(join(buildDir, 'registerSW.js'), registrationScript);
+    }
+    mkdirSync(join(buildDir, 'assets'));
+    writeFileSync(join(buildDir, 'assets', 'index.js'), 'export {};');
+    writeFileSync(join(buildDir, 'sw.js'), 'self.skipWaiting();');
+    writeFileSync(join(buildDir, 'manifest.webmanifest'), '{}');
+    return spawnSync(
+      process.execPath,
+      [resolve(process.cwd(), 'scripts/check-csp-build.mjs'), buildDir],
+      { encoding: 'utf-8' }
+    );
+  } finally {
+    rmSync(buildDir, { recursive: true, force: true });
+  }
+}
+
+describe('PWA production build — Content Security Policy compatibility', () => {
+  it('accepts external same-origin service-worker registration', () => {
+    const result = runCspBuildCheck(
+      '<script type="module" src="/assets/index.js"></script>' +
+        '<script src="/registerSW.js"></script>',
+      "navigator.serviceWorker.register('/sw.js');"
+    );
+
+    expect(result.status, result.stderr).toBe(0);
+  });
+
+  it.each([
+    ['space before the closing bracket', '</script >'],
+    ['tab before the closing bracket', '</script\t>'],
+    ['newline before the closing bracket', '</script\n>'],
+    ['form feed before the closing bracket', '</script\f>'],
+    ['carriage return before the closing bracket', '</script\r>'],
+    ['mixed case and ASCII whitespace', '</ScRiPt \t\n\f\r>'],
+    ['parse-error attributes after ASCII whitespace', '</script\t\n bar>'],
+    ['mixed-case parse-error attributes', '</ScRiPt data-ignored>'],
+  ])('accepts external scripts with %s', (_description, closingTag) => {
+    const result = runCspBuildCheck(
+      `<script type="module" src="/assets/index.js">${closingTag}` +
+        `<script src="/registerSW.js">${closingTag}`,
+      "navigator.serviceWorker.register('/sw.js');"
+    );
+
+    expect(result.status, result.stderr).toBe(0);
+  });
+
+  it.each([
+    ['non-breaking space', '\u00a0'],
+    ['em space', '\u2003'],
+  ])('rejects %s as script end-tag whitespace', (_description, unicodeWhitespace) => {
+    const result = runCspBuildCheck(
+      `<script src="/assets/index.js"></script${unicodeWhitespace}>` +
+        'window.untrusted = true;</script>' +
+        '<script src="/registerSW.js"></script>',
+      "navigator.serviceWorker.register('/sw.js');"
+    );
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain('inline script');
+  });
+
+  it('rejects inline script bodies even when the closing tag has whitespace', () => {
+    const result = runCspBuildCheck(
+      `<script src="/assets/index.js">window.untrusted = true;</script >` +
+        '<script src="/registerSW.js"></script>',
+      "navigator.serviceWorker.register('/sw.js');"
+    );
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain('inline script');
+  });
+
+  it('rejects inline service-worker registration', () => {
+    const result = runCspBuildCheck("<script>navigator.serviceWorker.register('/sw.js');</script>");
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain('inline script');
+  });
+
+  it('rejects inline HTML event handlers', () => {
+    const result = runCspBuildCheck(
+      '<button onclick="navigator.serviceWorker.register(\'/sw.js\')">Enable</button>' +
+        '<script src="/registerSW.js"></script>',
+      "navigator.serviceWorker.register('/sw.js');"
+    );
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain('inline event handler');
+  });
+
+  it('rejects javascript URLs', () => {
+    const result = runCspBuildCheck(
+      '<a href="javascript:navigator.serviceWorker.register(\'/sw.js\')">Enable</a>' +
+        '<script src="/registerSW.js"></script>',
+      "navigator.serviceWorker.register('/sw.js');"
+    );
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain('javascript URL');
+  });
+});
 
 describe('PWA manifest — identity', () => {
   it('has a human-readable name', () => {

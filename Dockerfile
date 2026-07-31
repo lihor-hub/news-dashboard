@@ -1,14 +1,14 @@
-FROM node:26-bookworm-slim AS frontend
+FROM node:26-bookworm-slim@sha256:9e6f9357d371591e32ab6f2d8a26d63bdd0d17c29eee3f4f3e7e454d9634bf73 AS frontend
 WORKDIR /app
 COPY package.json package-lock.json* ./
 RUN npm ci
 COPY index.html tsconfig.json vite.config.ts ./
-COPY scripts/check-bundle-budget.mjs ./scripts/
+COPY scripts/check-bundle-budget.mjs scripts/check-csp-build.mjs ./scripts/
 COPY public ./public
 COPY frontend ./frontend
 RUN npm run build
 
-FROM python:3.14-slim AS runtime
+FROM python:3.14-slim@sha256:cea0e6040540fb2b965b6e7fb5ffa00871e632eef63719f0ea54bca189ce14a6 AS runtime
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
 WORKDIR /app

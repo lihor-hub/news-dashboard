@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import os
+import re
+from ipaddress import ip_address
+from typing import TypedDict
 from unicodedata import category
 from urllib.parse import urlsplit, urlunsplit
 
@@ -11,9 +14,19 @@ _MAX_BASE_URL_LENGTH = 2_048
 _MAX_APP_TOKEN_LENGTH = 512
 _MAX_TITLE_LENGTH = 120
 _LOOPBACK_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
+_HOST_LABEL = re.compile(r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?")
 
 
-def _disabled_config() -> dict[str, object]:
+class PublicDifyConfig(TypedDict):
+    """Validated browser-safe Dify embed configuration."""
+
+    enabled: bool
+    base_url: str | None
+    app_token: str | None
+    title: str
+
+
+def _disabled_config() -> PublicDifyConfig:
     return {
         "enabled": False,
         "base_url": None,
@@ -30,6 +43,23 @@ def _contains_unsafe_characters(value: str) -> bool:
     return any(category(char) in {"Cc", "Cf"} for char in value)
 
 
+def _normalized_hostname(value: str) -> str | None:
+    candidate = value.lower()
+    try:
+        return ip_address(candidate).compressed
+    except ValueError:
+        pass
+    try:
+        candidate = candidate.encode("idna").decode("ascii")
+    except UnicodeError:
+        return None
+    if len(candidate) > 253 or any(
+        _HOST_LABEL.fullmatch(label) is None for label in candidate.split(".")
+    ):
+        return None
+    return candidate
+
+
 def _normalized_base_url(value: str) -> str | None:
     candidate = value.strip().rstrip("/")
     if not _is_valid_text(candidate, max_length=_MAX_BASE_URL_LENGTH):
@@ -39,18 +69,19 @@ def _normalized_base_url(value: str) -> str | None:
         port = parsed.port
     except ValueError:
         return None
+    hostname = _normalized_hostname(parsed.hostname) if parsed.hostname is not None else None
     if (
         parsed.scheme not in {"http", "https"}
-        or not parsed.hostname
+        or hostname is None
         or parsed.username is not None
         or parsed.password is not None
         or parsed.query
         or parsed.fragment
     ):
         return None
-    if parsed.scheme == "http" and parsed.hostname not in _LOOPBACK_HOSTS:
+    if parsed.scheme == "http" and hostname not in _LOOPBACK_HOSTS:
         return None
-    netloc = parsed.hostname
+    netloc = hostname
     if ":" in netloc:
         netloc = f"[{netloc}]"
     if port is not None:
@@ -58,7 +89,7 @@ def _normalized_base_url(value: str) -> str | None:
     return urlunsplit((parsed.scheme, netloc, parsed.path, "", ""))
 
 
-def public_dify_config() -> dict[str, object]:
+def public_dify_config() -> PublicDifyConfig:
     """Return safe-to-expose Dify embed settings, or a disabled object."""
     raw_enabled = os.getenv("DIFY_CHAT_ENABLED", "")
     if _contains_unsafe_characters(raw_enabled) or raw_enabled.strip().lower() != "true":

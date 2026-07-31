@@ -8,7 +8,7 @@ The system is not a large microservice platform. It is best understood as a modu
 - `postgres`: the durable production database.
 - `neo4j`: optional graph storage for article/entity relationships.
 - `news-dashboard-ingest`: a Kubernetes CronJob batch workload that runs ingestion on a schedule.
-- Optional external integrations: RSS/Atom feeds, a scraped Anthropic News page, SMTP, GHCR, GitHub Actions, Keycloak SSO, and host-level Caddy.
+- Optional external integrations: RSS/Atom feeds, a scraped Anthropic News page, SMTP, GHCR, GitHub Actions, and Keycloak SSO. Host-level Caddy is a transitional Keycloak migration boundary, not the production application route.
 
 ## Database Contract
 
@@ -44,9 +44,9 @@ flowchart TB
   end
 
   subgraph Kubernetes["Kubernetes via Helm"]
-    Caddy["Host Caddy<br/>news.lihor.ro<br/>reverse proxy"]
-    Keycloak["Keycloak<br/>optional SSO under /keycloak"]
-    Service["K8s Service<br/>NodePort 30088 or ClusterIP"]
+    Ingress["TLS Ingress<br/>news.lihor.ro"]
+    TLS["Kubernetes TLS Secret"]
+    Service["K8s Service<br/>ClusterIP"]
     Deployment["news-dashboard Deployment<br/>replicas: 1"]
     CronJob["K8s CronJob<br/>news-dashboard ingest<br/>every 6 hours"]
     PostgresSvc["Postgres Service"]
@@ -60,15 +60,17 @@ flowchart TB
     SMTP["SMTP server<br/>optional digest email"]
     GHCR["GitHub Container Registry"]
     Actions["GitHub Actions CI/CD"]
+    Keycloak["Existing Keycloak<br/>optional SSO under /keycloak"]
   end
 
   User --> Vite
   Vite --> FastAPIDev
   FastAPIDev --> PostgresDev
 
-  User --> Caddy
-  Caddy --> Service --> Deployment
-  Caddy --> Keycloak
+  User --> Ingress
+  TLS --> Ingress
+  Ingress --> Service --> Deployment
+  Ingress --> Keycloak
   Deployment --> App
   App --> PostgresSvc --> Postgres --> PVC
   CronJob --> PostgresSvc
@@ -210,11 +212,15 @@ flowchart LR
   Image --> GHCR["Push ghcr.io/lihor-hub/news-dashboard:<sha>"]
 
   GHCR --> Runner["Self-hosted runner<br/>mini PC"]
-  Runner --> Pull["docker pull image"]
-  Runner --> Secret["kubectl create/update<br/>GHCR pull secret"]
-  Runner --> Helm["helm upgrade --install"]
+  Runner --> Sync["Sync deployment logic<br/>from main"]
+  Sync --> Gate{"Ingress cutover<br/>explicitly enabled?"}
+  Gate -->|yes| Pull["docker pull image"]
+  Pull --> Secret["kubectl create/update<br/>GHCR pull secret"]
+  Secret --> Helm["helm upgrade --install"]
+  Gate -->|no| Preserve["Leave live release unchanged"]
   Helm --> K8s["Kubernetes namespace<br/>news-dashboard"]
-  K8s --> Smoke["curl localhost:30088/api/health"]
+  CI --> Render["PR: lint and render<br/>production values"]
+  K8s --> Smoke["main: curl HTTPS hostname<br/>/api/health"]
 ```
 
 ## Important Files
@@ -251,7 +257,17 @@ During ingestion, each source is fetched through either `feedparser` for RSS/Ato
 
 The React UI reads articles by status and category, displays summary counts, shows source health, and lets the user update article status. Status changes are persisted through `PATCH /api/articles/{article_id}/status`, and the UI reloads articles and counts afterward. Search calls `/api/search` and returns matching articles across statuses.
 
-For production, GitHub Actions tests the Python backend, builds the frontend, builds a Docker image, pushes it to GHCR, and deploys it on a self-hosted runner with Helm. The host-level Caddy route in `deploy/Caddyfile` exposes the Kubernetes NodePort at `news.lihor.ro` and proxies `/keycloak` to the colocated identity provider. Authentication is enforced by the FastAPI app through local password sessions or optional Keycloak SSO; see [Authentication (Keycloak)](/docs/configuration/authentication).
+For production, GitHub Actions tests the Python backend, builds the frontend,
+builds a Docker image, pushes it to GHCR, and deploys it on a self-hosted runner
+with Helm. Pull requests render `values-production.yaml` without contacting the
+appliance. The production Ingress terminates application TLS and routes to the
+ClusterIP Service. Main CI builds and publishes but does not apply that overlay
+unless the operator sets `INGRESS_CUTOVER_ENABLED` to exactly `true`.
+Authentication is enforced by FastAPI through local password sessions or
+optional Keycloak SSO; an operator must preserve the existing `/keycloak` route
+during the Caddy-to-Ingress cutover. See
+[Authentication (Keycloak)](/docs/configuration/authentication) and
+[Ingress HTTPS and Caddy migration](/docs/configuration/https-caddy).
 
 ## Operational Notes
 
@@ -259,3 +275,6 @@ For production, GitHub Actions tests the Python backend, builds the frontend, bu
 - The React app is served separately only in local development. In the production image, the built frontend is served by FastAPI.
 - There are two scheduling mechanisms: in-process APScheduler and the Kubernetes CronJob. If duplicate ingestion is undesirable, configure one of them as the authoritative scheduler.
 - Authentication is handled by the app. Local password login is always part of the app model, and production can enable Keycloak SSO with `KEYCLOAK_AUTH_ENABLED=1` plus the related `KEYCLOAK_*` settings documented in `README.md` and [Authentication (Keycloak)](/docs/configuration/authentication).
+- The production application Service is ClusterIP-only. The Ingress controller
+  must be the sole owner of public ports 80 and 443; Caddy cannot share those
+  sockets and remains only as a Keycloak migration/rollback concern.

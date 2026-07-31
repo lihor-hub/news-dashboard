@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import http.server
 import threading
+import urllib.error
 import urllib.request
-from collections.abc import Callable, Iterator
+from collections.abc import Iterator
 from contextlib import contextmanager
+from http.client import HTTPMessage
 from pathlib import Path
 from typing import Any
 from unittest.mock import patch
@@ -81,10 +83,7 @@ def _allow_local_body_fetches() -> Iterator[None]:
     def local_open(req: urllib.request.Request, *, timeout: float) -> object:
         return urllib.request.urlopen(req, timeout=timeout)  # noqa: S310
 
-    with (
-        patch("news_dashboard.body_fetch.validate_server_fetch_url", return_value=None),
-        patch("news_dashboard.body_fetch.open_server_fetch_url", side_effect=local_open),
-    ):
+    with patch("news_dashboard.body_fetch.open_server_fetch_url", side_effect=local_open):
         yield
 
 
@@ -230,7 +229,11 @@ def test_extract_public_content_uses_crawl4ai_then_optional_ai() -> None:
 
 def test_static_extract_classifies_unsafe_redirect() -> None:
     with (
-        patch("news_dashboard.body_fetch.validate_server_fetch_url"),
+        patch(
+            "news_dashboard.body_fetch.validate_server_fetch_url",
+            side_effect=AssertionError("body fetch performed redundant URL validation"),
+            create=True,
+        ),
         patch(
             "news_dashboard.body_fetch.open_server_fetch_url",
             side_effect=UnsafeUrlError("unsafe redirect"),
@@ -239,6 +242,30 @@ def test_static_extract_classifies_unsafe_redirect() -> None:
         body, status, reason = _static_extract_body("https://example.com/redirect")
 
     assert (body, status, reason) == ("", "error", "unsafe_url")
+
+
+def test_static_extract_does_not_classify_response_value_error_as_unsafe() -> None:
+    class _ValueErrorHeaders:
+        def get_content_type(self) -> str:
+            message = "malformed response header"
+            raise ValueError(message)
+
+    class _ValueErrorResponse:
+        headers = _ValueErrorHeaders()
+
+        def __enter__(self) -> _ValueErrorResponse:
+            return self
+
+        def __exit__(self, *exc_info: object) -> None:
+            return None
+
+    with patch(
+        "news_dashboard.body_fetch.open_server_fetch_url",
+        return_value=_ValueErrorResponse(),
+    ):
+        body, status, reason = _static_extract_body("https://example.com/article")
+
+    assert (body, status, reason) == ("", "error", "fetch_failed")
 
 
 def test_extract_public_content_skips_ai_and_preserves_blocked_failure() -> None:
@@ -703,40 +730,63 @@ def test_prefetch_article_bodies_skips_already_ok(tmp_path: Path) -> None:
 # ── _ai_extract_body ──────────────────────────────────────────────────────────
 
 
-class _FakeStreamResponse:
-    """Minimal stand-in for the ``httpx.stream(...)`` context manager."""
-
+class _FakeOpenResponse:
     def __init__(
         self,
-        text: str,
+        data: str | bytes,
         *,
+        charset: str = "utf-8",
         status_code: int = 200,
-        encoding: str = "utf-8",
-        chunk_size: int = 65_536,
-        on_chunk: Callable[[], None] | None = None,
     ) -> None:
-        self._data = text.encode(encoding)
-        self.status_code = status_code
-        self.encoding = encoding
-        self._chunk_size = chunk_size
-        self._on_chunk = on_chunk
+        self._data = data.encode(charset) if isinstance(data, str) else data
+        self._status_code = status_code
+        self.headers = HTTPMessage()
+        self.headers["Content-Type"] = f"text/html; charset={charset}"
+        self.read_sizes: list[int] = []
 
-    def raise_for_status(self) -> None:
-        if self.status_code >= 400:
-            msg = f"HTTP {self.status_code}"
-            raise RuntimeError(msg)
+    def read(self, amount: int) -> bytes:
+        self.read_sizes.append(amount)
+        return self._data[:amount]
 
-    def iter_bytes(self) -> Iterator[bytes]:
-        for i in range(0, len(self._data), self._chunk_size):
-            if self._on_chunk is not None:
-                self._on_chunk()
-            yield self._data[i : i + self._chunk_size]
-
-    def __enter__(self) -> _FakeStreamResponse:
+    def __enter__(self) -> _FakeOpenResponse:
+        if self._status_code >= 400:
+            url = "https://example.com"
+            message = f"HTTP {self._status_code}"
+            raise urllib.error.HTTPError(
+                url,
+                self._status_code,
+                message,
+                self.headers,
+                None,
+            )
         return self
 
     def __exit__(self, *exc_info: object) -> None:
         return None
+
+
+def test_fetch_capped_html_uses_central_opener_and_preserves_byte_cap() -> None:
+    from news_dashboard.body_fetch import _fetch_capped_html
+
+    response = _FakeOpenResponse(b"abcdefghij")
+    with (
+        patch(
+            "news_dashboard.body_fetch.open_server_fetch_url",
+            return_value=response,
+        ) as open_url,
+        patch("httpx.stream", side_effect=AssertionError("httpx bypassed the pinned opener")),
+    ):
+        text = _fetch_capped_html("https://example.com/article", byte_cap=5)
+
+    assert text == "abcde"
+    assert response.read_sizes == [5]
+    request = open_url.call_args.args[0]
+    assert isinstance(request, urllib.request.Request)
+    assert request.full_url == "https://example.com/article"
+    assert request.get_header("User-agent") == (
+        "news-dashboard/0.1 (personal RSS reader; contact@lihor.ro)"
+    )
+    assert open_url.call_args.kwargs == {"timeout": 15}
 
 
 def test_ai_extract_body_skipped_without_api_key(tmp_path: Path) -> None:
@@ -772,30 +822,50 @@ def test_extract_body_rejects_private_network_url_before_fetch(
     assert called is False
 
 
-def test_ai_extract_body_rejects_private_network_url_before_fetch() -> None:
+def test_ai_extract_body_maps_central_opener_unsafe_url_to_error() -> None:
     from news_dashboard.body_fetch import _ai_extract_body
 
     called = False
 
-    def fake_stream(*_: object, **__: object) -> None:
+    def fake_open(*_: object, **__: object) -> None:
         nonlocal called
         called = True
+        message = "unsafe URL"
+        raise UnsafeUrlError(message)
 
     with (
         patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}),
-        patch("httpx.stream", side_effect=fake_stream),
+        patch("news_dashboard.body_fetch.open_server_fetch_url", side_effect=fake_open),
     ):
         body, status = _ai_extract_body("http://169.254.169.254/latest/meta-data")
 
     assert status == "error"
     assert body == ""
-    assert called is False
+    assert called is True
+
+
+def test_ai_extract_body_classifies_malformed_initial_url_as_unsafe(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    from news_dashboard.body_fetch import _ai_extract_body
+
+    with (
+        patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}),
+        patch("news_dashboard.body_fetch.open_server_fetch_url") as open_url,
+        caplog.at_level("WARNING"),
+    ):
+        body, status = _ai_extract_body("http://[::1")
+
+    assert (body, status) == ("", "error")
+    assert "ai_body_fetch: unsafe URL" in caplog.text
+    assert "HTTP fetch failed" not in caplog.text
+    open_url.assert_not_called()
 
 
 def test_ai_extract_body_calls_openai_on_html(tmp_path: Path) -> None:
     from news_dashboard.body_fetch import _ai_extract_body
 
-    fake_stream = _FakeStreamResponse("<html><body>Hello world</body></html>")
+    response = _FakeOpenResponse("<html><body>Hello world</body></html>")
 
     calls: list[object] = []
 
@@ -807,7 +877,12 @@ def test_ai_extract_body_calls_openai_on_html(tmp_path: Path) -> None:
 
     with (
         patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}),
-        patch("httpx.stream", return_value=fake_stream),
+        patch(
+            "news_dashboard.body_fetch.validate_server_fetch_url",
+            side_effect=AssertionError("AI body fetch performed redundant URL validation"),
+            create=True,
+        ),
+        patch("news_dashboard.body_fetch.open_server_fetch_url", return_value=response),
         patch("news_dashboard.ai_client.get_chat_model", return_value=model),
     ):
         body, status = _ai_extract_body("https://example.com/article")
@@ -825,7 +900,10 @@ def test_ai_extract_body_uses_managed_prompt() -> None:
     managed = ManagedPrompt(text="compiled extraction prompt", langfuse_prompt=object())
     with (
         patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}),
-        patch("httpx.stream", return_value=_FakeStreamResponse(html)),
+        patch(
+            "news_dashboard.body_fetch.open_server_fetch_url",
+            return_value=_FakeOpenResponse(html),
+        ),
         patch("news_dashboard.ai_client.get_prompt", return_value=managed) as get_prompt,
         patch(
             "news_dashboard.ai_client.get_chat_model",
@@ -850,7 +928,10 @@ def test_ai_extract_body_returns_error_on_http_failure(tmp_path: Path) -> None:
 
     with (
         patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}),
-        patch("httpx.stream", side_effect=RuntimeError("connection refused")),
+        patch(
+            "news_dashboard.body_fetch.open_server_fetch_url",
+            side_effect=RuntimeError("connection refused"),
+        ),
     ):
         body, status = _ai_extract_body("https://example.com/article")
 
@@ -861,11 +942,11 @@ def test_ai_extract_body_returns_error_on_http_failure(tmp_path: Path) -> None:
 def test_ai_extract_body_returns_error_on_non_2xx_status(tmp_path: Path) -> None:
     from news_dashboard.body_fetch import _ai_extract_body
 
-    fake_stream = _FakeStreamResponse("<html>not found</html>", status_code=404)
+    response = _FakeOpenResponse("<html>not found</html>", status_code=404)
 
     with (
         patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}),
-        patch("httpx.stream", return_value=fake_stream),
+        patch("news_dashboard.body_fetch.open_server_fetch_url", return_value=response),
     ):
         body, status = _ai_extract_body("https://example.com/missing")
 
@@ -876,7 +957,7 @@ def test_ai_extract_body_returns_error_on_non_2xx_status(tmp_path: Path) -> None
 def test_ai_extract_body_returns_error_when_openai_returns_empty(tmp_path: Path) -> None:
     from news_dashboard.body_fetch import _ai_extract_body
 
-    fake_stream = _FakeStreamResponse("<html><body>some html</body></html>")
+    response = _FakeOpenResponse("<html><body>some html</body></html>")
 
     model: RunnableLambda[object, AIMessage] = RunnableLambda(
         lambda _value: AIMessage(content="   ")
@@ -884,7 +965,7 @@ def test_ai_extract_body_returns_error_when_openai_returns_empty(tmp_path: Path)
 
     with (
         patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}),
-        patch("httpx.stream", return_value=fake_stream),
+        patch("news_dashboard.body_fetch.open_server_fetch_url", return_value=response),
         patch("news_dashboard.ai_client.get_chat_model", return_value=model),
     ):
         body, status = _ai_extract_body("https://example.com/article")
@@ -898,7 +979,7 @@ def test_ai_extract_body_truncates_html_to_limit(tmp_path: Path) -> None:
 
     # 'A' * limit + 'B' * limit — 'B' must never appear in the OpenAI call
     long_html = "A" * _AI_HTML_LIMIT + "B" * _AI_HTML_LIMIT
-    fake_stream = _FakeStreamResponse(long_html)
+    response = _FakeOpenResponse(long_html)
 
     calls: list[Any] = []
 
@@ -910,7 +991,7 @@ def test_ai_extract_body_truncates_html_to_limit(tmp_path: Path) -> None:
 
     with (
         patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}),
-        patch("httpx.stream", return_value=fake_stream),
+        patch("news_dashboard.body_fetch.open_server_fetch_url", return_value=response),
         patch("news_dashboard.ai_client.get_chat_model", return_value=model),
     ):
         _ai_extract_body("https://example.com/article")
@@ -930,24 +1011,17 @@ def test_ai_extract_body_truncates_html_to_limit(tmp_path: Path) -> None:
 
 
 def test_ai_extract_body_stops_streaming_once_byte_cap_reached() -> None:
-    """A response far larger than the byte cap must not be fully consumed."""
+    """A response far larger than the byte cap must not be fully read."""
     from news_dashboard.body_fetch import _AI_FETCH_BYTE_CAP, _fetch_capped_html
 
     huge_html = "X" * (_AI_FETCH_BYTE_CAP * 10)
-    consumed_chunks = 0
+    response = _FakeOpenResponse(huge_html)
 
-    def count_chunk() -> None:
-        nonlocal consumed_chunks
-        consumed_chunks += 1
-
-    fake_stream = _FakeStreamResponse(huge_html, chunk_size=4096, on_chunk=count_chunk)
-
-    with patch("httpx.stream", return_value=fake_stream):
+    with patch("news_dashboard.body_fetch.open_server_fetch_url", return_value=response):
         text = _fetch_capped_html("https://example.com/huge", byte_cap=_AI_FETCH_BYTE_CAP)
 
     assert len(text) == _AI_FETCH_BYTE_CAP
-    # Only enough chunks to cross the cap should have been pulled, not all of them.
-    assert consumed_chunks < len(huge_html) // 4096
+    assert response.read_sizes == [_AI_FETCH_BYTE_CAP]
 
 
 # ── fetch_and_cache_body with AI fallback ─────────────────────────────────────
@@ -1076,12 +1150,15 @@ def test_extract_body_skips_selenium_on_network_failure() -> None:
 
 
 def _make_selenium_client_mock(fetch_spa_html_impl: object) -> object:
-    """Build a minimal sys.modules mock for news_dashboard.selenium_client."""
+    """Build a configured sys.modules mock for news_dashboard.selenium_client."""
     from types import ModuleType
     from unittest.mock import MagicMock
 
     mod = ModuleType("news_dashboard.selenium_client")
     mod.fetch_spa_html = fetch_spa_html_impl  # type: ignore[attr-defined]  # ty: ignore[unresolved-attribute]
+    mod.public_renderer_egress_proxy = (  # type: ignore[attr-defined]  # ty: ignore[unresolved-attribute]
+        lambda: "http://renderer-proxy.example"
+    )
     mod.__spec__ = MagicMock()
     return mod
 

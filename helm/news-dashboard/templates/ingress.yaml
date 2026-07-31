@@ -1,10 +1,28 @@
+{{- if and .Values.production (not .Values.ingress.enabled) }}
+{{- fail "ingress.enabled must be true in production" }}
+{{- end }}
+{{- if and .Values.production (not .Values.ingress.tls) }}
+{{- fail "ingress.tls must be configured in production" }}
+{{- end }}
+{{- if and .Values.production (not .Values.ingress.traefik.middlewareEnabled) }}
+{{- fail "Traefik middleware must be enabled in production" }}
+{{- end }}
+{{- if and .Values.ingress.traefik.middlewareEnabled (ne .Values.ingress.className "traefik") }}
+{{- fail "ingress.className must be traefik when Traefik middleware is enabled" }}
+{{- end }}
 {{- if .Values.ingress.enabled }}
+{{- $annotations := deepCopy .Values.ingress.annotations }}
+{{- if .Values.ingress.traefik.middlewareEnabled }}
+{{- $_ := set $annotations "traefik.ingress.kubernetes.io/router.entrypoints" .Values.ingress.traefik.entryPoints }}
+{{- $middlewarePrefix := printf "%s-%s" .Release.Namespace (include "news-dashboard.fullname" .) }}
+{{- $_ := set $annotations "traefik.ingress.kubernetes.io/router.middlewares" (printf "%s-redirect-https@kubernetescrd,%s-security-headers@kubernetescrd" $middlewarePrefix $middlewarePrefix) }}
+{{- end }}
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: {{ include "news-dashboard.fullname" . }}
   annotations:
-{{ toYaml .Values.ingress.annotations | indent 4 }}
+{{ toYaml $annotations | indent 4 }}
 spec:
   {{- if .Values.ingress.className }}
   ingressClassName: {{ .Values.ingress.className | quote }}

@@ -19,7 +19,7 @@ postgresql:
     enabled: true
     schedule: "0 2 * * *"      # daily at 02:00 UTC (cron syntax)
     retentionDays: 7            # delete dumps older than this many days
-    hostPath: /home/ioachim-minipc/news-dashboard-postgres-backups
+    hostPath: /srv/news-dashboard/postgres-backups
 ```
 
 > **Important:** `hostPath` must be different from `postgresql.persistence.hostPath`
@@ -31,7 +31,7 @@ Apply with:
 ```bash
 helm upgrade news-dashboard ./helm/news-dashboard \
   --set postgresql.backup.enabled=true \
-  --set postgresql.backup.hostPath=/home/ioachim-minipc/news-dashboard-postgres-backups \
+  --set postgresql.backup.hostPath=/srv/news-dashboard/postgres-backups \
   --reuse-values
 ```
 
@@ -69,7 +69,7 @@ kubectl -n news-dashboard logs -l job-name=manual-backup-... -f
 
 ```bash
 # From the node host, copy via scp or mount the backup directory directly.
-scp ioachim-minipc:/home/ioachim-minipc/news-dashboard-postgres-backups/news_dashboard_20260628T020001Z.dump .
+scp backup-node.example:/srv/news-dashboard/postgres-backups/news_dashboard_20260628T020001Z.dump .
 ```
 
 ### 2. Restore into the running Helm PostgreSQL pod

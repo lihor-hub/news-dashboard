@@ -78,10 +78,21 @@ test-full: test-nightly
 
 ## helm-validate: lint and render the Helm chart with default and production-like values
 helm-validate:
+	pytest scripts/test_helm_security_hardening.py -v
 	helm lint ./helm/news-dashboard \
 		--set-string "app.auth.sessionSecret=dummy-session-secret-for-render-only" \
 		--set-string "postgresql.password=dummy-postgres-password-for-render-only"
 	helm template news-dashboard ./helm/news-dashboard \
+		--set-string "app.auth.sessionSecret=dummy-session-secret-for-render-only" \
+		--set-string "postgresql.password=dummy-postgres-password-for-render-only"
+	helm lint ./helm/news-dashboard \
+		--values helm/news-dashboard/values-production.yaml \
+		--set-string "image.digest=sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" \
+		--set-string "app.auth.sessionSecret=dummy-session-secret-for-render-only" \
+		--set-string "postgresql.password=dummy-postgres-password-for-render-only"
+	helm template news-dashboard ./helm/news-dashboard \
+		--values helm/news-dashboard/values-production.yaml \
+		--set-string "image.digest=sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" \
 		--set-string "app.auth.sessionSecret=dummy-session-secret-for-render-only" \
 		--set-string "postgresql.password=dummy-postgres-password-for-render-only"
 	helm template news-dashboard ./helm/news-dashboard \

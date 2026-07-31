@@ -1,3 +1,6 @@
+{{- if and .Values.production (not .Values.app.config.enableHsts) }}
+{{- fail "application HSTS must be enabled in production" }}
+{{- end }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -17,6 +20,7 @@ spec:
         app.kubernetes.io/name: {{ include "news-dashboard.name" . }}
         app.kubernetes.io/instance: {{ .Release.Name }}
     spec:
+      automountServiceAccountToken: false
       securityContext:
 {{ toYaml .Values.app.podSecurityContext | indent 8 }}
       {{- if .Values.image.pullSecretName }}
@@ -25,7 +29,7 @@ spec:
       {{- end }}
       containers:
         - name: news-dashboard
-          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          image: {{ include "news-dashboard.image" . | quote }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           securityContext:
 {{ toYaml .Values.app.containerSecurityContext | indent 12 }}
@@ -34,6 +38,8 @@ spec:
               value: {{ ternary "false" "true" .Values.ingestCronJob.enabled | quote }}
             - name: DATA_DIR
               value: {{ .Values.app.data.dir | quote }}
+            - name: ENABLE_HSTS
+              value: {{ .Values.app.config.enableHsts | quote }}
 {{- if .Values.postgresql.enabled }}
             - name: POSTGRES_HOST
               value: {{ printf "%s-postgres" (include "news-dashboard.fullname" .) | quote }}

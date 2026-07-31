@@ -1,0 +1,21 @@
+{
+  "networkPolicy": {
+    "additionalEgress": [
+      {
+        "ports": [
+          {
+            "protocol": "TCP",
+            "port": 5432
+          }
+        ],
+        "to": [
+          {
+            "ipBlock": {
+              "cidr": "10.20.0.0/24"
+            }
+          }
+        ]
+      }
+    ]
+  }
+}

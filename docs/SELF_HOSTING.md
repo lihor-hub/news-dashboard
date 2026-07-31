@@ -17,6 +17,7 @@ This guide explains how to deploy News Dashboard for production use using the pu
 - [Image Tags and Versioning](#image-tags-and-versioning)
 - [Environment Variables](#environment-variables)
 - [Healthchecks](#healthchecks)
+- [Production Kubernetes Ingress](#production-kubernetes-ingress)
 - [Upgrading](#upgrading)
 - [Rolling Back](#rolling-back)
 - [Background Jobs](#background-jobs)
@@ -73,7 +74,9 @@ See the [.env.example reference](#environment-variables) below for all available
 docker compose -f docker-compose.prod.yml up -d
 ```
 
-The compose file will fail fast if required secrets (`SESSION_SECRET`, `BOOTSTRAP_ADMIN_USERNAME`, `BOOTSTRAP_ADMIN_PASSWORD`, `POSTGRES_PASSWORD`, `NEO4J_PASSWORD`) are not set.
+The compose file will fail fast if `IMAGE_DIGEST` or required secrets
+(`SESSION_SECRET`, `BOOTSTRAP_ADMIN_USERNAME`, `BOOTSTRAP_ADMIN_PASSWORD`,
+`POSTGRES_PASSWORD`, `NEO4J_PASSWORD`) are not set.
 
 `docker-compose.prod.yml` also mounts the named `news-dashboard-data` volume at
 `/data` and sets `DATA_DIR=/data`. Generated article audio and briefing podcast
@@ -113,18 +116,14 @@ The image is available with the following tags:
 - `ghcr.io/lihor-hub/news-dashboard:v<version>` - Specific version (e.g., `v1.21.0`)
 - `ghcr.io/lihor-hub/news-dashboard:<commit-sha>` - Exact commit (e.g., `a1b2c3d4e5f6`)
 
-For production deployments, we recommend pinning to a specific version or commit SHA to ensure consistency and prevent unexpected updates.
+For production deployments, resolve the published manifest digest and set
+`IMAGE_DIGEST=sha256:<64 lowercase hex characters>`. Tags and commit-SHA tags
+are useful discovery aliases, but the production entry points deploy the digest.
 
-### Updating docker-compose.prod.yml to Pin a Version
+### Selecting the production Compose image
 
-Edit the `image` line in `docker-compose.prod.yml`:
-
-```yaml
-services:
-  news-dashboard:
-    image: ghcr.io/lihor-hub/news-dashboard:v1.21.0 # Pin to specific version
-    # ...
-```
+`docker-compose.prod.yml` requires `IMAGE_DIGEST` and builds the reference as
+`ghcr.io/lihor-hub/news-dashboard@${IMAGE_DIGEST}`.
 
 Then pull and restart:
 
@@ -239,7 +238,7 @@ assistant guide](https://docs.lihor.ro/docs/configuration/dify-assistant).
 | Variable          | Description                                                                                                                                                                                                                                   |
 | ----------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `ENABLE_API_DOCS` | Set to `true` to serve the interactive API docs (`/docs`, `/redoc`, `/openapi.json`). Off by default so a public deployment doesn't leak its full API surface to anonymous visitors; enable it for local development or trusted environments. |
-| `ENABLE_HSTS`     | Set to `true` to have the app send `Strict-Transport-Security` itself. Off by default, since HSTS is only correct behind HTTPS — leave it unset for local HTTP dev, or when a TLS-terminating proxy (e.g. Caddy, see below) already sets it.  |
+| `ENABLE_HSTS`     | Set to `true` to have the app send `Strict-Transport-Security` itself. Off by default for local HTTP development; the production Helm overlay enables it alongside the TLS Ingress middleware. |
 
 > **Important**: Never commit secrets to version control. Use environment variables or a `.env` file (not committed to Git) to manage sensitive values.
 
@@ -248,15 +247,24 @@ assistant guide](https://docs.lihor.ro/docs/configuration/dify-assistant).
 The app itself sets `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`,
 `Referrer-Policy: no-referrer`, and a conservative `Permissions-Policy` on
 every response (API and static frontend alike), so this baseline applies
-regardless of which front door is used — `docker run`, `docker-compose.prod.yml`,
-or a reverse proxy other than Caddy. `Strict-Transport-Security` stays opt-in
-via `ENABLE_HSTS` above.
+regardless of which front door is used — `docker run`,
+`docker-compose.prod.yml`, or Kubernetes Ingress.
+`Strict-Transport-Security` stays opt-in via `ENABLE_HSTS` above, and the
+production Helm overlay opts in. The production Ingress provides the static
+edge baseline; the application remains the source of truth for its dynamic
+Content Security Policy.
 
-The documented Caddy deployment ([HTTPS with Caddy](https://docs.lihor.ro/docs/configuration/https-caddy),
-config in `deploy/Caddyfile`) also sets these headers at the edge, including
-HSTS. The two layers are compatible — headers the app already set are left
-alone (`setdefault` semantics), so the edge proxy can still enforce a
-stricter policy.
+### Public browser renderer proxy
+
+Selenium fallback for user-controlled public URLs stays disabled unless
+`PUBLIC_RENDERER_EGRESS_PROXY` names an HTTP or HTTPS proxy that validates and
+pins every public destination. Direct renderer egress must also be blocked.
+The URL must contain only a host and optional usable port; whitespace, paths,
+query strings, and username/password userinfo are rejected. Proxy credentials
+are deliberately unsupported in this URL so they cannot reach Chrome's process
+arguments. Authenticate the renderer by source-IP/network allowlisting or an
+external proxy authentication mechanism that does not embed secrets in the
+Chrome command line.
 
 ### Optional article body extraction (Crawl4AI)
 
@@ -344,6 +352,7 @@ liveness, swap the path for `/api/live` in the snippet above.
 For `docker run`, use the same Python-based probe:
 
 ```bash
+IMAGE_DIGEST="${IMAGE_DIGEST:?set IMAGE_DIGEST to the published sha256 digest}"
 docker run -d \
   --name news-dashboard \
   --health-cmd "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/api/ready', timeout=5).read()\"" \
@@ -352,7 +361,7 @@ docker run -d \
   --health-retries 3 \
   --health-start-period 30s \
   # ... other options ...
-  ghcr.io/lihor-hub/news-dashboard:latest
+  "ghcr.io/lihor-hub/news-dashboard@${IMAGE_DIGEST}"
 ```
 
 ### Kubernetes Probe Configuration
@@ -434,6 +443,87 @@ or both. PII is scrubbed before events are sent: `send_default_pii` is
 disabled on both SDKs, and the backend additionally strips cookies and
 `Authorization`/`Cookie` headers via a `before_send` hook.
 
+## Production Kubernetes Ingress
+
+The production architecture is:
+
+```text
+Internet → TLS Ingress → ClusterIP Service → News Dashboard
+```
+
+Use `helm/news-dashboard/values-production.yaml`. It enables the hostname and
+TLS Ingress, restricts the application Service to `ClusterIP`, and enables
+NetworkPolicies for the configured ingress-controller selectors. Caddy is not
+the application TLS source of truth. The repository Caddyfile retains only the
+legacy same-host Keycloak route so its separate migration boundary stays
+visible.
+
+The public egress policy allows HTTPS and standard authenticated mail ports only
+to globally routable addresses. Private/custom endpoints require
+`networkPolicy.additionalEgress`. Copy
+`deploy/additional-egress-values.example.json` to a protected operator path and
+set `ADDITIONAL_EGRESS_VALUES_FILE` on every manual deployment. For CI, store
+the same policy-only strict JSON in the production environment variable
+`ADDITIONAL_EGRESS_VALUES`; it persists across Helm upgrades and must not
+contain credentials. YAML-only syntax, aliases, merge keys, comments, and
+multiple documents are rejected.
+
+Live appliance installation and cutover are intentionally not automated from
+pull-request CI. Complete the DNS/TLS, ingress-controller, firewall, Keycloak,
+and rollback rehearsal in
+[human rollout issue #1302](https://github.com/lihor-hub/news-dashboard/issues/1302).
+Do not add credentials or private inventory to that issue or this repository.
+The detailed staged procedure is in
+[Ingress HTTPS and Caddy migration](https://docs.lihor.ro/docs/configuration/https-caddy).
+Until that procedure is ready, leave `INGRESS_CUTOVER_ENABLED` unset: main CI
+will still build, publish, and scan the image but will exit before any live
+release or cluster mutation. Set it to exactly `true` only in the approved
+cutover window.
+
+Before removing the old application route:
+
+1. Back up PostgreSQL and verify a restore on a separate instance.
+2. Save the current Helm revision and live Caddy configuration.
+3. Configure the production `POSTGRES_HOST_PATH` runtime variable for the
+   existing data directory, then stage the production values. Verify the
+   Ingress through its target address while preserving the public hostname and
+   TLS validation.
+4. Prepare and rehearse rollback to the previous Helm revision and Caddy route.
+5. Preserve the existing Keycloak route behind an equivalent higher-priority
+   Ingress route. Verify its login and callback flow.
+6. Only then make the ingress controller the sole owner of ports 80 and 443.
+
+### Host PostgreSQL controls
+
+When Kubernetes connects to PostgreSQL running on the host, the database must
+be reachable from the selected cluster network without becoming a public
+service:
+
+- Set PostgreSQL `listen_addresses` to the specific host or cluster-facing
+  interface. Avoid `*`; if it is temporarily unavoidable, the firewall and
+  `pg_hba.conf` rules below must still restrict every connection.
+- Add the narrowest `pg_hba.conf` `hostssl` rule for the application database,
+  role, and actual pod or node source CIDR. Use `scram-sha-256`; never use
+  `trust` or a public `0.0.0.0/0` rule.
+- Restrict the host firewall to TCP 5432 from that same cluster source network.
+  Confirm expected connections succeed and connections from an unrelated
+  network are denied.
+- Enable PostgreSQL TLS with operator-managed server certificates and protect
+  the private key with PostgreSQL-readable file permissions. Configure the
+  application DSN with certificate verification (`sslmode=verify-full` and the
+  trusted CA) when names and certificates are available; do not commit
+  certificate material.
+- Keep encrypted, access-controlled backups outside the database host and
+  define retention for both logical dumps and any WAL/base-backup strategy.
+- Perform restore verification regularly: restore a current backup into an
+  isolated PostgreSQL instance, run integrity/application queries, and confirm
+  `/api/ready` succeeds against the restored copy before calling the backup
+  usable.
+
+After the cutover, inspect the PostgreSQL listener, `pg_hba.conf`, firewall,
+TLS negotiation, backup job, and most recent restore verification as one
+control set. Record sanitized evidence in issue #1302.
+
 ## Upgrading
 
 Upgrade safely by following these steps in order.
@@ -463,15 +553,30 @@ docker compose -f docker-compose.prod.yml run --rm news-dashboard news-dashboard
 ### Kubernetes (Helm)
 
 ```bash
-# 1. Update the image tag and pull policy
+(
+set -euo pipefail
+IMAGE_DIGEST="${IMAGE_DIGEST:?set IMAGE_DIGEST to sha256:<64 lowercase hex>}"
+# 1. Deploy the exact published image manifest
+: "${SESSION_SECRET:?set SESSION_SECRET}"
+: "${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}"
+: "${POSTGRES_HOST_PATH:?set POSTGRES_HOST_PATH}"
+source ./scripts/production-deploy-lib.sh
+production_cutover_enabled || { echo "Ingress cutover is not enabled" >&2; exit 2; }
+prepare_production_helm_secret_files
+
 helm upgrade news-dashboard ./helm/news-dashboard \
-  --set image.tag=v1.22.0 \
-  --set image.pullPolicy=Always \
+  --namespace news-dashboard --create-namespace \
+  --values ./helm/news-dashboard/values-production.yaml \
+  --set-string image.digest="${IMAGE_DIGEST}" \
+  --set-string postgresql.persistence.hostPath="$POSTGRES_HOST_PATH" \
+  --set-file app.auth.sessionSecret="$PRODUCTION_SESSION_SECRET_FILE" \
+  --set-file postgresql.password="$PRODUCTION_POSTGRES_PASSWORD_FILE" \
   --reuse-values
 
 # 2. Rollout restarts the deployment automatically.
 #    The app runs init_db() on startup.
 kubectl -n news-dashboard rollout status deployment/news-dashboard
+)
 ```
 
 The `app.config` values in `helm/news-dashboard/values.yaml` expose the
@@ -551,11 +656,14 @@ docker compose -f docker-compose.prod.yml down
 docker compose -f docker-compose.prod.yml up -d
 ```
 
-For Helm, rollback directly:
-
-```bash
-helm rollback news-dashboard 1
-```
+For an application-only Helm revision rollback, restore the recorded revision
+while leaving the current edge unchanged, then verify health before changing
+traffic. For the Ingress-to-Caddy edge rollback, do not use `helm rollback`
+alone: first restore a guard-compatible NodePort backend, verify it locally,
+prepare the saved Caddy application route, release the Ingress listener, start
+and verify Caddy locally, and only then reverse DNS or port forwarding. Follow
+the exact ordered procedure in
+[Ingress HTTPS and Caddy migration](https://docs.lihor.ro/docs/configuration/https-caddy#roll-back).
 
 Rollback is the reason backups are important — always back up the database
 **before** starting an upgrade (see the [Pre-Upgrade Checklist](#pre-upgrade-checklist)).
@@ -709,8 +817,8 @@ Regularly back up your PostgreSQL database. See [PostgreSQL Backup and Restore](
   [Deployment](../README.md#deployment) reference.
 - Use the [README Configuration section](../README.md#configuration) as the
   canonical environment-variable reference.
-- **Set up HTTPS** with a reverse proxy (see
-  [HTTPS with Caddy](https://docs.lihor.ro/docs/configuration/https-caddy)).
+- **Set up HTTPS** with the production Ingress (see
+  [Ingress HTTPS and Caddy migration](https://docs.lihor.ro/docs/configuration/https-caddy)).
 - Configure authentication and optional integrations through the
   [Configuration guides](https://docs.lihor.ro/docs/configuration).
 - Sign in as an application administrator and follow

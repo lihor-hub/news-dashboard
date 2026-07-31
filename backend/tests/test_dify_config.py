@@ -67,6 +67,16 @@ def test_public_dify_config_removes_base_url_trailing_slash(
     assert public_dify_config()["base_url"] == "https://dify.example.test"
 
 
+def test_public_dify_config_normalizes_host_but_preserves_webapp_path(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("DIFY_CHAT_ENABLED", "true")
+    monkeypatch.setenv("DIFY_CHAT_BASE_URL", "https://DIFY.example.test:8443/chat/")
+    monkeypatch.setenv("DIFY_CHAT_APP_TOKEN", "public-embed-token")
+
+    assert public_dify_config()["base_url"] == "https://dify.example.test:8443/chat"
+
+
 @pytest.mark.parametrize("host", ["localhost", "127.0.0.1", "[::1]"])
 def test_public_dify_config_allows_http_loopback_hosts(
     monkeypatch: pytest.MonkeyPatch, host: str
@@ -78,7 +88,15 @@ def test_public_dify_config_allows_http_loopback_hosts(
     assert public_dify_config()["enabled"] is True
 
 
-@pytest.mark.parametrize("base_url", ["http://dify.example.test", "ftp://dify.example.test"])
+@pytest.mark.parametrize(
+    "base_url",
+    [
+        "http://dify.example.test",
+        "ftp://dify.example.test",
+        "https://dify example.test",
+        "https://dify.example.test;script-src",
+    ],
+)
 def test_public_dify_config_rejects_non_loopback_or_unsafe_urls(
     monkeypatch: pytest.MonkeyPatch, base_url: str
 ) -> None:

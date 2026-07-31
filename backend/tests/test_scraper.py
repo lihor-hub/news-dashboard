@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import socket
+import urllib.request
 from typing import Any
+from unittest.mock import patch
 
 import pytest
 
@@ -14,7 +17,9 @@ from news_dashboard.scraper import (
     _LinkListParser,
     scrape_source,
 )
+from news_dashboard.selenium_client import _build_options, public_renderer_egress_proxy
 from news_dashboard.sources.service import SourceDefinition
+from news_dashboard.url_safety import UnsafeUrlError, validate_server_fetch_url
 
 # Minimal static HTML that mimics the Anthropic news page structure
 ANTHROPIC_FIXTURE = """
@@ -83,19 +88,147 @@ def test_scrape_source_uses_fixture(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_fetch_html_rejects_private_network_url(monkeypatch: pytest.MonkeyPatch) -> None:
-
     called = False
 
-    def fake_urlopen(_req: object, timeout: float) -> None:
+    def fake_open(_req: object, *, timeout: float) -> None:
         nonlocal called
         called = True
+        message = "Refusing server-side fetch to unsafe host"
+        raise UnsafeUrlError(message)
 
-    monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
+    monkeypatch.setattr("news_dashboard.scraper.open_server_fetch_url", fake_open)
 
     with pytest.raises(ValueError, match="unsafe host"):
         _fetch_html("http://127.0.0.1/admin")
 
+    assert called is True
+
+
+def test_fetch_html_classifies_malformed_initial_url_as_unsafe() -> None:
+    with pytest.raises(UnsafeUrlError, match="malformed URL"):
+        _fetch_html("http://[::1")
+
+
+def test_fetch_html_selenium_path_keeps_preflight_validation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    called = False
+
+    def fake_fetch(_url: str) -> str:
+        nonlocal called
+        called = True
+        return ""
+
+    monkeypatch.setattr("news_dashboard.selenium_client.fetch_spa_html", fake_fetch)
+
+    with pytest.raises(ValueError, match="unsafe host"):
+        _fetch_html("http://127.0.0.1/admin", use_selenium=True)
+
     assert called is False
+
+
+def test_fetch_html_selenium_path_requires_egress_proxy(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("PUBLIC_RENDERER_EGRESS_PROXY", raising=False)
+    monkeypatch.setattr("news_dashboard.scraper.validate_server_fetch_url", lambda _url: None)
+
+    with (
+        patch("news_dashboard.selenium_client.fetch_spa_html") as fetch_spa_html,
+        pytest.raises(ScrapeFetchError, match="egress proxy"),
+    ):
+        _fetch_html("https://example.com/article", use_selenium=True)
+
+    fetch_spa_html.assert_not_called()
+
+
+def test_selenium_proxy_rejects_userinfo_without_exposing_it(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    credential = "renderer-secret"
+    proxy = f"https://proxy-user:{credential}@proxy.example:8443"
+    monkeypatch.setenv("PUBLIC_RENDERER_EGRESS_PROXY", proxy)
+
+    with pytest.raises(ValueError, match="PUBLIC_RENDERER_EGRESS_PROXY") as exc_info:
+        _build_options()
+
+    assert credential not in str(exc_info.value)
+
+
+def test_selenium_options_accept_proxy_with_default_port(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    proxy = "http://proxy.example"
+    monkeypatch.setenv("PUBLIC_RENDERER_EGRESS_PROXY", proxy)
+
+    options = _build_options()
+
+    assert f"--proxy-server={proxy}" in options.arguments
+
+
+@pytest.mark.parametrize(
+    ("proxy", "canonical"),
+    [
+        ("HTTP://Proxy.Example:80/", "http://proxy.example"),
+        ("https://proxy.example:443", "https://proxy.example"),
+        ("https://[2001:0db8:0:0::1]:8443", "https://[2001:db8::1]:8443"),
+    ],
+)
+def test_selenium_options_use_canonical_credential_free_proxy(
+    monkeypatch: pytest.MonkeyPatch,
+    proxy: str,
+    canonical: str,
+) -> None:
+    monkeypatch.setenv("PUBLIC_RENDERER_EGRESS_PROXY", proxy)
+
+    options = _build_options()
+
+    assert f"--proxy-server={canonical}" in options.arguments
+    assert all(proxy not in argument for argument in options.arguments if proxy != canonical)
+
+
+@pytest.mark.parametrize(
+    "proxy",
+    [
+        " http://proxy.example",
+        "http://proxy.example ",
+        "http://proxy .example",
+        "http://proxy.example\n",
+        "http://",
+        "http://:8080",
+        "http://proxy_example:8080",
+        "http://proxy.example:0",
+        "http://proxy.example:65536",
+        "http://proxy.example:80:90",
+        "http://2001:db8::1",
+        "http://[2001:db8::1",
+        "http://proxy.example/path",
+        "http://proxy.example?query=yes",
+    ],
+)
+def test_selenium_proxy_rejects_whitespace_invalid_authority_and_unusable_ports(
+    monkeypatch: pytest.MonkeyPatch,
+    proxy: str,
+) -> None:
+    monkeypatch.setenv("PUBLIC_RENDERER_EGRESS_PROXY", proxy)
+
+    with pytest.raises(ValueError, match="PUBLIC_RENDERER_EGRESS_PROXY"):
+        public_renderer_egress_proxy()
+
+
+def test_selenium_options_reject_invalid_proxy_without_exposing_credentials(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    credential = "credential-value"
+    monkeypatch.setenv(
+        "PUBLIC_RENDERER_EGRESS_PROXY",
+        f"socks5://proxy-user:{credential}@proxy.example:1080",
+    )
+
+    with pytest.raises(ValueError, match="PUBLIC_RENDERER_EGRESS_PROXY") as exc_info:
+        _build_options()
+
+    assert credential not in str(exc_info.value)
 
 
 # Mimics Meta AI / Cohere card layout: several anchors around one post URL
@@ -221,6 +354,29 @@ class _FakeResponse:
 
     def __exit__(self, *exc_info: object) -> None:
         return None
+
+
+def test_fetch_html_resolves_hostname_once(monkeypatch: pytest.MonkeyPatch) -> None:
+    resolutions: list[tuple[str, int]] = []
+
+    def fake_getaddrinfo(
+        host: str,
+        port: int,
+        **_kwargs: object,
+    ) -> list[tuple[socket.AddressFamily, socket.SocketKind, int, str, tuple[str, int]]]:
+        resolutions.append((host, port))
+        return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.216.34", port))]
+
+    def fake_open(req: object, *, timeout: float) -> _FakeResponse:
+        assert isinstance(req, urllib.request.Request)
+        validate_server_fetch_url(req.full_url)
+        return _FakeResponse(b"<html>ok</html>", None)
+
+    monkeypatch.setattr("news_dashboard.url_safety.socket.getaddrinfo", fake_getaddrinfo)
+    monkeypatch.setattr("news_dashboard.scraper.open_server_fetch_url", fake_open)
+
+    assert _fetch_html("https://example.com/news") == "<html>ok</html>"
+    assert resolutions == [("example.com", 443)]
 
 
 def test_fetch_html_under_limit_succeeds(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -69,9 +69,36 @@ def test_frontend_dsn_unset_by_default(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.mark.smoke
-def test_frontend_dsn_returned_when_set(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("SENTRY_DSN_FRONTEND", "https://example@o0.ingest.sentry.io/1")
-    assert frontend_error_tracking_dsn() == "https://example@o0.ingest.sentry.io/1"
+@pytest.mark.parametrize(
+    "dsn",
+    [
+        "https://example@o0.ingest.sentry.io/1",
+        "http://public@glitchtip.example.test:8080/sentry/2",
+    ],
+)
+def test_frontend_dsn_returned_when_valid(monkeypatch: pytest.MonkeyPatch, dsn: str) -> None:
+    monkeypatch.setenv("SENTRY_DSN_FRONTEND", dsn)
+    assert frontend_error_tracking_dsn() == dsn
+
+
+@pytest.mark.parametrize(
+    "dsn",
+    [
+        "javascript://public@errors.example.test/1",
+        "https://errors.example.test/1",
+        "https://public@errors example.test/1",
+        "https://public@errors.example.test/",
+        "https://public@errors.example.test/1?query=not-allowed",
+        "https://public@errors.example.test/1\nconnect-src https://evil.test",
+        "https://public@errors.example.test/1\n",
+        "\u0085https://public@errors.example.test/1",
+    ],
+)
+def test_frontend_dsn_rejects_malformed_or_unsafe_values(
+    monkeypatch: pytest.MonkeyPatch, dsn: str
+) -> None:
+    monkeypatch.setenv("SENTRY_DSN_FRONTEND", dsn)
+    assert frontend_error_tracking_dsn() is None
 
 
 @pytest.mark.smoke

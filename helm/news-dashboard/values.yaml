@@ -2,11 +2,11 @@ replicaCount: 1
 
 image:
   repository: ghcr.io/lihor-hub/news-dashboard
-  # CI overrides this with the commit SHA so Kubernetes always pulls the exact
-  # image that was just built.  'latest' is only used for manual local deploys.
-  tag: latest
-  # IfNotPresent is correct because CI pins an immutable SHA tag.
-  # Never use 'latest' + 'IfNotPresent' together — Kubernetes won't re-pull.
+  # Local/default installs may use a tag. Production ignores it and requires
+  # image.digest so Kubernetes resolves an exact registry manifest.
+  tag: 7d01027c3c2b21a537ab3264ce485d4fea6ba48d
+  digest: ""
+  # IfNotPresent is correct for an immutable digest.
   pullPolicy: IfNotPresent
   # Name of a pre-existing kubernetes.io/dockerconfigjson Secret that gives the
   # cluster pull access to GHCR.  The CI deploy job creates/refreshes this
@@ -20,6 +20,53 @@ service:
   # and needs a stable port that survives pod restarts and Helm upgrades.
   # Example override: helm upgrade --set service.type=NodePort,service.nodePort=30088
   nodePort: ""
+
+# Enables production-only render safeguards, such as rejecting externally
+# reachable Service types. Set only by values-production.yaml.
+production: false
+
+networkPolicy:
+  # Opt in only in clusters whose CNI enforces NetworkPolicy resources.
+  enabled: false
+  ingressController:
+    # Both selectors are required when NetworkPolicies are enabled so only the
+    # configured ingress-controller pods can reach the public app Service.
+    namespaceSelector: {}
+    podSelector: {}
+  # Applied to app and ingest pods in addition to their required database,
+  # DNS, and HTTPS routes. Each list item is a Kubernetes NetworkPolicy egress
+  # rule, for example an ipBlock and its allowed ports.
+  additionalEgress: []
+  # Public-only TCP egress for app and ingest workloads. Keep non-global ranges
+  # excluded here; private/custom services belong in additionalEgress.
+  publicEgress:
+    ports:
+      - 443
+    ipBlocks:
+      - cidr: 0.0.0.0/0
+        except:
+          - 0.0.0.0/8
+          - 10.0.0.0/8
+          - 100.64.0.0/10
+          - 127.0.0.0/8
+          - 169.254.0.0/16
+          - 172.16.0.0/12
+          - 192.0.0.0/24
+          - 192.0.2.0/24
+          - 192.168.0.0/16
+          - 198.18.0.0/15
+          - 198.51.100.0/24
+          - 203.0.113.0/24
+          - 224.0.0.0/4
+          - 240.0.0.0/4
+      # IANA's currently allocated global-unicast space. Translation, local,
+      # multicast, and otherwise unallocated IPv6 ranges stay outside it.
+      - cidr: 2000::/3
+        except:
+          - 2001::/23
+          - 2001:db8::/32
+          - 2002::/16
+          - 3fff::/20
 
 app:
   # Absolute browser-facing URL used in outbound links. Configure this even
@@ -188,6 +235,8 @@ app:
     # Comma-separated browser origins allowed by CORS. Leave empty to use the
     # app's built-in default.
     corsOrigins: ""
+    # Enable only when every public request reaches the app over HTTPS.
+    enableHsts: false
 
 ingestCronJob:
   enabled: true
@@ -228,7 +277,7 @@ ingestCronJob:
 
 postgresql:
   enabled: true
-  image: pgvector/pgvector:pg16
+  image: pgvector/pgvector:pg16@sha256:a36250871de0833b8757561c72f2477ef1ddd1101afa4e617fb552e0de514c6b
   podSecurityContext:
     fsGroup: 999
     seccompProfile:
@@ -284,7 +333,7 @@ neo4j:
   enabled: false
   image:
     repository: neo4j
-    tag: 5-community
+    tag: 5-community@sha256:362542416de6c09a971484d1893878016cc3b5cdec166e54b1c824a220ecd6b9
     pullPolicy: IfNotPresent
   auth:
     # Name of a pre-existing Secret containing the passwordKey below. When
@@ -305,12 +354,27 @@ neo4j:
     storageClassName: ""
     hostPath: ""
   resources: {}
+  podSecurityContext:
+    fsGroup: 7474
+    seccompProfile:
+      type: RuntimeDefault
+  # Neo4j must retain write access to /data, so do not use a read-only root
+  # filesystem without mounting all image write paths explicitly.
+  containerSecurityContext:
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop: ["ALL"]
 
 ingress:
   enabled: false
   className: ""
   host: news.lihor.ro
   annotations: {}
+  traefik:
+    # Render Traefik CRD middlewares for HTTPS redirect, HSTS, and static
+    # baseline headers. The application remains the only CSP source.
+    middlewareEnabled: false
+    entryPoints: web,websecure
   tls: []
 
 resources:

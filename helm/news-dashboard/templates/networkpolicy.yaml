@@ -1,0 +1,231 @@
+{{- if .Values.networkPolicy.enabled }}
+{{- if or (empty .Values.networkPolicy.ingressController.namespaceSelector) (empty .Values.networkPolicy.ingressController.podSelector) }}
+{{- fail "networkPolicy.ingressController selectors must be configured" }}
+{{- end }}
+{{- $name := include "news-dashboard.name" . }}
+{{- $instance := .Release.Name }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "news-dashboard.fullname" . }}-default-deny
+  labels:
+    app.kubernetes.io/name: {{ $name }}
+    app.kubernetes.io/instance: {{ $instance }}
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+    - Egress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "news-dashboard.fullname" . }}-app
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: {{ $name }}
+      app.kubernetes.io/instance: {{ $instance }}
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - namespaceSelector:
+{{ toYaml .Values.networkPolicy.ingressController.namespaceSelector | indent 12 }}
+          podSelector:
+{{ toYaml .Values.networkPolicy.ingressController.podSelector | indent 12 }}
+      ports:
+        - protocol: TCP
+          port: {{ .Values.service.port }}
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: {{ $name }}-postgres
+              app.kubernetes.io/instance: {{ $instance }}
+      ports:
+        - protocol: TCP
+          port: {{ .Values.postgresql.port }}
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: {{ $name }}-neo4j
+              app.kubernetes.io/instance: {{ $instance }}
+      ports:
+        - protocol: TCP
+          port: {{ .Values.neo4j.service.port }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "news-dashboard.fullname" . }}-ingest
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: {{ $name }}-ingest
+      app.kubernetes.io/instance: {{ $instance }}
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: {{ $name }}-postgres
+              app.kubernetes.io/instance: {{ $instance }}
+      ports:
+        - protocol: TCP
+          port: {{ .Values.postgresql.port }}
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: {{ $name }}-neo4j
+              app.kubernetes.io/instance: {{ $instance }}
+      ports:
+        - protocol: TCP
+          port: {{ .Values.neo4j.service.port }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "news-dashboard.fullname" . }}-postgres
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: {{ $name }}-postgres
+      app.kubernetes.io/instance: {{ $instance }}
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchExpressions:
+              - key: app.kubernetes.io/name
+                operator: In
+                values:
+                  - {{ $name }}
+                  - {{ $name }}-ingest
+                  - {{ $name }}-postgres-backup
+              - key: app.kubernetes.io/instance
+                operator: In
+                values: [{{ $instance }}]
+      ports:
+        - protocol: TCP
+          port: {{ .Values.postgresql.port }}
+{{- if and .Values.postgresql.enabled .Values.postgresql.backup.enabled }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "news-dashboard.fullname" . }}-postgres-backup
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: {{ $name }}-postgres-backup
+      app.kubernetes.io/instance: {{ $instance }}
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: {{ $name }}-postgres
+              app.kubernetes.io/instance: {{ $instance }}
+      ports:
+        - protocol: TCP
+          port: {{ .Values.postgresql.port }}
+{{- end }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "news-dashboard.fullname" . }}-neo4j
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: {{ $name }}-neo4j
+      app.kubernetes.io/instance: {{ $instance }}
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchExpressions:
+              - key: app.kubernetes.io/name
+                operator: In
+                values:
+                  - {{ $name }}
+                  - {{ $name }}-ingest
+              - key: app.kubernetes.io/instance
+                operator: In
+                values: [{{ $instance }}]
+      ports:
+        - protocol: TCP
+          port: {{ .Values.neo4j.service.port }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "news-dashboard.fullname" . }}-dns
+spec:
+  podSelector: {}
+  policyTypes:
+    - Egress
+  egress:
+    - ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "news-dashboard.fullname" . }}-public-egress
+spec:
+  podSelector:
+    matchExpressions:
+      - key: app.kubernetes.io/name
+        operator: In
+        values:
+          - {{ $name }}
+          - {{ $name }}-ingest
+      - key: app.kubernetes.io/instance
+        operator: In
+        values: [{{ $instance }}]
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+{{- range .Values.networkPolicy.publicEgress.ipBlocks }}
+        - ipBlock:
+{{ toYaml . | indent 12 }}
+{{- end }}
+      ports:
+{{- range .Values.networkPolicy.publicEgress.ports }}
+        - protocol: TCP
+          port: {{ . }}
+{{- end }}
+{{- if .Values.networkPolicy.additionalEgress }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "news-dashboard.fullname" . }}-additional-egress
+spec:
+  podSelector:
+    matchExpressions:
+      - key: app.kubernetes.io/name
+        operator: In
+        values:
+          - {{ $name }}
+          - {{ $name }}-ingest
+      - key: app.kubernetes.io/instance
+        operator: In
+        values: [{{ $instance }}]
+  policyTypes:
+    - Egress
+  egress:
+{{ toYaml .Values.networkPolicy.additionalEgress | indent 4 }}
+{{- end }}
+{{- end }}

@@ -46,27 +46,33 @@ SESSION_SECRET=<long random string>
 
 `KEYCLOAK_SERVER_URL` is the browser-visible issuer base. `KEYCLOAK_INTERNAL_SERVER_URL` may point to an internal service if one exists; for the minipc same-host reverse proxy it intentionally matches the public URL.
 
-## Caddy
+## Ingress migration boundary
 
-The minipc Caddy config exposes Keycloak under the same hostname:
+The existing Caddy config exposes Keycloak under the same hostname:
 
 ```caddy
 news.lihor.ro {
 	handle /keycloak* {
 		reverse_proxy 127.0.0.1:8081
 	}
-
-	reverse_proxy 127.0.0.1:30088
 }
 ```
 
-This avoids a separate DNS record and keeps redirect URIs under `https://news.lihor.ro`.
+This avoids a separate DNS record and keeps redirect URIs under
+`https://news.lihor.ro`. The production application now uses the Kubernetes
+Ingress, so the Caddy snippet records only the Keycloak migration boundary. An
+operator must create and verify an equivalent higher-priority `/keycloak`
+Ingress route before stopping Caddy. The two listeners cannot share public
+ports 80 and 443.
 
 Do **not** enable a separate `keycloak.lihor.ro` Caddy site unless the DNS record exists first. If that site is imported while the subdomain is `NXDOMAIN`, Caddy will keep retrying Let's Encrypt issuance and logging ACME DNS failures. For this deployment, the durable public Keycloak base is:
 
 ```text
 https://news.lihor.ro/keycloak
 ```
+
+See [Ingress HTTPS and Caddy migration](https-caddy) for the staged cutover and
+rollback sequence.
 
 ## Helm
 
