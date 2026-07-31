@@ -65,8 +65,11 @@ describe('PWA production build — Content Security Policy compatibility', () =>
 
   it.each([
     ['space before the closing bracket', '</script >'],
-    ['mixed-case closing tag', '</ScRiPt>'],
-    ['whitespace and mixed case in the closing tag', '</SCRIPT\n\t >'],
+    ['tab before the closing bracket', '</script\t>'],
+    ['newline before the closing bracket', '</script\n>'],
+    ['form feed before the closing bracket', '</script\f>'],
+    ['carriage return before the closing bracket', '</script\r>'],
+    ['mixed case and ASCII whitespace', '</ScRiPt \t\n\f\r>'],
   ])('accepts external scripts with %s', (_description, closingTag) => {
     const result = runCspBuildCheck(
       `<script type="module" src="/assets/index.js">${closingTag}` +
@@ -75,6 +78,21 @@ describe('PWA production build — Content Security Policy compatibility', () =>
     );
 
     expect(result.status, result.stderr).toBe(0);
+  });
+
+  it.each([
+    ['non-breaking space', '\u00a0'],
+    ['em space', '\u2003'],
+  ])('rejects %s as script end-tag whitespace', (_description, unicodeWhitespace) => {
+    const result = runCspBuildCheck(
+      `<script src="/assets/index.js"></script${unicodeWhitespace}>` +
+        'window.untrusted = true;</script>' +
+        '<script src="/registerSW.js"></script>',
+      "navigator.serviceWorker.register('/sw.js');"
+    );
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain('inline script');
   });
 
   it('rejects inline script bodies even when the closing tag has whitespace', () => {

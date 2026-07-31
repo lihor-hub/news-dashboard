@@ -73,3 +73,56 @@ exit 0
 
 The unrelated CodeQL scraper cyclic-import notice was intentionally left
 unchanged.
+
+## Follow-up: exact HTML whitespace semantics
+
+The first fix used JavaScript's `\s` class. That class is broader than HTML's
+definition of whitespace: it also accepts Unicode characters such as NBSP
+(`U+00A0`) and em space (`U+2003`). A browser does not close a script element
+at `</script\u00a0>`, but the checker did, allowing the checker to ignore an
+inline body before a later valid `</script>`.
+
+The end-tag matcher now uses the exact HTML ASCII whitespace set:
+
+```text
+</script[ \t\n\f\r]*>
+```
+
+### Follow-up TDD evidence
+
+RED:
+
+```text
+npm run test:frontend -- frontend/src/__tests__/pwa.test.ts
+2 failed, 24 passed
+```
+
+Both NBSP and em-space fixtures expected the checker to reject an inline body,
+but the checker exited 0.
+
+GREEN:
+
+```text
+npm run test:frontend -- frontend/src/__tests__/pwa.test.ts
+1 test file passed, 26 tests passed
+```
+
+The suite explicitly accepts space, tab, LF, form-feed, and CR before `>`,
+including a mixed-case closing tag, and rejects NBSP and em space as end-tag
+whitespace.
+
+Fresh follow-up verification:
+
+```text
+npm run lint
+exit 0
+
+npm run format:check
+exit 0
+
+npm run typecheck
+exit 0
+
+npm run build
+exit 0; CSP checker accepted the generated external registration script
+```
