@@ -12,7 +12,7 @@ import yaml
 ROOT = Path(__file__).resolve().parents[1]
 CHART = ROOT / "helm" / "news-dashboard"
 PRODUCTION_VALUES = CHART / "values-production.yaml"
-ADDITIONAL_EGRESS_EXAMPLE = ROOT / "deploy" / "additional-egress-values.example.yaml"
+ADDITIONAL_EGRESS_EXAMPLE = ROOT / "deploy" / "additional-egress-values.example.json"
 TEST_APP_DIGEST = f"sha256:{'a' * 64}"
 PUBLIC_EGRESS_IPV4_EXCEPTIONS = {
     "0.0.0.0/8",

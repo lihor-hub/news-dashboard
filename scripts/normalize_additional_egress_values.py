@@ -3,73 +3,60 @@
 
 from __future__ import annotations
 
+import json
+import math
 import sys
-from collections.abc import Hashable
 from pathlib import Path
 from typing import Any
 
-import yaml
-from yaml.constructor import ConstructorError
-from yaml.nodes import MappingNode
-from yaml.tokens import AliasToken, AnchorToken
-
-_MAPPING_TAG = "tag:yaml.org,2002:map"
-_MERGE_TAG = "tag:yaml.org,2002:merge"
+_MAX_INPUT_BYTES = 64 * 1024
+_MAX_NESTING_DEPTH = 32
+_INVALID_MESSAGE = "Invalid additional egress values.\n"
 
 
 class AdditionalEgressValuesError(ValueError):
     """Raised when input is not the exact additional-egress values structure."""
 
 
-class _StrictSafeLoader(yaml.SafeLoader):
-    """Safe YAML loader that rejects duplicate and merge keys."""
-
-    def construct_mapping(self, node: MappingNode, deep: bool = False) -> dict[Any, Any]:
-        if not isinstance(node, MappingNode):
-            raise ConstructorError(None, None, "expected a mapping node", node.start_mark)
-
-        keys: set[Hashable] = set()
-        for key_node, _ in node.value:
-            if key_node.tag == _MERGE_TAG:
-                raise AdditionalEgressValuesError
-            key = self.construct_object(key_node, deep=deep)
-            if not isinstance(key, Hashable) or key in keys:
-                raise AdditionalEgressValuesError
-            keys.add(key)
-
-        return super().construct_mapping(node, deep=deep)
+def _reject_duplicate_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    result: dict[str, Any] = {}
+    for key, value in pairs:
+        if key in result:
+            raise AdditionalEgressValuesError
+        result[key] = value
+    return result
 
 
-_StrictSafeLoader.add_constructor(_MAPPING_TAG, _StrictSafeLoader.construct_mapping)
+def _reject_nonstandard_constant(_value: str) -> None:
+    raise AdditionalEgressValuesError
 
 
-class _NoAliasSafeDumper(yaml.SafeDumper):
-    """Emit a self-contained document without aliases."""
-
-    def ignore_aliases(self, _data: Any) -> bool:
-        return True
-
-
-def _load_documents(content: str) -> list[Any]:
-    if any(
-        isinstance(token, (AliasToken, AnchorToken))
-        for token in yaml.scan(content, Loader=yaml.SafeLoader)
-    ):
-        raise AdditionalEgressValuesError
-    return list(yaml.load_all(content, Loader=_StrictSafeLoader))
+def _validate_nesting_and_numbers(root: Any) -> None:
+    pending = [(root, 0)]
+    while pending:
+        value, depth = pending.pop()
+        if depth > _MAX_NESTING_DEPTH:
+            raise AdditionalEgressValuesError
+        if isinstance(value, dict):
+            pending.extend((child, depth + 1) for child in value.values())
+        elif isinstance(value, list):
+            pending.extend((child, depth + 1) for child in value)
+        elif isinstance(value, float) and not math.isfinite(value):
+            raise AdditionalEgressValuesError
 
 
-def normalize_additional_egress_values(content: str) -> str:
-    """Return safe normalized YAML for exactly ``networkPolicy.additionalEgress``."""
-    try:
-        documents = _load_documents(content)
-    except (AdditionalEgressValuesError, yaml.YAMLError) as exc:
-        raise AdditionalEgressValuesError from exc
-
-    if len(documents) != 1:
+def normalize_additional_egress_values(content: bytes) -> str:
+    """Return safe normalized JSON for exactly ``networkPolicy.additionalEgress``."""
+    if len(content) > _MAX_INPUT_BYTES:
         raise AdditionalEgressValuesError
 
-    document = documents[0]
+    document = json.loads(
+        content.decode("utf-8"),
+        object_pairs_hook=_reject_duplicate_keys,
+        parse_constant=_reject_nonstandard_constant,
+    )
+    _validate_nesting_and_numbers(document)
+
     if not isinstance(document, dict) or set(document) != {"networkPolicy"}:
         raise AdditionalEgressValuesError
 
@@ -82,18 +69,18 @@ def normalize_additional_egress_values(content: str) -> str:
         raise AdditionalEgressValuesError
 
     normalized = {"networkPolicy": {"additionalEgress": additional_egress}}
-    return yaml.dump(
-        normalized,
-        Dumper=_NoAliasSafeDumper,
-        default_flow_style=False,
-        sort_keys=False,
-    )
+    return json.dumps(normalized, indent=2) + "\n"
 
 
-def _read_input(path: str) -> str:
+def _read_bounded_input(path: str) -> bytes:
     if path == "-":
-        return sys.stdin.read()
-    return Path(path).read_text()
+        content = sys.stdin.buffer.read(_MAX_INPUT_BYTES + 1)
+    else:
+        with Path(path).open("rb") as input_file:
+            content = input_file.read(_MAX_INPUT_BYTES + 1)
+    if len(content) > _MAX_INPUT_BYTES:
+        raise AdditionalEgressValuesError
+    return content
 
 
 def main() -> int:
@@ -102,10 +89,18 @@ def main() -> int:
         return 2
 
     try:
-        content = _read_input(sys.argv[1])
+        content = _read_bounded_input(sys.argv[1])
         normalized = normalize_additional_egress_values(content)
-    except (AdditionalEgressValuesError, OSError, UnicodeError):
-        sys.stderr.write("Invalid additional egress values structure.\n")
+    except (
+        json.JSONDecodeError,
+        AdditionalEgressValuesError,
+        MemoryError,
+        OSError,
+        RecursionError,
+        UnicodeError,
+        ValueError,
+    ):
+        sys.stderr.write(_INVALID_MESSAGE)
         return 2
 
     try:

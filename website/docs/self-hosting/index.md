@@ -97,11 +97,12 @@ helm upgrade --install news-dashboard ./helm/news-dashboard \
 Supply secrets and installation-specific persistence at runtime. Do not commit
 them to a values file or pass their values through Helm's `--set` arguments.
 The shared helper uses protected temporary files and removes them on exit.
-Private/custom endpoints require a policy-only additional-egress values file.
-Use `deploy/additional-egress-values.example.yaml` as the shape and persist it
-through `ADDITIONAL_EGRESS_VALUES_FILE` for manual deploys or the production
-GitHub environment variable `ADDITIONAL_EGRESS_VALUES` for CI. Never put
-credentials in this non-secret NetworkPolicy input.
+Private/custom endpoints require a policy-only strict JSON additional-egress
+values file. Use `deploy/additional-egress-values.example.json` as the shape and
+persist it through `ADDITIONAL_EGRESS_VALUES_FILE` for manual deploys or the
+production GitHub environment variable `ADDITIONAL_EGRESS_VALUES` for CI. Never
+put credentials in this non-secret NetworkPolicy input. YAML-only syntax,
+aliases, merge keys, comments, and multiple documents are rejected.
 Before public cutover, verify the ClusterIP Service, TLS Ingress, backups and
 restore, rollback revision, and the existing `/keycloak` route. Caddy cannot
 share ports 80 and 443 with the ingress controller.

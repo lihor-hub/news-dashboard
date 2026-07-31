@@ -29,7 +29,7 @@ prepare_production_additional_egress_file() {
   fi
 
   local input_file="${1:?additional egress input path is required}"
-  PRODUCTION_ADDITIONAL_EGRESS_FILE="${PRODUCTION_HELM_SECRET_DIR}/additional-egress-values.yaml"
+  PRODUCTION_ADDITIONAL_EGRESS_FILE="${PRODUCTION_HELM_SECRET_DIR}/additional-egress-values.json"
   python3 ./scripts/normalize_additional_egress_values.py \
     "${input_file}" "${PRODUCTION_ADDITIONAL_EGRESS_FILE}"
   chmod 600 "${PRODUCTION_ADDITIONAL_EGRESS_FILE}"

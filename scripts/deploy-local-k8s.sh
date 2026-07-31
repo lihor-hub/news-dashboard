@@ -17,7 +17,7 @@
 # Optional environment:
 #   OPENAI_API_KEY       enables Ask AI
 #   ADDITIONAL_EGRESS_VALUES_FILE
-#                        persistent non-secret Helm values for private/custom
+#                        persistent non-secret strict JSON file containing only
 #                        networkPolicy.additionalEgress destinations
 set -euo pipefail
 
@@ -73,7 +73,7 @@ prepare_production_helm_secret_files
 ADDITIONAL_EGRESS_HELM_ARGS=()
 if [[ -n "${ADDITIONAL_EGRESS_VALUES_FILE:-}" ]]; then
   if [[ ! -f "${ADDITIONAL_EGRESS_VALUES_FILE}" ]]; then
-    echo "ADDITIONAL_EGRESS_VALUES_FILE must name a readable YAML file." >&2
+    echo "ADDITIONAL_EGRESS_VALUES_FILE must name a readable strict JSON file." >&2
     exit 1
   fi
   prepare_production_additional_egress_file "${ADDITIONAL_EGRESS_VALUES_FILE}"

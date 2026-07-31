@@ -140,6 +140,7 @@ def test_deploy_normalizes_persistent_non_secret_additional_egress_values() -> N
     assert deploy_step["env"]["ADDITIONAL_EGRESS_VALUES"] == (  # noqa: S101
         "${{ vars.ADDITIONAL_EGRESS_VALUES }}"
     )
+    assert "Non-secret strict JSON" in CI_WORKFLOW.read_text()  # noqa: S101
     ci_normalize_index = script.index("prepare_production_additional_egress_file")
     ci_helm_index = script.index('helm "${helm_args[@]}"')
     assert ci_normalize_index < ci_helm_index  # noqa: S101
@@ -148,6 +149,7 @@ def test_deploy_normalizes_persistent_non_secret_additional_egress_values() -> N
     assert '"${additional_egress_helm_args[@]}"' in script  # noqa: S101
 
     assert "ADDITIONAL_EGRESS_VALUES_FILE" in helper  # noqa: S101
+    assert "strict JSON file" in helper  # noqa: S101
     helper_normalize_index = helper.index("prepare_production_additional_egress_file")
     helper_helm_index = helper.index("helm upgrade --install")
     assert helper_normalize_index < helper_helm_index  # noqa: S101

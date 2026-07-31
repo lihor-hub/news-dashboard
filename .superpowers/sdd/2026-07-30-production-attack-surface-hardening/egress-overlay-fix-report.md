@@ -100,3 +100,101 @@ An optional full-tree pre-commit sweep also found an existing Ruff `ISC004`
 finding in the unrelated, unchanged `scripts/check_live_content_extraction.py`.
 The staged-file hook set passed; this change does not modify or absorb that
 baseline issue.
+
+## Scoped review follow-up: strict JSON and bounded parsing
+
+This follow-up supersedes the YAML input contract and PyYAML runtime concern
+described above. Operator input is now strict JSON, which remains a valid Helm
+values format but can be parsed entirely with the Python standard library.
+Production deployment no longer depends on PyYAML.
+
+The normalizer reads at most 64 KiB before parsing, decodes strict UTF-8, rejects
+duplicate keys at every object level with `object_pairs_hook`, rejects
+non-standard numeric constants and non-finite floats, and limits the parsed
+tree to 32 levels. JSON parsing inherently rejects YAML aliases, anchors, merge
+keys, comments, tags, and multiple documents. Every invalid or resource-limit
+case exits with the single bounded message:
+
+```text
+Invalid additional egress values.
+```
+
+The exact accepted shape remains:
+
+```json
+{
+  "networkPolicy": {
+    "additionalEgress": [
+      {
+        "to": [
+          {
+            "ipBlock": {
+              "cidr": "10.20.0.0/24"
+            }
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+Both production entry points pass only normalized mode-600 JSON to Helm and
+remove it through the existing cleanup trap. CI continues to provide the input
+over standard input, while manual deployment reads the configured operator
+file. The tracked example and operator documentation now consistently use
+`deploy/additional-egress-values.example.json` and explicitly require strict
+JSON.
+
+### Follow-up TDD evidence
+
+The focused RED run added the resource and dependency regressions before the
+implementation:
+
+```bash
+PATH="$PWD/.venv/bin:$PATH" .venv/bin/pytest \
+  scripts/test_additional_egress_values.py \
+  scripts/test_ci_deploy_namespace.py::test_deploy_normalizes_persistent_non_secret_additional_egress_values \
+  scripts/test_helm_security_hardening.py::test_operator_additional_egress_example_renders_private_custom_service \
+  -v -n 0
+```
+
+Result: **21 failed**. The old validator failed immediately without site
+packages, leaked a PyYAML import traceback, lacked bounded resource handling,
+emitted YAML rather than exact JSON, and left the docs/example on the YAML
+contract.
+
+After the stdlib-only implementation and contract updates, the same run
+reported **21 passed**. The cases include the original unrestricted overlay,
+duplicate keys, YAML aliases/merge and multiple-document input, unknown keys,
+empty and wrong types, a 5,000-digit integer, 1,500 nesting levels, invalid
+UTF-8, input above 64 KiB, exact generic stderr, isolated `python -S` execution,
+mode-600 cleanup, exact normalized JSON, and rendered NetworkPolicy behavior.
+
+The expanded affected suite:
+
+```bash
+PATH="$PWD/.venv/bin:$PATH" .venv/bin/pytest \
+  scripts/test_additional_egress_values.py \
+  scripts/test_ci_deploy_namespace.py \
+  scripts/test_helm_security_hardening.py \
+  scripts/test_supply_chain_pins.py \
+  scripts/test_trivy_workflows.py -q -n 0
+```
+
+Result: **73 passed**.
+
+Follow-up verification:
+
+- `make helm-validate` — 17 Helm security tests passed and every chart
+  lint/template command completed.
+- `make lint` and `make typecheck` — all repository lint, dead-code, formatting,
+  Python typechecker, and frontend typecheck gates passed.
+- Focused Ruff and format checks, Bash syntax, ShellCheck, workflow YAML
+  parsing, stale YAML-contract search, and `git diff --check` passed.
+- Staged commit hooks passed, including JSON/YAML checks, secret-key detection,
+  Ruff, mypy, ty, pyrefly, Vulture, Prettier, and applicable frontend checks.
+
+No live Helm upgrade or cluster mutation was performed. The parser is
+stdlib-only and fails before Helm on invalid, oversized, deeply nested, or
+undecodable input.

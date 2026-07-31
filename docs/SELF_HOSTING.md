@@ -461,11 +461,12 @@ visible.
 The public egress policy allows HTTPS and standard authenticated mail ports only
 to globally routable addresses. Private/custom endpoints require
 `networkPolicy.additionalEgress`. Copy
-`deploy/additional-egress-values.example.yaml` to a protected operator path and
+`deploy/additional-egress-values.example.json` to a protected operator path and
 set `ADDITIONAL_EGRESS_VALUES_FILE` on every manual deployment. For CI, store
-the same policy-only YAML in the production environment variable
+the same policy-only strict JSON in the production environment variable
 `ADDITIONAL_EGRESS_VALUES`; it persists across Helm upgrades and must not
-contain credentials.
+contain credentials. YAML-only syntax, aliases, merge keys, comments, and
+multiple documents are rejected.
 
 Live appliance installation and cutover are intentionally not automated from
 pull-request CI. Complete the DNS/TLS, ingress-controller, firewall, Keycloak,

@@ -460,12 +460,13 @@ without requiring access to the production appliance.
 
 Public egress excludes private and other non-global networks. For an external
 PostgreSQL, SMTP, Keycloak, or other private/custom endpoint, copy
-`deploy/additional-egress-values.example.yaml` outside the repository and set
+`deploy/additional-egress-values.example.json` outside the repository and set
 `ADDITIONAL_EGRESS_VALUES_FILE` to that path for every manual deployment. CI
-operators can instead store the same non-secret YAML in the production
+operators can instead store the same non-secret strict JSON in the production
 environment variable `ADDITIONAL_EGRESS_VALUES`; both inputs are re-applied on
 every Helm upgrade. Keep credentials in Kubernetes/GitHub secrets, never in
-this policy-only values input.
+this policy-only values input. YAML syntax, aliases, merge keys, comments, and
+multiple documents are intentionally not accepted.
 
 Automated and local live application of this overlay is disabled until the
 operator sets `INGRESS_CUTOVER_ENABLED=true` after completing the readiness

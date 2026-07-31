@@ -669,7 +669,7 @@ jobs:
           DIFY_CHAT_APP_TOKEN: ${{ secrets.DIFY_CHAT_APP_TOKEN }}
           DIFY_CHAT_BASE_URL: ${{ vars.DIFY_CHAT_BASE_URL }}
           DIFY_CHAT_TITLE: ${{ vars.DIFY_CHAT_TITLE }}
-          # Non-secret YAML containing only networkPolicy.additionalEgress.
+          # Non-secret strict JSON containing only networkPolicy.additionalEgress.
           # A repository/environment variable persists this input across upgrades.
           ADDITIONAL_EGRESS_VALUES: ${{ vars.ADDITIONAL_EGRESS_VALUES }}
         run: |
