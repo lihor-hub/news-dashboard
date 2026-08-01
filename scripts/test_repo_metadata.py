@@ -61,6 +61,26 @@ class TestVultureWhitelistExists(unittest.TestCase):
         )
 
 
+class TestDependabotNpmProjects(unittest.TestCase):
+    _NPM_UPDATE = re.compile(
+        r'^  - package-ecosystem: "npm"\n(?P<configuration>.*?)(?=^  - |\Z)',
+        re.MULTILINE | re.DOTALL,
+    )
+
+    def test_expected_npm_projects_are_covered_exactly_once(self) -> None:
+        dependabot = (ROOT / ".github" / "dependabot.yml").read_text()
+        directories = [
+            re.search(
+                r'^    directory: "(?P<directory>[^"]+)"$',
+                match.group("configuration"),
+                re.MULTILINE,
+            )["directory"]
+            for match in self._NPM_UPDATE.finditer(dependabot)
+        ]
+
+        assert sorted(directories) == ["/", "/desktop", "/website"]
+
+
 class TestNoDuplicateDocusaurusSourceFiles(unittest.TestCase):
     """A compiled/generated ``.js`` file checked in beside its ``.tsx`` source under
     ``website/src`` makes Docusaurus register the same page or component twice
