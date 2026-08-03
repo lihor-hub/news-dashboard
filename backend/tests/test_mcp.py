@@ -1,12 +1,19 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Generator
+from collections.abc import AsyncIterator, Generator
+from contextlib import asynccontextmanager
 from threading import Event
 from typing import Any
 
+import httpx
 import pytest
 from fastapi.testclient import TestClient
+from fastmcp import Client
+from fastmcp.client.transports import StreamableHttpTransport
+from mcp.shared.exceptions import McpError
+from starlette.applications import Starlette
+from starlette.routing import Mount
 
 from news_dashboard.db import connect
 from news_dashboard.main import app
@@ -21,15 +28,19 @@ def _make_user(database_url: str, username: str) -> int:
     return int(row["id"])
 
 
-def _seed_source(database_url: str, slug: str = "test-source") -> None:
+def _seed_source(
+    database_url: str, slug: str = "test-source", *, owner_user_id: int | None = None
+) -> None:
     with connect(database_url=database_url) as conn:
         conn.execute(
             """
-            INSERT INTO sources(slug, name, url, category, kind, priority, enabled)
-            VALUES (%s, %s, %s, 'engineering', 'rss', 50, TRUE)
+            INSERT INTO sources(
+                slug, name, url, category, kind, priority, enabled, owner_user_id
+            )
+            VALUES (%s, %s, %s, 'engineering', 'rss', 50, TRUE, %s)
             ON CONFLICT(slug) DO NOTHING
             """,
-            (slug, slug, f"https://example.com/{slug}.xml"),
+            (slug, slug, f"https://example.com/{slug}.xml", owner_user_id),
         )
 
 
@@ -58,19 +69,6 @@ def _seed_article(database_url: str, article_id: int, source_slug: str = "test-s
                 "",
             ),
         )
-
-
-def _insert_briefing(database_url: str, user_id: int) -> int:
-    with connect(database_url=database_url) as conn:
-        row = conn.execute(
-            """
-            INSERT INTO briefings(scope, status, title, summary, user_id)
-            VALUES ('since_last_briefing', 'complete', 'Test Brief', 'Summary', %s)
-            RETURNING id
-            """,
-            (user_id,),
-        ).fetchone()
-    return int(row["id"])
 
 
 # ─── service.py — token lifecycle ────────────────────────────────────────────
@@ -243,186 +241,224 @@ def test_token_verifier_keeps_event_loop_responsive(monkeypatch: pytest.MonkeyPa
     asyncio.run(exercise_verifier())
 
 
-# ─── tools.py — scope checks and result bounds ───────────────────────────────
+# ─── FastMCP transport ────────────────────────────────────────────────────────
 
 
-def test_call_tool_rejects_unknown_tool(pg_clean: str) -> None:
-    from news_dashboard.mcp.tools import ToolError, call_tool
+@asynccontextmanager
+async def _mcp_client(token: str | None) -> AsyncIterator[Client[Any]]:
+    from news_dashboard.mcp.server import mcp_http_app
 
-    alice = _make_user(pg_clean, "alice-tool")
-    with pytest.raises(ToolError) as exc_info:
-        call_tool("delete_everything", {}, user_id=alice, scopes={"search", "read", "ask"})
-    assert exc_info.value.status_code == 404
-
-
-def test_call_tool_enforces_scope(pg_clean: str) -> None:
-    from news_dashboard.mcp.tools import ToolError, call_tool
-
-    alice = _make_user(pg_clean, "alice-scope")
-    with pytest.raises(ToolError) as exc_info:
-        call_tool("search_articles", {"q": ""}, user_id=alice, scopes=set())
-    assert exc_info.value.status_code == 403
-
-
-def test_search_articles_tool_is_scoped_per_user(pg_clean: str) -> None:
-    from news_dashboard.mcp.tools import call_tool
-
-    _seed_source(pg_clean)
-    alice = _make_user(pg_clean, "alice-search")
-    bob = _make_user(pg_clean, "bob-search")
-    _seed_article(pg_clean, 1)
-
-    with connect(database_url=pg_clean) as conn:
-        conn.execute(
-            "INSERT INTO user_sources(user_id, source_slug, enabled) VALUES (%s, %s, %s)",
-            (bob, "test-source", False),
-        )
-
-    alice_result = call_tool("search_articles", {"limit": 100}, user_id=alice, scopes={"search"})
-    bob_result = call_tool("search_articles", {"limit": 100}, user_id=bob, scopes={"search"})
-
-    assert any(a["id"] == 1 for a in alice_result["articles"])
-    assert not any(a["id"] == 1 for a in bob_result["articles"])
-
-
-def test_search_articles_tool_clamps_limit(pg_clean: str) -> None:
-    from news_dashboard.mcp.models import MAX_RESULT_LIMIT
-    from news_dashboard.mcp.tools import call_tool
-
-    _seed_source(pg_clean)
-    alice = _make_user(pg_clean, "alice-clamp")
-
-    result = call_tool("search_articles", {"limit": 999999}, user_id=alice, scopes={"search"})
-    assert len(result["articles"]) <= MAX_RESULT_LIMIT
-
-
-def test_get_article_tool_denies_invisible_article(pg_clean: str) -> None:
-    from news_dashboard.mcp.tools import ToolError, call_tool
-
-    _seed_source(pg_clean, "private-source")
-    alice = _make_user(pg_clean, "alice-owner")
-    bob = _make_user(pg_clean, "bob-visitor")
-    _seed_article(pg_clean, 42, source_slug="private-source")
-
-    with connect(database_url=pg_clean) as conn:
-        conn.execute(
-            "UPDATE sources SET owner_user_id = %s, enabled = TRUE WHERE slug = %s",
-            (alice, "private-source"),
-        )
-
-    owner_result = call_tool("get_article", {"article_id": 42}, user_id=alice, scopes={"read"})
-    assert owner_result["article"]["id"] == 42
-
-    with pytest.raises(ToolError) as exc_info:
-        call_tool("get_article", {"article_id": 42}, user_id=bob, scopes={"read"})
-    assert exc_info.value.status_code == 404
-
-
-def test_list_briefings_tool_is_scoped_per_user(pg_clean: str) -> None:
-    from news_dashboard.mcp.tools import call_tool
-
-    alice = _make_user(pg_clean, "alice-brief")
-    bob = _make_user(pg_clean, "bob-brief")
-    _insert_briefing(pg_clean, alice)
-
-    alice_result = call_tool("list_briefings", {}, user_id=alice, scopes={"briefings"})
-    bob_result = call_tool("list_briefings", {}, user_id=bob, scopes={"briefings"})
-
-    assert len(alice_result["briefings"]) == 1
-    assert bob_result["briefings"] == []
-
-
-def _pack(vector: list[float]) -> str:
-    """A pgvector literal padded to the real embedding_vec(1536) width."""
-    from news_dashboard.db import EMBEDDING_DIMENSIONS
-    from news_dashboard.embeddings import vector_literal
-
-    return vector_literal(vector + [0.0] * (EMBEDDING_DIMENSIONS - len(vector)))
-
-
-def _make_openai_stub(monkeypatch: pytest.MonkeyPatch, answer: str = "ok") -> None:
-    from langchain_core.messages import AIMessage
-    from langchain_core.runnables import RunnableLambda
-
-    class FakeEmbeddingData:
-        def __init__(self) -> None:
-            from news_dashboard.db import EMBEDDING_DIMENSIONS
-
-            self.embedding = [0.1] * 10 + [0.0] * (EMBEDDING_DIMENSIONS - 10)
-
-    class FakeEmbeddingResponse:
-        def __init__(self) -> None:
-            self.data = [FakeEmbeddingData()]
-
-    class FakeEmbeddings:
-        def create(self, **_: Any) -> FakeEmbeddingResponse:
-            return FakeEmbeddingResponse()
-
-    class FakeOpenAI:
-        def __init__(self, **_: object) -> None:
-            self.embeddings = FakeEmbeddings()
-
-    monkeypatch.setattr("news_dashboard.ai_client.get_openai_client", FakeOpenAI)
-    monkeypatch.setattr(
-        "news_dashboard.ai_client.get_chat_model",
-        lambda **_kwargs: RunnableLambda(lambda _value: AIMessage(content=answer)),
+    transport_app = Starlette(
+        routes=[Mount("/mcp", app=mcp_http_app)],
+        lifespan=mcp_http_app.lifespan,
     )
-    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+
+    def httpx_client_factory(
+        headers: dict[str, str] | None = None,
+        timeout: httpx.Timeout | None = None,
+        auth: httpx.Auth | None = None,
+        *,
+        follow_redirects: bool = True,
+    ) -> httpx.AsyncClient:
+        return httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=transport_app),
+            base_url="http://mcp.test",
+            headers=headers,
+            timeout=timeout,
+            auth=auth,
+            follow_redirects=follow_redirects,
+        )
+
+    transport = StreamableHttpTransport(
+        "http://mcp.test/mcp/",
+        auth=token,
+        httpx_client_factory=httpx_client_factory,
+    )
+    client_error: BaseException | None = None
+    async with transport_app.router.lifespan_context(transport_app):
+        try:
+            async with Client(transport) as mcp_client:
+                yield mcp_client
+        except BaseException as exc:
+            client_error = exc
+    if client_error is not None:
+        raise client_error
 
 
-def test_ask_tool_rejects_empty_query(pg_clean: str) -> None:
-    from news_dashboard.mcp.tools import ToolError, call_tool
+def test_fastmcp_initializes_and_lists_only_latest_news_tool(
+    pg_clean: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from news_dashboard.mcp import service
 
-    alice = _make_user(pg_clean, "alice-ask-empty")
-    with pytest.raises(ToolError):
-        call_tool("ask", {"query": "   "}, user_id=alice, scopes={"ask"})
+    monkeypatch.setenv("DATABASE_URL", pg_clean)
+    monkeypatch.setenv("MCP_SERVER_ENABLED", "true")
+    user_id = _make_user(pg_clean, "alice-fastmcp-list")
+    created = service.create_token(user_id, "client", scopes=("search",), database_url=pg_clean)
+
+    async def exercise() -> None:
+        async with _mcp_client(created["token"]) as mcp_client:
+            tools = await mcp_client.list_tools()
+        assert [tool.name for tool in tools] == ["list_latest_news"]
+
+    asyncio.run(exercise())
 
 
-def test_ask_tool_answers_over_users_corpus(pg_clean: str, monkeypatch: pytest.MonkeyPatch) -> None:
-    from news_dashboard.mcp.tools import call_tool
+def test_latest_news_returns_compact_articles_visible_to_token_owner(
+    pg_clean: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from news_dashboard.mcp import service
 
+    monkeypatch.setenv("DATABASE_URL", pg_clean)
+    monkeypatch.setenv("MCP_SERVER_ENABLED", "true")
+    alice = _make_user(pg_clean, "alice-fastmcp-news")
     _seed_source(pg_clean)
-    alice = _make_user(pg_clean, "alice-ask")
-    embedding = _pack([0.1] * 10)
-    with connect(database_url=pg_clean) as conn:
-        for i in range(1, 6):
-            conn.execute(
-                """
-                INSERT INTO articles(
-                    id, url, canonical_url, title, source_slug, source_name,
-                    category, kind, status, importance_score, summary, reason,
-                    tags, embedding_vec
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s::vector)
-                """,
-                (
-                    i,
-                    f"https://example.com/{i}",
-                    f"https://example.com/{i}",
-                    f"Article {i}",
-                    "test-source",
-                    "test-source",
-                    "engineering",
-                    "rss",
-                    "saved",
-                    0.5,
-                    f"Summary {i}",
-                    "",
-                    "",
-                    embedding,
-                ),
-            )
-            conn.execute(
-                "INSERT INTO user_article_state(user_id, article_id, state)"
-                " VALUES (%s, %s, 'done')",
-                (alice, i),
-            )
+    _seed_article(pg_clean, 1)
+    created = service.create_token(alice, "client", scopes=("search",), database_url=pg_clean)
 
-    _make_openai_stub(monkeypatch, answer="corpus answer")
-    result = call_tool("ask", {"query": "what's new?"}, user_id=alice, scopes={"ask"})
-    assert result["answer"] == "corpus answer"
+    async def exercise() -> None:
+        async with _mcp_client(created["token"]) as mcp_client:
+            result = await mcp_client.call_tool("list_latest_news", {"limit": 10})
+        assert result.structured_content is not None
+        articles = result.structured_content["articles"]
+        assert len(articles) == 1
+        article = articles[0]
+        discovered_at = article.pop("discovered_at")
+        assert isinstance(discovered_at, str)
+        assert article == {
+            "id": 1,
+            "title": "Article 1",
+            "url": "https://example.com/1",
+            "source_slug": "test-source",
+            "source_name": "test-source",
+            "category": "engineering",
+            "published_at": None,
+            "summary": "Summary 1",
+            "state": "today",
+        }
+
+    asyncio.run(exercise())
 
 
-# ─── HTTP endpoints ───────────────────────────────────────────────────────────
+def test_latest_news_isolates_private_sources_by_token_owner(
+    pg_clean: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from news_dashboard.mcp import service
+
+    monkeypatch.setenv("DATABASE_URL", pg_clean)
+    monkeypatch.setenv("MCP_SERVER_ENABLED", "true")
+    alice = _make_user(pg_clean, "alice-private-mcp")
+    bob = _make_user(pg_clean, "bob-private-mcp")
+    _seed_source(pg_clean, "alice-private", owner_user_id=alice)
+    _seed_article(pg_clean, 42, source_slug="alice-private")
+    alice_token = service.create_token(alice, "client", scopes=("search",), database_url=pg_clean)
+    bob_token = service.create_token(bob, "client", scopes=("search",), database_url=pg_clean)
+
+    async def article_ids(token: str) -> list[int]:
+        async with _mcp_client(token) as mcp_client:
+            result = await mcp_client.call_tool("list_latest_news")
+        assert result.structured_content is not None
+        return [article["id"] for article in result.structured_content["articles"]]
+
+    assert asyncio.run(article_ids(alice_token["token"])) == [42]
+    assert asyncio.run(article_ids(bob_token["token"])) == []
+
+
+def test_latest_news_requires_search_scope(pg_clean: str, monkeypatch: pytest.MonkeyPatch) -> None:
+    from news_dashboard.mcp import service
+
+    monkeypatch.setenv("DATABASE_URL", pg_clean)
+    monkeypatch.setenv("MCP_SERVER_ENABLED", "true")
+    user_id = _make_user(pg_clean, "alice-fastmcp-scope")
+    created = service.create_token(user_id, "client", scopes=("read",), database_url=pg_clean)
+
+    async def exercise() -> None:
+        async with _mcp_client(created["token"]) as mcp_client:
+            assert await mcp_client.list_tools() == []
+            result = await mcp_client.call_tool("list_latest_news", raise_on_error=False)
+        assert result.is_error is True
+
+    asyncio.run(exercise())
+
+
+@pytest.mark.parametrize(
+    "arguments",
+    [
+        {"date_range": "year"},
+        {"sources": [f"source-{index}" for index in range(51)]},
+    ],
+)
+def test_latest_news_rejects_invalid_or_unbounded_filters(
+    pg_clean: str,
+    monkeypatch: pytest.MonkeyPatch,
+    arguments: dict[str, Any],
+) -> None:
+    from news_dashboard.mcp import service
+
+    monkeypatch.setenv("DATABASE_URL", pg_clean)
+    monkeypatch.setenv("MCP_SERVER_ENABLED", "true")
+    user_id = _make_user(pg_clean, f"alice-invalid-{len(arguments)}")
+    created = service.create_token(user_id, "client", scopes=("search",), database_url=pg_clean)
+
+    async def exercise() -> None:
+        async with _mcp_client(created["token"]) as mcp_client:
+            result = await mcp_client.call_tool("list_latest_news", arguments, raise_on_error=False)
+        assert result.is_error is True
+
+    asyncio.run(exercise())
+
+
+def test_latest_news_clamps_limit_to_twenty_five(
+    pg_clean: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from news_dashboard.mcp import service
+
+    monkeypatch.setenv("DATABASE_URL", pg_clean)
+    monkeypatch.setenv("MCP_SERVER_ENABLED", "true")
+    user_id = _make_user(pg_clean, "alice-fastmcp-limit")
+    _seed_source(pg_clean)
+    for article_id in range(1, 31):
+        _seed_article(pg_clean, article_id)
+    created = service.create_token(user_id, "client", scopes=("search",), database_url=pg_clean)
+
+    async def exercise() -> None:
+        async with _mcp_client(created["token"]) as mcp_client:
+            result = await mcp_client.call_tool("list_latest_news", {"limit": 10_000})
+        assert result.structured_content is not None
+        assert len(result.structured_content["articles"]) == 25
+
+    asyncio.run(exercise())
+
+
+@pytest.mark.parametrize("mode", ["revoked", "unauthenticated", "disabled"])
+def test_fastmcp_transport_rejects_unavailable_authentication(
+    pg_clean: str, monkeypatch: pytest.MonkeyPatch, mode: str
+) -> None:
+    from news_dashboard.mcp import service
+
+    monkeypatch.setenv("DATABASE_URL", pg_clean)
+    monkeypatch.setenv("MCP_SERVER_ENABLED", "true")
+    user_id = _make_user(pg_clean, f"alice-fastmcp-{mode}")
+    created = service.create_token(user_id, "client", scopes=("search",), database_url=pg_clean)
+    token: str | None = created["token"]
+    if mode == "revoked":
+        service.revoke_token(user_id, created["id"], database_url=pg_clean)
+    elif mode == "unauthenticated":
+        token = None
+    else:
+        monkeypatch.setenv("MCP_SERVER_ENABLED", "false")
+
+    async def exercise() -> None:
+        expected_exception = McpError if mode == "disabled" else httpx.HTTPStatusError
+        with pytest.raises(expected_exception) as exc_info:
+            async with _mcp_client(token):
+                pass
+        if isinstance(exc_info.value, httpx.HTTPStatusError):
+            assert exc_info.value.response.status_code == 401
+
+    asyncio.run(exercise())
+
+
+# ─── HTTP token-management endpoints ─────────────────────────────────────────
 
 
 @pytest.fixture
@@ -517,90 +553,6 @@ def test_create_token_rejects_empty_scope_list(
         assert resp.status_code == 422
 
 
-def test_rpc_endpoint_rejects_missing_or_invalid_bearer(
-    client: TestClient, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.setenv("MCP_SERVER_ENABLED", "true")
-
-    resp = client.post("/api/mcp/rpc", json={"tool": "search_articles", "arguments": {}})
-    assert resp.status_code == 401
-
-    resp = client.post(
-        "/api/mcp/rpc",
-        json={"tool": "search_articles", "arguments": {}},
-        headers={"Authorization": "Bearer not-a-real-token"},
-    )
-    assert resp.status_code == 401
-
-
-def test_rpc_endpoint_enabled_by_default_rejects_invalid_bearer(
-    client: TestClient, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.delenv("MCP_SERVER_ENABLED", raising=False)
-    resp = client.post(
-        "/api/mcp/rpc",
-        json={"tool": "search_articles", "arguments": {}},
-        headers={"Authorization": "Bearer ndmcp_whatever"},
-    )
-    assert resp.status_code == 401
-
-
-def test_rpc_endpoint_calls_tool_with_valid_token(
-    client: TestClient, pg_clean: str, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    from news_dashboard.mcp import service
-
-    monkeypatch.setenv("MCP_SERVER_ENABLED", "true")
-    _seed_source(pg_clean)
-    alice = _make_user(pg_clean, "alice-rpc")
-    _seed_article(pg_clean, 7)
-    created = service.create_token(alice, "client", database_url=pg_clean)
-
-    resp = client.post(
-        "/api/mcp/rpc",
-        json={"tool": "search_articles", "arguments": {"limit": 10}},
-        headers={"Authorization": f"Bearer {created['token']}"},
-    )
-    assert resp.status_code == 200
-    body = resp.json()
-    assert body["tool"] == "search_articles"
-    assert any(a["id"] == 7 for a in body["result"]["articles"])
-
-
-def test_rpc_endpoint_denies_tool_outside_token_scopes(
-    client: TestClient, pg_clean: str, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    from news_dashboard.mcp import service
-
-    monkeypatch.setenv("MCP_SERVER_ENABLED", "true")
-    alice = _make_user(pg_clean, "alice-scoped-rpc")
-    created = service.create_token(alice, "search-only", scopes=("search",), database_url=pg_clean)
-
-    ok = client.post(
-        "/api/mcp/rpc",
-        json={"tool": "search_articles", "arguments": {}},
-        headers={"Authorization": f"Bearer {created['token']}"},
-    )
-    assert ok.status_code == 200
-
-    denied = client.post(
-        "/api/mcp/rpc",
-        json={"tool": "list_briefings", "arguments": {}},
-        headers={"Authorization": f"Bearer {created['token']}"},
-    )
-    assert denied.status_code == 403
-
-
-def test_rpc_endpoint_lists_tools(
-    client: TestClient, pg_clean: str, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    from news_dashboard.mcp import service
-
-    monkeypatch.setenv("MCP_SERVER_ENABLED", "true")
-    alice = _make_user(pg_clean, "alice-listtools")
-    created = service.create_token(alice, "client", database_url=pg_clean)
-
-    resp = client.get("/api/mcp/tools", headers={"Authorization": f"Bearer {created['token']}"})
-    assert resp.status_code == 200
-    names = {t["name"] for t in resp.json()["tools"]}
-    assert {"search_articles", "get_article", "list_briefings", "ask"} <= names
+def test_legacy_mcp_endpoints_no_longer_exist(client: TestClient) -> None:
+    assert client.get("/api/mcp/tools").status_code == 404
+    assert client.post("/api/mcp/rpc", json={}).status_code in {404, 405}

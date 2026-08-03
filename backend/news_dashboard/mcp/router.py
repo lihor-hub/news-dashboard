@@ -2,15 +2,13 @@ from __future__ import annotations
 
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
 from news_dashboard.auth import require_auth
 from news_dashboard.mcp import service
-from news_dashboard.mcp.models import McpRpcRequest, TokenCreateRequest
-from news_dashboard.mcp.tools import TOOLS, ToolError, call_tool
+from news_dashboard.mcp.models import TokenCreateRequest
 
 router = APIRouter()
-public_mcp_router = APIRouter()
 
 
 @router.get("/api/users/me/mcp-tokens")
@@ -43,8 +41,6 @@ def revoke_mcp_token(
     if token is None:
         raise HTTPException(status_code=404, detail="token not found")
     return token
-
-
 def authenticate_bearer(
     authorization: str | None,
     *,
@@ -75,40 +71,3 @@ def authenticate_bearer(
             detail=f"token is missing required scope '{required_scope}'",
         )
     return auth
-
-
-def _authenticate_bearer(authorization: str | None) -> dict[str, Any]:
-    return authenticate_bearer(
-        authorization,
-        enabled=service.mcp_enabled(),
-        disabled_detail="MCP server is not enabled on this instance",
-    )
-
-
-@public_mcp_router.get("/api/mcp/tools")
-def list_mcp_tools(authorization: Annotated[str | None, Header()] = None) -> dict[str, Any]:
-    _authenticate_bearer(authorization)
-    return {
-        "tools": [
-            {"name": name, "scope": meta["scope"], "description": meta["description"]}
-            for name, meta in TOOLS.items()
-        ]
-    }
-
-
-@public_mcp_router.post("/api/mcp/rpc")
-def call_mcp_tool(
-    payload: McpRpcRequest,
-    authorization: Annotated[str | None, Header()] = None,
-) -> dict[str, Any]:
-    auth = _authenticate_bearer(authorization)
-    try:
-        result = call_tool(
-            payload.tool,
-            payload.arguments,
-            user_id=int(auth["user_id"]),
-            scopes=set(auth["scopes"]),
-        )
-    except ToolError as exc:
-        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
-    return {"tool": payload.tool, "result": result}
