@@ -11,6 +11,8 @@ MAX_RESULT_LIMIT = 25
 MAX_FILTER_VALUES = 50
 MAX_FILTER_VALUE_LENGTH = 120
 MAX_SEARCH_OFFSET = 10_000
+MAX_BRIEFING_LIMIT = 25
+MAX_BRIEFING_OFFSET = 10_000
 
 FilterValue = Annotated[
     str,
@@ -29,6 +31,9 @@ PositiveArticleId = Annotated[
 SearchQuery = Annotated[str, StringConstraints(strip_whitespace=True, max_length=MAX_QUERY_LENGTH)]
 SearchLimit = Annotated[int, Field(ge=1, le=MAX_RESULT_LIMIT)]
 SearchOffset = Annotated[int, Field(ge=0, le=MAX_SEARCH_OFFSET)]
+BriefingId = Annotated[int, Field(strict=True, ge=1)]
+BriefingLimit = Annotated[int, Field(strict=True, ge=1, le=MAX_BRIEFING_LIMIT)]
+BriefingOffset = Annotated[int, Field(strict=True, ge=0, le=MAX_BRIEFING_OFFSET)]
 SourceCursor = Annotated[
     str,
     StringConstraints(max_length=20, pattern=r"^(0|[1-9][0-9]{0,19})$"),

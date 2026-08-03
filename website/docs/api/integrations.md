@@ -31,12 +31,15 @@ revoked under `/api/users/me/mcp-tokens` — see
 | `list_news_sources` | `search` | Page through the token owner's subscribed, enabled, searchable sources. |
 | `search_news` | `search` | Search visible articles with typed filters and offset pagination. |
 | `get_news_article` | `read` | Retrieve one visible article by a strict positive integer ID. |
+| `list_briefings` | `briefings` | Page through complete saved briefings owned by the token user. |
+| `get_briefing` | `briefings` | Read one owned, complete saved briefing and its currently visible citations. |
 
 Each tool requires its own **scope**, and a token only carries the scopes it
-was minted with. The listing, source-discovery, and search tools require
-`search`; `get_news_article` requires `read`. Briefings and MCP question
-answering are planned; clients should rely on MCP tool discovery until they are
-available.
+was minted with. News and source tools require `search`; saved-briefing tools
+require `briefings`; `get_news_article` requires `read`. Under-scoped tokens do
+not discover those tools. MCP question answering is planned; clients should
+rely on MCP tool discovery until it is available. The separate opt-in A2A
+surface remains ask-only and does not advertise briefing tools.
 
 `list_news_sources` returns `{sources, truncated, next_cursor}` in deterministic
 category, descending priority, name, then slug order. Each source contains only
@@ -91,6 +94,45 @@ Retrieval can fill the internal article-body cache, but it does not mutate
 user state or settings. Extraction errors and internals are not exposed.
 `body_truncated` reports body shortening; top-level `truncated` reports any
 field shortening needed to keep a schema-valid result within the inner limit.
+
+`list_briefings` accepts strict integer `limit` 1–25 (default 10) and `offset`
+0–10,000 (default 0). It reads only the token owner's complete saved rows in
+`created_at DESC, id DESC` order. Its exact envelope is
+`{briefings: [{id, title, summary, scope, since_at, until_at, created_at}],
+next_offset, truncated}`. A lookahead row determines whether another page
+exists without being returned. `next_offset` always resumes at the first row
+not returned, including when the 4,800-byte budget ends a page early, and is
+`null` on the terminal page.
+
+`get_briefing` accepts a strict positive integer `briefing_id`. Missing,
+incomplete, and foreign briefings produce the same identifier-free
+`Briefing not found` error. Its exact envelope is
+`{briefing: {id, title, summary, scope, since_at, until_at, created_at,
+content: {sections: [{title, body, citations}], worth_opening}, citations:
+[{article_id, title, source, url, section_index, citation_index}],
+content_truncated, omitted_sections, omitted_citations}, truncated}`.
+
+Briefing outputs allow at most 12 sections, 25 citations, and 25
+`worth_opening` IDs. Titles are bounded to 240 characters, summaries to 800,
+the saved time-window `scope` to 80, section titles to 200, section bodies to
+1,500, citation sources to 120, and citation URLs to 2,048 bytes. Responses
+pack complete records within 4,800 structured-content bytes; `truncated` and
+`content_truncated` identify degradation, while the omission counts include
+malformed, invisible, invalid, collection-capped, and byte-budget omissions.
+
+Citation visibility is recalculated at read time. Global source citations must
+still be enabled and subscribed, private source citations must belong to the
+token owner, and each returned link must normalize to a valid credential-free
+HTTP(S) URL. Invalid, inactive, foreign, duplicate, and dangling citations and
+their content references are removed. Malformed legacy content becomes safe
+empty or filtered typed content rather than leaking stored fields or causing
+an internal error.
+
+These tools only read saved output. They cannot generate or regenerate
+briefings, mutate them, chat, email, create podcasts, schedule delivery, or
+inspect or launch agent runs. They omit ownership, status, model, error,
+prompt, script, delivery, trace, workflow, article-body, and source-owner
+fields.
 
 The server is enabled when `MCP_SERVER_ENABLED` is unset. Set it to `false`,
 `0`, `no`, or `off` to disable `/mcp` and new token creation.
