@@ -28,7 +28,7 @@ revoked under `/api/users/me/mcp-tokens` — see
 | Tool | Scope | Does |
 |------|-------|------|
 | `list_latest_news` | `search` | List up to 25 recent articles visible to the token owner. |
-| `list_news_sources` | `search` | List the token owner's subscribed, enabled, searchable sources. |
+| `list_news_sources` | `search` | Page through the token owner's subscribed, enabled, searchable sources. |
 | `search_news` | `search` | Search visible articles with typed filters and offset pagination. |
 
 Each tool requires its own **scope**, and a token only carries the scopes it
@@ -36,16 +36,28 @@ was minted with. These three tools require `search`; under-scoped tokens do not
 discover them. Single-article retrieval, briefings, and question answering are
 planned; clients should rely on MCP tool discovery until they are available.
 
-`list_news_sources` returns `{sources, truncated}`. Each source contains only
+`list_news_sources` returns `{sources, truncated, next_cursor}` in deterministic
+category, descending priority, name, then slug order. Each source contains only
 `slug`, `name`, `category`, and `kind`; the list excludes sources the token
-owner has unsubscribed from and sources that are not enabled.
+owner has unsubscribed from, sources that are not enabled, and sources whose
+exact slug or category is not a valid search filter value. The exact slug and
+category can be passed to `search_news`. Display-only name and kind values may
+be shortened to keep their JSON-escaped representation within the size bound.
+
+Source pages accept `limit` 1–25 (default 25). Omit `cursor` on the first call,
+then pass each non-null `next_cursor` back unchanged until the response returns
+`null`. Cursors are canonical ASCII-decimal strings of at most 20 digits. A
+cursor exactly at or beyond the end returns an empty terminal page. For source
+discovery, `truncated: true` specifically means the 4,800-byte structured
+budget ended the page before the requested count; `next_cursor` continues at
+the first source not returned.
 
 `search_news` returns `{articles, truncated}`. Its compact article records
 contain `id`, `title`, canonical `url`, source slug and name, category,
 publication time, summary, and the authenticated user's workflow state and
 star status. Article bodies and source ownership fields are never returned.
-Each envelope contains complete records only; `truncated: true` means the
-structured-content size budget prevented the next record from fitting.
+Each article envelope contains complete records only; `truncated: true` means
+the structured-content size budget prevented the next article from fitting.
 
 Search accepts an optional query of at most 2,000 characters. An empty query
 returns a filtered recent listing in canonical web-search order. Source and
@@ -60,6 +72,8 @@ are excluded by default, but `include_archived: true` includes them and an
 explicit `archived` state overrides the default exclusion. `starred_only`
 uses only the token owner's stars. Pagination uses `limit` 1–25 (default 10)
 and `offset` 0–10,000 (default 0); out-of-range typed arguments are rejected.
+This numeric offset belongs to `search_news` and is separate from source
+discovery's cursor.
 
 The server is enabled when `MCP_SERVER_ENABLED` is unset. Set it to `false`,
 `0`, `no`, or `off` to disable `/mcp` and new token creation.

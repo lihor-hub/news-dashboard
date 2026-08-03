@@ -47,10 +47,14 @@ Use HTTPS outside a trusted local development environment. Do not put the token 
 | Tool | Scope | Description |
 |------|-------|-------------|
 | `list_latest_news` | `search` | Lists recent articles visible to the token owner. Supports source, category, state, archive, and date-range filters. |
-| `list_news_sources` | `search` | Lists the token owner's subscribed, enabled sources that can be used with `search_news`. |
+| `list_news_sources` | `search` | Pages through the token owner's subscribed, enabled sources that can be used with `search_news`. |
 | `search_news` | `search` | Searches visible articles with typed filters and offset pagination. An empty query returns a filtered recent listing. |
 
-Use `list_news_sources` before filtering by source. It returns only sources that are both subscribed and enabled for the authenticated user. Each source has `slug`, `name`, `category`, and `kind`; raw feed URLs, ownership identifiers, and internal state are omitted. The response envelope is `{sources, truncated}`.
+Use `list_news_sources` before filtering by source. It returns only sources that are both subscribed and enabled for the authenticated user, in deterministic category, descending priority, name, then slug order. Sources whose exact slug or category is not a valid search filter value are omitted. Each source has `slug`, `name`, `category`, and `kind`; raw feed URLs, ownership identifiers, and internal state are omitted. The exact `slug` and `category` are valid `search_news` filters. Display-only `name` and `kind` values may be shortened when their JSON-escaped bytes would exceed the response budget.
+
+Source discovery accepts `limit` from 1 through 25 (default 25) and an optional `cursor`. Omit the cursor for the first page. A cursor must be a canonical ASCII-decimal string of at most 20 digits: `0` or a non-zero digit followed by digits, with no sign, leading zero, or whitespace. Pass each `next_cursor` back unchanged to fetch the next page, and continue until it is `null`. A cursor at or beyond the end returns the terminal `{sources: [], truncated: false, next_cursor: null}` response.
+
+Every source page uses the `{sources, truncated, next_cursor}` envelope. `truncated: true` means the 4,800-byte structured-content budget ended that page before its requested count; use `next_cursor` to continue without skipping a source. A non-null `next_cursor` with `truncated: false` simply means more sources remain after a full page.
 
 `search_news` accepts these arguments:
 
@@ -68,7 +72,7 @@ Use `list_news_sources` before filtering by source. It returns only sources that
 
 Values within one filter group combine with OR; separate filter groups combine with AND. Search results contain complete compact records with `id`, `title`, canonical `url`, `source_slug`, `source_name`, `category`, `published_at`, `summary`, the token owner's `state`, and the token owner's `starred` value. They never contain article bodies.
 
-Article-list responses use `{articles, truncated}` and source-list responses use `{sources, truncated}`. Results accumulate only complete records within a 4,800-byte structured-content budget; `truncated: true` means another complete record did not fit. The MCP transport applies a separate 16 KiB response limit.
+Article-list responses use `{articles, truncated}`. Results accumulate only complete records within a 4,800-byte structured-content budget; `truncated: true` means another complete article did not fit. `search_news` pagination remains numeric: use `offset` from 0 through 10,000 rather than a source cursor. The MCP transport applies a separate 16 KiB response limit.
 
 Single-article retrieval, briefings, and question answering are planned as separate additions. MCP clients should use tool discovery instead of assuming those tools exist.
 
