@@ -1,7 +1,9 @@
 # User Guide
 
-Use News Dashboard to understand the day, triage articles, personalize the
-corpus, organize material, and revisit what you learned.
+News Dashboard is an AI research desk for developers keeping up with technical
+news. Centralize trusted sources, filter the Today Feed, start with a
+personalized brief, inspect article takeaways and context, ask cited follow-up
+questions, and retain useful material through saved items and learning tools.
 
 ## Start here
 

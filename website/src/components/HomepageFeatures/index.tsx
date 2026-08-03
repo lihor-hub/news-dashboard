@@ -11,32 +11,42 @@ type FeatureItem = {
 
 const FeatureList: FeatureItem[] = [
   {
-    title: 'Read Anywhere',
+    title: 'Find What Matters',
     Svg: require('@site/static/img/feature-getting-started.svg').default,
     description: (
       <>
-        Install the Android app or sign in from any browser. Your feed, saved articles, and
-        briefings stay in sync.
+        Centralize trusted technical sources, then use freshness, recommendations, and a
+        personalized brief to filter the noise.
       </>
     ),
   },
   {
-    title: 'Your Own Feed',
+    title: 'Understand Why',
     Svg: require('@site/static/img/feature-feed.svg').default,
     description: (
       <>
-        Curate sources, triage the Today Feed, and search across everything you have read — no
-        algorithm deciding for you.
+        Inspect article takeaways, context, and perspectives, then ask cited follow-up questions
+        grounded in your news corpus.
       </>
     ),
   },
   {
-    title: 'Self-Hostable',
+    title: 'Remember It',
+    Svg: require('@site/static/img/logo.svg').default,
+    description: (
+      <>
+        Save and organize useful material, create learning artifacts, and revisit it through search,
+        reading history, and the knowledge graph.
+      </>
+    ),
+  },
+  {
+    title: 'Own Your Data',
     Svg: require('@site/static/img/feature-self-host.svg').default,
     description: (
       <>
-        Run News Dashboard on your own infrastructure with Docker Compose or Helm, with full control
-        over your data.
+        Self-host with Docker Compose or Helm for control over your sources, reading data, and AI
+        provider configuration.
       </>
     ),
   },
@@ -44,9 +54,9 @@ const FeatureList: FeatureItem[] = [
 
 function Feature({ title, Svg, description }: FeatureItem) {
   return (
-    <div className={clsx('col col--4')}>
+    <div className={clsx('col col--3')}>
       <div className="text--center">
-        <Svg className={styles.featureSvg} role="img" />
+        <Svg className={styles.featureSvg} aria-hidden="true" />
       </div>
       <div className="text--center padding-horiz--md">
         <Heading as="h3">{title}</Heading>

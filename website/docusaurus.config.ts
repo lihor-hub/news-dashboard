@@ -6,7 +6,7 @@ import type * as Preset from '@docusaurus/preset-classic';
 
 const config: Config = {
   title: 'News Dashboard',
-  tagline: 'Your private, self-hosted news platform',
+  tagline: 'Your AI research desk for technical news',
   favicon: 'img/favicon.ico',
 
   // Future flags, see https://docusaurus.io/docs/api/docusaurus-config#future
@@ -59,7 +59,8 @@ const config: Config = {
     metadata: [
       {
         name: 'description',
-        content: 'Documentation for News Dashboard — your private, self-hosted news platform.',
+        content:
+          'Your AI research desk for technical news. Find what matters, understand why, and remember it.',
       },
     ],
     colorMode: {
@@ -68,7 +69,7 @@ const config: Config = {
     navbar: {
       title: 'News Dashboard',
       logo: {
-        alt: 'News Dashboard Logo',
+        alt: 'News Dashboard AI research desk',
         src: 'img/logo.svg',
       },
       items: [
