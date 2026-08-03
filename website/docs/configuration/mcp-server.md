@@ -28,7 +28,7 @@ curl -X POST https://your-instance/api/users/me/mcp-tokens \
 
 The plaintext `ndmcp_` token appears once. News Dashboard stores only its SHA-256 hash and a short display prefix. Each user can hold up to 10 active tokens and can revoke one immediately from Settings or `DELETE /api/users/me/mcp-tokens/{token_id}`.
 
-Available token scopes are `search`, `read`, `ask`, and `briefings`. Omitting `scopes` grants all four; prefer an explicit subset. `list_latest_news`, `list_news_sources`, and `search_news` require `search`; `get_news_article` requires `read`. Briefings and MCP question answering are planned and are not available yet.
+Available token scopes are `search`, `read`, `ask`, and `briefings`. Omitting `scopes` grants all four; prefer an explicit subset. News discovery and search tools require `search`; `get_news_article` requires `read`; saved-briefing tools require `briefings`. MCP question answering using `ask` is planned and is not available yet.
 
 MCP authentication is independent of Keycloak and browser login. The bearer token alone identifies the MCP user; clients never send a user ID as a tool argument.
 
@@ -50,6 +50,8 @@ Use HTTPS outside a trusted local development environment. Do not put the token 
 | `list_news_sources` | `search` | Pages through the token owner's subscribed, enabled sources that can be used with `search_news`. |
 | `search_news` | `search` | Searches visible articles with typed filters and offset pagination. An empty query returns a filtered recent listing. |
 | `get_news_article` | `read` | Retrieves one visible article by its positive integer article ID. |
+| `list_briefings` | `briefings` | Pages through complete saved briefings owned by the token user. |
+| `get_briefing` | `briefings` | Retrieves one complete saved briefing owned by the token user, including safe visible citations. |
 
 Use `list_news_sources` before filtering by source. It returns only sources that are both subscribed and enabled for the authenticated user, in deterministic category, descending priority, name, then slug order. Sources whose exact slug or category is not a valid search filter value are omitted. Each source has `slug`, `name`, `category`, and `kind`; raw feed URLs, ownership identifiers, and internal state are omitted. The exact `slug` and `category` are valid `search_news` filters. Display-only `name` and `kind` values are capped at 120 characters and may be shortened further when JSON escaping requires it to stay within the 4,800-byte budget.
 
@@ -74,8 +76,6 @@ Every source page uses the `{sources, truncated, next_cursor}` envelope. `trunca
 Values within one filter group combine with OR; separate filter groups combine with AND. Search results contain complete compact records with `id`, `title`, canonical `url`, `source_slug`, `source_name`, `category`, `published_at`, `summary`, the token owner's `state`, and the token owner's `starred` value. They never contain article bodies.
 
 Article-list responses use `{articles, truncated}`. Results accumulate only complete records within a 4,800-byte structured-content budget; `truncated: true` means another complete article did not fit. `search_news` pagination remains numeric: use `offset` from 0 through 10,000 rather than a source cursor. The MCP transport applies a separate 16 KiB response limit.
-
-Briefings and MCP question answering are planned as separate additions. MCP clients should use tool discovery instead of assuming those tools exist.
 
 ### Retrieve an article
 
@@ -116,7 +116,69 @@ If the visible article has no cached body, retrieval may fetch and populate the 
 
 `body_truncated` means the body was shortened. Top-level `truncated` means any returned text field was shortened to keep the complete structured result within its 4,800-byte limit; the outer transport remains capped at 16 KiB. Required fields remain present when truncation occurs.
 
-Briefings and MCP question answering remain planned. MCP clients should use tool discovery instead of assuming those tools exist.
+### Saved briefings
+
+`list_briefings` accepts an integer `limit` from 1 through 25 (default 10) and an integer `offset` from 0 through 10,000 (default 0). Values outside these ranges, booleans, and non-integers are rejected. Results contain only the authenticated token owner's saved briefings whose status is complete, ordered newest first by creation time and then descending briefing ID.
+
+The response has this exact shape:
+
+```text
+{
+  briefings: [{
+    id: integer,
+    title: string,
+    summary: string,
+    scope: string,
+    since_at: datetime | null,
+    until_at: datetime | null,
+    created_at: datetime
+  }],
+  next_offset: integer | null,
+  truncated: boolean
+}
+```
+
+The server reads one lookahead row to determine whether another page exists but never returns that row. When more data exists, `next_offset` points to the first database row not returned. This also applies when the 4,800-byte structured-content budget ends a page early, so continuing from `next_offset` does not skip a briefing. `next_offset: null` marks the terminal page. `truncated: true` means a field or complete record was shortened or omitted to satisfy output bounds; it is independent of whether another normal page exists.
+
+`get_briefing` accepts one strict positive integer, `briefing_id`. A missing ID, an incomplete briefing, and another user's briefing all produce the same safe `Briefing not found` error. A successful response has this exact shape:
+
+```text
+{
+  briefing: {
+    id: integer,
+    title: string,
+    summary: string,
+    scope: string,
+    since_at: datetime | null,
+    until_at: datetime | null,
+    created_at: datetime,
+    content: {
+      sections: [{title: string, body: string, citations: [integer]}],
+      worth_opening: [integer]
+    },
+    citations: [{
+      article_id: integer,
+      title: string,
+      source: string,
+      url: string,
+      section_index: integer | null,
+      citation_index: integer | null
+    }],
+    content_truncated: boolean,
+    omitted_sections: integer,
+    omitted_citations: integer
+  },
+  truncated: boolean
+}
+```
+
+Briefing strings and collections are bounded: title 240 characters, summary 800, saved time-window `scope` 80, section title 200, section body 1,500, citation source 120, and citation URL 2,048 bytes; at most 12 sections, 25 citations, and 25 `worth_opening` IDs are considered. Whole sections and citations are packed within 4,800 structured-content bytes; partial objects are never emitted. `content_truncated` and the outer `truncated` indicate degraded, shortened, or omitted briefing data. `omitted_sections` and `omitted_citations` count material excluded because it was malformed, invisible, invalid, over a collection bound, or over the byte budget.
+
+Citation access is evaluated when the briefing is read, not frozen when it was saved. A citation remains available only if its article is still visible to the token owner: global sources must still be enabled and subscribed, and private sources must belong to that user. Links must normalize to a valid HTTP or HTTPS URL with a valid host and no embedded credentials. Invalid, deleted, disabled, unsubscribed, foreign, duplicate, and dangling citations are omitted; their IDs are also removed from section citation lists and `worth_opening`. Malformed legacy briefing content degrades to safe typed empty or filtered content with truncation and omission metadata instead of exposing stored data or returning an internal error.
+
+The briefing tools only read previously saved results. They cannot generate or regenerate a briefing, mutate content, chat with a briefing, send email, create a podcast, change a schedule, trigger delivery, or inspect or start agent runs. Internal fields such as owner, status, model, errors, prompts, scripts, delivery data, trace IDs, workflow state, article bodies, and source ownership are not returned.
+
+MCP question answering is planned as a separate addition. MCP clients should use tool discovery instead of assuming that tool exists. The separately configured A2A endpoint remains an ask-only surface and does not advertise briefing tools.
 
 ## Security boundaries
 
