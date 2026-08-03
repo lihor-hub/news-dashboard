@@ -49,6 +49,9 @@ def _rate_limit_client_id(_context: MiddlewareContext[Any]) -> str:
     token = get_access_token()
     if token is None or not token.client_id:
         return "unauthenticated"
+    rate_limit_id = token.claims.get("rate_limit_id")
+    if isinstance(rate_limit_id, str) and rate_limit_id.startswith("mcp-rate:"):
+        return rate_limit_id
     return token.client_id
 
 

@@ -179,7 +179,45 @@ def test_token_verifier_returns_expected_access_token(
     assert verified.subject == str(user_id)
     assert verified.client_id == f"mcp-token:{created['id']}"
     assert verified.scopes == ["ask", "read"]
-    assert verified.claims == {"user_id": user_id, "token_id": created["id"]}
+    assert verified.claims["user_id"] == user_id
+    assert verified.claims["token_id"] == created["id"]
+    assert str(verified.claims["rate_limit_id"]).startswith("mcp-rate:")
+
+
+def test_reused_database_token_id_gets_fresh_opaque_rate_limit_identity(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from news_dashboard.mcp import service
+    from news_dashboard.mcp.auth import NewsDashboardTokenVerifier
+    from news_dashboard.mcp.server import _BoundedTokenBuckets
+
+    monkeypatch.setattr(
+        service,
+        "authenticate_token",
+        lambda _token: {"token_id": 7, "user_id": 11, "scopes": {"search"}},
+    )
+    first_value = service.TOKEN_PREFIX + ("a" * 32)
+    second_value = service.TOKEN_PREFIX + ("b" * 32)
+
+    async def exercise() -> None:
+        verifier = NewsDashboardTokenVerifier()
+        first = await verifier.verify_token(first_value)
+        second = await verifier.verify_token(second_value)
+        assert first is not None
+        assert second is not None
+        assert first.client_id == second.client_id == "mcp-token:7"
+        first_identity = str(first.claims["rate_limit_id"])
+        second_identity = str(second.claims["rate_limit_id"])
+        assert first_identity != second_identity
+        assert first_value not in first_identity
+        assert second_value not in second_identity
+
+        buckets = _BoundedTokenBuckets(max_identities=3, capacity=1, refill_rate=0.0001)
+        assert await buckets.for_client(first_identity).consume() is True
+        assert await buckets.for_client(first_identity).consume() is False
+        assert await buckets.for_client(second_identity).consume() is True
+
+    asyncio.run(exercise())
 
 
 @pytest.mark.parametrize("token", ["not-a-real-token", ""])

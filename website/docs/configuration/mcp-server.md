@@ -55,7 +55,7 @@ Article retrieval, source search, briefings, and question answering are planned 
 ## Security boundaries
 
 - Tokens are individually scoped and revocable; revoked tokens stop authenticating immediately.
-- Rate limits use the token's non-secret database identity, never the bearer value.
+- Rate limits use an opaque, process-local token-instance identity, never the bearer value or a reusable database row ID.
 - Logs contain tool name, status, and duration metadata only. They exclude tokens, arguments, article content, prompts, and answers.
 - Internal failures return a generic error without tracebacks, database details, or provider details.
 - Tools cannot run SQL, shell commands, or file-system operations and cannot read secrets.
