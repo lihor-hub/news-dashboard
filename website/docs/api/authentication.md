@@ -115,6 +115,12 @@ The server is enabled by default; setting `MCP_SERVER_ENABLED` to `false`, `0`,
 Existing tokens remain stored so access can resume if the feature is enabled
 again, and revocation invalidates a token immediately.
 
+Scopes are enforced per MCP tool: `search` grants current-news listing and
+`read` grants single-article retrieval. The `ask` scope is used separately by
+the optional A2A question-answering endpoint; it does not grant MCP article
+access. Prefer separate least-privilege tokens for clients that do not need
+both surfaces.
+
 ### Google Reader tokens
 
 | Route | Method | Purpose |

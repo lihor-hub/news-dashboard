@@ -17,6 +17,15 @@ FilterValue = Annotated[
     StringConstraints(strip_whitespace=True, min_length=1, max_length=MAX_FILTER_VALUE_LENGTH),
 ]
 FilterValues = Annotated[list[FilterValue], Field(max_length=MAX_FILTER_VALUES)]
+PositiveArticleId = Annotated[
+    int,
+    Field(
+        strict=True,
+        gt=0,
+        le=9_223_372_036_854_775_807,
+        description="Positive PostgreSQL BIGINT article identifier.",
+    ),
+]
 SearchQuery = Annotated[str, StringConstraints(strip_whitespace=True, max_length=MAX_QUERY_LENGTH)]
 SearchLimit = Annotated[int, Field(ge=1, le=MAX_RESULT_LIMIT)]
 SearchOffset = Annotated[int, Field(ge=0, le=MAX_SEARCH_OFFSET)]

@@ -28,7 +28,7 @@ curl -X POST https://your-instance/api/users/me/mcp-tokens \
 
 The plaintext `ndmcp_` token appears once. News Dashboard stores only its SHA-256 hash and a short display prefix. Each user can hold up to 10 active tokens and can revoke one immediately from Settings or `DELETE /api/users/me/mcp-tokens/{token_id}`.
 
-Available token scopes are `search`, `read`, `ask`, and `briefings`. Omitting `scopes` grants all four; prefer an explicit subset. The currently available tools require `search`. Tools using the other scopes are planned and are not available yet.
+Available token scopes are `search`, `read`, `ask`, and `briefings`. Omitting `scopes` grants all four; prefer an explicit subset. `list_latest_news`, `list_news_sources`, and `search_news` require `search`; `get_news_article` requires `read`. Briefings and MCP question answering are planned and are not available yet.
 
 MCP authentication is independent of Keycloak and browser login. The bearer token alone identifies the MCP user; clients never send a user ID as a tool argument.
 
@@ -49,6 +49,7 @@ Use HTTPS outside a trusted local development environment. Do not put the token 
 | `list_latest_news` | `search` | Lists recent articles visible to the token owner. Supports source, category, state, archive, and date-range filters. |
 | `list_news_sources` | `search` | Pages through the token owner's subscribed, enabled sources that can be used with `search_news`. |
 | `search_news` | `search` | Searches visible articles with typed filters and offset pagination. An empty query returns a filtered recent listing. |
+| `get_news_article` | `read` | Retrieves one visible article by its positive integer article ID. |
 
 Use `list_news_sources` before filtering by source. It returns only sources that are both subscribed and enabled for the authenticated user, in deterministic category, descending priority, name, then slug order. Sources whose exact slug or category is not a valid search filter value are omitted. Each source has `slug`, `name`, `category`, and `kind`; raw feed URLs, ownership identifiers, and internal state are omitted. The exact `slug` and `category` are valid `search_news` filters. Display-only `name` and `kind` values are capped at 120 characters and may be shortened further when JSON escaping requires it to stay within the 4,800-byte budget.
 
@@ -74,7 +75,48 @@ Values within one filter group combine with OR; separate filter groups combine w
 
 Article-list responses use `{articles, truncated}`. Results accumulate only complete records within a 4,800-byte structured-content budget; `truncated: true` means another complete article did not fit. `search_news` pagination remains numeric: use `offset` from 0 through 10,000 rather than a source cursor. The MCP transport applies a separate 16 KiB response limit.
 
-Single-article retrieval, briefings, and question answering are planned as separate additions. MCP clients should use tool discovery instead of assuming those tools exist.
+Briefings and MCP question answering are planned as separate additions. MCP clients should use tool discovery instead of assuming those tools exist.
+
+### Retrieve an article
+
+Call `get_news_article` with one `article_id`: a strict positive integer no larger than PostgreSQL's `BIGINT` maximum (`9223372036854775807`). The result always has these top-level fields:
+
+```json
+{
+  "found": true,
+  "article": {
+    "id": 123,
+    "title": "Example article",
+    "canonical_url": "https://example.com/article",
+    "source_slug": "example",
+    "source_name": "Example",
+    "category": "engineering",
+    "kind": "rss",
+    "published_at": "2026-08-04T09:00:00+00:00",
+    "discovered_at": "2026-08-04T09:05:00+00:00",
+    "summary": "Summary text",
+    "body": "Article text",
+    "body_truncated": false
+  },
+  "truncated": false
+}
+```
+
+`published_at` and `discovered_at` can be `null`. Every other article field is present. Title, source labels, category, kind, summary, and body are whitespace-normalized, escaped plain text—not HTML or Markdown. `canonical_url` remains URL data rather than escaped display text.
+
+A missing ID and an article outside the token owner's visibility boundary return the same sentinel, without an existence hint:
+
+```json
+{"found": false, "article": null, "truncated": false}
+```
+
+The visibility boundary includes private-source ownership and enabled global subscriptions. A private article owned by someone else, an article from a globally disabled subscription, and an article available only through an in-app share are not readable through this tool. Shared content must be read through its separate share capability.
+
+If the visible article has no cached body, retrieval may fetch and populate the internal body cache. It does not change read/starred state, sources, shares, tags, or settings. Extraction failures still return `found: true` with an empty body and do not reveal provider diagnostics, extraction methods, attempts, or stored raw content.
+
+`body_truncated` means the body was shortened. Top-level `truncated` means any returned text field was shortened to keep the complete structured result within its 4,800-byte limit; the outer transport remains capped at 16 KiB. Required fields remain present when truncation occurs.
+
+Briefings and MCP question answering remain planned. MCP clients should use tool discovery instead of assuming those tools exist.
 
 ## Security boundaries
 
@@ -85,3 +127,4 @@ Single-article retrieval, briefings, and question answering are planned as separ
 - Tools cannot run SQL, shell commands, or file-system operations and cannot read secrets.
 - Mutation tools are absent. MCP access cannot change article state, sources, shares, or settings.
 - Private-source visibility is enforced for the authenticated token owner.
+- Article misses do not distinguish absent IDs from unauthorized IDs.

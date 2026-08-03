@@ -39,14 +39,19 @@ and give it the `ask` scope. Requests without a valid, unrevoked token with the
 `ask` scope are rejected with `401`/`403`. Answers are always scoped to the
 articles visible to the token's owner.
 
+The token family is shared with MCP, but its scopes remain surface-specific:
+A2A requires `ask`, while MCP single-article retrieval requires `read`. Neither
+scope implies the other.
+
 ## Security boundaries
 
 - Disabled unless `A2A_SERVER_ENABLED` is explicitly set.
 - Bearer tokens are stored hashed; scopes are enforced per request.
 - The agent can only run retrieval Q&A — no SQL, no filesystem, no shell, no
   dashboard mutations.
-- Query length is bounded (same limit as the MCP `ask` tool) to limit
-  prompt-injection amplification and payload abuse.
+- Query length is bounded by the shared news-question limit to constrain
+  prompt-injection amplification and payload abuse. MCP question answering is
+  planned; it is not currently an available MCP tool.
 
 ## Client example
 
