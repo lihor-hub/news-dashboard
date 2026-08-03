@@ -26,6 +26,7 @@ from news_dashboard.mcp.auth import NewsDashboardTokenVerifier
 from news_dashboard.mcp.models import (
     MAX_FILTER_VALUE_LENGTH,
     MAX_RESULT_LIMIT,
+    MAX_SEARCH_OFFSET,
     DateRange,
     FilterValues,
     SearchLimit,
@@ -249,12 +250,32 @@ def _compact_article(article: dict[str, Any]) -> dict[str, Any]:
 
 
 def _compact_source(source: dict[str, Any]) -> dict[str, str]:
-    return {
+    compact = {
         "slug": str(source["slug"]),
         "name": str(source["name"])[:MAX_FILTER_VALUE_LENGTH],
         "category": str(source["category"]),
         "kind": str(source["kind"])[:MAX_FILTER_VALUE_LENGTH],
     }
+    while _single_source_result_size(compact) > MCP_STRUCTURED_CONTENT_BYTES:
+        name_bytes = len(json.dumps(compact["name"], ensure_ascii=True).encode())
+        kind_bytes = len(json.dumps(compact["kind"], ensure_ascii=True).encode())
+        if name_bytes >= kind_bytes and compact["name"]:
+            compact["name"] = compact["name"][:-1]
+        elif compact["kind"]:
+            compact["kind"] = compact["kind"][:-1]
+        else:
+            message = "Exact source filter values exceed structured content budget"
+            raise ValueError(message)
+    return compact
+
+
+def _single_source_result_size(source: dict[str, str]) -> int:
+    envelope: SourceListResult = {
+        "sources": [source],
+        "truncated": False,
+        "next_offset": MAX_SEARCH_OFFSET,
+    }
+    return len(json.dumps(envelope, ensure_ascii=True, separators=(",", ":")).encode())
 
 
 def _has_valid_filter_value(source: dict[str, Any], key: str) -> bool:
@@ -301,7 +322,8 @@ def list_news_sources(
     Whole compact records fit a 4,800-byte budget; truncation means the size budget
     ended a page early. Exact slug and category values are always returned. Sources
     with invalid filter values are omitted, while display-only name and kind values
-    are shortened to 120 characters so every searchable slug remains reachable.
+    are capped at 120 characters and shortened further only when JSON escaping requires
+    it, so every searchable slug remains reachable.
     """
     sources = list_sources_for_user(_current_user_id())
     searchable = [

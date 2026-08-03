@@ -839,6 +839,72 @@ def test_source_discovery_pages_without_duplicates_or_cursor_loops(
     asyncio.run(exercise())
 
 
+def test_source_discovery_preserves_max_unicode_filters_and_advances_cursor(
+    pg_clean: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from news_dashboard.mcp import server, service
+
+    monkeypatch.setenv("DATABASE_URL", pg_clean)
+    user_id = _make_user(pg_clean, "alice-fastmcp-unicode-source-page")
+    token = service.create_token(user_id, "client", scopes=("search",), database_url=pg_clean)[
+        "token"
+    ]
+    emoji_filter = "😀" * 120
+    rows = [
+        {
+            "slug": emoji_filter,
+            "name": "🔥" * 120,
+            "category": emoji_filter,
+            "kind": "🚀" * 120,
+            "subscribed": True,
+            "enabled": True,
+        },
+        {
+            "slug": "later-source",
+            "name": "Later source",
+            "category": "engineering",
+            "kind": "rss",
+            "subscribed": True,
+            "enabled": True,
+        },
+    ]
+    monkeypatch.setattr(server, "list_sources_for_user", lambda _user_id: rows)
+    response_bodies: list[bytes] = []
+
+    async def exercise() -> None:
+        offset = 0
+        collected: list[tuple[str, str]] = []
+        async with _mcp_client(token, response_bodies=response_bodies) as client:
+            for _page in range(3):
+                result = await client.call_tool("list_news_sources", {"limit": 1, "offset": offset})
+                assert result.structured_content is not None
+                assert (
+                    len(
+                        json.dumps(
+                            result.structured_content,
+                            ensure_ascii=True,
+                            separators=(",", ":"),
+                        ).encode()
+                    )
+                    <= 4_800
+                )
+                collected.extend(
+                    (row["slug"], row["category"]) for row in result.structured_content["sources"]
+                )
+                next_offset = result.structured_content["next_offset"]
+                if next_offset is None:
+                    break
+                assert next_offset > offset
+                offset = next_offset
+            else:
+                pytest.fail("Unicode source cursor did not terminate")
+        assert collected == [(emoji_filter, emoji_filter), ("later-source", "engineering")]
+
+    asyncio.run(exercise())
+    assert response_bodies
+    assert max(map(len, response_bodies)) < 16_384
+
+
 @pytest.mark.parametrize(
     "arguments",
     [{"limit": 0}, {"limit": 26}, {"offset": -1}, {"offset": 10_001}],
