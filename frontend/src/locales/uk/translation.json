@@ -5,23 +5,23 @@
   },
   "onboarding": {
     "workflow": {
-      "title": "Your AI research desk is ready",
-      "promise": "Your AI research desk for technical news. Find what matters, understand why, and remember it.",
+      "title": "Ваш дослідницький стіл готовий",
+      "promise": "Ваш дослідницький відділ ШІ для технічних новин. Знайдіть те, що має значення, зрозумійте, чому, і запам’ятайте це.",
       "find": {
-        "title": "Find what matters",
-        "description": "Fresh centralized sources, smart ranking, and a personalized daily brief."
+        "title": "Знайдіть те, що має значення",
+        "description": "Нові централізовані джерела, розумне рейтингування та персоналізована щоденна довідка."
       },
       "understand": {
-        "title": "Understand why",
-        "description": "Article takeaways with context and alternative perspectives."
+        "title": "Зрозумійте чому",
+        "description": "Висновки статті з контекстом і альтернативними точками зору."
       },
       "remember": {
-        "title": "Remember it",
-        "description": "Cited Ask AI answers plus learning and recap tools."
+        "title": "Запам'ятайте це",
+        "description": "Відповіді Cited Ask AI, а також інструменти навчання та повторення."
       },
-      "configuration": "AI features require an instance-level OpenAI-compatible configuration. Today remains fully useful without it, and no AI runs until you choose an AI action.",
-      "todayAction": "Explore Today",
-      "briefAction": "Open your first briefing"
+      "configuration": "Функції ШІ вимагають конфігурації, сумісної з OpenAI на рівні екземпляра. Стрічка новин «Сьогодні» залишається цілком корисною без цієї конфігурації, і штучний інтелект не запускається, доки ви не виберете дію ШІ.",
+      "todayAction": "Перегляньте стрічку новин Today",
+      "briefAction": "Відкрийте свій перший брифінг новин"
     }
   },
   "auth": {

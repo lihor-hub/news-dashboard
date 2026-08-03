@@ -5,23 +5,23 @@
   },
   "onboarding": {
     "workflow": {
-      "title": "Your AI research desk is ready",
-      "promise": "Your AI research desk for technical news. Find what matters, understand why, and remember it.",
+      "title": "你的人工智能研究台已经准备好了",
+      "promise": "您的人工智能研究台，可获取技术新闻。找到重要的事情，理解原因，并记住它。",
       "find": {
-        "title": "Find what matters",
-        "description": "Fresh centralized sources, smart ranking, and a personalized daily brief."
+        "title": "找到重要的事情",
+        "description": "新鲜的集中来源、智能排名和个性化的每日简报。"
       },
       "understand": {
-        "title": "Understand why",
-        "description": "Article takeaways with context and alternative perspectives."
+        "title": "明白为什么",
+        "description": "具有背景和替代观点的文章要点。"
       },
       "remember": {
-        "title": "Remember it",
-        "description": "Cited Ask AI answers plus learning and recap tools."
+        "title": "记住它",
+        "description": "引用 Ask AI 答案以及学习和回顾工具。"
       },
-      "configuration": "AI features require an instance-level OpenAI-compatible configuration. Today remains fully useful without it, and no AI runs until you choose an AI action.",
-      "todayAction": "Explore Today",
-      "briefAction": "Open your first briefing"
+      "configuration": "AI 功能需要实例级 OpenAI 兼容配置。如果没有此配置，今日新闻源仍然完全有用，并且在您选择 AI 操作之前不会运行 AI。",
+      "todayAction": "探索今日新闻源",
+      "briefAction": "打开你的第一个新闻发布会"
     }
   },
   "auth": {

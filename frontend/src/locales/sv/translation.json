@@ -5,23 +5,23 @@
   },
   "onboarding": {
     "workflow": {
-      "title": "Your AI research desk is ready",
-      "promise": "Your AI research desk for technical news. Find what matters, understand why, and remember it.",
+      "title": "Din AI-forskningsdisk är redo",
+      "promise": "Din AI-forskningsdisk för tekniska nyheter. Hitta det som är viktigt, förstå varför och kom ihåg det.",
       "find": {
-        "title": "Find what matters",
-        "description": "Fresh centralized sources, smart ranking, and a personalized daily brief."
+        "title": "Hitta det som är viktigt",
+        "description": "Färska centraliserade källor, smart rankning och en personlig daglig brief."
       },
       "understand": {
-        "title": "Understand why",
-        "description": "Article takeaways with context and alternative perspectives."
+        "title": "Förstå varför",
+        "description": "Artikel takeaways med sammanhang och alternativa perspektiv."
       },
       "remember": {
-        "title": "Remember it",
-        "description": "Cited Ask AI answers plus learning and recap tools."
+        "title": "Kom ihåg det",
+        "description": "Citerade Ask AI-svar plus lärande och sammanfattningsverktyg."
       },
-      "configuration": "AI features require an instance-level OpenAI-compatible configuration. Today remains fully useful without it, and no AI runs until you choose an AI action.",
-      "todayAction": "Explore Today",
-      "briefAction": "Open your first briefing"
+      "configuration": "AI-funktioner kräver en OpenAI-kompatibel konfiguration på instansnivå. Dagens nyhetsflöde förblir fullt användbart utan denna konfiguration, och ingen AI körs förrän du väljer en AI-åtgärd.",
+      "todayAction": "Utforska dagens nyhetsflöde",
+      "briefAction": "Öppna din första nyhetsbriefing"
     }
   },
   "auth": {

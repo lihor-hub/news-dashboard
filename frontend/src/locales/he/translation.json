@@ -5,23 +5,23 @@
   },
   "onboarding": {
     "workflow": {
-      "title": "Your AI research desk is ready",
-      "promise": "Your AI research desk for technical news. Find what matters, understand why, and remember it.",
+      "title": "שולחן המחקר שלך בינה מלאכותית מוכן",
+      "promise": "שולחן המחקר שלך בינה מלאכותית לחדשות טכניות. מצאו את מה שחשוב, הבינו מדוע וזכרו.",
       "find": {
-        "title": "Find what matters",
-        "description": "Fresh centralized sources, smart ranking, and a personalized daily brief."
+        "title": "מצא את מה שחשוב",
+        "description": "מקורות ריכוזיים טריים, דירוג חכם ובריף יומי מותאם אישית."
       },
       "understand": {
-        "title": "Understand why",
-        "description": "Article takeaways with context and alternative perspectives."
+        "title": "תבין למה",
+        "description": "קטעי מאמרים עם הקשר ונקודות מבט אלטרנטיביות."
       },
       "remember": {
-        "title": "Remember it",
-        "description": "Cited Ask AI answers plus learning and recap tools."
+        "title": "תזכור את זה",
+        "description": "צוטט תשובות Ask AI בתוספת כלי למידה וסיכום."
       },
-      "configuration": "AI features require an instance-level OpenAI-compatible configuration. Today remains fully useful without it, and no AI runs until you choose an AI action.",
-      "todayAction": "Explore Today",
-      "briefAction": "Open your first briefing"
+      "configuration": "תכונות AI דורשות תצורה תואמת OpenAI ברמת המופע. עדכון החדשות של Today נשאר שימושי לחלוטין ללא תצורה זו, ושום AI לא פועל עד שתבחר בפעולת AI.",
+      "todayAction": "חקור את עדכון החדשות של היום",
+      "briefAction": "פתח את תדריך החדשות הראשון שלך"
     }
   },
   "auth": {

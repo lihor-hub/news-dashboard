@@ -5,23 +5,23 @@
   },
   "onboarding": {
     "workflow": {
-      "title": "Your AI research desk is ready",
-      "promise": "Your AI research desk for technical news. Find what matters, understand why, and remember it.",
+      "title": "مكتب أبحاث الذكاء الاصطناعي الخاص بك جاهز",
+      "promise": "مكتب أبحاث الذكاء الاصطناعي الخاص بك للحصول على الأخبار التقنية. ابحث عن ما يهم، وافهم السبب، وتذكره.",
       "find": {
-        "title": "Find what matters",
-        "description": "Fresh centralized sources, smart ranking, and a personalized daily brief."
+        "title": "العثور على ما يهم",
+        "description": "مصادر مركزية جديدة، وتصنيف ذكي، وملخص يومي مخصص."
       },
       "understand": {
-        "title": "Understand why",
-        "description": "Article takeaways with context and alternative perspectives."
+        "title": "افهم لماذا",
+        "description": "الوجبات السريعة المادة مع السياق ووجهات النظر البديلة."
       },
       "remember": {
-        "title": "Remember it",
-        "description": "Cited Ask AI answers plus learning and recap tools."
+        "title": "تذكر ذلك",
+        "description": "تم الاستشهاد بإجابات Ask AI بالإضافة إلى أدوات التعلم والتلخيص."
       },
-      "configuration": "AI features require an instance-level OpenAI-compatible configuration. Today remains fully useful without it, and no AI runs until you choose an AI action.",
-      "todayAction": "Explore Today",
-      "briefAction": "Open your first briefing"
+      "configuration": "تتطلب ميزات الذكاء الاصطناعي تكوينًا متوافقًا مع OpenAI على مستوى المثيل. يظل موجز أخبار اليوم مفيدًا تمامًا بدون هذا التكوين، ولن يتم تشغيل الذكاء الاصطناعي حتى تختار إجراء الذكاء الاصطناعي.",
+      "todayAction": "استكشف موجز أخبار اليوم",
+      "briefAction": "افتح موجز الأخبار الأول"
     }
   },
   "auth": {

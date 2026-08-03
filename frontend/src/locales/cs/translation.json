@@ -5,23 +5,23 @@
   },
   "onboarding": {
     "workflow": {
-      "title": "Your AI research desk is ready",
-      "promise": "Your AI research desk for technical news. Find what matters, understand why, and remember it.",
+      "title": "Váš výzkumný stůl AI je připraven",
+      "promise": "Váš výzkumný stůl AI pro technické novinky. Najděte, na čem záleží, pochopte proč a zapamatujte si to.",
       "find": {
-        "title": "Find what matters",
-        "description": "Fresh centralized sources, smart ranking, and a personalized daily brief."
+        "title": "Najděte, na čem záleží",
+        "description": "Čerstvé centralizované zdroje, inteligentní hodnocení a personalizovaný denní přehled."
       },
       "understand": {
-        "title": "Understand why",
-        "description": "Article takeaways with context and alternative perspectives."
+        "title": "Pochopte proč",
+        "description": "Obsah článku s kontextem a alternativními pohledy."
       },
       "remember": {
-        "title": "Remember it",
-        "description": "Cited Ask AI answers plus learning and recap tools."
+        "title": "Pamatujte si to",
+        "description": "Citované odpovědi Ask AI plus nástroje pro učení a rekapitulaci."
       },
-      "configuration": "AI features require an instance-level OpenAI-compatible configuration. Today remains fully useful without it, and no AI runs until you choose an AI action.",
-      "todayAction": "Explore Today",
-      "briefAction": "Open your first briefing"
+      "configuration": "Funkce umělé inteligence vyžadují konfiguraci kompatibilní s OpenAI na úrovni instance. Informační kanál Dnes zůstává plně užitečný i bez této konfigurace a žádná umělá inteligence se nespustí, dokud nezvolíte akci umělé inteligence.",
+      "todayAction": "Prozkoumejte zpravodajský kanál Dnes",
+      "briefAction": "Otevřete svůj první zpravodajský brífink"
     }
   },
   "auth": {

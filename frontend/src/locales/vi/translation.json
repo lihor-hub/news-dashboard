@@ -5,23 +5,23 @@
   },
   "onboarding": {
     "workflow": {
-      "title": "Your AI research desk is ready",
-      "promise": "Your AI research desk for technical news. Find what matters, understand why, and remember it.",
+      "title": "Bàn nghiên cứu AI của bạn đã sẵn sàng",
+      "promise": "Bàn nghiên cứu AI của bạn để biết tin tức kỹ thuật. Tìm những gì quan trọng, hiểu lý do tại sao và ghi nhớ nó.",
       "find": {
-        "title": "Find what matters",
-        "description": "Fresh centralized sources, smart ranking, and a personalized daily brief."
+        "title": "Tìm những gì quan trọng",
+        "description": "Các nguồn tập trung mới, xếp hạng thông minh và bản tóm tắt hàng ngày được cá nhân hóa."
       },
       "understand": {
-        "title": "Understand why",
-        "description": "Article takeaways with context and alternative perspectives."
+        "title": "Hiểu lý do tại sao",
+        "description": "Bài viết rút ra với bối cảnh và quan điểm thay thế."
       },
       "remember": {
-        "title": "Remember it",
-        "description": "Cited Ask AI answers plus learning and recap tools."
+        "title": "Hãy nhớ nó",
+        "description": "Trích dẫn Hỏi câu trả lời AI cùng với các công cụ học tập và tóm tắt."
       },
-      "configuration": "AI features require an instance-level OpenAI-compatible configuration. Today remains fully useful without it, and no AI runs until you choose an AI action.",
-      "todayAction": "Explore Today",
-      "briefAction": "Open your first briefing"
+      "configuration": "Các tính năng AI yêu cầu cấu hình tương thích với OpenAI ở cấp độ phiên bản. Nguồn cấp tin tức Hôm nay vẫn hoàn toàn hữu ích nếu không có cấu hình này và không có AI nào chạy cho đến khi bạn chọn hành động AI.",
+      "todayAction": "Khám phá nguồn cấp tin tức Hôm nay",
+      "briefAction": "Mở cuộc họp báo tin tức đầu tiên của bạn"
     }
   },
   "auth": {

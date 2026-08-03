@@ -5,23 +5,23 @@
   },
   "onboarding": {
     "workflow": {
-      "title": "Your AI research desk is ready",
-      "promise": "Your AI research desk for technical news. Find what matters, understand why, and remember it.",
+      "title": "Twoje stanowisko badawcze AI jest gotowe",
+      "promise": "Twoje biuro badawcze AI, w którym znajdziesz aktualności techniczne. Znajdź to, co jest ważne, zrozum dlaczego i zapamiętaj to.",
       "find": {
-        "title": "Find what matters",
-        "description": "Fresh centralized sources, smart ranking, and a personalized daily brief."
+        "title": "Znajdź to, co ważne",
+        "description": "Świeże, scentralizowane źródła, inteligentny ranking i spersonalizowany codzienny brief."
       },
       "understand": {
-        "title": "Understand why",
-        "description": "Article takeaways with context and alternative perspectives."
+        "title": "Zrozum dlaczego",
+        "description": "Artykuły na wynos z kontekstem i alternatywnymi perspektywami."
       },
       "remember": {
-        "title": "Remember it",
-        "description": "Cited Ask AI answers plus learning and recap tools."
+        "title": "Zapamiętaj to",
+        "description": "Cytowane odpowiedzi na pytania AI oraz narzędzia do nauki i podsumowań."
       },
-      "configuration": "AI features require an instance-level OpenAI-compatible configuration. Today remains fully useful without it, and no AI runs until you choose an AI action.",
-      "todayAction": "Explore Today",
-      "briefAction": "Open your first briefing"
+      "configuration": "Funkcje AI wymagają konfiguracji zgodnej z OpenAI na poziomie instancji. Kanał informacyjny Today pozostaje w pełni użyteczny bez tej konfiguracji i żadna sztuczna inteligencja nie będzie działać, dopóki nie wybierzesz akcji AI.",
+      "todayAction": "Przeglądaj kanał informacyjny Today",
+      "briefAction": "Otwórz swoją pierwszą odprawę prasową"
     }
   },
   "auth": {

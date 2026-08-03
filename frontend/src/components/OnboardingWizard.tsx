@@ -19,6 +19,7 @@ import {
 } from '@/api';
 import type { OnboardingSourceRecommendation } from '@/types';
 import { trackFeature } from '@/lib/analytics';
+import { BRIEF_ROUTE, TODAY_ROUTE } from '@/lib/navigation';
 
 interface Props {
   open: boolean;
@@ -113,7 +114,7 @@ export function OnboardingWizard({ open, onClose }: Props) {
     setStep('recommendations');
   }
 
-  function handleWorkflowAction(route: '/today' | '/brief', event: string) {
+  function handleWorkflowAction(route: typeof BRIEF_ROUTE | typeof TODAY_ROUTE, event: string) {
     trackFeature(event);
     onClose();
     void navigate(route);
@@ -129,7 +130,7 @@ export function OnboardingWizard({ open, onClose }: Props) {
         if (!v) onClose();
       }}
     >
-      <DialogContent className="max-w-lg w-full">
+      <DialogContent className="max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] max-w-lg overflow-y-auto">
         <DialogHeader>
           <DialogTitle>
             {step === 'interests'
@@ -193,14 +194,14 @@ export function OnboardingWizard({ open, onClose }: Props) {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => handleWorkflowAction('/brief', 'onboarding_ai_workflow_brief')}
+                onClick={() => handleWorkflowAction(BRIEF_ROUTE, 'onboarding_ai_workflow_brief')}
               >
                 {t('onboarding.workflow.briefAction')}
               </Button>
               <Button
                 size="sm"
                 autoFocus
-                onClick={() => handleWorkflowAction('/today', 'onboarding_ai_workflow_today')}
+                onClick={() => handleWorkflowAction(TODAY_ROUTE, 'onboarding_ai_workflow_today')}
               >
                 {t('onboarding.workflow.todayAction')}
               </Button>

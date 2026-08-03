@@ -5,23 +5,23 @@
   },
   "onboarding": {
     "workflow": {
-      "title": "Your AI research desk is ready",
-      "promise": "Your AI research desk for technical news. Find what matters, understand why, and remember it.",
+      "title": "Το ερευνητικό γραφείο AI σας είναι έτοιμο",
+      "promise": "Το γραφείο έρευνας AI για τεχνικές ειδήσεις. Βρείτε αυτό που έχει σημασία, κατανοήστε το γιατί και θυμηθείτε το.",
       "find": {
-        "title": "Find what matters",
-        "description": "Fresh centralized sources, smart ranking, and a personalized daily brief."
+        "title": "Βρείτε αυτό που έχει σημασία",
+        "description": "Νέες κεντρικές πηγές, έξυπνη κατάταξη και εξατομικευμένη ημερήσια ενημέρωση."
       },
       "understand": {
-        "title": "Understand why",
-        "description": "Article takeaways with context and alternative perspectives."
+        "title": "Καταλάβετε γιατί",
+        "description": "Προτάσεις άρθρων με πλαίσιο και εναλλακτικές προοπτικές."
       },
       "remember": {
-        "title": "Remember it",
-        "description": "Cited Ask AI answers plus learning and recap tools."
+        "title": "Να το θυμάσαι",
+        "description": "Παρατίθενται απαντήσεις Ask AI καθώς και εργαλεία εκμάθησης και ανακεφαλαίωσης."
       },
-      "configuration": "AI features require an instance-level OpenAI-compatible configuration. Today remains fully useful without it, and no AI runs until you choose an AI action.",
-      "todayAction": "Explore Today",
-      "briefAction": "Open your first briefing"
+      "configuration": "Οι λειτουργίες AI απαιτούν διαμόρφωση συμβατή με OpenAI σε επίπεδο παρουσίας. Η ροή ειδήσεων Today παραμένει πλήρως χρήσιμη χωρίς αυτήν τη διαμόρφωση και καμία τεχνητή νοημοσύνη δεν εκτελείται μέχρι να επιλέξετε μια ενέργεια AI.",
+      "todayAction": "Εξερευνήστε τη ροή ειδήσεων Σήμερα",
+      "briefAction": "Ανοίξτε την πρώτη σας ενημέρωση ειδήσεων"
     }
   },
   "auth": {

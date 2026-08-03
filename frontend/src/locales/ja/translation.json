@@ -5,23 +5,23 @@
   },
   "onboarding": {
     "workflow": {
-      "title": "Your AI research desk is ready",
-      "promise": "Your AI research desk for technical news. Find what matters, understand why, and remember it.",
+      "title": "AI リサーチデスクの準備が整いました",
+      "promise": "技術ニュースに関する AI リサーチ デスク。重要なことを見つけ、その理由を理解し、それを覚えておいてください。",
       "find": {
-        "title": "Find what matters",
-        "description": "Fresh centralized sources, smart ranking, and a personalized daily brief."
+        "title": "重要なことを見つける",
+        "description": "新鮮な一元化されたソース、スマートなランキング、パーソナライズされた毎日の概要。"
       },
       "understand": {
-        "title": "Understand why",
-        "description": "Article takeaways with context and alternative perspectives."
+        "title": "理由を理解する",
+        "description": "文脈と別の視点を含む記事の要点。"
       },
       "remember": {
-        "title": "Remember it",
-        "description": "Cited Ask AI answers plus learning and recap tools."
+        "title": "覚えておいてください",
+        "description": "Ask AI の回答と学習および要約ツールを引用しました。"
       },
-      "configuration": "AI features require an instance-level OpenAI-compatible configuration. Today remains fully useful without it, and no AI runs until you choose an AI action.",
-      "todayAction": "Explore Today",
-      "briefAction": "Open your first briefing"
+      "configuration": "AI 機能には、インスタンス レベルの OpenAI 互換構成が必要です。 Today ニュース フィードは、この構成なしでも引き続き十分に機能し、AI アクションを選択するまで AI は実行されません。",
+      "todayAction": "Today ニュース フィードを探索する",
+      "briefAction": "最初のニュースブリーフィングを開きます"
     }
   },
   "auth": {

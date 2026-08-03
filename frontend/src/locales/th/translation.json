@@ -5,23 +5,23 @@
   },
   "onboarding": {
     "workflow": {
-      "title": "Your AI research desk is ready",
-      "promise": "Your AI research desk for technical news. Find what matters, understand why, and remember it.",
+      "title": "โต๊ะวิจัย AI ของคุณพร้อมแล้ว",
+      "promise": "โต๊ะวิจัย AI ของคุณสำหรับข่าวทางเทคนิค ค้นหาสิ่งที่สำคัญ ทำความเข้าใจว่าทำไม และจดจำมัน",
       "find": {
-        "title": "Find what matters",
-        "description": "Fresh centralized sources, smart ranking, and a personalized daily brief."
+        "title": "ค้นหาสิ่งที่สำคัญ",
+        "description": "แหล่งข้อมูลแบบรวมศูนย์ที่สดใหม่ การจัดอันดับที่ชาญฉลาด และสรุปรายวันส่วนบุคคล"
       },
       "understand": {
-        "title": "Understand why",
-        "description": "Article takeaways with context and alternative perspectives."
+        "title": "เข้าใจว่าทำไม",
+        "description": "ประเด็นสำคัญของบทความพร้อมบริบทและมุมมองทางเลือก"
       },
       "remember": {
-        "title": "Remember it",
-        "description": "Cited Ask AI answers plus learning and recap tools."
+        "title": "จำไว้",
+        "description": "อ้างถึงคำตอบ Ask AI พร้อมเครื่องมือการเรียนรู้และสรุป"
       },
-      "configuration": "AI features require an instance-level OpenAI-compatible configuration. Today remains fully useful without it, and no AI runs until you choose an AI action.",
-      "todayAction": "Explore Today",
-      "briefAction": "Open your first briefing"
+      "configuration": "คุณสมบัติ AI จำเป็นต้องมีการกำหนดค่าที่เข้ากันได้กับ OpenAI ระดับอินสแตนซ์ ฟีดข่าววันนี้ยังคงมีประโยชน์อย่างเต็มที่หากไม่มีการกำหนดค่านี้ และ AI จะไม่ทำงานจนกว่าคุณจะเลือกการดำเนินการของ AI",
+      "todayAction": "สำรวจฟีดข่าววันนี้",
+      "briefAction": "เปิดการบรรยายสรุปข่าวครั้งแรกของคุณ"
     }
   },
   "auth": {

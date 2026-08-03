@@ -5,23 +5,23 @@
   },
   "onboarding": {
     "workflow": {
-      "title": "Your AI research desk is ready",
-      "promise": "Your AI research desk for technical news. Find what matters, understand why, and remember it.",
+      "title": "Uw AI-onderzoeksbureau is klaar",
+      "promise": "Uw AI-onderzoeksbureau voor technisch nieuws. Vind wat belangrijk is, begrijp waarom en onthoud het.",
       "find": {
-        "title": "Find what matters",
-        "description": "Fresh centralized sources, smart ranking, and a personalized daily brief."
+        "title": "Vind wat belangrijk is",
+        "description": "Nieuwe gecentraliseerde bronnen, slimme ranking en een gepersonaliseerde dagelijkse briefing."
       },
       "understand": {
-        "title": "Understand why",
-        "description": "Article takeaways with context and alternative perspectives."
+        "title": "Begrijp waarom",
+        "description": "Afhaalrestaurants met context en alternatieve perspectieven."
       },
       "remember": {
-        "title": "Remember it",
-        "description": "Cited Ask AI answers plus learning and recap tools."
+        "title": "Onthoud het",
+        "description": "Geciteerde Ask AI-antwoorden plus leer- en samenvattingstools."
       },
-      "configuration": "AI features require an instance-level OpenAI-compatible configuration. Today remains fully useful without it, and no AI runs until you choose an AI action.",
-      "todayAction": "Explore Today",
-      "briefAction": "Open your first briefing"
+      "configuration": "AI-functies vereisen een OpenAI-compatibele configuratie op instanceniveau. De Today-nieuwsfeed blijft volledig bruikbaar zonder deze configuratie, en er wordt geen AI uitgevoerd totdat u een AI-actie kiest.",
+      "todayAction": "Verken de Today-nieuwsfeed",
+      "briefAction": "Open uw eerste nieuwsbriefing"
     }
   },
   "auth": {

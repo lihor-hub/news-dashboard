@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, render, screen, fireEvent, waitFor, renderHook } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, useLocation } from 'react-router';
 import * as api from '../api';
@@ -8,6 +9,7 @@ import * as analytics from '../lib/analytics';
 import i18n from '../lib/i18n';
 import { useOnboardingWizard } from '../hooks/useOnboardingWizard';
 import { OnboardingWizard } from '../components/OnboardingWizard';
+import { BRIEF_ROUTE, TODAY_ROUTE, primaryNavigationItems } from '../lib/navigation';
 
 // ── helpers ────────────────────────────────────────────────────────────────────
 
@@ -259,15 +261,47 @@ describe('OnboardingWizard', () => {
   });
 
   it.each([
-    ['Explore Today', '/today', 'onboarding_ai_workflow_today'],
-    ['Open your first briefing', '/brief', 'onboarding_ai_workflow_brief'],
-  ])('navigates with the %s action and tracks it', async (label, route, event) => {
+    ['Explore Today', TODAY_ROUTE, 'Today', 'onboarding_ai_workflow_today'],
+    ['Open your first briefing', BRIEF_ROUTE, 'Brief', 'onboarding_ai_workflow_brief'],
+  ])(
+    'navigates with the %s action and tracks it',
+    async (label, route, navLabel, analyticsEvent) => {
+      vi.spyOn(api, 'fetchOnboardingInterests').mockResolvedValue(MOCK_INTERESTS);
+      vi.spyOn(api, 'fetchOnboardingSourceRecommendations').mockResolvedValue(MOCK_RECOMMENDATIONS);
+      vi.spyOn(api, 'saveOnboardingInterests').mockResolvedValue(undefined);
+      const createBriefing = vi.spyOn(api, 'createBriefing');
+      const trackFeature = vi.spyOn(analytics, 'trackFeature');
+      const onClose = vi.fn();
+
+      render(
+        <Wrapper>
+          <OnboardingWizard {...makeProps({ onClose })} />
+          <LocationProbe />
+        </Wrapper>
+      );
+      await waitFor(() => expect(screen.getByText('Technology')).toBeTruthy());
+      fireEvent.click(screen.getByText('Technology'));
+      fireEvent.click(screen.getByRole('button', { name: /next/i }));
+      await waitFor(() => expect(screen.getByText('Hacker News')).toBeTruthy());
+      fireEvent.click(screen.getByRole('button', { name: /apply/i }));
+      await screen.findByText('Find what matters');
+      fireEvent.click(screen.getByRole('button', { name: label }));
+
+      const productionRoute = primaryNavigationItems.find((item) => item.label === navLabel)?.to;
+      expect(productionRoute).toBe(route);
+      expect(screen.getByLabelText('current route').textContent).toBe(productionRoute);
+      expect(trackFeature).toHaveBeenCalledWith(analyticsEvent);
+      expect(createBriefing).not.toHaveBeenCalled();
+      expect(onClose).toHaveBeenCalledOnce();
+    }
+  );
+
+  it('moves focus to the primary final-step action and activates it with Enter', async () => {
     vi.spyOn(api, 'fetchOnboardingInterests').mockResolvedValue(MOCK_INTERESTS);
     vi.spyOn(api, 'fetchOnboardingSourceRecommendations').mockResolvedValue(MOCK_RECOMMENDATIONS);
     vi.spyOn(api, 'saveOnboardingInterests').mockResolvedValue(undefined);
-    const createBriefing = vi.spyOn(api, 'createBriefing');
-    const trackFeature = vi.spyOn(analytics, 'trackFeature');
     const onClose = vi.fn();
+    const user = userEvent.setup();
 
     render(
       <Wrapper>
@@ -275,17 +309,40 @@ describe('OnboardingWizard', () => {
         <LocationProbe />
       </Wrapper>
     );
-    await waitFor(() => expect(screen.getByText('Technology')).toBeTruthy());
-    fireEvent.click(screen.getByText('Technology'));
-    fireEvent.click(screen.getByRole('button', { name: /next/i }));
-    await waitFor(() => expect(screen.getByText('Hacker News')).toBeTruthy());
-    fireEvent.click(screen.getByRole('button', { name: /apply/i }));
-    await screen.findByText('Find what matters');
-    fireEvent.click(screen.getByRole('button', { name: label }));
+    await screen.findByText('Technology');
+    await user.click(screen.getByText('Technology'));
+    await user.click(screen.getByRole('button', { name: /next/i }));
+    await screen.findByText('Hacker News');
+    await user.click(screen.getByRole('button', { name: /apply/i }));
 
-    expect(screen.getByLabelText('current route').textContent).toBe(route);
-    expect(trackFeature).toHaveBeenCalledWith(event);
-    expect(createBriefing).not.toHaveBeenCalled();
+    const primaryAction = await screen.findByRole('button', { name: 'Explore Today' });
+    expect(primaryAction).toHaveFocus();
+    await user.keyboard('{Enter}');
+    expect(screen.getByLabelText('current route')).toHaveTextContent(TODAY_ROUTE);
+    expect(onClose).toHaveBeenCalledOnce();
+  });
+
+  it('closes the final step with Escape and is scrollable in a short viewport', async () => {
+    vi.spyOn(api, 'fetchOnboardingInterests').mockResolvedValue(MOCK_INTERESTS);
+    vi.spyOn(api, 'fetchOnboardingSourceRecommendations').mockResolvedValue(MOCK_RECOMMENDATIONS);
+    vi.spyOn(api, 'saveOnboardingInterests').mockResolvedValue(undefined);
+    const onClose = vi.fn();
+    const user = userEvent.setup();
+
+    render(
+      <Wrapper>
+        <OnboardingWizard {...makeProps({ onClose })} />
+      </Wrapper>
+    );
+    await screen.findByText('Technology');
+    await user.click(screen.getByText('Technology'));
+    await user.click(screen.getByRole('button', { name: /next/i }));
+    await screen.findByText('Hacker News');
+    await user.click(screen.getByRole('button', { name: /apply/i }));
+
+    const dialog = await screen.findByRole('dialog');
+    expect(dialog).toHaveClass('max-h-[calc(100dvh-2rem)]', 'overflow-y-auto');
+    await user.keyboard('{Escape}');
     expect(onClose).toHaveBeenCalledOnce();
   });
 

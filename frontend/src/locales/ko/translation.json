@@ -5,23 +5,23 @@
   },
   "onboarding": {
     "workflow": {
-      "title": "Your AI research desk is ready",
-      "promise": "Your AI research desk for technical news. Find what matters, understand why, and remember it.",
+      "title": "귀하의 AI 연구 데스크가 준비되었습니다",
+      "promise": "기술 뉴스를 위한 AI 연구 데스크. 중요한 것이 무엇인지 찾고, 그 이유를 이해하고, 기억하세요.",
       "find": {
-        "title": "Find what matters",
-        "description": "Fresh centralized sources, smart ranking, and a personalized daily brief."
+        "title": "중요한 것을 찾아보세요",
+        "description": "새로운 중앙 집중식 소스, 스마트 순위, 개인화된 일일 브리핑."
       },
       "understand": {
-        "title": "Understand why",
-        "description": "Article takeaways with context and alternative perspectives."
+        "title": "이유를 이해하세요",
+        "description": "맥락과 대안적 관점을 담은 기사 요약."
       },
       "remember": {
-        "title": "Remember it",
-        "description": "Cited Ask AI answers plus learning and recap tools."
+        "title": "기억해",
+        "description": "Ask AI 답변과 학습 및 요약 도구를 인용했습니다."
       },
-      "configuration": "AI features require an instance-level OpenAI-compatible configuration. Today remains fully useful without it, and no AI runs until you choose an AI action.",
-      "todayAction": "Explore Today",
-      "briefAction": "Open your first briefing"
+      "configuration": "AI 기능을 사용하려면 인스턴스 수준 OpenAI 호환 구성이 필요합니다. Today 뉴스 피드는 이 구성 없이도 완전히 유용하며 AI 작업을 선택할 때까지 AI가 실행되지 않습니다.",
+      "todayAction": "Today 뉴스피드 살펴보기",
+      "briefAction": "첫 번째 브리핑을 시작하세요"
     }
   },
   "auth": {

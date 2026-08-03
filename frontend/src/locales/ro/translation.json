@@ -5,23 +5,23 @@
   },
   "onboarding": {
     "workflow": {
-      "title": "Your AI research desk is ready",
-      "promise": "Your AI research desk for technical news. Find what matters, understand why, and remember it.",
+      "title": "Biroul dvs. de cercetare AI este gata",
+      "promise": "Biroul dvs. de cercetare AI pentru știri tehnice. Găsiți ceea ce contează, înțelegeți de ce și amintiți-l.",
       "find": {
-        "title": "Find what matters",
-        "description": "Fresh centralized sources, smart ranking, and a personalized daily brief."
+        "title": "Găsiți ceea ce contează",
+        "description": "Surse proaspete centralizate, clasare inteligentă și un brief zilnic personalizat."
       },
       "understand": {
-        "title": "Understand why",
-        "description": "Article takeaways with context and alternative perspectives."
+        "title": "Înțelege de ce",
+        "description": "Recomandări ale articolelor cu context și perspective alternative."
       },
       "remember": {
-        "title": "Remember it",
-        "description": "Cited Ask AI answers plus learning and recap tools."
+        "title": "Ține minte",
+        "description": "Răspunsuri citate Ask AI plus instrumente de învățare și recapitulare."
       },
-      "configuration": "AI features require an instance-level OpenAI-compatible configuration. Today remains fully useful without it, and no AI runs until you choose an AI action.",
-      "todayAction": "Explore Today",
-      "briefAction": "Open your first briefing"
+      "configuration": "Funcțiile AI necesită o configurație compatibilă cu OpenAI la nivel de instanță. Fluxul de știri Today rămâne pe deplin util fără această configurație și nu rulează AI până când alegeți o acțiune AI.",
+      "todayAction": "Explorați fluxul de știri Today",
+      "briefAction": "Deschideți primul dvs. briefing de știri"
     }
   },
   "auth": {

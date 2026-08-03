@@ -5,23 +5,23 @@
   },
   "onboarding": {
     "workflow": {
-      "title": "Your AI research desk is ready",
-      "promise": "Your AI research desk for technical news. Find what matters, understand why, and remember it.",
+      "title": "आपका AI रिसर्च डेस्क तैयार है",
+      "promise": "तकनीकी समाचारों के लिए आपका एआई अनुसंधान डेस्क। जो महत्वपूर्ण है उसे खोजें, क्यों समझें और इसे याद रखें।",
       "find": {
-        "title": "Find what matters",
-        "description": "Fresh centralized sources, smart ranking, and a personalized daily brief."
+        "title": "खोजें कि क्या मायने रखता है",
+        "description": "ताज़ा केंद्रीकृत स्रोत, स्मार्ट रैंकिंग और एक वैयक्तिकृत दैनिक संक्षिप्त विवरण।"
       },
       "understand": {
-        "title": "Understand why",
-        "description": "Article takeaways with context and alternative perspectives."
+        "title": "समझे क्यों",
+        "description": "सन्दर्भ और वैकल्पिक दृष्टिकोण के साथ लेख की मुख्य बातें।"
       },
       "remember": {
-        "title": "Remember it",
-        "description": "Cited Ask AI answers plus learning and recap tools."
+        "title": "यह याद करो",
+        "description": "उद्धृत आस्क एआई उत्तर प्लस सीखने और पुनर्कथन उपकरण।"
       },
-      "configuration": "AI features require an instance-level OpenAI-compatible configuration. Today remains fully useful without it, and no AI runs until you choose an AI action.",
-      "todayAction": "Explore Today",
-      "briefAction": "Open your first briefing"
+      "configuration": "AI सुविधाओं के लिए इंस्टेंस-स्तरीय OpenAI-संगत कॉन्फ़िगरेशन की आवश्यकता होती है। इस कॉन्फ़िगरेशन के बिना टुडे न्यूज़ फ़ीड पूरी तरह से उपयोगी बनी रहती है, और जब तक आप AI कार्रवाई नहीं चुनते तब तक कोई AI नहीं चलता है।",
+      "todayAction": "टुडे समाचार फ़ीड का अन्वेषण करें",
+      "briefAction": "अपनी पहली समाचार ब्रीफिंग खोलें"
     }
   },
   "auth": {

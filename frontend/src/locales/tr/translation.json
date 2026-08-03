@@ -5,23 +5,23 @@
   },
   "onboarding": {
     "workflow": {
-      "title": "Your AI research desk is ready",
-      "promise": "Your AI research desk for technical news. Find what matters, understand why, and remember it.",
+      "title": "Yapay zeka araştırma masanız hazır",
+      "promise": "Teknik haberler için yapay zeka araştırma masanız. Neyin önemli olduğunu bulun, nedenini anlayın ve hatırlayın.",
       "find": {
-        "title": "Find what matters",
-        "description": "Fresh centralized sources, smart ranking, and a personalized daily brief."
+        "title": "Önemli olanı bulun",
+        "description": "Yeni merkezi kaynaklar, akıllı sıralama ve kişiselleştirilmiş günlük özet."
       },
       "understand": {
-        "title": "Understand why",
-        "description": "Article takeaways with context and alternative perspectives."
+        "title": "Nedenini anlayın",
+        "description": "Bağlam ve alternatif bakış açıları içeren makale çıkarımları."
       },
       "remember": {
-        "title": "Remember it",
-        "description": "Cited Ask AI answers plus learning and recap tools."
+        "title": "Bunu hatırla",
+        "description": "Alıntı yapılan Ask AI yanıtlarının yanı sıra öğrenme ve özetleme araçları."
       },
-      "configuration": "AI features require an instance-level OpenAI-compatible configuration. Today remains fully useful without it, and no AI runs until you choose an AI action.",
-      "todayAction": "Explore Today",
-      "briefAction": "Open your first briefing"
+      "configuration": "Yapay zeka özellikleri, örnek düzeyinde OpenAI uyumlu bir yapılandırma gerektirir. Today haber akışı, bu yapılandırma olmadan tamamen kullanışlı olmaya devam eder ve siz bir AI eylemi seçene kadar hiçbir AI çalışmaz.",
+      "todayAction": "Today haber akışını keşfedin",
+      "briefAction": "İlk haber brifinginizi açın"
     }
   },
   "auth": {

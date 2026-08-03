@@ -5,23 +5,23 @@
   },
   "onboarding": {
     "workflow": {
-      "title": "Your AI research desk is ready",
-      "promise": "Your AI research desk for technical news. Find what matters, understand why, and remember it.",
+      "title": "Meja penelitian AI Anda sudah siap",
+      "promise": "Meja penelitian AI Anda untuk berita teknis. Temukan apa yang penting, pahami alasannya, dan ingat itu.",
       "find": {
-        "title": "Find what matters",
-        "description": "Fresh centralized sources, smart ranking, and a personalized daily brief."
+        "title": "Temukan hal yang penting",
+        "description": "Sumber terpusat yang baru, peringkat cerdas, dan ringkasan harian yang dipersonalisasi."
       },
       "understand": {
-        "title": "Understand why",
-        "description": "Article takeaways with context and alternative perspectives."
+        "title": "Pahami alasannya",
+        "description": "Kesimpulan artikel dengan konteks dan perspektif alternatif."
       },
       "remember": {
-        "title": "Remember it",
-        "description": "Cited Ask AI answers plus learning and recap tools."
+        "title": "Ingat itu",
+        "description": "Dikutip jawaban Ask AI plus alat pembelajaran dan rekap."
       },
-      "configuration": "AI features require an instance-level OpenAI-compatible configuration. Today remains fully useful without it, and no AI runs until you choose an AI action.",
-      "todayAction": "Explore Today",
-      "briefAction": "Open your first briefing"
+      "configuration": "Fitur AI memerlukan konfigurasi yang kompatibel dengan OpenAI tingkat instans. Umpan berita Today tetap berguna sepenuhnya tanpa konfigurasi ini, dan AI tidak akan berjalan sampai Anda memilih tindakan AI.",
+      "todayAction": "Jelajahi umpan berita Hari Ini",
+      "briefAction": "Buka briefing berita pertama Anda"
     }
   },
   "auth": {

@@ -5,23 +5,23 @@
   },
   "onboarding": {
     "workflow": {
-      "title": "Your AI research desk is ready",
-      "promise": "Your AI research desk for technical news. Find what matters, understand why, and remember it.",
+      "title": "Din AI-forskningspult er klar",
+      "promise": "Din AI-forskningsskranke for tekniske nyheder. Find det, der betyder noget, forstå hvorfor, og husk det.",
       "find": {
-        "title": "Find what matters",
-        "description": "Fresh centralized sources, smart ranking, and a personalized daily brief."
+        "title": "Find det der betyder noget",
+        "description": "Friske centraliserede kilder, smart rangering og en personlig daglig brief."
       },
       "understand": {
-        "title": "Understand why",
-        "description": "Article takeaways with context and alternative perspectives."
+        "title": "Forstå hvorfor",
+        "description": "Artikel takeaways med kontekst og alternative perspektiver."
       },
       "remember": {
-        "title": "Remember it",
-        "description": "Cited Ask AI answers plus learning and recap tools."
+        "title": "Husk det",
+        "description": "Citeret Spørg AI-svar plus lærings- og opsummeringsværktøjer."
       },
-      "configuration": "AI features require an instance-level OpenAI-compatible configuration. Today remains fully useful without it, and no AI runs until you choose an AI action.",
-      "todayAction": "Explore Today",
-      "briefAction": "Open your first briefing"
+      "configuration": "AI-funktioner kræver en OpenAI-kompatibel konfiguration på instansniveau. Dagens nyhedsfeed forbliver fuldt ud nyttig uden denne konfiguration, og ingen AI kører, før du vælger en AI-handling.",
+      "todayAction": "Udforsk dagens nyhedsfeed",
+      "briefAction": "Åbn din første nyhedsbriefing"
     }
   },
   "auth": {

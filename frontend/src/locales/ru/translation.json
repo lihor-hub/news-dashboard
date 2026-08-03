@@ -5,23 +5,23 @@
   },
   "onboarding": {
     "workflow": {
-      "title": "Your AI research desk is ready",
-      "promise": "Your AI research desk for technical news. Find what matters, understand why, and remember it.",
+      "title": "Ваш исследовательский центр по искусственному интеллекту готов",
+      "promise": "Ваш отдел исследования искусственного интеллекта для получения технических новостей. Найдите то, что важно, поймите почему и запомните это.",
       "find": {
-        "title": "Find what matters",
-        "description": "Fresh centralized sources, smart ranking, and a personalized daily brief."
+        "title": "Найдите то, что важно",
+        "description": "Свежие централизованные источники, интеллектуальное ранжирование и персонализированный ежедневный обзор."
       },
       "understand": {
-        "title": "Understand why",
-        "description": "Article takeaways with context and alternative perspectives."
+        "title": "Поймите, почему",
+        "description": "Выводы из статьи с контекстом и альтернативными точками зрения."
       },
       "remember": {
-        "title": "Remember it",
-        "description": "Cited Ask AI answers plus learning and recap tools."
+        "title": "Помните это",
+        "description": "Цитируются ответы Ask AI, а также инструменты обучения и подведения итогов."
       },
-      "configuration": "AI features require an instance-level OpenAI-compatible configuration. Today remains fully useful without it, and no AI runs until you choose an AI action.",
-      "todayAction": "Explore Today",
-      "briefAction": "Open your first briefing"
+      "configuration": "Для функций искусственного интеллекта требуется конфигурация, совместимая с OpenAI, на уровне экземпляра. Лента новостей «Сегодня» остается полностью полезной и без этой конфигурации, и ИИ не запускается, пока вы не выберете действие ИИ.",
+      "todayAction": "Изучите ленту новостей Today",
+      "briefAction": "Откройте свой первый брифинг новостей"
     }
   },
   "auth": {

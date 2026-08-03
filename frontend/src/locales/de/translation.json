@@ -5,23 +5,23 @@
   },
   "onboarding": {
     "workflow": {
-      "title": "Your AI research desk is ready",
-      "promise": "Your AI research desk for technical news. Find what matters, understand why, and remember it.",
+      "title": "Ihr KI-Forschungstisch ist fertig",
+      "promise": "Ihr KI-Forschungsschalter für technische Neuigkeiten. Finden Sie heraus, worauf es ankommt, verstehen Sie warum, und erinnern Sie sich daran.",
       "find": {
-        "title": "Find what matters",
-        "description": "Fresh centralized sources, smart ranking, and a personalized daily brief."
+        "title": "Finden Sie heraus, worauf es ankommt",
+        "description": "Frische zentralisierte Quellen, intelligentes Ranking und ein personalisiertes Tagesbriefing."
       },
       "understand": {
-        "title": "Understand why",
-        "description": "Article takeaways with context and alternative perspectives."
+        "title": "Verstehen Sie, warum",
+        "description": "Artikel zum Mitnehmen mit Kontext und alternativen Perspektiven."
       },
       "remember": {
-        "title": "Remember it",
-        "description": "Cited Ask AI answers plus learning and recap tools."
+        "title": "Denken Sie daran",
+        "description": "Zitierte Ask AI-Antworten sowie Lern- und Zusammenfassungstools."
       },
-      "configuration": "AI features require an instance-level OpenAI-compatible configuration. Today remains fully useful without it, and no AI runs until you choose an AI action.",
-      "todayAction": "Explore Today",
-      "briefAction": "Open your first briefing"
+      "configuration": "KI-Funktionen erfordern eine OpenAI-kompatible Konfiguration auf Instanzebene. Der Newsfeed „Heute“ bleibt auch ohne diese Konfiguration voll nutzbar und es wird keine KI ausgeführt, bis Sie eine KI-Aktion auswählen.",
+      "todayAction": "Entdecken Sie den Today-Newsfeed",
+      "briefAction": "Eröffnen Sie Ihre erste Pressekonferenz"
     }
   },
   "auth": {

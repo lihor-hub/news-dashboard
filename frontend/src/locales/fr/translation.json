@@ -5,23 +5,23 @@
   },
   "onboarding": {
     "workflow": {
-      "title": "Your AI research desk is ready",
-      "promise": "Your AI research desk for technical news. Find what matters, understand why, and remember it.",
+      "title": "Votre bureau de recherche en IA est prêt",
+      "promise": "Votre bureau de recherche en IA pour les actualités techniques. Trouvez ce qui compte, comprenez pourquoi et souvenez-vous-en.",
       "find": {
-        "title": "Find what matters",
-        "description": "Fresh centralized sources, smart ranking, and a personalized daily brief."
+        "title": "Trouvez ce qui compte",
+        "description": "De nouvelles sources centralisées, un classement intelligent et un briefing quotidien personnalisé."
       },
       "understand": {
-        "title": "Understand why",
-        "description": "Article takeaways with context and alternative perspectives."
+        "title": "Comprendre pourquoi",
+        "description": "Article à retenir avec contexte et perspectives alternatives."
       },
       "remember": {
-        "title": "Remember it",
-        "description": "Cited Ask AI answers plus learning and recap tools."
+        "title": "Rappelez-vous-en",
+        "description": "Cité des réponses Ask AI ainsi que des outils d'apprentissage et de récapitulation."
       },
-      "configuration": "AI features require an instance-level OpenAI-compatible configuration. Today remains fully useful without it, and no AI runs until you choose an AI action.",
-      "todayAction": "Explore Today",
-      "briefAction": "Open your first briefing"
+      "configuration": "Les fonctionnalités d'IA nécessitent une configuration compatible OpenAI au niveau de l'instance. Le fil d'actualité Aujourd'hui reste pleinement utile sans cette configuration, et aucune IA ne s'exécute tant que vous n'avez pas choisi une action IA.",
+      "todayAction": "Explorez le fil d'actualité Aujourd'hui",
+      "briefAction": "Ouvrez votre premier point de presse"
     }
   },
   "auth": {
