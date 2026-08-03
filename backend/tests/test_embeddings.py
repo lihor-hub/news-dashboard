@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import time
 from pathlib import Path
 from typing import Any
@@ -10,6 +11,8 @@ import httpx
 import openai
 import pytest
 from fastapi.testclient import TestClient
+from langchain_core.messages import AIMessage
+from langchain_core.runnables import RunnableLambda
 
 from news_dashboard import embeddings as embeddings_mod
 from news_dashboard.auth import require_auth
@@ -144,7 +147,7 @@ def _seed_source(db_path: Path, slug: str = "test-source") -> None:
         )
 
 
-def _seed_unembedded_articles(db_path: Path, count: int) -> list[int]:
+def _seed_unembedded_articles(db_path: Any, count: int) -> list[int]:
     init_db(db_path)
     _seed_source(db_path)
     ids = []
@@ -202,6 +205,101 @@ def test_embed_all_eligible_skips_failing_article_and_continues(
             ).fetchall()
         }
     assert embedded_ids == {ids[0], ids[2]}
+
+
+def test_embed_all_eligible_limits_backfill_in_postgres(
+    pg_clean: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    ids = _seed_unembedded_articles(pg_clean, count=20)
+    monkeypatch.setattr(
+        embeddings_mod,
+        "_embed",
+        lambda _text, **_kwargs: [0.1] * EMBEDDING_DIMENSIONS,
+    )
+
+    count = embed_all_eligible(pg_clean, max_articles=16)
+
+    assert count == 16
+    with connect(database_url=pg_clean) as conn:
+        embedded = [
+            row["id"]
+            for row in conn.execute(
+                "SELECT id FROM articles WHERE embedding_vec IS NOT NULL ORDER BY id"
+            ).fetchall()
+        ]
+    assert embedded == ids[:16]
+
+
+def test_mcp_execution_policy_bounds_provider_calls(monkeypatch: pytest.MonkeyPatch) -> None:
+    from news_dashboard.assistant.service import AskExecutionPolicy
+
+    captured_client: dict[str, Any] = {}
+    captured_model: dict[str, Any] = {}
+
+    class FakeEmbeddingData:
+        def __init__(self) -> None:
+            self.embedding = [0.1]
+
+    class FakeEmbeddings:
+        def create(self, **_kwargs: Any) -> Any:
+            return type("Response", (), {"data": [FakeEmbeddingData()]})()
+
+    class FakeClient:
+        embeddings = FakeEmbeddings()
+
+    def fake_client(**kwargs: Any) -> FakeClient:
+        captured_client.update(kwargs)
+        return FakeClient()
+
+    monkeypatch.setattr(embeddings_mod, "_embeddings_ai_config", lambda: ("key", None, "embed"))
+    monkeypatch.setattr("news_dashboard.ai_client.get_chat_client", fake_client)
+    embeddings_mod._embed("question", timeout_seconds=20.0, trace_content=False)
+    assert captured_client["timeout_seconds"] == 20.0
+    assert captured_client["enable_tracing"] is False
+
+    monkeypatch.setenv("OPENAI_API_KEY", "key")
+    monkeypatch.setattr(
+        "news_dashboard.ai_client.get_chat_model",
+        lambda **kwargs: (
+            captured_model.update(kwargs)
+            or RunnableLambda(lambda _value: AIMessage(content="answer"))
+        ),
+    )
+    policy = AskExecutionPolicy.mcp()
+    embeddings_mod._answer(
+        "system",
+        "user",
+        max_tokens=policy.answer_max_tokens,
+        timeout_seconds=policy.provider_timeout_seconds,
+    )
+    assert captured_model["max_tokens"] == 512
+    assert captured_model["timeout_seconds"] == 20.0
+
+
+def test_private_backfill_logs_no_article_or_provider_content(
+    pg_clean: str,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    ids = _seed_unembedded_articles(pg_clean, count=1)
+    hostile = "PRIVATE PROVIDER BODY"
+
+    def fail_privately(_text: str, **_kwargs: Any) -> list[float]:
+        raise RuntimeError(hostile)
+
+    monkeypatch.setattr(embeddings_mod, "_embed", fail_privately)
+    with caplog.at_level(logging.WARNING, logger="news_dashboard.embeddings"):
+        count = embed_all_eligible(
+            pg_clean,
+            max_articles=16,
+            provider_timeout_seconds=20.0,
+            trace_content=False,
+        )
+
+    assert count == 0
+    rendered = "\n".join(record.getMessage() for record in caplog.records)
+    assert hostile not in rendered
+    assert str(ids[0]) not in rendered
 
 
 # ── /api/ask surfaces a clean error on persistent embedding failure ────────

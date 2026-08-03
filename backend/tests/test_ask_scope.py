@@ -29,7 +29,7 @@ def _test_vector(value: float = 0.1, dims: int = 10) -> str:
     return vector_literal(vec)
 
 
-def _seed_source(db_path: Path, slug: str = "test-source", name: str = "TestSource") -> None:
+def _seed_source(db_path: Any, slug: str = "test-source", name: str = "TestSource") -> None:
     with connect(db_path) as conn:
         conn.execute(
             """
@@ -244,7 +244,7 @@ def test_ask_include_all_widens_corpus(tmp_path: Path, monkeypatch: pytest.Monke
 # ─── User-scoped retrieval tests ──────────────────────────────────────────────
 
 
-def _seed_user(db_path: Path, username: str) -> int:
+def _seed_user(db_path: Any, username: str) -> int:
     """Insert a user and return the generated id."""
     with connect(db_path) as conn:
         row = conn.execute(
@@ -255,7 +255,7 @@ def _seed_user(db_path: Path, username: str) -> int:
 
 
 def _seed_article_with_embedding(
-    db_path: Path,
+    db_path: Any,
     article_id: int,
     source_slug: str = "test-source",
     source_name: str = "TestSource",
@@ -290,7 +290,7 @@ def _seed_article_with_embedding(
         )
 
 
-def _set_user_article_state(db_path: Path, user_id: int, article_id: int, state: str) -> None:
+def _set_user_article_state(db_path: Any, user_id: int, article_id: int, state: str) -> None:
     with connect(db_path) as conn:
         conn.execute(
             "INSERT INTO user_article_state(user_id, article_id, state) VALUES (%s, %s, %s)"
@@ -408,6 +408,75 @@ def test_ask_respects_disabled_user_sources(
     assert result["answer"] == "filtered answer"
     source_ids = {s["id"] for s in result["sources"]}
     assert 6 not in source_ids
+
+
+def test_mcp_policy_preserves_exact_two_user_visibility_corpora(
+    pg_clean: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """MCP bounds must not weaken the canonical per-user visibility predicates."""
+    from news_dashboard.assistant.service import AskExecutionPolicy
+    from news_dashboard.embeddings import ask
+
+    init_db(pg_clean)
+    alice = _seed_user(pg_clean, "alice-policy")
+    bob = _seed_user(pg_clean, "bob-policy")
+    _seed_source(pg_clean, "global", "Global")
+    _seed_source(pg_clean, "disabled", "Disabled")
+    _seed_source(pg_clean, "alice-private", "Alice Private")
+    _seed_source(pg_clean, "bob-private", "Bob Private")
+    with connect(database_url=pg_clean) as conn:
+        conn.execute("UPDATE sources SET owner_user_id=%s WHERE slug='alice-private'", (alice,))
+        conn.execute("UPDATE sources SET owner_user_id=%s WHERE slug='bob-private'", (bob,))
+        conn.execute(
+            "INSERT INTO user_sources(user_id, source_slug, enabled) "
+            "VALUES (%s, 'disabled', FALSE)",
+            (alice,),
+        )
+
+    article_sources = {
+        1: "global",
+        2: "global",
+        3: "global",
+        4: "global",
+        5: "global",
+        6: "global",
+        7: "disabled",
+        8: "alice-private",
+        9: "alice-private",
+        10: "bob-private",
+    }
+    for article_id, source_slug in article_sources.items():
+        _seed_article_with_embedding(
+            pg_clean,
+            article_id,
+            source_slug=source_slug,
+            source_name=source_slug,
+        )
+    for article_id in (1, 2, 3, 4, 5, 7, 8, 10):
+        _set_user_article_state(pg_clean, alice, article_id, "done")
+    _set_user_article_state(pg_clean, alice, 6, "archived")
+    with connect(database_url=pg_clean) as conn:
+        conn.execute(
+            "UPDATE user_article_state SET starred=TRUE WHERE user_id=%s AND article_id IN (2, 8)",
+            (alice,),
+        )
+
+    _make_openai_stub(monkeypatch, answer="bounded answer")
+    policy = AskExecutionPolicy.mcp()
+    saved = ask("question", pg_clean, user_id=alice, execution_policy=policy)
+    visible = ask(
+        "question",
+        pg_clean,
+        user_id=alice,
+        include_all=True,
+        execution_policy=policy,
+    )
+
+    assert {source["id"] for source in saved["sources"]} == {1, 2, 3, 4, 5, 8}
+    assert {source["id"] for source in visible["sources"]} == {1, 2, 3, 4, 5, 8, 9}
+    forbidden = {6, 7, 10}
+    assert forbidden.isdisjoint(source["id"] for source in saved["sources"])
+    assert forbidden.isdisjoint(source["id"] for source in visible["sources"])
 
 
 # ── POST /api/ask — payload bounds (#602) ────────────────────────────────────

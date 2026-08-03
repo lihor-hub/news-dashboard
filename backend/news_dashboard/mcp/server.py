@@ -24,6 +24,7 @@ from mcp.types import CallToolRequestParams, ErrorData
 from starlette.responses import PlainTextResponse
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
+from news_dashboard.assistant.service import AskExecutionPolicy
 from news_dashboard.body_fetch import fetch_and_cache_body
 from news_dashboard.briefings import service as briefing_service
 from news_dashboard.ingest.service import clean_html, search_articles
@@ -59,6 +60,7 @@ MCP_BURST_CAPACITY = 10
 MCP_MAX_RESPONSE_BYTES = 16_384
 MCP_STRUCTURED_CONTENT_BYTES = 4_800
 MCP_MAX_RATE_LIMIT_IDENTITIES = 4_096
+MCP_ASK_EXECUTION_POLICY = AskExecutionPolicy.mcp()
 _INTERNAL_ERROR_MESSAGE = "Internal server error"
 _ARTICLE_FIELD_BYTE_CAPS = {
     "title": 512,
@@ -587,6 +589,7 @@ async def ask_news(
             question,
             include_all=corpus == "all_visible",
             user_id=user_id,
+            execution_policy=MCP_ASK_EXECUTION_POLICY,
         )
     )
     sources = cast("list[dict[str, Any]]", result.get("sources", []))

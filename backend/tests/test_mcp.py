@@ -2233,6 +2233,7 @@ def test_ask_news_calls_canonical_assistant_with_token_identity(
     expected_include_all: bool,
 ) -> None:
     from news_dashboard.mcp import service
+    from news_dashboard.mcp.server import MCP_ASK_EXECUTION_POLICY
 
     monkeypatch.setenv("DATABASE_URL", pg_clean)
     user_id = _make_user(pg_clean, f"ask-call-{expected_include_all}")
@@ -2265,6 +2266,7 @@ def test_ask_news_calls_canonical_assistant_with_token_identity(
         "question": expected_question,
         "include_all": expected_include_all,
         "user_id": user_id,
+        "execution_policy": MCP_ASK_EXECUTION_POLICY,
     }
 
 

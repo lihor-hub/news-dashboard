@@ -200,6 +200,7 @@ def get_openai_client(
     api_key: str,
     base_url: str | None = None,
     timeout_seconds: float | None = None,
+    enable_tracing: bool = True,
 ) -> OpenAI:
     """Return an OpenAI client, Langfuse-wrapped when tracing is configured.
 
@@ -213,7 +214,7 @@ def get_openai_client(
     if base_url is not None:
         kwargs["base_url"] = base_url
 
-    if langfuse_enabled():
+    if enable_tracing and langfuse_enabled():
         _normalise_host_env()
         # Langfuse's drop-in client subclasses openai.OpenAI and traces every
         # request. Resolve it dynamically so this module type-checks whether or
@@ -235,6 +236,7 @@ def get_chat_model(
     max_tokens: int | None = None,
     temperature: float | None = None,
     response_format: dict[str, str] | None = None,
+    timeout_seconds: float | None = None,
 ) -> Runnable[LanguageModelInput, AIMessage]:
     """Return a LangChain chat model with the existing OpenAI fallback semantics."""
     from langchain_core.runnables import RunnableConfig, RunnableLambda
@@ -244,7 +246,7 @@ def get_chat_model(
     kwargs: dict[str, Any] = {
         "api_key": api_key,
         "model": model,
-        "timeout": request_timeout_seconds(),
+        "timeout": request_timeout_seconds() if timeout_seconds is None else timeout_seconds,
     }
     if base_url is not None:
         kwargs["base_url"] = base_url
@@ -263,7 +265,7 @@ def get_chat_model(
     fallback_kwargs: dict[str, Any] = {
         "api_key": openai_key,
         "model": model,
-        "timeout": request_timeout_seconds(),
+        "timeout": request_timeout_seconds() if timeout_seconds is None else timeout_seconds,
     }
     if openai_base is not None:
         fallback_kwargs["base_url"] = openai_base
@@ -298,7 +300,7 @@ def response_text(message: AIMessage) -> str:
 
 def _invoke[T](
     primary: OpenAI,
-    fallback: tuple[str, str | None] | None,
+    fallback: tuple[str, str | None, float | None, bool] | None,
     call: Callable[[OpenAI], T],
 ) -> T:
     """Run *call* against *primary*; on OpenAIError retry once on the OpenAI fallback.
@@ -316,15 +318,24 @@ def _invoke[T](
     try:
         return call(primary)
     except OpenAIError as exc:
-        api_key, base_url = fallback
-        logger.warning("free LLM request failed (%s); retrying on OpenAI fallback", exc)
-        return call(get_openai_client(api_key=api_key, base_url=base_url))
+        api_key, base_url, timeout_seconds, enable_tracing = fallback
+        if enable_tracing:
+            logger.warning("free LLM request failed (%s); retrying on OpenAI fallback", exc)
+        else:
+            logger.warning("free LLM request failed; retrying on OpenAI fallback")
+        kwargs: dict[str, Any] = {"api_key": api_key, "base_url": base_url}
+        if timeout_seconds is not None:
+            kwargs["timeout_seconds"] = timeout_seconds
+        kwargs["enable_tracing"] = enable_tracing
+        return call(get_openai_client(**kwargs))
 
 
 class _FallbackCompletions:
     """``chat.completions`` shim that routes ``create`` through :func:`_invoke`."""
 
-    def __init__(self, primary: OpenAI, fallback: tuple[str, str | None] | None) -> None:
+    def __init__(
+        self, primary: OpenAI, fallback: tuple[str, str | None, float | None, bool] | None
+    ) -> None:
         self._primary = primary
         self._fallback = fallback
 
@@ -335,14 +346,18 @@ class _FallbackCompletions:
 class _FallbackChat:
     """``chat`` namespace exposing a fallback-aware ``completions``."""
 
-    def __init__(self, primary: OpenAI, fallback: tuple[str, str | None] | None) -> None:
+    def __init__(
+        self, primary: OpenAI, fallback: tuple[str, str | None, float | None, bool] | None
+    ) -> None:
         self.completions = _FallbackCompletions(primary, fallback)
 
 
 class _FallbackEmbeddings:
     """``embeddings`` shim that routes ``create`` through :func:`_invoke`."""
 
-    def __init__(self, primary: OpenAI, fallback: tuple[str, str | None] | None) -> None:
+    def __init__(
+        self, primary: OpenAI, fallback: tuple[str, str | None, float | None, bool] | None
+    ) -> None:
         self._primary = primary
         self._fallback = fallback
 
@@ -358,12 +373,20 @@ class _FallbackClient:
     LLM) client and falls back to OpenAI on failure (see :func:`get_chat_client`).
     """
 
-    def __init__(self, primary: OpenAI, fallback: tuple[str, str | None] | None) -> None:
+    def __init__(
+        self, primary: OpenAI, fallback: tuple[str, str | None, float | None, bool] | None
+    ) -> None:
         self.chat = _FallbackChat(primary, fallback)
         self.embeddings = _FallbackEmbeddings(primary, fallback)
 
 
-def get_chat_client(*, api_key: str, base_url: str | None = None) -> OpenAI:
+def get_chat_client(
+    *,
+    api_key: str,
+    base_url: str | None = None,
+    timeout_seconds: float | None = None,
+    enable_tracing: bool = True,
+) -> OpenAI:
     """Return a chat/embedding client that prefers the free LLM gateway.
 
     *api_key* / *base_url* are the primary (free LLM) credentials, as resolved by
@@ -378,11 +401,16 @@ def get_chat_client(*, api_key: str, base_url: str | None = None) -> OpenAI:
     ``chat.completions.create`` and ``embeddings.create`` calls made through it.
     The OpenAI fallback client is built lazily, only on the first failure.
     """
-    primary = get_openai_client(api_key=api_key, base_url=base_url)
+    client_kwargs: dict[str, Any] = {"api_key": api_key, "base_url": base_url}
+    if timeout_seconds is not None:
+        client_kwargs["timeout_seconds"] = timeout_seconds
+    if not enable_tracing:
+        client_kwargs["enable_tracing"] = False
+    primary = get_openai_client(**client_kwargs)
     openai_key, openai_base = openai_config()
-    fallback: tuple[str, str | None] | None = None
+    fallback: tuple[str, str | None, float | None, bool] | None = None
     if openai_key and (openai_key, openai_base) != (api_key, base_url):
-        fallback = (openai_key, openai_base)
+        fallback = (openai_key, openai_base, timeout_seconds, enable_tracing)
     return cast("OpenAI", _FallbackClient(primary, fallback))
 
 

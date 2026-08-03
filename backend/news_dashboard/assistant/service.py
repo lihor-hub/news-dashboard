@@ -2,18 +2,54 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Any
 
 from news_dashboard.agent_actions import AgentActionError, AgentActionNotFoundError
 from news_dashboard.embeddings import EmbeddingUnavailableError
 
 
+@dataclass(frozen=True)
+class AskExecutionPolicy:
+    """Optional execution limits and trace privacy controls for Ask AI."""
+
+    backfill_limit: int | None = None
+    retrieval_limit: int = 8
+    answer_max_tokens: int | None = None
+    provider_timeout_seconds: float | None = None
+    trace_content: bool = True
+    trace_surface: str | None = None
+
+    @classmethod
+    def mcp(cls) -> AskExecutionPolicy:
+        return cls(
+            backfill_limit=16,
+            retrieval_limit=8,
+            answer_max_tokens=512,
+            provider_timeout_seconds=20.0,
+            trace_content=False,
+            trace_surface="mcp",
+        )
+
+
 def ask(
-    query: str, *, include_all: bool, user_id: int, session_id: str | None = None
+    query: str,
+    *,
+    include_all: bool,
+    user_id: int,
+    session_id: str | None = None,
+    execution_policy: AskExecutionPolicy | None = None,
 ) -> dict[str, Any]:
     from news_dashboard.embeddings import ask as ask_impl
 
-    return ask_impl(query, include_all=include_all, user_id=user_id, session_id=session_id)
+    kwargs: dict[str, Any] = {
+        "include_all": include_all,
+        "user_id": user_id,
+        "session_id": session_id,
+    }
+    if execution_policy is not None:
+        kwargs["execution_policy"] = execution_policy
+    return ask_impl(query, **kwargs)
 
 
 def plan_actions(query: str, *, user_id: int, is_admin: bool) -> dict[str, Any]:
@@ -78,6 +114,7 @@ def record_feedback(*, user_id: int, trace_id: str, helpful: bool, comment: str 
 __all__ = [
     "AgentActionError",
     "AgentActionNotFoundError",
+    "AskExecutionPolicy",
     "EmbeddingUnavailableError",
     "approve_run",
     "ask",
