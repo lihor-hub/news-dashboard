@@ -16,8 +16,13 @@ MAX_TOKEN_NAME_LENGTH = 120
 
 
 def mcp_enabled() -> bool:
-    """Whether the opt-in MCP server is enabled. Disabled unless explicitly configured."""
-    return (os.getenv("MCP_SERVER_ENABLED") or "").strip().lower() in {"1", "true", "yes", "on"}
+    """Whether the MCP server is enabled unless explicitly disabled."""
+    return (os.getenv("MCP_SERVER_ENABLED") or "").strip().lower() not in {
+        "false",
+        "0",
+        "no",
+        "off",
+    }
 
 
 def _hash_token(token: str) -> str:

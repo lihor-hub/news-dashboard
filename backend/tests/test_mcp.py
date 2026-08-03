@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Generator
 from typing import Any
 
@@ -136,17 +137,79 @@ def test_authenticate_token_rejects_unknown_revoked_and_malformed(pg_clean: str)
     assert service.authenticate_token(token, database_url=pg_clean) is None
 
 
-def test_mcp_enabled_defaults_to_false(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_mcp_enabled_defaults_to_true(monkeypatch: pytest.MonkeyPatch) -> None:
     from news_dashboard.mcp import service
 
     monkeypatch.delenv("MCP_SERVER_ENABLED", raising=False)
-    assert service.mcp_enabled() is False
-
-    monkeypatch.setenv("MCP_SERVER_ENABLED", "true")
     assert service.mcp_enabled() is True
 
-    monkeypatch.setenv("MCP_SERVER_ENABLED", "0")
+
+@pytest.mark.parametrize("value", ["false", "0", "no", "off"])
+def test_mcp_enabled_explicit_false_values_disable_server(
+    monkeypatch: pytest.MonkeyPatch, value: str
+) -> None:
+    from news_dashboard.mcp import service
+
+    monkeypatch.setenv("MCP_SERVER_ENABLED", value)
     assert service.mcp_enabled() is False
+
+
+def test_token_verifier_returns_expected_access_token(
+    pg_clean: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from news_dashboard.mcp import service
+    from news_dashboard.mcp.auth import NewsDashboardTokenVerifier
+
+    monkeypatch.setenv("DATABASE_URL", pg_clean)
+    user_id = _make_user(pg_clean, "alice-verifier")
+    created = service.create_token(
+        user_id,
+        "verifier",
+        scopes=("read", "ask"),
+        database_url=pg_clean,
+    )
+
+    verified = asyncio.run(NewsDashboardTokenVerifier().verify_token(created["token"]))
+
+    assert verified is not None
+    assert verified.token == created["token"]
+    assert verified.subject == str(user_id)
+    assert verified.client_id == f"mcp-token:{created['id']}"
+    assert verified.scopes == ["ask", "read"]
+    assert verified.claims == {"user_id": user_id, "token_id": created["id"]}
+
+
+@pytest.mark.parametrize("token", ["not-a-real-token", ""])
+def test_token_verifier_rejects_malformed_tokens(token: str) -> None:
+    from news_dashboard.mcp.auth import NewsDashboardTokenVerifier
+
+    assert asyncio.run(NewsDashboardTokenVerifier().verify_token(token)) is None
+
+
+def test_token_verifier_rejects_unknown_token(
+    pg_clean: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from news_dashboard.mcp import service
+    from news_dashboard.mcp.auth import NewsDashboardTokenVerifier
+
+    monkeypatch.setenv("DATABASE_URL", pg_clean)
+    unknown_token = f"{service.TOKEN_PREFIX}not-issued"
+
+    assert asyncio.run(NewsDashboardTokenVerifier().verify_token(unknown_token)) is None
+
+
+def test_token_verifier_rejects_revoked_token(
+    pg_clean: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from news_dashboard.mcp import service
+    from news_dashboard.mcp.auth import NewsDashboardTokenVerifier
+
+    monkeypatch.setenv("DATABASE_URL", pg_clean)
+    user_id = _make_user(pg_clean, "alice-verifier-revoked")
+    created = service.create_token(user_id, "verifier", database_url=pg_clean)
+    service.revoke_token(user_id, created["id"], database_url=pg_clean)
+
+    assert asyncio.run(NewsDashboardTokenVerifier().verify_token(created["token"])) is None
 
 
 # ─── tools.py — scope checks and result bounds ───────────────────────────────
@@ -349,10 +412,10 @@ def _client_for(user_id: int) -> TestClient:
     return TestClient(app, raise_server_exceptions=True)
 
 
-def test_token_management_endpoints_require_mcp_enabled(
+def test_token_management_endpoint_rejects_when_mcp_disabled(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.delenv("MCP_SERVER_ENABLED", raising=False)
+    monkeypatch.setenv("MCP_SERVER_ENABLED", "false")
     resp = client.post("/api/users/me/mcp-tokens", json={"name": "client"})
     assert resp.status_code == 403
 
@@ -439,7 +502,7 @@ def test_rpc_endpoint_rejects_missing_or_invalid_bearer(
     assert resp.status_code == 401
 
 
-def test_rpc_endpoint_disabled_by_default(
+def test_rpc_endpoint_enabled_by_default_rejects_invalid_bearer(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.delenv("MCP_SERVER_ENABLED", raising=False)
@@ -448,7 +511,7 @@ def test_rpc_endpoint_disabled_by_default(
         json={"tool": "search_articles", "arguments": {}},
         headers={"Authorization": "Bearer ndmcp_whatever"},
     )
-    assert resp.status_code == 403
+    assert resp.status_code == 401
 
 
 def test_rpc_endpoint_calls_tool_with_valid_token(
