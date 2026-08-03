@@ -459,10 +459,11 @@ def test_search_tools_publish_strict_generated_schemas_and_descriptions(
         source_schema = tools["list_news_sources"].inputSchema["properties"]
         assert source_schema["limit"]["minimum"] == 1
         assert source_schema["limit"]["maximum"] == 25
-        assert source_schema["offset"]["minimum"] == 0
-        assert source_schema["offset"]["maximum"] == 10_000
+        cursor_schema = source_schema["cursor"]["anyOf"][0]
+        assert cursor_schema["maxLength"] == 20
+        assert cursor_schema["pattern"] == "^(0|[1-9][0-9]{0,19})$"
         source_description = tools["list_news_sources"].description or ""
-        for phrase in ("canonical order", "next_offset", "4,800-byte", "Exact slug", "shortened"):
+        for phrase in ("canonical order", "next_cursor", "4,800-byte", "Exact slug", "shortened"):
             assert phrase in source_description
 
     asyncio.run(exercise())
@@ -814,19 +815,20 @@ def test_source_discovery_pages_without_duplicates_or_cursor_loops(
 
     async def exercise() -> None:
         collected: list[str] = []
-        offsets = [0]
+        cursors: list[str | None] = [None]
         async with _mcp_client(token) as client:
             for _page in range(20):
-                result = await client.call_tool(
-                    "list_news_sources", {"limit": 3, "offset": offsets[-1]}
-                )
+                arguments: dict[str, Any] = {"limit": 3}
+                if cursors[-1] is not None:
+                    arguments["cursor"] = cursors[-1]
+                result = await client.call_tool("list_news_sources", arguments)
                 assert result.structured_content is not None
                 collected.extend(row["slug"] for row in result.structured_content["sources"])
-                next_offset = result.structured_content["next_offset"]
-                if next_offset is None:
+                next_cursor = result.structured_content["next_cursor"]
+                if next_cursor is None:
                     break
-                assert next_offset > offsets[-1]
-                offsets.append(next_offset)
+                assert next_cursor not in cursors
+                cursors.append(next_cursor)
             else:
                 pytest.fail("source pagination cursor did not terminate")
         assert collected == [
@@ -872,11 +874,14 @@ def test_source_discovery_preserves_max_unicode_filters_and_advances_cursor(
     response_bodies: list[bytes] = []
 
     async def exercise() -> None:
-        offset = 0
+        cursor: str | None = None
         collected: list[tuple[str, str]] = []
         async with _mcp_client(token, response_bodies=response_bodies) as client:
             for _page in range(3):
-                result = await client.call_tool("list_news_sources", {"limit": 1, "offset": offset})
+                arguments: dict[str, Any] = {"limit": 1}
+                if cursor is not None:
+                    arguments["cursor"] = cursor
+                result = await client.call_tool("list_news_sources", arguments)
                 assert result.structured_content is not None
                 assert (
                     len(
@@ -891,11 +896,11 @@ def test_source_discovery_preserves_max_unicode_filters_and_advances_cursor(
                 collected.extend(
                     (row["slug"], row["category"]) for row in result.structured_content["sources"]
                 )
-                next_offset = result.structured_content["next_offset"]
-                if next_offset is None:
+                next_cursor = result.structured_content["next_cursor"]
+                if next_cursor is None:
                     break
-                assert next_offset > offset
-                offset = next_offset
+                assert next_cursor != cursor
+                cursor = next_cursor
             else:
                 pytest.fail("Unicode source cursor did not terminate")
         assert collected == [(emoji_filter, emoji_filter), ("later-source", "engineering")]
@@ -907,10 +912,20 @@ def test_source_discovery_preserves_max_unicode_filters_and_advances_cursor(
 
 @pytest.mark.parametrize(
     "arguments",
-    [{"limit": 0}, {"limit": 26}, {"offset": -1}, {"offset": 10_001}],
+    [
+        {"limit": 0},
+        {"limit": 26},
+        {"cursor": ""},
+        {"cursor": "-1"},
+        {"cursor": "01"},
+        {"cursor": "abc"},
+        {"cursor": "1" * 21},
+        {"cursor": " 1"},
+        {"cursor": 1},
+    ],
 )
 def test_source_discovery_rejects_invalid_pagination(
-    pg_clean: str, monkeypatch: pytest.MonkeyPatch, arguments: dict[str, int]
+    pg_clean: str, monkeypatch: pytest.MonkeyPatch, arguments: dict[str, Any]
 ) -> None:
     from news_dashboard.mcp import service
 
@@ -924,6 +939,64 @@ def test_source_discovery_rejects_invalid_pagination(
         async with _mcp_client(token) as client:
             result = await client.call_tool("list_news_sources", arguments, raise_on_error=False)
         assert result.is_error is True
+        rejected = arguments.get("cursor")
+        if rejected not in {None, ""}:
+            assert str(rejected) not in "".join(
+                item.text for item in result.content if isinstance(item, TextContent)
+            )
+
+    asyncio.run(exercise())
+
+
+def test_source_discovery_accepts_every_generated_cursor_beyond_ten_thousand(
+    pg_clean: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from news_dashboard.mcp import server, service
+
+    monkeypatch.setenv("DATABASE_URL", pg_clean)
+    user_id = _make_user(pg_clean, "alice-fastmcp-large-source-cursor")
+    token = service.create_token(user_id, "client", scopes=("search",), database_url=pg_clean)[
+        "token"
+    ]
+    rows = [
+        {
+            "slug": f"large-source-{index}",
+            "name": f"Large source {index}",
+            "category": "engineering",
+            "kind": "rss",
+            "subscribed": True,
+            "enabled": True,
+        }
+        for index in range(10_003)
+    ]
+    monkeypatch.setattr(server, "list_sources_for_user", lambda _user_id: rows)
+
+    async def exercise() -> None:
+        async with _mcp_client(token) as client:
+            page = await client.call_tool("list_news_sources", {"limit": 1, "cursor": "10000"})
+            assert page.structured_content is not None
+            assert [row["slug"] for row in page.structured_content["sources"]] == [
+                "large-source-10000"
+            ]
+            assert page.structured_content["next_cursor"] == "10001"
+            later = await client.call_tool(
+                "list_news_sources",
+                {"limit": 2, "cursor": page.structured_content["next_cursor"]},
+            )
+            assert later.structured_content is not None
+            assert [row["slug"] for row in later.structured_content["sources"]] == [
+                "large-source-10001",
+                "large-source-10002",
+            ]
+            assert later.structured_content["next_cursor"] is None
+            exact_end = await client.call_tool("list_news_sources", {"cursor": "10003"})
+            beyond_end = await client.call_tool("list_news_sources", {"cursor": "10004"})
+        assert exact_end.structured_content == {
+            "sources": [],
+            "truncated": False,
+            "next_cursor": None,
+        }
+        assert beyond_end.structured_content == exact_end.structured_content
 
     asyncio.run(exercise())
 
@@ -999,7 +1072,7 @@ def test_new_tools_keep_adversarial_structured_and_wire_results_bounded(
                 ],
                 "truncated": False,
             }
-            expected["next_offset"] = None
+            expected["next_cursor"] = None
         assert result.structured_content == expected
 
     asyncio.run(exercise())

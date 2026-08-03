@@ -26,12 +26,12 @@ from news_dashboard.mcp.auth import NewsDashboardTokenVerifier
 from news_dashboard.mcp.models import (
     MAX_FILTER_VALUE_LENGTH,
     MAX_RESULT_LIMIT,
-    MAX_SEARCH_OFFSET,
     DateRange,
     FilterValues,
     SearchLimit,
     SearchOffset,
     SearchQuery,
+    SourceCursor,
     WorkflowStates,
 )
 from news_dashboard.sources.service import list_sources_for_user
@@ -169,7 +169,7 @@ class ArticleListResult(TypedDict):
 class SourceListResult(TypedDict):
     sources: list[dict[str, str]]
     truncated: bool
-    next_offset: int | None
+    next_cursor: str | None
 
 
 def _bounded_articles(articles: list[dict[str, Any]]) -> ArticleListResult:
@@ -204,7 +204,7 @@ def _bounded_sources(
         candidate: SourceListResult = {
             "sources": [*accepted, _compact_source(source)],
             "truncated": False,
-            "next_offset": candidate_cursor if candidate_cursor < len(sources) else None,
+            "next_cursor": str(candidate_cursor) if candidate_cursor < len(sources) else None,
         }
         serialized = json.dumps(candidate, ensure_ascii=True, separators=(",", ":")).encode()
         if len(serialized) > MCP_STRUCTURED_CONTENT_BYTES:
@@ -218,7 +218,7 @@ def _bounded_sources(
     return {
         "sources": accepted,
         "truncated": truncated,
-        "next_offset": cursor if cursor < len(sources) else None,
+        "next_cursor": str(cursor) if cursor < len(sources) else None,
     }
 
 
@@ -273,7 +273,7 @@ def _single_source_result_size(source: dict[str, str]) -> int:
     envelope: SourceListResult = {
         "sources": [source],
         "truncated": False,
-        "next_offset": MAX_SEARCH_OFFSET,
+        "next_cursor": "9" * 20,
     }
     return len(json.dumps(envelope, ensure_ascii=True, separators=(",", ":")).encode())
 
@@ -314,11 +314,12 @@ def list_latest_news(
 @mcp.tool(auth=require_scopes("search"))
 def list_news_sources(
     limit: SearchLimit = 25,
-    offset: SearchOffset = 0,
+    cursor: SourceCursor | None = None,
 ) -> SourceListResult:
     """Page through searchable sources in canonical order.
 
-    Use limit 1..25 and offset 0..10000. Continue from next_offset until it is null.
+    Use limit 1..25 and an optional canonical ASCII-decimal cursor of at most 20 digits.
+    Continue from next_cursor until it is null; every server-generated cursor is accepted.
     Whole compact records fit a 4,800-byte budget; truncation means the size budget
     ended a page early. Exact slug and category values are always returned. Sources
     with invalid filter values are omitted, while display-only name and kind values
@@ -334,6 +335,7 @@ def list_news_sources(
         and _has_valid_filter_value(source, "slug")
         and _has_valid_filter_value(source, "category")
     ]
+    offset = int(cursor) if cursor is not None else 0
     return _bounded_sources(searchable, limit=limit, offset=offset)
 
 

@@ -20,6 +20,10 @@ FilterValues = Annotated[list[FilterValue], Field(max_length=MAX_FILTER_VALUES)]
 SearchQuery = Annotated[str, StringConstraints(strip_whitespace=True, max_length=MAX_QUERY_LENGTH)]
 SearchLimit = Annotated[int, Field(ge=1, le=MAX_RESULT_LIMIT)]
 SearchOffset = Annotated[int, Field(ge=0, le=MAX_SEARCH_OFFSET)]
+SourceCursor = Annotated[
+    str,
+    StringConstraints(max_length=20, pattern=r"^(0|[1-9][0-9]{0,19})$"),
+]
 WorkflowState = Literal["today", "later", "done", "skipped", "archived"]
 WorkflowStates = Annotated[list[WorkflowState], Field(max_length=MAX_FILTER_VALUES)]
 DateRange = Literal["all", "day", "week", "month"]
