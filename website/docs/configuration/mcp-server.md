@@ -1,69 +1,63 @@
 ---
-title: MCP server (opt-in AI client access)
+title: MCP server
 sidebar_position: 5
 ---
 
-# MCP server (opt-in AI client access)
+# MCP server
 
-News Dashboard can expose a minimal, read-only [Model Context Protocol](https://modelcontextprotocol.io/docs/getting-started/intro)-style tool set so an external AI client (Claude Desktop, Codex, or another MCP-aware agent) can search and read the articles visible to one user. It is disabled by default and does not give clients raw database, SQL, shell, or file-system access.
+News Dashboard exposes a read-only [Model Context Protocol](https://modelcontextprotocol.io/docs/getting-started/intro) server at `/mcp`. MCP-aware AI clients connect with stateless Streamable HTTP and see only news visible to the token owner.
 
-## Enabling the server
-
-Set on the backend:
+The server is enabled by default. To shut down MCP access and block creation of new MCP tokens, set:
 
 ```bash
-MCP_SERVER_ENABLED=1
+MCP_SERVER_ENABLED=false
 ```
 
-When unset (or falsy), all `/api/mcp/*` endpoints and the token-management endpoints under `/api/users/me/mcp-tokens` return `403 Forbidden`.
+The explicit values `false`, `0`, `no`, and `off` disable it. Leaving the variable unset keeps it enabled.
 
-## Creating a token
+## Create a token
 
-Once enabled, a signed-in user can create a token from **Settings → MCP Client Access**, choosing which scopes to grant, or via:
+A signed-in user can create a token from **Settings → MCP Client Access**, choosing the least set of scopes the client needs. Tokens can also be created through the session-authenticated API:
 
 ```bash
 curl -X POST https://your-instance/api/users/me/mcp-tokens \
   -H 'Content-Type: application/json' \
   --cookie "nd_session=$SESSION_COOKIE" \
-  -d '{"name": "Claude Desktop", "scopes": ["search", "read"]}'
+  -d '{"name": "MCP client", "scopes": ["search"]}'
 ```
 
-`scopes` is optional and must be a non-empty subset of `search`, `read`, `ask`, and `briefings`; unknown scopes or an empty list are rejected with a validation error. Omitting `scopes` entirely grants all four, preserving the previous default behavior.
+The plaintext `ndmcp_` token appears once. News Dashboard stores only its SHA-256 hash and a short display prefix. Each user can hold up to 10 active tokens and can revoke one immediately from Settings or `DELETE /api/users/me/mcp-tokens/{token_id}`.
 
-The response includes the plaintext token (prefixed `ndmcp_`) exactly once — only its hash is stored (SHA-256) alongside a short prefix, creation time, and last-used time. Losing the token means creating a new one; tokens can be revoked at any time from the same Settings section, which sets `revoked_at` and immediately invalidates it. Each user may hold up to 10 active tokens.
+Available token scopes are `search`, `read`, `ask`, and `briefings`. Omitting `scopes` grants all four; prefer an explicit subset. The current `list_latest_news` tool requires `search`. Tools using the other scopes are planned and are not available yet.
 
-## Calling tools
+MCP authentication is independent of Keycloak and browser login. The bearer token alone identifies the MCP user; clients never send a user ID as a tool argument.
 
-Tool calls authenticate with `Authorization: Bearer <token>`, not the session cookie:
+## Connect a client
 
-```bash
-curl https://your-instance/api/mcp/tools \
-  -H "Authorization: Bearer $MCP_TOKEN"
+Configure the MCP client with:
 
-curl -X POST https://your-instance/api/mcp/rpc \
-  -H "Authorization: Bearer $MCP_TOKEN" \
-  -H 'Content-Type: application/json' \
-  -d '{"tool": "search_articles", "arguments": {"q": "rust", "limit": 10}}'
-```
+- URL: `https://your-instance/mcp/`
+- Transport: Streamable HTTP
+- Header: `Authorization: Bearer <your ndmcp_ token>`
 
-Available tools, all read-only and scoped to the token owner's visible articles:
+Use HTTPS outside a trusted local development environment. Do not put the token in a URL, command history, or logs. There is no stdio adapter or sidecar service.
+
+## Available tool
 
 | Tool | Scope | Description |
-|------|-------|--------------|
-| `search_articles` | `search` | Search articles visible to the token owner. `limit` is capped at 25. |
-| `get_article` | `read` | Fetch a single visible article by `article_id`. Returns 404 for articles the owner cannot see. |
-| `list_briefings` | `briefings` | List the token owner's recent briefing metadata (no article bodies). |
-| `ask` | `ask` | Ask a question answered via retrieval over the token owner's corpus. |
+|------|-------|-------------|
+| `list_latest_news` | `search` | Lists recent articles visible to the token owner. Supports source, category, state, archive, and date-range filters. |
 
-A token can only call tools whose scope it holds; calling a tool outside its granted scopes returns `403 Forbidden`. New tokens are issued all four scopes unless the creation request narrows them, so a search-only dashboard integration or a briefings-only automation can be scoped to just what it needs. Requests are bounded: queries are capped at 2,000 characters and result lists at 25 items, matching the limits used by the browser-facing `/api/ask` and search endpoints.
+`list_latest_news` defaults to 10 articles and never returns more than 25. Responses contain compact article metadata and summaries, not article bodies or internal-only fields. Filter lists and the total response size are also bounded.
+
+Article retrieval, source search, briefings, and question answering are planned as separate additions. MCP clients should use tool discovery instead of assuming those tools exist.
 
 ## Security boundaries
 
-- No tool exposes raw SQL, environment variables, secrets, or server file-system/shell access.
-- Article visibility follows the same per-user rules as the authenticated web API — a token can never see another user's private sources or state.
-- Mutation tools (marking articles read, creating shares, etc.) are intentionally absent; only after a human-approval workflow exists for agent-initiated actions will mutating tools be considered.
-- Tokens are bearer secrets: treat them like passwords, transmit only over HTTPS, and revoke immediately if a client is decommissioned or compromised.
-
-## Connecting an MCP client
-
-Most MCP clients expect a local process or a documented HTTP tool endpoint. Point the client at `POST /api/mcp/rpc` (and `GET /api/mcp/tools` for discovery) on your instance, with the bearer token configured as a static header. Consult your specific client's documentation for how it wires up custom HTTP tool servers — News Dashboard does not (yet) ship a bundled stdio adapter.
+- Tokens are individually scoped and revocable; revoked tokens stop authenticating immediately.
+- Rate limits use the token's non-secret database identity, never the bearer value.
+- Logs contain tool name, status, and duration metadata only. They exclude tokens, arguments, article content, prompts, and answers.
+- Internal failures return a generic error without tracebacks, database details, or provider details.
+- Tools cannot run SQL, shell commands, or file-system operations and cannot read secrets.
+- Mutation tools are absent. MCP access cannot change article state, sources, shares, or settings.
+- Private-source visibility is enforced for the authenticated token owner.

@@ -11,18 +11,13 @@ or user-initiated.
 
 ## MCP server
 
-An intentionally narrow, **read-only** tool set that lets an MCP-aware AI
-client (Claude Desktop, Codex, or similar) search and read the articles
-visible to one user. It exposes no SQL, shell, or file-system access.
-
-Disabled by default. Set `MCP_SERVER_ENABLED=1` on the backend to enable it —
-otherwise every `/api/mcp/*` route and the token-management routes return
-`403 Forbidden`.
+An intentionally narrow, **read-only** FastMCP server lets an MCP-aware AI
+client read news visible to one user. It exposes no mutation, SQL, shell, or
+file-system access and is independent of Keycloak authentication.
 
 | Route | Method | Purpose |
 |-------|--------|---------|
-| `/api/mcp/tools` | GET | Discover available tools and their schemas. |
-| `/api/mcp/rpc` | POST | Invoke a tool. |
+| `/mcp/` | POST | Stateless Streamable HTTP MCP transport. |
 
 Authenticate with an MCP token as a bearer credential. Tokens are minted and
 revoked under `/api/users/me/mcp-tokens` — see
@@ -32,20 +27,18 @@ revoked under `/api/users/me/mcp-tokens` — see
 
 | Tool | Scope | Does |
 |------|-------|------|
-| `search_articles` | `search` | Search articles visible to the token owner. |
-| `get_article` | `read` | Fetch a single visible article by id. |
-| `list_briefings` | `briefings` | List the owner's recent briefings (metadata only). |
-| `ask` | `ask` | Answer a question via retrieval over the owner's corpus. |
+| `list_latest_news` | `search` | List up to 25 recent articles visible to the token owner. |
 
 Each tool requires its own **scope**, and a token only carries the scopes it
-was minted with. A token issued for `search` alone cannot call `ask`, so you
-can hand an agent search access without granting it generation budget.
-
-`list_briefings` returns metadata only — briefing bodies are not exposed
-through MCP.
+was minted with. Article retrieval, source search, briefings, and question
+answering are planned; clients should rely on MCP tool discovery until they
+are available.
 
 Result limits are clamped server-side, so a client asking for an unbounded
 page gets a bounded one rather than an error.
+
+The server is enabled when `MCP_SERVER_ENABLED` is unset. Set it to `false`,
+`0`, `no`, or `off` to disable `/mcp` and new token creation.
 
 Setup instructions for specific clients live in
 [Configuration → MCP server](../configuration/mcp-server.md).

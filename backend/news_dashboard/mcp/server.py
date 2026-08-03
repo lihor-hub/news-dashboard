@@ -1,11 +1,19 @@
 from __future__ import annotations
 
+import logging
+import time
 from typing import Any, Literal
 
 from fastmcp import FastMCP
 from fastmcp.exceptions import AuthorizationError
 from fastmcp.server.auth import require_scopes
 from fastmcp.server.dependencies import get_access_token
+from fastmcp.server.middleware import CallNext, Middleware, MiddlewareContext
+from fastmcp.server.middleware.rate_limiting import RateLimitingMiddleware
+from fastmcp.server.middleware.response_limiting import ResponseLimitingMiddleware
+from fastmcp.tools.base import ToolResult
+from mcp import McpError
+from mcp.types import CallToolRequestParams, ErrorData
 from starlette.responses import PlainTextResponse
 from starlette.types import ASGIApp, Receive, Scope, Send
 
@@ -14,12 +22,72 @@ from news_dashboard.mcp import service
 from news_dashboard.mcp.auth import NewsDashboardTokenVerifier
 from news_dashboard.mcp.models import MAX_RESULT_LIMIT, FilterValues
 
+MCP_RATE_PER_SECOND = 2.0
+MCP_BURST_CAPACITY = 10
+MCP_MAX_RESPONSE_BYTES = 16_384
+_INTERNAL_ERROR_MESSAGE = "Internal server error"
+
+logger = logging.getLogger("news_dashboard.mcp")
+
+
+class _DropFastMcpToolExceptionLogs(logging.Filter):
+    """Prevent FastMCP's exception logger from recording private tool data."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        return not record.getMessage().startswith("Error calling tool")
+
+
+logging.getLogger("fastmcp.server.server").addFilter(_DropFastMcpToolExceptionLogs())
+
+
+def _rate_limit_client_id(_context: MiddlewareContext[Any]) -> str:
+    token = get_access_token()
+    if token is None or not token.client_id:
+        return "unauthenticated"
+    return token.client_id
+
+
+class _SafeToolTelemetryMiddleware(Middleware):
+    async def on_call_tool(
+        self,
+        context: MiddlewareContext[CallToolRequestParams],
+        call_next: CallNext[CallToolRequestParams, ToolResult],
+    ) -> ToolResult:
+        started_at = time.perf_counter()
+        status = "success"
+        try:
+            return await call_next(context)
+        except McpError:
+            status = "error"
+            raise
+        except Exception:
+            status = "error"
+            raise McpError(ErrorData(code=-32603, message=_INTERNAL_ERROR_MESSAGE)) from None
+        finally:
+            duration_ms = (time.perf_counter() - started_at) * 1_000
+            logger.info(
+                "mcp tool=%s status=%s duration_ms=%.2f",
+                context.message.name,
+                status,
+                duration_ms,
+            )
+
+
 mcp = FastMCP(
     "News Dashboard",
     auth=NewsDashboardTokenVerifier(),
     mask_error_details=True,
     strict_input_validation=True,
 )
+mcp.add_middleware(_SafeToolTelemetryMiddleware())
+mcp.add_middleware(
+    RateLimitingMiddleware(
+        max_requests_per_second=MCP_RATE_PER_SECOND,
+        burst_capacity=MCP_BURST_CAPACITY,
+        get_client_id=_rate_limit_client_id,
+    )
+)
+mcp.add_middleware(ResponseLimitingMiddleware(max_size=MCP_MAX_RESPONSE_BYTES))
 
 
 def _current_user_id() -> int:

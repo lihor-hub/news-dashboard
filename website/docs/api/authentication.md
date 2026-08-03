@@ -109,8 +109,11 @@ are per-user, individually revocable, and scoped to a single integration.
 | `/api/users/me/mcp-tokens/{token_id}` | DELETE | Revoke a token. |
 
 These authenticate the read-only [MCP tool set](integrations.md#mcp-server).
-The whole surface — including these management routes — returns `403` unless
-`MCP_SERVER_ENABLED` is set.
+MCP bearer authentication is independent of Keycloak and browser sessions.
+The server is enabled by default; setting `MCP_SERVER_ENABLED` to `false`, `0`,
+`no`, or `off` disables the MCP transport and blocks creation of new tokens.
+Existing tokens remain stored so access can resume if the feature is enabled
+again, and revocation invalidates a token immediately.
 
 ### Google Reader tokens
 

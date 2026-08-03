@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from collections.abc import AsyncIterator, Generator
 from contextlib import asynccontextmanager
 from threading import Event
@@ -12,6 +13,7 @@ from fastapi.testclient import TestClient
 from fastmcp import Client
 from fastmcp.client.transports import StreamableHttpTransport
 from mcp.shared.exceptions import McpError
+from mcp.types import TextContent
 from starlette.applications import Starlette
 from starlette.routing import Mount
 
@@ -427,6 +429,136 @@ def test_latest_news_clamps_limit_to_twenty_five(
         assert len(result.structured_content["articles"]) == 25
 
     asyncio.run(exercise())
+
+
+def test_fastmcp_rate_limits_each_non_secret_token_identity(
+    pg_clean: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from news_dashboard.mcp import service
+
+    monkeypatch.setenv("DATABASE_URL", pg_clean)
+    monkeypatch.setenv("MCP_SERVER_ENABLED", "true")
+    first_user = _make_user(pg_clean, "alice-fastmcp-rate")
+    second_user = _make_user(pg_clean, "bob-fastmcp-rate")
+    first = service.create_token(
+        first_user, "first-client", scopes=("search",), database_url=pg_clean
+    )
+    second = service.create_token(
+        second_user, "second-client", scopes=("search",), database_url=pg_clean
+    )
+
+    async def exercise() -> None:
+        async with _mcp_client(first["token"]) as first_client:
+            results = [
+                await first_client.call_tool("list_latest_news", raise_on_error=False)
+                for _ in range(15)
+            ]
+        limited = next(result for result in results if result.is_error)
+        limited_text = " ".join(
+            block.text for block in limited.content if isinstance(block, TextContent)
+        )
+        assert f"mcp-token:{first['id']}" in limited_text
+        assert first["token"] not in limited_text
+
+        async with _mcp_client(second["token"]) as second_client:
+            result = await second_client.call_tool("list_latest_news", raise_on_error=False)
+        assert result.is_error is False
+
+    asyncio.run(exercise())
+
+
+def test_fastmcp_bounds_oversized_tool_output(
+    pg_clean: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from news_dashboard.mcp import server, service
+
+    monkeypatch.setenv("DATABASE_URL", pg_clean)
+    monkeypatch.setenv("MCP_SERVER_ENABLED", "true")
+    user_id = _make_user(pg_clean, "alice-fastmcp-response-limit")
+    created = service.create_token(user_id, "client", scopes=("search",), database_url=pg_clean)
+    oversized_marker = "private-article-content-" * 5_000
+    monkeypatch.setattr(
+        server,
+        "search_articles",
+        lambda **_kwargs: [
+            {
+                "id": 99,
+                "title": "Oversized",
+                "url": "https://example.com/99",
+                "source_slug": "test-source",
+                "source_name": "test-source",
+                "category": "engineering",
+                "published_at": None,
+                "discovered_at": None,
+                "summary": oversized_marker,
+                "state": "today",
+            }
+        ],
+    )
+
+    async def exercise() -> None:
+        async with _mcp_client(created["token"]) as mcp_client:
+            # Truncation intentionally removes structured output; disable the
+            # upstream client's schema check so this test can inspect the wire result.
+            mcp_client.session._tool_output_schemas["list_latest_news"] = None
+            result = await mcp_client.call_tool("list_latest_news")
+        rendered = "".join(block.text for block in result.content if isinstance(block, TextContent))
+        assert len(rendered.encode()) <= 16_384
+        assert "Response truncated" in rendered
+        assert result.structured_content is None
+
+    asyncio.run(exercise())
+
+
+def test_fastmcp_sanitizes_internal_errors_and_logs_metadata_only(
+    pg_clean: str,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    from news_dashboard.mcp import server, service
+
+    monkeypatch.setenv("DATABASE_URL", pg_clean)
+    monkeypatch.setenv("MCP_SERVER_ENABLED", "true")
+    user_id = _make_user(pg_clean, "alice-fastmcp-sanitize")
+    created = service.create_token(user_id, "client", scopes=("search",), database_url=pg_clean)
+    bearer_token = created["token"]
+    private_argument = "secret-source-filter"
+    internal_detail = "password=provider-secret db=postgresql://internal"
+
+    def fail_search(**_kwargs: Any) -> list[dict[str, Any]]:
+        raise RuntimeError(internal_detail)
+
+    monkeypatch.setattr(server, "search_articles", fail_search)
+    caplog.set_level(logging.INFO, logger="news_dashboard.mcp")
+
+    async def exercise() -> None:
+        async with _mcp_client(bearer_token) as mcp_client:
+            result = await mcp_client.call_tool(
+                "list_latest_news",
+                {"sources": [private_argument]},
+                raise_on_error=False,
+            )
+        rendered = " ".join(
+            block.text for block in result.content if isinstance(block, TextContent)
+        )
+        assert result.is_error is True
+        assert "Internal server error" in rendered
+        assert internal_detail not in rendered
+        assert "Traceback" not in rendered
+
+    asyncio.run(exercise())
+
+    logs = caplog.text
+    assert "tool=list_latest_news" in logs
+    assert "status=error" in logs
+    assert "duration_ms=" in logs
+    for sensitive_value in (
+        bearer_token,
+        private_argument,
+        internal_detail,
+        "provider-secret",
+    ):
+        assert sensitive_value not in logs
 
 
 @pytest.mark.parametrize("mode", ["revoked", "unauthenticated", "disabled"])
