@@ -19,7 +19,7 @@
     "electron-builder": "^26.15.3"
   },
   "dependencies": {
-    "@sentry/node": "^10.68.0",
+    "@sentry/node": "^10.69.0",
     "electron-updater": "^6.8.9"
   }
 }
