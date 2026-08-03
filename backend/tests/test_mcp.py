@@ -78,6 +78,45 @@ def _seed_article(database_url: str, article_id: int, source_slug: str = "test-s
         )
 
 
+def _set_article_search_data(
+    database_url: str,
+    article_id: int,
+    *,
+    title: str,
+    category: str = "engineering",
+    importance: float = 0.5,
+) -> None:
+    with connect(database_url=database_url) as conn:
+        conn.execute(
+            """
+            UPDATE articles
+            SET title = %s, category = %s, importance_score = %s
+            WHERE id = %s
+            """,
+            (title, category, importance, article_id),
+        )
+
+
+def _set_article_state(
+    database_url: str,
+    user_id: int,
+    article_id: int,
+    *,
+    state: str,
+    starred: bool = False,
+) -> None:
+    with connect(database_url=database_url) as conn:
+        conn.execute(
+            """
+            INSERT INTO user_article_state(user_id, article_id, state, starred)
+            VALUES (%s, %s, %s, %s)
+            ON CONFLICT(user_id, article_id)
+            DO UPDATE SET state = excluded.state, starred = excluded.starred
+            """,
+            (user_id, article_id, state, starred),
+        )
+
+
 # ─── service.py — token lifecycle ────────────────────────────────────────────
 
 
@@ -367,7 +406,7 @@ async def _mcp_client(
         raise client_error
 
 
-def test_fastmcp_initializes_and_lists_only_latest_news_tool(
+def test_fastmcp_initializes_and_lists_search_tools(
     pg_clean: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from news_dashboard.mcp import service
@@ -380,9 +419,318 @@ def test_fastmcp_initializes_and_lists_only_latest_news_tool(
     async def exercise() -> None:
         async with _mcp_client(created["token"]) as mcp_client:
             tools = await mcp_client.list_tools()
-        assert [tool.name for tool in tools] == ["list_latest_news"]
+        assert [tool.name for tool in tools] == [
+            "list_latest_news",
+            "list_news_sources",
+            "search_news",
+        ]
 
     asyncio.run(exercise())
+
+
+def test_search_tools_publish_strict_generated_schemas_and_descriptions(
+    pg_clean: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from news_dashboard.mcp import service
+
+    monkeypatch.setenv("DATABASE_URL", pg_clean)
+    user_id = _make_user(pg_clean, "alice-fastmcp-search-schema")
+    created = service.create_token(user_id, "client", scopes=("search",), database_url=pg_clean)
+
+    async def exercise() -> None:
+        async with _mcp_client(created["token"]) as mcp_client:
+            tools = {tool.name: tool for tool in await mcp_client.list_tools()}
+        assert set(tools) == {"list_latest_news", "list_news_sources", "search_news"}
+        schema = tools["search_news"].inputSchema
+        properties = schema["properties"]
+        assert properties["q"]["maxLength"] == 2_000
+        assert properties["limit"]["default"] == 10
+        assert properties["limit"]["minimum"] == 1
+        assert properties["limit"]["maximum"] == 25
+        assert properties["offset"]["default"] == 0
+        assert properties["offset"]["minimum"] == 0
+        assert properties["offset"]["maximum"] == 10_000
+        assert properties["sources"]["anyOf"][0]["maxItems"] == 50
+        assert properties["categories"]["anyOf"][0]["maxItems"] == 50
+        assert properties["states"]["anyOf"][0]["maxItems"] == 50
+        description = tools["search_news"].description or ""
+        for phrase in ("empty", "OR", "AND", "discovery", "archived", "offset", "bodies"):
+            assert phrase in description
+
+    asyncio.run(exercise())
+
+
+def test_source_discovery_and_search_use_owner_visibility_and_compact_records(
+    pg_clean: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from news_dashboard.mcp import service
+
+    monkeypatch.setenv("DATABASE_URL", pg_clean)
+    alice = _make_user(pg_clean, "alice-fastmcp-discovery")
+    bob = _make_user(pg_clean, "bob-fastmcp-discovery")
+    _seed_source(pg_clean, "global-live")
+    _seed_source(pg_clean, "global-off")
+    _seed_source(pg_clean, "alice-private", owner_user_id=alice)
+    _seed_source(pg_clean, "bob-private", owner_user_id=bob)
+    with connect(database_url=pg_clean) as conn:
+        conn.execute(
+            "INSERT INTO user_sources(user_id, source_slug, enabled) VALUES (%s, %s, FALSE)",
+            (alice, "global-off"),
+        )
+    _seed_article(pg_clean, 101, "alice-private")
+    _set_article_search_data(pg_clean, 101, title="Distinctive quantum release")
+    _set_article_state(pg_clean, alice, 101, state="later", starred=True)
+    created = service.create_token(alice, "client", scopes=("search",), database_url=pg_clean)
+
+    async def exercise() -> None:
+        async with _mcp_client(created["token"]) as mcp_client:
+            sources_result = await mcp_client.call_tool("list_news_sources")
+            search_result = await mcp_client.call_tool(
+                "search_news",
+                {
+                    "q": "quantum",
+                    "sources": ["alice-private"],
+                    "categories": ["engineering"],
+                    "states": ["later"],
+                    "starred_only": True,
+                },
+            )
+        assert sources_result.structured_content is not None
+        sources = sources_result.structured_content["sources"]
+        assert {source["slug"] for source in sources} == {"global-live", "alice-private"}
+        assert all(set(source) == {"slug", "name", "category", "kind"} for source in sources)
+        assert search_result.structured_content is not None
+        assert search_result.structured_content["truncated"] is False
+        [article] = search_result.structured_content["articles"]
+        assert article == {
+            "id": 101,
+            "title": "Distinctive quantum release",
+            "url": "https://example.com/101",
+            "source_slug": "alice-private",
+            "source_name": "alice-private",
+            "category": "engineering",
+            "published_at": None,
+            "summary": "Summary 101",
+            "state": "later",
+            "starred": True,
+        }
+
+    asyncio.run(exercise())
+
+
+def test_search_news_empty_query_is_ordered_and_paginatable(
+    pg_clean: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from news_dashboard.mcp import service
+
+    monkeypatch.setenv("DATABASE_URL", pg_clean)
+    user_id = _make_user(pg_clean, "alice-fastmcp-pagination")
+    _seed_source(pg_clean)
+    for article_id, importance in ((201, 0.9), (202, 0.8), (203, 0.7), (204, 0.6)):
+        _seed_article(pg_clean, article_id)
+        _set_article_search_data(
+            pg_clean, article_id, title=f"Ordered {article_id}", importance=importance
+        )
+    created = service.create_token(user_id, "client", scopes=("search",), database_url=pg_clean)
+
+    async def exercise() -> None:
+        async with _mcp_client(created["token"]) as mcp_client:
+            first = await mcp_client.call_tool("search_news", {"q": "", "limit": 2})
+            second = await mcp_client.call_tool("search_news", {"q": "", "limit": 2, "offset": 2})
+        assert first.structured_content is not None
+        assert second.structured_content is not None
+        assert [row["id"] for row in first.structured_content["articles"]] == [204, 203]
+        assert [row["id"] for row in second.structured_content["articles"]] == [202, 201]
+
+    asyncio.run(exercise())
+
+
+@pytest.mark.parametrize(
+    ("arguments", "secret"),
+    [
+        ({"q": "q" * 2_001}, "q" * 2_001),
+        ({"sources": [f"s-{index}" for index in range(51)]}, "s-50"),
+        ({"categories": ["x" * 121]}, "x" * 121),
+        ({"sources": ["  "]}, "  "),
+        ({"states": ["unknown"]}, "unknown"),
+        ({"date_range": "year"}, "year"),
+        ({"limit": 0}, "0"),
+        ({"limit": 26}, "26"),
+        ({"offset": -1}, "-1"),
+        ({"offset": 10_001}, "10001"),
+    ],
+)
+def test_search_news_rejects_invalid_arguments_without_logging_values(
+    pg_clean: str,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+    arguments: dict[str, Any],
+    secret: str,
+) -> None:
+    from news_dashboard.mcp import service
+
+    monkeypatch.setenv("DATABASE_URL", pg_clean)
+    user_id = _make_user(pg_clean, f"alice-invalid-search-{len(secret)}-{len(arguments)}")
+    created = service.create_token(user_id, "client", scopes=("search",), database_url=pg_clean)
+    caplog.set_level(logging.DEBUG)
+
+    async def exercise() -> None:
+        async with _mcp_client(created["token"]) as mcp_client:
+            result = await mcp_client.call_tool("search_news", arguments, raise_on_error=False)
+        assert result.is_error is True
+
+    asyncio.run(exercise())
+    server_messages = "\n".join(
+        record.getMessage()
+        for record in caplog.records
+        if record.name in {"news_dashboard.mcp", "fastmcp.server.server"}
+    )
+    assert secret not in server_messages
+
+
+def test_search_tools_are_hidden_and_denied_without_search_scope(
+    pg_clean: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from news_dashboard.mcp import service
+
+    monkeypatch.setenv("DATABASE_URL", pg_clean)
+    user_id = _make_user(pg_clean, "alice-fastmcp-search-denied")
+    created = service.create_token(user_id, "client", scopes=("read",), database_url=pg_clean)
+
+    async def exercise() -> None:
+        async with _mcp_client(created["token"]) as mcp_client:
+            assert await mcp_client.list_tools() == []
+            for name in ("list_news_sources", "search_news"):
+                result = await mcp_client.call_tool(name, raise_on_error=False)
+                assert result.is_error is True
+
+    asyncio.run(exercise())
+
+
+def test_search_news_keeps_private_sources_and_article_state_user_scoped(
+    pg_clean: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from news_dashboard.mcp import service
+
+    monkeypatch.setenv("DATABASE_URL", pg_clean)
+    alice = _make_user(pg_clean, "alice-fastmcp-isolation")
+    bob = _make_user(pg_clean, "bob-fastmcp-isolation")
+    _seed_source(pg_clean, "global-shared")
+    _seed_source(pg_clean, "alice-secret", owner_user_id=alice)
+    _seed_article(pg_clean, 301, "alice-secret")
+    _seed_article(pg_clean, 302, "global-shared")
+    _set_article_state(pg_clean, alice, 302, state="archived", starred=True)
+    _set_article_state(pg_clean, bob, 302, state="today", starred=False)
+    alice_token = service.create_token(alice, "client", scopes=("search",), database_url=pg_clean)[
+        "token"
+    ]
+    bob_token = service.create_token(bob, "client", scopes=("search",), database_url=pg_clean)[
+        "token"
+    ]
+
+    async def exercise() -> None:
+        async with _mcp_client(alice_token) as client:
+            alice_result = await client.call_tool(
+                "search_news", {"states": ["archived"], "starred_only": True}
+            )
+        async with _mcp_client(bob_token) as client:
+            private_result = await client.call_tool("search_news", {"sources": ["alice-secret"]})
+            bob_result = await client.call_tool("search_news", {"sources": ["global-shared"]})
+        assert alice_result.structured_content is not None
+        assert [row["id"] for row in alice_result.structured_content["articles"]] == [302]
+        assert private_result.structured_content == {"articles": [], "truncated": False}
+        assert bob_result.structured_content is not None
+        [bob_article] = bob_result.structured_content["articles"]
+        assert (bob_article["state"], bob_article["starred"]) == ("today", False)
+
+    asyncio.run(exercise())
+
+
+def test_search_news_enforces_twenty_five_result_maximum(
+    pg_clean: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from news_dashboard.mcp import service
+
+    monkeypatch.setenv("DATABASE_URL", pg_clean)
+    user_id = _make_user(pg_clean, "alice-fastmcp-search-limit")
+    _seed_source(pg_clean)
+    for article_id in range(401, 431):
+        _seed_article(pg_clean, article_id)
+    token = service.create_token(user_id, "client", scopes=("search",), database_url=pg_clean)[
+        "token"
+    ]
+
+    async def exercise() -> None:
+        async with _mcp_client(token) as client:
+            result = await client.call_tool("search_news", {"limit": 25})
+        assert result.structured_content is not None
+        assert len(result.structured_content["articles"]) <= 25
+
+    asyncio.run(exercise())
+
+
+@pytest.mark.parametrize(
+    ("tool_name", "result_key"),
+    [("list_news_sources", "sources"), ("search_news", "articles")],
+)
+def test_new_tools_keep_adversarial_structured_and_wire_results_bounded(
+    pg_clean: str,
+    monkeypatch: pytest.MonkeyPatch,
+    tool_name: str,
+    result_key: str,
+) -> None:
+    from news_dashboard.mcp import server, service
+
+    monkeypatch.setenv("DATABASE_URL", pg_clean)
+    user_id = _make_user(pg_clean, f"alice-fastmcp-bound-{tool_name}")
+    token = service.create_token(user_id, "client", scopes=("search",), database_url=pg_clean)[
+        "token"
+    ]
+    adversarial = '🔥"\\' * 5_000
+    if tool_name == "list_news_sources":
+        monkeypatch.setattr(
+            server,
+            "list_sources_for_user",
+            lambda _user_id: [
+                {
+                    "slug": adversarial,
+                    "name": adversarial,
+                    "category": adversarial,
+                    "kind": adversarial,
+                    "subscribed": True,
+                }
+            ],
+        )
+    else:
+        monkeypatch.setattr(
+            server,
+            "search_articles",
+            lambda **_kwargs: [
+                {
+                    "id": 1,
+                    "title": adversarial,
+                    "url": adversarial,
+                    "canonical_url": adversarial,
+                    "source_slug": adversarial,
+                    "source_name": adversarial,
+                    "category": adversarial,
+                    "published_at": None,
+                    "summary": adversarial,
+                    "state": "today",
+                    "starred": False,
+                }
+            ],
+        )
+    response_bodies: list[bytes] = []
+
+    async def exercise() -> None:
+        async with _mcp_client(token, response_bodies=response_bodies) as client:
+            result = await client.call_tool(tool_name)
+        assert result.structured_content == {result_key: [], "truncated": True}
+
+    asyncio.run(exercise())
+    assert response_bodies
+    assert max(map(len, response_bodies)) < 16_384
 
 
 def test_latest_news_returns_compact_articles_visible_to_token_owner(
@@ -404,8 +752,6 @@ def test_latest_news_returns_compact_articles_visible_to_token_owner(
         articles = result.structured_content["articles"]
         assert len(articles) == 1
         article = articles[0]
-        discovered_at = article.pop("discovered_at")
-        assert isinstance(discovered_at, str)
         assert article == {
             "id": 1,
             "title": "Article 1",
@@ -416,6 +762,7 @@ def test_latest_news_returns_compact_articles_visible_to_token_owner(
             "published_at": None,
             "summary": "Summary 1",
             "state": "today",
+            "starred": False,
         }
 
     asyncio.run(exercise())
