@@ -394,9 +394,7 @@ def _bounded_news_article(raw_article: dict[str, Any]) -> GetNewsArticleResult:
     discovered_at = _serialized_timestamp(raw_article.get("discovered_at"))
     raw_text = {
         "title": _escaped_plain_text(raw_article.get("title")),
-        "canonical_url": _escaped_plain_text(
-            raw_article.get("canonical_url") or raw_article.get("url")
-        ),
+        "canonical_url": str(raw_article.get("canonical_url") or raw_article.get("url") or ""),
         "source_slug": _escaped_plain_text(raw_article.get("source_slug")),
         "source_name": _escaped_plain_text(raw_article.get("source_name")),
         "category": _escaped_plain_text(raw_article.get("category")),
