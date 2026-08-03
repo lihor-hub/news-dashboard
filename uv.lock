@@ -1930,6 +1930,7 @@ version = "1.161.3"
 source = { editable = "." }
 dependencies = [
     { name = "a2a-sdk", extra = ["http-server"] },
+    { name = "anyio" },
     { name = "apscheduler" },
     { name = "bcrypt" },
     { name = "defusedxml" },
@@ -1982,6 +1983,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "a2a-sdk", extras = ["http-server"], specifier = ">=1.1.2" },
+    { name = "anyio", specifier = ">=4.0" },
     { name = "apscheduler", specifier = ">=3.11.3" },
     { name = "bcrypt", specifier = ">=4.0.0" },
     { name = "crawl4ai", marker = "extra == 'crawl4ai'", specifier = ">=0.9.2" },

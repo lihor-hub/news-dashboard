@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Generator
+from threading import Event
 from typing import Any
 
 import pytest
@@ -210,6 +211,36 @@ def test_token_verifier_rejects_revoked_token(
     service.revoke_token(user_id, created["id"], database_url=pg_clean)
 
     assert asyncio.run(NewsDashboardTokenVerifier().verify_token(created["token"])) is None
+
+
+def test_token_verifier_keeps_event_loop_responsive(monkeypatch: pytest.MonkeyPatch) -> None:
+    from news_dashboard.mcp import service
+    from news_dashboard.mcp.auth import NewsDashboardTokenVerifier
+
+    authentication_started = Event()
+    event_loop_progressed = Event()
+
+    def slow_authenticate(_token: str) -> None:
+        authentication_started.set()
+        if not event_loop_progressed.wait(timeout=1):
+            message = "authentication blocked the event loop"
+            raise RuntimeError(message)
+
+    monkeypatch.setattr(service, "authenticate_token", slow_authenticate)
+
+    async def exercise_verifier() -> None:
+        async def mark_event_loop_progress() -> None:
+            while not authentication_started.is_set():
+                await asyncio.sleep(0)
+            event_loop_progressed.set()
+
+        verified, _ = await asyncio.gather(
+            NewsDashboardTokenVerifier().verify_token("ndmcp_slow"),
+            mark_event_loop_progress(),
+        )
+        assert verified is None
+
+    asyncio.run(exercise_verifier())
 
 
 # ─── tools.py — scope checks and result bounds ───────────────────────────────
