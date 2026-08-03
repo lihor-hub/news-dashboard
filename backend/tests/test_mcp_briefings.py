@@ -162,6 +162,8 @@ def test_build_get_omits_invalid_urls_and_dangling_content_ids(url: str) -> None
         "https://example.com:0/story",
         "https://example.com:65536/story",
         "https://example.com:invalid/story",
+        "https://example.com:/story",
+        "https://[2001:db8::1]:/story",
         f"https://example.com/{'x' * 2_100}",
     ],
 )
@@ -192,6 +194,36 @@ def test_build_get_accepts_valid_ip_and_internationalized_hosts_stably(url: str)
     result = build_briefing_get_result(_row(articles=[article]))
 
     assert result.briefing.citations[0].url == url
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "https://fa\u00df.de/story",
+        "https://xn--fa-hia.de/story",
+        "https://stra\u00dfe.de/story",
+        "https://xn--strae-oqa.de/story",
+        "https://\u03b2\u03cc\u03bb\u03bf\u03c2.com/story",
+        "https://xn--nxasmm1c.com/story",
+    ],
+)
+def test_build_get_preserves_idna2008_u_and_a_labels_exactly(url: str) -> None:
+    article = {**_row()["articles"][0], "canonical_url": url}
+
+    result = build_briefing_get_result(_row(articles=[article]))
+
+    assert result.briefing.citations[0].url == url
+
+
+def test_build_get_normalizes_uppercase_idna_host_and_rejects_trailing_dot() -> None:
+    uppercase = {**_row()["articles"][0], "canonical_url": "https://XN--FA-HIA.DE/story"}
+    trailing_dot = {**_row()["articles"][0], "canonical_url": "https://fa\u00df.de./story"}
+
+    accepted = build_briefing_get_result(_row(articles=[uppercase]))
+    rejected = build_briefing_get_result(_row(articles=[trailing_dot]))
+
+    assert accepted.briefing.citations[0].url == "https://xn--fa-hia.de/story"
+    assert rejected.briefing.citations == []
 
 
 @pytest.mark.parametrize("content", [None, "oops", [], {"sections": "oops", "worth_opening": []}])

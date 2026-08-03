@@ -4,10 +4,11 @@ import json
 import re
 from collections.abc import Mapping
 from datetime import datetime, timezone
-from ipaddress import AddressValueError, ip_address
+from ipaddress import ip_address
 from typing import Any, cast
 from urllib.parse import urlsplit
 
+import idna
 from pydantic import BaseModel, ConfigDict, Field
 
 from news_dashboard.ingest.service import canonicalize_url
@@ -129,15 +130,19 @@ def _valid_hostname(hostname: str) -> bool:
     if ":" in hostname or all(character.isdigit() or character == "." for character in hostname):
         try:
             ip_address(hostname)
-        except (AddressValueError, ValueError):
+        except ValueError:
             return False
         return True
     try:
-        ascii_hostname = hostname.encode("idna").decode("ascii")
-        decoded_hostname = ascii_hostname.encode("ascii").decode("idna")
+        ascii_hostname = idna.encode(
+            hostname,
+            strict=True,
+            uts46=False,
+            std3_rules=True,
+        ).decode("ascii")
     except UnicodeError:
         return False
-    if len(ascii_hostname) > 253 or (not hostname.isascii() and decoded_hostname != hostname):
+    if len(ascii_hostname) > 253:
         return False
     return all(_DNS_LABEL.fullmatch(label) is not None for label in ascii_hostname.split("."))
 
@@ -166,6 +171,7 @@ def _normalized_url(article: Mapping[str, Any]) -> str | None:
         or parsed.username is not None
         or parsed.password is not None
         or port == 0
+        or parsed.netloc.endswith(":")
         or not _valid_hostname(hostname)
     ):
         return None
