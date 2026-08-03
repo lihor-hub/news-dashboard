@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router';
 import { Bookmark, Loader2, Newspaper, TriangleAlert } from 'lucide-react';
 import { saveSharedUrl } from '@/api';
 import { addReadingListItem } from '@/api/readingListApi';

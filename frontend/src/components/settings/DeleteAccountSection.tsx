@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router';
 import { RefreshCw, Trash2 } from 'lucide-react';
 import { useAuth } from '@/contexts/auth';
 import { deleteOwnAccount } from '@/api';

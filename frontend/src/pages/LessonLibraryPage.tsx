@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link } from 'react-router';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { AlertCircle, ExternalLink, GraduationCap, Loader2, Search } from 'lucide-react';
 import { useTranslation } from 'react-i18next';

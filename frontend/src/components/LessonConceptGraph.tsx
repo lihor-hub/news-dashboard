@@ -14,7 +14,7 @@ import {
   type NodeProps,
   type OnNodesChange,
 } from '@xyflow/react';
-import { Link } from 'react-router-dom';
+import { Link } from 'react-router';
 import type { LessonDetail, LessonGraphContext, LessonGraphEntity } from '@/api';
 import { Badge } from '@/components/ui/badge';
 import { forceLayout } from '@/lib/forceLayout';

@@ -1,4 +1,4 @@
-import { Link } from 'react-router-dom';
+import { Link } from 'react-router';
 import { Loader2, Pause, Play, SkipBack, SkipForward, X } from 'lucide-react';
 import { useListenQueue } from '@/contexts/listenQueue';
 import { cn } from '@/lib/utils';

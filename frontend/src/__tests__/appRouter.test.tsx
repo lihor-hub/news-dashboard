@@ -1,7 +1,8 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
-import { RouterProvider, createMemoryRouter } from 'react-router-dom';
+import { createMemoryRouter } from 'react-router';
+import { RouterProvider } from 'react-router/dom';
 
 // Stub every page/shell so the route table can be exercised cheaply without
 // pulling in real data fetching. Each stub renders an identifiable marker.
@@ -16,7 +17,7 @@ vi.mock('../components/RequireAuth', () => ({
   RequireAuth: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));
 vi.mock('../components/AppShell', async () => {
-  const { Outlet } = await import('react-router-dom');
+  const { Outlet } = await import('react-router');
   return { AppShell: () => <Outlet /> };
 });
 vi.mock('../contexts/auth', () => ({
@@ -35,7 +36,7 @@ vi.mock('../pages/StarredPage', () => ({ StarredPage: stub('starred-page') }));
 vi.mock('../pages/SearchPage', () => ({ SearchPage: stub('search-page') }));
 vi.mock('../pages/AskPage', () => ({ AskPage: stub('ask-page') }));
 vi.mock('../pages/FeedsPage', async () => {
-  const { Outlet } = await import('react-router-dom');
+  const { Outlet } = await import('react-router');
   return {
     FeedsPage: () => (
       <div>

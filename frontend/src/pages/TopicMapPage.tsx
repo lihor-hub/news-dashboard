@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router';
 import { Loader2, AlertCircle, Network, RefreshCw } from 'lucide-react';
 import { fetchTopicMap } from '@/api';
 import type { TopicMapArticle } from '@/types';

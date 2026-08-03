@@ -10,7 +10,7 @@
 // keep working regardless of an article's recommendation metadata.
 import { describe, expect, it, vi } from 'vitest';
 import { render, screen, fireEvent, within } from '@testing-library/react';
-import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { MemoryRouter, Route, Routes } from 'react-router';
 import { ArticleRow } from '../components/article/ArticleRow';
 import type { WorkflowArticle } from '../lib/workflowTypes';
 
