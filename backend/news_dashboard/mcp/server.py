@@ -5,6 +5,7 @@ import logging
 import time
 from collections import OrderedDict
 from contextvars import ContextVar
+from datetime import datetime
 from typing import Any, Literal, TypedDict
 
 from fastmcp import FastMCP
@@ -20,6 +21,7 @@ from mcp.types import CallToolRequestParams, ErrorData
 from starlette.responses import PlainTextResponse
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
+from news_dashboard.body_fetch import fetch_and_cache_body
 from news_dashboard.ingest.service import search_articles
 from news_dashboard.mcp import service
 from news_dashboard.mcp.auth import NewsDashboardTokenVerifier
@@ -28,6 +30,7 @@ from news_dashboard.mcp.models import (
     MAX_RESULT_LIMIT,
     DateRange,
     FilterValues,
+    PositiveArticleId,
     SearchLimit,
     SearchOffset,
     SearchQuery,
@@ -172,6 +175,27 @@ class SourceListResult(TypedDict):
     next_cursor: str | None
 
 
+class NewsArticleBody(TypedDict):
+    id: int
+    title: str
+    canonical_url: str
+    source_slug: str
+    source_name: str
+    category: str
+    kind: str
+    published_at: str | None
+    discovered_at: str | None
+    summary: str
+    body: str
+    body_truncated: bool
+
+
+class GetNewsArticleResult(TypedDict):
+    found: bool
+    article: NewsArticleBody | None
+    truncated: bool
+
+
 def _bounded_articles(articles: list[dict[str, Any]]) -> ArticleListResult:
     accepted: list[dict[str, Any]] = []
     for article in articles:
@@ -287,6 +311,18 @@ def _has_valid_filter_value(source: dict[str, Any], key: str) -> bool:
     )
 
 
+def _serialized_timestamp(value: object) -> str | None:
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value.isoformat()
+    rendered = str(value)
+    try:
+        return datetime.fromisoformat(rendered).isoformat()
+    except ValueError:
+        return rendered
+
+
 @mcp.tool(auth=require_scopes("search"))
 def list_latest_news(
     limit: int = 10,
@@ -374,6 +410,32 @@ def search_news(  # noqa: PLR0913, PLR0917
         user_id=_current_user_id(),
     )
     return _bounded_articles(articles)
+
+
+@mcp.tool(auth=require_scopes("read"))
+def get_news_article(article_id: PositiveArticleId) -> GetNewsArticleResult:
+    """Return one article visible to the authenticated token owner."""
+    article = fetch_and_cache_body(article_id, user_id=_current_user_id())
+    if article is None:
+        return {"found": False, "article": None, "truncated": False}
+    return {
+        "found": True,
+        "article": {
+            "id": int(article["id"]),
+            "title": str(article.get("title") or ""),
+            "canonical_url": str(article.get("canonical_url") or article.get("url") or ""),
+            "source_slug": str(article.get("source_slug") or ""),
+            "source_name": str(article.get("source_name") or ""),
+            "category": str(article.get("category") or ""),
+            "kind": str(article.get("kind") or ""),
+            "published_at": _serialized_timestamp(article.get("published_at")),
+            "discovered_at": _serialized_timestamp(article.get("discovered_at")),
+            "summary": str(article.get("summary") or ""),
+            "body": str(article.get("body") or ""),
+            "body_truncated": False,
+        },
+        "truncated": False,
+    }
 
 
 def _sanitize_mcp_response_body(body: bytes) -> bytes:
