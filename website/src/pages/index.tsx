@@ -30,16 +30,41 @@ function HeroArt() {
   );
 }
 
-function HomepageScreenshot() {
+function ResearchWorkflow() {
   return (
     <section className={styles.screenshot}>
       <div className="container">
-        <img
-          src="/img/screenshot-hero.webp"
-          alt="News Dashboard Today feed showing triaged articles with recommendation scores"
-          className={styles.screenshotImg}
-          loading="lazy"
-        />
+        <Heading as="h2" className={styles.workflowTitle}>
+          From a crowded feed to knowledge you can use
+        </Heading>
+        <p className={styles.workflowIntro}>
+          Centralize technical sources, let recommendations and a personalized brief surface what
+          matters, inspect the context, ask cited follow-ups, and retain the useful parts.
+        </p>
+        <div className={styles.screenshotGrid}>
+          <figure className={styles.screenshotFigure}>
+            <img
+              src="/img/briefing.webp"
+              alt="Personalized AI briefing generated from deterministic demo articles"
+              className={styles.screenshotImg}
+              loading="lazy"
+            />
+            <figcaption>
+              Start with a personalized brief of the technical news that matters.
+            </figcaption>
+          </figure>
+          <figure className={styles.screenshotFigure}>
+            <img
+              src="/img/article-detail.webp"
+              alt="Article reader with AI-generated takeaways, context, and perspectives from deterministic demo data"
+              className={styles.screenshotImg}
+              loading="lazy"
+            />
+            <figcaption>
+              Understand an article through takeaways, context, and perspectives.
+            </figcaption>
+          </figure>
+        </div>
       </div>
     </section>
   );
@@ -55,18 +80,22 @@ function HomepageHeader() {
             {siteConfig.title}
           </Heading>
           <p className={styles.heroSubtitle}>
-            Your private, self-hosted news platform. Curate sources, triage a daily feed, search
-            everything you have read, and get AI briefings — on your own infrastructure.
+            Your AI research desk for technical news. Find what matters, understand why, and
+            remember it.
+          </p>
+          <p className={styles.heroDetail}>
+            Built for developers keeping up with fast-moving sources, personalized briefings,
+            article intelligence, and cited follow-up answers.
           </p>
           <div className={styles.buttons}>
-            <Link className="button button--primary button--lg" to="/docs/getting-started">
-              Get Started
+            <Link className="button button--primary button--lg" href="https://news.lihor.ro">
+              Try the App
             </Link>
             <Link
               className={clsx('button button--outline button--lg', styles.buttonGhost)}
-              href="https://news.lihor.ro"
+              href="https://github.com/lihor-hub/news-dashboard#quick-start"
             >
-              Open the App
+              Run It Yourself
             </Link>
           </div>
         </div>
@@ -80,12 +109,12 @@ const docSections = [
   {
     title: 'Getting Started',
     to: '/docs/getting-started',
-    description: 'Install the Android app, create a web account, or self-host.',
+    description: 'Try the hosted app, install Android, or choose a self-hosted setup.',
   },
   {
     title: 'User Guide',
     to: '/docs/user-guide',
-    description: 'The Today Feed, triage, sources, search, briefings, and sharing.',
+    description: 'Find, understand, and retain technical news with briefings and AI tools.',
   },
   {
     title: 'Self-Hosting',
@@ -134,10 +163,10 @@ export default function Home(): ReactNode {
   return (
     <Layout
       title={siteConfig.title}
-      description="Documentation for News Dashboard — your private, self-hosted news platform."
+      description="News Dashboard is your AI research desk for technical news: find what matters, understand why, and remember it."
     >
       <HomepageHeader />
-      <HomepageScreenshot />
+      <ResearchWorkflow />
       <main>
         <HomepageFeatures />
         <DocSections />

@@ -28,6 +28,12 @@
   font-size: 1.15rem;
   line-height: 1.65;
   color: #b5aea3;
+  margin-bottom: 0.75rem;
+}
+
+.heroDetail {
+  color: #d8d2c8;
+  line-height: 1.6;
   margin-bottom: 2rem;
 }
 
@@ -88,12 +94,38 @@
 }
 
 .screenshotImg {
-  max-width: 960px;
   width: 100%;
   height: auto;
   border-radius: 12px;
   border: 1px solid var(--ifm-toc-border-color);
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.12);
+}
+
+.workflowTitle {
+  font-family: var(--ifm-heading-font-family);
+  margin-bottom: 0.75rem;
+}
+
+.workflowIntro {
+  color: var(--ifm-color-content-secondary);
+  margin: 0 auto 2rem;
+  max-width: 52rem;
+}
+
+.screenshotGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1.5rem;
+}
+
+.screenshotFigure {
+  margin: 0;
+}
+
+.screenshotFigure figcaption {
+  color: var(--ifm-color-content-secondary);
+  font-size: 0.9rem;
+  margin-top: 0.75rem;
 }
 
 .sections {
@@ -113,6 +145,10 @@
 }
 
 @media screen and (max-width: 996px) {
+  .screenshotGrid {
+    grid-template-columns: 1fr;
+  }
+
   .sectionsGrid {
     grid-template-columns: 1fr;
   }

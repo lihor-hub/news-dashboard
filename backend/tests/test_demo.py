@@ -98,6 +98,36 @@ def test_seed_creates_article_states(demo_db: str) -> None:
     assert state_count[0] > 0, "no article state entries for guest"
 
 
+def test_seed_creates_offline_ai_showcase(demo_db: str) -> None:
+    """Demo data includes a completed briefing and cached article intelligence."""
+    with psycopg_connect(demo_db, row_factory=None) as conn:
+        guest = conn.execute(
+            "SELECT id FROM users WHERE username='guest'",
+        ).fetchone()
+        assert guest is not None
+        briefing = conn.execute(
+            "SELECT title, summary, content FROM briefings WHERE user_id=%s",
+            (guest[0],),
+        ).fetchone()
+        article = conn.execute(
+            """
+            SELECT insights, perspective_analysis
+            FROM articles
+            WHERE url = 'https://example.com/demo/gpt-5'
+            """,
+        ).fetchone()
+
+    assert briefing is not None
+    assert briefing[0] == "The developer AI stack moves toward production"
+    assert briefing[1]
+    assert briefing[2]["sections"]
+    assert article is not None
+    assert article[0]
+    assert article[1]["verified_facts"]
+    assert article[1]["omissions"]
+    assert article[1]["alternative_perspectives"]
+
+
 def test_seed_spans_multiple_workflow_states(demo_db: str) -> None:
     """Seeded articles span multiple workflow states (today, done, saved)."""
     with psycopg_connect(demo_db, row_factory=None) as conn:

@@ -13,14 +13,39 @@
 [![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/lihor-hub/news-dashboard)
 [![Open in Dev Containers](https://img.shields.io/static/v1?label=Dev%20Containers&message=Open&color=blue&logo=visualstudiocode)](https://vscode.dev/redirect?url=vscode://ms-vscode-remote.remote-containers/cloneInVolume?url=https://github.com/lihor-hub/news-dashboard)
 
-Self-hosted technical news inbox for curated feeds, article triage, source
-health, search, briefings, and saved/read history.
+**Your AI research desk for technical news. Find what matters, understand why,
+and remember it.**
 
-The app uses a FastAPI backend, a Vite React frontend, PostgreSQL storage, and
-optional OpenAI-compatible AI features. LangChain composes conversational and
-structured model calls, while LangGraph orchestrates multi-stage workflows.
+News Dashboard helps developers keep up with fast-moving technical news without
+reading everything. Centralize the sources you trust, stay current with a
+ranked Today Feed, and receive a personalized briefing. Open an article for key
+takeaways, context, and perspectives; ask cited follow-up questions; then save,
+organize, or turn useful material into learning artifacts.
 
-![News Dashboard Today feed showing triaged articles with recommendation scores](docs/screenshots/today-feed.webp)
+[**Try it at news.lihor.ro**](https://news.lihor.ro) ·
+[**Run it on your infrastructure**](#quick-start) ·
+[Read the user guide](https://docs.lihor.ro/docs/user-guide)
+
+| Personalized AI briefing                                                                               | Article intelligence                                                                                                                        |
+| ------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| ![Personalized AI briefing generated from deterministic demo articles](docs/screenshots/briefing.webp) | ![Article reader with AI-generated takeaways, context, and perspectives from deterministic demo data](docs/screenshots/article-detail.webp) |
+
+Screenshots are generated from demo-mode seed data by `npm run capture:screenshots`
+(see [scripts/capture-screenshots.spec.ts](scripts/capture-screenshots.spec.ts)); no
+real account data is shown.
+
+## How it works
+
+1. **Centralize and filter.** Bring together technical feeds, release notes,
+   trending projects, and other sources, then use freshness and personalized
+   recommendations to focus the Today Feed.
+2. **Understand.** Start with a generated briefing, inspect article takeaways
+   and wider context, and ask AI for cited answers grounded in your corpus.
+3. **Retain.** Save and organize worthwhile articles, build learning artifacts,
+   and revisit what you read through history, search, and the knowledge graph.
+
+News Dashboard can run on your own infrastructure for privacy and control over
+your sources, reading data, and AI-provider configuration.
 
 ## Features
 
@@ -30,26 +55,11 @@ structured model calls, while LangGraph orchestrates multi-stage workflows.
 - Source health, ingest run history, dashboard stats, and search.
 - Local password auth with first-admin bootstrap.
 - Optional Keycloak login.
-- Optional OpenAI embeddings, Ask AI, and generated briefings.
+- OpenAI-compatible embeddings, cited Ask AI answers, article intelligence, and generated briefings when an AI provider is configured.
 - Google Reader-compatible sync API for third-party RSS clients (NetNewsWire, Reeder, Unread, ...).
 - Docker, Helm, and GitHub Actions deployment support.
 
-<details>
-<summary>Screenshots</summary>
-
-| Article reader                                                                               | AI briefing                                                       |
-| -------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
-| ![Article reader view with AI-generated key takeaways](docs/screenshots/article-detail.webp) | ![AI daily briefing landing page](docs/screenshots/briefing.webp) |
-
-| Source management                                                                          |
-| ------------------------------------------------------------------------------------------ |
-| ![Feeds page listing subscribed sources with health status](docs/screenshots/sources.webp) |
-
-Screenshots are generated from demo-mode seed data by `npm run capture:screenshots`
-(see [scripts/capture-screenshots.spec.ts](scripts/capture-screenshots.spec.ts)); no
-real account data is shown.
-
-</details>
+![News Dashboard Today Feed showing triaged technical articles with recommendation scores](docs/screenshots/today-feed.webp)
 
 ## Stack
 
@@ -87,14 +97,14 @@ Runtime storage is PostgreSQL only. Set `DATABASE_URL` or the split
 | `OPENAI_BRIEFING_MODEL`                                                                                          | Model name for briefing generation (e.g. `auto` for a routing gateway, or a specific model ID). Defaults to `gpt-4o-mini`.                                                                                                                                                                                                                                                       |
 | `LANGFUSE_HOST`, `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`                                                    | Traces every OpenAI call (embeddings, Ask AI, briefings, insights, TTS, body fetch) in [Langfuse](https://langfuse.com), each tagged with a descriptive name (`ask-ai`, `briefing-generation`, …). Tracing activates only when both keys are set; otherwise the app uses a plain OpenAI client with no tracing. `LANGFUSE_BASE_URL` is accepted as an alias for `LANGFUSE_HOST`. |
 | `KEYCLOAK_AUTH_ENABLED`, `KEYCLOAK_SERVER_URL`, `KEYCLOAK_REALM`, `KEYCLOAK_CLIENT_ID`, `KEYCLOAK_CLIENT_SECRET` | Enables Keycloak. See [Authentication (Keycloak)](https://docs.lihor.ro/docs/configuration/authentication).                                                                                                                                                                                                                                                                      |
-| `DIFY_CHAT_ENABLED`, `DIFY_CHAT_BASE_URL`, `DIFY_CHAT_APP_TOKEN`, `DIFY_CHAT_TITLE`                              | Enables the optional host-owned Dify WebApp iframe assistant. Use a separate Dify origin, HTTPS except for supported loopback HTTP development addresses, and a Publish → Embed token—never a Dify service/API key. See [Dify assistant](https://docs.lihor.ro/docs/configuration/dify-assistant).                                                                                   |
+| `DIFY_CHAT_ENABLED`, `DIFY_CHAT_BASE_URL`, `DIFY_CHAT_APP_TOKEN`, `DIFY_CHAT_TITLE`                              | Enables the optional host-owned Dify WebApp iframe assistant. Use a separate Dify origin, HTTPS except for supported loopback HTTP development addresses, and a Publish → Embed token—never a Dify service/API key. See [Dify assistant](https://docs.lihor.ro/docs/configuration/dify-assistant).                                                                               |
 | `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`                                                                          | VAPID public and private keys for Web Push notifications. Generate using `npx web-push generate-vapid-keys`.                                                                                                                                                                                                                                                                     |
 | `VAPID_EMAIL`                                                                                                    | Contact email address used in VAPID claims mailto link. Defaults to `admin@example.com` if unset.                                                                                                                                                                                                                                                                                |
 | `CORS_ORIGINS`                                                                                                   | Comma-separated browser dev origins.                                                                                                                                                                                                                                                                                                                                             |
 | `ANALYTICS_RETENTION_DAYS`                                                                                       | Days to retain `user_events` before the daily cleanup job prunes them. Defaults to `180`.                                                                                                                                                                                                                                                                                        |
 | `ANALYTICS_ENABLED`                                                                                              | Instance-wide analytics kill switch. Set to `false` to stop ingesting `user_events` for every user regardless of their individual Settings preference. Defaults to `true`. Users can opt out individually from Settings → Privacy.                                                                                                                                               |
 | `ENABLE_API_DOCS`                                                                                                | Serves the interactive API docs (`/docs`, `/redoc`, `/openapi.json`) when truthy. Off by default so a public deployment doesn't leak its full API surface.                                                                                                                                                                                                                       |
-| `PUBLIC_RENDERER_EGRESS_PROXY`                                                                                   | Credential-free HTTP(S) validating proxy for optional Selenium fallback. Direct browser egress must be blocked; use IP/network allowlisting or external proxy authentication instead of URL userinfo.                                                                                                                                                                             |
+| `PUBLIC_RENDERER_EGRESS_PROXY`                                                                                   | Credential-free HTTP(S) validating proxy for optional Selenium fallback. Direct browser egress must be blocked; use IP/network allowlisting or external proxy authentication instead of URL userinfo.                                                                                                                                                                            |
 | `NEWSLETTER_IMAP_HOST`, `NEWSLETTER_IMAP_PORT`, `NEWSLETTER_IMAP_USERNAME`, `NEWSLETTER_IMAP_PASSWORD`           | Shared IMAP mailbox polled for newsletter emails (`newsletter_ingest.py`). Feature is fully inert unless host, username, and password are all set. Port defaults to `993`.                                                                                                                                                                                                       |
 | `NEWSLETTER_IMAP_FOLDER`                                                                                         | Mailbox folder to poll for newsletters. Defaults to `INBOX`.                                                                                                                                                                                                                                                                                                                     |
 | `NEWSLETTER_POLL_MINUTES`                                                                                        | Interval in minutes between newsletter mailbox polls. Defaults to `15`.                                                                                                                                                                                                                                                                                                          |
@@ -133,14 +143,14 @@ promoting or rolling back means moving the `production` label in Langfuse, not
 deploying application code. Internal callers may also request an exact prompt
 version when a reproducible evaluation or rollback requires it.
 
-| Operation              | Langfuse session ID                                                                |
-| ---------------------- | ---------------------------------------------------------------------------------- |
-| Ask AI                 | Optional client-provided `session_id`; omitted requests remain independent traces. |
-| Briefing conversation  | `briefing:{user_id}:{briefing_id}`                                                 |
-| Lesson conversation and related lesson work | `lesson:{user_id}:{lesson_id}`                                      |
-| Briefing generation    | `briefing-run:{run_id}`                                                            |
-| Lesson generation      | `lesson-run:{run_id}`                                                              |
-| Agent action lifecycle | `agent-action:{run_id}`                                                            |
+| Operation                                   | Langfuse session ID                                                                |
+| ------------------------------------------- | ---------------------------------------------------------------------------------- |
+| Ask AI                                      | Optional client-provided `session_id`; omitted requests remain independent traces. |
+| Briefing conversation                       | `briefing:{user_id}:{briefing_id}`                                                 |
+| Lesson conversation and related lesson work | `lesson:{user_id}:{lesson_id}`                                                     |
+| Briefing generation                         | `briefing-run:{run_id}`                                                            |
+| Lesson generation                           | `lesson-run:{run_id}`                                                              |
+| Agent action lifecycle                      | `agent-action:{run_id}`                                                            |
 
 `POST /api/ask` accepts the optional field alongside its existing inputs:
 

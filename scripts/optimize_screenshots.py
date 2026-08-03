@@ -7,6 +7,7 @@ docs/screenshots/ to WebP, stepping quality down until the file is under the
 
 from __future__ import annotations
 
+import shutil
 import sys
 from pathlib import Path
 
@@ -14,6 +15,8 @@ from PIL import Image
 
 MAX_BYTES = 300 * 1024
 SCREENSHOTS_DIR = Path(__file__).resolve().parent.parent / "docs" / "screenshots"
+WEBSITE_IMG_DIR = Path(__file__).resolve().parent.parent / "website" / "static" / "img"
+WEBSITE_SCREENSHOTS = {"article-detail.webp", "briefing.webp"}
 
 
 def convert(png_path: Path) -> Path:
@@ -36,6 +39,9 @@ def main() -> None:
         sys.exit(1)
     for png_path in pngs:
         webp_path = convert(png_path)
+        if webp_path.name in WEBSITE_SCREENSHOTS:
+            WEBSITE_IMG_DIR.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(webp_path, WEBSITE_IMG_DIR / webp_path.name)
         size_kb = webp_path.stat().st_size / 1024
         print(f"{webp_path.name}: {size_kb:.1f} KB")
 
