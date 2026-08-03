@@ -1950,6 +1950,8 @@ def _build_user_search_query(  # noqa: PLR0912, PLR0913
     clauses.append(
         "((src.owner_user_id IS NULL AND COALESCE(us_src.enabled, true)) OR src.owner_user_id = %s)"
     )
+    clauses.append("src.enabled IS TRUE")
+    clauses.append("src.deleted_at IS NULL")
     where = f"WHERE {' AND '.join(clauses)}"
 
     if tsquery:

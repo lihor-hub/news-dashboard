@@ -646,6 +646,60 @@ def test_search_news_keeps_private_sources_and_article_state_user_scoped(
     asyncio.run(exercise())
 
 
+def test_search_news_excludes_disabled_and_deleted_sources_for_empty_and_exact_queries(
+    pg_clean: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from news_dashboard.mcp import service
+
+    monkeypatch.setenv("DATABASE_URL", pg_clean)
+    alice = _make_user(pg_clean, "alice-fastmcp-source-lifecycle")
+    bob = _make_user(pg_clean, "bob-fastmcp-source-lifecycle")
+    sources = [
+        ("live-global-lifecycle", True, None, None),
+        ("disabled-global-lifecycle", False, None, None),
+        ("deleted-global-lifecycle", True, None, "2026-01-01T00:00:00+00:00"),
+        ("live-owned-lifecycle", True, alice, None),
+        ("disabled-owned-lifecycle", False, alice, None),
+        ("deleted-owned-lifecycle", True, alice, "2026-01-01T00:00:00+00:00"),
+        ("other-owned-lifecycle", True, bob, None),
+    ]
+    with connect(database_url=pg_clean) as conn:
+        for slug, enabled, owner_id, deleted_at in sources:
+            conn.execute(
+                """
+                INSERT INTO sources(
+                    slug, name, url, category, kind, priority, enabled,
+                    owner_user_id, deleted_at
+                ) VALUES (%s, %s, %s, 'engineering', 'rss', 50, %s, %s, %s)
+                """,
+                (slug, slug, f"https://example.com/{slug}.xml", enabled, owner_id, deleted_at),
+            )
+    for article_id, (slug, *_rest) in enumerate(sources, start=601):
+        _seed_article(pg_clean, article_id, slug)
+    token = service.create_token(alice, "client", scopes=("search",), database_url=pg_clean)[
+        "token"
+    ]
+    hidden = {
+        "disabled-global-lifecycle",
+        "deleted-global-lifecycle",
+        "disabled-owned-lifecycle",
+        "deleted-owned-lifecycle",
+        "other-owned-lifecycle",
+    }
+
+    async def exercise() -> None:
+        async with _mcp_client(token) as client:
+            empty_result = await client.call_tool("search_news")
+            assert empty_result.structured_content is not None
+            visible = {row["source_slug"] for row in empty_result.structured_content["articles"]}
+            assert visible == {"live-global-lifecycle", "live-owned-lifecycle"}
+            for slug in hidden:
+                result = await client.call_tool("search_news", {"sources": [slug]})
+                assert result.structured_content == {"articles": [], "truncated": False}
+
+    asyncio.run(exercise())
+
+
 def test_search_news_enforces_twenty_five_result_maximum(
     pg_clean: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:

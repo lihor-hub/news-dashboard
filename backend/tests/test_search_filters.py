@@ -24,7 +24,7 @@ def _db(tmp: Path) -> Path:
 
 
 def _insert(  # noqa: PLR0913
-    db_path: Path,
+    db_path: Path | str,
     *,
     title: str = "Article",
     summary: str = "",
@@ -340,6 +340,53 @@ def test_search_endpoint_returns_matching_articles(client: TestClient, api_db: P
     titles = [it["title"] for it in items]
     assert "Pytest Tips" in titles
     assert "Rust Intro" not in titles
+
+
+def test_search_endpoint_excludes_disabled_and_deleted_sources(
+    client: TestClient, api_db: str
+) -> None:
+    with connect(api_db) as conn:
+        current_user = conn.execute(
+            "INSERT INTO users(id, username, password_hash)"
+            " VALUES (1, 'testadmin', 'hash') RETURNING id"
+        ).fetchone()
+        assert current_user is not None
+        owner_id = int(current_user["id"])
+        other_user = conn.execute(
+            "INSERT INTO users(id, username, password_hash)"
+            " VALUES (2, 'other-search-owner', 'hash') RETURNING id"
+        ).fetchone()
+        assert other_user is not None
+        source_rows = [
+            ("live-global", True, None, None),
+            ("disabled-global", False, None, None),
+            ("deleted-global", True, None, "2026-01-01T00:00:00+00:00"),
+            ("live-owned", True, owner_id, None),
+            ("disabled-owned", False, owner_id, None),
+            ("deleted-owned", True, owner_id, "2026-01-01T00:00:00+00:00"),
+            ("other-owned", True, int(other_user["id"]), None),
+        ]
+        for slug, enabled, source_owner, deleted_at in source_rows:
+            conn.execute(
+                """
+                INSERT INTO sources(
+                    slug, name, url, category, kind, priority, enabled,
+                    owner_user_id, deleted_at
+                ) VALUES (%s, %s, %s, 'engineering', 'rss', 50, %s, %s, %s)
+                """,
+                (slug, slug, f"https://example.com/{slug}.xml", enabled, source_owner, deleted_at),
+            )
+    for slug, *_rest in source_rows:
+        _insert(api_db, title=f"Article {slug}", source_slug=slug, url_suffix=slug)
+
+    empty_items = client.get("/api/search").json()["items"]
+    assert {row["source_slug"] for row in empty_items} >= {"live-global", "live-owned"}
+    hidden = {"disabled-global", "deleted-global", "disabled-owned", "deleted-owned", "other-owned"}
+    assert hidden.isdisjoint(row["source_slug"] for row in empty_items)
+    for slug in hidden:
+        response = client.get("/api/search", params={"sources": slug})
+        assert response.status_code == 200
+        assert response.json()["items"] == []
 
 
 def test_search_page_reports_total_and_second_page(db: Path) -> None:
