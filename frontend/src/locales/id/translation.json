@@ -5,23 +5,23 @@
   },
   "onboarding": {
     "workflow": {
-      "title": "Meja penelitian AI Anda sudah siap",
-      "promise": "Meja penelitian AI Anda untuk berita teknis. Temukan apa yang penting, pahami alasannya, dan ingat itu.",
+      "title": "Ruang kerja penelitian berita AI Anda sudah siap",
+      "promise": "Ruang kerja penelitian AI Anda untuk berita teknis. Temukan kisah-kisah penting, pahami maknanya, dan pertahankan apa yang Anda pelajari.",
       "find": {
-        "title": "Temukan hal yang penting",
-        "description": "Sumber terpusat yang baru, peringkat cerdas, dan ringkasan harian yang dipersonalisasi."
+        "title": "Temukan kisah-kisah penting",
+        "description": "Berita terkini dari sumber terpusat, peringkat cerdas, dan ringkasan berita harian yang dipersonalisasi."
       },
       "understand": {
-        "title": "Pahami alasannya",
-        "description": "Kesimpulan artikel dengan konteks dan perspektif alternatif."
+        "title": "Pahami signifikansinya",
+        "description": "Poin-poin penting dari setiap artikel, dengan konteks dan perspektif berbeda."
       },
       "remember": {
-        "title": "Ingat itu",
-        "description": "Dikutip jawaban Ask AI plus alat pembelajaran dan rekap."
+        "title": "Ingat apa yang Anda pelajari",
+        "description": "Jawaban dari Ask AI menyertakan kutipan sumber. Alat pembelajaran dan ulasan membantu Anda mengingat."
       },
-      "configuration": "Fitur AI memerlukan konfigurasi yang kompatibel dengan OpenAI tingkat instans. Umpan berita Today tetap berguna sepenuhnya tanpa konfigurasi ini, dan AI tidak akan berjalan sampai Anda memilih tindakan AI.",
+      "configuration": "Fitur AI memerlukan konfigurasi yang kompatibel dengan OpenAI tingkat instans. Umpan berita Today berfungsi sepenuhnya tanpa konfigurasi ini. AI hanya berjalan ketika Anda secara eksplisit memilih tindakan AI.",
       "todayAction": "Jelajahi umpan berita Hari Ini",
-      "briefAction": "Buka briefing berita pertama Anda"
+      "briefAction": "Buka ringkasan berita AI pertama Anda yang dipersonalisasi"
     }
   },
   "auth": {

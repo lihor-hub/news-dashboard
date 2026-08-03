@@ -5,23 +5,23 @@
   },
   "onboarding": {
     "workflow": {
-      "title": "Az AI kutatópultja készen áll",
-      "promise": "Az Ön mesterséges intelligencia kutatópultja műszaki hírekért. Találja meg, mi számít, értse meg, miért, és emlékezzen rá.",
+      "title": "Az AI-hírek kutatási munkaterülete készen áll",
+      "promise": "Az AI-kutatási munkaterület műszaki hírekért. Fedezze fel a fontos történeteket, értse meg jelentőségüket, és őrizze meg a tanultakat.",
       "find": {
-        "title": "Találja meg, ami számít",
-        "description": "Friss központosított források, intelligens rangsorolás és személyre szabott napi összefoglaló."
+        "title": "Fedezze fel a fontos történeteket",
+        "description": "Aktuális hírek központosított forrásokból, intelligens rangsorolás és személyre szabott napi hírösszefoglaló."
       },
       "understand": {
-        "title": "Értsd meg, miért",
-        "description": "Cikkkivonatok kontextussal és alternatív perspektívákkal."
+        "title": "Értsd meg a jelentőségüket",
+        "description": "Kulcspontok az egyes cikkekből, kontextussal és különböző nézőpontokkal."
       },
       "remember": {
-        "title": "Emlékezz rá",
-        "description": "Az idézett Ask AI válaszok, valamint tanulási és összefoglaló eszközök."
+        "title": "Emlékezz arra, amit tanultál",
+        "description": "Az Ask AI válaszai forrásokra hivatkoznak. A tanulási és áttekintő eszközök segítenek emlékezni."
       },
-      "configuration": "Az AI-funkciókhoz példányszintű OpenAI-kompatibilis konfiguráció szükséges. A Today hírfolyam e konfiguráció nélkül is teljes mértékben hasznos marad, és a mesterséges intelligencia nem fut addig, amíg nem választ egy AI-műveletet.",
+      "configuration": "Az AI-funkciókhoz példányszintű OpenAI-kompatibilis konfiguráció szükséges. A Today hírfolyam e konfiguráció nélkül is teljes mértékben működik. Az AI csak akkor fut, ha kifejezetten kiválaszt egy AI-műveletet.",
       "todayAction": "Fedezze fel a Today hírfolyamot",
-      "briefAction": "Nyissa meg első hírtájékoztatóját"
+      "briefAction": "Nyissa meg az első személyre szabott AI-hírösszefoglalót"
     }
   },
   "auth": {

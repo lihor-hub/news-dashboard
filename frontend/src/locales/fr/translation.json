@@ -5,23 +5,23 @@
   },
   "onboarding": {
     "workflow": {
-      "title": "Votre bureau de recherche en IA est prêt",
-      "promise": "Votre bureau de recherche en IA pour les actualités techniques. Trouvez ce qui compte, comprenez pourquoi et souvenez-vous-en.",
+      "title": "Votre espace de travail de recherche d’actualités sur l’IA est prêt",
+      "promise": "Votre espace de travail de recherche sur l'IA pour les actualités techniques. Découvrez les histoires importantes, comprenez leur signification et retenez ce que vous apprenez.",
       "find": {
-        "title": "Trouvez ce qui compte",
-        "description": "De nouvelles sources centralisées, un classement intelligent et un briefing quotidien personnalisé."
+        "title": "Découvrez les histoires importantes",
+        "description": "Actualités actuelles provenant de sources centralisées, classement intelligent et résumé quotidien personnalisé de l'actualité."
       },
       "understand": {
-        "title": "Comprendre pourquoi",
-        "description": "Article à retenir avec contexte et perspectives alternatives."
+        "title": "Comprendre leur signification",
+        "description": "Points clés de chaque article, avec contexte et perspectives différentes."
       },
       "remember": {
-        "title": "Rappelez-vous-en",
-        "description": "Cité des réponses Ask AI ainsi que des outils d'apprentissage et de récapitulation."
+        "title": "Rappelez-vous ce que vous apprenez",
+        "description": "Les réponses d'Ask AI incluent des citations de sources. Les outils d'apprentissage et de révision vous aident à vous souvenir."
       },
-      "configuration": "Les fonctionnalités d'IA nécessitent une configuration compatible OpenAI au niveau de l'instance. Le fil d'actualité Aujourd'hui reste pleinement utile sans cette configuration, et aucune IA ne s'exécute tant que vous n'avez pas choisi une action IA.",
+      "configuration": "Les fonctionnalités d'IA nécessitent une configuration compatible OpenAI au niveau de l'instance. Le fil d'actualité Today fonctionne entièrement sans cette configuration. L'IA s'exécute uniquement lorsque vous sélectionnez explicitement une action AI.",
       "todayAction": "Explorez le fil d'actualité Aujourd'hui",
-      "briefAction": "Ouvrez votre premier point de presse"
+      "briefAction": "Ouvrez votre premier résumé personnalisé de l'actualité de l'IA"
     }
   },
   "auth": {

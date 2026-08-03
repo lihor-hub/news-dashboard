@@ -5,23 +5,23 @@
   },
   "onboarding": {
     "workflow": {
-      "title": "Su mesa de investigación de IA está lista",
-      "promise": "Su mesa de investigación de IA para noticias técnicas. Encuentre lo que importa, comprenda por qué y recuérdelo.",
+      "title": "Su espacio de trabajo de investigación de noticias de IA está listo",
+      "promise": "Su espacio de trabajo de investigación de IA para noticias técnicas. Descubra las historias importantes, comprenda su significado y retenga lo que aprenda.",
       "find": {
-        "title": "Encuentra lo que importa",
-        "description": "Fuentes centralizadas nuevas, clasificación inteligente y un resumen diario personalizado."
+        "title": "Descubre las historias importantes",
+        "description": "Noticias de actualidad de fuentes centralizadas, clasificación inteligente y un resumen de noticias diario personalizado."
       },
       "understand": {
-        "title": "entender por qué",
-        "description": "Conclusiones del artículo con contexto y perspectivas alternativas."
+        "title": "Comprender su significado",
+        "description": "Puntos clave de cada artículo, con contexto y diferentes perspectivas."
       },
       "remember": {
-        "title": "Recuérdalo",
-        "description": "Se citan respuestas de Ask AI, además de herramientas de aprendizaje y resumen."
+        "title": "Recuerda lo que aprendes",
+        "description": "Las respuestas de Ask AI incluyen citas de fuentes. Las herramientas de aprendizaje y revisión le ayudan a recordar."
       },
-      "configuration": "Las funciones de IA requieren una configuración compatible con OpenAI a nivel de instancia. El servicio de noticias de Hoy sigue siendo totalmente útil sin esta configuración y no se ejecuta ninguna IA hasta que elijas una acción de IA.",
+      "configuration": "Las funciones de IA requieren una configuración compatible con OpenAI a nivel de instancia. El servicio de noticias Today funciona completamente sin esta configuración. La IA se ejecuta solo cuando seleccionas explícitamente una acción de IA.",
       "todayAction": "Explora las noticias de hoy",
-      "briefAction": "Abra su primera rueda de prensa"
+      "briefAction": "Abra su primer resumen personalizado de noticias sobre IA"
     }
   },
   "auth": {

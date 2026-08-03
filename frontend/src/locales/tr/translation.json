@@ -5,23 +5,23 @@
   },
   "onboarding": {
     "workflow": {
-      "title": "Yapay zeka araştırma masanız hazır",
-      "promise": "Teknik haberler için yapay zeka araştırma masanız. Neyin önemli olduğunu bulun, nedenini anlayın ve hatırlayın.",
+      "title": "Yapay zeka haber araştırma çalışma alanınız hazır",
+      "promise": "Teknik haberler için yapay zeka araştırma çalışma alanınız. Önemli hikayeleri keşfedin, önemlerini anlayın ve öğrendiklerinizi aklınızda tutun.",
       "find": {
-        "title": "Önemli olanı bulun",
-        "description": "Yeni merkezi kaynaklar, akıllı sıralama ve kişiselleştirilmiş günlük özet."
+        "title": "Önemli hikayeleri keşfedin",
+        "description": "Merkezi kaynaklardan güncel haberler, akıllı sıralama ve kişiselleştirilmiş günlük haber özeti."
       },
       "understand": {
-        "title": "Nedenini anlayın",
-        "description": "Bağlam ve alternatif bakış açıları içeren makale çıkarımları."
+        "title": "Önemlerini anlayın",
+        "description": "Bağlam ve farklı bakış açılarıyla her makaledeki önemli noktalar."
       },
       "remember": {
-        "title": "Bunu hatırla",
-        "description": "Alıntı yapılan Ask AI yanıtlarının yanı sıra öğrenme ve özetleme araçları."
+        "title": "Ne öğrendiğini hatırla",
+        "description": "Ask AI'nın yanıtları kaynaklara yapılan alıntıları içerir. Öğrenme ve inceleme araçları hatırlamanıza yardımcı olur."
       },
-      "configuration": "Yapay zeka özellikleri, örnek düzeyinde OpenAI uyumlu bir yapılandırma gerektirir. Today haber akışı, bu yapılandırma olmadan tamamen kullanışlı olmaya devam eder ve siz bir AI eylemi seçene kadar hiçbir AI çalışmaz.",
+      "configuration": "Yapay zeka özellikleri, örnek düzeyinde OpenAI uyumlu bir yapılandırma gerektirir. Today haber akışı bu yapılandırma olmadan tam olarak çalışır. Yapay zeka yalnızca bir yapay zeka eylemini açıkça seçtiğinizde çalışır.",
       "todayAction": "Today haber akışını keşfedin",
-      "briefAction": "İlk haber brifinginizi açın"
+      "briefAction": "İlk kişiselleştirilmiş AI haber özetinizi açın"
     }
   },
   "auth": {

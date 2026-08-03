@@ -5,23 +5,23 @@
   },
   "onboarding": {
     "workflow": {
-      "title": "Il tuo banco di ricerca sull'intelligenza artificiale è pronto",
-      "promise": "Il tuo ufficio di ricerca sull'intelligenza artificiale per notizie tecniche. Trova ciò che conta, capisci perché e ricordalo.",
+      "title": "Il tuo spazio di lavoro per la ricerca sulle notizie basato sull'intelligenza artificiale è pronto",
+      "promise": "Il tuo spazio di lavoro di ricerca sull'intelligenza artificiale per notizie tecniche. Scopri le storie importanti, comprendi il loro significato e conserva ciò che impari.",
       "find": {
-        "title": "Trova ciò che conta",
-        "description": "Fonti centralizzate fresche, classificazione intelligente e brief giornaliero personalizzato."
+        "title": "Scopri le storie importanti",
+        "description": "Notizie attuali da fonti centralizzate, classificazione intelligente e un riepilogo personalizzato delle notizie quotidiane."
       },
       "understand": {
-        "title": "Capire perché",
-        "description": "Punti salienti dell'articolo con contesto e prospettive alternative."
+        "title": "Comprendi il loro significato",
+        "description": "Punti chiave di ogni articolo, con contesto e prospettive diverse."
       },
       "remember": {
-        "title": "Ricordatelo",
-        "description": "Citate le risposte Ask AI più strumenti di apprendimento e riepilogo."
+        "title": "Ricorda ciò che impari",
+        "description": "Le risposte di Ask AI includono citazioni alle fonti. Gli strumenti di apprendimento e revisione ti aiutano a ricordare."
       },
-      "configuration": "Le funzionalità AI richiedono una configurazione compatibile con OpenAI a livello di istanza. Il feed di notizie di Oggi rimane pienamente utile senza questa configurazione e nessuna intelligenza artificiale viene eseguita finché non si sceglie un'azione IA.",
+      "configuration": "Le funzionalità AI richiedono una configurazione compatibile con OpenAI a livello di istanza. Il feed delle notizie di Oggi funziona perfettamente senza questa configurazione. L'intelligenza artificiale viene eseguita solo quando selezioni esplicitamente un'azione AI.",
       "todayAction": "Esplora il feed delle notizie di oggi",
-      "briefAction": "Apri la tua prima conferenza stampa"
+      "briefAction": "Apri il tuo primo riepilogo personalizzato delle notizie AI"
     }
   },
   "auth": {

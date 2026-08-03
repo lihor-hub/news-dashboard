@@ -69,6 +69,52 @@ describe('locale files', () => {
     }
   });
 
+  it('does not translate the personalized news summary as a press conference', () => {
+    const knownPressConferenceMistranslations = [
+      'مؤتمر صحفي',
+      'tisková konference',
+      'pressekonference',
+      'Pressekonferenz',
+      'συνέντευξη Τύπου',
+      'rueda de prensa',
+      'lehdistötilaisuus',
+      'point de presse',
+      'מסיבת עיתונאים',
+      'प्रेस कॉन्फ्रेंस',
+      'sajtótájékoztató',
+      'konferensi pers',
+      'conferenza stampa',
+      '記者会見',
+      '기자회견',
+      'persconferentie',
+      'pressekonferanse',
+      'odprawę prasową',
+      'coletiva de imprensa',
+      'conferință de presă',
+      'пресс-конференция',
+      'presskonferens',
+      'งานแถลงข่าว',
+      'basın toplantısı',
+      'прес-конференція',
+      'cuộc họp báo',
+      '新闻发布会',
+      '新聞發布會',
+      '記者會',
+    ];
+
+    for (const lang of supportedLanguages.filter(({ code }) => code !== 'en')) {
+      const mod = translationModules[`../locales/${lang.code}/translation.json`] as {
+        default: { onboarding: Record<string, unknown> };
+      };
+      const workflowCopy = JSON.stringify(mod.default.onboarding).toLocaleLowerCase(lang.code);
+      for (const mistranslation of knownPressConferenceMistranslations) {
+        expect(workflowCopy, `${lang.code}:${mistranslation}`).not.toContain(
+          mistranslation.toLocaleLowerCase(lang.code)
+        );
+      }
+    }
+  });
+
   it('flags only Arabic and Hebrew as right-to-left', () => {
     const rtl = supportedLanguages.filter((l) => isRtlLanguage(l.code)).map((l) => l.code);
     expect(rtl.sort()).toEqual(['ar', 'he']);

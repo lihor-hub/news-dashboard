@@ -5,23 +5,23 @@
   },
   "onboarding": {
     "workflow": {
-      "title": "Ihr KI-Forschungstisch ist fertig",
-      "promise": "Ihr KI-Forschungsschalter für technische Neuigkeiten. Finden Sie heraus, worauf es ankommt, verstehen Sie warum, und erinnern Sie sich daran.",
+      "title": "Ihr Arbeitsbereich für die KI-Nachrichtenrecherche ist fertig",
+      "promise": "Ihr KI-Forschungsarbeitsbereich für technische Neuigkeiten. Entdecken Sie die wichtigen Geschichten, verstehen Sie ihre Bedeutung und behalten Sie das Gelernte im Gedächtnis.",
       "find": {
-        "title": "Finden Sie heraus, worauf es ankommt",
-        "description": "Frische zentralisierte Quellen, intelligentes Ranking und ein personalisiertes Tagesbriefing."
+        "title": "Entdecken Sie die wichtigen Geschichten",
+        "description": "Aktuelle Nachrichten aus zentralen Quellen, intelligentes Ranking und eine personalisierte tägliche Nachrichtenzusammenfassung."
       },
       "understand": {
-        "title": "Verstehen Sie, warum",
-        "description": "Artikel zum Mitnehmen mit Kontext und alternativen Perspektiven."
+        "title": "Verstehen Sie ihre Bedeutung",
+        "description": "Kernpunkte aus jedem Artikel, mit Kontext und unterschiedlichen Perspektiven."
       },
       "remember": {
-        "title": "Denken Sie daran",
-        "description": "Zitierte Ask AI-Antworten sowie Lern- und Zusammenfassungstools."
+        "title": "Denken Sie daran, was Sie gelernt haben",
+        "description": "Die Antworten von Ask AI enthalten Quellenangaben. Lern- und Wiederholungstools helfen Ihnen, sich zu erinnern."
       },
-      "configuration": "KI-Funktionen erfordern eine OpenAI-kompatible Konfiguration auf Instanzebene. Der Newsfeed „Heute“ bleibt auch ohne diese Konfiguration voll nutzbar und es wird keine KI ausgeführt, bis Sie eine KI-Aktion auswählen.",
+      "configuration": "KI-Funktionen erfordern eine OpenAI-kompatible Konfiguration auf Instanzebene. Der Today-Newsfeed funktioniert vollständig ohne diese Konfiguration. KI wird nur ausgeführt, wenn Sie explizit eine KI-Aktion auswählen.",
       "todayAction": "Entdecken Sie den Today-Newsfeed",
-      "briefAction": "Eröffnen Sie Ihre erste Pressekonferenz"
+      "briefAction": "Öffnen Sie Ihre erste personalisierte KI-Nachrichtenzusammenfassung"
     }
   },
   "auth": {

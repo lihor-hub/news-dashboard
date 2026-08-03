@@ -5,23 +5,23 @@
   },
   "onboarding": {
     "workflow": {
-      "title": "Din AI-forskningspult er klar",
-      "promise": "Din AI-forskningsskranke for tekniske nyheder. Find det, der betyder noget, forstå hvorfor, og husk det.",
+      "title": "Dit AI-nyhedsforskningsarbejdsområde er klar",
+      "promise": "Dit AI-forskningsarbejdsområde for tekniske nyheder. Opdag de vigtige historier, forstå deres betydning, og behold det, du lærer.",
       "find": {
-        "title": "Find det der betyder noget",
-        "description": "Friske centraliserede kilder, smart rangering og en personlig daglig brief."
+        "title": "Opdag de vigtige historier",
+        "description": "Aktuelle nyheder fra centraliserede kilder, intelligent rangering og en personlig daglig nyhedsoversigt."
       },
       "understand": {
-        "title": "Forstå hvorfor",
-        "description": "Artikel takeaways med kontekst og alternative perspektiver."
+        "title": "Forstå deres betydning",
+        "description": "Nøglepunkter fra hver artikel med kontekst og forskellige perspektiver."
       },
       "remember": {
-        "title": "Husk det",
-        "description": "Citeret Spørg AI-svar plus lærings- og opsummeringsværktøjer."
+        "title": "Husk, hvad du lærer",
+        "description": "Svar fra Ask AI inkluderer kildehenvisninger. Lærings- og gennemgangsværktøjer hjælper dig med at huske."
       },
-      "configuration": "AI-funktioner kræver en OpenAI-kompatibel konfiguration på instansniveau. Dagens nyhedsfeed forbliver fuldt ud nyttig uden denne konfiguration, og ingen AI kører, før du vælger en AI-handling.",
+      "configuration": "AI-funktioner kræver en OpenAI-kompatibel konfiguration på instansniveau. Dagens nyhedsfeed fungerer fuldt ud uden denne konfiguration. AI kører kun, når du eksplicit vælger en AI-handling.",
       "todayAction": "Udforsk dagens nyhedsfeed",
-      "briefAction": "Åbn din første nyhedsbriefing"
+      "briefAction": "Åbn din første personlige AI-nyhedsoversigt"
     }
   },
   "auth": {

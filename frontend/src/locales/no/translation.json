@@ -5,23 +5,23 @@
   },
   "onboarding": {
     "workflow": {
-      "title": "AI-forskningspulten din er klar",
-      "promise": "Din AI-forskningsskranke for tekniske nyheter. Finn det som betyr noe, forstå hvorfor og husk det.",
+      "title": "Arbeidsområdet ditt for AI-nyheter er klart",
+      "promise": "Ditt AI-forskningsarbeidsområde for tekniske nyheter. Oppdag de viktige historiene, forstå betydningen deres, og behold det du lærer.",
       "find": {
-        "title": "Finn det som betyr noe",
-        "description": "Ferske sentraliserte kilder, smart rangering og en personlig daglig brief."
+        "title": "Oppdag de viktige historiene",
+        "description": "Aktuelle nyheter fra sentraliserte kilder, intelligent rangering og et personlig daglig nyhetsoppsummering."
       },
       "understand": {
-        "title": "Forstå hvorfor",
-        "description": "Artikkeltakeaways med kontekst og alternative perspektiver."
+        "title": "Forstå betydningen deres",
+        "description": "Sentrale poeng fra hver artikkel, med kontekst og ulike perspektiver."
       },
       "remember": {
-        "title": "Husk det",
-        "description": "Sitert Ask AI-svar pluss lærings- og oppsummeringsverktøy."
+        "title": "Husk hva du lærer",
+        "description": "Svar fra Ask AI inkluderer henvisninger til kilder. Lærings- og gjennomgangsverktøy hjelper deg å huske."
       },
-      "configuration": "AI-funksjoner krever en OpenAI-kompatibel konfigurasjon på forekomstnivå. Today-nyhetsstrømmen forblir fullt nyttig uten denne konfigurasjonen, og ingen AI kjører før du velger en AI-handling.",
+      "configuration": "AI-funksjoner krever en OpenAI-kompatibel konfigurasjon på forekomstnivå. Today-nyhetsstrømmen fungerer fullt ut uten denne konfigurasjonen. AI kjører bare når du eksplisitt velger en AI-handling.",
       "todayAction": "Utforsk dagens nyhetsfeed",
-      "briefAction": "Åpne din første nyhetsbriefing"
+      "briefAction": "Åpne ditt første personlige AI-nyhetssammendrag"
     }
   },
   "auth": {

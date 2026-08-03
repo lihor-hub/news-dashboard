@@ -5,23 +5,23 @@
   },
   "onboarding": {
     "workflow": {
-      "title": "Váš výzkumný stůl AI je připraven",
-      "promise": "Váš výzkumný stůl AI pro technické novinky. Najděte, na čem záleží, pochopte proč a zapamatujte si to.",
+      "title": "Váš pracovní prostor pro výzkum zpráv AI je připraven",
+      "promise": "Váš pracovní prostor pro výzkum AI pro technické novinky. Objevte důležité příběhy, pochopte jejich význam a uchovejte si, co jste se naučili.",
       "find": {
-        "title": "Najděte, na čem záleží",
-        "description": "Čerstvé centralizované zdroje, inteligentní hodnocení a personalizovaný denní přehled."
+        "title": "Objevte důležité příběhy",
+        "description": "Aktuální zprávy z centralizovaných zdrojů, inteligentní hodnocení a personalizovaný denní souhrn zpráv."
       },
       "understand": {
-        "title": "Pochopte proč",
-        "description": "Obsah článku s kontextem a alternativními pohledy."
+        "title": "Pochopte jejich význam",
+        "description": "Klíčové body z každého článku s kontextem a různými pohledy."
       },
       "remember": {
-        "title": "Pamatujte si to",
-        "description": "Citované odpovědi Ask AI plus nástroje pro učení a rekapitulaci."
+        "title": "Pamatujte si, co se naučíte",
+        "description": "Odpovědi z Ask AI obsahují citace zdrojů. Nástroje pro učení a kontrolu vám pomohou zapamatovat si."
       },
-      "configuration": "Funkce umělé inteligence vyžadují konfiguraci kompatibilní s OpenAI na úrovni instance. Informační kanál Dnes zůstává plně užitečný i bez této konfigurace a žádná umělá inteligence se nespustí, dokud nezvolíte akci umělé inteligence.",
+      "configuration": "Funkce umělé inteligence vyžadují konfiguraci kompatibilní s OpenAI na úrovni instance. Informační kanál Dnes funguje plně bez této konfigurace. Umělá inteligence se spustí pouze tehdy, když explicitně vyberete akci AI.",
       "todayAction": "Prozkoumejte zpravodajský kanál Dnes",
-      "briefAction": "Otevřete svůj první zpravodajský brífink"
+      "briefAction": "Otevřete svůj první personalizovaný souhrn zpráv o AI"
     }
   },
   "auth": {

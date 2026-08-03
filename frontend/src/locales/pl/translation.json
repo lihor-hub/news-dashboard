@@ -5,23 +5,23 @@
   },
   "onboarding": {
     "workflow": {
-      "title": "Twoje stanowisko badawcze AI jest gotowe",
-      "promise": "Twoje biuro badawcze AI, w którym znajdziesz aktualności techniczne. Znajdź to, co jest ważne, zrozum dlaczego i zapamiętaj to.",
+      "title": "Twój obszar roboczy badań nad wiadomościami AI jest gotowy",
+      "promise": "Twoja przestrzeń robocza do badań nad sztuczną inteligencją i aktualnościami technicznymi. Odkryj ważne historie, zrozum ich znaczenie i zachowaj to, czego się nauczyłeś.",
       "find": {
-        "title": "Znajdź to, co ważne",
-        "description": "Świeże, scentralizowane źródła, inteligentny ranking i spersonalizowany codzienny brief."
+        "title": "Odkryj ważne historie",
+        "description": "Aktualne wiadomości ze scentralizowanych źródeł, inteligentny ranking i spersonalizowane codzienne podsumowanie wiadomości."
       },
       "understand": {
-        "title": "Zrozum dlaczego",
-        "description": "Artykuły na wynos z kontekstem i alternatywnymi perspektywami."
+        "title": "Zrozum ich znaczenie",
+        "description": "Kluczowe punkty każdego artykułu, z kontekstem i różnymi perspektywami."
       },
       "remember": {
-        "title": "Zapamiętaj to",
-        "description": "Cytowane odpowiedzi na pytania AI oraz narzędzia do nauki i podsumowań."
+        "title": "Pamiętaj, czego się uczysz",
+        "description": "Odpowiedzi z Ask AI zawierają cytaty ze źródeł. Narzędzia do nauki i powtórek pomogą Ci zapamiętać."
       },
-      "configuration": "Funkcje AI wymagają konfiguracji zgodnej z OpenAI na poziomie instancji. Kanał informacyjny Today pozostaje w pełni użyteczny bez tej konfiguracji i żadna sztuczna inteligencja nie będzie działać, dopóki nie wybierzesz akcji AI.",
+      "configuration": "Funkcje AI wymagają konfiguracji zgodnej z OpenAI na poziomie instancji. Kanał informacyjny Today działa w pełni bez tej konfiguracji. Sztuczna inteligencja działa tylko wtedy, gdy wyraźnie wybierzesz akcję AI.",
       "todayAction": "Przeglądaj kanał informacyjny Today",
-      "briefAction": "Otwórz swoją pierwszą odprawę prasową"
+      "briefAction": "Otwórz swoje pierwsze spersonalizowane podsumowanie wiadomości AI"
     }
   },
   "auth": {

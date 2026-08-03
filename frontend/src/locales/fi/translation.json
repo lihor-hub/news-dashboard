@@ -5,23 +5,23 @@
   },
   "onboarding": {
     "workflow": {
-      "title": "Tekoälytutkimuspöytäsi on valmis",
-      "promise": "Tekoälytutkimuspisteesi teknisiä uutisia varten. Löydä tärkeät asiat, ymmärrä miksi ja muista se.",
+      "title": "Tekoälyuutisten tutkimustyötilasi on valmis",
+      "promise": "Tekoälytutkimuksesi työtila teknisiä uutisia varten. Löydä tärkeitä tarinoita, ymmärrä niiden merkitys ja säilytä oppimasi.",
       "find": {
-        "title": "Löydä mikä on tärkeää",
-        "description": "Tuoreet keskitetyt lähteet, älykäs luokitus ja henkilökohtainen päivälehti."
+        "title": "Tutustu tärkeisiin tarinoihin",
+        "description": "Ajankohtaiset uutiset keskitetyistä lähteistä, älykäs sijoitus ja henkilökohtainen päivittäinen uutisyhteenveto."
       },
       "understand": {
-        "title": "Ymmärrä miksi",
-        "description": "Artikkelin poimintoja kontekstista ja vaihtoehtoisista näkökulmista."
+        "title": "Ymmärrä niiden merkitys",
+        "description": "Jokaisen artikkelin tärkeimmät kohdat, konteksti ja eri näkökulmia."
       },
       "remember": {
-        "title": "Muista se",
-        "description": "Lainatut Ask AI -vastaukset sekä oppimis- ja yhteenvetotyökalut."
+        "title": "Muista mitä opit",
+        "description": "Ask AI:n vastaukset sisältävät viittauksia lähteisiin. Oppimis- ja arvostelutyökalut auttavat sinua muistamaan."
       },
-      "configuration": "AI-ominaisuudet vaativat ilmentymätason OpenAI-yhteensopivan kokoonpanon. Tänään-uutissyöte on täysin hyödyllinen ilman tätä kokoonpanoa, eikä tekoälyä suoriteta ennen kuin valitset tekoälytoiminnon.",
+      "configuration": "AI-ominaisuudet vaativat ilmentymätason OpenAI-yhteensopivan kokoonpanon. Tänään-uutissyöte toimii täysin ilman tätä kokoonpanoa. Tekoäly toimii vain, kun nimenomaan valitset tekoälytoiminnon.",
       "todayAction": "Tutustu Tänään-uutissyötteeseen",
-      "briefAction": "Avaa ensimmäinen uutistilauksesi"
+      "briefAction": "Avaa ensimmäinen henkilökohtainen tekoälyuutisten yhteenveto"
     }
   },
   "auth": {

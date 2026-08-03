@@ -5,23 +5,23 @@
   },
   "onboarding": {
     "workflow": {
-      "title": "Uw AI-onderzoeksbureau is klaar",
-      "promise": "Uw AI-onderzoeksbureau voor technisch nieuws. Vind wat belangrijk is, begrijp waarom en onthoud het.",
+      "title": "Uw AI-nieuwsonderzoekswerkruimte is klaar",
+      "promise": "Uw AI-onderzoekswerkplek voor technisch nieuws. Ontdek de belangrijke verhalen, begrijp hun betekenis en onthoud wat je leert.",
       "find": {
-        "title": "Vind wat belangrijk is",
-        "description": "Nieuwe gecentraliseerde bronnen, slimme ranking en een gepersonaliseerde dagelijkse briefing."
+        "title": "Ontdek de belangrijke verhalen",
+        "description": "Actueel nieuws uit gecentraliseerde bronnen, intelligente ranking en een gepersonaliseerde dagelijkse nieuwssamenvatting."
       },
       "understand": {
-        "title": "Begrijp waarom",
-        "description": "Afhaalrestaurants met context en alternatieve perspectieven."
+        "title": "Begrijp hun betekenis",
+        "description": "Kernpunten uit elk artikel, met context en verschillende perspectieven."
       },
       "remember": {
-        "title": "Onthoud het",
-        "description": "Geciteerde Ask AI-antwoorden plus leer- en samenvattingstools."
+        "title": "Onthoud wat je leert",
+        "description": "Antwoorden van Ask AI bevatten citaten naar bronnen. Leer- en beoordelingshulpmiddelen helpen u herinneren."
       },
-      "configuration": "AI-functies vereisen een OpenAI-compatibele configuratie op instanceniveau. De Today-nieuwsfeed blijft volledig bruikbaar zonder deze configuratie, en er wordt geen AI uitgevoerd totdat u een AI-actie kiest.",
+      "configuration": "AI-functies vereisen een OpenAI-compatibele configuratie op instanceniveau. De Today-nieuwsfeed werkt volledig zonder deze configuratie. AI wordt alleen uitgevoerd als u expliciet een AI-actie selecteert.",
       "todayAction": "Verken de Today-nieuwsfeed",
-      "briefAction": "Open uw eerste nieuwsbriefing"
+      "briefAction": "Open uw eerste gepersonaliseerde AI-nieuwsoverzicht"
     }
   },
   "auth": {
