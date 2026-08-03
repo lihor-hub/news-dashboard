@@ -3,6 +3,27 @@
     "name": "Přehled zpráv",
     "tagline": "Vaše soukromá zpravodajská platforma"
   },
+  "onboarding": {
+    "workflow": {
+      "title": "Váš pracovní prostor pro výzkum zpráv AI je připraven",
+      "promise": "Váš pracovní prostor pro výzkum AI pro technické novinky. Objevte důležité příběhy, pochopte jejich význam a uchovejte si, co jste se naučili.",
+      "find": {
+        "title": "Objevte důležité příběhy",
+        "description": "Aktuální zprávy z centralizovaných zdrojů, inteligentní hodnocení a personalizovaný denní souhrn zpráv."
+      },
+      "understand": {
+        "title": "Pochopte jejich význam",
+        "description": "Klíčové body z každého článku s kontextem a různými pohledy."
+      },
+      "remember": {
+        "title": "Pamatujte si, co se naučíte",
+        "description": "Odpovědi z Ask AI obsahují citace zdrojů. Nástroje pro učení a kontrolu vám pomohou zapamatovat si."
+      },
+      "configuration": "Funkce umělé inteligence vyžadují konfiguraci kompatibilní s OpenAI na úrovni instance. Informační kanál Dnes funguje plně bez této konfigurace. Umělá inteligence se spustí pouze tehdy, když explicitně vyberete akci AI.",
+      "todayAction": "Prozkoumejte zpravodajský kanál Dnes",
+      "briefAction": "Otevřete svůj první personalizovaný souhrn zpráv o AI"
+    }
+  },
   "auth": {
     "sign_in": "Přihlásit se",
     "username": "Uživatelské jméno",

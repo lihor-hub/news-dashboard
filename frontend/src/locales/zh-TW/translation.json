@@ -3,6 +3,27 @@
     "name": "新聞儀表板",
     "tagline": "您的私人新聞平台"
   },
+  "onboarding": {
+    "workflow": {
+      "title": "您的 AI 新聞研究工作區已準備就緒",
+      "promise": "您的人工智慧研究工作區，可取得技術新聞。發現重要的故事，理解它們的意義，並記住你學到的東西。",
+      "find": {
+        "title": "發現重要的故事",
+        "description": "來自集中來源的當前新聞、智慧排名和個人化的每日新聞摘要。"
+      },
+      "understand": {
+        "title": "了解它們的意義",
+        "description": "每篇文章的要點，以及上下文和不同的觀點。"
+      },
+      "remember": {
+        "title": "記住你學到的東西",
+        "description": "Ask AI 的答案包括對來源的引用。學習和複習工具可以幫助您記住。"
+      },
+      "configuration": "AI 功能需要實例級 OpenAI 相容配置。今日新聞提要無需此配置即可完全運行。 AI 僅在您明確選擇 AI 操作時運作。",
+      "todayAction": "探索今日新聞源",
+      "briefAction": "打開你的第一個個人化人工智慧新聞摘要"
+    }
+  },
   "auth": {
     "sign_in": "登入",
     "username": "使用者名稱",

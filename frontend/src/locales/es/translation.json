@@ -3,6 +3,27 @@
     "name": "Panel de Noticias",
     "tagline": "Tu plataforma privada de noticias"
   },
+  "onboarding": {
+    "workflow": {
+      "title": "Su espacio de trabajo de investigación de noticias de IA está listo",
+      "promise": "Su espacio de trabajo de investigación de IA para noticias técnicas. Descubra las historias importantes, comprenda su significado y retenga lo que aprenda.",
+      "find": {
+        "title": "Descubre las historias importantes",
+        "description": "Noticias de actualidad de fuentes centralizadas, clasificación inteligente y un resumen de noticias diario personalizado."
+      },
+      "understand": {
+        "title": "Comprender su significado",
+        "description": "Puntos clave de cada artículo, con contexto y diferentes perspectivas."
+      },
+      "remember": {
+        "title": "Recuerda lo que aprendes",
+        "description": "Las respuestas de Ask AI incluyen citas de fuentes. Las herramientas de aprendizaje y revisión le ayudan a recordar."
+      },
+      "configuration": "Las funciones de IA requieren una configuración compatible con OpenAI a nivel de instancia. El servicio de noticias Today funciona completamente sin esta configuración. La IA se ejecuta solo cuando seleccionas explícitamente una acción de IA.",
+      "todayAction": "Explora las noticias de hoy",
+      "briefAction": "Abra su primer resumen personalizado de noticias sobre IA"
+    }
+  },
   "auth": {
     "sign_in": "Iniciar sesión",
     "username": "Usuario",

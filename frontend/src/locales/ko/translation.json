@@ -3,6 +3,27 @@
     "name": "뉴스 대시보드",
     "tagline": "나만의 프라이빗 뉴스 플랫폼"
   },
+  "onboarding": {
+    "workflow": {
+      "title": "AI 뉴스 연구 작업 공간이 준비되었습니다",
+      "promise": "기술 뉴스를 위한 AI 연구 작업 공간. 중요한 이야기를 발견하고, 그 의미를 이해하고, 배운 내용을 유지하세요.",
+      "find": {
+        "title": "중요한 이야기를 만나보세요",
+        "description": "중앙 집중식 소스의 최신 뉴스, 지능형 순위 및 맞춤형 일일 뉴스 요약."
+      },
+      "understand": {
+        "title": "그 중요성을 이해하세요",
+        "description": "맥락과 다양한 관점이 담긴 각 기사의 핵심 사항."
+      },
+      "remember": {
+        "title": "배운 내용을 기억하세요.",
+        "description": "Ask AI의 답변에는 출처 인용이 포함됩니다. 학습 및 검토 도구는 기억하는 데 도움이 됩니다."
+      },
+      "configuration": "AI 기능을 사용하려면 인스턴스 수준 OpenAI 호환 구성이 필요합니다. Today 뉴스 피드는 이 구성 없이도 완벽하게 작동합니다. AI는 AI 작업을 명시적으로 선택한 경우에만 실행됩니다.",
+      "todayAction": "Today 뉴스피드 살펴보기",
+      "briefAction": "첫 번째 맞춤형 AI 뉴스 요약 열기"
+    }
+  },
   "auth": {
     "sign_in": "로그인",
     "username": "사용자 이름",

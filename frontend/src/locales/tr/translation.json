@@ -3,6 +3,27 @@
     "name": "Haber Panosu",
     "tagline": "Kendi özel haber platformunuz"
   },
+  "onboarding": {
+    "workflow": {
+      "title": "Yapay zeka haber araştırma çalışma alanınız hazır",
+      "promise": "Teknik haberler için yapay zeka araştırma çalışma alanınız. Önemli hikayeleri keşfedin, önemlerini anlayın ve öğrendiklerinizi aklınızda tutun.",
+      "find": {
+        "title": "Önemli hikayeleri keşfedin",
+        "description": "Merkezi kaynaklardan güncel haberler, akıllı sıralama ve kişiselleştirilmiş günlük haber özeti."
+      },
+      "understand": {
+        "title": "Önemlerini anlayın",
+        "description": "Bağlam ve farklı bakış açılarıyla her makaledeki önemli noktalar."
+      },
+      "remember": {
+        "title": "Ne öğrendiğini hatırla",
+        "description": "Ask AI'nın yanıtları kaynaklara yapılan alıntıları içerir. Öğrenme ve inceleme araçları hatırlamanıza yardımcı olur."
+      },
+      "configuration": "Yapay zeka özellikleri, örnek düzeyinde OpenAI uyumlu bir yapılandırma gerektirir. Today haber akışı bu yapılandırma olmadan tam olarak çalışır. Yapay zeka yalnızca bir yapay zeka eylemini açıkça seçtiğinizde çalışır.",
+      "todayAction": "Today haber akışını keşfedin",
+      "briefAction": "İlk kişiselleştirilmiş AI haber özetinizi açın"
+    }
+  },
   "auth": {
     "sign_in": "Giriş yap",
     "username": "Kullanıcı adı",

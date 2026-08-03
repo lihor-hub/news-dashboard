@@ -3,6 +3,27 @@
     "name": "Panou de Știri",
     "tagline": "Platforma ta privată de știri"
   },
+  "onboarding": {
+    "workflow": {
+      "title": "Spațiul dvs. de lucru pentru cercetarea știrilor AI este gata",
+      "promise": "Spațiul dvs. de lucru de cercetare AI pentru știri tehnice. Descoperiți poveștile importante, înțelegeți semnificația lor și păstrați ceea ce învățați.",
+      "find": {
+        "title": "Descoperiți poveștile importante",
+        "description": "Știri actuale din surse centralizate, clasare inteligentă și un rezumat zilnic personalizat al știrilor."
+      },
+      "understand": {
+        "title": "Înțelegeți semnificația lor",
+        "description": "Puncte cheie din fiecare articol, cu context și perspective diferite."
+      },
+      "remember": {
+        "title": "Amintește-ți ceea ce înveți",
+        "description": "Răspunsurile de la Ask AI includ citări la surse. Instrumentele de învățare și de revizuire vă ajută să vă amintiți."
+      },
+      "configuration": "Funcțiile AI necesită o configurație compatibilă cu OpenAI la nivel de instanță. Fluxul de știri Today funcționează complet fără această configurație. AI rulează numai atunci când selectezi explicit o acțiune AI.",
+      "todayAction": "Explorați fluxul de știri Today",
+      "briefAction": "Deschideți primul dvs. rezumat personalizat de știri AI"
+    }
+  },
   "auth": {
     "sign_in": "Conectare",
     "username": "Nume utilizator",

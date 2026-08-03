@@ -3,6 +3,27 @@
     "name": "Tableau de bord d'actualités",
     "tagline": "Votre plateforme d'actualités privée"
   },
+  "onboarding": {
+    "workflow": {
+      "title": "Votre espace de travail de recherche d’actualités sur l’IA est prêt",
+      "promise": "Votre espace de travail de recherche sur l'IA pour les actualités techniques. Découvrez les histoires importantes, comprenez leur signification et retenez ce que vous apprenez.",
+      "find": {
+        "title": "Découvrez les histoires importantes",
+        "description": "Actualités actuelles provenant de sources centralisées, classement intelligent et résumé quotidien personnalisé de l'actualité."
+      },
+      "understand": {
+        "title": "Comprendre leur signification",
+        "description": "Points clés de chaque article, avec contexte et perspectives différentes."
+      },
+      "remember": {
+        "title": "Rappelez-vous ce que vous apprenez",
+        "description": "Les réponses d'Ask AI incluent des citations de sources. Les outils d'apprentissage et de révision vous aident à vous souvenir."
+      },
+      "configuration": "Les fonctionnalités d'IA nécessitent une configuration compatible OpenAI au niveau de l'instance. Le fil d'actualité Today fonctionne entièrement sans cette configuration. L'IA s'exécute uniquement lorsque vous sélectionnez explicitement une action AI.",
+      "todayAction": "Explorez le fil d'actualité Aujourd'hui",
+      "briefAction": "Ouvrez votre premier résumé personnalisé de l'actualité de l'IA"
+    }
+  },
   "auth": {
     "sign_in": "Se connecter",
     "username": "Nom d'utilisateur",

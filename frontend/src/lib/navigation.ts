@@ -37,9 +37,12 @@ export interface NavigationItem {
   adminOnly?: boolean;
 }
 
+export const BRIEF_ROUTE = '/';
+export const TODAY_ROUTE = '/today';
+
 export const primaryNavigationItems: NavigationItem[] = [
-  { to: '/', label: 'Brief', labelKey: 'nav.brief', icon: Newspaper, shortcut: 'b' },
-  { to: '/today', label: 'Today', labelKey: 'nav.today', icon: Inbox, shortcut: 't' },
+  { to: BRIEF_ROUTE, label: 'Brief', labelKey: 'nav.brief', icon: Newspaper, shortcut: 'b' },
+  { to: TODAY_ROUTE, label: 'Today', labelKey: 'nav.today', icon: Inbox, shortcut: 't' },
   { to: '/later', label: 'Later', labelKey: 'nav.later', icon: Clock, shortcut: 'l' },
   { to: '/starred', label: 'Starred', labelKey: 'nav.starred', icon: Star, shortcut: 's' },
   { to: '/shared', label: 'Shared', labelKey: 'nav.shared', icon: Send },

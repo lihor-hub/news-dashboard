@@ -3,6 +3,27 @@
     "name": "Dasbor Berita",
     "tagline": "Platform berita pribadi Anda"
   },
+  "onboarding": {
+    "workflow": {
+      "title": "Ruang kerja penelitian berita AI Anda sudah siap",
+      "promise": "Ruang kerja penelitian AI Anda untuk berita teknis. Temukan kisah-kisah penting, pahami maknanya, dan pertahankan apa yang Anda pelajari.",
+      "find": {
+        "title": "Temukan kisah-kisah penting",
+        "description": "Berita terkini dari sumber terpusat, peringkat cerdas, dan ringkasan berita harian yang dipersonalisasi."
+      },
+      "understand": {
+        "title": "Pahami signifikansinya",
+        "description": "Poin-poin penting dari setiap artikel, dengan konteks dan perspektif berbeda."
+      },
+      "remember": {
+        "title": "Ingat apa yang Anda pelajari",
+        "description": "Jawaban dari Ask AI menyertakan kutipan sumber. Alat pembelajaran dan ulasan membantu Anda mengingat."
+      },
+      "configuration": "Fitur AI memerlukan konfigurasi yang kompatibel dengan OpenAI tingkat instans. Umpan berita Today berfungsi sepenuhnya tanpa konfigurasi ini. AI hanya berjalan ketika Anda secara eksplisit memilih tindakan AI.",
+      "todayAction": "Jelajahi umpan berita Hari Ini",
+      "briefAction": "Buka ringkasan berita AI pertama Anda yang dipersonalisasi"
+    }
+  },
   "auth": {
     "sign_in": "Masuk",
     "username": "Nama pengguna",

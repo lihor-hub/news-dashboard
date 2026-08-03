@@ -3,6 +3,27 @@
     "name": "Nyhedspanel",
     "tagline": "Din private nyhedsplatform"
   },
+  "onboarding": {
+    "workflow": {
+      "title": "Dit AI-nyhedsforskningsarbejdsområde er klar",
+      "promise": "Dit AI-forskningsarbejdsområde for tekniske nyheder. Opdag de vigtige historier, forstå deres betydning, og behold det, du lærer.",
+      "find": {
+        "title": "Opdag de vigtige historier",
+        "description": "Aktuelle nyheder fra centraliserede kilder, intelligent rangering og en personlig daglig nyhedsoversigt."
+      },
+      "understand": {
+        "title": "Forstå deres betydning",
+        "description": "Nøglepunkter fra hver artikel med kontekst og forskellige perspektiver."
+      },
+      "remember": {
+        "title": "Husk, hvad du lærer",
+        "description": "Svar fra Ask AI inkluderer kildehenvisninger. Lærings- og gennemgangsværktøjer hjælper dig med at huske."
+      },
+      "configuration": "AI-funktioner kræver en OpenAI-kompatibel konfiguration på instansniveau. Dagens nyhedsfeed fungerer fuldt ud uden denne konfiguration. AI kører kun, når du eksplicit vælger en AI-handling.",
+      "todayAction": "Udforsk dagens nyhedsfeed",
+      "briefAction": "Åbn din første personlige AI-nyhedsoversigt"
+    }
+  },
   "auth": {
     "sign_in": "Log ind",
     "username": "Brugernavn",

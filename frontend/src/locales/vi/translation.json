@@ -3,6 +3,27 @@
     "name": "Bảng Tin Tức",
     "tagline": "Nền tảng tin tức riêng của bạn"
   },
+  "onboarding": {
+    "workflow": {
+      "title": "Không gian nghiên cứu tin tức AI của bạn đã sẵn sàng",
+      "promise": "Không gian làm việc nghiên cứu AI của bạn dành cho tin tức kỹ thuật. Khám phá những câu chuyện quan trọng, hiểu ý nghĩa của chúng và ghi nhớ những gì bạn học được.",
+      "find": {
+        "title": "Khám phá những câu chuyện quan trọng",
+        "description": "Tin tức hiện tại từ các nguồn tập trung, xếp hạng thông minh và tóm tắt tin tức hàng ngày được cá nhân hóa."
+      },
+      "understand": {
+        "title": "Hiểu được ý nghĩa của chúng",
+        "description": "Những điểm chính trong mỗi bài viết, với bối cảnh và quan điểm khác nhau."
+      },
+      "remember": {
+        "title": "Hãy nhớ những gì bạn học",
+        "description": "Câu trả lời từ Ask AI bao gồm các trích dẫn đến các nguồn. Công cụ học tập và ôn tập giúp bạn ghi nhớ."
+      },
+      "configuration": "Các tính năng AI yêu cầu cấu hình tương thích với OpenAI ở cấp độ phiên bản. Nguồn cấp tin tức Hôm nay hoạt động hoàn toàn mà không cần cấu hình này. AI chỉ chạy khi bạn chọn rõ ràng một hành động AI.",
+      "todayAction": "Khám phá nguồn cấp tin tức Hôm nay",
+      "briefAction": "Mở bản tóm tắt tin tức AI được cá nhân hóa đầu tiên của bạn"
+    }
+  },
   "auth": {
     "sign_in": "Đăng nhập",
     "username": "Tên đăng nhập",

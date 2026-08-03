@@ -3,6 +3,27 @@
     "name": "Nyhetspanel",
     "tagline": "Din privata nyhetsplattform"
   },
+  "onboarding": {
+    "workflow": {
+      "title": "Din arbetsyta för AI-nyheter är klar",
+      "promise": "Din arbetsplats för AI-forskning för tekniska nyheter. Upptäck de viktiga berättelserna, förstå deras betydelse och behåll det du lär dig.",
+      "find": {
+        "title": "Upptäck de viktiga berättelserna",
+        "description": "Aktuella nyheter från centraliserade källor, intelligent rankning och en personlig daglig nyhetssammanfattning."
+      },
+      "understand": {
+        "title": "Förstå deras betydelse",
+        "description": "Nyckelpunkter från varje artikel, med sammanhang och olika perspektiv."
+      },
+      "remember": {
+        "title": "Kom ihåg vad du lär dig",
+        "description": "Svar från Ask AI inkluderar hänvisningar till källor. Inlärnings- och granskningsverktyg hjälper dig att komma ihåg."
+      },
+      "configuration": "AI-funktioner kräver en OpenAI-kompatibel konfiguration på instansnivå. Dagens nyhetsflöde fungerar fullt ut utan denna konfiguration. AI körs endast när du uttryckligen väljer en AI-åtgärd.",
+      "todayAction": "Utforska dagens nyhetsflöde",
+      "briefAction": "Öppna din första personliga AI-nyhetssammanfattning"
+    }
+  },
   "auth": {
     "sign_in": "Logga in",
     "username": "Användarnamn",

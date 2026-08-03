@@ -3,6 +3,27 @@
     "name": "Hírműszerfal",
     "tagline": "Az Ön saját hírplatformja"
   },
+  "onboarding": {
+    "workflow": {
+      "title": "Az AI-hírek kutatási munkaterülete készen áll",
+      "promise": "Az AI-kutatási munkaterület műszaki hírekért. Fedezze fel a fontos történeteket, értse meg jelentőségüket, és őrizze meg a tanultakat.",
+      "find": {
+        "title": "Fedezze fel a fontos történeteket",
+        "description": "Aktuális hírek központosított forrásokból, intelligens rangsorolás és személyre szabott napi hírösszefoglaló."
+      },
+      "understand": {
+        "title": "Értsd meg a jelentőségüket",
+        "description": "Kulcspontok az egyes cikkekből, kontextussal és különböző nézőpontokkal."
+      },
+      "remember": {
+        "title": "Emlékezz arra, amit tanultál",
+        "description": "Az Ask AI válaszai forrásokra hivatkoznak. A tanulási és áttekintő eszközök segítenek emlékezni."
+      },
+      "configuration": "Az AI-funkciókhoz példányszintű OpenAI-kompatibilis konfiguráció szükséges. A Today hírfolyam e konfiguráció nélkül is teljes mértékben működik. Az AI csak akkor fut, ha kifejezetten kiválaszt egy AI-műveletet.",
+      "todayAction": "Fedezze fel a Today hírfolyamot",
+      "briefAction": "Nyissa meg az első személyre szabott AI-hírösszefoglalót"
+    }
+  },
   "auth": {
     "sign_in": "Bejelentkezés",
     "username": "Felhasználónév",

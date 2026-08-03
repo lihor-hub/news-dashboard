@@ -3,6 +3,27 @@
     "name": "Uutiskojelauta",
     "tagline": "Yksityinen uutisalustasi"
   },
+  "onboarding": {
+    "workflow": {
+      "title": "Tekoälyuutisten tutkimustyötilasi on valmis",
+      "promise": "Tekoälytutkimuksesi työtila teknisiä uutisia varten. Löydä tärkeitä tarinoita, ymmärrä niiden merkitys ja säilytä oppimasi.",
+      "find": {
+        "title": "Tutustu tärkeisiin tarinoihin",
+        "description": "Ajankohtaiset uutiset keskitetyistä lähteistä, älykäs sijoitus ja henkilökohtainen päivittäinen uutisyhteenveto."
+      },
+      "understand": {
+        "title": "Ymmärrä niiden merkitys",
+        "description": "Jokaisen artikkelin tärkeimmät kohdat, konteksti ja eri näkökulmia."
+      },
+      "remember": {
+        "title": "Muista mitä opit",
+        "description": "Ask AI:n vastaukset sisältävät viittauksia lähteisiin. Oppimis- ja arvostelutyökalut auttavat sinua muistamaan."
+      },
+      "configuration": "AI-ominaisuudet vaativat ilmentymätason OpenAI-yhteensopivan kokoonpanon. Tänään-uutissyöte toimii täysin ilman tätä kokoonpanoa. Tekoäly toimii vain, kun nimenomaan valitset tekoälytoiminnon.",
+      "todayAction": "Tutustu Tänään-uutissyötteeseen",
+      "briefAction": "Avaa ensimmäinen henkilökohtainen tekoälyuutisten yhteenveto"
+    }
+  },
   "auth": {
     "sign_in": "Kirjaudu sisään",
     "username": "Käyttäjänimi",

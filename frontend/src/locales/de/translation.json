@@ -3,6 +3,27 @@
     "name": "Nachrichten-Dashboard",
     "tagline": "Ihre private Nachrichtenplattform"
   },
+  "onboarding": {
+    "workflow": {
+      "title": "Ihr Arbeitsbereich für die KI-Nachrichtenrecherche ist fertig",
+      "promise": "Ihr KI-Forschungsarbeitsbereich für technische Neuigkeiten. Entdecken Sie die wichtigen Geschichten, verstehen Sie ihre Bedeutung und behalten Sie das Gelernte im Gedächtnis.",
+      "find": {
+        "title": "Entdecken Sie die wichtigen Geschichten",
+        "description": "Aktuelle Nachrichten aus zentralen Quellen, intelligentes Ranking und eine personalisierte tägliche Nachrichtenzusammenfassung."
+      },
+      "understand": {
+        "title": "Verstehen Sie ihre Bedeutung",
+        "description": "Kernpunkte aus jedem Artikel, mit Kontext und unterschiedlichen Perspektiven."
+      },
+      "remember": {
+        "title": "Denken Sie daran, was Sie gelernt haben",
+        "description": "Die Antworten von Ask AI enthalten Quellenangaben. Lern- und Wiederholungstools helfen Ihnen, sich zu erinnern."
+      },
+      "configuration": "KI-Funktionen erfordern eine OpenAI-kompatible Konfiguration auf Instanzebene. Der Today-Newsfeed funktioniert vollständig ohne diese Konfiguration. KI wird nur ausgeführt, wenn Sie explizit eine KI-Aktion auswählen.",
+      "todayAction": "Entdecken Sie den Today-Newsfeed",
+      "briefAction": "Öffnen Sie Ihre erste personalisierte KI-Nachrichtenzusammenfassung"
+    }
+  },
   "auth": {
     "sign_in": "Anmelden",
     "username": "Benutzername",

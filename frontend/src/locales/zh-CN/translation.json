@@ -3,6 +3,27 @@
     "name": "新闻仪表盘",
     "tagline": "您的私人新闻平台"
   },
+  "onboarding": {
+    "workflow": {
+      "title": "您的 AI 新闻研究工作区已准备就绪",
+      "promise": "您的人工智能研究工作区，可获取技术新闻。发现重要的故事，理解它们的意义，并记住你学到的东西。",
+      "find": {
+        "title": "发现重要的故事",
+        "description": "来自集中来源的当前新闻、智能排名和个性化的每日新闻摘要。"
+      },
+      "understand": {
+        "title": "了解它们的意义",
+        "description": "每篇文章的要点，以及上下文和不同的观点。"
+      },
+      "remember": {
+        "title": "记住你学到的东西",
+        "description": "Ask AI 的答案包括对来源的引用。学习和复习工具可以帮助您记住。"
+      },
+      "configuration": "AI 功能需要实例级 OpenAI 兼容配置。今日新闻提要无需此配置即可完全运行。 AI 仅在您明确选择 AI 操作时运行。",
+      "todayAction": "探索今日新闻源",
+      "briefAction": "打开你的第一个个性化人工智能新闻摘要"
+    }
+  },
   "auth": {
     "sign_in": "登录",
     "username": "用户名",
