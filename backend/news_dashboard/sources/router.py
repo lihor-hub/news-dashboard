@@ -43,6 +43,7 @@ from news_dashboard.sources.service import (
     SourceDefinition,
     SubstackUrlError,
     add_user_source_preference,
+    list_sources_for_user,
     normalize_substack_feed_url,
     set_user_source_priority,
 )
@@ -94,29 +95,8 @@ def _generate_opml(sources: list[dict[str, Any]]) -> str:
 def sources(
     current_user: Annotated[dict[str, Any], Depends(require_auth)],
 ) -> dict[str, Any]:
-    init_db()
-    uid = current_user["id"]
-    with connect() as conn:
-        rows = conn.execute(
-            """
-            SELECT s.*,
-              CASE WHEN s.owner_user_id IS NULL THEN COALESCE(us.enabled, true)
-                   ELSE (s.enabled IS TRUE) END AS user_enabled,
-              COALESCE(us.high_priority, false) AS high_priority
-            FROM sources s
-            LEFT JOIN user_sources us ON us.source_slug = s.slug AND us.user_id = %s
-            WHERE (s.owner_user_id IS NULL OR s.owner_user_id = %s)
-              AND s.deleted_at IS NULL
-            ORDER BY s.category, s.priority DESC, s.name
-            """,
-            (uid, uid),
-        ).fetchall()
-        items = []
-        for row in rows:
-            d = row_to_dict(row)
-            d["subscribed"] = bool(d.pop("user_enabled", 1))
-            items.append(d)
-        return {"items": items}
+    items = list_sources_for_user(int(current_user["id"]))
+    return {"items": items}
 
 
 @router.post("/api/sources")

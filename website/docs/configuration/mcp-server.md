@@ -28,7 +28,7 @@ curl -X POST https://your-instance/api/users/me/mcp-tokens \
 
 The plaintext `ndmcp_` token appears once. News Dashboard stores only its SHA-256 hash and a short display prefix. Each user can hold up to 10 active tokens and can revoke one immediately from Settings or `DELETE /api/users/me/mcp-tokens/{token_id}`.
 
-Available token scopes are `search`, `read`, `ask`, and `briefings`. Omitting `scopes` grants all four; prefer an explicit subset. The current `list_latest_news` tool requires `search`. Tools using the other scopes are planned and are not available yet.
+Available token scopes are `search`, `read`, `ask`, and `briefings`. Omitting `scopes` grants all four; prefer an explicit subset. The currently available tools require `search`. Tools using the other scopes are planned and are not available yet.
 
 MCP authentication is independent of Keycloak and browser login. The bearer token alone identifies the MCP user; clients never send a user ID as a tool argument.
 
@@ -42,15 +42,39 @@ Configure the MCP client with:
 
 Use HTTPS outside a trusted local development environment. Do not put the token in a URL, command history, or logs. There is no stdio adapter or sidecar service.
 
-## Available tool
+## Available tools
 
 | Tool | Scope | Description |
 |------|-------|-------------|
 | `list_latest_news` | `search` | Lists recent articles visible to the token owner. Supports source, category, state, archive, and date-range filters. |
+| `list_news_sources` | `search` | Pages through the token owner's subscribed, enabled sources that can be used with `search_news`. |
+| `search_news` | `search` | Searches visible articles with typed filters and offset pagination. An empty query returns a filtered recent listing. |
 
-`list_latest_news` defaults to 10 articles and never returns more than 25. Responses contain compact article metadata and summaries, not article bodies or internal-only fields. Filter lists and the total serialized response size are also bounded. Every response has `articles` and a `truncated` boolean; when the size bound prevents another complete article from fitting, `truncated` is `true` and the returned articles remain valid structured data.
+Use `list_news_sources` before filtering by source. It returns only sources that are both subscribed and enabled for the authenticated user, in deterministic category, descending priority, name, then slug order. Sources whose exact slug or category is not a valid search filter value are omitted. Each source has `slug`, `name`, `category`, and `kind`; raw feed URLs, ownership identifiers, and internal state are omitted. The exact `slug` and `category` are valid `search_news` filters. Display-only `name` and `kind` values are capped at 120 characters and may be shortened further when JSON escaping requires it to stay within the 4,800-byte budget.
 
-Article retrieval, source search, briefings, and question answering are planned as separate additions. MCP clients should use tool discovery instead of assuming those tools exist.
+Source discovery accepts `limit` from 1 through 25 (default 25) and an optional `cursor`. Omit the cursor for the first page. A cursor must be a canonical ASCII-decimal string of at most 20 digits: `0` or a non-zero digit followed by digits, with no sign, leading zero, or whitespace. Pass each `next_cursor` back unchanged to fetch the next page, and continue until it is `null`. A cursor at or beyond the end returns the terminal `{sources: [], truncated: false, next_cursor: null}` response.
+
+Every source page uses the `{sources, truncated, next_cursor}` envelope. `truncated: true` means the 4,800-byte structured-content budget ended that page before its requested count; use `next_cursor` to continue without skipping a source. A non-null `next_cursor` with `truncated: false` simply means more sources remain after a full page.
+
+`search_news` accepts these arguments:
+
+| Argument | Type and bounds | Behavior |
+|----------|-----------------|----------|
+| `q` | string, at most 2,000 characters; default `""` | Full-text query. An empty value returns the filtered recent listing in the web search's canonical order. |
+| `sources` | up to 50 non-empty strings, each at most 120 characters | Source slugs from `list_news_sources`. |
+| `categories` | up to 50 non-empty strings, each at most 120 characters | Source categories. |
+| `date_range` | `all`, `day`, `week`, or `month`; default `all` | Filters by discovery time. `day`, `week`, and `month` cover the trailing 1, 7, and 30 days. |
+| `states` | up to 50 values from `today`, `later`, `done`, `skipped`, `archived` | Workflow states belonging to the token owner. |
+| `starred_only` | boolean; default `false` | Returns only articles starred by the token owner. |
+| `include_archived` | boolean; default `false` | Includes archived articles. Explicitly filtering for the `archived` state overrides the default exclusion. |
+| `limit` | integer from 1 through 25; default 10 | Maximum number of articles requested. |
+| `offset` | integer from 0 through 10,000; default 0 | Number of matching articles to skip for pagination. |
+
+Values within one filter group combine with OR; separate filter groups combine with AND. Search results contain complete compact records with `id`, `title`, canonical `url`, `source_slug`, `source_name`, `category`, `published_at`, `summary`, the token owner's `state`, and the token owner's `starred` value. They never contain article bodies.
+
+Article-list responses use `{articles, truncated}`. Results accumulate only complete records within a 4,800-byte structured-content budget; `truncated: true` means another complete article did not fit. `search_news` pagination remains numeric: use `offset` from 0 through 10,000 rather than a source cursor. The MCP transport applies a separate 16 KiB response limit.
+
+Single-article retrieval, briefings, and question answering are planned as separate additions. MCP clients should use tool discovery instead of assuming those tools exist.
 
 ## Security boundaries
 

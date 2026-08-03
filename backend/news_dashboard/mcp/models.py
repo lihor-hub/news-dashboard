@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Annotated
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, Field, StringConstraints, field_validator
 
@@ -10,12 +10,23 @@ MAX_QUERY_LENGTH = 2_000
 MAX_RESULT_LIMIT = 25
 MAX_FILTER_VALUES = 50
 MAX_FILTER_VALUE_LENGTH = 120
+MAX_SEARCH_OFFSET = 10_000
 
 FilterValue = Annotated[
     str,
     StringConstraints(strip_whitespace=True, min_length=1, max_length=MAX_FILTER_VALUE_LENGTH),
 ]
 FilterValues = Annotated[list[FilterValue], Field(max_length=MAX_FILTER_VALUES)]
+SearchQuery = Annotated[str, StringConstraints(strip_whitespace=True, max_length=MAX_QUERY_LENGTH)]
+SearchLimit = Annotated[int, Field(ge=1, le=MAX_RESULT_LIMIT)]
+SearchOffset = Annotated[int, Field(ge=0, le=MAX_SEARCH_OFFSET)]
+SourceCursor = Annotated[
+    str,
+    StringConstraints(max_length=20, pattern=r"^(0|[1-9][0-9]{0,19})$"),
+]
+WorkflowState = Literal["today", "later", "done", "skipped", "archived"]
+WorkflowStates = Annotated[list[WorkflowState], Field(max_length=MAX_FILTER_VALUES)]
+DateRange = Literal["all", "day", "week", "month"]
 
 
 class TokenCreateRequest(BaseModel):

@@ -23,7 +23,18 @@ from starlette.types import ASGIApp, Message, Receive, Scope, Send
 from news_dashboard.ingest.service import search_articles
 from news_dashboard.mcp import service
 from news_dashboard.mcp.auth import NewsDashboardTokenVerifier
-from news_dashboard.mcp.models import MAX_RESULT_LIMIT, FilterValues
+from news_dashboard.mcp.models import (
+    MAX_FILTER_VALUE_LENGTH,
+    MAX_RESULT_LIMIT,
+    DateRange,
+    FilterValues,
+    SearchLimit,
+    SearchOffset,
+    SearchQuery,
+    SourceCursor,
+    WorkflowStates,
+)
+from news_dashboard.sources.service import list_sources_for_user
 
 MCP_RATE_PER_SECOND = 2.0
 MCP_BURST_CAPACITY = 10
@@ -150,15 +161,21 @@ mcp.add_middleware(_BoundedRateLimitingMiddleware())
 mcp.add_middleware(ResponseLimitingMiddleware(max_size=MCP_MAX_RESPONSE_BYTES))
 
 
-class LatestNewsResult(TypedDict):
+class ArticleListResult(TypedDict):
     articles: list[dict[str, Any]]
     truncated: bool
 
 
-def _bounded_latest_news(articles: list[dict[str, Any]]) -> LatestNewsResult:
+class SourceListResult(TypedDict):
+    sources: list[dict[str, str]]
+    truncated: bool
+    next_cursor: str | None
+
+
+def _bounded_articles(articles: list[dict[str, Any]]) -> ArticleListResult:
     accepted: list[dict[str, Any]] = []
     for article in articles:
-        candidate: LatestNewsResult = {
+        candidate: ArticleListResult = {
             "articles": [*accepted, _compact_article(article)],
             "truncated": False,
         }
@@ -172,6 +189,37 @@ def _bounded_latest_news(articles: list[dict[str, Any]]) -> LatestNewsResult:
             return {"articles": accepted, "truncated": True}
         accepted = candidate["articles"]
     return {"articles": accepted, "truncated": False}
+
+
+def _bounded_sources(
+    sources: list[dict[str, Any]], *, limit: SearchLimit, offset: SearchOffset
+) -> SourceListResult:
+    accepted: list[dict[str, str]] = []
+    cursor = offset
+    page_end = min(len(sources), offset + limit)
+    truncated = False
+    while cursor < page_end:
+        source = sources[cursor]
+        candidate_cursor = cursor + 1
+        candidate: SourceListResult = {
+            "sources": [*accepted, _compact_source(source)],
+            "truncated": False,
+            "next_cursor": str(candidate_cursor) if candidate_cursor < len(sources) else None,
+        }
+        serialized = json.dumps(candidate, ensure_ascii=True, separators=(",", ":")).encode()
+        if len(serialized) > MCP_STRUCTURED_CONTENT_BYTES:
+            truncated = True
+            if accepted:
+                break
+            message = "Compact source exceeds structured content budget"
+            raise ValueError(message)
+        accepted = candidate["sources"]
+        cursor = candidate_cursor
+    return {
+        "sources": accepted,
+        "truncated": truncated,
+        "next_cursor": str(cursor) if cursor < len(sources) else None,
+    }
 
 
 def _current_user_id() -> int:
@@ -190,15 +238,53 @@ def _compact_article(article: dict[str, Any]) -> dict[str, Any]:
     return {
         "id": article["id"],
         "title": article["title"],
-        "url": article["url"],
+        "url": article.get("canonical_url") or article["url"],
         "source_slug": article["source_slug"],
         "source_name": article["source_name"],
         "category": article["category"],
         "published_at": article["published_at"],
-        "discovered_at": article["discovered_at"],
         "summary": article["summary"],
         "state": article["state"],
+        "starred": bool(article.get("starred", False)),
     }
+
+
+def _compact_source(source: dict[str, Any]) -> dict[str, str]:
+    compact = {
+        "slug": str(source["slug"]),
+        "name": str(source["name"])[:MAX_FILTER_VALUE_LENGTH],
+        "category": str(source["category"]),
+        "kind": str(source["kind"])[:MAX_FILTER_VALUE_LENGTH],
+    }
+    while _single_source_result_size(compact) > MCP_STRUCTURED_CONTENT_BYTES:
+        name_bytes = len(json.dumps(compact["name"], ensure_ascii=True).encode())
+        kind_bytes = len(json.dumps(compact["kind"], ensure_ascii=True).encode())
+        if name_bytes >= kind_bytes and compact["name"]:
+            compact["name"] = compact["name"][:-1]
+        elif compact["kind"]:
+            compact["kind"] = compact["kind"][:-1]
+        else:
+            message = "Exact source filter values exceed structured content budget"
+            raise ValueError(message)
+    return compact
+
+
+def _single_source_result_size(source: dict[str, str]) -> int:
+    envelope: SourceListResult = {
+        "sources": [source],
+        "truncated": False,
+        "next_cursor": "9" * 20,
+    }
+    return len(json.dumps(envelope, ensure_ascii=True, separators=(",", ":")).encode())
+
+
+def _has_valid_filter_value(source: dict[str, Any], key: str) -> bool:
+    value = source.get(key)
+    return (
+        isinstance(value, str)
+        and value == value.strip()
+        and 0 < len(value) <= MAX_FILTER_VALUE_LENGTH
+    )
 
 
 @mcp.tool(auth=require_scopes("search"))
@@ -209,20 +295,85 @@ def list_latest_news(
     states: FilterValues | None = None,
     date_range: Literal["all", "day", "week", "month"] = "all",
     include_archived: bool = False,
-) -> LatestNewsResult:
+) -> ArticleListResult:
     """List recent articles visible to the authenticated token owner."""
     bounded_limit = max(1, min(limit, MAX_RESULT_LIMIT))
     articles = search_articles(
         q="",
         limit=bounded_limit,
-        states=states,
+        states=list(states) if states is not None else None,
         categories=categories,
         sources=sources,
         include_archived=include_archived,
         date_range="today" if date_range == "day" else date_range,
         user_id=_current_user_id(),
     )
-    return _bounded_latest_news(articles)
+    return _bounded_articles(articles)
+
+
+@mcp.tool(auth=require_scopes("search"))
+def list_news_sources(
+    limit: SearchLimit = 25,
+    cursor: SourceCursor | None = None,
+) -> SourceListResult:
+    """Page through searchable sources in canonical order.
+
+    Use limit 1..25 and an optional canonical ASCII-decimal cursor of at most 20 digits.
+    Continue from next_cursor until it is null; every server-generated cursor is accepted.
+    Whole compact records fit a 4,800-byte budget; truncation means the size budget
+    ended a page early. Exact slug and category values are always returned. Sources
+    with invalid filter values are omitted, while display-only name and kind values
+    are capped at 120 characters and shortened further only when JSON escaping requires
+    it, so every searchable slug remains reachable.
+    """
+    sources = list_sources_for_user(_current_user_id())
+    searchable = [
+        source
+        for source in sources
+        if bool(source["subscribed"])
+        and bool(source["enabled"])
+        and _has_valid_filter_value(source, "slug")
+        and _has_valid_filter_value(source, "category")
+    ]
+    offset = int(cursor) if cursor is not None else 0
+    return _bounded_sources(searchable, limit=limit, offset=offset)
+
+
+@mcp.tool(auth=require_scopes("search"))
+def search_news(  # noqa: PLR0913, PLR0917
+    q: SearchQuery = "",
+    sources: FilterValues | None = None,
+    categories: FilterValues | None = None,
+    date_range: DateRange = "all",
+    states: WorkflowStates | None = None,
+    starred_only: bool = False,
+    include_archived: bool = False,
+    limit: SearchLimit = 10,
+    offset: SearchOffset = 0,
+) -> ArticleListResult:
+    """Search the authenticated owner's news without returning full bodies.
+
+    An empty query returns a filtered recent listing in the web search's canonical order.
+    Multiple values within source, category, or state filters combine with OR; distinct
+    filter groups combine with AND. Date windows use discovery time: day, week, and month
+    cover the trailing 1, 7, and 30 days. Archived articles are excluded unless requested;
+    an explicit archived state overrides that default. Starred state belongs only to the
+    authenticated owner. Page with limit 1..25 and offset 0..10000. Results contain whole
+    compact records only and report truncation if the 4,800-byte structured budget fills.
+    """
+    articles = search_articles(
+        q=q,
+        sources=sources,
+        categories=categories,
+        date_range="today" if date_range == "day" else date_range,
+        states=list(states) if states is not None else None,
+        starred_only=starred_only,
+        include_archived=include_archived,
+        limit=limit,
+        offset=offset,
+        user_id=_current_user_id(),
+    )
+    return _bounded_articles(articles)
 
 
 def _sanitize_mcp_response_body(body: bytes) -> bytes:
