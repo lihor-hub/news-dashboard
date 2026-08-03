@@ -1385,26 +1385,52 @@ def test_get_news_article_suppresses_real_body_fetch_diagnostics_during_mcp(
     monkeypatch: pytest.MonkeyPatch,
     caplog: pytest.LogCaptureFixture,
 ) -> None:
-    from news_dashboard import body_fetch
+    from news_dashboard import ai_client, body_fetch, selenium_client
     from news_dashboard.mcp import service
 
     monkeypatch.setenv("DATABASE_URL", pg_clean)
     user_id = _make_user(pg_clean, "article-real-body-fetch-log")
     _seed_source(pg_clean)
     _seed_article(pg_clean, 118)
-    private_url = "https://private.example/body-fetch-url-sentinel-b67e"
+    private_url = "https://private.medium.com/body-fetch-url-sentinel-b67e"
     provider_detail = "provider-detail-sentinel-95ac"
+    rendered_detail = "rendered-provider-sentinel-e241"
+    ai_provider_detail = "ai-provider-sentinel-071f"
     question_sentinel = "private-question-sentinel-28de"
     extraction_error = f"{provider_detail} {question_sentinel}"
-    returned_body = "safe extracted article body " * 20
+    rendered_calls: list[str] = []
+    ai_logger_calls = 0
     with connect(database_url=pg_clean) as conn:
         conn.execute("UPDATE articles SET url = %s WHERE id = %s", (private_url, 118))
 
     def fail_static_fetch(*_args: Any, **_kwargs: Any) -> None:
         raise RuntimeError(extraction_error)
 
+    def fail_rendered_fetch(url: str, **_kwargs: Any) -> None:
+        rendered_calls.append(url)
+        raise RuntimeError(rendered_detail)
+
+    def fail_langfuse_client() -> None:
+        nonlocal ai_logger_calls
+        ai_logger_calls += 1
+        raise RuntimeError(ai_provider_detail)
+
+    def fail_ai_stage(*_args: Any, **_kwargs: Any) -> tuple[str, str]:
+        ai_client.get_prompt("ai-body-fetch", fallback="fallback")
+        return "", "error"
+
     monkeypatch.setattr(body_fetch, "open_server_fetch_url", fail_static_fetch)
-    monkeypatch.setattr(body_fetch, "_selenium_extract_body", lambda _url: (returned_body, "ok"))
+    monkeypatch.setattr(
+        selenium_client, "public_renderer_egress_proxy", lambda: "https://proxy.example"
+    )
+    monkeypatch.setattr(
+        selenium_client,
+        "_fetch_with_cleanup",
+        fail_rendered_fetch,
+    )
+    monkeypatch.setattr(ai_client, "langfuse_enabled", lambda: True)
+    monkeypatch.setattr(ai_client, "_client", fail_langfuse_client)
+    monkeypatch.setattr(body_fetch, "_ai_extract_body", fail_ai_stage)
     created = service.create_token(user_id, "client", scopes=("read",), database_url=pg_clean)
     caplog.set_level(logging.DEBUG)
 
@@ -1415,6 +1441,8 @@ def test_get_news_article_suppresses_real_body_fetch_diagnostics_during_mcp(
         assert result.structured_content["found"] is True
 
     asyncio.run(exercise())
+    assert rendered_calls
+    assert ai_logger_calls == 1
     log_formatter = logging.Formatter("%(levelname)s %(name)s %(message)s")
     server_logs = "\n".join(
         log_formatter.format(record)
@@ -1426,8 +1454,9 @@ def test_get_news_article_suppresses_real_body_fetch_diagnostics_during_mcp(
         created["token"],
         private_url,
         provider_detail,
+        rendered_detail,
+        ai_provider_detail,
         question_sentinel,
-        returned_body,
     ):
         assert sensitive_value not in server_logs
 
@@ -1438,28 +1467,49 @@ def test_get_news_article_suppresses_real_body_fetch_diagnostics_during_mcp(
     assert provider_detail in non_mcp_logs
     assert question_sentinel in non_mcp_logs
 
+    caplog.clear()
+    with pytest.raises(RuntimeError, match=rendered_detail):
+        selenium_client.fetch_spa_html(private_url)
+    non_mcp_rendered_logs = "\n".join(log_formatter.format(record) for record in caplog.records)
+    assert private_url in non_mcp_rendered_logs
+    assert rendered_detail in non_mcp_rendered_logs
 
-def test_mcp_body_fetch_log_filter_is_request_scoped_and_resets(
+    caplog.clear()
+    ai_client.get_prompt("ai-body-fetch", fallback="fallback")
+    assert ai_logger_calls == 2
+    non_mcp_ai_logs = "\n".join(log_formatter.format(record) for record in caplog.records)
+    assert ai_provider_detail in non_mcp_ai_logs
+
+
+def test_mcp_extraction_log_filters_are_request_scoped_and_reset(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     from news_dashboard.mcp.server import _SanitizeMcpResponses
 
-    body_fetch_logger = logging.getLogger("news_dashboard.body_fetch")
+    extraction_loggers = tuple(
+        logging.getLogger(name)
+        for name in (
+            "news_dashboard.body_fetch",
+            "news_dashboard.selenium_client",
+            "news_dashboard.ai_client",
+        )
+    )
     mcp_started = asyncio.Event()
     allow_mcp_to_log = asyncio.Event()
 
     async def concurrent_mcp_app(_scope: Scope, _receive: Receive, _send: Send) -> None:
         mcp_started.set()
         await allow_mcp_to_log.wait()
-        body_fetch_logger.warning("mcp-private-url provider-private-detail")
+        for extraction_logger in extraction_loggers:
+            extraction_logger.warning("mcp-private-url provider-private-detail")
 
     async def raising_mcp_app(_scope: Scope, _receive: Receive, _send: Send) -> None:
-        body_fetch_logger.warning("mcp-error-private-detail")
+        extraction_loggers[0].warning("mcp-error-private-detail")
         message = "expected MCP test error"
         raise RuntimeError(message)
 
     async def cancelled_mcp_app(_scope: Scope, _receive: Receive, _send: Send) -> None:
-        body_fetch_logger.warning("mcp-cancel-private-detail")
+        extraction_loggers[1].warning("mcp-cancel-private-detail")
         raise asyncio.CancelledError
 
     async def receive() -> Message:
@@ -1469,27 +1519,28 @@ def test_mcp_body_fetch_log_filter_is_request_scoped_and_resets(
         return None
 
     scope: Scope = {"type": "http"}
-    caplog.set_level(logging.DEBUG, logger="news_dashboard.body_fetch")
+    caplog.set_level(logging.DEBUG)
 
     async def exercise() -> None:
         wrapped = _SanitizeMcpResponses(concurrent_mcp_app)
         mcp_task = asyncio.create_task(wrapped(scope, receive, send))
         await mcp_started.wait()
-        body_fetch_logger.warning("background-visible-during-mcp")
+        for extraction_logger in extraction_loggers:
+            extraction_logger.warning("background-visible-during-mcp")
         allow_mcp_to_log.set()
         await mcp_task
 
         with pytest.raises(RuntimeError, match="expected MCP test error"):
             await _SanitizeMcpResponses(raising_mcp_app)(scope, receive, send)
-        body_fetch_logger.warning("visible-after-error")
+        extraction_loggers[2].warning("visible-after-error")
 
         with pytest.raises(asyncio.CancelledError):
             await _SanitizeMcpResponses(cancelled_mcp_app)(scope, receive, send)
-        body_fetch_logger.warning("visible-after-cancellation")
+        extraction_loggers[1].warning("visible-after-cancellation")
 
     asyncio.run(exercise())
     rendered = caplog.text
-    assert "background-visible-during-mcp" in rendered
+    assert rendered.count("background-visible-during-mcp") == len(extraction_loggers)
     assert "visible-after-error" in rendered
     assert "visible-after-cancellation" in rendered
     assert "mcp-private-url" not in rendered
