@@ -1,12 +1,25 @@
 from __future__ import annotations
 
+import asyncio
 import json
+import logging
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from datetime import datetime, timezone
+from threading import Event
 from typing import Any
 
+import httpx
 import pytest
+from fastmcp import Client
+from fastmcp.client.transports import StreamableHttpTransport
+from mcp.types import TextContent
 from pydantic import TypeAdapter, ValidationError
+from starlette.applications import Starlette
+from starlette.routing import Mount
+from starlette.types import Message, Receive, Scope, Send
 
+from news_dashboard.db import connect
 from news_dashboard.mcp.briefings import (
     MCP_STRUCTURED_CONTENT_BYTES,
     BriefingGetResult,
@@ -15,6 +28,61 @@ from news_dashboard.mcp.briefings import (
     build_briefing_list_result,
 )
 from news_dashboard.mcp.models import BriefingId, BriefingLimit, BriefingOffset
+
+
+def _make_user(database_url: str, username: str) -> int:
+    with connect(database_url=database_url) as conn:
+        row = conn.execute(
+            "INSERT INTO users(username, password_hash) VALUES (%s, 'hash') RETURNING id",
+            (username,),
+        ).fetchone()
+    return int(row["id"])
+
+
+@asynccontextmanager
+async def _briefing_client(
+    token: str, *, response_bodies: list[bytes] | None = None
+) -> AsyncIterator[Client[Any]]:
+    from news_dashboard.mcp.server import mcp_http_app
+
+    async def capture_responses(scope: Scope, receive: Receive, send: Send) -> None:
+        body_parts: list[bytes] = []
+
+        async def capture_send(message: Message) -> None:
+            if message["type"] == "http.response.body":
+                body_parts.append(message.get("body", b""))
+                if not message.get("more_body", False) and response_bodies is not None:
+                    response_bodies.append(b"".join(body_parts))
+            await send(message)
+
+        await mcp_http_app(scope, receive, capture_send)
+
+    app = Starlette(
+        routes=[Mount("/mcp", app=capture_responses)],
+        lifespan=mcp_http_app.lifespan,
+    )
+
+    def client_factory(
+        headers: dict[str, str] | None = None,
+        timeout: httpx.Timeout | None = None,
+        auth: httpx.Auth | None = None,
+        *,
+        follow_redirects: bool = True,
+    ) -> httpx.AsyncClient:
+        return httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app),
+            base_url="http://mcp.test",
+            headers=headers,
+            timeout=timeout,
+            auth=auth,
+            follow_redirects=follow_redirects,
+        )
+
+    transport = StreamableHttpTransport(
+        "http://mcp.test/mcp/", auth=token, httpx_client_factory=client_factory
+    )
+    async with app.router.lifespan_context(app), Client(transport) as client:
+        yield client
 
 
 def _row(**overrides: Any) -> dict[str, Any]:
@@ -387,3 +455,251 @@ def test_build_list_byte_resume_does_not_skip_first_unreturned_row() -> None:
 def test_briefing_input_aliases_reject_invalid_values(alias: Any, value: Any) -> None:
     with pytest.raises(ValidationError):
         TypeAdapter(alias).validate_python(value)
+
+
+def _seed_briefing(
+    database_url: str,
+    user_id: int,
+    *,
+    title: str,
+    status: str = "complete",
+    created_at: str = "2026-08-04T08:00:00+00:00",
+    content: Any = None,
+) -> int:
+    stored_content = (
+        {
+            "sections": [{"title": "Top", "body": "Visible body", "citations": []}],
+            "worth_opening": [],
+        }
+        if content is None
+        else content
+    )
+    with connect(database_url=database_url) as conn:
+        row = conn.execute(
+            """
+            INSERT INTO briefings(
+              title, summary, content, status, scope, since_at, until_at, model, created_at,
+              user_id
+            ) VALUES (%s, 'Saved summary', %s::jsonb, %s, 'day', NULL, NULL, 'model', %s, %s)
+            RETURNING id
+            """,
+            (title, json.dumps(stored_content), status, created_at, user_id),
+        ).fetchone()
+    return int(row["id"])
+
+
+def test_briefing_scope_controls_discovery_and_direct_calls(
+    pg_clean: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from news_dashboard.mcp import service
+
+    monkeypatch.setenv("DATABASE_URL", pg_clean)
+    user_id = _make_user(pg_clean, "briefing-scope")
+    briefing_token = service.create_token(
+        user_id, "briefings", scopes=("briefings",), database_url=pg_clean
+    )["token"]
+    search_token = service.create_token(
+        user_id, "search", scopes=("search",), database_url=pg_clean
+    )["token"]
+
+    async def exercise() -> None:
+        async with _briefing_client(briefing_token) as client:
+            assert {tool.name for tool in await client.list_tools()} == {
+                "list_briefings",
+                "get_briefing",
+            }
+        async with _briefing_client(search_token) as client:
+            names = {tool.name for tool in await client.list_tools()}
+            denied = await client.call_tool("list_briefings", raise_on_error=False)
+            assert names == {"list_latest_news", "list_news_sources", "search_news"}
+            assert denied.is_error is True
+
+    asyncio.run(exercise())
+
+
+def test_briefing_tools_list_newest_complete_rows_and_get_owned_detail(
+    pg_clean: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from news_dashboard.briefings import service as briefing_service
+    from news_dashboard.mcp import service
+
+    monkeypatch.setenv("DATABASE_URL", pg_clean)
+    alice = _make_user(pg_clean, "briefing-owner")
+    bob = _make_user(pg_clean, "briefing-foreign")
+    older = _seed_briefing(pg_clean, alice, title="Older", created_at="2026-08-03T08:00:00+00:00")
+    newest = _seed_briefing(pg_clean, alice, title="Newest", created_at="2026-08-04T08:00:00+00:00")
+    _seed_briefing(pg_clean, alice, title="Failed", status="failed")
+    foreign = _seed_briefing(pg_clean, bob, title="Foreign")
+    token = service.create_token(alice, "briefings", scopes=("briefings",), database_url=pg_clean)[
+        "token"
+    ]
+
+    def forbidden(*_args: Any, **_kwargs: Any) -> None:
+        message = "write or generation path called"
+        raise AssertionError(message)
+
+    for name in ("generate_briefing", "chat_with_briefing", "update_briefing_script"):
+        monkeypatch.setattr(briefing_service, name, forbidden)
+
+    def briefing_state() -> tuple[list[Any], list[Any], list[Any], list[Any]]:
+        with connect(database_url=pg_clean) as conn:
+            return (
+                list(conn.execute("SELECT * FROM briefings ORDER BY id")),
+                list(
+                    conn.execute("SELECT * FROM briefing_articles ORDER BY briefing_id, article_id")
+                ),
+                list(conn.execute("SELECT * FROM briefing_agent_runs ORDER BY id")),
+                list(conn.execute("SELECT * FROM briefing_agent_steps ORDER BY id")),
+            )
+
+    before = briefing_state()
+
+    async def exercise() -> None:
+        async with _briefing_client(token) as client:
+            first = await client.call_tool("list_briefings", {"limit": 1, "offset": 0})
+            second = await client.call_tool("list_briefings", {"limit": 1, "offset": 1})
+            detail = await client.call_tool("get_briefing", {"briefing_id": newest})
+            missing = await client.call_tool(
+                "get_briefing", {"briefing_id": 999_999}, raise_on_error=False
+            )
+            hidden = await client.call_tool(
+                "get_briefing", {"briefing_id": foreign}, raise_on_error=False
+            )
+        first_content = first.structured_content
+        second_content = second.structured_content
+        detail_content = detail.structured_content
+        assert first_content is not None
+        assert second_content is not None
+        assert detail_content is not None
+        assert first_content == {
+            "briefings": [first_content["briefings"][0]],
+            "next_offset": 1,
+            "truncated": False,
+        }
+        assert first_content["briefings"][0]["id"] == newest
+        assert second_content["briefings"][0]["id"] == older
+        assert second_content["next_offset"] is None
+        sections = detail_content["briefing"]["content"]["sections"]
+        assert sections[0]["body"] == "Visible body"
+        missing_text = " ".join(
+            block.text for block in missing.content if isinstance(block, TextContent)
+        )
+        hidden_text = " ".join(
+            block.text for block in hidden.content if isinstance(block, TextContent)
+        )
+        assert missing.is_error is True
+        assert hidden.is_error is True
+        assert missing_text == hidden_text
+        assert "Briefing not found" in missing_text
+        assert str(foreign) not in hidden_text
+
+    asyncio.run(exercise())
+    assert briefing_state() == before
+
+
+def test_briefing_tools_use_exact_canonical_arguments_and_do_not_block(
+    pg_clean: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from news_dashboard.briefings import service as briefing_service
+    from news_dashboard.mcp import service
+
+    monkeypatch.setenv("DATABASE_URL", pg_clean)
+    user_id = _make_user(pg_clean, "briefing-offload")
+    token = service.create_token(
+        user_id, "briefings", scopes=("briefings",), database_url=pg_clean
+    )["token"]
+    entered = Event()
+    release = Event()
+    calls: list[dict[str, Any]] = []
+    get_calls: list[tuple[tuple[Any, ...], dict[str, Any]]] = []
+
+    def blocking_list(**kwargs: Any) -> list[dict[str, Any]]:
+        calls.append(kwargs)
+        entered.set()
+        release.wait(timeout=2)
+        return []
+
+    def capture_get(*args: Any, **kwargs: Any) -> dict[str, Any]:
+        get_calls.append((args, kwargs))
+        return _row()
+
+    monkeypatch.setattr(briefing_service, "list_briefings", blocking_list)
+    monkeypatch.setattr(briefing_service, "get_briefing", capture_get)
+
+    async def exercise() -> None:
+        async with _briefing_client(token) as client:
+            call = asyncio.create_task(
+                client.call_tool("list_briefings", {"limit": 4, "offset": 7})
+            )
+            await asyncio.to_thread(entered.wait, 1)
+            heartbeat = asyncio.Event()
+            asyncio.get_running_loop().call_soon(heartbeat.set)
+            await asyncio.wait_for(heartbeat.wait(), timeout=0.2)
+            release.set()
+            result = await call
+            detail = await client.call_tool("get_briefing", {"briefing_id": 7})
+        assert result.structured_content == {
+            "briefings": [],
+            "next_offset": None,
+            "truncated": False,
+        }
+        assert detail.structured_content is not None
+        assert detail.structured_content["briefing"]["id"] == 7
+
+    asyncio.run(exercise())
+    assert calls == [{"limit": 5, "offset": 7, "user_id": user_id, "status": "complete"}]
+    assert get_calls == [((7,), {"user_id": user_id, "status": "complete"})]
+
+
+def test_briefing_wire_bounds_and_metadata_only_logs(
+    pg_clean: str,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    from news_dashboard.briefings import service as briefing_service
+    from news_dashboard.mcp import service
+
+    monkeypatch.setenv("DATABASE_URL", pg_clean)
+    user_id = _make_user(pg_clean, "briefing-wire")
+    bearer = service.create_token(
+        user_id, "briefings", scopes=("briefings",), database_url=pg_clean
+    )["token"]
+    private_title = "private-title-4f18"
+    private_body = "private-body-9a22"
+    private_url = "https://private.example/secret"
+    row = _row(
+        title=private_title * 200,
+        summary=private_body * 200,
+        content={
+            "sections": [{"title": private_title, "body": private_body * 300, "citations": [11]}],
+            "worth_opening": [11],
+        },
+        articles=[{**_row()["articles"][0], "canonical_url": private_url}],
+    )
+
+    def get_row(*_args: Any, **_kwargs: Any) -> dict[str, Any]:
+        return row
+
+    monkeypatch.setattr(briefing_service, "get_briefing", get_row)
+    responses: list[bytes] = []
+    caplog.set_level(logging.DEBUG)
+
+    async def exercise() -> None:
+        async with _briefing_client(bearer, response_bodies=responses) as client:
+            result = await client.call_tool("get_briefing", {"briefing_id": 7})
+        encoded = json.dumps(
+            result.structured_content, ensure_ascii=True, separators=(",", ":")
+        ).encode()
+        assert len(encoded) <= MCP_STRUCTURED_CONTENT_BYTES
+
+    asyncio.run(exercise())
+    assert responses
+    assert max(map(len, responses)) < 16_384
+    server_logs = "\n".join(
+        record.getMessage()
+        for record in caplog.records
+        if not record.name.startswith(("mcp.client", "httpx"))
+    )
+    assert "mcp tool=get_briefing status=success duration_ms=" in server_logs
+    for private in (bearer, private_title, private_body, private_url):
+        assert private not in server_logs

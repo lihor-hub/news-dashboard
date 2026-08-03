@@ -7,10 +7,12 @@ import time
 from collections import OrderedDict
 from contextvars import ContextVar
 from datetime import datetime
+from functools import partial
 from typing import Any, Literal, TypedDict, cast
 
+from anyio import to_thread
 from fastmcp import FastMCP
-from fastmcp.exceptions import AuthorizationError
+from fastmcp.exceptions import AuthorizationError, ToolError
 from fastmcp.server.auth import require_scopes
 from fastmcp.server.dependencies import get_access_token
 from fastmcp.server.middleware import CallNext, Middleware, MiddlewareContext
@@ -23,12 +25,22 @@ from starlette.responses import PlainTextResponse
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from news_dashboard.body_fetch import fetch_and_cache_body
+from news_dashboard.briefings import service as briefing_service
 from news_dashboard.ingest.service import clean_html, search_articles
 from news_dashboard.mcp import service
 from news_dashboard.mcp.auth import NewsDashboardTokenVerifier
+from news_dashboard.mcp.briefings import (
+    BriefingGetResult,
+    BriefingListResult,
+    build_briefing_get_result,
+    build_briefing_list_result,
+)
 from news_dashboard.mcp.models import (
     MAX_FILTER_VALUE_LENGTH,
     MAX_RESULT_LIMIT,
+    BriefingId,
+    BriefingLimit,
+    BriefingOffset,
     DateRange,
     FilterValues,
     PositiveArticleId,
@@ -70,6 +82,7 @@ _ARTICLE_REDUCTION_ORDER = (
     "published_at",
     "discovered_at",
 )
+_BRIEFING_NOT_FOUND_MESSAGE = "Briefing not found"
 
 logger = logging.getLogger("news_dashboard.mcp")
 _mcp_transport_logging = ContextVar("mcp_transport_logging", default=False)
@@ -177,6 +190,11 @@ class _SafeToolTelemetryMiddleware(Middleware):
                     is_error=True,
                 )
             return result
+        except ToolError as exc:
+            status = "error"
+            if str(exc) == _BRIEFING_NOT_FOUND_MESSAGE:
+                raise
+            raise McpError(ErrorData(code=-32603, message=_INTERNAL_ERROR_MESSAGE)) from None
         except McpError:
             status = "error"
             raise
@@ -549,6 +567,42 @@ def get_news_article(article_id: PositiveArticleId) -> GetNewsArticleResult:
     return _bounded_news_article(article)
 
 
+@mcp.tool(auth=require_scopes("briefings"))
+async def list_briefings(
+    limit: BriefingLimit = 10,
+    offset: BriefingOffset = 0,
+) -> BriefingListResult:
+    """List complete saved briefings owned by the authenticated token user."""
+    user_id = _current_user_id()
+    rows = await to_thread.run_sync(
+        partial(
+            briefing_service.list_briefings,
+            limit=limit + 1,
+            offset=offset,
+            user_id=user_id,
+            status="complete",
+        )
+    )
+    return build_briefing_list_result(rows, offset=offset, requested_limit=limit)
+
+
+@mcp.tool(auth=require_scopes("briefings"))
+async def get_briefing(briefing_id: BriefingId) -> BriefingGetResult:
+    """Get one complete saved briefing owned by the authenticated token user."""
+    user_id = _current_user_id()
+    row = await to_thread.run_sync(
+        partial(
+            briefing_service.get_briefing,
+            briefing_id,
+            user_id=user_id,
+            status="complete",
+        )
+    )
+    if row is None:
+        raise ToolError(_BRIEFING_NOT_FOUND_MESSAGE)
+    return build_briefing_get_result(row)
+
+
 def _sanitize_mcp_response_body(body: bytes) -> bytes:
     marker = b"data: "
     start = body.find(marker)
@@ -564,6 +618,15 @@ def _sanitize_mcp_response_body(body: bytes) -> bytes:
         return body
     result = payload.get("result")
     if not isinstance(result, dict) or result.get("isError") is not True:
+        return body
+    content = result.get("content")
+    if (
+        isinstance(content, list)
+        and len(content) == 1
+        and isinstance(content[0], dict)
+        and content[0].get("type") == "text"
+        and content[0].get("text") == _BRIEFING_NOT_FOUND_MESSAGE
+    ):
         return body
     result["content"] = [{"type": "text", "text": _INTERNAL_ERROR_MESSAGE}]
     sanitized = json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode()
