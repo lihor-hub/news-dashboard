@@ -1,11 +1,6 @@
 import { lazy, Suspense } from 'react';
-import {
-  createBrowserRouter,
-  RouterProvider,
-  Navigate,
-  Link,
-  type RouteObject,
-} from 'react-router-dom';
+import { createBrowserRouter, Navigate, Link, type RouteObject } from 'react-router';
+import { RouterProvider } from 'react-router/dom';
 import { Loader2 } from 'lucide-react';
 import { FocusedArticleProvider } from './contexts/focusedArticle';
 import { AuthProvider } from './contexts/auth';

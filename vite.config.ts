@@ -105,7 +105,7 @@ export default defineConfig({
         // the app-shell "index" chunk every time application code changes.
         manualChunks(id) {
           if (
-            /node_modules\/(react|react-dom|react-router-dom|i18next|react-i18next|i18next-browser-languagedetector|@tanstack\/react-query|sonner)\//.test(
+            /node_modules\/(react|react-dom|react-router|i18next|react-i18next|i18next-browser-languagedetector|@tanstack\/react-query|sonner)\//.test(
               id
             )
           ) {

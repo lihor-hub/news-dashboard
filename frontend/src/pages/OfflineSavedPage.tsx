@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link } from 'react-router';
 import { ExternalLink, Trash2, WifiOff } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { listOfflineArticles, removeOfflineArticle, type OfflineArticle } from '@/lib/offline';

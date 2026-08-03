@@ -1,6 +1,6 @@
 import { memo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Link } from 'react-router-dom';
+import { Link } from 'react-router';
 import { Star, Info, Siren } from 'lucide-react';
 import type { WorkflowArticle } from '@/lib/workflowTypes';
 import { relativeTime, signalLabel } from '@/lib/format';

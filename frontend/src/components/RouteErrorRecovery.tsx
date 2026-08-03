@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { isRouteErrorResponse, Link, useRevalidator, useRouteError } from 'react-router-dom';
+import { isRouteErrorResponse, Link, useRevalidator, useRouteError } from 'react-router';
 import { Button } from '@/components/ui/button';
 import { reportError } from '@/lib/errorTracking';
 import { isChunkLoadError } from '@/lib/chunkError';

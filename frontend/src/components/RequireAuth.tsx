@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router';
 import { fetchMe, HttpError, sessionExpiredEvent } from '@/api';
 import { useAuth } from '@/contexts/auth';
 import { AppLogo } from './AppLogo';

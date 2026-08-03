@@ -1,4 +1,4 @@
-import { useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router';
 import { logoutUser } from '@/api';
 import { useAuth } from '@/contexts/auth';
 

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
 import { Newspaper, RefreshCw, AlertCircle, Inbox, History, Wand2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';

@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router';
 import type { EmbeddingMapCluster, EmbeddingMapPoint } from '@/types';
 import { categoryColorMap, colorForCategory } from '@/lib/categoryColor';
 import { convexHull, hullPath, padHull } from '@/lib/convexHull';

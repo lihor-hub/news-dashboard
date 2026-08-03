@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
-import { Link } from 'react-router-dom';
+import { Link } from 'react-router';
 import { AlertCircle, GraduationCap, Headphones, Loader2 } from 'lucide-react';
 import { fetchLessonRecaps, generateLessonRecap, generateLessonRecapPodcast } from '../api';
 import { Button } from '@/components/ui/button';

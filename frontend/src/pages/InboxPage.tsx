@@ -1,5 +1,5 @@
 import { Inbox } from 'lucide-react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams } from 'react-router';
 import { ArticleListView } from '@/components/article/ArticleListView';
 import { FeedNudgeBanner } from '@/components/FeedNudgeBanner';
 import { fetchTriageArticles } from '@/api/workflowApi';

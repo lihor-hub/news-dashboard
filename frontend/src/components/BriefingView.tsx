@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link } from 'react-router';
 import { RefreshCw, Headphones, ChevronDown, ChevronUp, Sparkles, AlertCircle } from 'lucide-react';
 import { AiFeedbackThumbs } from '@/components/AiFeedbackThumbs';
 import { Button } from '@/components/ui/button';

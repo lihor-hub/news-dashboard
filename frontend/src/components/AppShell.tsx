@@ -1,4 +1,4 @@
-import { useLocation, useNavigate, Outlet, Link } from 'react-router-dom';
+import { useLocation, useNavigate, Outlet, Link } from 'react-router';
 import { useState, useEffect, lazy, Suspense } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useQuery } from '@tanstack/react-query';

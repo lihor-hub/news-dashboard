@@ -1,4 +1,4 @@
-import { useParams } from 'react-router-dom';
+import { useParams } from 'react-router';
 import { Tag as TagIcon } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { ArticleListView } from '@/components/article/ArticleListView';
