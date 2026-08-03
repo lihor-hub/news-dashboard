@@ -242,6 +242,37 @@ def test_list_sources_for_user_preserves_visibility_preferences_and_ordering(
     assert [item["high_priority"] for item in items] == [False, True, True]
 
 
+def test_source_listing_uses_slug_as_a_stable_final_ordering_key(
+    pg_clean: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("DATABASE_URL", pg_clean)
+    user_id = _make_user(pg_clean, "tied-source-reader")
+    with connect(pg_clean) as conn:
+        for slug in ("tie-z", "tie-a"):
+            conn.execute(
+                """
+                INSERT INTO sources(slug, name, url, category, kind, priority, enabled)
+                VALUES (%s, 'Same name', %s, 'zz-tied', 'rss_feed', 50, TRUE)
+                """,
+                (slug, f"https://example.com/{slug}"),
+            )
+
+    service_slugs = [
+        item["slug"]
+        for item in source_service.list_sources_for_user(user_id, database_url=pg_clean)
+        if item["slug"].startswith("tie-")
+    ]
+    with _api_client(pg_clean, user_id) as client:
+        response = client.get("/api/sources")
+    browser_slugs = [
+        item["slug"] for item in response.json()["items"] if item["slug"].startswith("tie-")
+    ]
+
+    assert service_slugs == ["tie-a", "tie-z"]
+    assert browser_slugs == ["tie-a", "tie-z"]
+
+
 def _api_client(db_path: Path | str, user_id: int, is_admin: bool = False) -> Any:
     from collections.abc import Generator
     from contextlib import contextmanager

@@ -29,7 +29,7 @@ def list_sources_for_user(
             LEFT JOIN user_sources us ON us.source_slug = s.slug AND us.user_id = %s
             WHERE (s.owner_user_id IS NULL OR s.owner_user_id = %s)
               AND s.deleted_at IS NULL
-            ORDER BY s.category, s.priority DESC, s.name
+            ORDER BY s.category, s.priority DESC, s.name, s.slug
             """,
             (user_id, user_id),
         ).fetchall()
