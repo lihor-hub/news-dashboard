@@ -52,13 +52,13 @@ jobs:
           MANIFEST=$(find desktop/dist -name "latest-mac.yml" | head -1)
           echo "manifest=$MANIFEST" >> "$GITHUB_OUTPUT"
 
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: news-dashboard-dmg-v${{ steps.version.outputs.version }}-manual
           path: ${{ steps.dmg.outputs.path }}
           retention-days: 7
 
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: steps.dmg.outputs.manifest != ''
         with:
           name: latest-mac-v${{ steps.version.outputs.version }}-manual
