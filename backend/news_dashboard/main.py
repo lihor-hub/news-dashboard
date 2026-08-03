@@ -40,18 +40,9 @@ from news_dashboard.scheduler.service import (
     start_scheduler,
     stop_scheduler,
 )
+from news_dashboard.version import read_app_version
 
 logger = logging.getLogger(__name__)
-
-_VERSION_FILE = Path(__file__).resolve().parents[2] / "VERSION"
-
-
-def _read_app_version() -> str:
-    """Return the running app version from the VERSION file baked into the image."""
-    try:
-        return _VERSION_FILE.read_text().strip()
-    except OSError:
-        return "unknown"
 
 
 class SPAStaticFiles(StaticFiles):
@@ -87,7 +78,7 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
         close_connection_pool()
 
 
-app = FastAPI(title="News Dashboard", version=_read_app_version(), lifespan=lifespan)
+app = FastAPI(title="News Dashboard", version=read_app_version(), lifespan=lifespan)
 
 
 async def unhandled_server_error(_request: Request, _exception: Exception) -> StarletteResponse:
@@ -395,10 +386,10 @@ _READING_LIST_LIMIT_MAX = 20
 admin = APIRouter(prefix="/api/admin", dependencies=[Depends(require_admin)])
 
 
-from news_dashboard.admin_routes.router import router as admin_routes_router  # noqa: E402
-
 # Feature-module routers mount onto ``api`` so they inherit its ``require_auth``
 # gate. Add each new domain's router here as it is extracted from main.py.
+from news_dashboard.a2a.router import public_a2a_router  # noqa: E402
+from news_dashboard.admin_routes.router import router as admin_routes_router  # noqa: E402
 from news_dashboard.ai_feedback.router import router as ai_feedback_router  # noqa: E402
 from news_dashboard.ai_memory.router import router as ai_memory_router  # noqa: E402
 from news_dashboard.ai_stats.router import router as ai_stats_router  # noqa: E402
@@ -474,10 +465,11 @@ admin.include_router(admin_routes_router)
 app.include_router(public_router)
 app.include_router(api)
 app.include_router(admin)
-# MCP tool-calling and GReader-sync endpoints authenticate via bearer token,
-# not the session cookie, so they mount directly on the app rather than the
-# `api` router.
+# MCP tool-calling, A2A, and GReader-sync endpoints authenticate via bearer
+# token, not the session cookie, so they mount directly on the app rather than
+# the `api` router.
 app.include_router(public_mcp_router)
+app.include_router(public_a2a_router)
 app.include_router(public_greader_router)
 # System/health endpoints are unauthenticated, so mount directly on the app
 # rather than the `api` router.

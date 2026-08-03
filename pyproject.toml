@@ -32,6 +32,7 @@ dependencies = [
   "sentry-sdk>=2.66.1",
   "neo4j>=5.0.0",
   "jinja2>=3.1.6",
+  "a2a-sdk[http-server]>=1.1.2",
 ]
 
 [project.optional-dependencies]
@@ -56,6 +57,7 @@ dev = [
   "types-defusedxml>=0.7.0",
   "vulture>=2.14",
   "Pillow>=11.0.0",
+  "types-protobuf>=6.30",
 ]
 
 [project.scripts]
