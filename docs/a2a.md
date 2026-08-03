@@ -49,8 +49,9 @@ scope implies the other.
 - Bearer tokens are stored hashed; scopes are enforced per request.
 - The agent can only run retrieval Q&A — no SQL, no filesystem, no shell, no
   dashboard mutations.
-- Query length is bounded (same limit as the MCP `ask` tool) to limit
-  prompt-injection amplification and payload abuse.
+- Query length is bounded by the shared news-question limit to constrain
+  prompt-injection amplification and payload abuse. MCP question answering is
+  planned; it is not currently an available MCP tool.
 
 ## Client example
 

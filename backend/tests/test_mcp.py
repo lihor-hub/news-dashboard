@@ -1128,7 +1128,7 @@ def test_get_news_article_revoked_read_token_fails_transport_authentication(
     asyncio.run(exercise())
 
 
-def test_get_news_article_preserves_rate_and_outer_response_limits(
+def test_get_news_article_preserves_per_token_rate_limit(
     pg_clean: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from news_dashboard.mcp import service
@@ -1138,10 +1138,9 @@ def test_get_news_article_preserves_rate_and_outer_response_limits(
     _seed_source(pg_clean)
     _seed_article(pg_clean, 114, body='snow 雪🙂 \\"' * 20_000, body_status="ok")
     created = service.create_token(user_id, "client", scopes=("read",), database_url=pg_clean)
-    response_bodies: list[bytes] = []
 
     async def exercise() -> None:
-        async with _mcp_client(created["token"], response_bodies=response_bodies) as mcp_client:
+        async with _mcp_client(created["token"]) as mcp_client:
             results = [
                 await mcp_client.call_tool(
                     "get_news_article", {"article_id": 114}, raise_on_error=False
@@ -1155,9 +1154,89 @@ def test_get_news_article_preserves_rate_and_outer_response_limits(
         assert any(result.is_error for result in results)
 
     asyncio.run(exercise())
-    article_responses = [body for body in response_bodies if b'"body_truncated":true' in body]
-    assert article_responses
-    assert all(len(body) <= 16_384 for body in article_responses)
+
+
+def test_get_news_article_outer_response_middleware_intervenes_via_official_transport(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    from fastmcp import FastMCP
+    from fastmcp.server.middleware.response_limiting import ResponseLimitingMiddleware
+
+    outer_limit = 300
+    truncation_marker = "[article outer limit applied]"
+    isolated_mcp = FastMCP("Article outer-limit regression")
+    isolated_mcp.add_middleware(
+        ResponseLimitingMiddleware(
+            max_size=outer_limit,
+            truncation_suffix=truncation_marker,
+            tools=["get_news_article"],
+        )
+    )
+
+    @isolated_mcp.tool
+    def get_news_article(article_id: int) -> dict[str, object]:
+        return {
+            "found": True,
+            "article": {"id": article_id, "body": "bounded article text " * 80},
+            "truncated": False,
+        }
+
+    isolated_http_app = isolated_mcp.http_app(path="/", stateless_http=True, transport="http")
+    response_bodies: list[bytes] = []
+
+    async def capture_responses(scope: Scope, receive: Receive, send: Send) -> None:
+        body_parts: list[bytes] = []
+
+        async def capture_send(message: Message) -> None:
+            if message["type"] == "http.response.body":
+                body_parts.append(message.get("body", b""))
+                if not message.get("more_body", False):
+                    response_bodies.append(b"".join(body_parts))
+            await send(message)
+
+        await isolated_http_app(scope, receive, capture_send)
+
+    transport_app = Starlette(
+        routes=[Mount("/mcp", app=capture_responses)],
+        lifespan=isolated_http_app.lifespan,
+    )
+
+    def httpx_client_factory(
+        headers: dict[str, str] | None = None,
+        timeout: httpx.Timeout | None = None,
+        auth: httpx.Auth | None = None,
+        *,
+        follow_redirects: bool = True,
+    ) -> httpx.AsyncClient:
+        return httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=transport_app),
+            base_url="http://outer-limit.test",
+            headers=headers,
+            timeout=timeout,
+            auth=auth,
+            follow_redirects=follow_redirects,
+        )
+
+    transport = StreamableHttpTransport(
+        "http://outer-limit.test/mcp/", httpx_client_factory=httpx_client_factory
+    )
+    caplog.set_level(logging.WARNING, logger="fastmcp.server.middleware.response_limiting")
+
+    async def exercise() -> None:
+        async with (
+            transport_app.router.lifespan_context(transport_app),
+            Client(transport) as mcp_client,
+        ):
+            with pytest.raises(RuntimeError, match="did not return structured content"):
+                await mcp_client.call_tool(
+                    "get_news_article", {"article_id": 117}, raise_on_error=False
+                )
+
+    asyncio.run(exercise())
+    tool_response = next(body for body in response_bodies if truncation_marker.encode() in body)
+    assert len(tool_response) < 2_000
+    assert b"bounded article text" in tool_response
+    assert "response exceeds size limit" in caplog.text
 
 
 def test_get_news_article_safe_misses_log_metadata_only(
@@ -1200,8 +1279,9 @@ def test_get_news_article_safe_misses_log_metadata_only(
         )
 
     asyncio.run(exercise())
+    log_formatter = logging.Formatter("%(levelname)s %(name)s %(message)s")
     server_logs = "\n".join(
-        record.getMessage()
+        log_formatter.format(record)
         for record in caplog.records
         if not record.name.startswith(("mcp.client", "httpx"))
     )
@@ -1280,8 +1360,9 @@ def test_get_news_article_sanitizes_internal_failures_in_response_and_debug_logs
             assert sensitive_value not in rendered
 
     asyncio.run(exercise())
+    log_formatter = logging.Formatter("%(levelname)s %(name)s %(message)s")
     server_logs = "\n".join(
-        record.getMessage()
+        log_formatter.format(record)
         for record in caplog.records
         if not record.name.startswith(("mcp.client", "httpx"))
     )
