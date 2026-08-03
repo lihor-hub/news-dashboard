@@ -41,15 +41,27 @@ from news_dashboard.reading_list.service import add_item as add_reading_list_ite
 # ── Seeding helpers ───────────────────────────────────────────────────────────
 
 
-def _seed_source(pg_url: str, slug: str = "test-source") -> None:
+def _seed_source(
+    pg_url: str,
+    slug: str = "test-source",
+    *,
+    owner_user_id: int | None = None,
+) -> None:
     with connect(database_url=pg_url) as conn:
         conn.execute(
             """
-            INSERT INTO sources(slug, name, url, category, kind)
-            VALUES (%s, %s, %s, %s, %s)
+            INSERT INTO sources(slug, name, url, category, kind, owner_user_id)
+            VALUES (%s, %s, %s, %s, %s, %s)
             ON CONFLICT(slug) DO NOTHING
             """,
-            (slug, "Test Source", f"https://example.com/{slug}", "tech", "rss_feed"),
+            (
+                slug,
+                "Test Source",
+                f"https://example.com/{slug}",
+                "tech",
+                "rss_feed",
+                owner_user_id,
+            ),
         )
 
 
@@ -126,6 +138,8 @@ def _seed_briefing(
     content: dict[str, Any] | None = None,
     created_at: str | None = None,
     until_at: str = "2026-06-13T00:00:00+00:00",
+    user_id: int | None = None,
+    status: str = "complete",
 ) -> int:
     _content = content or {"sections": [], "worth_opening": []}
     # Always set created_at from Python's clock so it's behind any subsequent
@@ -136,21 +150,23 @@ def _seed_briefing(
         row = conn.execute(
             """
             INSERT INTO briefings(
-              title, summary, content, status, scope, since_at, until_at, model, created_at
+              title, summary, content, status, scope, since_at, until_at, model, created_at,
+              user_id
             )
-            VALUES (%s, %s, %s::jsonb, %s, %s, %s, %s, %s, %s)
+            VALUES (%s, %s, %s::jsonb, %s, %s, %s, %s, %s, %s, %s)
             RETURNING id
             """,
             (
                 title,
                 "A test summary.",
                 json.dumps(_content),
-                "complete",
+                status,
                 "since_last_briefing",
                 "2026-06-12T00:00:00+00:00",
                 until_at,
                 "claude-sonnet-4-6",
                 ts,
+                user_id,
             ),
         ).fetchone()
     assert row is not None
@@ -240,6 +256,17 @@ def test_get_latest_briefing_returns_most_recent(pg_clean: str) -> None:
     assert result["title"] == "Newest Brief"
 
 
+def test_get_latest_briefing_breaks_equal_timestamps_by_newest_id(pg_clean: str) -> None:
+    created_at = "2026-06-13T10:00:00+00:00"
+    _seed_briefing(pg_clean, title="First", created_at=created_at)
+    newest_id = _seed_briefing(pg_clean, title="Second", created_at=created_at)
+
+    result = get_latest_briefing(database_url=pg_clean)
+
+    assert result is not None
+    assert result["id"] == newest_id
+
+
 def test_get_latest_briefing_decodes_jsonb_content(pg_clean: str) -> None:
     _seed_source(pg_clean)
     content = {
@@ -274,6 +301,26 @@ def test_get_latest_briefing_empty_articles_list_when_no_citations(pg_clean: str
     _seed_source(pg_clean)
     _seed_briefing(pg_clean)
     result = get_latest_briefing(database_url=pg_clean)
+    assert result is not None
+    assert result["articles"] == []
+
+
+def test_get_latest_briefing_filters_citations_for_user(pg_clean: str) -> None:
+    user_id = _seed_user(pg_clean, "latest-citation-user")
+    _seed_source(pg_clean, "latest-disabled")
+    article_id = _seed_article(
+        pg_clean, url="https://example.com/latest-disabled", source_slug="latest-disabled"
+    )
+    briefing_id = _seed_briefing(pg_clean, user_id=user_id)
+    _link_article(pg_clean, briefing_id, article_id)
+    with connect(database_url=pg_clean) as conn:
+        conn.execute(
+            "INSERT INTO user_sources(user_id, source_slug, enabled) VALUES (%s, %s, %s)",
+            (user_id, "latest-disabled", False),
+        )
+
+    result = get_latest_briefing(database_url=pg_clean, user_id=user_id)
+
     assert result is not None
     assert result["articles"] == []
 
@@ -326,6 +373,40 @@ def test_list_briefings_offset(pg_clean: str) -> None:
     assert items[1]["title"] == "First"
 
 
+def test_list_briefings_orders_equal_timestamps_by_newest_id(pg_clean: str) -> None:
+    created_at = "2026-06-13T10:00:00+00:00"
+    first_id = _seed_briefing(pg_clean, title="First", created_at=created_at)
+    second_id = _seed_briefing(pg_clean, title="Second", created_at=created_at)
+
+    items = list_briefings(database_url=pg_clean)
+
+    assert [item["id"] for item in items] == [second_id, first_id]
+
+
+def test_list_briefings_filters_by_owner_and_status_with_pagination(pg_clean: str) -> None:
+    owner_id = _seed_user(pg_clean, "briefing-owner")
+    other_id = _seed_user(pg_clean, "other-briefing-owner")
+    created_at = "2026-06-13T10:00:00+00:00"
+    _seed_briefing(pg_clean, title="Owner complete 1", user_id=owner_id, created_at=created_at)
+    wanted_id = _seed_briefing(
+        pg_clean, title="Owner complete 2", user_id=owner_id, created_at=created_at
+    )
+    _seed_briefing(
+        pg_clean, title="Owner failed", user_id=owner_id, status="failed", created_at=created_at
+    )
+    _seed_briefing(pg_clean, title="Other complete", user_id=other_id, created_at=created_at)
+
+    items = list_briefings(
+        limit=1,
+        offset=0,
+        database_url=pg_clean,
+        user_id=owner_id,
+        status="complete",
+    )
+
+    assert [item["id"] for item in items] == [wanted_id]
+
+
 # ── get_briefing ──────────────────────────────────────────────────────────────
 
 
@@ -373,6 +454,76 @@ def test_get_briefing_does_not_return_other_briefing_articles(pg_clean: str) -> 
     assert result is not None
     assert len(result["articles"]) == 1
     assert result["articles"][0]["title"] == "Article A"
+
+
+def test_get_briefing_filters_by_owner_and_status(pg_clean: str) -> None:
+    owner_id = _seed_user(pg_clean, "detail-owner")
+    other_id = _seed_user(pg_clean, "other-detail-owner")
+    complete_id = _seed_briefing(pg_clean, user_id=owner_id)
+    failed_id = _seed_briefing(pg_clean, user_id=owner_id, status="failed")
+    foreign_id = _seed_briefing(pg_clean, user_id=other_id)
+
+    assert (
+        get_briefing(complete_id, database_url=pg_clean, user_id=owner_id, status="complete")
+        is not None
+    )
+    assert (
+        get_briefing(failed_id, database_url=pg_clean, user_id=owner_id, status="complete") is None
+    )
+    assert (
+        get_briefing(foreign_id, database_url=pg_clean, user_id=owner_id, status="complete") is None
+    )
+
+
+def test_get_briefing_filters_citations_by_user_source_visibility(pg_clean: str) -> None:
+    owner_id = _seed_user(pg_clean, "citation-owner")
+    other_id = _seed_user(pg_clean, "foreign-source-owner")
+    _seed_source(pg_clean, "global-enabled")
+    _seed_source(pg_clean, "global-disabled")
+    _seed_source(pg_clean, "private-owned", owner_user_id=owner_id)
+    _seed_source(pg_clean, "private-foreign", owner_user_id=other_id)
+    enabled_id = _seed_article(
+        pg_clean, url="https://example.com/enabled", source_slug="global-enabled"
+    )
+    disabled_id = _seed_article(
+        pg_clean, url="https://example.com/disabled", source_slug="global-disabled"
+    )
+    owned_id = _seed_article(pg_clean, url="https://example.com/owned", source_slug="private-owned")
+    foreign_id = _seed_article(
+        pg_clean, url="https://example.com/foreign", source_slug="private-foreign"
+    )
+    briefing_id = _seed_briefing(pg_clean, user_id=owner_id)
+    for article_id in (enabled_id, disabled_id, owned_id, foreign_id):
+        _link_article(pg_clean, briefing_id, article_id)
+    with connect(database_url=pg_clean) as conn:
+        conn.execute(
+            "INSERT INTO user_sources(user_id, source_slug, enabled) VALUES (%s, %s, %s)",
+            (owner_id, "global-enabled", True),
+        )
+        conn.execute(
+            "INSERT INTO user_sources(user_id, source_slug, enabled) VALUES (%s, %s, %s)",
+            (owner_id, "global-disabled", False),
+        )
+
+    result = get_briefing(briefing_id, database_url=pg_clean, user_id=owner_id)
+
+    assert result is not None
+    assert {article["id"] for article in result["articles"]} == {enabled_id, owned_id}
+
+
+def test_get_briefing_userless_citations_keep_background_compatibility(pg_clean: str) -> None:
+    owner_id = _seed_user(pg_clean, "background-private-owner")
+    _seed_source(pg_clean, "background-private", owner_user_id=owner_id)
+    article_id = _seed_article(
+        pg_clean, url="https://example.com/background", source_slug="background-private"
+    )
+    briefing_id = _seed_briefing(pg_clean)
+    _link_article(pg_clean, briefing_id, article_id)
+
+    result = get_briefing(briefing_id, database_url=pg_clean)
+
+    assert result is not None
+    assert [article["id"] for article in result["articles"]] == [article_id]
 
 
 # ── NULLS LAST ordering ───────────────────────────────────────────────────────

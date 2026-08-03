@@ -23,6 +23,7 @@ from langgraph.graph.state import CompiledStateGraph
 from typing_extensions import TypedDict
 
 from news_dashboard import briefing_agent
+from news_dashboard.article_visibility import visible_article_sql
 from news_dashboard.db import connect, row_to_dict
 from news_dashboard.reading_list import service as reading_list_service
 
@@ -139,6 +140,30 @@ _CITED_ARTICLES_SQL = """
     ORDER BY ba.section_index NULLS LAST, ba.citation_index NULLS LAST, a.id
 """
 
+_CITED_ARTICLES_SQL_USER = f"""
+    SELECT
+        a.id,
+        a.title,
+        a.url,
+        a.canonical_url,
+        a.source_name,
+        a.category,
+        a.kind,
+        a.published_at,
+        a.summary,
+        a.importance_score,
+        ba.section_index,
+        ba.citation_index
+    FROM briefing_articles ba
+    JOIN articles a ON a.id = ba.article_id
+    JOIN sources a_src ON a_src.slug = a.source_slug
+    LEFT JOIN user_sources a_us
+      ON a_us.source_slug = a.source_slug AND a_us.user_id = %s
+    WHERE ba.briefing_id = %s
+      AND ({visible_article_sql("a")})
+    ORDER BY ba.section_index NULLS LAST, ba.citation_index NULLS LAST, a.id
+"""
+
 _CANDIDATES_SQL = """
     SELECT id, title, url, source_name, category, summary, importance_score, discovered_at
     FROM articles
@@ -171,8 +196,16 @@ _CANDIDATES_SQL_USER = """
 # ── Internal helpers ──────────────────────────────────────────────────────────
 
 
-def _fetch_cited_articles(conn: Any, briefing_id: int) -> list[dict[str, Any]]:
-    rows = conn.execute(_CITED_ARTICLES_SQL, (briefing_id,)).fetchall()
+def _fetch_cited_articles(
+    conn: Any, briefing_id: int, user_id: int | None = None
+) -> list[dict[str, Any]]:
+    if user_id is None:
+        rows = conn.execute(_CITED_ARTICLES_SQL, (briefing_id,)).fetchall()
+    else:
+        rows = conn.execute(
+            _CITED_ARTICLES_SQL_USER,
+            (user_id, briefing_id, user_id),
+        ).fetchall()
     return [row_to_dict(row) for row in rows]
 
 
@@ -197,7 +230,7 @@ def _get_since_at(
                 """
                 SELECT until_at FROM briefings
                 WHERE status = 'complete' AND until_at IS NOT NULL AND user_id = %s
-                ORDER BY created_at DESC
+                ORDER BY created_at DESC, id DESC
                 LIMIT 1
                 """,
                 (user_id,),
@@ -207,7 +240,7 @@ def _get_since_at(
                 """
                 SELECT until_at FROM briefings
                 WHERE status = 'complete' AND until_at IS NOT NULL AND user_id IS NULL
-                ORDER BY created_at DESC
+                ORDER BY created_at DESC, id DESC
                 LIMIT 1
                 """,
             ).fetchone()
@@ -823,7 +856,7 @@ def get_latest_briefing(
                        title, summary, content, model, error, script, focus_prompt
                 FROM briefings
                 WHERE user_id = %s
-                ORDER BY created_at DESC
+                ORDER BY created_at DESC, id DESC
                 LIMIT %s
                 """,
                 (user_id, 1),
@@ -835,7 +868,7 @@ def get_latest_briefing(
                        title, summary, content, model, error, script, focus_prompt
                 FROM briefings
                 WHERE user_id IS NULL
-                ORDER BY created_at DESC
+                ORDER BY created_at DESC, id DESC
                 LIMIT %s
                 """,
                 (1,),
@@ -845,7 +878,7 @@ def get_latest_briefing(
         briefing = row_to_dict(row)
         briefing["content"] = _coerce_content(briefing.get("content"))
         briefing["script"] = _coerce_content(briefing.get("script"))
-        briefing["articles"] = _fetch_cited_articles(conn, briefing["id"])
+        briefing["articles"] = _fetch_cited_articles(conn, briefing["id"], user_id)
         return briefing
 
 
@@ -855,6 +888,8 @@ def list_briefings(
     db_path: Path | str | None = None,
     database_url: str | None = None,
     user_id: int | None = None,
+    *,
+    status: str | None = None,
 ) -> list[dict[str, Any]]:
     """Return briefing history (no content blob, no articles)."""
     with connect(db_path, database_url) as conn:
@@ -864,11 +899,11 @@ def list_briefings(
                 SELECT id, created_at, scope, since_at, until_at, status,
                        title, summary, model, error, focus_prompt
                 FROM briefings
-                WHERE user_id = %s
-                ORDER BY created_at DESC
+                WHERE user_id = %s AND (%s::text IS NULL OR status = %s)
+                ORDER BY created_at DESC, id DESC
                 LIMIT %s OFFSET %s
                 """,
-                (user_id, limit, offset),
+                (user_id, status, status, limit, offset),
             ).fetchall()
         else:
             rows = conn.execute(
@@ -876,11 +911,11 @@ def list_briefings(
                 SELECT id, created_at, scope, since_at, until_at, status,
                        title, summary, model, error, focus_prompt
                 FROM briefings
-                WHERE user_id IS NULL
-                ORDER BY created_at DESC
+                WHERE user_id IS NULL AND (%s::text IS NULL OR status = %s)
+                ORDER BY created_at DESC, id DESC
                 LIMIT %s OFFSET %s
                 """,
-                (limit, offset),
+                (status, status, limit, offset),
             ).fetchall()
         return [row_to_dict(r) for r in rows]
 
@@ -890,6 +925,8 @@ def get_briefing(
     db_path: Path | str | None = None,
     database_url: str | None = None,
     user_id: int | None = None,
+    *,
+    status: str | None = None,
 ) -> dict[str, Any] | None:
     """Return one briefing with full content and cited article metadata."""
     with connect(db_path, database_url) as conn:
@@ -899,9 +936,9 @@ def get_briefing(
                 SELECT id, created_at, scope, since_at, until_at, status,
                        title, summary, content, model, error, script, focus_prompt
                 FROM briefings
-                WHERE id = %s AND user_id = %s
+                WHERE id = %s AND user_id = %s AND (%s::text IS NULL OR status = %s)
                 """,
-                (briefing_id, user_id),
+                (briefing_id, user_id, status, status),
             ).fetchone()
         else:
             row = conn.execute(
@@ -909,16 +946,16 @@ def get_briefing(
                 SELECT id, created_at, scope, since_at, until_at, status,
                        title, summary, content, model, error, script, focus_prompt
                 FROM briefings
-                WHERE id = %s AND user_id IS NULL
+                WHERE id = %s AND user_id IS NULL AND (%s::text IS NULL OR status = %s)
                 """,
-                (briefing_id,),
+                (briefing_id, status, status),
             ).fetchone()
         if row is None:
             return None
         briefing = row_to_dict(row)
         briefing["content"] = _coerce_content(briefing.get("content"))
         briefing["script"] = _coerce_content(briefing.get("script"))
-        briefing["articles"] = _fetch_cited_articles(conn, briefing["id"])
+        briefing["articles"] = _fetch_cited_articles(conn, briefing["id"], user_id)
         return briefing
 
 
