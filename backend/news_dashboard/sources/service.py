@@ -11,6 +11,37 @@ class SubstackUrlError(ValueError):
     """Raised when a submitted URL cannot identify a Substack publication."""
 
 
+def list_sources_for_user(
+    user_id: int,
+    *,
+    database_url: str | None = None,
+) -> list[dict[str, Any]]:
+    """List non-deleted global and user-owned sources with preference metadata."""
+    init_db(database_url=database_url)
+    with connect(database_url=database_url) as conn:
+        rows = conn.execute(
+            """
+            SELECT s.*,
+              CASE WHEN s.owner_user_id IS NULL THEN COALESCE(us.enabled, true)
+                   ELSE (s.enabled IS TRUE) END AS user_enabled,
+              COALESCE(us.high_priority, false) AS high_priority
+            FROM sources s
+            LEFT JOIN user_sources us ON us.source_slug = s.slug AND us.user_id = %s
+            WHERE (s.owner_user_id IS NULL OR s.owner_user_id = %s)
+              AND s.deleted_at IS NULL
+            ORDER BY s.category, s.priority DESC, s.name
+            """,
+            (user_id, user_id),
+        ).fetchall()
+
+    items: list[dict[str, Any]] = []
+    for row in rows:
+        item = row_to_dict(row)
+        item["subscribed"] = bool(item.pop("user_enabled", 1))
+        items.append(item)
+    return items
+
+
 @dataclass(frozen=True)
 class SubstackFeed:
     feed_url: str

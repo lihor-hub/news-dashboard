@@ -11,6 +11,7 @@ from fastapi.testclient import TestClient
 from news_dashboard.auth import create_user
 from news_dashboard.db import connect, row_to_dict
 from news_dashboard.ingest.service import list_articles, sync_sources
+from news_dashboard.sources import service as source_service
 from news_dashboard.sources.service import SourceDefinition
 
 # ── helpers ───────────────────────────────────────────────────────────────────
@@ -167,6 +168,78 @@ def test_unsubscription_is_per_user(tmp_path: Path) -> None:
 
 
 # ── API layer ─────────────────────────────────────────────────────────────────
+
+
+def test_list_sources_for_user_preserves_visibility_preferences_and_ordering(
+    pg_clean: str,
+) -> None:
+    alice_id = _make_user(pg_clean, "alice")
+    bob_id = _make_user(pg_clean, "bob")
+    with connect(pg_clean) as conn:
+        conn.cursor().executemany(
+            """
+            INSERT INTO sources(
+              slug, name, url, category, kind, priority, enabled,
+              owner_user_id, deleted_at
+            )
+            VALUES (%s, %s, %s, %s, 'rss_feed', %s, %s, %s, %s)
+            """,
+            [
+                ("global-low", "Alpha", "https://example.com/a", "a", 10, True, None, None),
+                ("global-high", "Zulu", "https://example.com/z", "a", 20, True, None, None),
+                (
+                    "alice-private",
+                    "Alice Private",
+                    "https://example.com/alice",
+                    "b",
+                    30,
+                    True,
+                    alice_id,
+                    None,
+                ),
+                (
+                    "bob-private",
+                    "Bob Private",
+                    "https://example.com/bob",
+                    "b",
+                    40,
+                    True,
+                    bob_id,
+                    None,
+                ),
+                (
+                    "alice-deleted",
+                    "Alice Deleted",
+                    "https://example.com/deleted",
+                    "b",
+                    50,
+                    True,
+                    alice_id,
+                    "2026-08-03T00:00:00+00:00",
+                ),
+            ],
+        )
+        conn.cursor().executemany(
+            """
+            INSERT INTO user_sources(user_id, source_slug, enabled, high_priority)
+            VALUES (%s, %s, %s, %s)
+            """,
+            [
+                (alice_id, "global-low", True, True),
+                (alice_id, "global-high", False, False),
+                (alice_id, "alice-private", True, True),
+            ],
+        )
+
+    items = source_service.list_sources_for_user(alice_id, database_url=pg_clean)
+
+    assert [item["slug"] for item in items] == [
+        "global-high",
+        "global-low",
+        "alice-private",
+    ]
+    assert [item["subscribed"] for item in items] == [False, True, True]
+    assert [item["high_priority"] for item in items] == [False, True, True]
 
 
 def _api_client(db_path: Path | str, user_id: int, is_admin: bool = False) -> Any:
