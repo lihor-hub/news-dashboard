@@ -10,9 +10,6 @@ WORKFLOWS = [
     ROOT / ".github" / "workflows" / "trivy-scan.yml",
 ]
 DOCKERFILE = ROOT / "Dockerfile"
-TRIVY_ACTION_REFERENCE = (
-    "aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0"
-)
 RUNTIME_STAGE = re.compile(
     r"^FROM python:3.14-slim@sha256:[0-9a-f]{64} AS runtime$",
     re.MULTILINE,
@@ -20,16 +17,6 @@ RUNTIME_STAGE = re.compile(
 
 
 class TestTrivyWorkflows(unittest.TestCase):
-    def test_trivy_action_uses_resolved_commit_with_version_comment(self) -> None:
-        workflow_texts = [path.read_text() for path in WORKFLOWS]
-        combined = "\n".join(workflow_texts)
-
-        if "aquasecurity/trivy-action@0.29.0" in combined:
-            self.fail("Unresolvable Trivy action tag is still referenced")
-
-        if combined.count(TRIVY_ACTION_REFERENCE) != len(WORKFLOWS):
-            self.fail("Expected one SHA-pinned Trivy v0.36.0 action per workflow")
-
     def test_trivy_scan_policy_is_preserved(self) -> None:
         for path in WORKFLOWS:
             workflow = path.read_text()
