@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Loader2 } from 'lucide-react';
+import { Brain, Lightbulb, Loader2, Search } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
+import { useNavigate } from 'react-router';
 import {
   Dialog,
   DialogContent,
@@ -16,16 +18,19 @@ import {
   saveOnboardingInterests,
 } from '@/api';
 import type { OnboardingSourceRecommendation } from '@/types';
+import { trackFeature } from '@/lib/analytics';
 
 interface Props {
   open: boolean;
   onClose: () => void;
 }
 
-type Step = 'interests' | 'recommendations' | 'saving';
+type Step = 'interests' | 'recommendations' | 'workflow';
 
 export function OnboardingWizard({ open, onClose }: Props) {
   const qc = useQueryClient();
+  const navigate = useNavigate();
+  const { t } = useTranslation();
   const [step, setStep] = useState<Step>('interests');
   const [selectedInterests, setSelectedInterests] = useState<Set<string>>(new Set());
   const [selectedSlugs, setSelectedSlugs] = useState<Set<string>>(new Set());
@@ -52,11 +57,17 @@ export function OnboardingWizard({ open, onClose }: Props) {
     }
   }, [step, recommendations]);
 
+  useEffect(() => {
+    if (step === 'workflow') {
+      trackFeature('onboarding_ai_workflow_impression');
+    }
+  }, [step]);
+
   const saveMutation = useMutation({
     mutationFn: saveOnboardingInterests,
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['sources'] });
-      onClose();
+      setStep('workflow');
     },
   });
 
@@ -102,7 +113,14 @@ export function OnboardingWizard({ open, onClose }: Props) {
     setStep('recommendations');
   }
 
-  const isLoading = step === 'interests' ? loadingInterests : loadingRecs;
+  function handleWorkflowAction(route: '/today' | '/brief', event: string) {
+    trackFeature(event);
+    onClose();
+    void navigate(route);
+  }
+
+  const isLoading =
+    step === 'interests' ? loadingInterests : step === 'recommendations' && loadingRecs;
 
   return (
     <Dialog
@@ -114,7 +132,11 @@ export function OnboardingWizard({ open, onClose }: Props) {
       <DialogContent className="max-w-lg w-full">
         <DialogHeader>
           <DialogTitle>
-            {step === 'interests' ? 'What are you interested in?' : 'Recommended sources'}
+            {step === 'interests'
+              ? 'What are you interested in?'
+              : step === 'recommendations'
+                ? 'Recommended sources'
+                : t('onboarding.workflow.title')}
           </DialogTitle>
         </DialogHeader>
 
@@ -128,13 +150,15 @@ export function OnboardingWizard({ open, onClose }: Props) {
             selected={selectedInterests}
             onToggle={toggleInterest}
           />
-        ) : (
+        ) : step === 'recommendations' ? (
           <RecommendationsStep
             recommendations={recommendations}
             selected={selectedSlugs}
             onToggle={toggleSlug}
             loading={loadingRecs}
           />
+        ) : (
+          <WorkflowStep />
         )}
 
         <DialogFooter className="gap-2 sm:gap-0">
@@ -151,7 +175,7 @@ export function OnboardingWizard({ open, onClose }: Props) {
                 Next
               </Button>
             </>
-          ) : (
+          ) : step === 'recommendations' ? (
             <>
               <Button variant="ghost" size="sm" onClick={handleBack}>
                 Back
@@ -164,6 +188,23 @@ export function OnboardingWizard({ open, onClose }: Props) {
                 {saveMutation.isPending ? <Loader2 className="size-4 animate-spin" /> : 'Apply'}
               </Button>
             </>
+          ) : (
+            <>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => handleWorkflowAction('/brief', 'onboarding_ai_workflow_brief')}
+              >
+                {t('onboarding.workflow.briefAction')}
+              </Button>
+              <Button
+                size="sm"
+                autoFocus
+                onClick={() => handleWorkflowAction('/today', 'onboarding_ai_workflow_today')}
+              >
+                {t('onboarding.workflow.todayAction')}
+              </Button>
+            </>
           )}
         </DialogFooter>
 
@@ -174,6 +215,35 @@ export function OnboardingWizard({ open, onClose }: Props) {
         )}
       </DialogContent>
     </Dialog>
+  );
+}
+
+function WorkflowStep() {
+  const { t } = useTranslation();
+  const outcomes = [
+    { key: 'find', icon: Search },
+    { key: 'understand', icon: Lightbulb },
+    { key: 'remember', icon: Brain },
+  ] as const;
+
+  return (
+    <div className="grid gap-4">
+      <p className="text-sm text-muted-foreground">{t('onboarding.workflow.promise')}</p>
+      <div className="grid gap-2 sm:grid-cols-3">
+        {outcomes.map(({ key, icon: Icon }) => (
+          <section key={key} className="rounded-md border bg-surface/50 p-3">
+            <Icon className="mb-2 size-4 text-primary" aria-hidden="true" />
+            <h3 className="text-sm font-medium">{t(`onboarding.workflow.${key}.title`)}</h3>
+            <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+              {t(`onboarding.workflow.${key}.description`)}
+            </p>
+          </section>
+        ))}
+      </div>
+      <p className="rounded-md bg-surface-2 px-3 py-2 text-xs text-muted-foreground">
+        {t('onboarding.workflow.configuration')}
+      </p>
+    </div>
   );
 }
 

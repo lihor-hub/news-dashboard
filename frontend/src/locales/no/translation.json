@@ -3,6 +3,27 @@
     "name": "Nyhetspanel",
     "tagline": "Din private nyhetsplattform"
   },
+  "onboarding": {
+    "workflow": {
+      "title": "Your AI research desk is ready",
+      "promise": "Your AI research desk for technical news. Find what matters, understand why, and remember it.",
+      "find": {
+        "title": "Find what matters",
+        "description": "Fresh centralized sources, smart ranking, and a personalized daily brief."
+      },
+      "understand": {
+        "title": "Understand why",
+        "description": "Article takeaways with context and alternative perspectives."
+      },
+      "remember": {
+        "title": "Remember it",
+        "description": "Cited Ask AI answers plus learning and recap tools."
+      },
+      "configuration": "AI features require an instance-level OpenAI-compatible configuration. Today remains fully useful without it, and no AI runs until you choose an AI action.",
+      "todayAction": "Explore Today",
+      "briefAction": "Open your first briefing"
+    }
+  },
   "auth": {
     "sign_in": "Logg inn",
     "username": "Brukernavn",

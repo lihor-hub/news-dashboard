@@ -2,7 +2,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, render, screen, fireEvent, waitFor, renderHook } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { MemoryRouter, useLocation } from 'react-router';
 import * as api from '../api';
+import * as analytics from '../lib/analytics';
+import i18n from '../lib/i18n';
 import { useOnboardingWizard } from '../hooks/useOnboardingWizard';
 import { OnboardingWizard } from '../components/OnboardingWizard';
 
@@ -13,7 +16,15 @@ function makeQc() {
 }
 
 function Wrapper({ children }: { children: React.ReactNode }) {
-  return <QueryClientProvider client={makeQc()}>{children}</QueryClientProvider>;
+  return (
+    <QueryClientProvider client={makeQc()}>
+      <MemoryRouter>{children}</MemoryRouter>
+    </QueryClientProvider>
+  );
+}
+
+function LocationProbe() {
+  return <output aria-label="current route">{useLocation().pathname}</output>;
 }
 
 const MOCK_INTERESTS = [
@@ -49,7 +60,7 @@ const MOCK_RECOMMENDATIONS = [
   },
 ];
 
-beforeEach(() => {
+beforeEach(async () => {
   vi.stubGlobal(
     'ResizeObserver',
     class {
@@ -59,6 +70,7 @@ beforeEach(() => {
     }
   );
   sessionStorage.clear();
+  await i18n.changeLanguage('en');
 });
 
 afterEach(() => {
@@ -196,7 +208,7 @@ describe('OnboardingWizard', () => {
     await waitFor(() => expect(screen.getByText('Top source for tech discussion')).toBeTruthy());
   });
 
-  it('calls saveOnboardingInterests and onClose when Apply is clicked', async () => {
+  it('saves preferences and advances to the AI research workflow when Apply is clicked', async () => {
     vi.spyOn(api, 'fetchOnboardingInterests').mockResolvedValue(MOCK_INTERESTS);
     vi.spyOn(api, 'fetchOnboardingSourceRecommendations').mockResolvedValue(MOCK_RECOMMENDATIONS);
     const save = vi.spyOn(api, 'saveOnboardingInterests').mockResolvedValue(undefined);
@@ -213,7 +225,88 @@ describe('OnboardingWizard', () => {
     // Click Apply
     fireEvent.click(screen.getByRole('button', { name: /apply/i }));
     await waitFor(() => expect(save).toHaveBeenCalled());
-    await waitFor(() => expect(onClose).toHaveBeenCalled());
+    expect(
+      await screen.findByRole('heading', { name: /your ai research desk is ready/i })
+    ).toBeTruthy();
+    expect(screen.getByText(/your ai research desk for technical news/i)).toBeTruthy();
+    expect(screen.getByText('Find what matters')).toBeTruthy();
+    expect(screen.getByText('Understand why')).toBeTruthy();
+    expect(screen.getByText('Remember it')).toBeTruthy();
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it('tracks the workflow impression without invoking an AI endpoint', async () => {
+    vi.spyOn(api, 'fetchOnboardingInterests').mockResolvedValue(MOCK_INTERESTS);
+    vi.spyOn(api, 'fetchOnboardingSourceRecommendations').mockResolvedValue(MOCK_RECOMMENDATIONS);
+    vi.spyOn(api, 'saveOnboardingInterests').mockResolvedValue(undefined);
+    const createBriefing = vi.spyOn(api, 'createBriefing');
+    const trackFeature = vi.spyOn(analytics, 'trackFeature');
+
+    render(
+      <Wrapper>
+        <OnboardingWizard {...makeProps()} />
+      </Wrapper>
+    );
+    await waitFor(() => expect(screen.getByText('Technology')).toBeTruthy());
+    fireEvent.click(screen.getByText('Technology'));
+    fireEvent.click(screen.getByRole('button', { name: /next/i }));
+    await waitFor(() => expect(screen.getByText('Hacker News')).toBeTruthy());
+    fireEvent.click(screen.getByRole('button', { name: /apply/i }));
+
+    expect(await screen.findByText('Find what matters')).toBeTruthy();
+    expect(trackFeature).toHaveBeenCalledWith('onboarding_ai_workflow_impression');
+    expect(createBriefing).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['Explore Today', '/today', 'onboarding_ai_workflow_today'],
+    ['Open your first briefing', '/brief', 'onboarding_ai_workflow_brief'],
+  ])('navigates with the %s action and tracks it', async (label, route, event) => {
+    vi.spyOn(api, 'fetchOnboardingInterests').mockResolvedValue(MOCK_INTERESTS);
+    vi.spyOn(api, 'fetchOnboardingSourceRecommendations').mockResolvedValue(MOCK_RECOMMENDATIONS);
+    vi.spyOn(api, 'saveOnboardingInterests').mockResolvedValue(undefined);
+    const createBriefing = vi.spyOn(api, 'createBriefing');
+    const trackFeature = vi.spyOn(analytics, 'trackFeature');
+    const onClose = vi.fn();
+
+    render(
+      <Wrapper>
+        <OnboardingWizard {...makeProps({ onClose })} />
+        <LocationProbe />
+      </Wrapper>
+    );
+    await waitFor(() => expect(screen.getByText('Technology')).toBeTruthy());
+    fireEvent.click(screen.getByText('Technology'));
+    fireEvent.click(screen.getByRole('button', { name: /next/i }));
+    await waitFor(() => expect(screen.getByText('Hacker News')).toBeTruthy());
+    fireEvent.click(screen.getByRole('button', { name: /apply/i }));
+    await screen.findByText('Find what matters');
+    fireEvent.click(screen.getByRole('button', { name: label }));
+
+    expect(screen.getByLabelText('current route').textContent).toBe(route);
+    expect(trackFeature).toHaveBeenCalledWith(event);
+    expect(createBriefing).not.toHaveBeenCalled();
+    expect(onClose).toHaveBeenCalledOnce();
+  });
+
+  it('explains AI configuration and keeps a non-AI path available', async () => {
+    vi.spyOn(api, 'fetchOnboardingInterests').mockResolvedValue(MOCK_INTERESTS);
+    vi.spyOn(api, 'fetchOnboardingSourceRecommendations').mockResolvedValue(MOCK_RECOMMENDATIONS);
+    vi.spyOn(api, 'saveOnboardingInterests').mockResolvedValue(undefined);
+
+    render(
+      <Wrapper>
+        <OnboardingWizard {...makeProps()} />
+      </Wrapper>
+    );
+    await waitFor(() => expect(screen.getByText('Technology')).toBeTruthy());
+    fireEvent.click(screen.getByText('Technology'));
+    fireEvent.click(screen.getByRole('button', { name: /next/i }));
+    await waitFor(() => expect(screen.getByText('Hacker News')).toBeTruthy());
+    fireEvent.click(screen.getByRole('button', { name: /apply/i }));
+
+    expect(await screen.findByText(/openai-compatible configuration/i)).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Explore Today' })).toBeTruthy();
   });
 
   it('does not call save on Apply when no interests are selected', async () => {
