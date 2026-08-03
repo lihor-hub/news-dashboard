@@ -266,7 +266,9 @@ def list_latest_news(
 def list_news_sources() -> SourceListResult:
     """List subscribed sources available to the authenticated token owner's searches."""
     sources = list_sources_for_user(_current_user_id())
-    return _bounded_sources([source for source in sources if source["subscribed"]])
+    return _bounded_sources(
+        [source for source in sources if bool(source["subscribed"]) and bool(source["enabled"])]
+    )
 
 
 @mcp.tool(auth=require_scopes("search"))

@@ -674,6 +674,24 @@ def test_search_news_excludes_disabled_and_deleted_sources_for_empty_and_exact_q
                 """,
                 (slug, slug, f"https://example.com/{slug}.xml", enabled, owner_id, deleted_at),
             )
+        conn.execute(
+            """
+            INSERT INTO sources(slug, name, url, category, kind, priority, enabled)
+            VALUES ('subscribed-global-lifecycle', 'Subscribed global',
+                    'https://example.com/subscribed-global.xml', 'engineering', 'rss', 50, TRUE)
+            """
+        )
+        conn.execute(
+            """
+            INSERT INTO sources(slug, name, url, category, kind, priority, enabled)
+            VALUES ('unsubscribed-global-lifecycle', 'Unsubscribed global',
+                    'https://example.com/unsubscribed-global.xml', 'engineering', 'rss', 50, TRUE)
+            """
+        )
+        conn.execute(
+            "INSERT INTO user_sources(user_id, source_slug, enabled) VALUES (%s, %s, FALSE)",
+            (alice, "unsubscribed-global-lifecycle"),
+        )
     for article_id, (slug, *_rest) in enumerate(sources, start=601):
         _seed_article(pg_clean, article_id, slug)
     token = service.create_token(alice, "client", scopes=("search",), database_url=pg_clean)[
@@ -689,6 +707,14 @@ def test_search_news_excludes_disabled_and_deleted_sources_for_empty_and_exact_q
 
     async def exercise() -> None:
         async with _mcp_client(token) as client:
+            discovery = await client.call_tool("list_news_sources")
+            assert discovery.structured_content is not None
+            discovered = {row["slug"] for row in discovery.structured_content["sources"]}
+            assert discovered == {
+                "subscribed-global-lifecycle",
+                "live-global-lifecycle",
+                "live-owned-lifecycle",
+            }
             empty_result = await client.call_tool("search_news")
             assert empty_result.structured_content is not None
             visible = {row["source_slug"] for row in empty_result.structured_content["articles"]}
@@ -752,6 +778,7 @@ def test_new_tools_keep_adversarial_structured_and_wire_results_bounded(
                     "category": adversarial,
                     "kind": adversarial,
                     "subscribed": True,
+                    "enabled": True,
                 }
             ],
         )
