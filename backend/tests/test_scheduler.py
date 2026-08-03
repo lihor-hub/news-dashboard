@@ -810,6 +810,28 @@ def test_run_scheduled_ingest_returns_results_and_runs_maintenance() -> None:
     recalc.assert_called_once()
 
 
+def test_scheduled_enrichment_failure_does_not_change_ingest_success(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    import news_dashboard.scheduler.service as scheduler
+    from news_dashboard.ingest.service import IngestResult
+
+    with (
+        patch(
+            "news_dashboard.ingest.service.ingest_all",
+            return_value=IngestResult(results={"a": 2}, run_id=1, total_errors=0),
+        ),
+        patch(
+            "news_dashboard.auto_enrichment.prefetch_then_auto_enrich",
+            side_effect=RuntimeError("enrichment unavailable"),
+        ),
+        patch.object(scheduler, "_run_recommendation_recalc"),
+    ):
+        results = scheduler.run_scheduled_ingest(raise_on_failure=True)
+    assert results == {"a": 2}
+    assert "Scheduled body prefetch/automatic AI enrichment failed" in caplog.text
+
+
 def test_run_ingest_skips_prefetch_when_no_new_articles() -> None:
     import news_dashboard.scheduler.service as scheduler
     from news_dashboard.ingest.service import IngestResult

@@ -92,18 +92,19 @@ def test_candidates_rank_dedupe_and_enforce_visibility(pg_clean: str) -> None:
             "INSERT INTO user_sources(user_id,source_slug,enabled) VALUES (%s,'global',FALSE)",
             (user1,),
         )
-        conn.executemany(
-            """
-            INSERT INTO user_article_recommendations(
-              user_id,article_id,recommendation_score,cold_start_score,stale
-            ) VALUES (%s,%s,%s,0,FALSE)
-            """,
-            [
-                (user1, article_ids[0], 0.9),
-                (user2, article_ids[0], 0.8),
-                (user2, article_ids[1], 0.95),
-            ],
-        )
+        for values in (
+            (user1, article_ids[0], 0.9),
+            (user2, article_ids[0], 0.8),
+            (user2, article_ids[1], 0.95),
+        ):
+            conn.execute(
+                """
+                INSERT INTO user_article_recommendations(
+                  user_id,article_id,recommendation_score,cold_start_score,stale
+                ) VALUES (%s,%s,%s,0,FALSE)
+                """,
+                values,
+            )
     eligible, candidates = _candidates(2, pg_clean)
     assert eligible == 3
     assert [row["article_id"] for row in candidates] == [article_ids[1], article_ids[0]]

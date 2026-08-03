@@ -118,9 +118,9 @@ def generate_insights(article: dict[str, Any], *, user_id: int | None = None) ->
 
 
 def _get_or_generate_insights(
+    conn: Any,
     article_id: int,
     user_id: int | None = None,
-    database_url: str | None = None,
 ) -> list[str]:
     """Return cached insights or generate + cache them.
 
@@ -131,12 +131,9 @@ def _get_or_generate_insights(
     Raises InsightsNotConfiguredError when OPENAI_API_KEY is absent and
     no cached insights exist.
     """
-    init_db(database_url=database_url)
-
-    with connect(database_url=database_url) as conn:
-        if user_id is not None:
-            row = conn.execute(
-                """
+    if user_id is not None:
+        row = conn.execute(
+            """
                 SELECT a.insights
                 FROM articles a
                 JOIN sources src ON src.slug = a.source_slug
@@ -147,12 +144,13 @@ def _get_or_generate_insights(
                   OR src.owner_user_id = %s
                 )
                 """,
-                (user_id, article_id, user_id),
-            ).fetchone()
-        else:
-            row = conn.execute(
-                "SELECT insights FROM articles WHERE id = %s", (article_id,)
-            ).fetchone()
+            (user_id, article_id, user_id),
+        ).fetchone()
+    else:
+        row = conn.execute(
+            "SELECT insights FROM articles WHERE id = %s",
+            (article_id,),
+        ).fetchone()
 
     if row is None:
         return []
@@ -161,7 +159,7 @@ def _get_or_generate_insights(
     if cached is not None:
         return list(json.loads(cached))
 
-    article = get_article(article_id, user_id=user_id)
+    article = get_article(article_id, user_id=user_id, conn=conn)
     if article is None:
         return []
 
@@ -171,11 +169,10 @@ def _get_or_generate_insights(
 
     bullets = generate_insights(article, user_id=user_id)
 
-    with connect(database_url=database_url) as conn:
-        conn.execute(
-            "UPDATE articles SET insights = %s WHERE id = %s",
-            (json.dumps(bullets), article_id),
-        )
+    conn.execute(
+        "UPDATE articles SET insights = %s WHERE id = %s",
+        (json.dumps(bullets), article_id),
+    )
 
     return bullets
 
@@ -190,7 +187,7 @@ def get_or_generate_insights(
     with connect(database_url=database_url) as lock_conn:
         lock_key = (1 << 56) | article_id
         lock_conn.execute("SELECT pg_advisory_xact_lock(%s::bigint)", (lock_key,))
-        return _get_or_generate_insights(article_id, user_id, database_url)
+        return _get_or_generate_insights(lock_conn, article_id, user_id)
 
 
 # ── Topic Map / Story Clustering ──────────────────────────────────────────────

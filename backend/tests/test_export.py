@@ -390,7 +390,8 @@ def test_export_preferences_include_recommendations_onboarding_notifications(
             UPDATE users
             SET briefing_time = '07:30', briefing_timezone = 'America/New_York',
                 briefing_push_enabled = TRUE, briefing_email_enabled = TRUE,
-                recap_enabled = FALSE, recap_day = 'fri'
+                recap_enabled = FALSE, recap_day = 'fri',
+                auto_ai_enrichment_enabled = TRUE
             WHERE id = %s
             """,
             (uid,),
@@ -408,6 +409,7 @@ def test_export_preferences_include_recommendations_onboarding_notifications(
     assert prefs["notifications"]["email_enabled"] is True
     assert prefs["notifications"]["recap_enabled"] is False
     assert prefs["notifications"]["recap_day"] == "fri"
+    assert prefs["notifications"]["automatic_ai_enrichment_enabled"] is True
 
 
 def test_export_preferences_scoped_to_user(pg_clean: str) -> None:

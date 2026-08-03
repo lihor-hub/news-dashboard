@@ -398,19 +398,16 @@ def test_get_or_generate_insights_is_single_flight_across_threads(pg_clean: str)
     release_invocation = threading.Event()
     calls = 0
 
-    def invoke(_value: Any, **_kwargs: Any) -> AIMessage:
+    def generate(*_args: object, **_kwargs: object) -> list[str]:
         nonlocal calls
         calls += 1
         invocation_started.set()
         assert release_invocation.wait(timeout=5)
-        return AIMessage(content="• Exactly once")
+        return ["Exactly once"]
 
-    model = MagicMock()
-    model.invoke.side_effect = invoke
     with (
-        patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}),
-        patch("news_dashboard.ai_client.get_chat_model", return_value=model),
         patch("news_dashboard.insights.get_article", return_value=fake_article),
+        patch("news_dashboard.insights.generate_insights", side_effect=generate),
         ThreadPoolExecutor(max_workers=2) as pool,
     ):
         first = pool.submit(get_or_generate_insights, article_id, None, pg_clean)
@@ -421,6 +418,24 @@ def test_get_or_generate_insights_is_single_flight_across_threads(pg_clean: str)
         assert second.result(timeout=5) == ["Exactly once"]
 
     assert calls == 1
+
+
+def test_get_or_generate_insights_uses_one_pool_connection() -> None:
+    conn = MagicMock()
+    conn.execute.return_value.fetchone.return_value = {"insights": None}
+    context = MagicMock()
+    context.__enter__.return_value = conn
+    context.__exit__.return_value = False
+    article = {"id": 7, "title": "T", "body": "body", "summary": "s"}
+    with (
+        patch("news_dashboard.insights.init_db"),
+        patch("news_dashboard.insights.connect", return_value=context) as acquire,
+        patch("news_dashboard.insights.get_article", return_value=article),
+        patch("news_dashboard.insights.generate_insights", return_value=["one"]),
+    ):
+        assert get_or_generate_insights(7) == ["one"]
+    acquire.assert_called_once()
+    assert conn.execute.call_count == 3
 
 
 def test_get_or_generate_insights_raises_without_api_key_when_not_cached(pg_clean: str) -> None:

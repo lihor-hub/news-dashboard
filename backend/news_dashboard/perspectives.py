@@ -112,15 +112,20 @@ def _fetch_related_articles(
     *,
     user_id: int | None = None,
     database_url: str | None = None,
+    conn: Any | None = None,
 ) -> list[dict[str, Any]]:
     """Return up to _MAX_RELATED articles sharing the same category.
 
     When user_id is provided, only articles visible to that user are included.
     """
-    with connect(database_url=database_url) as conn:
-        if user_id is not None:
-            rows = conn.execute(
-                """
+    if conn is None:
+        with connect(database_url=database_url) as owned_conn:
+            return _fetch_related_articles(
+                article_id, user_id=user_id, database_url=database_url, conn=owned_conn
+            )
+    elif user_id is not None:
+        rows = conn.execute(
+            """
                 SELECT a.title, a.body, a.summary
                 FROM articles a
                 JOIN sources src ON src.slug = a.source_slug
@@ -137,11 +142,11 @@ def _fetch_related_articles(
                 ORDER BY a.discovered_at DESC
                 LIMIT %s
                 """,
-                (user_id, article_id, article_id, user_id, _MAX_RELATED),
-            ).fetchall()
-        else:
-            rows = conn.execute(
-                """
+            (user_id, article_id, article_id, user_id, _MAX_RELATED),
+        ).fetchall()
+    else:
+        rows = conn.execute(
+            """
                 SELECT a.title, a.body, a.summary
                 FROM articles a
                 JOIN articles pivot ON pivot.id = %s
@@ -151,8 +156,8 @@ def _fetch_related_articles(
                 ORDER BY a.discovered_at DESC
                 LIMIT %s
                 """,
-                (article_id, article_id, _MAX_RELATED),
-            ).fetchall()
+            (article_id, article_id, _MAX_RELATED),
+        ).fetchall()
     return [dict(r) for r in rows]
 
 
@@ -201,9 +206,9 @@ def generate_perspectives(
 
 
 def _get_or_generate_perspectives(
+    conn: Any,
     article_id: int,
     user_id: int | None = None,
-    database_url: str | None = None,
 ) -> dict[str, list[str]] | None:
     """Return cached perspective analysis or generate and cache it.
 
@@ -211,12 +216,9 @@ def _get_or_generate_perspectives(
     Raises PerspectivesNotConfiguredError when OPENAI_API_KEY is absent and
     no cached analysis exists.
     """
-    init_db(database_url=database_url)
-
-    with connect(database_url=database_url) as conn:
-        if user_id is not None:
-            row = conn.execute(
-                """
+    if user_id is not None:
+        row = conn.execute(
+            """
                 SELECT a.perspective_analysis
                 FROM articles a
                 JOIN sources src ON src.slug = a.source_slug
@@ -227,12 +229,13 @@ def _get_or_generate_perspectives(
                   OR src.owner_user_id = %s
                 )
                 """,
-                (user_id, article_id, user_id),
-            ).fetchone()
-        else:
-            row = conn.execute(
-                "SELECT perspective_analysis FROM articles WHERE id = %s", (article_id,)
-            ).fetchone()
+            (user_id, article_id, user_id),
+        ).fetchone()
+    else:
+        row = conn.execute(
+            "SELECT perspective_analysis FROM articles WHERE id = %s",
+            (article_id,),
+        ).fetchone()
 
     if row is None:
         return None
@@ -244,21 +247,20 @@ def _get_or_generate_perspectives(
             return parsed
         return dict(cached)
 
-    article = get_article(article_id, user_id=user_id)
+    article = get_article(article_id, user_id=user_id, conn=conn)
     if article is None:
         return None
 
     if not str(article.get("body") or "").strip():
         return {"verified_facts": [], "omissions": [], "alternative_perspectives": []}
 
-    related = _fetch_related_articles(article_id, user_id=user_id, database_url=database_url)
+    related = _fetch_related_articles(article_id, user_id=user_id, conn=conn)
     analysis = generate_perspectives(article, related, user_id=user_id)
 
-    with connect(database_url=database_url) as conn:
-        conn.execute(
-            "UPDATE articles SET perspective_analysis = %s WHERE id = %s",
-            (json.dumps(analysis), article_id),
-        )
+    conn.execute(
+        "UPDATE articles SET perspective_analysis = %s WHERE id = %s",
+        (json.dumps(analysis), article_id),
+    )
 
     return analysis
 
@@ -273,4 +275,4 @@ def get_or_generate_perspectives(
     with connect(database_url=database_url) as lock_conn:
         lock_key = (2 << 56) | article_id
         lock_conn.execute("SELECT pg_advisory_xact_lock(%s::bigint)", (lock_key,))
-        return _get_or_generate_perspectives(article_id, user_id, database_url)
+        return _get_or_generate_perspectives(lock_conn, article_id, user_id)
