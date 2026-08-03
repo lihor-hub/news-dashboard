@@ -1380,6 +1380,124 @@ def test_get_news_article_sanitizes_internal_failures_in_response_and_debug_logs
         assert sensitive_value not in server_logs
 
 
+def test_get_news_article_suppresses_real_body_fetch_diagnostics_during_mcp(
+    pg_clean: str,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    from news_dashboard import body_fetch
+    from news_dashboard.mcp import service
+
+    monkeypatch.setenv("DATABASE_URL", pg_clean)
+    user_id = _make_user(pg_clean, "article-real-body-fetch-log")
+    _seed_source(pg_clean)
+    _seed_article(pg_clean, 118)
+    private_url = "https://private.example/body-fetch-url-sentinel-b67e"
+    provider_detail = "provider-detail-sentinel-95ac"
+    question_sentinel = "private-question-sentinel-28de"
+    extraction_error = f"{provider_detail} {question_sentinel}"
+    returned_body = "safe extracted article body " * 20
+    with connect(database_url=pg_clean) as conn:
+        conn.execute("UPDATE articles SET url = %s WHERE id = %s", (private_url, 118))
+
+    def fail_static_fetch(*_args: Any, **_kwargs: Any) -> None:
+        raise RuntimeError(extraction_error)
+
+    monkeypatch.setattr(body_fetch, "open_server_fetch_url", fail_static_fetch)
+    monkeypatch.setattr(body_fetch, "_selenium_extract_body", lambda _url: (returned_body, "ok"))
+    created = service.create_token(user_id, "client", scopes=("read",), database_url=pg_clean)
+    caplog.set_level(logging.DEBUG)
+
+    async def exercise() -> None:
+        async with _mcp_client(created["token"]) as mcp_client:
+            result = await mcp_client.call_tool("get_news_article", {"article_id": 118})
+        assert result.structured_content is not None
+        assert result.structured_content["found"] is True
+
+    asyncio.run(exercise())
+    log_formatter = logging.Formatter("%(levelname)s %(name)s %(message)s")
+    server_logs = "\n".join(
+        log_formatter.format(record)
+        for record in caplog.records
+        if not record.name.startswith(("mcp.client", "httpx"))
+    )
+    assert "mcp tool=get_news_article status=success duration_ms=" in server_logs
+    for sensitive_value in (
+        created["token"],
+        private_url,
+        provider_detail,
+        question_sentinel,
+        returned_body,
+    ):
+        assert sensitive_value not in server_logs
+
+    caplog.clear()
+    body_fetch._static_extract_body(private_url)
+    non_mcp_logs = "\n".join(log_formatter.format(record) for record in caplog.records)
+    assert private_url in non_mcp_logs
+    assert provider_detail in non_mcp_logs
+    assert question_sentinel in non_mcp_logs
+
+
+def test_mcp_body_fetch_log_filter_is_request_scoped_and_resets(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    from news_dashboard.mcp.server import _SanitizeMcpResponses
+
+    body_fetch_logger = logging.getLogger("news_dashboard.body_fetch")
+    mcp_started = asyncio.Event()
+    allow_mcp_to_log = asyncio.Event()
+
+    async def concurrent_mcp_app(_scope: Scope, _receive: Receive, _send: Send) -> None:
+        mcp_started.set()
+        await allow_mcp_to_log.wait()
+        body_fetch_logger.warning("mcp-private-url provider-private-detail")
+
+    async def raising_mcp_app(_scope: Scope, _receive: Receive, _send: Send) -> None:
+        body_fetch_logger.warning("mcp-error-private-detail")
+        message = "expected MCP test error"
+        raise RuntimeError(message)
+
+    async def cancelled_mcp_app(_scope: Scope, _receive: Receive, _send: Send) -> None:
+        body_fetch_logger.warning("mcp-cancel-private-detail")
+        raise asyncio.CancelledError
+
+    async def receive() -> Message:
+        return {"type": "http.disconnect"}
+
+    async def send(_message: Message) -> None:
+        return None
+
+    scope: Scope = {"type": "http"}
+    caplog.set_level(logging.DEBUG, logger="news_dashboard.body_fetch")
+
+    async def exercise() -> None:
+        wrapped = _SanitizeMcpResponses(concurrent_mcp_app)
+        mcp_task = asyncio.create_task(wrapped(scope, receive, send))
+        await mcp_started.wait()
+        body_fetch_logger.warning("background-visible-during-mcp")
+        allow_mcp_to_log.set()
+        await mcp_task
+
+        with pytest.raises(RuntimeError, match="expected MCP test error"):
+            await _SanitizeMcpResponses(raising_mcp_app)(scope, receive, send)
+        body_fetch_logger.warning("visible-after-error")
+
+        with pytest.raises(asyncio.CancelledError):
+            await _SanitizeMcpResponses(cancelled_mcp_app)(scope, receive, send)
+        body_fetch_logger.warning("visible-after-cancellation")
+
+    asyncio.run(exercise())
+    rendered = caplog.text
+    assert "background-visible-during-mcp" in rendered
+    assert "visible-after-error" in rendered
+    assert "visible-after-cancellation" in rendered
+    assert "mcp-private-url" not in rendered
+    assert "provider-private-detail" not in rendered
+    assert "mcp-error-private-detail" not in rendered
+    assert "mcp-cancel-private-detail" not in rendered
+
+
 def test_latest_news_returns_compact_articles_visible_to_token_owner(
     pg_clean: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:

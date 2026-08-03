@@ -96,6 +96,16 @@ class _DropMcpSsePayloadLogs(logging.Filter):
 logging.getLogger("sse_starlette.sse").addFilter(_DropMcpSsePayloadLogs())
 
 
+class _DropBodyFetchDetailsDuringMcp(logging.Filter):
+    """Keep extraction diagnostics out of MCP while preserving other callers' logs."""
+
+    def filter(self, record: logging.LogRecord) -> bool:  # noqa: ARG002 - logging override
+        return not _mcp_transport_logging.get()
+
+
+logging.getLogger("news_dashboard.body_fetch").addFilter(_DropBodyFetchDetailsDuringMcp())
+
+
 def _rate_limit_client_id(_context: MiddlewareContext[Any]) -> str:
     token = get_access_token()
     if token is None or not token.client_id:
