@@ -15,7 +15,6 @@ from unittest.mock import AsyncMock, patch
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
-from news_dashboard import main as main_module
 from news_dashboard.auth_routes.router import _safe_next_path
 from news_dashboard.main import app
 
@@ -269,15 +268,27 @@ def test_auth_config_returns_metadata() -> None:
 
 
 def test_read_app_version_reads_version_file() -> None:
-    with patch("news_dashboard.main._VERSION_FILE") as vf:
-        vf.read_text.return_value = "9.9.9\n"
-        assert main_module._read_app_version() == "9.9.9"
+    from news_dashboard import version as version_module
+
+    version_module.read_app_version.cache_clear()
+    try:
+        with patch("news_dashboard.version._VERSION_FILE") as vf:
+            vf.read_text.return_value = "9.9.9\n"
+            assert version_module.read_app_version() == "9.9.9"
+    finally:
+        version_module.read_app_version.cache_clear()
 
 
 def test_read_app_version_falls_back_to_unknown_on_oserror() -> None:
-    with patch("news_dashboard.main._VERSION_FILE") as vf:
-        vf.read_text.side_effect = OSError("missing")
-        assert main_module._read_app_version() == "unknown"
+    from news_dashboard import version as version_module
+
+    version_module.read_app_version.cache_clear()
+    try:
+        with patch("news_dashboard.version._VERSION_FILE") as vf:
+            vf.read_text.side_effect = OSError("missing")
+            assert version_module.read_app_version() == "unknown"
+    finally:
+        version_module.read_app_version.cache_clear()
 
 
 def test_version_endpoint_returns_the_running_app_version() -> None:

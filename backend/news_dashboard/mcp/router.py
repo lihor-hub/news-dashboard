@@ -45,16 +45,44 @@ def revoke_mcp_token(
     return token
 
 
-def _authenticate_bearer(authorization: str | None) -> dict[str, Any]:
-    if not service.mcp_enabled():
-        raise HTTPException(status_code=403, detail="MCP server is not enabled on this instance")
+def authenticate_bearer(
+    authorization: str | None,
+    *,
+    enabled: bool,
+    disabled_detail: str,
+    required_scope: str | None = None,
+) -> dict[str, Any]:
+    """Shared bearer-token gate for token-authenticated surfaces (MCP, A2A)."""
+    if not enabled:
+        raise HTTPException(status_code=403, detail=disabled_detail)
     if not authorization or not authorization.lower().startswith("bearer "):
-        raise HTTPException(status_code=401, detail="missing bearer token")
+        raise HTTPException(
+            status_code=401,
+            detail="missing bearer token",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
     token = authorization.split(" ", 1)[1].strip()
     auth = service.authenticate_token(token)
     if auth is None:
-        raise HTTPException(status_code=401, detail="invalid or revoked token")
+        raise HTTPException(
+            status_code=401,
+            detail="invalid or revoked token",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    if required_scope is not None and required_scope not in auth["scopes"]:
+        raise HTTPException(
+            status_code=403,
+            detail=f"token is missing required scope '{required_scope}'",
+        )
     return auth
+
+
+def _authenticate_bearer(authorization: str | None) -> dict[str, Any]:
+    return authenticate_bearer(
+        authorization,
+        enabled=service.mcp_enabled(),
+        disabled_detail="MCP server is not enabled on this instance",
+    )
 
 
 @public_mcp_router.get("/api/mcp/tools")
