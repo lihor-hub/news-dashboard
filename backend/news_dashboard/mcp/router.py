@@ -41,6 +41,8 @@ def revoke_mcp_token(
     if token is None:
         raise HTTPException(status_code=404, detail="token not found")
     return token
+
+
 def authenticate_bearer(
     authorization: str | None,
     *,

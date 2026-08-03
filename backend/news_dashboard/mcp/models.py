@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field, StringConstraints, field_validator
 
 from news_dashboard.mcp.service import KNOWN_SCOPES
 
+MAX_QUERY_LENGTH = 2_000
 MAX_RESULT_LIMIT = 25
 MAX_FILTER_VALUES = 50
 MAX_FILTER_VALUE_LENGTH = 120
