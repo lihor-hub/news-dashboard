@@ -2,6 +2,7 @@ __pycache__/
 *.py[cod]
 .pytest_cache/
 .coverage
+coverage/
 .venv/
 node_modules/
 frontend/dist/
