@@ -200,7 +200,7 @@ def generate_perspectives(
     return analysis
 
 
-def get_or_generate_perspectives(
+def _get_or_generate_perspectives(
     article_id: int,
     user_id: int | None = None,
     database_url: str | None = None,
@@ -261,3 +261,16 @@ def get_or_generate_perspectives(
         )
 
     return analysis
+
+
+def get_or_generate_perspectives(
+    article_id: int,
+    user_id: int | None = None,
+    database_url: str | None = None,
+) -> dict[str, list[str]] | None:
+    """Single-flight cached perspective generation for all callers."""
+    init_db(database_url=database_url)
+    with connect(database_url=database_url) as lock_conn:
+        lock_key = (2 << 56) | article_id
+        lock_conn.execute("SELECT pg_advisory_xact_lock(%s::bigint)", (lock_key,))
+        return _get_or_generate_perspectives(article_id, user_id, database_url)

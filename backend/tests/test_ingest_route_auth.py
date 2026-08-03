@@ -45,7 +45,7 @@ def test_ingest_succeeds_for_admin(client: TestClient) -> None:
     fake_result = IngestResult(results={"feed1": 3, "feed2": 0}, run_id=1, total_errors=0)
     with (
         patch("news_dashboard.ingest.router.ingest_all", return_value=fake_result),
-        patch("news_dashboard.ingest.router.prefetch_article_bodies"),
+        patch("news_dashboard.ingest.router.prefetch_article_bodies") as background,
     ):
         resp = client.post("/api/ingest")
     assert resp.status_code == 200
@@ -54,6 +54,7 @@ def test_ingest_succeeds_for_admin(client: TestClient) -> None:
     assert body["run_id"] == 1
     assert body["total_errors"] == 0
     assert body["failed_sources"] == []
+    background.assert_called_once()
 
 
 def test_ingest_exposes_partial_failure_metadata(client: TestClient) -> None:

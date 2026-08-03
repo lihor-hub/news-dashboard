@@ -117,7 +117,7 @@ def generate_insights(article: dict[str, Any], *, user_id: int | None = None) ->
     return bullets
 
 
-def get_or_generate_insights(
+def _get_or_generate_insights(
     article_id: int,
     user_id: int | None = None,
     database_url: str | None = None,
@@ -178,6 +178,19 @@ def get_or_generate_insights(
         )
 
     return bullets
+
+
+def get_or_generate_insights(
+    article_id: int,
+    user_id: int | None = None,
+    database_url: str | None = None,
+) -> list[str]:
+    """Single-flight cached insight generation for all callers."""
+    init_db(database_url=database_url)
+    with connect(database_url=database_url) as lock_conn:
+        lock_key = (1 << 56) | article_id
+        lock_conn.execute("SELECT pg_advisory_xact_lock(%s::bigint)", (lock_key,))
+        return _get_or_generate_insights(article_id, user_id, database_url)
 
 
 # ── Topic Map / Story Clustering ──────────────────────────────────────────────

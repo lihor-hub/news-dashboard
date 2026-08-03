@@ -58,7 +58,9 @@ export function AutomaticAiEnrichmentSection() {
           <Switch
             checked={settings.enabled}
             onCheckedChange={() => void toggle()}
-            disabled={saving || !settings.available || settings.limit === 0}
+            disabled={
+              saving || (!settings.enabled && (!settings.available || settings.limit === 0))
+            }
             aria-label="Automatic AI article enrichment"
           />
         </div>

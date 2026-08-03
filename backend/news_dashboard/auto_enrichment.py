@@ -37,7 +37,7 @@ def ai_available() -> bool:
     return bool(os.getenv("FREE_LLM_API_KEY") or os.getenv("OPENAI_API_KEY"))
 
 
-def _candidates(limit: int, database_url: str | None) -> list[dict[str, Any]]:
+def _candidates(limit: int, database_url: str | None) -> tuple[int, list[dict[str, Any]]]:
     with connect(database_url=database_url) as conn:
         rows = conn.execute(
             """
@@ -64,7 +64,8 @@ def _candidates(limit: int, database_url: str | None) -> list[dict[str, Any]]:
               AND ((src.owner_user_id IS NULL AND COALESCE(us.enabled, TRUE))
                    OR src.owner_user_id = u.id)
             )
-            SELECT article_id, user_id, insights_cached, perspectives_cached
+            SELECT article_id, user_id, insights_cached, perspectives_cached,
+                   COUNT(*) OVER () AS total_eligible
             FROM visible_candidates
             WHERE user_rank = 1
             ORDER BY recommendation_score DESC, discovered_at DESC, article_id DESC
@@ -72,7 +73,9 @@ def _candidates(limit: int, database_url: str | None) -> list[dict[str, Any]]:
             """,
             (limit,),
         ).fetchall()
-    return [dict(row) for row in rows]
+    candidates = [dict(row) for row in rows]
+    eligible = int(candidates[0]["total_eligible"]) if candidates else 0
+    return eligible, candidates
 
 
 def run_auto_enrichment(database_url: str | None = None) -> EnrichmentSummary:
@@ -80,8 +83,7 @@ def run_auto_enrichment(database_url: str | None = None) -> EnrichmentSummary:
     limit = auto_enrich_limit()
     if limit == 0 or not ai_available():
         return summary
-    candidates = _candidates(limit, database_url)
-    summary.eligible = len(candidates)
+    summary.eligible, candidates = _candidates(limit, database_url)
     from news_dashboard.insights import get_or_generate_insights
     from news_dashboard.perspectives import get_or_generate_perspectives
 
@@ -101,13 +103,13 @@ def run_auto_enrichment(database_url: str | None = None) -> EnrichmentSummary:
                     summary.generated += 1
                 else:
                     summary.skipped += 1
-            except Exception:
+            except Exception as exc:
                 summary.failed += 1
                 logger.warning(
-                    "Automatic AI enrichment failed for article %d (%s)",
+                    "Automatic AI enrichment failed: article_id=%d type=%s error=%s",
                     article_id,
                     cache_key,
-                    exc_info=True,
+                    type(exc).__name__,
                 )
     logger.info("Automatic AI enrichment: %s", summary.as_dict())
     return summary

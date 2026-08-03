@@ -7,6 +7,8 @@ DB-touching tests use the pg_clean fixture (live Postgres).
 from __future__ import annotations
 
 import json
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 from unittest.mock import MagicMock, patch
 
@@ -387,6 +389,38 @@ def test_get_or_generate_insights_generates_and_caches_when_missing(pg_clean: st
         row = conn.execute("SELECT insights FROM articles WHERE id = %s", (article_id,)).fetchone()
     stored = row["insights"] if isinstance(row, dict) else row[0]
     assert json.loads(stored) == ["New bullet", "Another bullet"]
+
+
+def test_get_or_generate_insights_is_single_flight_across_threads(pg_clean: str) -> None:
+    article_id = _seed_article(pg_clean)
+    fake_article = {"id": article_id, "title": "T", "body": "body", "summary": "s"}
+    invocation_started = threading.Event()
+    release_invocation = threading.Event()
+    calls = 0
+
+    def invoke(_value: Any, **_kwargs: Any) -> AIMessage:
+        nonlocal calls
+        calls += 1
+        invocation_started.set()
+        assert release_invocation.wait(timeout=5)
+        return AIMessage(content="• Exactly once")
+
+    model = MagicMock()
+    model.invoke.side_effect = invoke
+    with (
+        patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}),
+        patch("news_dashboard.ai_client.get_chat_model", return_value=model),
+        patch("news_dashboard.insights.get_article", return_value=fake_article),
+        ThreadPoolExecutor(max_workers=2) as pool,
+    ):
+        first = pool.submit(get_or_generate_insights, article_id, None, pg_clean)
+        assert invocation_started.wait(timeout=5)
+        second = pool.submit(get_or_generate_insights, article_id, None, pg_clean)
+        release_invocation.set()
+        assert first.result(timeout=5) == ["Exactly once"]
+        assert second.result(timeout=5) == ["Exactly once"]
+
+    assert calls == 1
 
 
 def test_get_or_generate_insights_raises_without_api_key_when_not_cached(pg_clean: str) -> None:

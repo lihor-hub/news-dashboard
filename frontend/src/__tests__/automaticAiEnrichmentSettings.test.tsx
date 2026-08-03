@@ -34,6 +34,27 @@ describe('AutomaticAiEnrichmentSection', () => {
     expect(screen.getByText(/AI credentials are not configured/i)).toBeInTheDocument();
   });
 
+  it('allows an enabled preference to be disabled without credentials', async () => {
+    fetchSettings.mockResolvedValue({ enabled: true, available: false, limit: 5 });
+    updateSettings.mockResolvedValue({ enabled: false, available: false, limit: 5 });
+    render(<AutomaticAiEnrichmentSection />);
+    const toggle = await screen.findByRole('switch');
+    expect(toggle).toBeEnabled();
+    await userEvent.click(toggle);
+    expect(updateSettings).toHaveBeenCalledWith({ enabled: false });
+    await waitFor(() => expect(toggle).not.toBeChecked());
+  });
+
+  it('allows an enabled preference to be disabled when the cap is zero', async () => {
+    fetchSettings.mockResolvedValue({ enabled: true, available: true, limit: 0 });
+    updateSettings.mockResolvedValue({ enabled: false, available: true, limit: 0 });
+    render(<AutomaticAiEnrichmentSection />);
+    const toggle = await screen.findByRole('switch');
+    expect(toggle).toBeEnabled();
+    await userEvent.click(toggle);
+    expect(updateSettings).toHaveBeenCalledWith({ enabled: false });
+  });
+
   it('rolls back after a save failure', async () => {
     updateSettings.mockRejectedValue(new Error('save failed'));
     render(<AutomaticAiEnrichmentSection />);
