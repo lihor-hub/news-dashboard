@@ -24,6 +24,7 @@ from news_dashboard.ingest.service import search_articles
 from news_dashboard.mcp import service
 from news_dashboard.mcp.auth import NewsDashboardTokenVerifier
 from news_dashboard.mcp.models import (
+    MAX_FILTER_VALUE_LENGTH,
     MAX_RESULT_LIMIT,
     DateRange,
     FilterValues,
@@ -167,6 +168,7 @@ class ArticleListResult(TypedDict):
 class SourceListResult(TypedDict):
     sources: list[dict[str, str]]
     truncated: bool
+    next_offset: int | None
 
 
 def _bounded_articles(articles: list[dict[str, Any]]) -> ArticleListResult:
@@ -188,18 +190,35 @@ def _bounded_articles(articles: list[dict[str, Any]]) -> ArticleListResult:
     return {"articles": accepted, "truncated": False}
 
 
-def _bounded_sources(sources: list[dict[str, Any]]) -> SourceListResult:
+def _bounded_sources(
+    sources: list[dict[str, Any]], *, limit: SearchLimit, offset: SearchOffset
+) -> SourceListResult:
     accepted: list[dict[str, str]] = []
-    for source in sources:
+    cursor = offset
+    page_end = min(len(sources), offset + limit)
+    truncated = False
+    while cursor < page_end:
+        source = sources[cursor]
+        candidate_cursor = cursor + 1
         candidate: SourceListResult = {
             "sources": [*accepted, _compact_source(source)],
             "truncated": False,
+            "next_offset": candidate_cursor if candidate_cursor < len(sources) else None,
         }
         serialized = json.dumps(candidate, ensure_ascii=True, separators=(",", ":")).encode()
         if len(serialized) > MCP_STRUCTURED_CONTENT_BYTES:
-            return {"sources": accepted, "truncated": True}
+            truncated = True
+            if accepted:
+                break
+            message = "Compact source exceeds structured content budget"
+            raise ValueError(message)
         accepted = candidate["sources"]
-    return {"sources": accepted, "truncated": False}
+        cursor = candidate_cursor
+    return {
+        "sources": accepted,
+        "truncated": truncated,
+        "next_offset": cursor if cursor < len(sources) else None,
+    }
 
 
 def _current_user_id() -> int:
@@ -232,10 +251,19 @@ def _compact_article(article: dict[str, Any]) -> dict[str, Any]:
 def _compact_source(source: dict[str, Any]) -> dict[str, str]:
     return {
         "slug": str(source["slug"]),
-        "name": str(source["name"]),
+        "name": str(source["name"])[:MAX_FILTER_VALUE_LENGTH],
         "category": str(source["category"]),
-        "kind": str(source["kind"]),
+        "kind": str(source["kind"])[:MAX_FILTER_VALUE_LENGTH],
     }
+
+
+def _has_valid_filter_value(source: dict[str, Any], key: str) -> bool:
+    value = source.get(key)
+    return (
+        isinstance(value, str)
+        and value == value.strip()
+        and 0 < len(value) <= MAX_FILTER_VALUE_LENGTH
+    )
 
 
 @mcp.tool(auth=require_scopes("search"))
@@ -263,12 +291,28 @@ def list_latest_news(
 
 
 @mcp.tool(auth=require_scopes("search"))
-def list_news_sources() -> SourceListResult:
-    """List subscribed sources available to the authenticated token owner's searches."""
+def list_news_sources(
+    limit: SearchLimit = 25,
+    offset: SearchOffset = 0,
+) -> SourceListResult:
+    """Page through searchable sources in canonical order.
+
+    Use limit 1..25 and offset 0..10000. Continue from next_offset until it is null.
+    Whole compact records fit a 4,800-byte budget; truncation means the size budget
+    ended a page early. Exact slug and category values are always returned. Sources
+    with invalid filter values are omitted, while display-only name and kind values
+    are shortened to 120 characters so every searchable slug remains reachable.
+    """
     sources = list_sources_for_user(_current_user_id())
-    return _bounded_sources(
-        [source for source in sources if bool(source["subscribed"]) and bool(source["enabled"])]
-    )
+    searchable = [
+        source
+        for source in sources
+        if bool(source["subscribed"])
+        and bool(source["enabled"])
+        and _has_valid_filter_value(source, "slug")
+        and _has_valid_filter_value(source, "category")
+    ]
+    return _bounded_sources(searchable, limit=limit, offset=offset)
 
 
 @mcp.tool(auth=require_scopes("search"))

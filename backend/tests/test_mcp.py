@@ -456,6 +456,14 @@ def test_search_tools_publish_strict_generated_schemas_and_descriptions(
         description = tools["search_news"].description or ""
         for phrase in ("empty", "OR", "AND", "discovery", "archived", "offset", "bodies"):
             assert phrase in description
+        source_schema = tools["list_news_sources"].inputSchema["properties"]
+        assert source_schema["limit"]["minimum"] == 1
+        assert source_schema["limit"]["maximum"] == 25
+        assert source_schema["offset"]["minimum"] == 0
+        assert source_schema["offset"]["maximum"] == 10_000
+        source_description = tools["list_news_sources"].description or ""
+        for phrase in ("canonical order", "next_offset", "4,800-byte", "Exact slug", "shortened"):
+            assert phrase in source_description
 
     asyncio.run(exercise())
 
@@ -749,6 +757,111 @@ def test_search_news_enforces_twenty_five_result_maximum(
     asyncio.run(exercise())
 
 
+def test_source_discovery_pages_without_duplicates_or_cursor_loops(
+    pg_clean: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from news_dashboard.mcp import server, service
+
+    monkeypatch.setenv("DATABASE_URL", pg_clean)
+    user_id = _make_user(pg_clean, "alice-fastmcp-source-pages")
+    token = service.create_token(user_id, "client", scopes=("search",), database_url=pg_clean)[
+        "token"
+    ]
+    reachable_slugs = [f"source-{index}" for index in range(7)]
+    rows = [
+        {
+            "slug": slug,
+            "name": f"{index}-" + ("雪" * 650),
+            "category": "engineering",
+            "kind": "rss",
+            "subscribed": True,
+            "enabled": True,
+        }
+        for index, slug in enumerate(reachable_slugs)
+    ]
+    rows.insert(
+        3,
+        {
+            "slug": "individually-oversized",
+            "name": "🔥" * 5_000,
+            "category": "engineering",
+            "kind": "rss",
+            "subscribed": True,
+            "enabled": True,
+        },
+    )
+    rows.extend(
+        [
+            {
+                "slug": " invalid-filter-slug ",
+                "name": "Invalid slug",
+                "category": "engineering",
+                "kind": "rss",
+                "subscribed": True,
+                "enabled": True,
+            },
+            {
+                "slug": "invalid-filter-category",
+                "name": "Invalid category",
+                "category": "x" * 121,
+                "kind": "rss",
+                "subscribed": True,
+                "enabled": True,
+            },
+        ]
+    )
+    monkeypatch.setattr(server, "list_sources_for_user", lambda _user_id: rows)
+
+    async def exercise() -> None:
+        collected: list[str] = []
+        offsets = [0]
+        async with _mcp_client(token) as client:
+            for _page in range(20):
+                result = await client.call_tool(
+                    "list_news_sources", {"limit": 3, "offset": offsets[-1]}
+                )
+                assert result.structured_content is not None
+                collected.extend(row["slug"] for row in result.structured_content["sources"])
+                next_offset = result.structured_content["next_offset"]
+                if next_offset is None:
+                    break
+                assert next_offset > offsets[-1]
+                offsets.append(next_offset)
+            else:
+                pytest.fail("source pagination cursor did not terminate")
+        assert collected == [
+            *reachable_slugs[:3],
+            "individually-oversized",
+            *reachable_slugs[3:],
+        ]
+        assert len(collected) == len(set(collected))
+
+    asyncio.run(exercise())
+
+
+@pytest.mark.parametrize(
+    "arguments",
+    [{"limit": 0}, {"limit": 26}, {"offset": -1}, {"offset": 10_001}],
+)
+def test_source_discovery_rejects_invalid_pagination(
+    pg_clean: str, monkeypatch: pytest.MonkeyPatch, arguments: dict[str, int]
+) -> None:
+    from news_dashboard.mcp import service
+
+    monkeypatch.setenv("DATABASE_URL", pg_clean)
+    user_id = _make_user(pg_clean, f"alice-fastmcp-source-invalid-{next(iter(arguments.values()))}")
+    token = service.create_token(user_id, "client", scopes=("search",), database_url=pg_clean)[
+        "token"
+    ]
+
+    async def exercise() -> None:
+        async with _mcp_client(token) as client:
+            result = await client.call_tool("list_news_sources", arguments, raise_on_error=False)
+        assert result.is_error is True
+
+    asyncio.run(exercise())
+
+
 @pytest.mark.parametrize(
     ("tool_name", "result_key"),
     [("list_news_sources", "sources"), ("search_news", "articles")],
@@ -773,9 +886,9 @@ def test_new_tools_keep_adversarial_structured_and_wire_results_bounded(
             "list_sources_for_user",
             lambda _user_id: [
                 {
-                    "slug": adversarial,
+                    "slug": "adversarial-source",
                     "name": adversarial,
-                    "category": adversarial,
+                    "category": "engineering",
                     "kind": adversarial,
                     "subscribed": True,
                     "enabled": True,
@@ -807,7 +920,21 @@ def test_new_tools_keep_adversarial_structured_and_wire_results_bounded(
     async def exercise() -> None:
         async with _mcp_client(token, response_bodies=response_bodies) as client:
             result = await client.call_tool(tool_name)
-        assert result.structured_content == {result_key: [], "truncated": True}
+        expected: dict[str, Any] = {result_key: [], "truncated": True}
+        if tool_name == "list_news_sources":
+            expected = {
+                "sources": [
+                    {
+                        "slug": "adversarial-source",
+                        "name": adversarial[:120],
+                        "category": "engineering",
+                        "kind": adversarial[:120],
+                    }
+                ],
+                "truncated": False,
+            }
+            expected["next_offset"] = None
+        assert result.structured_content == expected
 
     asyncio.run(exercise())
     assert response_bodies
