@@ -35,7 +35,9 @@ answering are planned; clients should rely on MCP tool discovery until they
 are available.
 
 Result limits are clamped server-side, so a client asking for an unbounded
-page gets a bounded one rather than an error.
+page gets a bounded one rather than an error. The structured response includes
+`truncated: true` when its serialized size bound prevents another complete
+article from fitting.
 
 The server is enabled when `MCP_SERVER_ENABLED` is unset. Set it to `false`,
 `0`, `no`, or `off` to disable `/mcp` and new token creation.

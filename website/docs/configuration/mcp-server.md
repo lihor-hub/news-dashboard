@@ -48,7 +48,7 @@ Use HTTPS outside a trusted local development environment. Do not put the token 
 |------|-------|-------------|
 | `list_latest_news` | `search` | Lists recent articles visible to the token owner. Supports source, category, state, archive, and date-range filters. |
 
-`list_latest_news` defaults to 10 articles and never returns more than 25. Responses contain compact article metadata and summaries, not article bodies or internal-only fields. Filter lists and the total response size are also bounded.
+`list_latest_news` defaults to 10 articles and never returns more than 25. Responses contain compact article metadata and summaries, not article bodies or internal-only fields. Filter lists and the total serialized response size are also bounded. Every response has `articles` and a `truncated` boolean; when the size bound prevents another complete article from fitting, `truncated` is `true` and the returned articles remain valid structured data.
 
 Article retrieval, source search, briefings, and question answering are planned as separate additions. MCP clients should use tool discovery instead of assuming those tools exist.
 
