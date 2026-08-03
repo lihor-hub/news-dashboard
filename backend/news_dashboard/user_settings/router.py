@@ -26,6 +26,7 @@ from news_dashboard.auth_routes.router import SESSION_COOKIE as _SESSION_COOKIE
 from news_dashboard.user_settings import service
 from news_dashboard.user_settings.models import (
     AnalyticsSettingsUpdate,
+    AutomaticAiEnrichmentUpdate,
     DeleteAccountRequest,
     NotificationSettingsUpdate,
     PushSubscribeRequest,
@@ -167,6 +168,23 @@ def update_analytics_settings(
     payload: AnalyticsSettingsUpdate,
 ) -> dict[str, Any]:
     return service.update_analytics_settings(current_user["id"], enabled=payload.enabled)
+
+
+@router.get("/api/settings/automatic-ai-enrichment")
+def get_automatic_ai_enrichment_settings(
+    current_user: Annotated[dict[str, Any], Depends(require_auth)],
+) -> dict[str, Any]:
+    return service.get_automatic_ai_enrichment_settings(current_user["id"])
+
+
+@router.put("/api/settings/automatic-ai-enrichment")
+def update_automatic_ai_enrichment_settings(
+    current_user: Annotated[dict[str, Any], Depends(require_auth)],
+    payload: AutomaticAiEnrichmentUpdate,
+) -> dict[str, Any]:
+    return service.update_automatic_ai_enrichment_settings(
+        current_user["id"], enabled=payload.enabled
+    )
 
 
 @router.post("/api/notifications/subscribe")

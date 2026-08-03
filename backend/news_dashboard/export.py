@@ -14,7 +14,7 @@ SCHEMA_VERSION = 2
 _NOTIFICATION_COLS = (
     "briefing_time, briefing_push_enabled, briefing_email_enabled, briefing_timezone, "
     "recap_enabled, recap_day, "
-    "analytics_enabled"
+    "analytics_enabled, auto_ai_enrichment_enabled"
 )
 
 
@@ -223,6 +223,7 @@ def _export_notification_settings(conn: Any, user_id: int) -> dict[str, Any]:
             "recap_enabled": True,
             "recap_day": "mon",
             "analytics_enabled": True,
+            "automatic_ai_enrichment_enabled": False,
         }
     return {
         "briefing_time": row["briefing_time"] or "09:00",
@@ -232,6 +233,7 @@ def _export_notification_settings(conn: Any, user_id: int) -> dict[str, Any]:
         "recap_enabled": bool(row["recap_enabled"]),
         "recap_day": row["recap_day"] or "mon",
         "analytics_enabled": bool(row["analytics_enabled"]),
+        "automatic_ai_enrichment_enabled": bool(row["auto_ai_enrichment_enabled"]),
     }
 
 
