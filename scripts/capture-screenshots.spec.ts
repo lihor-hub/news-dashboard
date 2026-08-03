@@ -49,6 +49,12 @@ test('capture product screenshots', async ({ page }) => {
   }
   await dismissIfShown(/skip for now/i);
   await dismissIfShown(/got it/i);
+  await page.evaluate(async () => {
+    const response = await fetch('/api/changelog');
+    const changelog = (await response.json()) as { version?: string };
+    window.sessionStorage.setItem('onboarding-skipped', '1');
+    if (changelog.version) window.localStorage.setItem('lastSeenVersion', changelog.version);
+  });
 
   // 1. Today feed — the primary triage view, used as the README hero shot.
   await page.goto('/today');
@@ -57,18 +63,36 @@ test('capture product screenshots', async ({ page }) => {
   await expect(firstArticleLink).toBeVisible();
   await page.screenshot({ path: path.join(OUT_DIR, 'today-feed.png') });
 
-  // 2. Article detail — navigate to the first article from the feed. A
+  // 2. Article intelligence — open the seeded article with cached AI output. A
   // direct goto is used instead of clicking the row: clicking intermittently
   // updates the URL via history.pushState without React Router committing
   // the corresponding route render.
-  const articleHref = await firstArticleLink.getAttribute('href');
-  await page.goto(articleHref!);
+  const intelligenceArticleId = await page.evaluate(async () => {
+    const response = await fetch('/api/articles?state=today&limit=100');
+    const payload = (await response.json()) as { items: Array<{ id: number; title: string }> };
+    return payload.items.find((article) => article.title.startsWith('GPT-5:'))?.id;
+  });
+  expect(intelligenceArticleId).toBeDefined();
+  await page.goto(`/a/${intelligenceArticleId}`);
   await page.waitForLoadState('networkidle');
+  await page.getByTestId('insights-button').click();
+  await expect(page.getByTestId('insights-section')).toBeVisible();
+  await page.getByTestId('perspectives-button').click();
+  await expect(page.getByTestId('perspectives-section')).toBeVisible();
   await page.screenshot({ path: path.join(OUT_DIR, 'article-detail.png') });
 
-  // 3. Briefing page — the AI daily-briefing landing view.
-  await page.goto('/');
+  // 3. Briefing detail — the completed, deterministic AI briefing.
+  const briefingId = await page.evaluate(async () => {
+    const response = await fetch('/api/briefings/latest');
+    const payload = (await response.json()) as { id?: number };
+    return payload.id;
+  });
+  expect(briefingId).toBeDefined();
+  await page.goto(`/briefs/${briefingId}`);
   await page.waitForLoadState('networkidle');
+  await expect(
+    page.getByRole('heading', { name: 'The developer AI stack moves toward production' })
+  ).toBeVisible();
   await page.screenshot({ path: path.join(OUT_DIR, 'briefing.png') });
 
   // 4. Sources page — feed management.

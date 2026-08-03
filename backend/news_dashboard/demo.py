@@ -11,6 +11,7 @@ The guest account is read-only: the ``reject_guest_writes`` middleware in
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 from datetime import datetime, timedelta, timezone
@@ -196,6 +197,37 @@ _DEMO_ARTICLES: list[dict[str, Any]] = [
         "category": "ai-llm",
         "importance_score": 90,
         "tags": "ai,llm,openai",
+        "insights": [
+            (
+                "The release combines stronger reasoning, native multimodality, and "
+                "schema-constrained outputs."
+            ),
+            (
+                "Structured outputs can remove retry and parsing code from applications that "
+                "consume model responses."
+            ),
+            (
+                "The reported benchmark gains are vendor claims in this demo article, not "
+                "independent measurements."
+            ),
+        ],
+        "perspective_analysis": {
+            "verified_facts": [
+                (
+                    "The article describes reasoning, multimodal input, and structured output "
+                    "capabilities."
+                )
+            ],
+            "omissions": [
+                "It does not include pricing, latency, or independent benchmark methodology."
+            ],
+            "alternative_perspectives": [
+                (
+                    "Teams may value predictable cost and evaluation results over headline "
+                    "benchmark gains."
+                )
+            ],
+        },
     },
     {
         "url": "https://example.com/demo/llama-4",
@@ -407,11 +439,6 @@ def seed_demo() -> dict[str, Any]:
     if os.getenv("DEMO_MODE", "").strip().lower() not in ("1", "true", "yes", "on"):
         return {"skipped": True, "reason": "DEMO_MODE not set"}
 
-    # Idempotency: if the guest user already exists, skip.
-    existing = get_user_by_username(_DEMO_GUEST_USERNAME)
-    if existing:
-        return {"skipped": True, "reason": "guest user already exists"}
-
     # Ensure sources table has the demo entries before inserting articles.
     _seed_demo_sources()
     source_ids = _get_demo_source_slugs()
@@ -419,24 +446,31 @@ def seed_demo() -> dict[str, Any]:
         msg = "demo sources must exist before seeding articles"
         raise RuntimeError(msg)
 
-    # Create the guest user.
-    guest = create_user(
-        _DEMO_GUEST_USERNAME,
-        _DEMO_GUEST_PASSWORD,
-        is_admin=False,
-        is_guest=True,
-    )
-    guest_id = int(guest["id"])
-    logger.info("Demo guest user created: id=%s", guest_id)
+    # Insert or refresh the deterministic articles before resolving the guest,
+    # so existing demo databases receive newly added showcase data too.
+    article_ids = _seed_demo_articles()
+
+    existing = get_user_by_username(_DEMO_GUEST_USERNAME)
+    if existing:
+        guest_id = int(existing["id"])
+        created = False
+    else:
+        guest = create_user(
+            _DEMO_GUEST_USERNAME,
+            _DEMO_GUEST_PASSWORD,
+            is_admin=False,
+            is_guest=True,
+        )
+        guest_id = int(guest["id"])
+        created = True
+        logger.info("Demo guest user created: id=%s", guest_id)
 
     # Subscribe guest to demo sources.
     _subscribe_guest_to_sources(guest_id)
 
-    # Insert demo articles.
-    article_ids = _seed_demo_articles()
-
     # Create per-user article states.
     _seed_demo_article_states(guest_id, article_ids)
+    _seed_demo_briefing(guest_id, article_ids)
 
     logger.info(
         "Demo data seeded: %d sources, %d articles, %d states for guest user %s",
@@ -446,6 +480,8 @@ def seed_demo() -> dict[str, Any]:
         guest_id,
     )
 
+    if not created:
+        return {"skipped": True, "reason": "guest user already exists"}
     return {"created": True, "guest_id": guest_id, "articles": len(article_ids)}
 
 
@@ -507,10 +543,18 @@ def _seed_demo_articles() -> list[int]:
                 INSERT INTO articles(
                     url, canonical_url, title, source_slug, source_name,
                     category, kind, published_at, summary, importance_score, tags, state,
-                    body, body_status
+                    body, body_status, insights, perspective_analysis
                 )
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'today', %s, %s)
-                ON CONFLICT (url) DO NOTHING
+                VALUES (
+                    %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'today',
+                    %s, %s, %s, %s::jsonb
+                )
+                ON CONFLICT (url) DO UPDATE SET
+                    insights = COALESCE(articles.insights, EXCLUDED.insights),
+                    perspective_analysis = COALESCE(
+                        articles.perspective_analysis,
+                        EXCLUDED.perspective_analysis
+                    )
                 RETURNING id
                 """,
                 (
@@ -527,6 +571,12 @@ def _seed_demo_articles() -> list[int]:
                     art.get("tags", ""),
                     body,
                     "ok" if body else "missing",
+                    json.dumps(art["insights"]) if art.get("insights") else None,
+                    (
+                        json.dumps(art["perspective_analysis"])
+                        if art.get("perspective_analysis")
+                        else None
+                    ),
                 ),
             ).fetchone()
             if row:
@@ -540,6 +590,80 @@ def _seed_demo_articles() -> list[int]:
                 if existing_row:
                     article_ids.append(int(existing_row["id"]))
     return article_ids
+
+
+def _seed_demo_briefing(user_id: int, article_ids: list[int]) -> None:
+    """Create the deterministic, offline briefing used by the demo and screenshots."""
+    if len(article_ids) < 7:
+        return
+
+    now = datetime.now(timezone.utc)
+    cited_ids = [article_ids[3], article_ids[4], article_ids[6]]
+    content = {
+        "sections": [
+            {
+                "title": "AI tools move toward production workflows",
+                "body": (
+                    "This cycle pairs stronger coding and reasoning models with a common protocol "
+                    "for connecting assistants to tools and trusted data."
+                ),
+                "citations": cited_ids,
+            }
+        ],
+        "worth_opening": [article_ids[4], article_ids[6]],
+    }
+
+    with connect() as conn:
+        row = conn.execute(
+            """
+            SELECT id FROM briefings
+            WHERE user_id = %s AND title = %s
+            LIMIT 1
+            """,
+            (user_id, "The developer AI stack moves toward production"),
+        ).fetchone()
+        if row:
+            briefing_id = int(row["id"])
+        else:
+            inserted = conn.execute(
+                """
+                INSERT INTO briefings(
+                    created_at, scope, since_at, until_at, status,
+                    title, summary, content, model, user_id
+                )
+                VALUES (%s, %s, %s, %s, 'complete', %s, %s, %s::jsonb, %s, %s)
+                RETURNING id
+                """,
+                (
+                    now.isoformat(),
+                    "current_day",
+                    (now - timedelta(days=1)).isoformat(),
+                    now.isoformat(),
+                    "The developer AI stack moves toward production",
+                    (
+                        "Coding models, structured outputs, and tool protocols are converging on "
+                        "more reliable developer workflows."
+                    ),
+                    json.dumps(content),
+                    "deterministic-demo",
+                    user_id,
+                ),
+            ).fetchone()
+            if inserted is None:
+                return
+            briefing_id = int(inserted["id"])
+
+        for citation_index, article_id in enumerate(cited_ids):
+            conn.execute(
+                """
+                INSERT INTO briefing_articles(
+                    briefing_id, article_id, section_index, citation_index
+                )
+                VALUES (%s, %s, 0, %s)
+                ON CONFLICT DO NOTHING
+                """,
+                (briefing_id, article_id, citation_index),
+            )
 
 
 def _seed_demo_article_states(user_id: int, article_ids: list[int]) -> None:
