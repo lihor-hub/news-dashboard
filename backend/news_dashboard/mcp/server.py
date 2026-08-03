@@ -38,6 +38,8 @@ from news_dashboard.mcp.briefings import (
 from news_dashboard.mcp.models import (
     MAX_FILTER_VALUE_LENGTH,
     MAX_RESULT_LIMIT,
+    AskCorpus,
+    AskQuestion,
     BriefingId,
     BriefingLimit,
     BriefingOffset,
@@ -251,6 +253,19 @@ class NewsArticleBody(TypedDict):
 class GetNewsArticleResult(TypedDict):
     found: bool
     article: NewsArticleBody | None
+    truncated: bool
+
+
+class AskCitation(TypedDict):
+    id: int
+    title: str
+    url: str
+
+
+class AskNewsResult(TypedDict):
+    answer: str
+    citations: list[AskCitation]
+    trace_id: str | None
     truncated: bool
 
 
@@ -556,6 +571,38 @@ def search_news(  # noqa: PLR0913, PLR0917
         user_id=_current_user_id(),
     )
     return _bounded_articles(articles)
+
+
+@mcp.tool(auth=require_scopes("ask"))
+async def ask_news(
+    question: AskQuestion,
+    corpus: AskCorpus = "saved_and_read",
+) -> AskNewsResult:
+    """Answer a question over the authenticated owner's news corpus."""
+    from news_dashboard.assistant import service as assistant_service
+
+    user_id = _current_user_id()
+    result = await to_thread.run_sync(
+        lambda: assistant_service.ask(
+            question,
+            include_all=corpus == "all_visible",
+            user_id=user_id,
+        )
+    )
+    sources = cast("list[dict[str, Any]]", result.get("sources", []))
+    return {
+        "answer": str(result.get("answer", "")),
+        "citations": [
+            {
+                "id": int(source["id"]),
+                "title": str(source["title"]),
+                "url": str(source["url"]),
+            }
+            for source in sources
+        ],
+        "trace_id": cast("str | None", result.get("trace_id")),
+        "truncated": False,
+    }
 
 
 @mcp.tool(auth=require_scopes("read"))

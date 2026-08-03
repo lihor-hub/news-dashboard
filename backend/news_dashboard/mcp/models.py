@@ -29,6 +29,11 @@ PositiveArticleId = Annotated[
     ),
 ]
 SearchQuery = Annotated[str, StringConstraints(strip_whitespace=True, max_length=MAX_QUERY_LENGTH)]
+AskQuestion = Annotated[
+    str,
+    StringConstraints(strip_whitespace=True, min_length=1, max_length=MAX_QUERY_LENGTH),
+]
+AskCorpus = Literal["saved_and_read", "all_visible"]
 SearchLimit = Annotated[int, Field(ge=1, le=MAX_RESULT_LIMIT)]
 SearchOffset = Annotated[int, Field(ge=0, le=MAX_SEARCH_OFFSET)]
 BriefingId = Annotated[int, Field(strict=True, ge=1)]

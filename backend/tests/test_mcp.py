@@ -2110,6 +2110,164 @@ def test_fastmcp_discovers_article_tool_only_with_read_scope(
     asyncio.run(exercise())
 
 
+@pytest.mark.parametrize(
+    ("scopes", "expected"),
+    [
+        (("ask",), ["ask_news"]),
+        (
+            ("ask", "search"),
+            ["ask_news", "list_latest_news", "list_news_sources", "search_news"],
+        ),
+        (("ask", "read"), ["ask_news", "get_news_article"]),
+    ],
+)
+def test_fastmcp_discovers_ask_news_only_with_ask_scope(
+    pg_clean: str,
+    monkeypatch: pytest.MonkeyPatch,
+    scopes: tuple[str, ...],
+    expected: list[str],
+) -> None:
+    from news_dashboard.mcp import service
+
+    monkeypatch.setenv("DATABASE_URL", pg_clean)
+    user_id = _make_user(pg_clean, f"ask-discovery-{'-'.join(scopes)}")
+    token = service.create_token(user_id, "client", scopes=scopes, database_url=pg_clean)["token"]
+
+    async def exercise() -> None:
+        async with _mcp_client(token) as mcp_client:
+            tools = await mcp_client.list_tools()
+        assert sorted(tool.name for tool in tools) == expected
+
+    asyncio.run(exercise())
+
+
+def test_ask_news_is_hidden_and_denied_without_ask_scope(
+    pg_clean: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from news_dashboard.mcp import service
+
+    monkeypatch.setenv("DATABASE_URL", pg_clean)
+    user_id = _make_user(pg_clean, "ask-scope-denied")
+    token = service.create_token(user_id, "client", scopes=("read",), database_url=pg_clean)[
+        "token"
+    ]
+
+    async def exercise() -> None:
+        async with _mcp_client(token) as mcp_client:
+            assert [tool.name for tool in await mcp_client.list_tools()] == ["get_news_article"]
+            result = await mcp_client.call_tool(
+                "ask_news", {"question": "What happened?"}, raise_on_error=False
+            )
+        assert result.is_error is True
+
+    asyncio.run(exercise())
+
+
+def test_ask_news_schema_exposes_only_bounded_question_and_corpus(
+    pg_clean: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from news_dashboard.mcp import service
+
+    monkeypatch.setenv("DATABASE_URL", pg_clean)
+    user_id = _make_user(pg_clean, "ask-schema")
+    token = service.create_token(user_id, "client", scopes=("ask",), database_url=pg_clean)["token"]
+
+    async def exercise() -> None:
+        async with _mcp_client(token) as mcp_client:
+            [tool] = await mcp_client.list_tools()
+        assert tool.name == "ask_news"
+        schema = tool.inputSchema
+        assert schema["required"] == ["question"]
+        assert set(schema["properties"]) == {"question", "corpus"}
+        assert schema["properties"]["question"]["minLength"] == 1
+        assert schema["properties"]["question"]["maxLength"] == 2_000
+        assert schema["properties"]["corpus"]["enum"] == ["saved_and_read", "all_visible"]
+        assert schema["properties"]["corpus"]["default"] == "saved_and_read"
+
+    asyncio.run(exercise())
+
+
+@pytest.mark.parametrize("question", ["   ", "x" * 2_001])
+def test_ask_news_rejects_invalid_question_before_calling_assistant(
+    pg_clean: str,
+    monkeypatch: pytest.MonkeyPatch,
+    question: str,
+) -> None:
+    from news_dashboard.mcp import service
+
+    monkeypatch.setenv("DATABASE_URL", pg_clean)
+    user_id = _make_user(pg_clean, f"ask-invalid-{len(question)}")
+    token = service.create_token(user_id, "client", scopes=("ask",), database_url=pg_clean)["token"]
+
+    def unexpected_ask(*_args: Any, **_kwargs: Any) -> dict[str, Any]:
+        pytest.fail("assistant service must not run for an invalid question")
+
+    monkeypatch.setattr("news_dashboard.assistant.service.ask", unexpected_ask)
+
+    async def exercise() -> None:
+        async with _mcp_client(token) as mcp_client:
+            result = await mcp_client.call_tool(
+                "ask_news", {"question": question}, raise_on_error=False
+            )
+        assert result.is_error is True
+
+    asyncio.run(exercise())
+
+
+@pytest.mark.parametrize(
+    ("arguments", "expected_question", "expected_include_all"),
+    [
+        ({"question": "  What changed?  "}, "What changed?", False),
+        (
+            {"question": "Show everything", "corpus": "all_visible"},
+            "Show everything",
+            True,
+        ),
+    ],
+)
+def test_ask_news_calls_canonical_assistant_with_token_identity(
+    pg_clean: str,
+    monkeypatch: pytest.MonkeyPatch,
+    arguments: dict[str, str],
+    expected_question: str,
+    expected_include_all: bool,
+) -> None:
+    from news_dashboard.mcp import service
+
+    monkeypatch.setenv("DATABASE_URL", pg_clean)
+    user_id = _make_user(pg_clean, f"ask-call-{expected_include_all}")
+    token = service.create_token(user_id, "client", scopes=("ask",), database_url=pg_clean)["token"]
+    captured: dict[str, Any] = {}
+
+    def fake_ask(question: str, **kwargs: Any) -> dict[str, Any]:
+        captured["question"] = question
+        captured.update(kwargs)
+        return {
+            "answer": "Grounded answer [1]",
+            "sources": [{"id": 17, "title": "A source", "url": "https://example.com/a"}],
+            "trace_id": None,
+        }
+
+    monkeypatch.setattr("news_dashboard.assistant.service.ask", fake_ask)
+
+    async def exercise() -> None:
+        async with _mcp_client(token) as mcp_client:
+            result = await mcp_client.call_tool("ask_news", arguments)
+        assert result.structured_content == {
+            "answer": "Grounded answer [1]",
+            "citations": [{"id": 17, "title": "A source", "url": "https://example.com/a"}],
+            "trace_id": None,
+            "truncated": False,
+        }
+
+    asyncio.run(exercise())
+    assert captured == {
+        "question": expected_question,
+        "include_all": expected_include_all,
+        "user_id": user_id,
+    }
+
+
 def test_get_news_article_returns_canonical_visible_article(
     pg_clean: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
