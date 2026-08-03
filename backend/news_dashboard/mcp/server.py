@@ -4,6 +4,7 @@ import json
 import logging
 import time
 from collections import OrderedDict
+from contextvars import ContextVar
 from typing import Any, Literal, TypedDict
 
 from fastmcp import FastMCP
@@ -32,6 +33,7 @@ MCP_MAX_RATE_LIMIT_IDENTITIES = 4_096
 _INTERNAL_ERROR_MESSAGE = "Internal server error"
 
 logger = logging.getLogger("news_dashboard.mcp")
+_mcp_transport_logging = ContextVar("mcp_transport_logging", default=False)
 
 
 class _DropFastMcpToolExceptionLogs(logging.Filter):
@@ -45,6 +47,16 @@ class _DropFastMcpToolExceptionLogs(logging.Filter):
 logging.getLogger("fastmcp.server.server").addFilter(_DropFastMcpToolExceptionLogs())
 
 
+class _DropMcpSsePayloadLogs(logging.Filter):
+    """Drop raw SSE chunks only while this app is serving an MCP request."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        return not (_mcp_transport_logging.get() and record.getMessage().startswith("chunk:"))
+
+
+logging.getLogger("sse_starlette.sse").addFilter(_DropMcpSsePayloadLogs())
+
+
 def _rate_limit_client_id(_context: MiddlewareContext[Any]) -> str:
     token = get_access_token()
     if token is None or not token.client_id:
@@ -52,7 +64,8 @@ def _rate_limit_client_id(_context: MiddlewareContext[Any]) -> str:
     rate_limit_id = token.claims.get("rate_limit_id")
     if isinstance(rate_limit_id, str) and rate_limit_id.startswith("mcp-rate:"):
         return rate_limit_id
-    return token.client_id
+    message = "Authorization required"
+    raise AuthorizationError(message)
 
 
 class _BoundedTokenBuckets:
@@ -88,7 +101,7 @@ class _BoundedRateLimitingMiddleware(Middleware):
     ) -> Any:
         client_id = _rate_limit_client_id(context)
         if not await self._buckets.for_client(client_id).consume():
-            message = f"Rate limit exceeded for client: {client_id}"
+            message = "Rate limit exceeded"
             raise RateLimitError(message)
         return await call_next(context)
 
@@ -243,7 +256,11 @@ class _SanitizeMcpResponses:
                 message = {**message, "body": _sanitize_mcp_response_body(message["body"])}
             await send(message)
 
-        await self.app(scope, receive, sanitized_send)
+        context_token = _mcp_transport_logging.set(True)
+        try:
+            await self.app(scope, receive, sanitized_send)
+        finally:
+            _mcp_transport_logging.reset(context_token)
 
 
 class _RequireMcpEnabled:

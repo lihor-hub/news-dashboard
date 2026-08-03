@@ -13,6 +13,9 @@ import pytest
 from fastapi.testclient import TestClient
 from fastmcp import Client
 from fastmcp.client.transports import StreamableHttpTransport
+from fastmcp.exceptions import AuthorizationError
+from fastmcp.server.auth import AccessToken
+from fastmcp.server.middleware import MiddlewareContext
 from mcp.shared.exceptions import McpError
 from mcp.types import TextContent
 from starlette.applications import Starlette
@@ -218,6 +221,29 @@ def test_reused_database_token_id_gets_fresh_opaque_rate_limit_identity(
         assert await buckets.for_client(second_identity).consume() is True
 
     asyncio.run(exercise())
+
+
+@pytest.mark.parametrize("rate_limit_id", [None, "", "mcp-token:7", 7])
+def test_rate_limiter_fails_closed_without_valid_internal_identity(
+    monkeypatch: pytest.MonkeyPatch, rate_limit_id: object
+) -> None:
+    from news_dashboard.mcp import server
+
+    claims: dict[str, Any] = {"user_id": 11, "token_id": 7}
+    if rate_limit_id is not None:
+        claims["rate_limit_id"] = rate_limit_id
+    opaque_value = "-".join(("opaque", "test", "value"))
+    access_token = AccessToken(
+        token=opaque_value,
+        client_id="mcp-token:7",
+        subject="11",
+        scopes=["search"],
+        claims=claims,
+    )
+    monkeypatch.setattr(server, "get_access_token", lambda: access_token)
+
+    with pytest.raises(AuthorizationError, match="Authorization required"):
+        server._rate_limit_client_id(MiddlewareContext(message={}, method="tools/call"))
 
 
 @pytest.mark.parametrize("token", ["not-a-real-token", ""])
@@ -612,6 +638,81 @@ def test_fastmcp_invalid_arguments_never_leak_to_response_or_logs(
 
     asyncio.run(exercise())
     assert rejected_argument not in caplog.text
+
+
+def test_fastmcp_debug_logs_never_contain_transport_payloads_or_identities(
+    pg_clean: str,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    from news_dashboard.mcp import server, service
+    from news_dashboard.mcp.auth import NewsDashboardTokenVerifier
+
+    monkeypatch.setenv("DATABASE_URL", pg_clean)
+    monkeypatch.setenv("MCP_SERVER_ENABLED", "true")
+    user_id = _make_user(pg_clean, "alice-fastmcp-debug-log")
+    created = service.create_token(user_id, "client", scopes=("search",), database_url=pg_clean)
+    bearer_value = created["token"]
+    article_content = "private-article-summary-8f31"
+    answer_content = "private-generated-answer-4a92"
+    invalid_value = "rejected-private-argument-7d20"
+    monkeypatch.setattr(
+        server,
+        "search_articles",
+        lambda **_kwargs: [
+            {
+                "id": 99,
+                "title": answer_content,
+                "url": "https://example.com/private",
+                "source_slug": "test-source",
+                "source_name": "test-source",
+                "category": "engineering",
+                "published_at": None,
+                "discovered_at": None,
+                "summary": article_content,
+                "state": "today",
+            }
+        ],
+    )
+    verified = asyncio.run(NewsDashboardTokenVerifier().verify_token(bearer_value))
+    assert verified is not None
+    rate_identity = str(verified.claims["rate_limit_id"])
+    caplog.set_level(logging.DEBUG)
+
+    async def exercise() -> None:
+        async with _mcp_client(bearer_value) as mcp_client:
+            success = await mcp_client.call_tool("list_latest_news")
+            assert success.is_error is False
+            invalid = await mcp_client.call_tool(
+                "list_latest_news",
+                {"date_range": invalid_value},
+                raise_on_error=False,
+            )
+            assert invalid.is_error is True
+            limited_results = [
+                await mcp_client.call_tool("list_latest_news", raise_on_error=False)
+                for _ in range(12)
+            ]
+            assert any(result.is_error for result in limited_results)
+
+    asyncio.run(exercise())
+    logging.getLogger("sse_starlette.sse").debug("chunk: harmless-unrelated-sse")
+
+    server_logs = "\n".join(
+        record.getMessage()
+        for record in caplog.records
+        if not record.name.startswith(("mcp.client", "httpx"))
+    )
+    assert "mcp tool=list_latest_news" in server_logs
+    assert "harmless-unrelated-sse" in server_logs
+    for private_value in (
+        article_content,
+        answer_content,
+        bearer_value,
+        invalid_value,
+        rate_identity,
+    ):
+        assert private_value not in server_logs
 
 
 def test_fastmcp_sanitizes_internal_errors_and_logs_metadata_only(
