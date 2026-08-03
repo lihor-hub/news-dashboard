@@ -99,8 +99,9 @@ source not returned.
 
 Each discovered source has `slug`, `name`, `category`, and `kind`. Exact slug
 and category values are valid `search_news` filters. Sources with invalid
-filter-valued slugs or categories are omitted, while display-only name and kind
-may be shortened when JSON escaping would otherwise exceed the size bound.
+filter-valued slugs or categories are omitted. Display-only name and kind are
+capped at 120 characters and may be shortened further when JSON escaping
+requires it to stay within the 4,800-byte budget.
 
 `search_news` supports a query plus source, category, date-range, workflow-state,
 starred, and archive filters. An empty query returns the filtered recent listing

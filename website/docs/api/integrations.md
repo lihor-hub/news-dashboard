@@ -41,8 +41,9 @@ category, descending priority, name, then slug order. Each source contains only
 `slug`, `name`, `category`, and `kind`; the list excludes sources the token
 owner has unsubscribed from, sources that are not enabled, and sources whose
 exact slug or category is not a valid search filter value. The exact slug and
-category can be passed to `search_news`. Display-only name and kind values may
-be shortened to keep their JSON-escaped representation within the size bound.
+category can be passed to `search_news`. Display-only name and kind values are
+capped at 120 characters and may be shortened further when JSON escaping
+requires it to stay within the 4,800-byte budget.
 
 Source pages accept `limit` 1–25 (default 25). Omit `cursor` on the first call,
 then pass each non-null `next_cursor` back unchanged until the response returns
