@@ -1,12 +1,13 @@
 from __future__ import annotations
 
+import html
 import json
 import logging
 import time
 from collections import OrderedDict
 from contextvars import ContextVar
 from datetime import datetime
-from typing import Any, Literal, TypedDict
+from typing import Any, Literal, TypedDict, cast
 
 from fastmcp import FastMCP
 from fastmcp.exceptions import AuthorizationError
@@ -22,7 +23,7 @@ from starlette.responses import PlainTextResponse
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from news_dashboard.body_fetch import fetch_and_cache_body
-from news_dashboard.ingest.service import search_articles
+from news_dashboard.ingest.service import clean_html, search_articles
 from news_dashboard.mcp import service
 from news_dashboard.mcp.auth import NewsDashboardTokenVerifier
 from news_dashboard.mcp.models import (
@@ -45,6 +46,30 @@ MCP_MAX_RESPONSE_BYTES = 16_384
 MCP_STRUCTURED_CONTENT_BYTES = 4_800
 MCP_MAX_RATE_LIMIT_IDENTITIES = 4_096
 _INTERNAL_ERROR_MESSAGE = "Internal server error"
+_ARTICLE_FIELD_BYTE_CAPS = {
+    "title": 512,
+    "canonical_url": 2_048,
+    "source_slug": 256,
+    "source_name": 512,
+    "category": 128,
+    "kind": 128,
+    "published_at": 64,
+    "discovered_at": 64,
+    "summary": 2_048,
+    "body": 8_192,
+}
+_ARTICLE_REDUCTION_ORDER = (
+    "body",
+    "summary",
+    "title",
+    "canonical_url",
+    "source_name",
+    "source_slug",
+    "category",
+    "kind",
+    "published_at",
+    "discovered_at",
+)
 
 logger = logging.getLogger("news_dashboard.mcp")
 _mcp_transport_logging = ContextVar("mcp_transport_logging", default=False)
@@ -323,6 +348,96 @@ def _serialized_timestamp(value: object) -> str | None:
         return rendered
 
 
+def _escaped_plain_text(value: object) -> str:
+    """Return canonical whitespace-normalized text safe to embed in any markup."""
+    return html.escape(clean_html(str(value or "")), quote=True)
+
+
+def _utf8_prefix(value: str, max_bytes: int) -> str:
+    """Take a deterministic prefix without splitting a UTF-8 code point."""
+    encoded = value.encode("utf-8")
+    if len(encoded) <= max_bytes:
+        return value
+    return encoded[:max_bytes].decode("utf-8", errors="ignore")
+
+
+def _structured_size(value: GetNewsArticleResult) -> int:
+    return len(json.dumps(value, ensure_ascii=True, separators=(",", ":")).encode("utf-8"))
+
+
+def _largest_fitting_prefix(
+    result: GetNewsArticleResult, article: dict[str, Any], field: str
+) -> str | None:
+    current = article[field]
+    if current is None:
+        return None
+    value = cast("str", current)
+    low = 0
+    high = len(value)
+    best = ""
+    while low <= high:
+        middle = (low + high) // 2
+        candidate = value[:middle]
+        article[field] = candidate
+        if _structured_size(result) <= MCP_STRUCTURED_CONTENT_BYTES:
+            best = candidate
+            low = middle + 1
+        else:
+            high = middle - 1
+    article[field] = best
+    return best
+
+
+def _bounded_news_article(raw_article: dict[str, Any]) -> GetNewsArticleResult:
+    """Build a sanitized required-key article result under the structured limit."""
+    published_at = _serialized_timestamp(raw_article.get("published_at"))
+    discovered_at = _serialized_timestamp(raw_article.get("discovered_at"))
+    raw_text = {
+        "title": _escaped_plain_text(raw_article.get("title")),
+        "canonical_url": _escaped_plain_text(
+            raw_article.get("canonical_url") or raw_article.get("url")
+        ),
+        "source_slug": _escaped_plain_text(raw_article.get("source_slug")),
+        "source_name": _escaped_plain_text(raw_article.get("source_name")),
+        "category": _escaped_plain_text(raw_article.get("category")),
+        "kind": _escaped_plain_text(raw_article.get("kind")),
+        "published_at": _escaped_plain_text(published_at) if published_at is not None else None,
+        "discovered_at": (
+            _escaped_plain_text(discovered_at) if discovered_at is not None else None
+        ),
+        "summary": _escaped_plain_text(raw_article.get("summary")),
+        "body": _escaped_plain_text(raw_article.get("body")),
+    }
+    bounded_text = {
+        field: _utf8_prefix(value, _ARTICLE_FIELD_BYTE_CAPS[field]) if value is not None else None
+        for field, value in raw_text.items()
+    }
+    shortened_fields = {field for field, value in bounded_text.items() if value != raw_text[field]}
+    article: dict[str, Any] = {
+        "id": int(raw_article["id"]),
+        **bounded_text,
+        "body_truncated": "body" in shortened_fields,
+    }
+    result = cast(
+        "GetNewsArticleResult",
+        {"found": True, "article": article, "truncated": bool(shortened_fields)},
+    )
+    for field in _ARTICLE_REDUCTION_ORDER:
+        if _structured_size(result) <= MCP_STRUCTURED_CONTENT_BYTES:
+            break
+        before = cast("str", article[field])
+        after = _largest_fitting_prefix(result, article, field)
+        if after != before:
+            shortened_fields.add(field)
+            result["truncated"] = True
+            if field == "body":
+                article["body_truncated"] = True
+    if _structured_size(result) > MCP_STRUCTURED_CONTENT_BYTES:
+        message = "Article metadata cannot fit MCP structured response limit"
+        raise ValueError(message)
+    return result
+
+
 @mcp.tool(auth=require_scopes("search"))
 def list_latest_news(
     limit: int = 10,
@@ -418,24 +533,7 @@ def get_news_article(article_id: PositiveArticleId) -> GetNewsArticleResult:
     article = fetch_and_cache_body(article_id, user_id=_current_user_id())
     if article is None:
         return {"found": False, "article": None, "truncated": False}
-    return {
-        "found": True,
-        "article": {
-            "id": int(article["id"]),
-            "title": str(article.get("title") or ""),
-            "canonical_url": str(article.get("canonical_url") or article.get("url") or ""),
-            "source_slug": str(article.get("source_slug") or ""),
-            "source_name": str(article.get("source_name") or ""),
-            "category": str(article.get("category") or ""),
-            "kind": str(article.get("kind") or ""),
-            "published_at": _serialized_timestamp(article.get("published_at")),
-            "discovered_at": _serialized_timestamp(article.get("discovered_at")),
-            "summary": str(article.get("summary") or ""),
-            "body": str(article.get("body") or ""),
-            "body_truncated": False,
-        },
-        "truncated": False,
-    }
+    return _bounded_news_article(article)
 
 
 def _sanitize_mcp_response_body(body: bytes) -> bytes:
