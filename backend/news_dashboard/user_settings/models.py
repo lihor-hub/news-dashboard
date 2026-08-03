@@ -37,3 +37,7 @@ class DeleteAccountRequest(BaseModel):
 
 class AnalyticsSettingsUpdate(BaseModel):
     enabled: bool
+
+
+class AutomaticAiEnrichmentUpdate(BaseModel):
+    enabled: bool

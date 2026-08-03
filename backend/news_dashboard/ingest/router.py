@@ -14,11 +14,14 @@ from fastapi.responses import StreamingResponse
 from news_dashboard.auth import (
     require_admin,
 )
-from news_dashboard.body_fetch import prefetch_article_bodies
+from news_dashboard.auto_enrichment import prefetch_then_auto_enrich
 from news_dashboard.ingest.service import (
     ingest_all,
 )
 from news_dashboard.ingest_events import stream_ingest_events
+
+# Kept as a module-level seam for background-task tests and integrations.
+prefetch_article_bodies = prefetch_then_auto_enrich
 
 router = APIRouter()
 

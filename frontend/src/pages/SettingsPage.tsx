@@ -4,6 +4,7 @@ import { LanguageSection } from '@/components/settings/LanguageSection';
 import { PersonalizationSection } from '@/components/settings/PersonalizationSection';
 import { WatchlistsSection } from '@/components/settings/WatchlistsSection';
 import { AiMemorySection } from '@/components/settings/AiMemorySection';
+import { AutomaticAiEnrichmentSection } from '@/components/settings/AutomaticAiEnrichmentSection';
 import { McpTokensSection } from '@/components/settings/McpTokensSection';
 import { GreaderTokensSection } from '@/components/settings/GreaderTokensSection';
 import { DataExportSection } from '@/components/settings/DataExportSection';
@@ -27,6 +28,7 @@ export function SettingsPage() {
       <PersonalizationSection />
       <WatchlistsSection />
       <AiMemorySection />
+      <AutomaticAiEnrichmentSection />
       <McpTokensSection />
       <GreaderTokensSection />
       <DataExportSection />

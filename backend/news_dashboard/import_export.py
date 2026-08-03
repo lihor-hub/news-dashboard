@@ -586,6 +586,8 @@ def _restore_notification_settings(conn: Any, user_id: int, data: Any) -> bool:
         updates["recap_day"] = recap_day
     if isinstance(data.get("analytics_enabled"), bool):
         updates["analytics_enabled"] = data["analytics_enabled"]
+    if isinstance(data.get("automatic_ai_enrichment_enabled"), bool):
+        updates["auto_ai_enrichment_enabled"] = data["automatic_ai_enrichment_enabled"]
 
     if not updates:
         return False

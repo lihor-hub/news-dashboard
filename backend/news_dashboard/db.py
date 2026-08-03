@@ -470,6 +470,10 @@ POSTGRES_MULTIUSER_SCHEMA = [
         " BOOLEAN NOT NULL DEFAULT FALSE"
     ),
     "ALTER TABLE users ADD COLUMN IF NOT EXISTS briefing_timezone TEXT NOT NULL DEFAULT 'UTC'",
+    (
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS auto_ai_enrichment_enabled"
+        " BOOLEAN NOT NULL DEFAULT FALSE"
+    ),
     """
     CREATE TABLE IF NOT EXISTS briefing_email_deliveries (
       id                  BIGSERIAL PRIMARY KEY,

@@ -623,6 +623,7 @@ def test_restores_preferences(pg_clean: str) -> None:
                 "recap_enabled": False,
                 "recap_day": "fri",
                 "analytics_enabled": False,
+                "automatic_ai_enrichment_enabled": True,
             },
         }
     )
@@ -643,7 +644,8 @@ def test_restores_preferences(pg_clean: str) -> None:
             """
             SELECT briefing_time, briefing_timezone, briefing_push_enabled,
                    briefing_email_enabled,
-                   recap_enabled, recap_day, analytics_enabled
+                   recap_enabled, recap_day, analytics_enabled,
+                   auto_ai_enrichment_enabled
             FROM users WHERE id = %s
             """,
             (uid,),
@@ -663,6 +665,20 @@ def test_restores_preferences(pg_clean: str) -> None:
     assert user_row["recap_enabled"] is False
     assert user_row["recap_day"] == "fri"
     assert user_row["analytics_enabled"] is False
+    assert user_row["auto_ai_enrichment_enabled"] is True
+
+
+def test_legacy_import_keeps_automatic_ai_enrichment_off(pg_clean: str) -> None:
+    sync_sources(pg_clean)
+    uid = _make_user(pg_clean, "legacy_auto_ai")
+    archive = _base_archive(preferences={"notifications": {"briefing_time": "08:00"}})
+    restore_user_archive(uid, archive, database_url=pg_clean)
+    with connect(database_url=pg_clean) as conn:
+        row = conn.execute(
+            "SELECT auto_ai_enrichment_enabled FROM users WHERE id = %s", (uid,)
+        ).fetchone()
+    assert row is not None
+    assert row["auto_ai_enrichment_enabled"] is False
 
 
 def test_restore_preferences_skips_missing_sections(pg_clean: str) -> None:

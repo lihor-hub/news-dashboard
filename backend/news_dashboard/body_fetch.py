@@ -605,6 +605,8 @@ def get_article(
     article_id: int,
     db_path: Path | str | None = None,
     user_id: int | None = None,
+    *,
+    conn: Any | None = None,
 ) -> dict[str, Any] | None:
     """Fetch a single article by ID, stripping internal columns.
 
@@ -613,12 +615,17 @@ def get_article(
     Returns None for invisible articles as well as non-existent ones.
     Per-user state from user_article_state is merged in for the returned dict.
     """
-    init_db(db_path)
-    with connect(db_path) as conn:
+    if conn is not None:
         row = get_visible_article_row(conn, article_id, user_id)
         if row is None:
             return None
         return _article_from_row(row, conn, article_id, user_id)
+    init_db(db_path)
+    with connect(db_path) as owned_conn:
+        row = get_visible_article_row(owned_conn, article_id, user_id)
+        if row is None:
+            return None
+        return _article_from_row(row, owned_conn, article_id, user_id)
 
 
 def translate_body(body: str, from_lang: str) -> str:

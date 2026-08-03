@@ -411,6 +411,16 @@ export interface AnalyticsSettingsUpdate {
   enabled: boolean;
 }
 
+export interface AutomaticAiEnrichmentSettings {
+  enabled: boolean;
+  available: boolean;
+  limit: number;
+}
+
+export interface AutomaticAiEnrichmentSettingsUpdate {
+  enabled: boolean;
+}
+
 export interface PushSubscribeRequest {
   endpoint: string;
   p256dh: string;

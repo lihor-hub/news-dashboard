@@ -7,6 +7,8 @@ DB-touching tests use the pg_clean fixture (live Postgres).
 from __future__ import annotations
 
 import json
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 from unittest.mock import MagicMock, patch
 
@@ -360,6 +362,34 @@ def test_get_or_generate_second_call_uses_cache(pg_clean: str) -> None:
 
     assert r1 == r2
     assert len(model.calls) == 1, "AI called more than once — cache not working"
+
+
+def test_get_or_generate_perspectives_is_single_flight_across_threads(pg_clean: str) -> None:
+    article_id = _seed_article(pg_clean)
+    fake_article = {"id": article_id, "title": "T", "body": "body", "summary": "s"}
+    invocation_started = threading.Event()
+    release_invocation = threading.Event()
+    calls = 0
+
+    def generate(*_args: object, **_kwargs: object) -> dict[str, list[str]]:
+        nonlocal calls
+        calls += 1
+        invocation_started.set()
+        assert release_invocation.wait(timeout=5)
+        return _VALID_ANALYSIS
+
+    with (
+        patch("news_dashboard.perspectives.get_article", return_value=fake_article),
+        patch("news_dashboard.perspectives.generate_perspectives", side_effect=generate),
+        ThreadPoolExecutor(max_workers=2) as pool,
+    ):
+        first = pool.submit(get_or_generate_perspectives, article_id, None, pg_clean)
+        assert invocation_started.wait(timeout=5)
+        second = pool.submit(get_or_generate_perspectives, article_id, None, pg_clean)
+        release_invocation.set()
+        assert first.result(timeout=5) == _VALID_ANALYSIS
+        assert second.result(timeout=5) == _VALID_ANALYSIS
+    assert calls == 1
 
 
 # ── visibility / authorization tests ─────────────────────────────────────────

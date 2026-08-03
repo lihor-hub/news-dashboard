@@ -163,3 +163,26 @@ def update_analytics_settings(user_id: int, *, enabled: bool) -> dict[str, bool]
             (enabled, user_id),
         )
     return {"enabled": enabled, "global_enabled": analytics_globally_enabled()}
+
+
+def get_automatic_ai_enrichment_settings(user_id: int) -> dict[str, Any]:
+    from news_dashboard.auto_enrichment import ai_available, auto_enrich_limit
+
+    with connect() as conn:
+        row = conn.execute(
+            "SELECT auto_ai_enrichment_enabled FROM users WHERE id = %s", (user_id,)
+        ).fetchone()
+    return {
+        "enabled": bool(row["auto_ai_enrichment_enabled"]) if row else False,
+        "available": ai_available(),
+        "limit": auto_enrich_limit(),
+    }
+
+
+def update_automatic_ai_enrichment_settings(user_id: int, *, enabled: bool) -> dict[str, Any]:
+    with connect() as conn:
+        conn.execute(
+            "UPDATE users SET auto_ai_enrichment_enabled = %s WHERE id = %s",
+            (enabled, user_id),
+        )
+    return get_automatic_ai_enrichment_settings(user_id)

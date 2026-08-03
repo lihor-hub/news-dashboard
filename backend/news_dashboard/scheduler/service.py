@@ -31,7 +31,7 @@ def _env_flag_enabled(name: str, *, default: bool) -> bool:
 
 
 def run_scheduled_ingest(raise_on_failure: bool = False) -> dict[str, int]:
-    from news_dashboard.body_fetch import prefetch_article_bodies
+    from news_dashboard.auto_enrichment import prefetch_then_auto_enrich
     from news_dashboard.ingest.service import ingest_all
 
     logger.info("Scheduled ingest starting…")
@@ -42,7 +42,11 @@ def run_scheduled_ingest(raise_on_failure: bool = False) -> dict[str, int]:
         total = sum(v for v in results.values() if v > 0)
         logger.info("Scheduled ingest complete: %d new articles", total)
         if total > 0:
-            prefetch_article_bodies()
+            try:
+                summary = prefetch_then_auto_enrich()
+                logger.info("Scheduled automatic AI enrichment: %s", summary.as_dict())
+            except Exception:
+                logger.exception("Scheduled body prefetch/automatic AI enrichment failed")
     except Exception:
         logger.exception("Scheduled ingest failed")
         if raise_on_failure:
