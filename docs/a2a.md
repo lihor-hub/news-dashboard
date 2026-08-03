@@ -39,6 +39,10 @@ and give it the `ask` scope. Requests without a valid, unrevoked token with the
 `ask` scope are rejected with `401`/`403`. Answers are always scoped to the
 articles visible to the token's owner.
 
+The token family is shared with MCP, but its scopes remain surface-specific:
+A2A requires `ask`, while MCP single-article retrieval requires `read`. Neither
+scope implies the other.
+
 ## Security boundaries
 
 - Disabled unless `A2A_SERVER_ENABLED` is explicitly set.

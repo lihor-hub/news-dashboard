@@ -1080,6 +1080,225 @@ def test_new_tools_keep_adversarial_structured_and_wire_results_bounded(
     assert max(map(len, response_bodies)) < 16_384
 
 
+@pytest.mark.parametrize("scope", ["search", "ask"])
+def test_get_news_article_is_hidden_and_denied_without_read_scope(
+    pg_clean: str, monkeypatch: pytest.MonkeyPatch, scope: str
+) -> None:
+    from news_dashboard.mcp import service
+
+    monkeypatch.setenv("DATABASE_URL", pg_clean)
+    user_id = _make_user(pg_clean, f"article-scope-denied-{scope}")
+    _seed_source(pg_clean)
+    _seed_article(pg_clean, 113, body="private article body", body_status="ok")
+    created = service.create_token(user_id, "client", scopes=(scope,), database_url=pg_clean)
+
+    async def exercise() -> None:
+        async with _mcp_client(created["token"]) as mcp_client:
+            tools = await mcp_client.list_tools()
+            result = await mcp_client.call_tool(
+                "get_news_article", {"article_id": 113}, raise_on_error=False
+            )
+        assert "get_news_article" not in {tool.name for tool in tools}
+        rendered = " ".join(
+            block.text for block in result.content if isinstance(block, TextContent)
+        )
+        assert result.is_error is True
+        assert "private article body" not in rendered
+        assert "Article 113" not in rendered
+
+    asyncio.run(exercise())
+
+
+def test_get_news_article_revoked_read_token_fails_transport_authentication(
+    pg_clean: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from news_dashboard.mcp import service
+
+    monkeypatch.setenv("DATABASE_URL", pg_clean)
+    user_id = _make_user(pg_clean, "article-revoked-read")
+    created = service.create_token(user_id, "client", scopes=("read",), database_url=pg_clean)
+    service.revoke_token(user_id, created["id"], database_url=pg_clean)
+
+    async def exercise() -> None:
+        with pytest.raises(httpx.HTTPStatusError) as exc_info:
+            async with _mcp_client(created["token"]):
+                pass
+        assert exc_info.value.response.status_code == 401
+
+    asyncio.run(exercise())
+
+
+def test_get_news_article_preserves_rate_and_outer_response_limits(
+    pg_clean: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from news_dashboard.mcp import service
+
+    monkeypatch.setenv("DATABASE_URL", pg_clean)
+    user_id = _make_user(pg_clean, "article-rate-response-limits")
+    _seed_source(pg_clean)
+    _seed_article(pg_clean, 114, body='snow 雪🙂 \\"' * 20_000, body_status="ok")
+    created = service.create_token(user_id, "client", scopes=("read",), database_url=pg_clean)
+    response_bodies: list[bytes] = []
+
+    async def exercise() -> None:
+        async with _mcp_client(created["token"], response_bodies=response_bodies) as mcp_client:
+            results = [
+                await mcp_client.call_tool(
+                    "get_news_article", {"article_id": 114}, raise_on_error=False
+                )
+                for _ in range(15)
+            ]
+        successful = next(result for result in results if not result.is_error)
+        assert successful.structured_content is not None
+        assert successful.structured_content["truncated"] is True
+        assert successful.structured_content["article"]["body_truncated"] is True
+        assert any(result.is_error for result in results)
+
+    asyncio.run(exercise())
+    article_responses = [body for body in response_bodies if b'"body_truncated":true' in body]
+    assert article_responses
+    assert all(len(body) <= 16_384 for body in article_responses)
+
+
+def test_get_news_article_safe_misses_log_metadata_only(
+    pg_clean: str,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    from news_dashboard.mcp import service
+
+    monkeypatch.setenv("DATABASE_URL", pg_clean)
+    owner = _make_user(pg_clean, "article-safe-miss-owner")
+    reader = _make_user(pg_clean, "article-safe-miss-reader")
+    source_slug = "private-source-log-sentinel-721c"
+    title = "private-title-log-sentinel-413a"
+    summary = "private-summary-log-sentinel-59bc"
+    body = "private-body-log-sentinel-80fd"
+    canonical_url = "https://private.example/log-sentinel-47ed"
+    _seed_source(pg_clean, source_slug, owner_user_id=owner)
+    _seed_article(pg_clean, 115, source_slug, body=body, body_status="ok")
+    with connect(database_url=pg_clean) as conn:
+        conn.execute(
+            "UPDATE articles SET title = %s, summary = %s, canonical_url = %s WHERE id = %s",
+            (title, summary, canonical_url, 115),
+        )
+    created = service.create_token(reader, "client", scopes=("read",), database_url=pg_clean)
+    caplog.set_level(logging.DEBUG)
+
+    async def exercise() -> None:
+        async with _mcp_client(created["token"]) as mcp_client:
+            unauthorized = await mcp_client.call_tool("get_news_article", {"article_id": 115})
+            missing = await mcp_client.call_tool("get_news_article", {"article_id": 9_876_543})
+        assert (
+            unauthorized.structured_content
+            == missing.structured_content
+            == {
+                "found": False,
+                "article": None,
+                "truncated": False,
+            }
+        )
+
+    asyncio.run(exercise())
+    server_logs = "\n".join(
+        record.getMessage()
+        for record in caplog.records
+        if not record.name.startswith(("mcp.client", "httpx"))
+    )
+    assert "mcp tool=get_news_article status=success duration_ms=" in server_logs
+    for sensitive_value in (
+        created["token"],
+        "115",
+        "9876543",
+        source_slug,
+        canonical_url,
+        title,
+        summary,
+        body,
+    ):
+        assert sensitive_value not in server_logs
+
+
+def test_get_news_article_sanitizes_internal_failures_in_response_and_debug_logs(
+    pg_clean: str,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    from news_dashboard.mcp import server, service
+
+    monkeypatch.setenv("DATABASE_URL", pg_clean)
+    user_id = _make_user(pg_clean, "article-internal-failure")
+    created = service.create_token(user_id, "client", scopes=("read",), database_url=pg_clean)
+    bearer = created["token"]
+    article_id = 116
+    private_url = "https://private.example/article-116"
+    private_title = "private-title-116"
+    private_summary = "private-summary-116"
+    private_body = "private-body-116"
+    extraction_detail = "extractor=private-provider attempt=7"
+    database_url = "postgresql://private-user:private-password@db.internal/private"
+
+    def fail_reader(*_args: Any, **_kwargs: Any) -> None:
+        message = " ".join(
+            (
+                bearer,
+                str(article_id),
+                private_url,
+                private_title,
+                private_summary,
+                private_body,
+                database_url,
+                extraction_detail,
+            )
+        )
+        raise RuntimeError(message)
+
+    monkeypatch.setattr(server, "fetch_and_cache_body", fail_reader)
+    caplog.set_level(logging.DEBUG)
+
+    async def exercise() -> None:
+        async with _mcp_client(bearer) as mcp_client:
+            result = await mcp_client.call_tool(
+                "get_news_article", {"article_id": article_id}, raise_on_error=False
+            )
+        rendered = " ".join(
+            block.text for block in result.content if isinstance(block, TextContent)
+        )
+        assert result.is_error is True
+        assert "Internal server error" in rendered
+        assert "Traceback" not in rendered
+        for sensitive_value in (
+            bearer,
+            str(article_id),
+            private_url,
+            private_title,
+            private_summary,
+            private_body,
+            database_url,
+            extraction_detail,
+        ):
+            assert sensitive_value not in rendered
+
+    asyncio.run(exercise())
+    server_logs = "\n".join(
+        record.getMessage()
+        for record in caplog.records
+        if not record.name.startswith(("mcp.client", "httpx"))
+    )
+    assert "mcp tool=get_news_article status=error duration_ms=" in server_logs
+    for sensitive_value in (
+        bearer,
+        str(article_id),
+        private_url,
+        private_title,
+        private_summary,
+        private_body,
+        database_url,
+        extraction_detail,
+    ):
+        assert sensitive_value not in server_logs
+
+
 def test_latest_news_returns_compact_articles_visible_to_token_owner(
     pg_clean: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:

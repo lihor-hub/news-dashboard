@@ -129,7 +129,7 @@ and it changes alongside them.
 Two surfaces are explicitly built for third-party consumption and are the
 safest to integrate against:
 
-- The [MCP tool set](integrations.md#mcp-server) — read-only and deliberately
-  narrow.
+- The [MCP tool set](integrations.md#mcp-server) — scoped, read-only news
+  listing and single-article retrieval with bounded structured results.
 - The [Google Reader API](integrations.md#google-reader-sync) — implements an
   external, already-stable contract.

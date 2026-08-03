@@ -30,11 +30,13 @@ revoked under `/api/users/me/mcp-tokens` — see
 | `list_latest_news` | `search` | List up to 25 recent articles visible to the token owner. |
 | `list_news_sources` | `search` | Page through the token owner's subscribed, enabled, searchable sources. |
 | `search_news` | `search` | Search visible articles with typed filters and offset pagination. |
+| `get_news_article` | `read` | Retrieve one visible article by a strict positive integer ID. |
 
 Each tool requires its own **scope**, and a token only carries the scopes it
-was minted with. These three tools require `search`; under-scoped tokens do not
-discover them. Single-article retrieval, briefings, and question answering are
-planned; clients should rely on MCP tool discovery until they are available.
+was minted with. The listing, source-discovery, and search tools require
+`search`; `get_news_article` requires `read`. Briefings and MCP question
+answering are planned; clients should rely on MCP tool discovery until they are
+available.
 
 `list_news_sources` returns `{sources, truncated, next_cursor}` in deterministic
 category, descending priority, name, then slug order. Each source contains only
@@ -75,6 +77,20 @@ uses only the token owner's stars. Pagination uses `limit` 1–25 (default 10)
 and `offset` 0–10,000 (default 0); out-of-range typed arguments are rejected.
 This numeric offset belongs to `search_news` and is separate from source
 discovery's cursor.
+
+`get_news_article` returns `found`, `article`, and `truncated`. A found article
+contains `id`, `title`, `canonical_url`, `source_slug`, `source_name`,
+`category`, `kind`, nullable `published_at` and `discovered_at`, `summary`,
+`body`, and `body_truncated`. Text is returned as escaped plain text; the URL
+remains URL data. Missing and invisible articles both return
+`{"found": false, "article": null, "truncated": false}`. Private ownership,
+disabled subscriptions, and share-only access are enforced without revealing
+which boundary caused the miss.
+
+Retrieval can fill the internal article-body cache, but it does not mutate
+user state or settings. Extraction errors and internals are not exposed.
+`body_truncated` reports body shortening; top-level `truncated` reports any
+field shortening needed to keep a schema-valid result within the inner limit.
 
 The server is enabled when `MCP_SERVER_ENABLED` is unset. Set it to `false`,
 `0`, `no`, or `off` to disable `/mcp` and new token creation.
