@@ -36,6 +36,7 @@ from news_dashboard.error_tracking import init_error_tracking
 from news_dashboard.ingest.service import (
     sync_sources,
 )
+from news_dashboard.mcp.server import mcp_http_app
 from news_dashboard.scheduler.service import (
     start_scheduler,
     stop_scheduler,
@@ -61,21 +62,22 @@ class SPAStaticFiles(StaticFiles):
 
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
-    init_error_tracking()
-    open_connection_pool()
-    init_auth()
-    sync_sources()
-    # Seed demo data when DEMO_MODE is enabled.
-    if os.getenv("DEMO_MODE", "").strip().lower() in ("1", "true", "yes", "on"):
-        from news_dashboard.demo import seed_demo
+    async with mcp_http_app.lifespan(mcp_http_app):
+        init_error_tracking()
+        open_connection_pool()
+        init_auth()
+        sync_sources()
+        # Seed demo data when DEMO_MODE is enabled.
+        if os.getenv("DEMO_MODE", "").strip().lower() in ("1", "true", "yes", "on"):
+            from news_dashboard.demo import seed_demo
 
-        seed_demo()
-    start_scheduler()
-    try:
-        yield
-    finally:
-        stop_scheduler()
-        close_connection_pool()
+            seed_demo()
+        start_scheduler()
+        try:
+            yield
+        finally:
+            stop_scheduler()
+            close_connection_pool()
 
 
 app = FastAPI(title="News Dashboard", version=read_app_version(), lifespan=lifespan)
@@ -408,7 +410,6 @@ from news_dashboard.greader import router as greader_router  # noqa: E402
 from news_dashboard.ingest.router import router as ingest_router  # noqa: E402
 from news_dashboard.learn_from_link.router import router as learn_from_link_router  # noqa: E402
 from news_dashboard.lesson_recaps.router import router as lesson_recaps_router  # noqa: E402
-from news_dashboard.mcp.router import public_mcp_router  # noqa: E402
 from news_dashboard.mcp.router import router as mcp_router  # noqa: E402
 from news_dashboard.onboarding.router import router as onboarding_router  # noqa: E402
 from news_dashboard.personalization.router import router as personalization_router  # noqa: E402
@@ -465,15 +466,18 @@ admin.include_router(admin_routes_router)
 app.include_router(public_router)
 app.include_router(api)
 app.include_router(admin)
-# MCP tool-calling, A2A, and GReader-sync endpoints authenticate via bearer
-# token, not the session cookie, so they mount directly on the app rather than
-# the `api` router.
-app.include_router(public_mcp_router)
+# A2A and GReader-sync endpoints authenticate via bearer token, not the session
+# cookie, so they mount directly on the app rather than the `api` router.
 app.include_router(public_a2a_router)
 app.include_router(public_greader_router)
 # System/health endpoints are unauthenticated, so mount directly on the app
 # rather than the `api` router.
 app.include_router(system_router)
+
+# FastMCP authenticates its bearer tokens independently of session-cookie API
+# routes. Mount it before the catch-all SPA so protocol requests cannot fall
+# through to index.html.
+app.mount("/mcp", mcp_http_app, name="mcp")
 
 
 # ── SPA static files ─────────────────────────────────────────────────────────

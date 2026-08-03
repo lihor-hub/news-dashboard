@@ -42,7 +42,7 @@ behavior:
 | `/api/*` | authenticated `api` router | Requires a valid session. |
 | `/api/admin/*` | `admin` router | Requires a session belonging to an admin user. |
 | `/api/auth/*`, `/auth/*` | public router | Login, registration, and SSO callbacks. |
-| `/api/mcp/*` | public MCP router | Bearer-token authenticated, opt-in. |
+| `/mcp/*` | mounted FastMCP server | Bearer-token authenticated, stateless Streamable HTTP. |
 | `/reader/api/0/*`, `/accounts/ClientLogin` | public GReader router | Google Reader-compatible sync. |
 | `/api/health`, `/api/live`, `/api/ready`, `/metrics` | system router | Unauthenticated probes. |
 

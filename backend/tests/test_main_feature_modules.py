@@ -114,8 +114,6 @@ EXPECTED_METHOD_PATHS = {
     ("GET", "/api/live"),
     ("POST", "/api/a2a"),
     ("GET", "/.well-known/agent-card.json"),
-    ("POST", "/api/mcp/rpc"),
-    ("GET", "/api/mcp/tools"),
     ("DELETE", "/api/notifications/subscribe"),
     ("POST", "/api/notifications/subscribe"),
     ("GET", "/api/onboarding/interests"),

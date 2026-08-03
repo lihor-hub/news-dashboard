@@ -4,6 +4,7 @@ import asyncio
 
 import pytest
 from fastapi import FastAPI
+from starlette.routing import Mount
 
 
 def test_lifespan_opens_and_closes_connection_pool(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -37,3 +38,12 @@ def test_lifespan_opens_and_closes_connection_pool(monkeypatch: pytest.MonkeyPat
         "scheduler_stop",
         "pool_close",
     ]
+
+
+def test_mcp_mount_precedes_spa_fallback() -> None:
+    from news_dashboard.main import app
+
+    mount_paths = [route.path for route in app.routes if isinstance(route, Mount)]
+    assert "/mcp" in mount_paths
+    if "/" in mount_paths:
+        assert mount_paths.index("/mcp") < mount_paths.index("/")
