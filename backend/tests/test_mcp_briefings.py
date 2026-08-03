@@ -136,6 +136,64 @@ def test_build_get_omits_invalid_urls_and_dangling_content_ids(url: str) -> None
     assert result.truncated is True
 
 
+@pytest.mark.parametrize(
+    "url",
+    [
+        "http://[::1",
+        "https://example.com\uff0f@evil.test/story",
+        "https://%65xample.com/story",
+        "https://example%00.com/story",
+        "https://.example.com/story",
+        "https://example.com./story",
+        "https://one..example.com/story",
+        "https://under_score.example/story",
+        "https://\uff45xample.com/story",
+        f"https://{'a' * 64}.example/story",
+        f"https://{'a.' * 127}example/story",
+        "https://-edge.example/story",
+        "https://edge-.example/story",
+        "https://\ud800.example/story",
+        "https://\u200d.example/story",
+        "https://999.1.1.1/story",
+        "https://256.256.256.256/story",
+        "https://2001:db8::1/story",
+        "https://[2001:db8:::1]/story",
+        "https://user@example.com/story",
+        "https://example.com:0/story",
+        "https://example.com:65536/story",
+        "https://example.com:invalid/story",
+        f"https://example.com/{'x' * 2_100}",
+    ],
+)
+def test_build_get_safely_omits_ambiguous_or_invalid_authorities(url: str) -> None:
+    article = {**_row()["articles"][0], "canonical_url": url, "url": url}
+
+    result = build_briefing_get_result(_row(articles=[article]))
+
+    assert result.briefing.citations == []
+    assert result.briefing.content.sections[0].citations == []
+    assert result.briefing.content.worth_opening == []
+    assert result.briefing.omitted_citations >= 1
+    assert result.truncated is True
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "https://127.0.0.1/story",
+        "https://[2001:db8::1]/story",
+        "https://m\u00fcnich.example/story",
+        "https://xn--mnich-kva.example/story",
+    ],
+)
+def test_build_get_accepts_valid_ip_and_internationalized_hosts_stably(url: str) -> None:
+    article = {**_row()["articles"][0], "canonical_url": url}
+
+    result = build_briefing_get_result(_row(articles=[article]))
+
+    assert result.briefing.citations[0].url == url
+
+
 @pytest.mark.parametrize("content", [None, "oops", [], {"sections": "oops", "worth_opening": []}])
 def test_build_get_degrades_malformed_top_level_content(content: Any) -> None:
     result = build_briefing_get_result(_row(content=content))

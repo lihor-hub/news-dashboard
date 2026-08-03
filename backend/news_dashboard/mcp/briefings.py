@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import json
+import re
 from collections.abc import Mapping
 from datetime import datetime, timezone
+from ipaddress import AddressValueError, ip_address
 from typing import Any, cast
 from urllib.parse import urlsplit
 
@@ -21,6 +23,7 @@ MAX_CITATION_URL_LENGTH = 2_048
 MAX_SECTIONS = 12
 MAX_CITATIONS = 25
 MAX_WORTH_OPENING = 25
+_DNS_LABEL = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$", re.IGNORECASE)
 
 
 class _PublicModel(BaseModel):
@@ -120,24 +123,50 @@ def _positive_ids(value: Any) -> tuple[list[int], int]:
     return accepted, omitted
 
 
+def _valid_hostname(hostname: str) -> bool:
+    if not hostname or hostname.startswith(".") or hostname.endswith(".") or ".." in hostname:
+        return False
+    if ":" in hostname or all(character.isdigit() or character == "." for character in hostname):
+        try:
+            ip_address(hostname)
+        except (AddressValueError, ValueError):
+            return False
+        return True
+    try:
+        ascii_hostname = hostname.encode("idna").decode("ascii")
+        decoded_hostname = ascii_hostname.encode("ascii").decode("idna")
+    except UnicodeError:
+        return False
+    if len(ascii_hostname) > 253 or (not hostname.isascii() and decoded_hostname != hostname):
+        return False
+    return all(_DNS_LABEL.fullmatch(label) is not None for label in ascii_hostname.split("."))
+
+
 def _normalized_url(article: Mapping[str, Any]) -> str | None:
     canonical = article.get("canonical_url")
     raw = canonical if isinstance(canonical, str) and canonical.strip() else article.get("url")
     if not isinstance(raw, str) or not raw.strip():
         return None
-    normalized = canonicalize_url(raw)[:MAX_CITATION_URL_LENGTH]
+    if any(ord(character) < 32 for character in raw):
+        return None
     try:
+        normalized = canonicalize_url(raw)
         parsed = urlsplit(normalized)
         hostname = parsed.hostname
-        _ = parsed.port
-    except ValueError:
+        port = parsed.port
+        normalized_bytes = normalized.encode()
+    except (UnicodeError, ValueError):
         return None
     if (
-        parsed.scheme.lower() not in {"http", "https"}
+        len(normalized_bytes) > MAX_CITATION_URL_LENGTH
+        or parsed.scheme.lower() not in {"http", "https"}
         or not hostname
-        or any(character.isspace() for character in hostname)
+        or "%" in parsed.netloc
+        or "\x00" in parsed.netloc
         or parsed.username is not None
         or parsed.password is not None
+        or port == 0
+        or not _valid_hostname(hostname)
     ):
         return None
     return normalized
@@ -229,7 +258,7 @@ def _normalize_citations(value: Any) -> tuple[list[BriefingCitation], int, bool]
                 ),
             )
         )
-        truncated = truncated or title_cut or source_cut or len(url) >= MAX_CITATION_URL_LENGTH
+        truncated = truncated or title_cut or source_cut
     return citations, omitted, truncated
 
 
