@@ -27,12 +27,14 @@ from news_dashboard.briefings.service import (
     _call_openai,
     _coerce_content,
     _current_day_since_at,
+    _find_recent_briefing,
     _get_since_at,
     _validate_content,
     generate_briefing,
     get_briefing,
     get_latest_briefing,
     list_briefings,
+    list_briefings_with_script,
     select_candidates,
 )
 from news_dashboard.db import connect, row_to_dict
@@ -511,6 +513,98 @@ def test_get_briefing_filters_citations_by_user_source_visibility(pg_clean: str)
     assert {article["id"] for article in result["articles"]} == {enabled_id, owned_id}
 
 
+def test_get_briefing_excludes_inactive_sources_and_dangling_content_ids(pg_clean: str) -> None:
+    owner_id = _seed_user(pg_clean, "citation-lifecycle-owner")
+    other_id = _seed_user(pg_clean, "citation-lifecycle-other")
+    _seed_source(pg_clean, "visible-global")
+    _seed_source(pg_clean, "disabled-global")
+    _seed_source(pg_clean, "deleted-global")
+    _seed_source(pg_clean, "visible-private", owner_user_id=owner_id)
+    _seed_source(pg_clean, "disabled-private", owner_user_id=owner_id)
+    _seed_source(pg_clean, "deleted-private", owner_user_id=owner_id)
+    _seed_source(pg_clean, "foreign-private", owner_user_id=other_id)
+    article_ids = {
+        slug: _seed_article(
+            pg_clean,
+            url=f"https://example.com/{slug}",
+            source_slug=slug,
+        )
+        for slug in (
+            "visible-global",
+            "disabled-global",
+            "deleted-global",
+            "visible-private",
+            "disabled-private",
+            "deleted-private",
+            "foreign-private",
+        )
+    }
+    original_citations = [
+        article_ids["visible-private"],
+        article_ids["disabled-global"],
+        article_ids["deleted-global"],
+        article_ids["foreign-private"],
+        999_999,
+        article_ids["visible-global"],
+        article_ids["visible-private"],
+        article_ids["disabled-private"],
+        article_ids["deleted-private"],
+    ]
+    content = {
+        "sections": [{"title": "Lifecycle", "body": "Body", "citations": original_citations}],
+        "worth_opening": list(reversed(original_citations)),
+    }
+    briefing_id = _seed_briefing(pg_clean, user_id=owner_id, content=content)
+    for index, article_id in enumerate(article_ids.values()):
+        _link_article(pg_clean, briefing_id, article_id, section_index=0, citation_index=index)
+    with connect(database_url=pg_clean) as conn:
+        conn.execute(
+            "UPDATE sources SET enabled = FALSE WHERE slug IN (%s, %s)",
+            ("disabled-global", "disabled-private"),
+        )
+        conn.execute(
+            "UPDATE sources SET deleted_at = NOW() WHERE slug IN (%s, %s)",
+            ("deleted-global", "deleted-private"),
+        )
+
+    result = get_briefing(briefing_id, database_url=pg_clean, user_id=owner_id)
+
+    assert result is not None
+    visible_ids = [article_ids["visible-global"], article_ids["visible-private"]]
+    assert [article["id"] for article in result["articles"]] == visible_ids
+    assert result["content"]["sections"][0]["citations"] == [
+        article_ids["visible-private"],
+        article_ids["visible-global"],
+        article_ids["visible-private"],
+    ]
+    assert result["content"]["worth_opening"] == [
+        article_ids["visible-private"],
+        article_ids["visible-global"],
+        article_ids["visible-private"],
+    ]
+    with connect(database_url=pg_clean) as conn:
+        stored = conn.execute(
+            "SELECT content FROM briefings WHERE id = %s", (briefing_id,)
+        ).fetchone()
+    assert stored is not None
+    assert stored["content"]["sections"][0]["citations"] == original_citations
+
+
+@pytest.mark.parametrize("content", ["not-json", [1, 2], None])
+def test_get_briefing_tolerates_nonmapping_content(pg_clean: str, content: Any) -> None:
+    briefing_id = _seed_briefing(pg_clean)
+    with connect(database_url=pg_clean) as conn:
+        conn.execute(
+            "UPDATE briefings SET content = %s::jsonb WHERE id = %s",
+            (json.dumps(content), briefing_id),
+        )
+
+    result = get_briefing(briefing_id, database_url=pg_clean)
+
+    assert result is not None
+    assert result["content"] == content
+
+
 def test_get_briefing_userless_citations_keep_background_compatibility(pg_clean: str) -> None:
     owner_id = _seed_user(pg_clean, "background-private-owner")
     _seed_source(pg_clean, "background-private", owner_user_id=owner_id)
@@ -597,6 +691,33 @@ def test_get_since_at_uses_most_recent_briefing(pg_clean: str) -> None:
     result = _get_since_at(database_url=pg_clean)
     assert isinstance(result, datetime)
     assert result.tzinfo is not None
+
+
+def test_find_recent_briefing_breaks_equal_timestamps_by_newest_id(pg_clean: str) -> None:
+    created_at = (datetime.now(timezone.utc) - timedelta(seconds=1)).isoformat()
+    _seed_briefing(pg_clean, title="First recent", created_at=created_at)
+    newest_id = _seed_briefing(pg_clean, title="Second recent", created_at=created_at)
+
+    result = _find_recent_briefing(10, database_url=pg_clean)
+
+    assert result is not None
+    assert result["id"] == newest_id
+
+
+def test_list_briefings_with_script_breaks_equal_timestamps_by_newest_id(pg_clean: str) -> None:
+    user_id = _seed_user(pg_clean, "script-order-owner")
+    created_at = "2026-06-13T10:00:00+00:00"
+    first_id = _seed_briefing(pg_clean, user_id=user_id, created_at=created_at)
+    second_id = _seed_briefing(pg_clean, user_id=user_id, created_at=created_at)
+    with connect(database_url=pg_clean) as conn:
+        conn.execute(
+            "UPDATE briefings SET script = %s::jsonb WHERE id = ANY(%s)",
+            (json.dumps([{"speaker": "host", "text": "Ready"}]), [first_id, second_id]),
+        )
+
+    results = list_briefings_with_script(user_id, database_url=pg_clean)
+
+    assert [result["id"] for result in results] == [second_id, first_id]
 
 
 # ── select_candidates ─────────────────────────────────────────────────────────

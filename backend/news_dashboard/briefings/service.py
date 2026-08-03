@@ -10,6 +10,7 @@ import logging
 import os
 import time
 from collections.abc import Callable, Mapping
+from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 from functools import partial
 from pathlib import Path
@@ -161,6 +162,8 @@ _CITED_ARTICLES_SQL_USER = f"""
       ON a_us.source_slug = a.source_slug AND a_us.user_id = %s
     WHERE ba.briefing_id = %s
       AND ({visible_article_sql("a")})
+      AND a_src.enabled IS TRUE
+      AND a_src.deleted_at IS NULL
     ORDER BY ba.section_index NULLS LAST, ba.citation_index NULLS LAST, a.id
 """
 
@@ -217,6 +220,32 @@ def _coerce_content(value: Any) -> Any:
         except (json.JSONDecodeError, TypeError):
             return value
     return value
+
+
+def _filter_content_citations(value: Any, visible_ids: set[int]) -> Any:
+    """Return a copy whose citation collections contain only visible article IDs."""
+    content = _coerce_content(value)
+    if not isinstance(content, Mapping):
+        return content
+
+    filtered = cast("dict[str, Any]", deepcopy(dict(content)))
+    sections = filtered.get("sections")
+    if isinstance(sections, list):
+        for section in sections:
+            if not isinstance(section, dict):
+                continue
+            citations = section.get("citations")
+            if isinstance(citations, list):
+                section["citations"] = [
+                    citation for citation in citations if citation in visible_ids
+                ]
+
+    worth_opening = filtered.get("worth_opening")
+    if isinstance(worth_opening, list):
+        filtered["worth_opening"] = [
+            article_id for article_id in worth_opening if article_id in visible_ids
+        ]
+    return filtered
 
 
 def _get_since_at(
@@ -509,7 +538,7 @@ def _find_recent_briefing(
                 SELECT id FROM briefings
                 WHERE status = 'complete' AND created_at >= %s AND user_id = %s
                   AND focus_prompt IS NOT DISTINCT FROM %s
-                ORDER BY created_at DESC
+                ORDER BY created_at DESC, id DESC
                 LIMIT 1
                 """,
                 (cutoff, user_id, focus_prompt),
@@ -520,7 +549,7 @@ def _find_recent_briefing(
                 SELECT id FROM briefings
                 WHERE status = 'complete' AND created_at >= %s AND user_id IS NULL
                   AND focus_prompt IS NOT DISTINCT FROM %s
-                ORDER BY created_at DESC
+                ORDER BY created_at DESC, id DESC
                 LIMIT 1
                 """,
                 (cutoff, focus_prompt),
@@ -876,9 +905,11 @@ def get_latest_briefing(
         if row is None:
             return None
         briefing = row_to_dict(row)
-        briefing["content"] = _coerce_content(briefing.get("content"))
+        articles = _fetch_cited_articles(conn, briefing["id"], user_id)
+        visible_ids = {int(article["id"]) for article in articles}
+        briefing["content"] = _filter_content_citations(briefing.get("content"), visible_ids)
         briefing["script"] = _coerce_content(briefing.get("script"))
-        briefing["articles"] = _fetch_cited_articles(conn, briefing["id"], user_id)
+        briefing["articles"] = articles
         return briefing
 
 
@@ -953,9 +984,11 @@ def get_briefing(
         if row is None:
             return None
         briefing = row_to_dict(row)
-        briefing["content"] = _coerce_content(briefing.get("content"))
+        articles = _fetch_cited_articles(conn, briefing["id"], user_id)
+        visible_ids = {int(article["id"]) for article in articles}
+        briefing["content"] = _filter_content_citations(briefing.get("content"), visible_ids)
         briefing["script"] = _coerce_content(briefing.get("script"))
-        briefing["articles"] = _fetch_cited_articles(conn, briefing["id"], user_id)
+        briefing["articles"] = articles
         return briefing
 
 
@@ -990,7 +1023,7 @@ def list_briefings_with_script(
             SELECT id, created_at, title, summary, script
             FROM briefings
             WHERE user_id = %s AND script IS NOT NULL
-            ORDER BY created_at DESC
+            ORDER BY created_at DESC, id DESC
             LIMIT %s
             """,
             (user_id, limit),
