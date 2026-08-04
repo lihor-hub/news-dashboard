@@ -96,8 +96,14 @@ def test_mcp_http_app_factory_enforces_host_and_origin() -> None:
 
     allowed = asyncio.run(request(host="news.example.com"))
     bad_host = asyncio.run(request(host="evil.example.com"))
+    implicit_local_host = asyncio.run(request(host="testserver"))
     bad_origin = asyncio.run(request(host="news.example.com", origin="https://evil.example.com"))
+    wrong_scheme = asyncio.run(request(host="news.example.com", origin="http://news.example.com"))
 
     assert allowed.status_code != 421
     assert bad_host.status_code == 421
+    assert implicit_local_host.status_code == 421
     assert bad_origin.status_code == 403
+    assert wrong_scheme.status_code == 403
+    assert bad_host.text == "Misdirected Request"
+    assert bad_origin.text == "Forbidden"

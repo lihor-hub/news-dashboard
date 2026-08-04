@@ -49,11 +49,11 @@ services:
       OTP_SMTP_PASS: ${OTP_SMTP_PASS:-}
       OTP_SMTP_FROM: ${OTP_SMTP_FROM:-}
       OTP_SMTP_TLS: ${OTP_SMTP_TLS:-}
-      APP_BASE_URL: ${APP_BASE_URL:-}
-      # Set the public values in production; APP_BASE_URL is the fallback source.
+      APP_BASE_URL: ${APP_BASE_URL:?APP_BASE_URL is required}
+      # Optional exact overrides; empty values derive from required APP_BASE_URL.
       MCP_SERVER_ENABLED: ${MCP_SERVER_ENABLED:-true}
-      MCP_ALLOWED_HOSTS: ${MCP_ALLOWED_HOSTS:-localhost:8080,127.0.0.1:8080,[::1]:8080}
-      MCP_ALLOWED_ORIGINS: ${MCP_ALLOWED_ORIGINS:-http://localhost:8080,http://127.0.0.1:8080,http://[::1]:8080}
+      MCP_ALLOWED_HOSTS: ${MCP_ALLOWED_HOSTS:-}
+      MCP_ALLOWED_ORIGINS: ${MCP_ALLOWED_ORIGINS:-}
       # Legacy credential aliases remain available to the OTP mailer.
       SMTP_USERNAME: ${SMTP_USERNAME:-}
       SMTP_PASSWORD: ${SMTP_PASSWORD:-}

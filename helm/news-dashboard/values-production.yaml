@@ -31,5 +31,3 @@ networkPolicy:
 app:
   config:
     enableHsts: true
-    mcpAllowedHosts: news.lihor.ro
-    mcpAllowedOrigins: https://news.lihor.ro

@@ -928,6 +928,41 @@ class _RequireMcpEnabled:
         await self.app(scope, receive, send)
 
 
+class _ExactMcpHostOrigin:
+    """Reject untrusted routing headers before FastMCP authentication runs."""
+
+    def __init__(
+        self,
+        app: ASGIApp,
+        *,
+        allowed_hosts: tuple[str, ...],
+        allowed_origins: tuple[str, ...],
+    ) -> None:
+        self.app = app
+        self.allowed_hosts = frozenset(allowed_hosts)
+        self.allowed_origins = frozenset(allowed_origins)
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        headers = {name.lower(): value for name, value in scope["headers"]}
+        host = headers.get(b"host", b"").decode("latin-1")
+        if host not in self.allowed_hosts:
+            await PlainTextResponse("Misdirected Request", status_code=421)(scope, receive, send)
+            return
+
+        origin_value = headers.get(b"origin")
+        if origin_value is not None:
+            origin = origin_value.decode("latin-1")
+            if origin not in self.allowed_origins:
+                await PlainTextResponse("Forbidden", status_code=403)(scope, receive, send)
+                return
+
+        await self.app(scope, receive, send)
+
+
 def create_mcp_http_app(server: FastMCP[Any], *, config: McpHttpConfig) -> StarletteWithLifespan:
     """Build the guarded MCP ASGI application mounted by FastAPI."""
     http_app = server.http_app(
@@ -940,6 +975,11 @@ def create_mcp_http_app(server: FastMCP[Any], *, config: McpHttpConfig) -> Starl
     )
     http_app.add_middleware(_RequireMcpEnabled)
     http_app.add_middleware(_SanitizeMcpResponses)
+    http_app.add_middleware(
+        _ExactMcpHostOrigin,
+        allowed_hosts=config.allowed_hosts,
+        allowed_origins=config.allowed_origins,
+    )
     return http_app
 
 
