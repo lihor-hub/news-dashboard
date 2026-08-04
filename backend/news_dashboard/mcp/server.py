@@ -29,6 +29,7 @@ from news_dashboard.body_fetch import fetch_and_cache_body
 from news_dashboard.briefings import service as briefing_service
 from news_dashboard.ingest.service import clean_html, search_articles
 from news_dashboard.mcp import service
+from news_dashboard.mcp.ask import AskNewsResult, shape_ask_result
 from news_dashboard.mcp.auth import NewsDashboardTokenVerifier
 from news_dashboard.mcp.briefings import (
     BriefingGetResult,
@@ -255,19 +256,6 @@ class NewsArticleBody(TypedDict):
 class GetNewsArticleResult(TypedDict):
     found: bool
     article: NewsArticleBody | None
-    truncated: bool
-
-
-class AskCitation(TypedDict):
-    id: int
-    title: str
-    url: str
-
-
-class AskNewsResult(TypedDict):
-    answer: str
-    citations: list[AskCitation]
-    trace_id: str | None
     truncated: bool
 
 
@@ -592,20 +580,7 @@ async def ask_news(
             execution_policy=MCP_ASK_EXECUTION_POLICY,
         )
     )
-    sources = cast("list[dict[str, Any]]", result.get("sources", []))
-    response: AskNewsResult = {
-        "answer": str(result.get("answer", "")),
-        "citations": [
-            {
-                "id": int(source["id"]),
-                "title": str(source["title"]),
-                "url": str(source["url"]),
-            }
-            for source in sources
-        ],
-        "trace_id": cast("str | None", result.get("trace_id")),
-        "truncated": False,
-    }
+    response = shape_ask_result(result)
     trace_id = response["trace_id"]
     if trace_id is not None:
         from news_dashboard.ai_client import record_mcp_ask_result

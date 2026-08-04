@@ -2301,6 +2301,171 @@ def test_ask_news_calls_canonical_assistant_with_token_identity(
         assert private_value not in server_logs
 
 
+@pytest.mark.parametrize(
+    ("answer", "expected_ids"),
+    [
+        ("First [2], then [1], then [2].", [22, 11]),
+        ("Invalid [0] [-1] [3] [x] [ 1 ].", []),
+        ("A positive decimal may have leading zeroes: [01].", [11]),
+    ],
+)
+def test_ask_result_uses_only_valid_bracket_positions_in_first_cited_order(
+    answer: str, expected_ids: list[int]
+) -> None:
+    from news_dashboard.mcp.ask import shape_ask_result
+
+    result = shape_ask_result(
+        {
+            "answer": answer,
+            "sources": [
+                {"id": 11, "title": "One", "url": "https://one.test/story"},
+                {"id": 22, "title": "Two", "url": "https://two.test/story"},
+            ],
+            "trace_id": None,
+        }
+    )
+
+    assert [citation["id"] for citation in result["citations"]] == expected_ids
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        {"id": True, "title": "Boolean", "url": "https://example.test/1"},
+        {"id": 0, "title": "Zero", "url": "https://example.test/1"},
+        {"id": -1, "title": "Negative", "url": "https://example.test/1"},
+        {"id": 1, "title": "   ", "url": "https://example.test/1"},
+        {"id": 1, "title": "Title", "url": 123},
+        {"id": 1, "title": "Title", "url": "javascript:alert(1)"},
+        {"id": 1, "title": "Title", "url": "file:///etc/passwd"},
+        {"id": 1, "title": "Title", "url": "https://user:pass@example.test/story"},
+        {"id": 1, "title": "Title", "url": "https://example.test\\@evil.test/story"},
+        {"id": 1, "title": "Title", "url": "https:///missing-host"},
+    ],
+)
+def test_ask_result_omits_invalid_citation_records(source: dict[str, object]) -> None:
+    from news_dashboard.mcp.ask import shape_ask_result
+
+    result = shape_ask_result({"answer": "Claim [1]", "sources": [source], "trace_id": None})
+
+    assert result["citations"] == []
+
+
+def test_ask_result_normalizes_urls_and_deduplicates_article_ids() -> None:
+    from news_dashboard.mcp.ask import shape_ask_result
+
+    result = shape_ask_result(
+        {
+            "answer": "Claims [1], [2], and [3].",
+            "sources": [
+                {
+                    "id": 7,
+                    "title": " First title ",
+                    "url": "HTTPS://Example.TEST/story/?utm_source=mcp&b=2&a=1#fragment",
+                },
+                {"id": 7, "title": "Duplicate", "url": "https://duplicate.test"},
+                {"id": 8, "title": "HTTP stays HTTP", "url": "http://HTTP.test/path/"},
+            ],
+            "trace_id": "ABCDEF0123456789ABCDEF0123456789",
+        }
+    )
+
+    assert result == {
+        "answer": "Claims [1], [2], and [3].",
+        "citations": [
+            {
+                "id": 7,
+                "title": "First title",
+                "url": "https://example.test/story?a=1&b=2",
+            },
+            {"id": 8, "title": "HTTP stays HTTP", "url": "http://http.test/path"},
+        ],
+        "trace_id": "abcdef0123456789abcdef0123456789",
+        "truncated": False,
+    }
+
+
+@pytest.mark.parametrize(
+    ("trace_id", "expected"),
+    [
+        ("0123456789abcdef0123456789abcdef", "0123456789abcdef0123456789abcdef"),
+        ("ABCDEF0123456789ABCDEF0123456789", "abcdef0123456789abcdef0123456789"),
+        ("trace-local", None),
+        ("0" * 31, None),
+        (123, None),
+    ],
+)
+def test_ask_result_validates_trace_id(trace_id: object, expected: str | None) -> None:
+    from news_dashboard.mcp.ask import shape_ask_result
+
+    result = shape_ask_result({"answer": "Answer", "sources": [], "trace_id": trace_id})
+
+    assert result["trace_id"] == expected
+
+
+def test_ask_result_is_utf8_safe_and_within_structured_budget() -> None:
+    from news_dashboard.mcp.ask import shape_ask_result
+    from news_dashboard.mcp.server import MCP_STRUCTURED_CONTENT_BYTES
+
+    result = shape_ask_result(
+        {
+            "answer": '🙂雪\\"' * 8_000 + " [1] [2]",
+            "sources": [
+                {
+                    "id": 1,
+                    "title": 'Title 🙂雪\\"' * 1_000,
+                    "url": "https://example.test/" + "safe" * 1_000,
+                },
+                {"id": 2, "title": "Second", "url": "https://second.test/story"},
+            ],
+            "trace_id": "a" * 32,
+        }
+    )
+    encoded = json.dumps(result, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
+
+    assert len(encoded) <= MCP_STRUCTURED_CONTENT_BYTES
+    assert result["truncated"] is True
+    assert result["answer"]
+    result["answer"].encode("utf-8").decode("utf-8")
+    assert all(set(citation) == {"id", "title", "url"} for citation in result["citations"])
+
+
+def test_ask_news_transport_stays_within_wire_budget(
+    pg_clean: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from news_dashboard.mcp import service
+
+    monkeypatch.setenv("DATABASE_URL", pg_clean)
+    user_id = _make_user(pg_clean, "ask-wire-budget")
+    token = service.create_token(user_id, "client", scopes=("ask",), database_url=pg_clean)["token"]
+    monkeypatch.setattr(
+        "news_dashboard.assistant.service.ask",
+        lambda *_args, **_kwargs: {
+            "answer": '🙂\\"' * 20_000 + " [1]",
+            "sources": [
+                {
+                    "id": 1,
+                    "title": "雪" * 4_000,
+                    "url": "https://example.test/" + "x" * 5_000,
+                }
+            ],
+            "trace_id": None,
+        },
+    )
+    response_bodies: list[bytes] = []
+
+    async def exercise() -> None:
+        async with _mcp_client(token, response_bodies=response_bodies) as mcp_client:
+            result = await mcp_client.call_tool("ask_news", {"question": "Question"})
+        assert result.structured_content is not None
+        assert result.structured_content["truncated"] is True
+
+    asyncio.run(exercise())
+    tool_response = next(body for body in response_bodies if b'"structuredContent"' in body)
+    assert len(tool_response) <= 16_384
+    json.loads(tool_response.split(b"data: ", 1)[1].splitlines()[0])
+
+
 def test_get_news_article_returns_canonical_visible_article(
     pg_clean: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
