@@ -25,6 +25,13 @@ def mcp_enabled() -> bool:
     }
 
 
+def check_mcp_dependency() -> None:
+    """Run the bounded, read-only PostgreSQL probe required by MCP."""
+    with connect() as conn:
+        conn.execute("SET LOCAL statement_timeout = '2s'")
+        conn.execute("SELECT 1")
+
+
 def _hash_token(token: str) -> str:
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
 

@@ -62,6 +62,41 @@ source_health_checks_total = Counter(
     registry=registry,
 )
 
+mcp_auth_attempts_total = Counter(
+    "news_dashboard_mcp_auth_attempts_total",
+    "MCP authentication attempts by bounded outcome.",
+    ["status"],
+    registry=registry,
+)
+
+mcp_tool_calls_total = Counter(
+    "news_dashboard_mcp_tool_calls_total",
+    "MCP tool calls by catalog tool and bounded outcome.",
+    ["tool", "status"],
+    registry=registry,
+)
+
+mcp_tool_duration_seconds = Histogram(
+    "news_dashboard_mcp_tool_duration_seconds",
+    "MCP tool execution duration by catalog tool and bounded outcome.",
+    ["tool", "status"],
+    registry=registry,
+)
+
+mcp_rate_limits_total = Counter(
+    "news_dashboard_mcp_rate_limits_total",
+    "MCP requests rejected by the bounded rate limiter.",
+    ["status"],
+    registry=registry,
+)
+
+mcp_response_limits_total = Counter(
+    "news_dashboard_mcp_response_limits_total",
+    "MCP tool responses truncated at the transport response limit.",
+    ["tool"],
+    registry=registry,
+)
+
 
 def metrics_enabled() -> bool:
     return os.getenv("METRICS_ENABLED", "").strip().lower() in ("1", "true", "yes", "on")
@@ -77,6 +112,11 @@ __all__ = [
     "http_requests_total",
     "ingest_articles_new_total",
     "ingest_runs_total",
+    "mcp_auth_attempts_total",
+    "mcp_rate_limits_total",
+    "mcp_response_limits_total",
+    "mcp_tool_calls_total",
+    "mcp_tool_duration_seconds",
     "metrics_enabled",
     "render_metrics",
     "scheduler_job_runs_total",

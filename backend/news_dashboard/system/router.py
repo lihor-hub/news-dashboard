@@ -9,7 +9,9 @@ from __future__ import annotations
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request, Response
+from fastapi.responses import JSONResponse
 
+from news_dashboard.mcp import service as mcp_service
 from news_dashboard.system import service
 
 router = APIRouter()
@@ -33,6 +35,18 @@ def readiness() -> dict[str, Any]:
     except Exception as exc:
         raise HTTPException(status_code=503, detail="database unavailable") from exc
     return {"status": "ok"}
+
+
+@router.get("/api/mcp/health")
+def mcp_health() -> JSONResponse:
+    """Report MCP availability without exposing tokens, tools, or content."""
+    if not mcp_service.mcp_enabled():
+        return JSONResponse({"status": "disabled"})
+    try:
+        mcp_service.check_mcp_dependency()
+    except Exception:
+        return JSONResponse({"status": "dependency_failure"}, status_code=503)
+    return JSONResponse({"status": "healthy"})
 
 
 @router.get("/metrics")
