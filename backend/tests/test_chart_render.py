@@ -98,6 +98,36 @@ def test_helm_template_default() -> None:
 
 
 @pytest.mark.skipif(HELM_BIN is None, reason="helm binary not found on path")
+def test_helm_template_mcp_defaults_to_enabled_with_local_allowlists() -> None:
+    output = _render_chart()
+    deployment_env = _env_block(_manifest_for_kind(output, "Deployment"))
+
+    assert _env_entry(deployment_env, "MCP_SERVER_ENABLED") == (
+        '- name: MCP_SERVER_ENABLED\n  value: "true"'
+    )
+    assert "localhost:8080,127.0.0.1:8080,[::1]:8080" in _env_entry(
+        deployment_env, "MCP_ALLOWED_HOSTS"
+    )
+    assert "http://localhost:8080,http://127.0.0.1:8080,http://[::1]:8080" in _env_entry(
+        deployment_env, "MCP_ALLOWED_ORIGINS"
+    )
+
+
+@pytest.mark.skipif(HELM_BIN is None, reason="helm binary not found on path")
+def test_helm_template_mcp_accepts_explicit_shutdown_and_public_allowlists() -> None:
+    output = _render_chart(
+        "app.config.mcpServerEnabled=false",
+        "app.config.mcpAllowedHosts=news.example.com",
+        "app.config.mcpAllowedOrigins=https://news.example.com",
+    )
+    deployment_env = _env_block(_manifest_for_kind(output, "Deployment"))
+
+    assert 'value: "false"' in _env_entry(deployment_env, "MCP_SERVER_ENABLED")
+    assert 'value: "news.example.com"' in _env_entry(deployment_env, "MCP_ALLOWED_HOSTS")
+    assert 'value: "https://news.example.com"' in _env_entry(deployment_env, "MCP_ALLOWED_ORIGINS")
+
+
+@pytest.mark.skipif(HELM_BIN is None, reason="helm binary not found on path")
 def test_helm_template_dify_chat_is_disabled_by_default() -> None:
     output = _render_chart()
     deployment_env = _env_block(_manifest_for_kind(output, "Deployment"))

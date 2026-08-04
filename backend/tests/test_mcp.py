@@ -397,7 +397,7 @@ async def _mcp_client(
     ) -> httpx.AsyncClient:
         return httpx.AsyncClient(
             transport=httpx.ASGITransport(app=transport_app),
-            base_url="http://mcp.test",
+            base_url="http://localhost:8080",
             headers=headers,
             timeout=timeout,
             auth=auth,
@@ -405,7 +405,7 @@ async def _mcp_client(
         )
 
     transport = StreamableHttpTransport(
-        "http://mcp.test/mcp/",
+        "http://localhost:8080/mcp/",
         auth=token,
         httpx_client_factory=httpx_client_factory,
     )

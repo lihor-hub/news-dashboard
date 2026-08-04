@@ -19,6 +19,7 @@ from fastmcp import FastMCP
 from fastmcp.exceptions import AuthorizationError, ToolError
 from fastmcp.server.auth import require_scopes
 from fastmcp.server.dependencies import get_access_token
+from fastmcp.server.http import StarletteWithLifespan
 from fastmcp.server.middleware import CallNext, Middleware, MiddlewareContext
 from fastmcp.server.middleware.rate_limiting import RateLimitError, TokenBucketRateLimiter
 from fastmcp.server.middleware.response_limiting import ResponseLimitingMiddleware
@@ -52,6 +53,7 @@ from news_dashboard.mcp.briefings import (
     build_briefing_get_result,
     build_briefing_list_result,
 )
+from news_dashboard.mcp.config import McpHttpConfig
 from news_dashboard.mcp.models import (
     MAX_FILTER_VALUE_LENGTH,
     MAX_RESULT_LIMIT,
@@ -926,6 +928,19 @@ class _RequireMcpEnabled:
         await self.app(scope, receive, send)
 
 
-mcp_http_app = mcp.http_app(path="/", stateless_http=True, transport="http")
-mcp_http_app.add_middleware(_RequireMcpEnabled)
-mcp_http_app.add_middleware(_SanitizeMcpResponses)
+def create_mcp_http_app(server: FastMCP[Any], *, config: McpHttpConfig) -> StarletteWithLifespan:
+    """Build the guarded MCP ASGI application mounted by FastAPI."""
+    http_app = server.http_app(
+        path="/",
+        stateless_http=True,
+        transport="http",
+        host_origin_protection=True,
+        allowed_hosts=list(config.allowed_hosts),
+        allowed_origins=list(config.allowed_origins),
+    )
+    http_app.add_middleware(_RequireMcpEnabled)
+    http_app.add_middleware(_SanitizeMcpResponses)
+    return http_app
+
+
+mcp_http_app = create_mcp_http_app(mcp, config=McpHttpConfig.from_environment())

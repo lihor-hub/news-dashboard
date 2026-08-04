@@ -40,6 +40,12 @@ spec:
               value: {{ .Values.app.data.dir | quote }}
             - name: ENABLE_HSTS
               value: {{ .Values.app.config.enableHsts | quote }}
+            - name: MCP_SERVER_ENABLED
+              value: {{ .Values.app.config.mcpServerEnabled | quote }}
+            - name: MCP_ALLOWED_HOSTS
+              value: {{ .Values.app.config.mcpAllowedHosts | quote }}
+            - name: MCP_ALLOWED_ORIGINS
+              value: {{ .Values.app.config.mcpAllowedOrigins | quote }}
 {{- if .Values.postgresql.enabled }}
             - name: POSTGRES_HOST
               value: {{ printf "%s-postgres" (include "news-dashboard.fullname" .) | quote }}
