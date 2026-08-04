@@ -13,7 +13,7 @@ from news_dashboard.ingest.service import canonicalize_url
 ASK_STRUCTURED_CONTENT_BYTES = 4_800
 _MAX_CITATION_TITLE_BYTES = 512
 _MAX_CITATION_URL_BYTES = 2_048
-_BRACKET_POSITION = re.compile(r"\[([1-9][0-9]{0,18})\]")
+_BRACKET_POSITION = re.compile(r"(?<!\[)\[([1-9][0-9]{0,18})\](?!\])")
 _TRACE_ID = re.compile(r"[0-9a-fA-F]{32}")
 
 
@@ -83,10 +83,11 @@ def _safe_http_url_parts(value: str) -> SplitResult | None:
 
 
 def _normalized_url(value: object) -> tuple[str | None, bool]:
+    if isinstance(value, str) and len(value) > 16_384:
+        return None, True
     if (
         not isinstance(value, str)
         or not value
-        or len(value) > 16_384
         or "\\" in value
         or any(character.isspace() or ord(character) < 32 for character in value)
         or _safe_http_url_parts(value) is None

@@ -2329,6 +2329,47 @@ def test_ask_result_uses_only_valid_bracket_positions_in_first_cited_order(
 
 
 @pytest.mark.parametrize(
+    "answer",
+    [
+        "Nested [[1]]",
+        "Extra opener [[1]",
+        "Extra closer [1]]",
+        "Deep [[[1]]]",
+        "Mixed [ [1]] and [[1] ]",
+    ],
+)
+def test_ask_result_rejects_references_embedded_in_extra_brackets(answer: str) -> None:
+    from news_dashboard.mcp.ask import shape_ask_result
+
+    result = shape_ask_result(
+        {
+            "answer": answer,
+            "sources": [{"id": 1, "title": "One", "url": "https://one.test/story"}],
+            "trace_id": None,
+        }
+    )
+
+    assert result["citations"] == []
+
+
+def test_ask_result_accepts_adjacent_references_and_punctuation() -> None:
+    from news_dashboard.mcp.ask import shape_ask_result
+
+    result = shape_ask_result(
+        {
+            "answer": "Adjacent [1][2]; punctuation ([2]), [1].",
+            "sources": [
+                {"id": 1, "title": "One", "url": "https://one.test/story"},
+                {"id": 2, "title": "Two", "url": "https://two.test/story"},
+            ],
+            "trace_id": None,
+        }
+    )
+
+    assert [citation["id"] for citation in result["citations"]] == [1, 2]
+
+
+@pytest.mark.parametrize(
     "source",
     [
         {"id": True, "title": "Boolean", "url": "https://example.test/1"},
@@ -2432,6 +2473,33 @@ def test_ask_result_omits_overlong_url_instead_of_rewriting_destination() -> Non
     assert result["citations"] == []
     assert result["truncated"] is True
     assert overlong_url[:2_048] not in json.dumps(result)
+
+
+@pytest.mark.parametrize(
+    "overlong_url",
+    [
+        "https://example.test/" + "x" * 16_385,
+        "https://example.test/" + "é" * 1_100,
+    ],
+)
+def test_ask_result_marks_capacity_omission_while_preserving_other_citations(
+    overlong_url: str,
+) -> None:
+    from news_dashboard.mcp.ask import shape_ask_result
+
+    result = shape_ask_result(
+        {
+            "answer": "Oversized [1], valid [2].",
+            "sources": [
+                {"id": 1, "title": "Oversized", "url": overlong_url},
+                {"id": 2, "title": "Valid", "url": "https://valid.test/story"},
+            ],
+            "trace_id": None,
+        }
+    )
+
+    assert result["citations"] == [{"id": 2, "title": "Valid", "url": "https://valid.test/story"}]
+    assert result["truncated"] is True
 
 
 def test_ask_result_fails_closed_when_url_normalization_raises(
@@ -2557,6 +2625,8 @@ def test_ask_news_transport_stays_within_wire_budget(
     )
     assert len(tool_response) <= 16_384
     payload = _decode_sse_json_response(tool_response)
+    assert payload["jsonrpc"] == "2.0"
+    assert isinstance(payload["id"], int)
     structured = payload["result"]["structuredContent"]
     assert set(structured) == {"answer", "citations", "trace_id", "truncated"}
     assert structured["answer"] == answer_sentinel
