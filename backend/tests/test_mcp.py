@@ -6,7 +6,7 @@ import logging
 from collections.abc import AsyncIterator, Generator
 from contextlib import asynccontextmanager
 from threading import Event
-from typing import Any
+from typing import Any, cast
 
 import httpx
 import pytest
@@ -274,7 +274,9 @@ def test_reused_database_token_id_gets_fresh_opaque_rate_limit_identity(
     asyncio.run(exercise())
 
 
-@pytest.mark.parametrize("rate_limit_id", [None, "", "mcp-token:7", 7])
+@pytest.mark.parametrize(
+    "rate_limit_id", [None, "", "mcp-token:7", "mcp-rate:", "mcp-rate:not-hex", 7]
+)
 def test_rate_limiter_fails_closed_without_valid_internal_identity(
     monkeypatch: pytest.MonkeyPatch, rate_limit_id: object
 ) -> None:
@@ -2633,6 +2635,329 @@ def test_ask_news_transport_stays_within_wire_budget(
     assert isinstance(structured["citations"], list)
     assert structured["trace_id"] is None
     assert structured["truncated"] is True
+
+
+def test_ask_news_dedicated_bucket_refills_without_sleep() -> None:
+    from news_dashboard.mcp.server import _AskRateLimiter
+
+    now = [100.0]
+    limiter = _AskRateLimiter(clock=lambda: now[0])
+    identity = "mcp-rate:" + "a" * 64
+
+    assert limiter.consume(identity) is True
+    assert limiter.consume(identity) is True
+    assert limiter.consume(identity) is False
+    now[0] += 29.999
+    assert limiter.consume(identity) is False
+    now[0] += 0.001
+    assert limiter.consume(identity) is True
+
+
+def test_ask_news_dedicated_bucket_isolates_tokens_and_bounds_lru() -> None:
+    from news_dashboard.mcp.server import _AskRateLimiter
+
+    limiter = _AskRateLimiter(clock=lambda: 100.0, max_identities=4_096)
+    first_identity = "mcp-rate:" + "a" * 64
+    second_identity = "mcp-rate:" + "b" * 64
+    assert limiter.consume(first_identity) is True
+    assert limiter.consume(first_identity) is True
+    assert limiter.consume(first_identity) is False
+    assert limiter.consume(second_identity) is True
+
+    for index in range(4_096):
+        assert limiter.consume(f"mcp-rate:{index:064x}") is True
+    assert len(limiter) == 4_096
+    assert limiter.consume(first_identity) is True
+
+
+@pytest.mark.parametrize("identity", [None, "", "mcp-token:1", "mcp-rate:", "mcp-rate:not-hex", 1])
+def test_ask_news_dedicated_bucket_fails_closed_for_invalid_identity(identity: object) -> None:
+    from news_dashboard.mcp.server import _AskRateLimiter
+
+    limiter = _AskRateLimiter(clock=lambda: 100.0)
+    with pytest.raises(AuthorizationError, match="Authorization required"):
+        limiter.consume(identity)
+
+
+def test_ask_news_dedicated_middleware_ignores_non_ask_tools(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from news_dashboard.mcp import server
+
+    middleware = server._AskRateLimitingMiddleware(
+        limiter=server._AskRateLimiter(clock=lambda: 100.0)
+    )
+    opaque_value = "-".join(("private", "bearer"))
+    token = AccessToken(
+        token=opaque_value,
+        client_id="mcp-token:5",
+        subject="7",
+        scopes=["search"],
+        claims={"user_id": 7},
+    )
+    monkeypatch.setattr(server, "get_access_token", lambda: token)
+    context = MiddlewareContext(
+        message=type("Params", (), {"name": "search_news"})(), method="tools/call"
+    )
+
+    from fastmcp.tools.base import ToolResult
+
+    async def call_next(_context: MiddlewareContext[Any]) -> ToolResult:
+        return ToolResult(content="ok")
+
+    result = asyncio.run(middleware.on_call_tool(cast("Any", context), cast("Any", call_next)))
+    assert result.is_error is False
+
+
+def test_ask_news_uses_foreground_timeout_and_abandonable_thread(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from fastmcp.exceptions import ToolError
+
+    from news_dashboard.mcp import server
+
+    calls: dict[str, object] = {}
+
+    class ImmediateTimeout:
+        def __enter__(self) -> None:
+            raise TimeoutError
+
+        def __exit__(self, *_args: object) -> None:
+            return None
+
+    monkeypatch.setattr(
+        server, "fail_after", lambda seconds: (calls.update(seconds=seconds), ImmediateTimeout())[1]
+    )
+    monkeypatch.setattr(server, "_current_user_id", lambda: 7)
+    monkeypatch.setattr(server, "_ask_rate_limit_identity", lambda: "mcp-rate:" + "a" * 64)
+
+    with pytest.raises(ToolError, match="ask_timeout"):
+        asyncio.run(server.ask_news("Question"))
+    assert calls == {"seconds": 30.0}
+
+
+@pytest.mark.parametrize(
+    ("exception_factory", "code", "message"),
+    [
+        (
+            lambda: __import__(
+                "news_dashboard.embeddings", fromlist=["MissingAICredentialsError"]
+            ).MissingAICredentialsError("SECRET"),
+            "ask_not_configured",
+            "News answering is not configured.",
+        ),
+        (
+            lambda: __import__(
+                "news_dashboard.embeddings", fromlist=["EmbeddingUnavailableError"]
+            ).EmbeddingUnavailableError("provider body"),
+            "embedding_unavailable",
+            "News retrieval is temporarily unavailable.",
+        ),
+    ],
+)
+def test_ask_news_maps_application_errors_to_fixed_public_errors(
+    exception_factory: Any, code: str, message: str
+) -> None:
+    from news_dashboard.mcp.server import _public_ask_error
+
+    private_error = exception_factory()
+    public_error = _public_ask_error(private_error)
+    rendered = str(public_error)
+    assert code in rendered
+    assert message in rendered
+    assert str(private_error) not in rendered
+
+
+@pytest.mark.parametrize(
+    ("error_name", "expected_code"),
+    [
+        ("AuthenticationError", "provider_authentication_failed"),
+        ("PermissionDeniedError", "provider_authentication_failed"),
+        ("RateLimitError", "provider_rate_limited"),
+        ("APITimeoutError", "ask_timeout"),
+        ("APIConnectionError", "ask_unavailable"),
+        ("APIStatusError", "ask_unavailable"),
+    ],
+)
+def test_ask_news_maps_provider_errors_without_provider_details(
+    error_name: str, expected_code: str
+) -> None:
+    import openai
+
+    from news_dashboard.mcp.server import _public_ask_error
+
+    request = httpx.Request("POST", "https://provider.test/private")
+    if error_name in {"APITimeoutError", "APIConnectionError"}:
+        private_error = getattr(openai, error_name)(request=request)
+    else:
+        response = httpx.Response(503, request=request)
+        private_error = getattr(openai, error_name)(
+            "private provider response", response=response, body={"secret": "body"}
+        )
+    rendered = str(_public_ask_error(private_error))
+    assert expected_code in rendered
+    for private_value in ("provider.test", "private provider response", "secret", "body"):
+        assert private_value not in rendered
+
+
+def test_ask_news_preserves_cancellation_and_requests_abandonable_thread(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from news_dashboard.mcp import server
+
+    captured: dict[str, object] = {}
+
+    async def cancelled_run_sync(
+        _function: Any, *, abandon_on_cancel: bool = False
+    ) -> dict[str, Any]:
+        captured["abandon_on_cancel"] = abandon_on_cancel
+        raise asyncio.CancelledError
+
+    monkeypatch.setattr("news_dashboard.mcp.server.to_thread.run_sync", cancelled_run_sync)
+    monkeypatch.setattr(server, "_current_user_id", lambda: 7)
+
+    with pytest.raises(asyncio.CancelledError):
+        asyncio.run(server.ask_news("Question"))
+    assert captured == {"abandon_on_cancel": True}
+
+
+def test_ask_news_dedicated_rate_is_distinct_from_provider_rate(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from fastmcp.exceptions import ToolError
+    from fastmcp.tools.base import ToolResult
+
+    from news_dashboard.mcp import server
+
+    limiter = server._AskRateLimiter(clock=lambda: 100.0)
+    middleware = server._AskRateLimitingMiddleware(limiter=limiter)
+    opaque_value = "-".join(("private", "bearer"))
+    token = AccessToken(
+        token=opaque_value,
+        client_id="public-db-token-id",
+        subject="7",
+        scopes=["ask"],
+        claims={"user_id": 7, "rate_limit_id": "mcp-rate:" + "a" * 64},
+    )
+    monkeypatch.setattr(server, "get_access_token", lambda: token)
+    context = MiddlewareContext(
+        message=type("Params", (), {"name": "ask_news"})(), method="tools/call"
+    )
+
+    async def call_next(_context: MiddlewareContext[Any]) -> ToolResult:
+        return ToolResult(content="ok")
+
+    assert (
+        asyncio.run(middleware.on_call_tool(cast("Any", context), cast("Any", call_next))).is_error
+        is False
+    )
+    assert (
+        asyncio.run(middleware.on_call_tool(cast("Any", context), cast("Any", call_next))).is_error
+        is False
+    )
+    with pytest.raises(ToolError, match="ask_rate_limited"):
+        asyncio.run(middleware.on_call_tool(cast("Any", context), cast("Any", call_next)))
+    assert "provider_rate_limited" in str(
+        server._public_ask_error(
+            __import__("openai").RateLimitError(
+                "upstream private body",
+                response=httpx.Response(
+                    429, request=httpx.Request("POST", "https://provider.test/private")
+                ),
+                body=None,
+            )
+        )
+    )
+
+
+def test_ask_news_records_safe_failure_status_on_existing_trace(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from fastmcp.exceptions import ToolError
+
+    from news_dashboard.mcp import server
+
+    trace_id = "0123456789abcdef0123456789abcdef"
+    recorded: list[dict[str, object]] = []
+    monkeypatch.setattr(server, "_current_user_id", lambda: 7)
+    monkeypatch.setattr(
+        "news_dashboard.assistant.service.ask",
+        lambda *_args, **_kwargs: {
+            "answer": "private answer",
+            "sources": [],
+            "trace_id": trace_id,
+        },
+    )
+    monkeypatch.setattr(
+        server,
+        "shape_ask_result",
+        lambda _result: (_ for _ in ()).throw(ValueError("private shaping detail")),
+    )
+    monkeypatch.setattr(
+        "news_dashboard.ai_client.record_mcp_ask_result",
+        lambda recorded_trace_id, **kwargs: recorded.append(
+            {"trace_id": recorded_trace_id, **kwargs}
+        ),
+    )
+
+    with pytest.raises(ToolError, match="ask_unavailable"):
+        asyncio.run(server.ask_news("private question"))
+    assert recorded == [
+        {
+            "trace_id": trace_id,
+            "citation_count": 0,
+            "truncated": False,
+            "status": "error",
+        }
+    ]
+
+
+def test_ask_news_timeout_error_is_stable_through_real_transport(
+    pg_clean: str,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    from news_dashboard.mcp import service
+
+    monkeypatch.setenv("DATABASE_URL", pg_clean)
+    user_id = _make_user(pg_clean, "ask-stable-timeout")
+    bearer = service.create_token(user_id, "client", scopes=("ask",), database_url=pg_clean)[
+        "token"
+    ]
+    private_values = (
+        "private question",
+        "private context",
+        "private answer",
+        bearer,
+        "https://provider.test/private",
+        "SELECT private FROM secrets",
+    )
+
+    def timed_out(*_args: Any, **_kwargs: Any) -> dict[str, Any]:
+        raise TimeoutError(" ".join(private_values))
+
+    monkeypatch.setattr("news_dashboard.assistant.service.ask", timed_out)
+    caplog.set_level(logging.DEBUG)
+
+    async def exercise() -> None:
+        async with _mcp_client(bearer) as client:
+            result = await client.call_tool(
+                "ask_news", {"question": private_values[0]}, raise_on_error=False
+            )
+        assert result.is_error is True
+        rendered = " ".join(item.text for item in result.content if isinstance(item, TextContent))
+        assert "ask_timeout" in rendered
+        assert "News answering timed out; retry later." in rendered
+
+    asyncio.run(exercise())
+    formatter = logging.Formatter("%(levelname)s %(name)s %(message)s")
+    logs = "\n".join(
+        formatter.format(record)
+        for record in caplog.records
+        if record.name.startswith(("news_dashboard", "fastmcp", "mcp.server"))
+    )
+    for private_value in private_values:
+        assert private_value not in logs
 
 
 def test_get_news_article_returns_canonical_visible_article(
