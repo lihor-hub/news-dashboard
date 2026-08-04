@@ -143,6 +143,7 @@ for _extraction_logger_name in (
     "news_dashboard.body_fetch",
     "news_dashboard.selenium_client",
     "news_dashboard.ai_client",
+    "news_dashboard.embeddings",
 ):
     logging.getLogger(_extraction_logger_name).addFilter(_DropExtractionDetailsDuringMcp())
 

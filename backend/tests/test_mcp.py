@@ -1506,7 +1506,10 @@ def test_get_news_article_suppresses_real_body_fetch_diagnostics_during_mcp(
 
 def test_mcp_extraction_log_filters_are_request_scoped_and_reset(
     caplog: pytest.LogCaptureFixture,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    from news_dashboard import embeddings
+    from news_dashboard.graph_store import GraphUnavailableError
     from news_dashboard.mcp.server import _SanitizeMcpResponses
 
     extraction_loggers = tuple(
@@ -1515,8 +1518,15 @@ def test_mcp_extraction_log_filters_are_request_scoped_and_reset(
             "news_dashboard.body_fetch",
             "news_dashboard.selenium_client",
             "news_dashboard.ai_client",
+            "news_dashboard.embeddings",
         )
     )
+    graph_detail = "neo4j=https://private graph-article-781 connection-secret"
+
+    def fail_graph_store() -> None:
+        raise GraphUnavailableError(graph_detail)
+
+    monkeypatch.setattr("news_dashboard.graph_store.graph_store_from_env", fail_graph_store)
     mcp_started = asyncio.Event()
     allow_mcp_to_log = asyncio.Event()
 
@@ -1525,6 +1535,7 @@ def test_mcp_extraction_log_filters_are_request_scoped_and_reset(
         await allow_mcp_to_log.wait()
         for extraction_logger in extraction_loggers:
             extraction_logger.warning("mcp-private-url provider-private-detail")
+        assert embeddings.graph_context_for_articles([781]) is None
 
     async def raising_mcp_app(_scope: Scope, _receive: Receive, _send: Send) -> None:
         extraction_loggers[0].warning("mcp-error-private-detail")
@@ -1560,6 +1571,7 @@ def test_mcp_extraction_log_filters_are_request_scoped_and_reset(
         with pytest.raises(asyncio.CancelledError):
             await _SanitizeMcpResponses(cancelled_mcp_app)(scope, receive, send)
         extraction_loggers[1].warning("visible-after-cancellation")
+        assert embeddings.graph_context_for_articles([781]) is None
 
     asyncio.run(exercise())
     rendered = caplog.text
@@ -1570,6 +1582,7 @@ def test_mcp_extraction_log_filters_are_request_scoped_and_reset(
     assert "provider-private-detail" not in rendered
     assert "mcp-error-private-detail" not in rendered
     assert "mcp-cancel-private-detail" not in rendered
+    assert rendered.count(graph_detail) == 1
 
 
 def test_latest_news_returns_compact_articles_visible_to_token_owner(

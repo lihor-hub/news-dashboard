@@ -6,7 +6,7 @@ import logging
 import time
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Any
+from typing import Any, Literal
 from unittest.mock import MagicMock
 
 import httpx
@@ -417,6 +417,90 @@ def test_private_answer_records_safe_generation_usage_at_client_boundary(
     rendered = repr((langfuse.mock_calls, observation.mock_calls))
     for secret in ("PRIVATE SYSTEM", "PRIVATE USER PROMPT", "PRIVATE ANSWER", "secret"):
         assert secret not in rendered
+
+
+def test_private_ask_root_exits_cleanly_and_returns_trace_for_small_corpus(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from news_dashboard import ai_client
+    from news_dashboard.assistant.service import AskExecutionPolicy
+
+    escaped: list[BaseException | None] = []
+    root = MagicMock()
+
+    class CleanExitContext:
+        def __enter__(self) -> MagicMock:
+            return root
+
+        def __exit__(
+            self, _kind: Any, error: BaseException | None, _traceback: Any
+        ) -> Literal[False]:
+            escaped.append(error)
+            return False
+
+    client = MagicMock()
+    client.start_as_current_observation.return_value = CleanExitContext()
+    client.get_current_trace_id.return_value = "0123456789abcdef0123456789abcdef"
+    monkeypatch.setattr(ai_client, "langfuse_enabled", lambda: True)
+    monkeypatch.setattr(ai_client, "_client", lambda: client)
+    monkeypatch.setattr(
+        embeddings_mod,
+        "_ask_impl",
+        lambda *_args, **_kwargs: {
+            "answer": "Not enough articles",
+            "sources": [],
+            "trace_id": None,
+        },
+    )
+
+    result = embeddings_mod.ask(
+        "PRIVATE QUESTION", user_id=7, execution_policy=AskExecutionPolicy.mcp()
+    )
+
+    assert escaped == [None]
+    assert result["trace_id"] == "0123456789abcdef0123456789abcdef"
+    root.update.assert_called_once_with(
+        output={"answer_chars": 19, "source_count": 0, "status": "ok"}
+    )
+
+
+def test_private_ask_root_reraises_only_after_clean_observation_exit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from news_dashboard import ai_client
+    from news_dashboard.assistant.service import AskExecutionPolicy
+
+    escaped: list[BaseException | None] = []
+    root = MagicMock()
+
+    class CleanExitContext:
+        def __enter__(self) -> MagicMock:
+            return root
+
+        def __exit__(
+            self, _kind: Any, error: BaseException | None, _traceback: Any
+        ) -> Literal[False]:
+            escaped.append(error)
+            return False
+
+    client = MagicMock()
+    client.start_as_current_observation.return_value = CleanExitContext()
+    monkeypatch.setattr(ai_client, "langfuse_enabled", lambda: True)
+    monkeypatch.setattr(ai_client, "_client", lambda: client)
+    hostile = "provider=https://secret sql=SELECT bearer=private"
+
+    def fail(*_args: Any, **_kwargs: Any) -> dict[str, Any]:
+        raise RuntimeError(hostile)
+
+    monkeypatch.setattr(embeddings_mod, "_ask_impl", fail)
+    with pytest.raises(RuntimeError, match="provider=https://secret"):
+        embeddings_mod.ask("PRIVATE QUESTION", user_id=7, execution_policy=AskExecutionPolicy.mcp())
+
+    assert escaped == [None]
+    root.update.assert_called_once_with(
+        output={"status": "error"}, level="ERROR", status_message="ask failed"
+    )
+    assert hostile not in repr(root.mock_calls)
 
 
 # ── /api/ask surfaces a clean error on persistent embedding failure ────────

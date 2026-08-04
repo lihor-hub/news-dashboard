@@ -400,6 +400,9 @@ def _safe_provider_call[T](
         "attempt": attempt,
         "retry": request_attempt - 1,
     }
+    response: T | None = None
+    failure: BaseException | None = None
+    failure_traceback = None
     with _client().start_as_current_observation(
         name=f"{observation.operation}-{provider}",
         as_type=observation.as_type,
@@ -410,26 +413,32 @@ def _safe_provider_call[T](
     ) as provider_observation:
         try:
             response = call(client)
-        except Exception:
+        except BaseException as exc:
             provider_observation.update(
                 output={"status": "error"},
                 level="ERROR",
                 status_message="provider request failed",
                 metadata={**metadata, "outcome": "failure"},
             )
-            raise
-        update: dict[str, Any] = {
-            "output": {"status": "ok"},
-            "usage_details": _usage_details(response),
-            "metadata": {**metadata, "outcome": "success"},
-        }
-        cost_details = _cost_details(response)
-        if cost_details:
-            update["cost_details"] = cost_details
-        provider_observation.update(
-            **update,
-        )
-        return response
+            response = None
+            failure = exc
+            failure_traceback = exc.__traceback__
+        else:
+            update: dict[str, Any] = {
+                "output": {"status": "ok"},
+                "usage_details": _usage_details(response),
+                "metadata": {**metadata, "outcome": "success"},
+            }
+            cost_details = _cost_details(response)
+            if cost_details:
+                update["cost_details"] = cost_details
+            provider_observation.update(**update)
+    if failure is not None:
+        raise failure.with_traceback(failure_traceback)
+    if response is None:
+        message = "Provider returned no response"
+        raise RuntimeError(message)
+    return response
 
 
 class _FallbackCompletions:

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 from types import SimpleNamespace
-from typing import Any
+from typing import Any, Literal
 from unittest.mock import MagicMock
 
 import pytest
@@ -247,12 +247,26 @@ def test_safe_provider_observations_record_primary_failure_and_fallback(
 
     failed = MagicMock()
     succeeded = MagicMock()
-    failed_context = MagicMock()
-    failed_context.__enter__.return_value = failed
-    succeeded_context = MagicMock()
-    succeeded_context.__enter__.return_value = succeeded
+    escaped: list[BaseException | None] = []
+
+    class CleanExitContext:
+        def __init__(self, observation: MagicMock) -> None:
+            self.observation = observation
+
+        def __enter__(self) -> MagicMock:
+            return self.observation
+
+        def __exit__(
+            self, _kind: Any, error: BaseException | None, _traceback: Any
+        ) -> Literal[False]:
+            escaped.append(error)
+            return False
+
     langfuse = MagicMock()
-    langfuse.start_as_current_observation.side_effect = [failed_context, succeeded_context]
+    langfuse.start_as_current_observation.side_effect = [
+        CleanExitContext(failed),
+        CleanExitContext(succeeded),
+    ]
     primary = MagicMock()
     primary.embeddings.create.side_effect = openai.APIConnectionError(
         request=httpx.Request("POST", "https://provider.invalid")
@@ -283,6 +297,7 @@ def test_safe_provider_observations_record_primary_failure_and_fallback(
     assert failed.update.call_args.kwargs["output"] == {"status": "error"}
     assert failed.update.call_args.kwargs["status_message"] == "provider request failed"
     assert succeeded.update.call_args.kwargs["usage_details"] == {"input": 2, "total": 2}
+    assert escaped == [None, None]
     rendered = repr((langfuse.mock_calls, failed.mock_calls, succeeded.mock_calls))
     for secret in ("PRIVATE", "primary-secret", "fallback-secret", "provider.invalid"):
         assert secret not in rendered

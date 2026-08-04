@@ -355,15 +355,35 @@ def _generate_answer(
     )
     client = _client()
     if not trace_content:
+        failure: BaseException | None = None
+        failure_traceback = None
+        answer: str | None = None
+        trace_id: str | None = None
         with client.start_as_current_observation(
             name="answer-pipeline",
             as_type="chain",
             input=trace_input,
             prompt=prompt.langfuse_prompt,
         ) as root:
-            answer = _answer_with_policy(prompt.text, user_prompt, execution_policy)
-            root.update(output={"answer_chars": len(answer), "status": "ok"})
-            return answer, client.get_current_trace_id()
+            try:
+                answer = _answer_with_policy(prompt.text, user_prompt, execution_policy)
+            except BaseException as exc:
+                failure = exc
+                failure_traceback = exc.__traceback__
+                root.update(
+                    output={"status": "error"},
+                    level="ERROR",
+                    status_message="answer generation failed",
+                )
+            else:
+                root.update(output={"answer_chars": len(answer), "status": "ok"})
+                trace_id = client.get_current_trace_id()
+        if failure is not None:
+            raise failure.with_traceback(failure_traceback)
+        if answer is None:
+            message = "Answer generation returned no result"
+            raise RuntimeError(message)
+        return answer, trace_id
 
     attribute_kwargs: dict[str, Any] = {
         "user_id": str(user_id) if user_id is not None else None,
@@ -730,6 +750,9 @@ def ask(
     from news_dashboard.ai_client import _client
 
     corpus = "all_visible" if include_all else "saved_and_read"
+    failure: BaseException | None = None
+    failure_traceback = None
+    result: dict[str, Any] | None = None
     with (
         propagate_attributes(
             user_id=str(user_id) if user_id is not None else None,
@@ -747,19 +770,36 @@ def ask(
             },
         ) as root,
     ):
-        result = _ask_impl(
-            query,
-            db_path,
-            include_all=include_all,
-            user_id=user_id,
-            session_id=session_id,
-            execution_policy=execution_policy,
-        )
-        root.update(
-            output={
-                "answer_chars": len(str(result.get("answer", ""))),
-                "source_count": len(result.get("sources", [])),
-                "status": "ok",
-            }
-        )
-        return result
+        try:
+            result = _ask_impl(
+                query,
+                db_path,
+                include_all=include_all,
+                user_id=user_id,
+                session_id=session_id,
+                execution_policy=execution_policy,
+            )
+        except BaseException as exc:
+            failure = exc
+            failure_traceback = exc.__traceback__
+            root.update(
+                output={"status": "error"},
+                level="ERROR",
+                status_message="ask failed",
+            )
+        else:
+            if result.get("trace_id") is None:
+                result["trace_id"] = _client().get_current_trace_id()
+            root.update(
+                output={
+                    "answer_chars": len(str(result.get("answer", ""))),
+                    "source_count": len(result.get("sources", [])),
+                    "status": "ok",
+                }
+            )
+    if failure is not None:
+        raise failure.with_traceback(failure_traceback)
+    if result is None:
+        message = "Ask returned no result"
+        raise RuntimeError(message)
+    return result
