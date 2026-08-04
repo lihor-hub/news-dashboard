@@ -73,6 +73,7 @@ from news_dashboard.mcp.models import (
     WorkflowStates,
 )
 from news_dashboard.metrics import (
+    mcp_auth_attempts_total,
     mcp_rate_limits_total,
     mcp_response_limits_total,
     mcp_tool_calls_total,
@@ -997,8 +998,36 @@ class _RequireMcpEnabled:
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         if scope["type"] == "http" and not service.mcp_enabled():
+            mcp_auth_attempts_total.labels(status="disabled").inc()
+            logger.info("mcp event=auth status=disabled")
             await PlainTextResponse("Not Found", status_code=404)(scope, receive, send)
             return
+        await self.app(scope, receive, send)
+
+
+class _ObservePreVerifierAuthentication:
+    """Record credentials FastMCP rejects before invoking the token verifier."""
+
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] == "http":
+            authorization = [
+                value for name, value in scope["headers"] if name.lower() == b"authorization"
+            ]
+            status: str | None = None
+            if not authorization:
+                status = "missing"
+            elif len(authorization) != 1:
+                status = "invalid"
+            else:
+                scheme, separator, credential = authorization[0].partition(b" ")
+                if not separator or scheme.lower() != b"bearer" or not credential.strip():
+                    status = "invalid"
+            if status is not None:
+                mcp_auth_attempts_total.labels(status=status).inc()
+                logger.info("mcp event=auth status=%s", status)
         await self.app(scope, receive, send)
 
 
@@ -1047,6 +1076,7 @@ def create_mcp_http_app(server: FastMCP[Any], *, config: McpHttpConfig) -> Starl
         allowed_hosts=list(config.allowed_hosts),
         allowed_origins=list(config.allowed_origins),
     )
+    http_app.add_middleware(_ObservePreVerifierAuthentication)
     http_app.add_middleware(_RequireMcpEnabled)
     http_app.add_middleware(_SanitizeMcpResponses)
     http_app.add_middleware(

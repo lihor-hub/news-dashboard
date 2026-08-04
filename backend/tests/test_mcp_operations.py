@@ -6,6 +6,8 @@ from typing import Any, cast
 
 import pytest
 from fastapi.testclient import TestClient
+from starlette.applications import Starlette
+from starlette.routing import Mount
 
 from news_dashboard.main import app
 
@@ -57,6 +59,79 @@ def test_mcp_health_hides_dependency_failures(monkeypatch: pytest.MonkeyPatch) -
     assert response.status_code == 503
     assert response.json() == {"status": "dependency_failure"}
     assert private_detail not in response.text
+
+
+def test_mcp_health_uses_independent_connection_timeout(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from news_dashboard.mcp import service
+
+    captured: dict[str, object] = {}
+    queries: list[str] = []
+
+    class Connection:
+        def __enter__(self) -> Connection:
+            return self
+
+        def __exit__(self, *_args: object) -> None:
+            return None
+
+        def execute(self, query: str) -> None:
+            queries.append(query)
+
+    def connect(dsn: str, *, connect_timeout: int) -> Connection:
+        captured.update(dsn=dsn, connect_timeout=connect_timeout)
+        return Connection()
+
+    monkeypatch.setenv("DATABASE_URL", "postgresql://health.example/news")
+    monkeypatch.setenv("DB_POOL_TIMEOUT_SECONDS", "300")
+    monkeypatch.setenv("DB_CONNECT_MAX_ATTEMPTS", "300")
+    monkeypatch.setattr("news_dashboard.mcp.service.psycopg.connect", connect)
+
+    service.check_mcp_dependency()
+
+    assert captured["dsn"] == "postgresql://health.example/news"
+    assert captured["connect_timeout"] == 2
+    assert queries == ["SET statement_timeout = '2s'", "SELECT 1"]
+
+
+@pytest.mark.parametrize(
+    ("authorization", "status"),
+    [(None, "missing"), ("Basic private-credential", "invalid")],
+)
+def test_http_auth_boundary_records_pre_verifier_failures_once(
+    authorization: str | None,
+    status: str,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    from news_dashboard.mcp.config import McpHttpConfig
+    from news_dashboard.mcp.server import create_mcp_http_app, mcp
+    from news_dashboard.metrics import mcp_auth_attempts_total
+
+    http_app = create_mcp_http_app(
+        mcp,
+        config=McpHttpConfig(
+            allowed_hosts=("mcp.test",),
+            allowed_origins=("https://mcp.test",),
+        ),
+    )
+    mounted = Starlette(routes=[Mount("/mcp", app=http_app)], lifespan=http_app.lifespan)
+    headers = {"host": "mcp.test"}
+    if authorization is not None:
+        headers["authorization"] = authorization
+    before = mcp_auth_attempts_total.labels(status=status)._value.get()
+    caplog.set_level(logging.INFO, logger="news_dashboard.mcp")
+
+    with TestClient(mounted, raise_server_exceptions=False) as client:
+        response = client.post("/mcp/", headers=headers, json={"jsonrpc": "2.0", "id": 1})
+
+    assert response.status_code == 401
+    assert mcp_auth_attempts_total.labels(status=status)._value.get() == before + 1
+    events = [
+        record.getMessage() for record in caplog.records if "event=auth" in record.getMessage()
+    ]
+    assert events == [f"mcp event=auth status={status}"]
+    assert "private-credential" not in caplog.text
 
 
 def test_mcp_metrics_have_only_fixed_cardinality_labels() -> None:
