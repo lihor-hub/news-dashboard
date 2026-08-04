@@ -37,6 +37,7 @@ def test_container_smoke_probes_mounted_transport_and_never_echoes_bearer() -> N
     ):
         assert required in script
     assert 'echo "${smoke_token}"' not in script
+    assert "Authorization: Bearer ${smoke_token}" not in script
     assert "set -x" not in script
 
 

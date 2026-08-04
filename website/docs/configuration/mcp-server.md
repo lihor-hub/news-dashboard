@@ -209,10 +209,13 @@ MCP clients should use tool discovery rather than assuming a deployment exposes 
 
 ## Client examples
 
-Keep the one-time bearer value in an environment variable rather than a checked-in file, URL, or command argument:
+Keep the endpoint and one-time bearer value in environment variables rather than a checked-in file, URL, command argument, or shell-history entry. The hidden prompt below does not place the token value in the command itself:
 
 ```bash
-export MCP_TOKEN='ndmcp_replace-with-the-one-time-value'
+export NEWS_DASHBOARD_MCP_URL='https://news.example.com/mcp/'
+read -rsp 'News Dashboard MCP token: ' NEWS_DASHBOARD_MCP_TOKEN
+export NEWS_DASHBOARD_MCP_TOKEN
+printf '\n'
 ```
 
 A FastMCP Python client can read the credential at runtime:
@@ -226,8 +229,8 @@ from fastmcp import Client
 
 async def main() -> None:
     async with Client(
-        "https://news.example.com/mcp/",
-        auth=os.environ["MCP_TOKEN"],
+        os.environ["NEWS_DASHBOARD_MCP_URL"],
+        auth=os.environ["NEWS_DASHBOARD_MCP_TOKEN"],
     ) as client:
         result = await client.call_tool("search_news", {"q": "PostgreSQL"})
         print(result.structured_content)
@@ -243,9 +246,9 @@ Claude Code supports an environment placeholder in a project `.mcp.json`. Commit
   "mcpServers": {
     "news-dashboard": {
       "type": "http",
-      "url": "https://news.example.com/mcp/",
+      "url": "${NEWS_DASHBOARD_MCP_URL}",
       "headers": {
-        "Authorization": "Bearer ${MCP_TOKEN}"
+        "Authorization": "Bearer ${NEWS_DASHBOARD_MCP_TOKEN}"
       }
     }
   }

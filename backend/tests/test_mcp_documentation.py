@@ -32,7 +32,8 @@ def test_published_mcp_docs_cover_operational_and_client_contracts() -> None:
         "/api/mcp/health",
         "/metrics",
         "https://news.example.com/mcp/",
-        "MCP_TOKEN",
+        "NEWS_DASHBOARD_MCP_URL",
+        "NEWS_DASHBOARD_MCP_TOKEN",
         "Langfuse",
         "Keycloak",
     ):
@@ -49,3 +50,6 @@ def test_published_mcp_docs_have_no_legacy_or_stale_availability_claims() -> Non
         "tokens are read-only and disabled by default",
     ):
         assert stale not in combined
+
+    assert "export MCP_TOKEN='ndmcp_" not in combined
+    assert "read -rsp" in combined

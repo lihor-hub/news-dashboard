@@ -139,8 +139,7 @@ wait_for_app
 
 disabled_code="$(curl --silent --output /tmp/mcp-smoke-disabled-$$ \
   --write-out '%{http_code}' -H 'Host: localhost:8080' -H "${content_type}" -H "${accept}" \
-  -H "Authorization: Bearer ${smoke_token}" --data "${initialize}" \
-  "http://127.0.0.1:${app_port}/mcp/")"
+  --data "${initialize}" "http://127.0.0.1:${app_port}/mcp/")"
 test "${disabled_code}" = 404
 ! grep -qi '<!doctype html' /tmp/mcp-smoke-disabled-$$
 rm -f /tmp/mcp-smoke-disabled-$$
