@@ -22,3 +22,31 @@ The first focused run failed because the config/factory module and deployment va
 - `git diff --check`: passed.
 
 The shared PostgreSQL container was neither started, stopped, nor reconfigured.
+
+## Review repair
+
+- Added an outer ASGI Host/Origin guard so exact routing-header validation runs
+  before FastMCP authentication. Unconfigured hosts (including implicit test or
+  server hosts) now return a generic 421; an Origin is optional but, when sent,
+  must exactly match an allowlisted scheme and authority or receives a generic
+  403.
+- Changed production Compose to require `APP_BASE_URL` and pass empty optional
+  MCP overrides, allowing the application to derive its exact public host and
+  origin instead of injecting localhost values.
+- Changed Helm MCP allowlist defaults to empty and derive them from
+  `app.publicBaseUrl` or the configured ingress. Localhost values remain only
+  for development renders with no public URL or ingress. The production values
+  now exercise ingress derivation rather than repeating the public hostname.
+- Added regressions for implicit hosts, same-host wrong-scheme origins,
+  production Compose fail-closed configuration, production ingress derivation,
+  and Helm public-base-URL derivation.
+
+Repair verification:
+
+- Focused config/Compose/Helm tests: `50 passed`.
+- All MCP plus deployment tests: `213 passed`; three unrelated workers hit the
+  shared PostgreSQL container's `max_locks_per_transaction` limit. The affected
+  briefing module passed serially: `64 passed`.
+- `make lint`: passed.
+- `make typecheck`: passed.
+- `git diff --check`: passed.
