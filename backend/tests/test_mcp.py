@@ -422,7 +422,9 @@ async def _mcp_client(
 
 def _decode_sse_json_response(body: bytes) -> dict[str, Any]:
     lines = body.splitlines()
-    assert lines[0] == b"event: message"
+    # FastMCP may emit an SSE keepalive comment before the response event when
+    # a bounded tool call takes longer than its ping interval.
+    assert b"event: message" in lines
     data_line = next(line for line in lines if line.startswith(b"data: "))
     payload = json.loads(data_line.removeprefix(b"data: "))
     assert isinstance(payload, dict)
