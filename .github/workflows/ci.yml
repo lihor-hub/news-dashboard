@@ -154,6 +154,22 @@ jobs:
         run: |
           npm run test:frontend:smoke --silent
 
+  mcp-container-smoke:
+    name: MCP container smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    if: github.event_name == 'pull_request' || github.event_name == 'merge_group' || github.event_name == 'workflow_dispatch'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: '3.14'
+          cache: pip
+      - run: pip install -e '.[dev]'
+      - name: Build and probe the supported application container
+        run: scripts/smoke-mcp-container.sh
+
   # ── 3. TEST (BACKEND) ──────────────────────────────────────────────────────
   # On pull requests: runs only when backend files changed (or forced via dispatch).
   # On push to main: always runs.
@@ -275,7 +291,7 @@ jobs:
   # (all-skipped = no relevant files changed, so the check still passes).
   test:
     name: Test & build
-    needs: [test-backend, test-frontend, test-a11y]
+    needs: [test-backend, test-frontend, test-a11y, mcp-container-smoke]
     runs-on: ubuntu-latest
     if: always()
     steps:
@@ -284,6 +300,7 @@ jobs:
           backend="${{ needs.test-backend.result }}"
           frontend="${{ needs.test-frontend.result }}"
           a11y="${{ needs.test-a11y.result }}"
+          mcp_container="${{ needs.mcp-container-smoke.result }}"
           if [[ "$backend" == "failure" || "$backend" == "cancelled" ]]; then
             echo "Backend tests failed or were cancelled ($backend)" && exit 1
           fi
@@ -293,7 +310,10 @@ jobs:
           if [[ "$a11y" == "failure" || "$a11y" == "cancelled" ]]; then
             echo "Accessibility tests failed or were cancelled ($a11y)" && exit 1
           fi
-          echo "All test lanes passed (backend=$backend, frontend=$frontend, a11y=$a11y)"
+          if [[ "$mcp_container" == "failure" || "$mcp_container" == "cancelled" ]]; then
+            echo "MCP container smoke failed or was cancelled ($mcp_container)" && exit 1
+          fi
+          echo "All test lanes passed (backend=$backend, frontend=$frontend, a11y=$a11y, mcp_container=$mcp_container)"
   # ── 7. COVERAGE UPLOAD ─────────────────────────────────────────────────────
   # Uploads coverage reports to Codecov for PR comments, status checks, and
   # coverage trends. Merge groups run the full test suite, so they also upload
