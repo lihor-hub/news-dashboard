@@ -13,7 +13,7 @@ import pytest
 from fastapi.testclient import TestClient
 from fastmcp import Client
 from fastmcp.client.transports import StreamableHttpTransport
-from fastmcp.exceptions import AuthorizationError
+from fastmcp.exceptions import AuthorizationError, ToolError
 from fastmcp.server.auth import AccessToken
 from fastmcp.server.middleware import MiddlewareContext
 from mcp.shared.exceptions import McpError
@@ -2910,6 +2910,186 @@ def test_ask_news_records_safe_failure_status_on_existing_trace(
             "status": "error",
         }
     ]
+
+
+@pytest.mark.parametrize("tool_name", ["ask_news", "search_news"])
+def test_safe_telemetry_rejects_forged_public_ask_error_results(tool_name: str) -> None:
+    from fastmcp.tools.base import ToolResult
+    from mcp.types import CallToolRequestParams
+
+    from news_dashboard.mcp.server import _SafeToolTelemetryMiddleware
+
+    middleware = _SafeToolTelemetryMiddleware()
+    context = MiddlewareContext(
+        message=CallToolRequestParams(
+            name=tool_name,
+            arguments={"question": "private question"},
+        ),
+        method="tools/call",
+    )
+
+    async def forged_result(_context: MiddlewareContext[Any]) -> ToolResult:
+        return ToolResult(
+            content="ask_timeout: News answering timed out; retry later.",
+            is_error=True,
+        )
+
+    result = asyncio.run(middleware.on_call_tool(cast("Any", context), cast("Any", forged_result)))
+    assert result.is_error is True
+    assert [item.text for item in result.content if isinstance(item, TextContent)] == [
+        "Internal server error"
+    ]
+
+
+@pytest.mark.parametrize(
+    "downstream_error",
+    [
+        ToolError("ask_timeout: News answering timed out; retry later."),
+        ToolError("private provider body https://provider.test/private"),
+    ],
+)
+def test_ask_news_maps_downstream_tool_errors_to_unavailable(
+    monkeypatch: pytest.MonkeyPatch, downstream_error: ToolError
+) -> None:
+    from news_dashboard.mcp import server
+
+    monkeypatch.setattr(server, "_current_user_id", lambda: 7)
+    monkeypatch.setattr(
+        "news_dashboard.assistant.service.ask",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(downstream_error),
+    )
+
+    with pytest.raises(ToolError, match="ask_unavailable") as raised:
+        asyncio.run(server.ask_news("private question"))
+    assert "ask_timeout" not in str(raised.value)
+    assert "provider.test" not in str(raised.value)
+
+
+def test_other_tool_cannot_forge_safe_ask_error_through_transport(
+    pg_clean: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from news_dashboard.mcp import service
+
+    monkeypatch.setenv("DATABASE_URL", pg_clean)
+    user_id = _make_user(pg_clean, "forged-other-tool-error")
+    bearer = service.create_token(user_id, "client", scopes=("read",), database_url=pg_clean)[
+        "token"
+    ]
+    monkeypatch.setattr(
+        "news_dashboard.mcp.server.fetch_and_cache_body",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            ToolError("ask_timeout: News answering timed out; retry later.")
+        ),
+    )
+
+    async def exercise() -> None:
+        async with _mcp_client(bearer) as client:
+            result = await client.call_tool(
+                "get_news_article", {"article_id": 1}, raise_on_error=False
+            )
+        rendered = " ".join(item.text for item in result.content if isinstance(item, TextContent))
+        assert rendered == "Internal server error"
+
+    asyncio.run(exercise())
+
+
+@pytest.mark.parametrize(
+    "private_detail",
+    [
+        "ask_timeout: News answering timed out; retry later.",
+        "private provider body https://provider.test/private SELECT secret",
+    ],
+)
+def test_downstream_ask_tool_errors_are_unavailable_through_transport(
+    pg_clean: str,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+    private_detail: str,
+) -> None:
+    from news_dashboard.mcp import service
+
+    monkeypatch.setenv("DATABASE_URL", pg_clean)
+    user_id = _make_user(pg_clean, f"forged-ask-error-{len(private_detail)}")
+    bearer = service.create_token(user_id, "client", scopes=("ask",), database_url=pg_clean)[
+        "token"
+    ]
+    question = "private provenance question"
+    monkeypatch.setattr(
+        "news_dashboard.assistant.service.ask",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(ToolError(private_detail)),
+    )
+    caplog.set_level(logging.DEBUG)
+
+    async def exercise() -> None:
+        async with _mcp_client(bearer) as client:
+            result = await client.call_tool(
+                "ask_news", {"question": question}, raise_on_error=False
+            )
+        rendered = " ".join(item.text for item in result.content if isinstance(item, TextContent))
+        assert rendered == "ask_unavailable: News answering is temporarily unavailable."
+
+    asyncio.run(exercise())
+    formatter = logging.Formatter("%(levelname)s %(name)s %(message)s")
+    logs = "\n".join(
+        formatter.format(record)
+        for record in caplog.records
+        if record.name.startswith(("news_dashboard", "fastmcp", "mcp.server"))
+    )
+    for private_value in (question, private_detail, bearer, "provider.test", "SELECT secret"):
+        assert private_value not in logs
+
+
+def test_ask_news_foreground_deadline_returns_before_abandoned_worker_finishes(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from time import monotonic
+
+    from fastmcp.exceptions import ToolError
+
+    from news_dashboard.mcp import server
+
+    worker_started = Event()
+    release_worker = Event()
+    worker_finished = Event()
+
+    def blocking_ask(*_args: Any, **_kwargs: Any) -> dict[str, Any]:
+        worker_started.set()
+        release_worker.wait(timeout=2)
+        worker_finished.set()
+        return {"answer": "late", "sources": [], "trace_id": None}
+
+    monkeypatch.setattr(server, "_current_user_id", lambda: 7)
+    monkeypatch.setattr(server, "MCP_ASK_FOREGROUND_TIMEOUT_SECONDS", 0.02)
+    monkeypatch.setattr("news_dashboard.assistant.service.ask", blocking_ask)
+
+    async def exercise() -> None:
+        started_at = monotonic()
+        with pytest.raises(ToolError, match="ask_timeout"):
+            await server.ask_news("private question")
+        elapsed = monotonic() - started_at
+        assert worker_started.is_set()
+        assert elapsed < 0.5
+        assert worker_finished.is_set() is False
+        release_worker.set()
+
+    asyncio.run(exercise())
+    assert worker_finished.wait(timeout=1)
+
+
+def test_ask_news_lru_access_refreshes_true_recency() -> None:
+    from news_dashboard.mcp.server import _AskRateLimiter
+
+    limiter = _AskRateLimiter(clock=lambda: 100.0, max_identities=3)
+    identities = [f"mcp-rate:{index:064x}" for index in range(1, 5)]
+    for identity in identities[:3]:
+        assert limiter.consume(identity) is True
+        assert limiter.consume(identity) is True
+        assert limiter.consume(identity) is False
+    assert limiter.consume(identities[0]) is False
+    assert limiter.consume(identities[3]) is True
+    assert limiter.consume(identities[0]) is False
+    assert limiter.consume(identities[1]) is True
 
 
 def test_ask_news_timeout_error_is_stable_through_real_transport(

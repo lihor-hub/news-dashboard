@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import hashlib
+import hmac
 import html
 import json
 import logging
+import secrets
 import time
 from collections import OrderedDict
 from collections.abc import Callable
@@ -22,12 +25,23 @@ from fastmcp.server.middleware.response_limiting import ResponseLimitingMiddlewa
 from fastmcp.tools.base import ToolResult
 from mcp import McpError
 from mcp.types import CallToolRequestParams, ErrorData
+from openai import (
+    APIConnectionError,
+    APIStatusError,
+    APITimeoutError,
+    AuthenticationError,
+    PermissionDeniedError,
+)
+from openai import (
+    RateLimitError as OpenAIRateLimitError,
+)
 from starlette.responses import PlainTextResponse
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from news_dashboard.assistant.service import AskExecutionPolicy
 from news_dashboard.body_fetch import fetch_and_cache_body
 from news_dashboard.briefings import service as briefing_service
+from news_dashboard.embeddings import EmbeddingUnavailableError, MissingAICredentialsError
 from news_dashboard.ingest.service import clean_html, search_articles
 from news_dashboard.mcp import service
 from news_dashboard.mcp.ask import AskNewsResult, shape_ask_result
@@ -244,29 +258,48 @@ _ASK_PUBLIC_ERRORS = {
     "ask_rate_limited": "News answering rate limit exceeded; retry later.",
     "ask_unavailable": "News answering is temporarily unavailable.",
 }
+_ASK_ERROR_PROVENANCE_KEY = secrets.token_bytes(32)
+_ASK_ERROR_MARKER = "ndask-error:"
 
 
-def _fixed_ask_error(code: str) -> ToolError:
-    return ToolError(f"{code}: {_ASK_PUBLIC_ERRORS[code]}")
+class _PrivateAskError(ToolError):
+    """Internal provenance-bearing error converted to public text at transport."""
 
 
-def _public_ask_error(exc: Exception) -> ToolError:
-    from openai import (
-        APIConnectionError,
-        APIStatusError,
-        APITimeoutError,
-        AuthenticationError,
-        PermissionDeniedError,
-    )
-    from openai import (
-        RateLimitError as OpenAIRateLimitError,
-    )
+def _signed_ask_error_text(code: str) -> str:
+    public_text = f"{code}: {_ASK_PUBLIC_ERRORS[code]}"
+    signature = hmac.new(
+        _ASK_ERROR_PROVENANCE_KEY,
+        public_text.encode(),
+        hashlib.sha256,
+    ).hexdigest()
+    return f"{_ASK_ERROR_MARKER}{signature}:{public_text}"
 
-    from news_dashboard.embeddings import (
-        EmbeddingUnavailableError,
-        MissingAICredentialsError,
-    )
 
+def _verified_public_ask_error(value: object) -> str | None:
+    if not isinstance(value, str) or not value.startswith(_ASK_ERROR_MARKER):
+        return None
+    signed_value = value.removeprefix(_ASK_ERROR_MARKER)
+    signature, separator, public_text = signed_value.partition(":")
+    if not separator or len(signature) != 64:
+        return None
+    expected_signature = hmac.new(
+        _ASK_ERROR_PROVENANCE_KEY,
+        public_text.encode(),
+        hashlib.sha256,
+    ).hexdigest()
+    if not hmac.compare_digest(signature, expected_signature):
+        return None
+    if public_text not in {f"{code}: {message}" for code, message in _ASK_PUBLIC_ERRORS.items()}:
+        return None
+    return public_text
+
+
+def _fixed_ask_error(code: str) -> _PrivateAskError:
+    return _PrivateAskError(_signed_ask_error_text(code))
+
+
+def _public_ask_error(exc: Exception) -> _PrivateAskError:
     if isinstance(exc, MissingAICredentialsError):
         code = "ask_not_configured"
     elif isinstance(exc, EmbeddingUnavailableError):
@@ -344,7 +377,7 @@ def _is_safe_ask_tool_error(result: ToolResult) -> bool:
     if len(result.content) != 1:
         return False
     text = getattr(result.content[0], "text", None)
-    return text in {f"{code}: {message}" for code, message in _ASK_PUBLIC_ERRORS.items()}
+    return _verified_public_ask_error(text) is not None
 
 
 class _SafeToolTelemetryMiddleware(Middleware):
@@ -359,18 +392,21 @@ class _SafeToolTelemetryMiddleware(Middleware):
             result = await call_next(context)
             if result.is_error:
                 status = "error"
-                if _is_safe_ask_tool_error(result):
+                if context.message.name == "ask_news" and _is_safe_ask_tool_error(result):
                     return result
                 return ToolResult(
                     content=_INTERNAL_ERROR_MESSAGE,
                     is_error=True,
                 )
             return result
+        except _PrivateAskError:
+            status = "error"
+            if context.message.name == "ask_news":
+                raise
+            raise McpError(ErrorData(code=-32603, message=_INTERNAL_ERROR_MESSAGE)) from None
         except ToolError as exc:
             status = "error"
-            if str(exc) == _BRIEFING_NOT_FOUND_MESSAGE or str(exc) in {
-                f"{code}: {message}" for code, message in _ASK_PUBLIC_ERRORS.items()
-            }:
+            if str(exc) == _BRIEFING_NOT_FOUND_MESSAGE:
                 raise
             raise McpError(ErrorData(code=-32603, message=_INTERNAL_ERROR_MESSAGE)) from None
         except McpError:
@@ -768,8 +804,6 @@ async def ask_news(
                 status="ok",
             )
         return response
-    except (McpError, ToolError):
-        raise
     except Exception as exc:
         trace_id = _safe_trace_id(result)
         if trace_id is not None:
@@ -849,13 +883,14 @@ def _sanitize_mcp_response_body(body: bytes) -> bytes:
         and len(content) == 1
         and isinstance(content[0], dict)
         and content[0].get("type") == "text"
-        and content[0].get("text")
-        in {
-            _BRIEFING_NOT_FOUND_MESSAGE,
-            *(f"{code}: {message}" for code, message in _ASK_PUBLIC_ERRORS.items()),
-        }
     ):
-        return body
+        if content[0].get("text") == _BRIEFING_NOT_FOUND_MESSAGE:
+            return body
+        public_error = _verified_public_ask_error(content[0].get("text"))
+        if public_error is not None:
+            content[0]["text"] = public_error
+            sanitized = json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode()
+            return body[:data_start] + sanitized + body[data_end:]
     result["content"] = [{"type": "text", "text": _INTERNAL_ERROR_MESSAGE}]
     sanitized = json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode()
     return body[:data_start] + sanitized + body[data_end:]
