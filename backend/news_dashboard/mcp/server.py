@@ -890,9 +890,10 @@ def _sanitize_mcp_response_body(body: bytes) -> bytes:
         public_error = _verified_public_ask_error(content[0].get("text"))
         if public_error is not None:
             content[0]["text"] = public_error
-            sanitized = json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode()
-            return body[:data_start] + sanitized + body[data_end:]
-    result["content"] = [{"type": "text", "text": _INTERNAL_ERROR_MESSAGE}]
+        else:
+            result["content"] = [{"type": "text", "text": _INTERNAL_ERROR_MESSAGE}]
+    else:
+        result["content"] = [{"type": "text", "text": _INTERNAL_ERROR_MESSAGE}]
     sanitized = json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode()
     return body[:data_start] + sanitized + body[data_end:]
 
