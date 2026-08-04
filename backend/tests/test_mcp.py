@@ -2306,7 +2306,7 @@ def test_ask_news_calls_canonical_assistant_with_token_identity(
     [
         ("First [2], then [1], then [2].", [22, 11]),
         ("Invalid [0] [-1] [3] [x] [ 1 ].", []),
-        ("A positive decimal may have leading zeroes: [01].", [11]),
+        ("A canonical positive decimal: [1].", [11]),
     ],
 )
 def test_ask_result_uses_only_valid_bracket_positions_in_first_cited_order(
@@ -2341,6 +2341,15 @@ def test_ask_result_uses_only_valid_bracket_positions_in_first_cited_order(
         {"id": 1, "title": "Title", "url": "https://user:pass@example.test/story"},
         {"id": 1, "title": "Title", "url": "https://example.test\\@evil.test/story"},
         {"id": 1, "title": "Title", "url": "https:///missing-host"},
+        {"id": 1, "title": "Title", "url": "https://example.test:/story"},
+        {"id": 1, "title": "Title", "url": "https://example.test:0/story"},
+        {"id": 1, "title": "Title", "url": "https://example.test:65536/story"},
+        {"id": 1, "title": "Title", "url": "https://example.test:notaport/story"},
+        {"id": 1, "title": "Title", "url": "https://%65xample.test/story"},
+        {"id": 1, "title": "Title", "url": "https://exa_mple.test/story"},
+        {"id": 1, "title": "Title", "url": "https://-example.test/story"},
+        {"id": 1, "title": "Title", "url": "https://example..test/story"},
+        {"id": 1, "title": "Title", "url": "https://[not-ipv6]/story"},
     ],
 )
 def test_ask_result_omits_invalid_citation_records(source: dict[str, object]) -> None:
@@ -2383,6 +2392,83 @@ def test_ask_result_normalizes_urls_and_deduplicates_article_ids() -> None:
         "trace_id": "abcdef0123456789abcdef0123456789",
         "truncated": False,
     }
+
+
+@pytest.mark.parametrize(
+    ("url", "expected"),
+    [
+        ("https://192.0.2.1/story", "https://192.0.2.1/story"),
+        ("https://[2001:db8::1]/story", "https://[2001:db8::1]/story"),
+        ("https://BÜCHER.example/story", "https://bücher.example/story"),
+        ("https://XN--BCHER-KVA.example/story", "https://xn--bcher-kva.example/story"),
+    ],
+)
+def test_ask_result_preserves_valid_normalized_ip_and_idna_hosts(url: str, expected: str) -> None:
+    from news_dashboard.mcp.ask import shape_ask_result
+
+    result = shape_ask_result(
+        {
+            "answer": "Claim [1]",
+            "sources": [{"id": 1, "title": "Title", "url": url}],
+            "trace_id": None,
+        }
+    )
+
+    assert result["citations"] == [{"id": 1, "title": "Title", "url": expected}]
+
+
+def test_ask_result_omits_overlong_url_instead_of_rewriting_destination() -> None:
+    from news_dashboard.mcp.ask import shape_ask_result
+
+    overlong_url = "https://example.test/" + "x" * 2_100
+    result = shape_ask_result(
+        {
+            "answer": "Claim [1]",
+            "sources": [{"id": 1, "title": "Title", "url": overlong_url}],
+            "trace_id": None,
+        }
+    )
+
+    assert result["citations"] == []
+    assert result["truncated"] is True
+    assert overlong_url[:2_048] not in json.dumps(result)
+
+
+def test_ask_result_fails_closed_when_url_normalization_raises(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from news_dashboard.mcp import ask
+
+    monkeypatch.setattr(
+        ask,
+        "canonicalize_url",
+        lambda _url: (_ for _ in ()).throw(ValueError("private normalization detail")),
+    )
+
+    result = ask.shape_ask_result(
+        {
+            "answer": "Claim [1]",
+            "sources": [{"id": 1, "title": "Title", "url": "https://example.test/a"}],
+            "trace_id": None,
+        }
+    )
+
+    assert result["citations"] == []
+
+
+@pytest.mark.parametrize("reference", ["[" + "9" * 5_000 + "]", "[0001]"])
+def test_ask_result_ignores_ambiguous_or_oversized_decimal_references(reference: str) -> None:
+    from news_dashboard.mcp.ask import shape_ask_result
+
+    result = shape_ask_result(
+        {
+            "answer": f"Ordinary text {reference}",
+            "sources": [{"id": 1, "title": "Title", "url": "https://example.test/a"}],
+            "trace_id": None,
+        }
+    )
+
+    assert result["citations"] == []
 
 
 @pytest.mark.parametrize(
@@ -2438,16 +2524,18 @@ def test_ask_news_transport_stays_within_wire_budget(
     monkeypatch.setenv("DATABASE_URL", pg_clean)
     user_id = _make_user(pg_clean, "ask-wire-budget")
     token = service.create_token(user_id, "client", scopes=("ask",), database_url=pg_clean)["token"]
+    answer_sentinel = "wire-budget-answer " + " ".join(f"[{index}]" for index in range(1, 13))
     monkeypatch.setattr(
         "news_dashboard.assistant.service.ask",
         lambda *_args, **_kwargs: {
-            "answer": '🙂\\"' * 20_000 + " [1]",
+            "answer": answer_sentinel,
             "sources": [
                 {
-                    "id": 1,
+                    "id": index,
                     "title": "雪" * 4_000,
-                    "url": "https://example.test/" + "x" * 5_000,
+                    "url": f"https://example.test/{index}",
                 }
+                for index in range(1, 13)
             ],
             "trace_id": None,
         },
@@ -2458,12 +2546,23 @@ def test_ask_news_transport_stays_within_wire_budget(
         async with _mcp_client(token, response_bodies=response_bodies) as mcp_client:
             result = await mcp_client.call_tool("ask_news", {"question": "Question"})
         assert result.structured_content is not None
+        assert result.structured_content["answer"] == answer_sentinel
         assert result.structured_content["truncated"] is True
 
     asyncio.run(exercise())
-    tool_response = next(body for body in response_bodies if b'"structuredContent"' in body)
+    tool_response = next(
+        body
+        for body in response_bodies
+        if b'"structuredContent"' in body and answer_sentinel.encode() in body
+    )
     assert len(tool_response) <= 16_384
-    json.loads(tool_response.split(b"data: ", 1)[1].splitlines()[0])
+    payload = _decode_sse_json_response(tool_response)
+    structured = payload["result"]["structuredContent"]
+    assert set(structured) == {"answer", "citations", "trace_id", "truncated"}
+    assert structured["answer"] == answer_sentinel
+    assert isinstance(structured["citations"], list)
+    assert structured["trace_id"] is None
+    assert structured["truncated"] is True
 
 
 def test_get_news_article_returns_canonical_visible_article(

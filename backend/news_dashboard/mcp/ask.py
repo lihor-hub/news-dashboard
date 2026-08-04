@@ -1,16 +1,19 @@
 from __future__ import annotations
 
+import ipaddress
 import json
 import re
 from typing import Any, TypedDict
 from urllib.parse import SplitResult, urlsplit
+
+import idna
 
 from news_dashboard.ingest.service import canonicalize_url
 
 ASK_STRUCTURED_CONTENT_BYTES = 4_800
 _MAX_CITATION_TITLE_BYTES = 512
 _MAX_CITATION_URL_BYTES = 2_048
-_BRACKET_POSITION = re.compile(r"\[([0-9]+)\]")
+_BRACKET_POSITION = re.compile(r"\[([1-9][0-9]{0,18})\]")
 _TRACE_ID = re.compile(r"[0-9a-fA-F]{32}")
 
 
@@ -34,22 +37,52 @@ def _utf8_prefix(value: str, max_bytes: int) -> str:
     return encoded[:max_bytes].decode("utf-8", errors="ignore")
 
 
+def _valid_host(host: str) -> bool:
+    if ":" in host:
+        try:
+            ipaddress.IPv6Address(host)
+        except ValueError:
+            return False
+        return True
+    if all(character.isdigit() or character == "." for character in host):
+        try:
+            ipaddress.IPv4Address(host)
+        except ValueError:
+            return False
+        return True
+    candidate = host[:-1] if host.endswith(".") else host
+    try:
+        ascii_host = idna.encode(candidate, uts46=False, std3_rules=True)
+    except idna.IDNAError:
+        return False
+    return bool(ascii_host) and len(ascii_host) <= 253
+
+
 def _safe_http_url_parts(value: str) -> SplitResult | None:
     try:
         parsed = urlsplit(value)
-    except ValueError:
+        hostname = parsed.hostname
+        port = parsed.port
+    except (UnicodeError, ValueError):
         return None
+    empty_port = parsed.netloc.endswith(":")
+    if parsed.netloc.startswith("[") and "]" in parsed.netloc:
+        empty_port = parsed.netloc.partition("]")[2] == ":"
     if (
         parsed.scheme.lower() not in {"http", "https"}
-        or parsed.hostname is None
+        or hostname is None
         or parsed.username is not None
         or parsed.password is not None
+        or "%" in parsed.netloc
+        or empty_port
+        or (port is not None and not 1 <= port <= 65_535)
+        or not _valid_host(hostname)
     ):
         return None
     return parsed
 
 
-def _normalized_url(value: object) -> tuple[str, bool] | None:
+def _normalized_url(value: object) -> tuple[str | None, bool]:
     if (
         not isinstance(value, str)
         or not value
@@ -58,19 +91,21 @@ def _normalized_url(value: object) -> tuple[str, bool] | None:
         or any(character.isspace() or ord(character) < 32 for character in value)
         or _safe_http_url_parts(value) is None
     ):
-        return None
-    normalized = canonicalize_url(value)
+        return None, False
+    try:
+        normalized = canonicalize_url(value)
+    except (UnicodeError, ValueError):
+        return None, False
     if _safe_http_url_parts(normalized) is None:
-        return None
-    bounded = _utf8_prefix(normalized, _MAX_CITATION_URL_BYTES)
-    if _safe_http_url_parts(bounded) is None:
-        return None
-    return bounded, bounded != normalized
+        return None, False
+    if len(normalized.encode("utf-8")) > _MAX_CITATION_URL_BYTES:
+        return None, True
+    return normalized, False
 
 
-def _citation(source: object) -> tuple[AskCitation, bool] | None:
+def _citation(source: object) -> tuple[AskCitation | None, bool]:
     if not isinstance(source, dict):
-        return None
+        return None, False
     article_id = source.get("id")
     title = source.get("title")
     if (
@@ -80,18 +115,17 @@ def _citation(source: object) -> tuple[AskCitation, bool] | None:
         or not isinstance(title, str)
         or not title.strip()
     ):
-        return None
-    normalized = _normalized_url(source.get("url"))
-    if normalized is None:
-        return None
-    url, url_truncated = normalized
+        return None, False
+    url, url_omitted = _normalized_url(source.get("url"))
+    if url is None:
+        return None, url_omitted
     stripped_title = title.strip()
     bounded_title = _utf8_prefix(stripped_title, _MAX_CITATION_TITLE_BYTES).strip()
     if not bounded_title:
-        return None
+        return None, False
     return (
         {"id": article_id, "title": bounded_title, "url": url},
-        url_truncated or bounded_title != stripped_title,
+        bounded_title != stripped_title,
     )
 
 
@@ -127,12 +161,12 @@ def shape_ask_result(raw_result: dict[str, Any]) -> AskNewsResult:
     truncated = False
     for match in _BRACKET_POSITION.finditer(answer):
         position = int(match.group(1))
-        if position <= 0 or position > len(sources):
+        if position > len(sources):
             continue
-        accepted = _citation(sources[position - 1])
-        if accepted is None:
+        citation, citation_truncated = _citation(sources[position - 1])
+        truncated = truncated or citation_truncated
+        if citation is None:
             continue
-        citation, citation_truncated = accepted
         if citation["id"] in cited_article_ids:
             continue
         cited_article_ids.add(citation["id"])
