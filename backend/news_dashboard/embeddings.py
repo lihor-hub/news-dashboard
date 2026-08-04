@@ -11,7 +11,12 @@ from __future__ import annotations
 import logging
 import os
 import time
-from typing import Any
+from typing import TYPE_CHECKING, Any, cast
+
+if TYPE_CHECKING:
+    from openai.types.chat import ChatCompletion
+
+    from news_dashboard.assistant.service import AskExecutionPolicy
 
 logger = logging.getLogger(__name__)
 
@@ -114,7 +119,13 @@ def _is_retryable_embedding_error(exc: Exception) -> bool:
     return isinstance(exc, APIStatusError) and exc.status_code == 429
 
 
-def _embed(text: str) -> list[float]:
+def _embed(
+    text: str,
+    *,
+    timeout_seconds: float | None = None,
+    trace_content: bool = True,
+    operation: str = "query-embedding",
+) -> list[float]:
     """Embed *text* via the configured OpenAI-compatible endpoint.
 
     Retries transient rate-limit (429) errors with exponential backoff. Once
@@ -122,10 +133,20 @@ def _embed(text: str) -> list[float]:
     the raw provider exception so callers can distinguish "provider is
     rate-limiting us" from other failures (e.g. bad credentials).
     """
-    from news_dashboard.ai_client import get_chat_client, trace_params
+    from news_dashboard.ai_client import SafeAIObservation, get_chat_client, trace_params
 
     api_key, base_url, model = _embeddings_ai_config()
-    client = get_chat_client(api_key=api_key, base_url=base_url)
+    client_kwargs: dict[str, Any] = {"api_key": api_key, "base_url": base_url}
+    if timeout_seconds is not None:
+        client_kwargs["timeout_seconds"] = timeout_seconds
+    if not trace_content:
+        client_kwargs["enable_tracing"] = False
+        client_kwargs["safe_observation"] = SafeAIObservation(
+            operation=operation,
+            as_type="embedding",
+            model=model,
+        )
+    client = get_chat_client(**client_kwargs)
 
     attempt = 0
     while True:
@@ -133,7 +154,11 @@ def _embed(text: str) -> list[float]:
             response = client.embeddings.create(
                 model=model,
                 input=text,
-                **trace_params("article-embedding", tags=["embedding"], user_id="system"),
+                **(
+                    trace_params("article-embedding", tags=["embedding"], user_id="system")
+                    if trace_content
+                    else {}
+                ),
             )
             return list(response.data[0].embedding)
         except Exception as exc:
@@ -156,21 +181,66 @@ def _embed(text: str) -> list[float]:
 def _answer(
     system_prompt: str,
     user_prompt: str,
+    *,
+    max_tokens: int | None = None,
+    timeout_seconds: float | None = None,
+    trace_content: bool = True,
 ) -> str:
     """Generate an answer with a vanilla LangChain prompt/model/parser pipeline."""
     from langchain_core.messages import SystemMessage
     from langchain_core.output_parsers import StrOutputParser
     from langchain_core.prompts import ChatPromptTemplate
 
-    from news_dashboard.ai_client import free_llm_config, get_chat_model
+    from news_dashboard.ai_client import (
+        SafeAIObservation,
+        free_llm_config,
+        get_chat_client,
+        get_chat_model,
+    )
 
     api_key, base_url = free_llm_config()
     if not api_key:
         _require_env("FREE_LLM_API_KEY", "use Ask AI")
+    model_name = os.getenv("OPENAI_ANSWER_MODEL", DEFAULT_ANSWER_MODEL)
+    if not trace_content:
+        client = get_chat_client(
+            api_key=api_key,
+            base_url=base_url,
+            timeout_seconds=timeout_seconds,
+            enable_tracing=False,
+            safe_observation=SafeAIObservation(
+                operation="answer-generation",
+                as_type="generation",
+                model=model_name,
+                model_parameters={"max_tokens": max_tokens} if max_tokens is not None else {},
+            ),
+        )
+        request: dict[str, Any] = {
+            "model": model_name,
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+        }
+        if max_tokens is not None:
+            request["max_tokens"] = max_tokens
+        response = cast("ChatCompletion", client.chat.completions.create(**request))
+        content = response.choices[0].message.content
+        if not isinstance(content, str):
+            message = "AI response must contain string content"
+            raise TypeError(message)
+        return content
+    model_kwargs: dict[str, Any] = {
+        "api_key": api_key,
+        "base_url": base_url,
+        "model": model_name,
+    }
+    if max_tokens is not None:
+        model_kwargs["max_tokens"] = max_tokens
+    if timeout_seconds is not None:
+        model_kwargs["timeout_seconds"] = timeout_seconds
     model = get_chat_model(
-        api_key=api_key,
-        base_url=base_url,
-        model=os.getenv("OPENAI_ANSWER_MODEL", DEFAULT_ANSWER_MODEL),
+        **model_kwargs,
     )
     chain = (
         ChatPromptTemplate.from_messages(
@@ -242,6 +312,98 @@ def _format_graph_context(context: dict[str, Any] | None) -> str:
     return "Knowledge graph:\n" + "\n".join(lines)
 
 
+def _answer_with_policy(
+    system_prompt: str,
+    user_prompt: str,
+    execution_policy: AskExecutionPolicy | None,
+) -> str:
+    if execution_policy is None:
+        return _answer(system_prompt, user_prompt)
+    return _answer(
+        system_prompt,
+        user_prompt,
+        max_tokens=execution_policy.answer_max_tokens,
+        timeout_seconds=execution_policy.provider_timeout_seconds,
+        trace_content=execution_policy.trace_content,
+    )
+
+
+def _generate_answer(
+    *,
+    query: str,
+    include_all: bool,
+    user_id: int | None,
+    session_id: str | None,
+    prompt: Any,
+    user_prompt: str,
+    execution_policy: AskExecutionPolicy | None,
+) -> tuple[str, str | None]:
+    from news_dashboard.ai_client import _client, langfuse_enabled
+
+    if not langfuse_enabled():
+        return _answer_with_policy(prompt.text, user_prompt, execution_policy), None
+
+    from langfuse import propagate_attributes
+
+    trace_content = execution_policy is None or execution_policy.trace_content
+    retrieval_limit = execution_policy.retrieval_limit if execution_policy is not None else TOP_K
+    corpus = "all_visible" if include_all else "saved_and_read"
+    trace_input = (
+        {"query": query, "include_all": include_all}
+        if trace_content
+        else {"question_chars": len(query), "corpus": corpus, "retrieval_limit": retrieval_limit}
+    )
+    client = _client()
+    if not trace_content:
+        failure: BaseException | None = None
+        failure_traceback = None
+        answer: str | None = None
+        trace_id: str | None = None
+        with client.start_as_current_observation(
+            name="answer-pipeline",
+            as_type="chain",
+            input=trace_input,
+            prompt=prompt.langfuse_prompt,
+        ) as root:
+            try:
+                answer = _answer_with_policy(prompt.text, user_prompt, execution_policy)
+            except BaseException as exc:
+                failure = exc
+                failure_traceback = exc.__traceback__
+                root.update(
+                    output={"status": "error"},
+                    level="ERROR",
+                    status_message="answer generation failed",
+                )
+            else:
+                root.update(output={"answer_chars": len(answer), "status": "ok"})
+                trace_id = client.get_current_trace_id()
+        if failure is not None:
+            raise failure.with_traceback(failure_traceback)
+        if answer is None:
+            message = "Answer generation returned no result"
+            raise RuntimeError(message)
+        return answer, trace_id
+
+    attribute_kwargs: dict[str, Any] = {
+        "user_id": str(user_id) if user_id is not None else None,
+        "session_id": session_id,
+        "tags": ["ask-ai"],
+        "prompt": prompt.langfuse_prompt,
+    }
+    with (
+        propagate_attributes(**attribute_kwargs),
+        client.start_as_current_observation(
+            name="ask-ai", as_type="chain", input=trace_input
+        ) as root,
+    ):
+        answer = _answer_with_policy(prompt.text, user_prompt, execution_policy)
+        root.update(
+            output=answer if trace_content else {"answer_chars": len(answer), "status": "ok"}
+        )
+        return answer, client.get_current_trace_id()
+
+
 # ── Cosine similarity ──────────────────────────────────────────────────────
 
 
@@ -289,6 +451,9 @@ def embed_all_eligible(
     *,
     include_all: bool = False,
     user_id: int | None = None,
+    max_articles: int | None = None,
+    provider_timeout_seconds: float | None = None,
+    trace_content: bool = True,
 ) -> int:
     """Embed eligible articles that don't have an embedding yet.
 
@@ -335,13 +500,23 @@ def embed_all_eligible(
                         OR src.owner_user_id = %s
                       )
                 """
-            rows = conn.execute(query, (user_id, user_id, user_id)).fetchall()
+            query += " ORDER BY a.id"
+            params: tuple[Any, ...] = (user_id, user_id, user_id)
+            if max_articles is not None:
+                query += " LIMIT %s"
+                params += (max_articles,)
+            rows = conn.execute(query, params).fetchall()
         else:
             status_filter = "status != 'archived'" if include_all else "status IN ('saved', 'read')"
-            rows = conn.execute(
+            query = (
                 "SELECT id, title, summary, reason, tags FROM articles "
-                f"WHERE {status_filter} AND embedding_vec IS NULL"
-            ).fetchall()
+                f"WHERE {status_filter} AND embedding_vec IS NULL ORDER BY id"
+            )
+            params = ()
+            if max_articles is not None:
+                query += " LIMIT %s"
+                params = (max_articles,)
+            rows = conn.execute(query, params).fetchall()
 
     count = 0
     for row in rows:
@@ -349,7 +524,20 @@ def embed_all_eligible(
         if not text:
             continue
         try:
-            vector = _embed(text)
+            vector = (
+                _embed(
+                    text,
+                    timeout_seconds=provider_timeout_seconds,
+                    trace_content=trace_content,
+                    operation="article-backfill",
+                )
+                if provider_timeout_seconds is not None
+                else (
+                    _embed(text)
+                    if trace_content
+                    else _embed(text, trace_content=False, operation="article-backfill")
+                )
+            )
             from news_dashboard.db import connect as _connect
 
             with _connect(db_path) as conn:
@@ -359,22 +547,28 @@ def embed_all_eligible(
                 )
             count += 1
         except Exception:
-            logger.warning(
-                "failed to embed article %s during backfill; skipping", row["id"], exc_info=True
-            )
+            if trace_content:
+                logger.warning(
+                    "failed to embed article %s during backfill; skipping",
+                    row["id"],
+                    exc_info=True,
+                )
+            else:
+                logger.warning("failed to embed article during private backfill; skipping")
     return count
 
 
 # ── Main Q&A entry-point ───────────────────────────────────────────────────
 
 
-def ask(
+def _ask_impl(
     query: str,
     db_path: Any = None,
     *,
     include_all: bool = False,
     user_id: int | None = None,
     session_id: str | None = None,
+    execution_policy: AskExecutionPolicy | None = None,
 ) -> dict[str, Any]:
     """Answer *query* using RAG over saved/read articles.
 
@@ -393,13 +587,37 @@ def ask(
     from news_dashboard.db import connect, init_db
 
     # 1. Backfill embeddings for any eligible articles not yet embedded
-    embed_all_eligible(db_path, include_all=include_all, user_id=user_id)
+    backfill_limit = execution_policy.backfill_limit if execution_policy is not None else None
+    provider_timeout = (
+        execution_policy.provider_timeout_seconds if execution_policy is not None else None
+    )
+    retrieval_limit = execution_policy.retrieval_limit if execution_policy is not None else TOP_K
+    if execution_policy is None:
+        embed_all_eligible(db_path, include_all=include_all, user_id=user_id)
+    else:
+        embed_all_eligible(
+            db_path,
+            include_all=include_all,
+            user_id=user_id,
+            max_articles=backfill_limit,
+            provider_timeout_seconds=provider_timeout,
+            trace_content=execution_policy.trace_content,
+        )
 
     # 2. Embed the user's question, then let Postgres rank + return the top-k
     #    nearest articles in one query via the pgvector `<=>` cosine-distance
     #    operator (using the embedding_vec HNSW index), with a COUNT(*) in the
     #    same round trip for the MIN_ARTICLES eligibility check.
-    query_vec = vector_literal(_embed(query))
+    query_embedding = (
+        _embed(query)
+        if execution_policy is None
+        else _embed(
+            query,
+            timeout_seconds=provider_timeout,
+            trace_content=execution_policy.trace_content,
+        )
+    )
+    query_vec = vector_literal(query_embedding)
     init_db(db_path)
     with connect(db_path) as conn:
         if user_id is not None:
@@ -442,7 +660,7 @@ def ask(
                     LIMIT %(top_k)s
                 """
             rows = conn.execute(
-                sql, {"user_id": user_id, "query_vec": query_vec, "top_k": TOP_K}
+                sql, {"user_id": user_id, "query_vec": query_vec, "top_k": retrieval_limit}
             ).fetchall()
         else:
             status_filter = "status != 'archived'" if include_all else "status IN ('saved', 'read')"
@@ -450,7 +668,7 @@ def ask(
                 "SELECT id, title, url, summary, COUNT(*) OVER () AS eligible_count "
                 f"FROM articles WHERE {status_filter} AND embedding_vec IS NOT NULL "
                 "ORDER BY embedding_vec <=> %(query_vec)s::vector LIMIT %(top_k)s",
-                {"query_vec": query_vec, "top_k": TOP_K},
+                {"query_vec": query_vec, "top_k": retrieval_limit},
             ).fetchall()
 
     eligible_count = rows[0]["eligible_count"] if rows else 0
@@ -474,7 +692,7 @@ def ask(
     graph_context = graph_context_for_articles([int(row["id"]) for row in rows])
     graph_context_text = _format_graph_context(graph_context)
 
-    from news_dashboard.ai_client import _client, get_prompt, langfuse_enabled
+    from news_dashboard.ai_client import get_prompt
     from news_dashboard.ai_memory.service import format_memories_for_prompt
 
     prompt = get_prompt("ask-system", fallback=ASK_SYSTEM_PROMPT)
@@ -483,28 +701,15 @@ def ask(
     graph_block = f"\n\n{graph_context_text}" if graph_context_text else ""
     user_prompt = f"{memory_block}Articles:\n\n{context_text}{graph_block}\n\nQuestion: {query}"
 
-    # 6. Call OpenAI for the answer, grouping retrieval + generation under one
-    #    Langfuse trace so its id can carry user feedback (see /api/feedback).
-    trace_id: str | None = None
-    trace_input = {"query": query, "include_all": include_all}
-    if langfuse_enabled():
-        from langfuse import propagate_attributes
-
-        client = _client()
-        with client.start_as_current_observation(
-            name="ask-ai", as_type="chain", input=trace_input
-        ) as root:
-            with propagate_attributes(
-                user_id=str(user_id) if user_id is not None else None,
-                session_id=session_id,
-                tags=["ask-ai"],
-                prompt=prompt.langfuse_prompt,
-            ):
-                answer_text = _answer(prompt.text, user_prompt)
-            root.update(output=answer_text)
-            trace_id = client.get_current_trace_id()
-    else:
-        answer_text = _answer(prompt.text, user_prompt)
+    answer_text, trace_id = _generate_answer(
+        query=query,
+        include_all=include_all,
+        user_id=user_id,
+        session_id=session_id,
+        prompt=prompt,
+        user_prompt=user_prompt,
+        execution_policy=execution_policy,
+    )
 
     # 7. Return answer + source list (top-k order)
     sources = [{"id": row["id"], "title": row["title"], "url": row["url"]} for row in rows]
@@ -515,4 +720,86 @@ def ask(
     }
     if graph_context is not None:
         result["graph_context"] = graph_context
+    return result
+
+
+def ask(
+    query: str,
+    db_path: Any = None,
+    *,
+    include_all: bool = False,
+    user_id: int | None = None,
+    session_id: str | None = None,
+    execution_policy: AskExecutionPolicy | None = None,
+) -> dict[str, Any]:
+    """Answer a question over the caller's authorized article corpus."""
+    from news_dashboard.ai_client import langfuse_enabled
+
+    if execution_policy is None or execution_policy.trace_content or not langfuse_enabled():
+        return _ask_impl(
+            query,
+            db_path,
+            include_all=include_all,
+            user_id=user_id,
+            session_id=session_id,
+            execution_policy=execution_policy,
+        )
+
+    from langfuse import propagate_attributes
+
+    from news_dashboard.ai_client import _client
+
+    corpus = "all_visible" if include_all else "saved_and_read"
+    failure: BaseException | None = None
+    failure_traceback = None
+    result: dict[str, Any] | None = None
+    with (
+        propagate_attributes(
+            user_id=str(user_id) if user_id is not None else None,
+            tags=["ask-ai", "mcp"],
+            metadata={"surface": execution_policy.trace_surface, "corpus": corpus},
+            trace_name="ask-news",
+        ),
+        _client().start_as_current_observation(
+            name="ask-ai",
+            as_type="chain",
+            input={
+                "question_chars": len(query),
+                "corpus": corpus,
+                "retrieval_limit": execution_policy.retrieval_limit,
+            },
+        ) as root,
+    ):
+        try:
+            result = _ask_impl(
+                query,
+                db_path,
+                include_all=include_all,
+                user_id=user_id,
+                session_id=session_id,
+                execution_policy=execution_policy,
+            )
+        except BaseException as exc:
+            failure = exc
+            failure_traceback = exc.__traceback__
+            root.update(
+                output={"status": "error"},
+                level="ERROR",
+                status_message="ask failed",
+            )
+        else:
+            if result.get("trace_id") is None:
+                result["trace_id"] = _client().get_current_trace_id()
+            root.update(
+                output={
+                    "answer_chars": len(str(result.get("answer", ""))),
+                    "source_count": len(result.get("sources", [])),
+                    "status": "ok",
+                }
+            )
+    if failure is not None:
+        raise failure.with_traceback(failure_traceback)
+    if result is None:
+        message = "Ask returned no result"
+        raise RuntimeError(message)
     return result

@@ -31,15 +31,16 @@ revoked under `/api/users/me/mcp-tokens` — see
 | `list_news_sources` | `search` | Page through the token owner's subscribed, enabled, searchable sources. |
 | `search_news` | `search` | Search visible articles with typed filters and offset pagination. |
 | `get_news_article` | `read` | Retrieve one visible article by a strict positive integer ID. |
+| `ask_news` | `ask` | Answer a question over Starred + Done or all visible news, with validated citations. |
 | `list_briefings` | `briefings` | Page through complete saved briefings owned by the token user. |
 | `get_briefing` | `briefings` | Read one owned, complete saved briefing and its currently visible citations. |
 
 Each tool requires its own **scope**, and a token only carries the scopes it
 was minted with. News and source tools require `search`; saved-briefing tools
-require `briefings`; `get_news_article` requires `read`. Under-scoped tokens do
-not discover those tools. MCP question answering is planned; clients should
-rely on MCP tool discovery until it is available. The separate opt-in A2A
-surface remains ask-only and does not advertise briefing tools.
+require `briefings`; `get_news_article` requires `read`; and `ask_news` requires
+`ask`. Under-scoped tokens do not discover those tools. Clients should rely on
+MCP tool discovery. The separate opt-in A2A surface remains ask-only and does
+not advertise briefing tools.
 
 `list_news_sources` returns `{sources, truncated, next_cursor}` in deterministic
 category, descending priority, name, then slug order. Each source contains only
@@ -133,6 +134,31 @@ briefings, mutate them, chat, email, create podcasts, schedule delivery, or
 inspect or launch agent runs. They omit ownership, status, model, error,
 prompt, script, delivery, trace, workflow, article-body, and source-owner
 fields.
+
+`ask_news(question, corpus="saved_and_read")` accepts a non-empty question of
+at most 2,000 characters. `saved_and_read` means **Starred + Done**;
+`all_visible` means all non-archived articles available through owned private
+sources and enabled global-source subscriptions. It returns `answer`, validated
+`citations`, a nullable Langfuse `trace_id`, and `truncated`. Citation brackets
+such as `[1]` are authorized retrieval positions, not article IDs; only complete
+citations with validated HTTP(S) URLs are returned.
+
+MCP answering is bounded to 16 embedding backfills, 8 retrieved articles, 512
+answer tokens, a 20-second provider timeout, and a 30-second foreground
+deadline. Its per-token bucket has burst 2 and refills one request every 30
+seconds. Stable errors distinguish configuration, retrieval, provider
+authentication/rate limiting, timeout, local rate limiting, and temporary
+availability failures; the exact messages and retry guidance are in
+[Configuration → MCP server](../configuration/mcp-server.md#ask-a-question-about-news).
+
+Langfuse retains privacy-safe model, token usage, provider-reported cost,
+counts, timing, corpus, and status metadata, but no question, article, prompt,
+citation title/URL, answer, bearer token, provider body, or exception text.
+`ask_news` does not mutate dashboard data.
+
+The independently opt-in A2A endpoint may use the same `ask` scope but requires
+`A2A_SERVER_ENABLED=true`, keeps its `ask_news` agent-card skill ID, and always
+uses Starred + Done. MCP and A2A do not enable one another.
 
 The server is enabled when `MCP_SERVER_ENABLED` is unset. Set it to `false`,
 `0`, `no`, or `off` to disable `/mcp` and new token creation.

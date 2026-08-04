@@ -6,14 +6,14 @@ import logging
 from collections.abc import AsyncIterator, Generator
 from contextlib import asynccontextmanager
 from threading import Event
-from typing import Any
+from typing import Any, cast
 
 import httpx
 import pytest
 from fastapi.testclient import TestClient
 from fastmcp import Client
 from fastmcp.client.transports import StreamableHttpTransport
-from fastmcp.exceptions import AuthorizationError
+from fastmcp.exceptions import AuthorizationError, ToolError
 from fastmcp.server.auth import AccessToken
 from fastmcp.server.middleware import MiddlewareContext
 from mcp.shared.exceptions import McpError
@@ -274,7 +274,9 @@ def test_reused_database_token_id_gets_fresh_opaque_rate_limit_identity(
     asyncio.run(exercise())
 
 
-@pytest.mark.parametrize("rate_limit_id", [None, "", "mcp-token:7", 7])
+@pytest.mark.parametrize(
+    "rate_limit_id", [None, "", "mcp-token:7", "mcp-rate:", "mcp-rate:not-hex", 7]
+)
 def test_rate_limiter_fails_closed_without_valid_internal_identity(
     monkeypatch: pytest.MonkeyPatch, rate_limit_id: object
 ) -> None:
@@ -420,7 +422,9 @@ async def _mcp_client(
 
 def _decode_sse_json_response(body: bytes) -> dict[str, Any]:
     lines = body.splitlines()
-    assert lines[0] == b"event: message"
+    # FastMCP may emit an SSE keepalive comment before the response event when
+    # a bounded tool call takes longer than its ping interval.
+    assert b"event: message" in lines
     data_line = next(line for line in lines if line.startswith(b"data: "))
     payload = json.loads(data_line.removeprefix(b"data: "))
     assert isinstance(payload, dict)
@@ -1504,7 +1508,10 @@ def test_get_news_article_suppresses_real_body_fetch_diagnostics_during_mcp(
 
 def test_mcp_extraction_log_filters_are_request_scoped_and_reset(
     caplog: pytest.LogCaptureFixture,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    from news_dashboard import embeddings
+    from news_dashboard.graph_store import GraphUnavailableError
     from news_dashboard.mcp.server import _SanitizeMcpResponses
 
     extraction_loggers = tuple(
@@ -1513,8 +1520,15 @@ def test_mcp_extraction_log_filters_are_request_scoped_and_reset(
             "news_dashboard.body_fetch",
             "news_dashboard.selenium_client",
             "news_dashboard.ai_client",
+            "news_dashboard.embeddings",
         )
     )
+    graph_detail = "neo4j=https://private graph-article-781 connection-secret"
+
+    def fail_graph_store() -> None:
+        raise GraphUnavailableError(graph_detail)
+
+    monkeypatch.setattr("news_dashboard.graph_store.graph_store_from_env", fail_graph_store)
     mcp_started = asyncio.Event()
     allow_mcp_to_log = asyncio.Event()
 
@@ -1523,6 +1537,7 @@ def test_mcp_extraction_log_filters_are_request_scoped_and_reset(
         await allow_mcp_to_log.wait()
         for extraction_logger in extraction_loggers:
             extraction_logger.warning("mcp-private-url provider-private-detail")
+        assert embeddings.graph_context_for_articles([781]) is None
 
     async def raising_mcp_app(_scope: Scope, _receive: Receive, _send: Send) -> None:
         extraction_loggers[0].warning("mcp-error-private-detail")
@@ -1558,6 +1573,7 @@ def test_mcp_extraction_log_filters_are_request_scoped_and_reset(
         with pytest.raises(asyncio.CancelledError):
             await _SanitizeMcpResponses(cancelled_mcp_app)(scope, receive, send)
         extraction_loggers[1].warning("visible-after-cancellation")
+        assert embeddings.graph_context_for_articles([781]) is None
 
     asyncio.run(exercise())
     rendered = caplog.text
@@ -1568,6 +1584,7 @@ def test_mcp_extraction_log_filters_are_request_scoped_and_reset(
     assert "provider-private-detail" not in rendered
     assert "mcp-error-private-detail" not in rendered
     assert "mcp-cancel-private-detail" not in rendered
+    assert rendered.count(graph_detail) == 1
 
 
 def test_latest_news_returns_compact_articles_visible_to_token_owner(
@@ -2108,6 +2125,1034 @@ def test_fastmcp_discovers_article_tool_only_with_read_scope(
         assert sorted(tool.name for tool in tools) == expected
 
     asyncio.run(exercise())
+
+
+@pytest.mark.parametrize(
+    ("scopes", "expected"),
+    [
+        (("ask",), ["ask_news"]),
+        (
+            ("ask", "search"),
+            ["ask_news", "list_latest_news", "list_news_sources", "search_news"],
+        ),
+        (("ask", "read"), ["ask_news", "get_news_article"]),
+    ],
+)
+def test_fastmcp_discovers_ask_news_only_with_ask_scope(
+    pg_clean: str,
+    monkeypatch: pytest.MonkeyPatch,
+    scopes: tuple[str, ...],
+    expected: list[str],
+) -> None:
+    from news_dashboard.mcp import service
+
+    monkeypatch.setenv("DATABASE_URL", pg_clean)
+    user_id = _make_user(pg_clean, f"ask-discovery-{'-'.join(scopes)}")
+    token = service.create_token(user_id, "client", scopes=scopes, database_url=pg_clean)["token"]
+
+    async def exercise() -> None:
+        async with _mcp_client(token) as mcp_client:
+            tools = await mcp_client.list_tools()
+        assert sorted(tool.name for tool in tools) == expected
+
+    asyncio.run(exercise())
+
+
+def test_ask_news_is_hidden_and_denied_without_ask_scope(
+    pg_clean: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from news_dashboard.mcp import service
+
+    monkeypatch.setenv("DATABASE_URL", pg_clean)
+    user_id = _make_user(pg_clean, "ask-scope-denied")
+    token = service.create_token(user_id, "client", scopes=("read",), database_url=pg_clean)[
+        "token"
+    ]
+
+    async def exercise() -> None:
+        async with _mcp_client(token) as mcp_client:
+            assert [tool.name for tool in await mcp_client.list_tools()] == ["get_news_article"]
+            result = await mcp_client.call_tool(
+                "ask_news", {"question": "What happened?"}, raise_on_error=False
+            )
+        assert result.is_error is True
+
+    asyncio.run(exercise())
+
+
+def test_ask_news_schema_exposes_only_bounded_question_and_corpus(
+    pg_clean: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from news_dashboard.mcp import service
+
+    monkeypatch.setenv("DATABASE_URL", pg_clean)
+    user_id = _make_user(pg_clean, "ask-schema")
+    token = service.create_token(user_id, "client", scopes=("ask",), database_url=pg_clean)["token"]
+
+    async def exercise() -> None:
+        async with _mcp_client(token) as mcp_client:
+            [tool] = await mcp_client.list_tools()
+        assert tool.name == "ask_news"
+        schema = tool.inputSchema
+        assert schema["required"] == ["question"]
+        assert set(schema["properties"]) == {"question", "corpus"}
+        assert schema["properties"]["question"]["minLength"] == 1
+        assert schema["properties"]["question"]["maxLength"] == 2_000
+        assert schema["properties"]["corpus"]["enum"] == ["saved_and_read", "all_visible"]
+        assert schema["properties"]["corpus"]["default"] == "saved_and_read"
+
+    asyncio.run(exercise())
+
+
+@pytest.mark.parametrize("question", ["   ", "x" * 2_001])
+def test_ask_news_rejects_invalid_question_before_calling_assistant(
+    pg_clean: str,
+    monkeypatch: pytest.MonkeyPatch,
+    question: str,
+) -> None:
+    from news_dashboard.mcp import service
+
+    monkeypatch.setenv("DATABASE_URL", pg_clean)
+    user_id = _make_user(pg_clean, f"ask-invalid-{len(question)}")
+    token = service.create_token(user_id, "client", scopes=("ask",), database_url=pg_clean)["token"]
+
+    def unexpected_ask(*_args: Any, **_kwargs: Any) -> dict[str, Any]:
+        pytest.fail("assistant service must not run for an invalid question")
+
+    monkeypatch.setattr("news_dashboard.assistant.service.ask", unexpected_ask)
+
+    async def exercise() -> None:
+        async with _mcp_client(token) as mcp_client:
+            result = await mcp_client.call_tool(
+                "ask_news", {"question": question}, raise_on_error=False
+            )
+        assert result.is_error is True
+
+    asyncio.run(exercise())
+
+
+@pytest.mark.parametrize(
+    ("arguments", "expected_question", "expected_include_all"),
+    [
+        ({"question": "  What changed?  "}, "What changed?", False),
+        (
+            {"question": "Show everything", "corpus": "all_visible"},
+            "Show everything",
+            True,
+        ),
+    ],
+)
+def test_ask_news_calls_canonical_assistant_with_token_identity(
+    pg_clean: str,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+    arguments: dict[str, str],
+    expected_question: str,
+    expected_include_all: bool,
+) -> None:
+    from news_dashboard.mcp import service
+    from news_dashboard.mcp.server import MCP_ASK_EXECUTION_POLICY
+
+    monkeypatch.setenv("DATABASE_URL", pg_clean)
+    user_id = _make_user(pg_clean, f"ask-call-{expected_include_all}")
+    token = service.create_token(user_id, "client", scopes=("ask",), database_url=pg_clean)["token"]
+    captured: dict[str, Any] = {}
+    recorded: list[dict[str, Any]] = []
+    trace_id = "0123456789abcdef0123456789abcdef"
+
+    def fake_ask(question: str, **kwargs: Any) -> dict[str, Any]:
+        captured["question"] = question
+        captured.update(kwargs)
+        return {
+            "answer": "Grounded answer [1]",
+            "sources": [{"id": 17, "title": "A source", "url": "https://example.com/a"}],
+            "trace_id": trace_id,
+        }
+
+    monkeypatch.setattr("news_dashboard.assistant.service.ask", fake_ask)
+    monkeypatch.setattr(
+        "news_dashboard.ai_client.record_mcp_ask_result",
+        lambda recorded_trace_id, **kwargs: recorded.append(
+            {"trace_id": recorded_trace_id, **kwargs}
+        ),
+    )
+    caplog.set_level(logging.DEBUG)
+
+    async def exercise() -> None:
+        async with _mcp_client(token) as mcp_client:
+            result = await mcp_client.call_tool("ask_news", arguments)
+        assert result.structured_content == {
+            "answer": "Grounded answer [1]",
+            "citations": [{"id": 17, "title": "A source", "url": "https://example.com/a"}],
+            "trace_id": trace_id,
+            "truncated": False,
+        }
+
+    asyncio.run(exercise())
+    assert captured == {
+        "question": expected_question,
+        "include_all": expected_include_all,
+        "user_id": user_id,
+        "execution_policy": MCP_ASK_EXECUTION_POLICY,
+    }
+    assert recorded == [
+        {
+            "trace_id": trace_id,
+            "citation_count": 1,
+            "truncated": False,
+            "status": "ok",
+        }
+    ]
+    formatter = logging.Formatter("%(levelname)s %(name)s %(message)s")
+    server_logs = "\n".join(
+        formatter.format(record)
+        for record in caplog.records
+        if record.name.startswith(("news_dashboard", "fastmcp", "mcp.server"))
+    )
+    for private_value in (
+        expected_question,
+        "Grounded answer [1]",
+        "https://example.com/a",
+        token,
+    ):
+        assert private_value not in server_logs
+
+
+@pytest.mark.parametrize(
+    ("answer", "expected_ids"),
+    [
+        ("First [2], then [1], then [2].", [22, 11]),
+        ("Invalid [0] [-1] [3] [x] [ 1 ].", []),
+        ("A canonical positive decimal: [1].", [11]),
+    ],
+)
+def test_ask_result_uses_only_valid_bracket_positions_in_first_cited_order(
+    answer: str, expected_ids: list[int]
+) -> None:
+    from news_dashboard.mcp.ask import shape_ask_result
+
+    result = shape_ask_result(
+        {
+            "answer": answer,
+            "sources": [
+                {"id": 11, "title": "One", "url": "https://one.test/story"},
+                {"id": 22, "title": "Two", "url": "https://two.test/story"},
+            ],
+            "trace_id": None,
+        }
+    )
+
+    assert [citation["id"] for citation in result["citations"]] == expected_ids
+
+
+@pytest.mark.parametrize(
+    "answer",
+    [
+        "Nested [[1]]",
+        "Extra opener [[1]",
+        "Extra closer [1]]",
+        "Deep [[[1]]]",
+        "Mixed [ [1]] and [[1] ]",
+    ],
+)
+def test_ask_result_rejects_references_embedded_in_extra_brackets(answer: str) -> None:
+    from news_dashboard.mcp.ask import shape_ask_result
+
+    result = shape_ask_result(
+        {
+            "answer": answer,
+            "sources": [{"id": 1, "title": "One", "url": "https://one.test/story"}],
+            "trace_id": None,
+        }
+    )
+
+    assert result["citations"] == []
+
+
+def test_ask_result_accepts_adjacent_references_and_punctuation() -> None:
+    from news_dashboard.mcp.ask import shape_ask_result
+
+    result = shape_ask_result(
+        {
+            "answer": "Adjacent [1][2]; punctuation ([2]), [1].",
+            "sources": [
+                {"id": 1, "title": "One", "url": "https://one.test/story"},
+                {"id": 2, "title": "Two", "url": "https://two.test/story"},
+            ],
+            "trace_id": None,
+        }
+    )
+
+    assert [citation["id"] for citation in result["citations"]] == [1, 2]
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        {"id": True, "title": "Boolean", "url": "https://example.test/1"},
+        {"id": 0, "title": "Zero", "url": "https://example.test/1"},
+        {"id": -1, "title": "Negative", "url": "https://example.test/1"},
+        {"id": 1, "title": "   ", "url": "https://example.test/1"},
+        {"id": 1, "title": "Title", "url": 123},
+        {"id": 1, "title": "Title", "url": "javascript:alert(1)"},
+        {"id": 1, "title": "Title", "url": "file:///etc/passwd"},
+        {"id": 1, "title": "Title", "url": "https://user:pass@example.test/story"},
+        {"id": 1, "title": "Title", "url": "https://example.test\\@evil.test/story"},
+        {"id": 1, "title": "Title", "url": "https:///missing-host"},
+        {"id": 1, "title": "Title", "url": "https://example.test:/story"},
+        {"id": 1, "title": "Title", "url": "https://example.test:0/story"},
+        {"id": 1, "title": "Title", "url": "https://example.test:65536/story"},
+        {"id": 1, "title": "Title", "url": "https://example.test:notaport/story"},
+        {"id": 1, "title": "Title", "url": "https://%65xample.test/story"},
+        {"id": 1, "title": "Title", "url": "https://exa_mple.test/story"},
+        {"id": 1, "title": "Title", "url": "https://-example.test/story"},
+        {"id": 1, "title": "Title", "url": "https://example..test/story"},
+        {"id": 1, "title": "Title", "url": "https://[not-ipv6]/story"},
+    ],
+)
+def test_ask_result_omits_invalid_citation_records(source: dict[str, object]) -> None:
+    from news_dashboard.mcp.ask import shape_ask_result
+
+    result = shape_ask_result({"answer": "Claim [1]", "sources": [source], "trace_id": None})
+
+    assert result["citations"] == []
+
+
+def test_ask_result_normalizes_urls_and_deduplicates_article_ids() -> None:
+    from news_dashboard.mcp.ask import shape_ask_result
+
+    result = shape_ask_result(
+        {
+            "answer": "Claims [1], [2], and [3].",
+            "sources": [
+                {
+                    "id": 7,
+                    "title": " First title ",
+                    "url": "HTTPS://Example.TEST/story/?utm_source=mcp&b=2&a=1#fragment",
+                },
+                {"id": 7, "title": "Duplicate", "url": "https://duplicate.test"},
+                {"id": 8, "title": "HTTP stays HTTP", "url": "http://HTTP.test/path/"},
+            ],
+            "trace_id": "ABCDEF0123456789ABCDEF0123456789",
+        }
+    )
+
+    assert result == {
+        "answer": "Claims [1], [2], and [3].",
+        "citations": [
+            {
+                "id": 7,
+                "title": "First title",
+                "url": "https://example.test/story?a=1&b=2",
+            },
+            {"id": 8, "title": "HTTP stays HTTP", "url": "http://http.test/path"},
+        ],
+        "trace_id": "abcdef0123456789abcdef0123456789",
+        "truncated": False,
+    }
+
+
+@pytest.mark.parametrize(
+    ("url", "expected"),
+    [
+        ("https://192.0.2.1/story", "https://192.0.2.1/story"),
+        ("https://[2001:db8::1]/story", "https://[2001:db8::1]/story"),
+        ("https://BÜCHER.example/story", "https://bücher.example/story"),
+        ("https://XN--BCHER-KVA.example/story", "https://xn--bcher-kva.example/story"),
+    ],
+)
+def test_ask_result_preserves_valid_normalized_ip_and_idna_hosts(url: str, expected: str) -> None:
+    from news_dashboard.mcp.ask import shape_ask_result
+
+    result = shape_ask_result(
+        {
+            "answer": "Claim [1]",
+            "sources": [{"id": 1, "title": "Title", "url": url}],
+            "trace_id": None,
+        }
+    )
+
+    assert result["citations"] == [{"id": 1, "title": "Title", "url": expected}]
+
+
+def test_ask_result_omits_overlong_url_instead_of_rewriting_destination() -> None:
+    from news_dashboard.mcp.ask import shape_ask_result
+
+    overlong_url = "https://example.test/" + "x" * 2_100
+    result = shape_ask_result(
+        {
+            "answer": "Claim [1]",
+            "sources": [{"id": 1, "title": "Title", "url": overlong_url}],
+            "trace_id": None,
+        }
+    )
+
+    assert result["citations"] == []
+    assert result["truncated"] is True
+    assert overlong_url[:2_048] not in json.dumps(result)
+
+
+@pytest.mark.parametrize(
+    "overlong_url",
+    [
+        "https://example.test/" + "x" * 16_385,
+        "https://example.test/" + "é" * 1_100,
+    ],
+)
+def test_ask_result_marks_capacity_omission_while_preserving_other_citations(
+    overlong_url: str,
+) -> None:
+    from news_dashboard.mcp.ask import shape_ask_result
+
+    result = shape_ask_result(
+        {
+            "answer": "Oversized [1], valid [2].",
+            "sources": [
+                {"id": 1, "title": "Oversized", "url": overlong_url},
+                {"id": 2, "title": "Valid", "url": "https://valid.test/story"},
+            ],
+            "trace_id": None,
+        }
+    )
+
+    assert result["citations"] == [{"id": 2, "title": "Valid", "url": "https://valid.test/story"}]
+    assert result["truncated"] is True
+
+
+def test_ask_result_fails_closed_when_url_normalization_raises(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from news_dashboard.mcp import ask
+
+    monkeypatch.setattr(
+        ask,
+        "canonicalize_url",
+        lambda _url: (_ for _ in ()).throw(ValueError("private normalization detail")),
+    )
+
+    result = ask.shape_ask_result(
+        {
+            "answer": "Claim [1]",
+            "sources": [{"id": 1, "title": "Title", "url": "https://example.test/a"}],
+            "trace_id": None,
+        }
+    )
+
+    assert result["citations"] == []
+
+
+@pytest.mark.parametrize("reference", ["[" + "9" * 5_000 + "]", "[0001]"])
+def test_ask_result_ignores_ambiguous_or_oversized_decimal_references(reference: str) -> None:
+    from news_dashboard.mcp.ask import shape_ask_result
+
+    result = shape_ask_result(
+        {
+            "answer": f"Ordinary text {reference}",
+            "sources": [{"id": 1, "title": "Title", "url": "https://example.test/a"}],
+            "trace_id": None,
+        }
+    )
+
+    assert result["citations"] == []
+
+
+@pytest.mark.parametrize(
+    ("trace_id", "expected"),
+    [
+        ("0123456789abcdef0123456789abcdef", "0123456789abcdef0123456789abcdef"),
+        ("ABCDEF0123456789ABCDEF0123456789", "abcdef0123456789abcdef0123456789"),
+        ("trace-local", None),
+        ("0" * 31, None),
+        (123, None),
+    ],
+)
+def test_ask_result_validates_trace_id(trace_id: object, expected: str | None) -> None:
+    from news_dashboard.mcp.ask import shape_ask_result
+
+    result = shape_ask_result({"answer": "Answer", "sources": [], "trace_id": trace_id})
+
+    assert result["trace_id"] == expected
+
+
+def test_ask_result_is_utf8_safe_and_within_structured_budget() -> None:
+    from news_dashboard.mcp.ask import shape_ask_result
+    from news_dashboard.mcp.server import MCP_STRUCTURED_CONTENT_BYTES
+
+    result = shape_ask_result(
+        {
+            "answer": '🙂雪\\"' * 8_000 + " [1] [2]",
+            "sources": [
+                {
+                    "id": 1,
+                    "title": 'Title 🙂雪\\"' * 1_000,
+                    "url": "https://example.test/" + "safe" * 1_000,
+                },
+                {"id": 2, "title": "Second", "url": "https://second.test/story"},
+            ],
+            "trace_id": "a" * 32,
+        }
+    )
+    encoded = json.dumps(result, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
+
+    assert len(encoded) <= MCP_STRUCTURED_CONTENT_BYTES
+    assert result["truncated"] is True
+    assert result["answer"]
+    result["answer"].encode("utf-8").decode("utf-8")
+    assert all(set(citation) == {"id", "title", "url"} for citation in result["citations"])
+
+
+def test_ask_news_transport_stays_within_wire_budget(
+    pg_clean: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from news_dashboard.mcp import service
+
+    monkeypatch.setenv("DATABASE_URL", pg_clean)
+    user_id = _make_user(pg_clean, "ask-wire-budget")
+    token = service.create_token(user_id, "client", scopes=("ask",), database_url=pg_clean)["token"]
+    answer_sentinel = "wire-budget-answer " + " ".join(f"[{index}]" for index in range(1, 13))
+    monkeypatch.setattr(
+        "news_dashboard.assistant.service.ask",
+        lambda *_args, **_kwargs: {
+            "answer": answer_sentinel,
+            "sources": [
+                {
+                    "id": index,
+                    "title": "雪" * 4_000,
+                    "url": f"https://example.test/{index}",
+                }
+                for index in range(1, 13)
+            ],
+            "trace_id": None,
+        },
+    )
+    response_bodies: list[bytes] = []
+
+    async def exercise() -> None:
+        async with _mcp_client(token, response_bodies=response_bodies) as mcp_client:
+            result = await mcp_client.call_tool("ask_news", {"question": "Question"})
+        assert result.structured_content is not None
+        assert result.structured_content["answer"] == answer_sentinel
+        assert result.structured_content["truncated"] is True
+
+    asyncio.run(exercise())
+    tool_response = next(
+        body
+        for body in response_bodies
+        if b'"structuredContent"' in body and answer_sentinel.encode() in body
+    )
+    assert len(tool_response) <= 16_384
+    payload = _decode_sse_json_response(tool_response)
+    assert payload["jsonrpc"] == "2.0"
+    assert isinstance(payload["id"], int)
+    structured = payload["result"]["structuredContent"]
+    assert set(structured) == {"answer", "citations", "trace_id", "truncated"}
+    assert structured["answer"] == answer_sentinel
+    assert isinstance(structured["citations"], list)
+    assert structured["trace_id"] is None
+    assert structured["truncated"] is True
+
+
+def test_ask_news_dedicated_bucket_refills_without_sleep() -> None:
+    from news_dashboard.mcp.server import _AskRateLimiter
+
+    now = [100.0]
+    limiter = _AskRateLimiter(clock=lambda: now[0])
+    identity = "mcp-rate:" + "a" * 64
+
+    assert limiter.consume(identity) is True
+    assert limiter.consume(identity) is True
+    assert limiter.consume(identity) is False
+    now[0] += 29.999
+    assert limiter.consume(identity) is False
+    now[0] += 0.001
+    assert limiter.consume(identity) is True
+
+
+def test_ask_news_dedicated_bucket_isolates_tokens_and_bounds_lru() -> None:
+    from news_dashboard.mcp.server import _AskRateLimiter
+
+    limiter = _AskRateLimiter(clock=lambda: 100.0, max_identities=4_096)
+    first_identity = "mcp-rate:" + "a" * 64
+    second_identity = "mcp-rate:" + "b" * 64
+    assert limiter.consume(first_identity) is True
+    assert limiter.consume(first_identity) is True
+    assert limiter.consume(first_identity) is False
+    assert limiter.consume(second_identity) is True
+
+    for index in range(4_096):
+        assert limiter.consume(f"mcp-rate:{index:064x}") is True
+    assert len(limiter) == 4_096
+    assert limiter.consume(first_identity) is True
+
+
+@pytest.mark.parametrize("identity", [None, "", "mcp-token:1", "mcp-rate:", "mcp-rate:not-hex", 1])
+def test_ask_news_dedicated_bucket_fails_closed_for_invalid_identity(identity: object) -> None:
+    from news_dashboard.mcp.server import _AskRateLimiter
+
+    limiter = _AskRateLimiter(clock=lambda: 100.0)
+    with pytest.raises(AuthorizationError, match="Authorization required"):
+        limiter.consume(identity)
+
+
+def test_ask_news_dedicated_middleware_ignores_non_ask_tools(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from news_dashboard.mcp import server
+
+    middleware = server._AskRateLimitingMiddleware(
+        limiter=server._AskRateLimiter(clock=lambda: 100.0)
+    )
+    opaque_value = "-".join(("private", "bearer"))
+    token = AccessToken(
+        token=opaque_value,
+        client_id="mcp-token:5",
+        subject="7",
+        scopes=["search"],
+        claims={"user_id": 7},
+    )
+    monkeypatch.setattr(server, "get_access_token", lambda: token)
+    context = MiddlewareContext(
+        message=type("Params", (), {"name": "search_news"})(), method="tools/call"
+    )
+
+    from fastmcp.tools.base import ToolResult
+
+    async def call_next(_context: MiddlewareContext[Any]) -> ToolResult:
+        return ToolResult(content="ok")
+
+    result = asyncio.run(middleware.on_call_tool(cast("Any", context), cast("Any", call_next)))
+    assert result.is_error is False
+
+
+def test_ask_news_uses_foreground_timeout_and_abandonable_thread(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from fastmcp.exceptions import ToolError
+
+    from news_dashboard.mcp import server
+
+    calls: dict[str, object] = {}
+
+    class ImmediateTimeout:
+        def __enter__(self) -> None:
+            raise TimeoutError
+
+        def __exit__(self, *_args: object) -> None:
+            return None
+
+    monkeypatch.setattr(
+        server, "fail_after", lambda seconds: (calls.update(seconds=seconds), ImmediateTimeout())[1]
+    )
+    monkeypatch.setattr(server, "_current_user_id", lambda: 7)
+    monkeypatch.setattr(server, "_ask_rate_limit_identity", lambda: "mcp-rate:" + "a" * 64)
+
+    with pytest.raises(ToolError, match="ask_timeout"):
+        asyncio.run(server.ask_news("Question"))
+    assert calls == {"seconds": 30.0}
+
+
+@pytest.mark.parametrize(
+    ("exception_factory", "code", "message"),
+    [
+        (
+            lambda: __import__(
+                "news_dashboard.embeddings", fromlist=["MissingAICredentialsError"]
+            ).MissingAICredentialsError("SECRET"),
+            "ask_not_configured",
+            "News answering is not configured.",
+        ),
+        (
+            lambda: __import__(
+                "news_dashboard.embeddings", fromlist=["EmbeddingUnavailableError"]
+            ).EmbeddingUnavailableError("provider body"),
+            "embedding_unavailable",
+            "News retrieval is temporarily unavailable.",
+        ),
+    ],
+)
+def test_ask_news_maps_application_errors_to_fixed_public_errors(
+    exception_factory: Any, code: str, message: str
+) -> None:
+    from news_dashboard.mcp.server import _public_ask_error
+
+    private_error = exception_factory()
+    public_error = _public_ask_error(private_error)
+    rendered = str(public_error)
+    assert code in rendered
+    assert message in rendered
+    assert str(private_error) not in rendered
+
+
+@pytest.mark.parametrize(
+    ("error_name", "expected_code"),
+    [
+        ("AuthenticationError", "provider_authentication_failed"),
+        ("PermissionDeniedError", "provider_authentication_failed"),
+        ("RateLimitError", "provider_rate_limited"),
+        ("APITimeoutError", "ask_timeout"),
+        ("APIConnectionError", "ask_unavailable"),
+        ("APIStatusError", "ask_unavailable"),
+    ],
+)
+def test_ask_news_maps_provider_errors_without_provider_details(
+    error_name: str, expected_code: str
+) -> None:
+    import openai
+
+    from news_dashboard.mcp.server import _public_ask_error
+
+    request = httpx.Request("POST", "https://provider.test/private")
+    if error_name in {"APITimeoutError", "APIConnectionError"}:
+        private_error = getattr(openai, error_name)(request=request)
+    else:
+        response = httpx.Response(503, request=request)
+        private_error = getattr(openai, error_name)(
+            "private provider response", response=response, body={"secret": "body"}
+        )
+    rendered = str(_public_ask_error(private_error))
+    assert expected_code in rendered
+    for private_value in ("provider.test", "private provider response", "secret", "body"):
+        assert private_value not in rendered
+
+
+def test_ask_news_preserves_cancellation_and_requests_abandonable_thread(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from news_dashboard.mcp import server
+
+    captured: dict[str, object] = {}
+
+    async def cancelled_run_sync(
+        _function: Any, *, abandon_on_cancel: bool = False
+    ) -> dict[str, Any]:
+        captured["abandon_on_cancel"] = abandon_on_cancel
+        raise asyncio.CancelledError
+
+    monkeypatch.setattr("news_dashboard.mcp.server.to_thread.run_sync", cancelled_run_sync)
+    monkeypatch.setattr(server, "_current_user_id", lambda: 7)
+
+    with pytest.raises(asyncio.CancelledError):
+        asyncio.run(server.ask_news("Question"))
+    assert captured == {"abandon_on_cancel": True}
+
+
+def test_ask_news_dedicated_rate_is_distinct_from_provider_rate(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from fastmcp.exceptions import ToolError
+    from fastmcp.tools.base import ToolResult
+
+    from news_dashboard.mcp import server
+
+    limiter = server._AskRateLimiter(clock=lambda: 100.0)
+    middleware = server._AskRateLimitingMiddleware(limiter=limiter)
+    opaque_value = "-".join(("private", "bearer"))
+    token = AccessToken(
+        token=opaque_value,
+        client_id="public-db-token-id",
+        subject="7",
+        scopes=["ask"],
+        claims={"user_id": 7, "rate_limit_id": "mcp-rate:" + "a" * 64},
+    )
+    monkeypatch.setattr(server, "get_access_token", lambda: token)
+    context = MiddlewareContext(
+        message=type("Params", (), {"name": "ask_news"})(), method="tools/call"
+    )
+
+    async def call_next(_context: MiddlewareContext[Any]) -> ToolResult:
+        return ToolResult(content="ok")
+
+    assert (
+        asyncio.run(middleware.on_call_tool(cast("Any", context), cast("Any", call_next))).is_error
+        is False
+    )
+    assert (
+        asyncio.run(middleware.on_call_tool(cast("Any", context), cast("Any", call_next))).is_error
+        is False
+    )
+    with pytest.raises(ToolError, match="ask_rate_limited"):
+        asyncio.run(middleware.on_call_tool(cast("Any", context), cast("Any", call_next)))
+    assert "provider_rate_limited" in str(
+        server._public_ask_error(
+            __import__("openai").RateLimitError(
+                "upstream private body",
+                response=httpx.Response(
+                    429, request=httpx.Request("POST", "https://provider.test/private")
+                ),
+                body=None,
+            )
+        )
+    )
+
+
+def test_ask_news_records_safe_failure_status_on_existing_trace(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from fastmcp.exceptions import ToolError
+
+    from news_dashboard.mcp import server
+
+    trace_id = "0123456789abcdef0123456789abcdef"
+    recorded: list[dict[str, object]] = []
+    monkeypatch.setattr(server, "_current_user_id", lambda: 7)
+    monkeypatch.setattr(
+        "news_dashboard.assistant.service.ask",
+        lambda *_args, **_kwargs: {
+            "answer": "private answer",
+            "sources": [],
+            "trace_id": trace_id,
+        },
+    )
+    monkeypatch.setattr(
+        server,
+        "shape_ask_result",
+        lambda _result: (_ for _ in ()).throw(ValueError("private shaping detail")),
+    )
+    monkeypatch.setattr(
+        "news_dashboard.ai_client.record_mcp_ask_result",
+        lambda recorded_trace_id, **kwargs: recorded.append(
+            {"trace_id": recorded_trace_id, **kwargs}
+        ),
+    )
+
+    with pytest.raises(ToolError, match="ask_unavailable"):
+        asyncio.run(server.ask_news("private question"))
+    assert recorded == [
+        {
+            "trace_id": trace_id,
+            "citation_count": 0,
+            "truncated": False,
+            "status": "error",
+        }
+    ]
+
+
+@pytest.mark.parametrize("tool_name", ["ask_news", "search_news"])
+def test_safe_telemetry_rejects_forged_public_ask_error_results(tool_name: str) -> None:
+    from fastmcp.tools.base import ToolResult
+    from mcp.types import CallToolRequestParams
+
+    from news_dashboard.mcp.server import _SafeToolTelemetryMiddleware
+
+    middleware = _SafeToolTelemetryMiddleware()
+    context = MiddlewareContext(
+        message=CallToolRequestParams(
+            name=tool_name,
+            arguments={"question": "private question"},
+        ),
+        method="tools/call",
+    )
+
+    async def forged_result(_context: MiddlewareContext[Any]) -> ToolResult:
+        return ToolResult(
+            content="ask_timeout: News answering timed out; retry later.",
+            is_error=True,
+        )
+
+    result = asyncio.run(middleware.on_call_tool(cast("Any", context), cast("Any", forged_result)))
+    assert result.is_error is True
+    assert [item.text for item in result.content if isinstance(item, TextContent)] == [
+        "Internal server error"
+    ]
+
+
+@pytest.mark.parametrize(
+    "downstream_error",
+    [
+        ToolError("ask_timeout: News answering timed out; retry later."),
+        ToolError("private provider body https://provider.test/private"),
+    ],
+)
+def test_ask_news_maps_downstream_tool_errors_to_unavailable(
+    monkeypatch: pytest.MonkeyPatch, downstream_error: ToolError
+) -> None:
+    from news_dashboard.mcp import server
+
+    monkeypatch.setattr(server, "_current_user_id", lambda: 7)
+    monkeypatch.setattr(
+        "news_dashboard.assistant.service.ask",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(downstream_error),
+    )
+
+    with pytest.raises(ToolError, match="ask_unavailable") as raised:
+        asyncio.run(server.ask_news("private question"))
+    assert "ask_timeout" not in str(raised.value)
+    assert "provider.test" not in str(raised.value)
+
+
+def test_other_tool_cannot_forge_safe_ask_error_through_transport(
+    pg_clean: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from news_dashboard.mcp import service
+
+    monkeypatch.setenv("DATABASE_URL", pg_clean)
+    user_id = _make_user(pg_clean, "forged-other-tool-error")
+    bearer = service.create_token(user_id, "client", scopes=("read",), database_url=pg_clean)[
+        "token"
+    ]
+    monkeypatch.setattr(
+        "news_dashboard.mcp.server.fetch_and_cache_body",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            ToolError("ask_timeout: News answering timed out; retry later.")
+        ),
+    )
+
+    async def exercise() -> None:
+        async with _mcp_client(bearer) as client:
+            result = await client.call_tool(
+                "get_news_article", {"article_id": 1}, raise_on_error=False
+            )
+        rendered = " ".join(item.text for item in result.content if isinstance(item, TextContent))
+        assert rendered == "Internal server error"
+
+    asyncio.run(exercise())
+
+
+@pytest.mark.parametrize(
+    "private_detail",
+    [
+        "ask_timeout: News answering timed out; retry later.",
+        "private provider body https://provider.test/private SELECT secret",
+    ],
+)
+def test_downstream_ask_tool_errors_are_unavailable_through_transport(
+    pg_clean: str,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+    private_detail: str,
+) -> None:
+    from news_dashboard.mcp import service
+
+    monkeypatch.setenv("DATABASE_URL", pg_clean)
+    user_id = _make_user(pg_clean, f"forged-ask-error-{len(private_detail)}")
+    bearer = service.create_token(user_id, "client", scopes=("ask",), database_url=pg_clean)[
+        "token"
+    ]
+    question = "private provenance question"
+    monkeypatch.setattr(
+        "news_dashboard.assistant.service.ask",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(ToolError(private_detail)),
+    )
+    caplog.set_level(logging.DEBUG)
+
+    async def exercise() -> None:
+        async with _mcp_client(bearer) as client:
+            result = await client.call_tool(
+                "ask_news", {"question": question}, raise_on_error=False
+            )
+        rendered = " ".join(item.text for item in result.content if isinstance(item, TextContent))
+        assert rendered == "ask_unavailable: News answering is temporarily unavailable."
+
+    asyncio.run(exercise())
+    formatter = logging.Formatter("%(levelname)s %(name)s %(message)s")
+    logs = "\n".join(
+        formatter.format(record)
+        for record in caplog.records
+        if record.name.startswith(("news_dashboard", "fastmcp", "mcp.server"))
+    )
+    for private_value in (question, private_detail, bearer, "provider.test", "SELECT secret"):
+        assert private_value not in logs
+
+
+def test_ask_news_foreground_deadline_returns_before_abandoned_worker_finishes(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from time import monotonic
+
+    from fastmcp.exceptions import ToolError
+
+    from news_dashboard.mcp import server
+
+    worker_started = Event()
+    release_worker = Event()
+    worker_finished = Event()
+
+    def blocking_ask(*_args: Any, **_kwargs: Any) -> dict[str, Any]:
+        worker_started.set()
+        release_worker.wait(timeout=2)
+        worker_finished.set()
+        return {"answer": "late", "sources": [], "trace_id": None}
+
+    monkeypatch.setattr(server, "_current_user_id", lambda: 7)
+    monkeypatch.setattr(server, "MCP_ASK_FOREGROUND_TIMEOUT_SECONDS", 0.02)
+    monkeypatch.setattr("news_dashboard.assistant.service.ask", blocking_ask)
+
+    async def exercise() -> None:
+        started_at = monotonic()
+        with pytest.raises(ToolError, match="ask_timeout"):
+            await server.ask_news("private question")
+        elapsed = monotonic() - started_at
+        assert worker_started.is_set()
+        assert elapsed < 0.5
+        assert worker_finished.is_set() is False
+        release_worker.set()
+
+    asyncio.run(exercise())
+    assert worker_finished.wait(timeout=1)
+
+
+def test_ask_news_lru_access_refreshes_true_recency() -> None:
+    from news_dashboard.mcp.server import _AskRateLimiter
+
+    limiter = _AskRateLimiter(clock=lambda: 100.0, max_identities=3)
+    identities = [f"mcp-rate:{index:064x}" for index in range(1, 5)]
+    for identity in identities[:3]:
+        assert limiter.consume(identity) is True
+        assert limiter.consume(identity) is True
+        assert limiter.consume(identity) is False
+    assert limiter.consume(identities[0]) is False
+    assert limiter.consume(identities[3]) is True
+    assert limiter.consume(identities[0]) is False
+    assert limiter.consume(identities[1]) is True
+
+
+def test_ask_news_timeout_error_is_stable_through_real_transport(
+    pg_clean: str,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    from news_dashboard.mcp import service
+
+    monkeypatch.setenv("DATABASE_URL", pg_clean)
+    user_id = _make_user(pg_clean, "ask-stable-timeout")
+    bearer = service.create_token(user_id, "client", scopes=("ask",), database_url=pg_clean)[
+        "token"
+    ]
+    private_values = (
+        "private question",
+        "private context",
+        "private answer",
+        bearer,
+        "https://provider.test/private",
+        "SELECT private FROM secrets",
+    )
+
+    def timed_out(*_args: Any, **_kwargs: Any) -> dict[str, Any]:
+        raise TimeoutError(" ".join(private_values))
+
+    monkeypatch.setattr("news_dashboard.assistant.service.ask", timed_out)
+    caplog.set_level(logging.DEBUG)
+
+    async def exercise() -> None:
+        async with _mcp_client(bearer) as client:
+            result = await client.call_tool(
+                "ask_news", {"question": private_values[0]}, raise_on_error=False
+            )
+        assert result.is_error is True
+        rendered = " ".join(item.text for item in result.content if isinstance(item, TextContent))
+        assert "ask_timeout" in rendered
+        assert "News answering timed out; retry later." in rendered
+
+    asyncio.run(exercise())
+    formatter = logging.Formatter("%(levelname)s %(name)s %(message)s")
+    logs = "\n".join(
+        formatter.format(record)
+        for record in caplog.records
+        if record.name.startswith(("news_dashboard", "fastmcp", "mcp.server"))
+    )
+    for private_value in private_values:
+        assert private_value not in logs
 
 
 def test_get_news_article_returns_canonical_visible_article(

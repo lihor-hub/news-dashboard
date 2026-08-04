@@ -40,6 +40,16 @@ _DEFAULT_AI_REQUEST_TIMEOUT_SECONDS = 30.0
 _DEFAULT_AI_TTS_TIMEOUT_SECONDS = 120.0
 
 
+@dataclass(frozen=True)
+class SafeAIObservation:
+    """Metadata-only Langfuse observation for a provider operation."""
+
+    operation: str
+    as_type: Literal["generation", "embedding"]
+    model: str
+    model_parameters: dict[str, str | int | float | bool] = field(default_factory=dict)
+
+
 def _timeout_seconds_from_env(name: str, default: float) -> float:
     value = os.getenv(name)
     if value is None:
@@ -200,6 +210,7 @@ def get_openai_client(
     api_key: str,
     base_url: str | None = None,
     timeout_seconds: float | None = None,
+    enable_tracing: bool = True,
 ) -> OpenAI:
     """Return an OpenAI client, Langfuse-wrapped when tracing is configured.
 
@@ -213,7 +224,7 @@ def get_openai_client(
     if base_url is not None:
         kwargs["base_url"] = base_url
 
-    if langfuse_enabled():
+    if enable_tracing and langfuse_enabled():
         _normalise_host_env()
         # Langfuse's drop-in client subclasses openai.OpenAI and traces every
         # request. Resolve it dynamically so this module type-checks whether or
@@ -235,6 +246,7 @@ def get_chat_model(
     max_tokens: int | None = None,
     temperature: float | None = None,
     response_format: dict[str, str] | None = None,
+    timeout_seconds: float | None = None,
 ) -> Runnable[LanguageModelInput, AIMessage]:
     """Return a LangChain chat model with the existing OpenAI fallback semantics."""
     from langchain_core.runnables import RunnableConfig, RunnableLambda
@@ -244,7 +256,7 @@ def get_chat_model(
     kwargs: dict[str, Any] = {
         "api_key": api_key,
         "model": model,
-        "timeout": request_timeout_seconds(),
+        "timeout": request_timeout_seconds() if timeout_seconds is None else timeout_seconds,
     }
     if base_url is not None:
         kwargs["base_url"] = base_url
@@ -263,7 +275,7 @@ def get_chat_model(
     fallback_kwargs: dict[str, Any] = {
         "api_key": openai_key,
         "model": model,
-        "timeout": request_timeout_seconds(),
+        "timeout": request_timeout_seconds() if timeout_seconds is None else timeout_seconds,
     }
     if openai_base is not None:
         fallback_kwargs["base_url"] = openai_base
@@ -298,8 +310,10 @@ def response_text(message: AIMessage) -> str:
 
 def _invoke[T](
     primary: OpenAI,
-    fallback: tuple[str, str | None] | None,
+    fallback: tuple[str, str | None, float | None, bool] | None,
     call: Callable[[OpenAI], T],
+    observation: SafeAIObservation | None = None,
+    request_attempt: int = 1,
 ) -> T:
     """Run *call* against *primary*; on OpenAIError retry once on the OpenAI fallback.
 
@@ -309,45 +323,184 @@ def _invoke[T](
     runs directly against *primary* and any error propagates unchanged.
     """
     if fallback is None:
-        return call(primary)
+        return _safe_provider_call(
+            primary,
+            call,
+            observation,
+            provider="primary",
+            attempt=1,
+            request_attempt=request_attempt,
+        )
 
     from openai import OpenAIError  # lazy import — optional dep at import time
 
     try:
-        return call(primary)
+        return _safe_provider_call(
+            primary,
+            call,
+            observation,
+            provider="primary",
+            attempt=1,
+            request_attempt=request_attempt,
+        )
     except OpenAIError as exc:
-        api_key, base_url = fallback
-        logger.warning("free LLM request failed (%s); retrying on OpenAI fallback", exc)
-        return call(get_openai_client(api_key=api_key, base_url=base_url))
+        api_key, base_url, timeout_seconds, enable_tracing = fallback
+        if enable_tracing:
+            logger.warning("free LLM request failed (%s); retrying on OpenAI fallback", exc)
+        else:
+            logger.warning("free LLM request failed; retrying on OpenAI fallback")
+        kwargs: dict[str, Any] = {"api_key": api_key, "base_url": base_url}
+        if timeout_seconds is not None:
+            kwargs["timeout_seconds"] = timeout_seconds
+        if not enable_tracing:
+            kwargs["enable_tracing"] = False
+        fallback_client = get_openai_client(**kwargs)
+        return _safe_provider_call(
+            fallback_client,
+            call,
+            observation,
+            provider="fallback",
+            attempt=2,
+            request_attempt=request_attempt,
+        )
+
+
+def _usage_details(response: Any) -> dict[str, int]:
+    usage = getattr(response, "usage", None)
+    if usage is None:
+        return {}
+    fields = {
+        "input": getattr(usage, "prompt_tokens", None),
+        "output": getattr(usage, "completion_tokens", None),
+        "total": getattr(usage, "total_tokens", None),
+    }
+    return {name: value for name, value in fields.items() if isinstance(value, int)}
+
+
+def _cost_details(response: Any) -> dict[str, float]:
+    usage = getattr(response, "usage", None)
+    cost = getattr(usage, "cost", None)
+    return {"total": cost} if isinstance(cost, float) else {}
+
+
+def _safe_provider_call[T](
+    client: OpenAI,
+    call: Callable[[OpenAI], T],
+    observation: SafeAIObservation | None,
+    *,
+    provider: str,
+    attempt: int,
+    request_attempt: int,
+) -> T:
+    if observation is None or not langfuse_enabled():
+        return call(client)
+    metadata = {
+        "operation": observation.operation,
+        "provider": provider,
+        "attempt": attempt,
+        "retry": request_attempt - 1,
+    }
+    response: T | None = None
+    failure: BaseException | None = None
+    failure_traceback = None
+    with _client().start_as_current_observation(
+        name=f"{observation.operation}-{provider}",
+        as_type=observation.as_type,
+        input=None,
+        model=observation.model,
+        model_parameters=observation.model_parameters,
+        metadata=metadata,
+    ) as provider_observation:
+        try:
+            response = call(client)
+        except BaseException as exc:
+            provider_observation.update(
+                output={"status": "error"},
+                level="ERROR",
+                status_message="provider request failed",
+                metadata={**metadata, "outcome": "failure"},
+            )
+            response = None
+            failure = exc
+            failure_traceback = exc.__traceback__
+        else:
+            update: dict[str, Any] = {
+                "output": {"status": "ok"},
+                "usage_details": _usage_details(response),
+                "metadata": {**metadata, "outcome": "success"},
+            }
+            cost_details = _cost_details(response)
+            if cost_details:
+                update["cost_details"] = cost_details
+            provider_observation.update(**update)
+    if failure is not None:
+        raise failure.with_traceback(failure_traceback)
+    if response is None:
+        message = "Provider returned no response"
+        raise RuntimeError(message)
+    return response
 
 
 class _FallbackCompletions:
     """``chat.completions`` shim that routes ``create`` through :func:`_invoke`."""
 
-    def __init__(self, primary: OpenAI, fallback: tuple[str, str | None] | None) -> None:
+    def __init__(
+        self,
+        primary: OpenAI,
+        fallback: tuple[str, str | None, float | None, bool] | None,
+        observation: SafeAIObservation | None,
+    ) -> None:
         self._primary = primary
         self._fallback = fallback
+        self._observation = observation
+        self._request_attempt = 0
 
     def create(self, **kwargs: Any) -> Any:
-        return _invoke(self._primary, self._fallback, lambda c: c.chat.completions.create(**kwargs))
+        self._request_attempt += 1
+        return _invoke(
+            self._primary,
+            self._fallback,
+            lambda c: c.chat.completions.create(**kwargs),
+            self._observation,
+            self._request_attempt,
+        )
 
 
 class _FallbackChat:
     """``chat`` namespace exposing a fallback-aware ``completions``."""
 
-    def __init__(self, primary: OpenAI, fallback: tuple[str, str | None] | None) -> None:
-        self.completions = _FallbackCompletions(primary, fallback)
+    def __init__(
+        self,
+        primary: OpenAI,
+        fallback: tuple[str, str | None, float | None, bool] | None,
+        observation: SafeAIObservation | None,
+    ) -> None:
+        self.completions = _FallbackCompletions(primary, fallback, observation)
 
 
 class _FallbackEmbeddings:
     """``embeddings`` shim that routes ``create`` through :func:`_invoke`."""
 
-    def __init__(self, primary: OpenAI, fallback: tuple[str, str | None] | None) -> None:
+    def __init__(
+        self,
+        primary: OpenAI,
+        fallback: tuple[str, str | None, float | None, bool] | None,
+        observation: SafeAIObservation | None,
+    ) -> None:
         self._primary = primary
         self._fallback = fallback
+        self._observation = observation
+        self._request_attempt = 0
 
     def create(self, **kwargs: Any) -> Any:
-        return _invoke(self._primary, self._fallback, lambda c: c.embeddings.create(**kwargs))
+        self._request_attempt += 1
+        return _invoke(
+            self._primary,
+            self._fallback,
+            lambda c: c.embeddings.create(**kwargs),
+            self._observation,
+            self._request_attempt,
+        )
 
 
 class _FallbackClient:
@@ -358,12 +511,24 @@ class _FallbackClient:
     LLM) client and falls back to OpenAI on failure (see :func:`get_chat_client`).
     """
 
-    def __init__(self, primary: OpenAI, fallback: tuple[str, str | None] | None) -> None:
-        self.chat = _FallbackChat(primary, fallback)
-        self.embeddings = _FallbackEmbeddings(primary, fallback)
+    def __init__(
+        self,
+        primary: OpenAI,
+        fallback: tuple[str, str | None, float | None, bool] | None,
+        observation: SafeAIObservation | None,
+    ) -> None:
+        self.chat = _FallbackChat(primary, fallback, observation)
+        self.embeddings = _FallbackEmbeddings(primary, fallback, observation)
 
 
-def get_chat_client(*, api_key: str, base_url: str | None = None) -> OpenAI:
+def get_chat_client(
+    *,
+    api_key: str,
+    base_url: str | None = None,
+    timeout_seconds: float | None = None,
+    enable_tracing: bool = True,
+    safe_observation: SafeAIObservation | None = None,
+) -> OpenAI:
     """Return a chat/embedding client that prefers the free LLM gateway.
 
     *api_key* / *base_url* are the primary (free LLM) credentials, as resolved by
@@ -378,12 +543,42 @@ def get_chat_client(*, api_key: str, base_url: str | None = None) -> OpenAI:
     ``chat.completions.create`` and ``embeddings.create`` calls made through it.
     The OpenAI fallback client is built lazily, only on the first failure.
     """
-    primary = get_openai_client(api_key=api_key, base_url=base_url)
+    client_kwargs: dict[str, Any] = {"api_key": api_key, "base_url": base_url}
+    if timeout_seconds is not None:
+        client_kwargs["timeout_seconds"] = timeout_seconds
+    if not enable_tracing:
+        client_kwargs["enable_tracing"] = False
+    primary = get_openai_client(**client_kwargs)
     openai_key, openai_base = openai_config()
-    fallback: tuple[str, str | None] | None = None
+    fallback: tuple[str, str | None, float | None, bool] | None = None
     if openai_key and (openai_key, openai_base) != (api_key, base_url):
-        fallback = (openai_key, openai_base)
-    return cast("OpenAI", _FallbackClient(primary, fallback))
+        fallback = (openai_key, openai_base, timeout_seconds, enable_tracing)
+    return cast("OpenAI", _FallbackClient(primary, fallback, safe_observation))
+
+
+def record_mcp_ask_result(
+    trace_id: str,
+    *,
+    citation_count: int,
+    truncated: bool,
+    status: str,
+) -> None:
+    """Attach final MCP response-shaping metadata to an existing Ask trace."""
+    if not langfuse_enabled():
+        return
+    try:
+        observation = _client().start_observation(
+            trace_context={"trace_id": trace_id},
+            name="mcp-result",
+            as_type="span",
+            input=None,
+            metadata={"surface": "mcp", "operation": "ask-result"},
+        )
+        observation.end(
+            output={"citation_count": citation_count, "truncated": truncated, "status": status}
+        )
+    except Exception:
+        logger.warning("Failed to record MCP result observation")
 
 
 # ── Trace context ────────────────────────────────────────────────────────

@@ -2,14 +2,19 @@
 
 from __future__ import annotations
 
+import logging
 import time
 from pathlib import Path
-from typing import Any
+from types import SimpleNamespace
+from typing import Any, Literal
+from unittest.mock import MagicMock
 
 import httpx
 import openai
 import pytest
 from fastapi.testclient import TestClient
+from langchain_core.messages import AIMessage
+from langchain_core.runnables import RunnableLambda
 
 from news_dashboard import embeddings as embeddings_mod
 from news_dashboard.auth import require_auth
@@ -144,7 +149,7 @@ def _seed_source(db_path: Path, slug: str = "test-source") -> None:
         )
 
 
-def _seed_unembedded_articles(db_path: Path, count: int) -> list[int]:
+def _seed_unembedded_articles(db_path: Any, count: int) -> list[int]:
     init_db(db_path)
     _seed_source(db_path)
     ids = []
@@ -202,6 +207,300 @@ def test_embed_all_eligible_skips_failing_article_and_continues(
             ).fetchall()
         }
     assert embedded_ids == {ids[0], ids[2]}
+
+
+def test_embed_all_eligible_limits_backfill_in_postgres(
+    pg_clean: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    ids = _seed_unembedded_articles(pg_clean, count=20)
+    monkeypatch.setattr(
+        embeddings_mod,
+        "_embed",
+        lambda _text, **_kwargs: [0.1] * EMBEDDING_DIMENSIONS,
+    )
+
+    count = embed_all_eligible(pg_clean, max_articles=16)
+
+    assert count == 16
+    with connect(database_url=pg_clean) as conn:
+        embedded = [
+            row["id"]
+            for row in conn.execute(
+                "SELECT id FROM articles WHERE embedding_vec IS NOT NULL ORDER BY id"
+            ).fetchall()
+        ]
+    assert embedded == ids[:16]
+
+
+def test_mcp_execution_policy_bounds_provider_calls(monkeypatch: pytest.MonkeyPatch) -> None:
+    from news_dashboard.assistant.service import AskExecutionPolicy
+
+    captured_client: dict[str, Any] = {}
+    captured_model: dict[str, Any] = {}
+
+    class FakeEmbeddingData:
+        def __init__(self) -> None:
+            self.embedding = [0.1]
+
+    class FakeEmbeddings:
+        def create(self, **_kwargs: Any) -> Any:
+            return type("Response", (), {"data": [FakeEmbeddingData()]})()
+
+    class FakeClient:
+        embeddings = FakeEmbeddings()
+
+    def fake_client(**kwargs: Any) -> FakeClient:
+        captured_client.update(kwargs)
+        return FakeClient()
+
+    monkeypatch.setattr(embeddings_mod, "_embeddings_ai_config", lambda: ("key", None, "embed"))
+    monkeypatch.setattr("news_dashboard.ai_client.get_chat_client", fake_client)
+    embeddings_mod._embed("question", timeout_seconds=20.0, trace_content=False)
+    assert captured_client["timeout_seconds"] == 20.0
+    assert captured_client["enable_tracing"] is False
+
+    monkeypatch.setenv("OPENAI_API_KEY", "key")
+    monkeypatch.setattr(
+        "news_dashboard.ai_client.get_chat_model",
+        lambda **kwargs: (
+            captured_model.update(kwargs)
+            or RunnableLambda(lambda _value: AIMessage(content="answer"))
+        ),
+    )
+    policy = AskExecutionPolicy.mcp()
+    embeddings_mod._answer(
+        "system",
+        "user",
+        max_tokens=policy.answer_max_tokens,
+        timeout_seconds=policy.provider_timeout_seconds,
+    )
+    assert captured_model["max_tokens"] == 512
+    assert captured_model["timeout_seconds"] == 20.0
+
+
+def test_private_backfill_logs_no_article_or_provider_content(
+    pg_clean: str,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    ids = _seed_unembedded_articles(pg_clean, count=1)
+    hostile = "PRIVATE PROVIDER BODY"
+
+    def fail_privately(_text: str, **_kwargs: Any) -> list[float]:
+        raise RuntimeError(hostile)
+
+    monkeypatch.setattr(embeddings_mod, "_embed", fail_privately)
+    with caplog.at_level(logging.WARNING, logger="news_dashboard.embeddings"):
+        count = embed_all_eligible(
+            pg_clean,
+            max_articles=16,
+            provider_timeout_seconds=20.0,
+            trace_content=False,
+        )
+
+    assert count == 0
+    rendered = caplog.text
+    assert hostile not in rendered
+    assert str(ids[0]) not in rendered
+
+
+def test_private_embedding_records_safe_provider_usage_at_client_boundary(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from news_dashboard import ai_client
+
+    observation = MagicMock()
+    context = MagicMock()
+    context.__enter__.return_value = observation
+    client = MagicMock()
+    client.start_as_current_observation.return_value = context
+    response = SimpleNamespace(
+        data=[SimpleNamespace(embedding=[0.1, 0.2])],
+        usage=SimpleNamespace(prompt_tokens=7, total_tokens=7),
+    )
+    plain = MagicMock()
+    plain.embeddings.create.return_value = response
+    monkeypatch.setattr(ai_client, "langfuse_enabled", lambda: True)
+    monkeypatch.setattr(ai_client, "_client", lambda: client)
+    monkeypatch.setattr(ai_client, "get_openai_client", lambda **_kwargs: plain)
+    monkeypatch.setattr(
+        embeddings_mod, "_embeddings_ai_config", lambda: ("secret", None, "embed-model")
+    )
+
+    vector = embeddings_mod._embed("PRIVATE INPUT", timeout_seconds=20.0, trace_content=False)
+
+    assert vector == [0.1, 0.2]
+    client.start_as_current_observation.assert_called_once_with(
+        name="query-embedding-primary",
+        as_type="embedding",
+        input=None,
+        model="embed-model",
+        model_parameters={},
+        metadata={
+            "operation": "query-embedding",
+            "provider": "primary",
+            "attempt": 1,
+            "retry": 0,
+        },
+    )
+    observation.update.assert_called_once_with(
+        output={"status": "ok"},
+        usage_details={"input": 7, "total": 7},
+        metadata={
+            "operation": "query-embedding",
+            "provider": "primary",
+            "attempt": 1,
+            "retry": 0,
+            "outcome": "success",
+        },
+    )
+    rendered = repr((client.mock_calls, observation.mock_calls))
+    assert "PRIVATE INPUT" not in rendered
+    assert "secret" not in rendered
+
+
+def test_private_answer_records_safe_generation_usage_at_client_boundary(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from news_dashboard import ai_client
+
+    observation = MagicMock()
+    context = MagicMock()
+    context.__enter__.return_value = observation
+    langfuse = MagicMock()
+    langfuse.start_as_current_observation.return_value = context
+    response = SimpleNamespace(
+        choices=[SimpleNamespace(message=SimpleNamespace(content="PRIVATE ANSWER"))],
+        usage=SimpleNamespace(prompt_tokens=11, completion_tokens=4, total_tokens=15, cost=0.002),
+    )
+    plain = MagicMock()
+    plain.chat.completions.create.return_value = response
+    monkeypatch.setattr(ai_client, "langfuse_enabled", lambda: True)
+    monkeypatch.setattr(ai_client, "_client", lambda: langfuse)
+    monkeypatch.setattr(ai_client, "get_openai_client", lambda **_kwargs: plain)
+    monkeypatch.setattr(ai_client, "free_llm_config", lambda: ("secret", None))
+
+    answer = embeddings_mod._answer(
+        "PRIVATE SYSTEM",
+        "PRIVATE USER PROMPT",
+        max_tokens=512,
+        timeout_seconds=20.0,
+        trace_content=False,
+    )
+
+    assert answer == "PRIVATE ANSWER"
+    langfuse.start_as_current_observation.assert_called_once_with(
+        name="answer-generation-primary",
+        as_type="generation",
+        input=None,
+        model="gpt-4o-mini",
+        model_parameters={"max_tokens": 512},
+        metadata={
+            "operation": "answer-generation",
+            "provider": "primary",
+            "attempt": 1,
+            "retry": 0,
+        },
+    )
+    observation.update.assert_called_once_with(
+        output={"status": "ok"},
+        usage_details={"input": 11, "output": 4, "total": 15},
+        metadata={
+            "operation": "answer-generation",
+            "provider": "primary",
+            "attempt": 1,
+            "retry": 0,
+            "outcome": "success",
+        },
+        cost_details={"total": 0.002},
+    )
+    rendered = repr((langfuse.mock_calls, observation.mock_calls))
+    for secret in ("PRIVATE SYSTEM", "PRIVATE USER PROMPT", "PRIVATE ANSWER", "secret"):
+        assert secret not in rendered
+
+
+def test_private_ask_root_exits_cleanly_and_returns_trace_for_small_corpus(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from news_dashboard import ai_client
+    from news_dashboard.assistant.service import AskExecutionPolicy
+
+    escaped: list[BaseException | None] = []
+    root = MagicMock()
+
+    class CleanExitContext:
+        def __enter__(self) -> MagicMock:
+            return root
+
+        def __exit__(
+            self, _kind: Any, error: BaseException | None, _traceback: Any
+        ) -> Literal[False]:
+            escaped.append(error)
+            return False
+
+    client = MagicMock()
+    client.start_as_current_observation.return_value = CleanExitContext()
+    client.get_current_trace_id.return_value = "0123456789abcdef0123456789abcdef"
+    monkeypatch.setattr(ai_client, "langfuse_enabled", lambda: True)
+    monkeypatch.setattr(ai_client, "_client", lambda: client)
+    monkeypatch.setattr(
+        embeddings_mod,
+        "_ask_impl",
+        lambda *_args, **_kwargs: {
+            "answer": "Not enough articles",
+            "sources": [],
+            "trace_id": None,
+        },
+    )
+
+    result = embeddings_mod.ask(
+        "PRIVATE QUESTION", user_id=7, execution_policy=AskExecutionPolicy.mcp()
+    )
+
+    assert escaped == [None]
+    assert result["trace_id"] == "0123456789abcdef0123456789abcdef"
+    root.update.assert_called_once_with(
+        output={"answer_chars": 19, "source_count": 0, "status": "ok"}
+    )
+
+
+def test_private_ask_root_reraises_only_after_clean_observation_exit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from news_dashboard import ai_client
+    from news_dashboard.assistant.service import AskExecutionPolicy
+
+    escaped: list[BaseException | None] = []
+    root = MagicMock()
+
+    class CleanExitContext:
+        def __enter__(self) -> MagicMock:
+            return root
+
+        def __exit__(
+            self, _kind: Any, error: BaseException | None, _traceback: Any
+        ) -> Literal[False]:
+            escaped.append(error)
+            return False
+
+    client = MagicMock()
+    client.start_as_current_observation.return_value = CleanExitContext()
+    monkeypatch.setattr(ai_client, "langfuse_enabled", lambda: True)
+    monkeypatch.setattr(ai_client, "_client", lambda: client)
+    hostile = "provider=https://secret sql=SELECT bearer=private"
+
+    def fail(*_args: Any, **_kwargs: Any) -> dict[str, Any]:
+        raise RuntimeError(hostile)
+
+    monkeypatch.setattr(embeddings_mod, "_ask_impl", fail)
+    with pytest.raises(RuntimeError, match="provider=https://secret"):
+        embeddings_mod.ask("PRIVATE QUESTION", user_id=7, execution_policy=AskExecutionPolicy.mcp())
+
+    assert escaped == [None]
+    root.update.assert_called_once_with(
+        output={"status": "error"}, level="ERROR", status_message="ask failed"
+    )
+    assert hostile not in repr(root.mock_calls)
 
 
 # ── /api/ask surfaces a clean error on persistent embedding failure ────────

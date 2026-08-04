@@ -264,6 +264,101 @@ def test_ask_uses_native_langfuse_user_and_session_attributes() -> None:
     span.update.assert_called_once_with(output="answer")
 
 
+def test_mcp_ask_trace_contains_only_safe_operational_metadata() -> None:
+    from contextlib import contextmanager
+
+    from news_dashboard import embeddings
+    from news_dashboard.assistant.service import AskExecutionPolicy
+
+    question = "PRIVATE QUESTION"
+    article_text = "PRIVATE ARTICLE"
+    answer = "PRIVATE ANSWER"
+    article_url = "https://private.example/secret"
+    captured: dict[str, Any] = {}
+    observations: list[tuple[dict[str, Any], MagicMock]] = []
+    client = MagicMock()
+    client.get_current_trace_id.return_value = "0123456789abcdef0123456789abcdef"
+
+    @contextmanager
+    def attributes(**kwargs: Any) -> Any:
+        captured["attributes"] = kwargs
+        yield
+
+    @contextmanager
+    def observation(**kwargs: Any) -> Any:
+        span = MagicMock()
+        observations.append((kwargs, span))
+        yield span
+
+    client.start_as_current_observation.side_effect = observation
+    rows = [
+        {
+            "id": i,
+            "title": f"Title {i}",
+            "url": article_url,
+            "summary": article_text,
+            "eligible_count": 5,
+        }
+        for i in range(1, 6)
+    ]
+    with (
+        patch("news_dashboard.ai_client.langfuse_enabled", return_value=True),
+        patch("news_dashboard.ai_client._client", return_value=client),
+        patch("langfuse.propagate_attributes", side_effect=attributes),
+        patch.object(embeddings, "embed_all_eligible", return_value=0),
+        patch.object(embeddings, "_embed", return_value=[]),
+        patch("news_dashboard.db.init_db"),
+        patch("news_dashboard.db.connect") as connect,
+        patch.object(embeddings, "graph_context_for_articles", return_value=None),
+        patch("news_dashboard.ai_client.get_prompt") as get_prompt,
+        patch("news_dashboard.ai_memory.service.format_memories_for_prompt", return_value=""),
+        patch.object(embeddings, "_answer", return_value=answer),
+    ):
+        fetchall = connect.return_value.__enter__.return_value.execute.return_value.fetchall
+        fetchall.return_value = rows
+        get_prompt.return_value.text = "PRIVATE PROMPT"
+        get_prompt.return_value.langfuse_prompt = object()
+        result = embeddings.ask(
+            question,
+            user_id=7,
+            execution_policy=AskExecutionPolicy.mcp(),
+        )
+
+    assert result["trace_id"] == "0123456789abcdef0123456789abcdef"
+    assert captured["attributes"] | observations[0][0] == {
+        "user_id": "7",
+        "tags": ["ask-ai", "mcp"],
+        "metadata": {"surface": "mcp", "corpus": "saved_and_read"},
+        "trace_name": "ask-news",
+        "name": "ask-ai",
+        "as_type": "chain",
+        "input": {
+            "question_chars": len(question),
+            "corpus": "saved_and_read",
+            "retrieval_limit": 8,
+        },
+    }
+    assert observations[1][0] == {
+        "name": "answer-pipeline",
+        "as_type": "chain",
+        "input": {
+            "question_chars": len(question),
+            "corpus": "saved_and_read",
+            "retrieval_limit": 8,
+        },
+        "prompt": get_prompt.return_value.langfuse_prompt,
+    }
+    observations[0][1].update.assert_called_once_with(
+        output={"answer_chars": len(answer), "source_count": 5, "status": "ok"}
+    )
+    observations[1][1].update.assert_called_once_with(
+        output={"answer_chars": len(answer), "status": "ok"}
+    )
+    rendered = repr((captured, observations))
+    for secret in (question, article_text, article_url, answer, "PRIVATE PROMPT"):
+        assert secret not in rendered
+
+
 # ── body_fetch: AI body extraction threads user_id ────────────────────────────
 
 

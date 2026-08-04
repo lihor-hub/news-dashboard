@@ -1,16 +1,20 @@
 from __future__ import annotations
 
+import hashlib
+import hmac
 import html
 import json
 import logging
+import secrets
 import time
 from collections import OrderedDict
+from collections.abc import Callable
 from contextvars import ContextVar
 from datetime import datetime
 from functools import partial
 from typing import Any, Literal, TypedDict, cast
 
-from anyio import to_thread
+from anyio import fail_after, to_thread
 from fastmcp import FastMCP
 from fastmcp.exceptions import AuthorizationError, ToolError
 from fastmcp.server.auth import require_scopes
@@ -21,13 +25,26 @@ from fastmcp.server.middleware.response_limiting import ResponseLimitingMiddlewa
 from fastmcp.tools.base import ToolResult
 from mcp import McpError
 from mcp.types import CallToolRequestParams, ErrorData
+from openai import (
+    APIConnectionError,
+    APIStatusError,
+    APITimeoutError,
+    AuthenticationError,
+    PermissionDeniedError,
+)
+from openai import (
+    RateLimitError as OpenAIRateLimitError,
+)
 from starlette.responses import PlainTextResponse
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
+from news_dashboard.assistant.service import AskExecutionPolicy
 from news_dashboard.body_fetch import fetch_and_cache_body
 from news_dashboard.briefings import service as briefing_service
+from news_dashboard.embeddings import EmbeddingUnavailableError, MissingAICredentialsError
 from news_dashboard.ingest.service import clean_html, search_articles
 from news_dashboard.mcp import service
+from news_dashboard.mcp.ask import AskNewsResult, shape_ask_result
 from news_dashboard.mcp.auth import NewsDashboardTokenVerifier
 from news_dashboard.mcp.briefings import (
     BriefingGetResult,
@@ -38,6 +55,8 @@ from news_dashboard.mcp.briefings import (
 from news_dashboard.mcp.models import (
     MAX_FILTER_VALUE_LENGTH,
     MAX_RESULT_LIMIT,
+    AskCorpus,
+    AskQuestion,
     BriefingId,
     BriefingLimit,
     BriefingOffset,
@@ -57,6 +76,10 @@ MCP_BURST_CAPACITY = 10
 MCP_MAX_RESPONSE_BYTES = 16_384
 MCP_STRUCTURED_CONTENT_BYTES = 4_800
 MCP_MAX_RATE_LIMIT_IDENTITIES = 4_096
+MCP_ASK_BURST_CAPACITY = 2
+MCP_ASK_REFILL_SECONDS = 30.0
+MCP_ASK_FOREGROUND_TIMEOUT_SECONDS = 30.0
+MCP_ASK_EXECUTION_POLICY = AskExecutionPolicy.mcp()
 _INTERNAL_ERROR_MESSAGE = "Internal server error"
 _ARTICLE_FIELD_BYTE_CAPS = {
     "title": 512,
@@ -120,6 +143,7 @@ for _extraction_logger_name in (
     "news_dashboard.body_fetch",
     "news_dashboard.selenium_client",
     "news_dashboard.ai_client",
+    "news_dashboard.embeddings",
 ):
     logging.getLogger(_extraction_logger_name).addFilter(_DropExtractionDetailsDuringMcp())
 
@@ -129,8 +153,8 @@ def _rate_limit_client_id(_context: MiddlewareContext[Any]) -> str:
     if token is None or not token.client_id:
         return "unauthenticated"
     rate_limit_id = token.claims.get("rate_limit_id")
-    if isinstance(rate_limit_id, str) and rate_limit_id.startswith("mcp-rate:"):
-        return rate_limit_id
+    if _valid_rate_limit_identity(rate_limit_id):
+        return cast("str", rate_limit_id)
     message = "Authorization required"
     raise AuthorizationError(message)
 
@@ -173,6 +197,190 @@ class _BoundedRateLimitingMiddleware(Middleware):
         return await call_next(context)
 
 
+class _AskBucket(TypedDict):
+    tokens: float
+    updated_at: float
+
+
+def _valid_rate_limit_identity(identity: object) -> bool:
+    if not isinstance(identity, str) or not identity.startswith("mcp-rate:"):
+        return False
+    digest = identity.removeprefix("mcp-rate:")
+    return len(digest) == 64 and all(character in "0123456789abcdef" for character in digest)
+
+
+class _AskRateLimiter:
+    """Small deterministic LRU token bucket dedicated to generation."""
+
+    def __init__(
+        self,
+        *,
+        clock: Callable[[], float] = time.monotonic,
+        max_identities: int = MCP_MAX_RATE_LIMIT_IDENTITIES,
+    ) -> None:
+        self._clock = clock
+        self._max_identities = max_identities
+        self._buckets: OrderedDict[str, _AskBucket] = OrderedDict()
+
+    def __len__(self) -> int:
+        return len(self._buckets)
+
+    def consume(self, identity: object) -> bool:
+        if not _valid_rate_limit_identity(identity):
+            message = "Authorization required"
+            raise AuthorizationError(message)
+        identity = cast("str", identity)
+        now = self._clock()
+        bucket = self._buckets.pop(identity, None)
+        if bucket is None:
+            bucket = _AskBucket(tokens=float(MCP_ASK_BURST_CAPACITY), updated_at=now)
+        else:
+            elapsed = max(0.0, now - bucket["updated_at"])
+            bucket["tokens"] = min(
+                float(MCP_ASK_BURST_CAPACITY),
+                bucket["tokens"] + elapsed / MCP_ASK_REFILL_SECONDS,
+            )
+            bucket["updated_at"] = now
+        allowed = bucket["tokens"] >= 1.0
+        if allowed:
+            bucket["tokens"] -= 1.0
+        self._buckets[identity] = bucket
+        if len(self._buckets) > self._max_identities:
+            self._buckets.popitem(last=False)
+        return allowed
+
+
+_ASK_PUBLIC_ERRORS = {
+    "ask_not_configured": "News answering is not configured.",
+    "embedding_unavailable": "News retrieval is temporarily unavailable.",
+    "provider_authentication_failed": "News answering provider authentication failed.",
+    "provider_rate_limited": "News answering provider is rate limited; retry later.",
+    "ask_timeout": "News answering timed out; retry later.",
+    "ask_rate_limited": "News answering rate limit exceeded; retry later.",
+    "ask_unavailable": "News answering is temporarily unavailable.",
+}
+_ASK_ERROR_PROVENANCE_KEY = secrets.token_bytes(32)
+_ASK_ERROR_MARKER = "ndask-error:"
+
+
+class _PrivateAskError(ToolError):
+    """Internal provenance-bearing error converted to public text at transport."""
+
+
+def _signed_ask_error_text(code: str) -> str:
+    public_text = f"{code}: {_ASK_PUBLIC_ERRORS[code]}"
+    signature = hmac.new(
+        _ASK_ERROR_PROVENANCE_KEY,
+        public_text.encode(),
+        hashlib.sha256,
+    ).hexdigest()
+    return f"{_ASK_ERROR_MARKER}{signature}:{public_text}"
+
+
+def _verified_public_ask_error(value: object) -> str | None:
+    if not isinstance(value, str) or not value.startswith(_ASK_ERROR_MARKER):
+        return None
+    signed_value = value.removeprefix(_ASK_ERROR_MARKER)
+    signature, separator, public_text = signed_value.partition(":")
+    if not separator or len(signature) != 64:
+        return None
+    expected_signature = hmac.new(
+        _ASK_ERROR_PROVENANCE_KEY,
+        public_text.encode(),
+        hashlib.sha256,
+    ).hexdigest()
+    if not hmac.compare_digest(signature, expected_signature):
+        return None
+    if public_text not in {f"{code}: {message}" for code, message in _ASK_PUBLIC_ERRORS.items()}:
+        return None
+    return public_text
+
+
+def _fixed_ask_error(code: str) -> _PrivateAskError:
+    return _PrivateAskError(_signed_ask_error_text(code))
+
+
+def _public_ask_error(exc: Exception) -> _PrivateAskError:
+    if isinstance(exc, MissingAICredentialsError):
+        code = "ask_not_configured"
+    elif isinstance(exc, EmbeddingUnavailableError):
+        code = "embedding_unavailable"
+    elif isinstance(exc, (AuthenticationError, PermissionDeniedError)):
+        code = "provider_authentication_failed"
+    elif isinstance(exc, OpenAIRateLimitError):
+        code = "provider_rate_limited"
+    elif isinstance(exc, (TimeoutError, APITimeoutError)):
+        code = "ask_timeout"
+    elif isinstance(exc, (APIConnectionError, APIStatusError)):
+        code = "ask_unavailable"
+    else:
+        code = "ask_unavailable"
+    return _fixed_ask_error(code)
+
+
+def _ask_rate_limit_identity() -> str:
+    token = get_access_token()
+    identity = token.claims.get("rate_limit_id") if token is not None else None
+    if not _valid_rate_limit_identity(identity):
+        message = "Authorization required"
+        raise AuthorizationError(message)
+    return cast("str", identity)
+
+
+def _safe_trace_id(result: object) -> str | None:
+    if not isinstance(result, dict):
+        return None
+    trace_id = result.get("trace_id")
+    if (
+        not isinstance(trace_id, str)
+        or len(trace_id) != 32
+        or any(character not in "0123456789abcdefABCDEF" for character in trace_id)
+    ):
+        return None
+    return trace_id.lower()
+
+
+def _record_ask_result(
+    trace_id: str,
+    *,
+    citation_count: int,
+    truncated: bool,
+    status: Literal["ok", "error"],
+) -> None:
+    from news_dashboard.ai_client import record_mcp_ask_result
+
+    record_mcp_ask_result(
+        trace_id,
+        citation_count=citation_count,
+        truncated=truncated,
+        status=status,
+    )
+
+
+class _AskRateLimitingMiddleware(Middleware):
+    def __init__(self, *, limiter: _AskRateLimiter | None = None) -> None:
+        self._limiter = limiter or _AskRateLimiter()
+
+    async def on_call_tool(
+        self,
+        context: MiddlewareContext[CallToolRequestParams],
+        call_next: CallNext[CallToolRequestParams, ToolResult],
+    ) -> ToolResult:
+        if context.message.name != "ask_news":
+            return await call_next(context)
+        if not self._limiter.consume(_ask_rate_limit_identity()):
+            code = "ask_rate_limited"
+            raise _fixed_ask_error(code)
+        return await call_next(context)
+
+
+def _is_safe_ask_tool_error(result: ToolResult) -> bool:
+    if len(result.content) != 1:
+        return False
+    text = getattr(result.content[0], "text", None)
+    return _verified_public_ask_error(text) is not None
+
+
 class _SafeToolTelemetryMiddleware(Middleware):
     async def on_call_tool(
         self,
@@ -185,11 +393,18 @@ class _SafeToolTelemetryMiddleware(Middleware):
             result = await call_next(context)
             if result.is_error:
                 status = "error"
+                if context.message.name == "ask_news" and _is_safe_ask_tool_error(result):
+                    return result
                 return ToolResult(
                     content=_INTERNAL_ERROR_MESSAGE,
                     is_error=True,
                 )
             return result
+        except _PrivateAskError:
+            status = "error"
+            if context.message.name == "ask_news":
+                raise
+            raise McpError(ErrorData(code=-32603, message=_INTERNAL_ERROR_MESSAGE)) from None
         except ToolError as exc:
             status = "error"
             if str(exc) == _BRIEFING_NOT_FOUND_MESSAGE:
@@ -219,6 +434,7 @@ mcp = FastMCP(
 )
 mcp.add_middleware(_SafeToolTelemetryMiddleware())
 mcp.add_middleware(_BoundedRateLimitingMiddleware())
+mcp.add_middleware(_AskRateLimitingMiddleware())
 mcp.add_middleware(ResponseLimitingMiddleware(max_size=MCP_MAX_RESPONSE_BYTES))
 
 
@@ -558,6 +774,49 @@ def search_news(  # noqa: PLR0913, PLR0917
     return _bounded_articles(articles)
 
 
+@mcp.tool(auth=require_scopes("ask"))
+async def ask_news(
+    question: AskQuestion,
+    corpus: AskCorpus = "saved_and_read",
+) -> AskNewsResult:
+    """Answer a question over the authenticated owner's news corpus."""
+    from news_dashboard.assistant import service as assistant_service
+
+    user_id = _current_user_id()
+    result: dict[str, Any] | None = None
+    try:
+        with fail_after(MCP_ASK_FOREGROUND_TIMEOUT_SECONDS):
+            result = await to_thread.run_sync(
+                lambda: assistant_service.ask(
+                    question,
+                    include_all=corpus == "all_visible",
+                    user_id=user_id,
+                    execution_policy=MCP_ASK_EXECUTION_POLICY,
+                ),
+                abandon_on_cancel=True,
+            )
+        response = shape_ask_result(result)
+        trace_id = response["trace_id"]
+        if trace_id is not None:
+            _record_ask_result(
+                trace_id,
+                citation_count=len(response["citations"]),
+                truncated=response["truncated"],
+                status="ok",
+            )
+        return response
+    except Exception as exc:
+        trace_id = _safe_trace_id(result)
+        if trace_id is not None:
+            _record_ask_result(
+                trace_id,
+                citation_count=0,
+                truncated=False,
+                status="error",
+            )
+        raise _public_ask_error(exc) from None
+
+
 @mcp.tool(auth=require_scopes("read"))
 def get_news_article(article_id: PositiveArticleId) -> GetNewsArticleResult:
     """Return one article visible to the authenticated token owner."""
@@ -625,10 +884,16 @@ def _sanitize_mcp_response_body(body: bytes) -> bytes:
         and len(content) == 1
         and isinstance(content[0], dict)
         and content[0].get("type") == "text"
-        and content[0].get("text") == _BRIEFING_NOT_FOUND_MESSAGE
     ):
-        return body
-    result["content"] = [{"type": "text", "text": _INTERNAL_ERROR_MESSAGE}]
+        if content[0].get("text") == _BRIEFING_NOT_FOUND_MESSAGE:
+            return body
+        public_error = _verified_public_ask_error(content[0].get("text"))
+        if public_error is not None:
+            content[0]["text"] = public_error
+        else:
+            result["content"] = [{"type": "text", "text": _INTERNAL_ERROR_MESSAGE}]
+    else:
+        result["content"] = [{"type": "text", "text": _INTERNAL_ERROR_MESSAGE}]
     sanitized = json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode()
     return body[:data_start] + sanitized + body[data_end:]
 

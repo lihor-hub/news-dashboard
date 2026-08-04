@@ -71,7 +71,7 @@ def build_agent_card() -> AgentCard:
         name="News Dashboard Assistant",
         description=(
             "Answers questions over the token owner's news corpus using retrieval "
-            "over their saved and read articles. Read-only: it cannot modify any "
+            "over their Starred + Done articles. Read-only: it cannot modify any "
             "dashboard state."
         ),
         version=read_app_version(),
@@ -98,8 +98,8 @@ def build_agent_card() -> AgentCard:
                 id=SKILL_ID,
                 name="Ask over news corpus",
                 description=(
-                    "Ask a question answered via retrieval over the articles "
-                    "visible to the token owner."
+                    "Ask a question answered via retrieval over the token owner's "
+                    "Starred + Done articles."
                 ),
                 tags=["news", "rag", "question-answering", "read-only"],
                 examples=["What happened in AI infrastructure this week?"],

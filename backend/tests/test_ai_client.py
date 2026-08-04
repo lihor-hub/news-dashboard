@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 from types import SimpleNamespace
+from typing import Any, Literal
 from unittest.mock import MagicMock
 
 import pytest
@@ -206,6 +207,100 @@ def test_observe_is_noop_without_credentials() -> None:
 def test_create_score_and_trace_url_noop_without_credentials() -> None:
     assert create_score("trace-1", name="user-thumbs", value=1, data_type="BOOLEAN") is False
     assert get_trace_url("trace-1") is None
+
+
+def test_records_final_mcp_result_on_returned_trace(monkeypatch: pytest.MonkeyPatch) -> None:
+    from news_dashboard import ai_client
+
+    observation = MagicMock()
+    client = MagicMock()
+    client.start_observation.return_value = observation
+    monkeypatch.setattr(ai_client, "langfuse_enabled", lambda: True)
+    monkeypatch.setattr(ai_client, "_client", lambda: client)
+
+    ai_client.record_mcp_ask_result(
+        "0123456789abcdef0123456789abcdef",
+        citation_count=3,
+        truncated=True,
+        status="ok",
+    )
+
+    client.start_observation.assert_called_once_with(
+        trace_context={"trace_id": "0123456789abcdef0123456789abcdef"},
+        name="mcp-result",
+        as_type="span",
+        input=None,
+        metadata={"surface": "mcp", "operation": "ask-result"},
+    )
+    observation.end.assert_called_once_with(
+        output={"citation_count": 3, "truncated": True, "status": "ok"}
+    )
+
+
+def test_safe_provider_observations_record_primary_failure_and_fallback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import httpx
+    import openai
+
+    from news_dashboard import ai_client
+
+    failed = MagicMock()
+    succeeded = MagicMock()
+    escaped: list[BaseException | None] = []
+
+    class CleanExitContext:
+        def __init__(self, observation: MagicMock) -> None:
+            self.observation = observation
+
+        def __enter__(self) -> MagicMock:
+            return self.observation
+
+        def __exit__(
+            self, _kind: Any, error: BaseException | None, _traceback: Any
+        ) -> Literal[False]:
+            escaped.append(error)
+            return False
+
+    langfuse = MagicMock()
+    langfuse.start_as_current_observation.side_effect = [
+        CleanExitContext(failed),
+        CleanExitContext(succeeded),
+    ]
+    primary = MagicMock()
+    primary.embeddings.create.side_effect = openai.APIConnectionError(
+        request=httpx.Request("POST", "https://provider.invalid")
+    )
+    response = SimpleNamespace(
+        data=[SimpleNamespace(embedding=[0.1])],
+        usage=SimpleNamespace(prompt_tokens=2, total_tokens=2),
+    )
+    fallback = MagicMock()
+    fallback.embeddings.create.return_value = response
+    clients = iter((primary, fallback))
+    monkeypatch.setenv("OPENAI_API_KEY", "fallback-secret")
+    monkeypatch.setattr(ai_client, "langfuse_enabled", lambda: True)
+    monkeypatch.setattr(ai_client, "_client", lambda: langfuse)
+    monkeypatch.setattr(ai_client, "get_openai_client", lambda **_kwargs: next(clients))
+
+    client: Any = ai_client.get_chat_client(
+        api_key="primary-secret",
+        enable_tracing=False,
+        safe_observation=ai_client.SafeAIObservation(
+            operation="query-embedding", as_type="embedding", model="embed-model"
+        ),
+    )
+    assert client.embeddings.create(model="embed-model", input="PRIVATE") is response
+
+    names = [call.kwargs["name"] for call in langfuse.start_as_current_observation.call_args_list]
+    assert names == ["query-embedding-primary", "query-embedding-fallback"]
+    assert failed.update.call_args.kwargs["output"] == {"status": "error"}
+    assert failed.update.call_args.kwargs["status_message"] == "provider request failed"
+    assert succeeded.update.call_args.kwargs["usage_details"] == {"input": 2, "total": 2}
+    assert escaped == [None, None]
+    rendered = repr((langfuse.mock_calls, failed.mock_calls, succeeded.mock_calls))
+    for secret in ("PRIVATE", "primary-secret", "fallback-secret", "provider.invalid"):
+        assert secret not in rendered
 
 
 @pytest.mark.usefixtures("_no_langfuse")

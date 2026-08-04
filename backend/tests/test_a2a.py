@@ -113,6 +113,8 @@ def test_agent_card_is_spec_valid(monkeypatch: pytest.MonkeyPatch) -> None:
     # Exactly one read-only Q&A skill.
     assert len(card.skills) == 1
     assert card.skills[0].id == "ask_news"
+    assert "Starred + Done" in card.description
+    assert "Starred + Done" in card.skills[0].description
     # Bearer auth must be declared.
     schemes = dict(card.security_schemes)
     assert any(s.WhichOneof("scheme") == "http_auth_security_scheme" for s in schemes.values())
