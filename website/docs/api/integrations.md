@@ -12,12 +12,13 @@ or user-initiated.
 ## MCP server
 
 An intentionally narrow, **read-only** FastMCP server lets an MCP-aware AI
-client read news visible to one user. It exposes no mutation, SQL, shell, or
-file-system access and is independent of Keycloak authentication.
+client read news visible to one user. It exposes no mutation, SQL, shell,
+file-system, secret, or direct Keycloak credential access and is independent
+of Keycloak authentication.
 
-| Route | Method | Purpose |
-|-------|--------|---------|
-| `/mcp/` | POST | Stateless Streamable HTTP MCP transport. |
+| Route   | Method | Purpose                                  |
+| ------- | ------ | ---------------------------------------- |
+| `/mcp/` | POST   | Stateless Streamable HTTP MCP transport. |
 
 Authenticate with an MCP token as a bearer credential. Tokens are minted and
 revoked under `/api/users/me/mcp-tokens` — see
@@ -25,15 +26,15 @@ revoked under `/api/users/me/mcp-tokens` — see
 
 ### Available tools
 
-| Tool | Scope | Does |
-|------|-------|------|
-| `list_latest_news` | `search` | List up to 25 recent articles visible to the token owner. |
-| `list_news_sources` | `search` | Page through the token owner's subscribed, enabled, searchable sources. |
-| `search_news` | `search` | Search visible articles with typed filters and offset pagination. |
-| `get_news_article` | `read` | Retrieve one visible article by a strict positive integer ID. |
-| `ask_news` | `ask` | Answer a question over Starred + Done or all visible news, with validated citations. |
-| `list_briefings` | `briefings` | Page through complete saved briefings owned by the token user. |
-| `get_briefing` | `briefings` | Read one owned, complete saved briefing and its currently visible citations. |
+| Tool                | Scope       | Does                                                                                 |
+| ------------------- | ----------- | ------------------------------------------------------------------------------------ |
+| `list_latest_news`  | `search`    | List up to 25 recent articles visible to the token owner.                            |
+| `list_news_sources` | `search`    | Page through the token owner's subscribed, enabled, searchable sources.              |
+| `search_news`       | `search`    | Search visible articles with typed filters and offset pagination.                    |
+| `get_news_article`  | `read`      | Retrieve one visible article by a strict positive integer ID.                        |
+| `ask_news`          | `ask`       | Answer a question over Starred + Done or all visible news, with validated citations. |
+| `list_briefings`    | `briefings` | Page through complete saved briefings owned by the token user.                       |
+| `get_briefing`      | `briefings` | Read one owned, complete saved briefing and its currently visible citations.         |
 
 Each tool requires its own **scope**, and a token only carries the scopes it
 was minted with. News and source tools require `search`; saved-briefing tools
@@ -165,6 +166,10 @@ The server is enabled when `MCP_SERVER_ENABLED` is unset. Set it to `false`,
 
 Setup instructions for specific clients live in
 [Configuration → MCP server](../configuration/mcp-server.md).
+That guide also covers the canonical HTTPS proxy path, exact Host/Origin
+allowlists, `MCP_SERVER_ENABLED=false` shutdown, token rotation, the
+content-free `/api/mcp/health` probe, fixed-cardinality `/metrics`, and
+metadata-only logs.
 
 ## Google Reader sync
 
@@ -175,16 +180,16 @@ support.
 Authenticate with a GReader token from
 `/api/users/me/greader-tokens`. Most readers expect the ClientLogin flow:
 
-| Route | Method | Purpose |
-|-------|--------|---------|
-| `/accounts/ClientLogin` | POST | Exchange credentials for a session. |
-| `/reader/api/0/token` | GET | Fetch the write token. |
-| `/reader/api/0/user-info` | GET | Account metadata. |
-| `/reader/api/0/subscription/list` | GET | Subscribed feeds. |
-| `/reader/api/0/stream/contents/{stream_id}` | GET | Items in a stream. |
-| `/reader/api/0/stream/items/ids` | GET | Item IDs in a stream. |
-| `/reader/api/0/stream/items/contents` | POST | Fetch items by ID. |
-| `/reader/api/0/edit-tag` | POST | Add or remove tags — read/starred state. |
+| Route                                       | Method | Purpose                                  |
+| ------------------------------------------- | ------ | ---------------------------------------- |
+| `/accounts/ClientLogin`                     | POST   | Exchange credentials for a session.      |
+| `/reader/api/0/token`                       | GET    | Fetch the write token.                   |
+| `/reader/api/0/user-info`                   | GET    | Account metadata.                        |
+| `/reader/api/0/subscription/list`           | GET    | Subscribed feeds.                        |
+| `/reader/api/0/stream/contents/{stream_id}` | GET    | Items in a stream.                       |
+| `/reader/api/0/stream/items/ids`            | GET    | Item IDs in a stream.                    |
+| `/reader/api/0/stream/items/contents`       | POST   | Fetch items by ID.                       |
+| `/reader/api/0/edit-tag`                    | POST   | Add or remove tags — read/starred state. |
 
 `edit-tag` is how third-party readers mark items read or starred; those changes
 map onto the same triage state used by the web UI, so the two stay in sync.
@@ -198,23 +203,23 @@ the most stable surface here. Configuration details are in
 Sharing sends an article to another user on the same instance, with a threaded
 conversation attached. It is instance-internal — not public link sharing.
 
-| Route | Method | Purpose |
-|-------|--------|---------|
-| `/api/users` | GET | Users you can share with. |
-| `/api/articles/{article_id}/share` | POST | Share an article. |
-| `/api/shares` | GET | Shares you received. |
-| `/api/shares/sent` | GET | Shares you sent. |
-| `/api/shares/unread_count` | GET | Badge count. |
-| `/api/shares/{share_id}` | GET | One share. |
-| `/api/shares/{share_id}/read` | POST | Mark as read. |
-| `/api/shares/{share_id}/revoke` | POST | Revoke a share you sent. |
+| Route                              | Method | Purpose                   |
+| ---------------------------------- | ------ | ------------------------- |
+| `/api/users`                       | GET    | Users you can share with. |
+| `/api/articles/{article_id}/share` | POST   | Share an article.         |
+| `/api/shares`                      | GET    | Shares you received.      |
+| `/api/shares/sent`                 | GET    | Shares you sent.          |
+| `/api/shares/unread_count`         | GET    | Badge count.              |
+| `/api/shares/{share_id}`           | GET    | One share.                |
+| `/api/shares/{share_id}/read`      | POST   | Mark as read.             |
+| `/api/shares/{share_id}/revoke`    | POST   | Revoke a share you sent.  |
 
 ### Shared article content
 
-| Route | Method | Purpose |
-|-------|--------|---------|
-| `/api/shares/{share_id}/article` | GET | The shared article. |
-| `/api/shares/{share_id}/article/body` | POST | Extract its body. |
+| Route                                 | Method | Purpose             |
+| ------------------------------------- | ------ | ------------------- |
+| `/api/shares/{share_id}/article`      | GET    | The shared article. |
+| `/api/shares/{share_id}/article/body` | POST   | Extract its body.   |
 
 The recipient reads the article through the **share**, not through
 `/api/articles/{id}`. The share is the grant, so revoking it withdraws access
@@ -222,21 +227,21 @@ rather than leaving a dangling readable article.
 
 ### Discussion
 
-| Route | Method | Purpose |
-|-------|--------|---------|
-| `/api/shares/{share_id}/messages` | GET / POST | Conversation on a share. |
-| `/api/shares/{share_id}/annotations` | GET / POST | Inline annotations. |
+| Route                                | Method     | Purpose                  |
+| ------------------------------------ | ---------- | ------------------------ |
+| `/api/shares/{share_id}/messages`    | GET / POST | Conversation on a share. |
+| `/api/shares/{share_id}/annotations` | GET / POST | Inline annotations.      |
 
 Messages are share-level discussion; annotations anchor to positions in the
 article body.
 
 ## Push notifications
 
-| Route | Method | Purpose |
-|-------|--------|---------|
-| `/api/notifications/subscribe` | POST | Register a Web Push subscription. |
-| `/api/notifications/subscribe` | DELETE | Unregister it. |
-| `/api/settings/notifications` | GET / PUT | Notification preferences. |
+| Route                          | Method    | Purpose                           |
+| ------------------------------ | --------- | --------------------------------- |
+| `/api/notifications/subscribe` | POST      | Register a Web Push subscription. |
+| `/api/notifications/subscribe` | DELETE    | Unregister it.                    |
+| `/api/settings/notifications`  | GET / PUT | Notification preferences.         |
 
 Notification settings include briefing delivery time, timezone, whether push is
 enabled, weekly recap day, and whether to include reading-list items (capped at
@@ -245,10 +250,10 @@ recap day must be one of `mon`–`sun`.
 
 ## Analytics preferences
 
-| Route | Method | Purpose |
-|-------|--------|---------|
+| Route                     | Method    | Purpose                     |
+| ------------------------- | --------- | --------------------------- |
 | `/api/settings/analytics` | GET / PUT | Opt in or out of analytics. |
-| `/api/events` | POST | Record a client-side event. |
+| `/api/events`             | POST      | Record a client-side event. |
 
 Event recording honors the analytics preference — opting out stops collection
 rather than merely hiding it. See [PRIVACY.md](https://github.com/lihor-hub/news-dashboard/blob/main/PRIVACY.md)

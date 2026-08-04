@@ -5,7 +5,7 @@ sidebar_position: 5
 
 # MCP server
 
-News Dashboard exposes a read-only [Model Context Protocol](https://modelcontextprotocol.io/docs/getting-started/intro) server at `/mcp`. MCP-aware AI clients connect with stateless Streamable HTTP and see only news visible to the token owner.
+News Dashboard exposes a read-only [Model Context Protocol](https://modelcontextprotocol.io/docs/getting-started/intro) server at `/mcp/` on the same listener as the web application. MCP-aware AI clients connect with stateless Streamable HTTP and see only news visible to the token owner.
 
 The server is enabled by default. To shut down MCP access and block creation of new MCP tokens, set:
 
@@ -44,15 +44,15 @@ Use HTTPS outside a trusted local development environment. Do not put the token 
 
 ## Available tools
 
-| Tool | Scope | Description |
-|------|-------|-------------|
-| `list_latest_news` | `search` | Lists recent articles visible to the token owner. Supports source, category, state, archive, and date-range filters. |
-| `list_news_sources` | `search` | Pages through the token owner's subscribed, enabled sources that can be used with `search_news`. |
-| `search_news` | `search` | Searches visible articles with typed filters and offset pagination. An empty query returns a filtered recent listing. |
-| `get_news_article` | `read` | Retrieves one visible article by its positive integer article ID. |
-| `ask_news` | `ask` | Answers a question from a bounded, user-visible news corpus and returns validated citations. |
-| `list_briefings` | `briefings` | Pages through complete saved briefings owned by the token user. |
-| `get_briefing` | `briefings` | Retrieves one complete saved briefing owned by the token user, including safe visible citations. |
+| Tool                | Scope       | Description                                                                                                           |
+| ------------------- | ----------- | --------------------------------------------------------------------------------------------------------------------- |
+| `list_latest_news`  | `search`    | Lists recent articles visible to the token owner. Supports source, category, state, archive, and date-range filters.  |
+| `list_news_sources` | `search`    | Pages through the token owner's subscribed, enabled sources that can be used with `search_news`.                      |
+| `search_news`       | `search`    | Searches visible articles with typed filters and offset pagination. An empty query returns a filtered recent listing. |
+| `get_news_article`  | `read`      | Retrieves one visible article by its positive integer article ID.                                                     |
+| `ask_news`          | `ask`       | Answers a question from a bounded, user-visible news corpus and returns validated citations.                          |
+| `list_briefings`    | `briefings` | Pages through complete saved briefings owned by the token user.                                                       |
+| `get_briefing`      | `briefings` | Retrieves one complete saved briefing owned by the token user, including safe visible citations.                      |
 
 Use `list_news_sources` before filtering by source. It returns only sources that are both subscribed and enabled for the authenticated user, in deterministic category, descending priority, name, then slug order. Sources whose exact slug or category is not a valid search filter value are omitted. Each source has `slug`, `name`, `category`, and `kind`; raw feed URLs, ownership identifiers, and internal state are omitted. The exact `slug` and `category` are valid `search_news` filters. Display-only `name` and `kind` values are capped at 120 characters and may be shortened further when JSON escaping requires it to stay within the 4,800-byte budget.
 
@@ -62,17 +62,17 @@ Every source page uses the `{sources, truncated, next_cursor}` envelope. `trunca
 
 `search_news` accepts these arguments:
 
-| Argument | Type and bounds | Behavior |
-|----------|-----------------|----------|
-| `q` | string, at most 2,000 characters; default `""` | Full-text query. An empty value returns the filtered recent listing in the web search's canonical order. |
-| `sources` | up to 50 non-empty strings, each at most 120 characters | Source slugs from `list_news_sources`. |
-| `categories` | up to 50 non-empty strings, each at most 120 characters | Source categories. |
-| `date_range` | `all`, `day`, `week`, or `month`; default `all` | Filters by discovery time. `day`, `week`, and `month` cover the trailing 1, 7, and 30 days. |
-| `states` | up to 50 values from `today`, `later`, `done`, `skipped`, `archived` | Workflow states belonging to the token owner. |
-| `starred_only` | boolean; default `false` | Returns only articles starred by the token owner. |
-| `include_archived` | boolean; default `false` | Includes archived articles. Explicitly filtering for the `archived` state overrides the default exclusion. |
-| `limit` | integer from 1 through 25; default 10 | Maximum number of articles requested. |
-| `offset` | integer from 0 through 10,000; default 0 | Number of matching articles to skip for pagination. |
+| Argument           | Type and bounds                                                      | Behavior                                                                                                   |
+| ------------------ | -------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `q`                | string, at most 2,000 characters; default `""`                       | Full-text query. An empty value returns the filtered recent listing in the web search's canonical order.   |
+| `sources`          | up to 50 non-empty strings, each at most 120 characters              | Source slugs from `list_news_sources`.                                                                     |
+| `categories`       | up to 50 non-empty strings, each at most 120 characters              | Source categories.                                                                                         |
+| `date_range`       | `all`, `day`, `week`, or `month`; default `all`                      | Filters by discovery time. `day`, `week`, and `month` cover the trailing 1, 7, and 30 days.                |
+| `states`           | up to 50 values from `today`, `later`, `done`, `skipped`, `archived` | Workflow states belonging to the token owner.                                                              |
+| `starred_only`     | boolean; default `false`                                             | Returns only articles starred by the token owner.                                                          |
+| `include_archived` | boolean; default `false`                                             | Includes archived articles. Explicitly filtering for the `archived` state overrides the default exclusion. |
+| `limit`            | integer from 1 through 25; default 10                                | Maximum number of articles requested.                                                                      |
+| `offset`           | integer from 0 through 10,000; default 0                             | Number of matching articles to skip for pagination.                                                        |
 
 Values within one filter group combine with OR; separate filter groups combine with AND. Search results contain complete compact records with `id`, `title`, canonical `url`, `source_slug`, `source_name`, `category`, `published_at`, `summary`, the token owner's `state`, and the token owner's `starred` value. They never contain article bodies.
 
@@ -108,7 +108,7 @@ Call `get_news_article` with one `article_id`: a strict positive integer no larg
 A missing ID and an article outside the token owner's visibility boundary return the same sentinel, without an existence hint:
 
 ```json
-{"found": false, "article": null, "truncated": false}
+{ "found": false, "article": null, "truncated": false }
 ```
 
 The visibility boundary includes private-source ownership and enabled global subscriptions. A private article owned by someone else, an article from a globally disabled subscription, and an article available only through an in-app share are not readable through this tool. Shared content must be read through its separate share capability.
@@ -129,15 +129,15 @@ The instance needs `FREE_LLM_API_KEY` (preferred) or `OPENAI_API_KEY`, plus the 
 
 The dedicated per-token generation bucket permits a burst of 2 and refills one request every 30 seconds. This is separate from the general MCP limit. Stable errors are:
 
-| Code | Stable public message | Retry guidance |
-|------|-----------------------|----------------|
-| `ask_not_configured` | `News answering is not configured.` | Configure AI credentials; do not retry unchanged. |
-| `embedding_unavailable` | `News retrieval is temporarily unavailable.` | Retry with backoff. |
-| `provider_authentication_failed` | `News answering provider authentication failed.` | Repair provider credentials; do not retry unchanged. |
-| `provider_rate_limited` | `News answering provider is rate limited; retry later.` | Retry with provider-aware backoff. |
-| `ask_timeout` | `News answering timed out; retry later.` | Retry with backoff. |
-| `ask_rate_limited` | `News answering rate limit exceeded; retry later.` | Wait at least 30 seconds before retrying. |
-| `ask_unavailable` | `News answering is temporarily unavailable.` | Retry with backoff. |
+| Code                             | Stable public message                                   | Retry guidance                                       |
+| -------------------------------- | ------------------------------------------------------- | ---------------------------------------------------- |
+| `ask_not_configured`             | `News answering is not configured.`                     | Configure AI credentials; do not retry unchanged.    |
+| `embedding_unavailable`          | `News retrieval is temporarily unavailable.`            | Retry with backoff.                                  |
+| `provider_authentication_failed` | `News answering provider authentication failed.`        | Repair provider credentials; do not retry unchanged. |
+| `provider_rate_limited`          | `News answering provider is rate limited; retry later.` | Retry with provider-aware backoff.                   |
+| `ask_timeout`                    | `News answering timed out; retry later.`                | Retry with backoff.                                  |
+| `ask_rate_limited`               | `News answering rate limit exceeded; retry later.`      | Wait at least 30 seconds before retrying.            |
+| `ask_unavailable`                | `News answering is temporarily unavailable.`            | Retry with backoff.                                  |
 
 When Langfuse is enabled, MCP Ask traces contain operational metadata only: authenticated user attribution, surface and corpus tags, model, token usage, provider-reported cost, character and citation counts, timing, and status. They exclude bearer tokens, questions, article text, prompts, source titles/URLs, generated answers, provider response bodies, and exception details. Application logs follow the same content-free boundary.
 
@@ -207,6 +207,80 @@ The briefing tools only read previously saved results. They cannot generate or r
 
 MCP clients should use tool discovery rather than assuming a deployment exposes every tool. The separately configured A2A endpoint remains ask-only and does not advertise briefing tools.
 
+## Client examples
+
+Keep the one-time bearer value in an environment variable rather than a checked-in file, URL, or command argument:
+
+```bash
+export MCP_TOKEN='ndmcp_replace-with-the-one-time-value'
+```
+
+A FastMCP Python client can read the credential at runtime:
+
+```python
+import asyncio
+import os
+
+from fastmcp import Client
+
+
+async def main() -> None:
+    async with Client(
+        "https://news.example.com/mcp/",
+        auth=os.environ["MCP_TOKEN"],
+    ) as client:
+        result = await client.call_tool("search_news", {"q": "PostgreSQL"})
+        print(result.structured_content)
+
+
+asyncio.run(main())
+```
+
+Claude Code supports an environment placeholder in a project `.mcp.json`. Commit the placeholder, never the resolved token:
+
+```json
+{
+  "mcpServers": {
+    "news-dashboard": {
+      "type": "http",
+      "url": "https://news.example.com/mcp/",
+      "headers": {
+        "Authorization": "Bearer ${MCP_TOKEN}"
+      }
+    }
+  }
+}
+```
+
+## Deploy behind HTTPS
+
+The canonical public URL is `https://news.example.com/mcp/`. Terminate TLS at the reverse proxy and preserve the `/mcp/` path, request method, `Authorization`, `Host`, and streaming response. Do not rewrite the path to the SPA or publish another service, port, or database endpoint.
+
+Set `APP_BASE_URL=https://news.example.com` to derive the default exact Host and Origin, or configure both allowlists explicitly:
+
+```bash
+MCP_ALLOWED_HOSTS=news.example.com
+MCP_ALLOWED_ORIGINS=https://news.example.com
+```
+
+Values are comma-separated exact authorities or origins; wildcards are rejected. The proxy must forward `Host: news.example.com`. Server-to-server clients may omit `Origin`; a client that supplies it must use exactly `Origin: https://news.example.com`. A Host or supplied Origin outside the allowlist is rejected before MCP initialization. These allowlists are separate from browser CORS configuration.
+
+Compose and Helm enable MCP by default. Set `MCP_SERVER_ENABLED=false` in the application environment or Helm MCP value to shut down `/mcp/` and block new token creation. Existing token hashes remain stored for later re-enablement or explicit revocation.
+
+## Operate and monitor
+
+`GET /api/mcp/health` is an unauthenticated, content-free readiness probe:
+
+| Body                              | HTTP | Meaning                                                                     |
+| --------------------------------- | ---- | --------------------------------------------------------------------------- |
+| `{"status":"disabled"}`           | 200  | MCP is explicitly disabled; PostgreSQL is not checked.                      |
+| `{"status":"healthy"}`            | 200  | MCP is enabled and its bounded PostgreSQL dependency check passed.          |
+| `{"status":"dependency_failure"}` | 503  | The dependency check failed; no exception or connection detail is returned. |
+
+When `METRICS_ENABLED=true`, `/metrics` includes `news_dashboard_mcp_auth_attempts_total`, `news_dashboard_mcp_tool_calls_total`, `news_dashboard_mcp_tool_duration_seconds`, `news_dashboard_mcp_rate_limits_total`, and `news_dashboard_mcp_response_limits_total`. Labels contain only bounded status and catalog tool values—never token IDs, user IDs, arguments, URLs, questions, or content.
+
+Structured application logs record authentication status and a non-secret numeric token ID, or tool name, outcome, and duration. They never record bearer values, tool arguments, article or briefing bodies, questions, prompts, generated answers, provider responses, URLs, or exception text. Rotate a suspected credential by revoking it, creating a least-privilege replacement, updating the client's `MCP_TOKEN`, verifying the replacement, and removing the old secret from the client environment.
+
 ## Security boundaries
 
 - Tokens are individually scoped and revocable; revoked tokens stop authenticating immediately.
@@ -215,5 +289,6 @@ MCP clients should use tool discovery rather than assuming a deployment exposes 
 - Internal failures return a generic error without tracebacks, database details, or provider details.
 - Tools cannot run SQL, shell commands, or file-system operations and cannot read secrets.
 - Mutation tools are absent. MCP access cannot change article state, sources, shares, or settings.
+- MCP tokens neither contain nor expose direct Keycloak credentials and do not reuse browser sessions.
 - Private-source visibility is enforced for the authenticated token owner.
 - Article misses do not distinguish absent IDs from unauthorized IDs.
