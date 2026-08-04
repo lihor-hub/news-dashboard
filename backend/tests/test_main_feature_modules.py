@@ -228,6 +228,7 @@ EXPECTED_METHOD_PATHS = {
     ("GET", "/auth/login"),
     ("GET", "/auth/logout"),
     ("GET", "/auth/register"),
+    ("GET", "/api/mcp/health"),
     ("GET", "/metrics"),
 }
 

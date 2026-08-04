@@ -1,6 +1,28 @@
 {{- if and .Values.production (not .Values.app.config.enableHsts) }}
 {{- fail "application HSTS must be enabled in production" }}
 {{- end }}
+{{- $mcpHosts := .Values.app.config.mcpAllowedHosts }}
+{{- $mcpOrigins := .Values.app.config.mcpAllowedOrigins }}
+{{- if not $mcpHosts }}
+  {{- if .Values.app.publicBaseUrl }}
+    {{- $mcpHosts = (urlParse .Values.app.publicBaseUrl).host }}
+  {{- else if .Values.ingress.enabled }}
+    {{- $mcpHosts = .Values.ingress.host }}
+  {{- else }}
+    {{- $mcpHosts = "localhost:8080,127.0.0.1:8080,[::1]:8080" }}
+  {{- end }}
+{{- end }}
+{{- if not $mcpOrigins }}
+  {{- if .Values.app.publicBaseUrl }}
+    {{- $publicUrl := urlParse .Values.app.publicBaseUrl }}
+    {{- $mcpOrigins = printf "%s://%s" $publicUrl.scheme $publicUrl.host }}
+  {{- else if .Values.ingress.enabled }}
+    {{- $scheme := ternary "https" "http" (not (empty .Values.ingress.tls)) }}
+    {{- $mcpOrigins = printf "%s://%s" $scheme .Values.ingress.host }}
+  {{- else }}
+    {{- $mcpOrigins = "http://localhost:8080,http://127.0.0.1:8080,http://[::1]:8080" }}
+  {{- end }}
+{{- end }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -40,6 +62,12 @@ spec:
               value: {{ .Values.app.data.dir | quote }}
             - name: ENABLE_HSTS
               value: {{ .Values.app.config.enableHsts | quote }}
+            - name: MCP_SERVER_ENABLED
+              value: {{ .Values.app.config.mcpServerEnabled | quote }}
+            - name: MCP_ALLOWED_HOSTS
+              value: {{ $mcpHosts | quote }}
+            - name: MCP_ALLOWED_ORIGINS
+              value: {{ $mcpOrigins | quote }}
 {{- if .Values.postgresql.enabled }}
             - name: POSTGRES_HOST
               value: {{ printf "%s-postgres" (include "news-dashboard.fullname" .) | quote }}

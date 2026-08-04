@@ -224,6 +224,12 @@ app:
     # Optional release identifier, usually set by CI to the deployed commit SHA.
     release: ""
   config:
+    # FastMCP is mounted on the existing app listener at /mcp/.
+    mcpServerEnabled: true
+    # Exact overrides. Empty values derive from publicBaseUrl or ingress;
+    # installations without either retain local-development defaults.
+    mcpAllowedHosts: ""
+    mcpAllowedOrigins: ""
     # Serves GET /metrics in Prometheus exposition format. Off by default.
     metricsEnabled: false
     # Serves the interactive API docs (/docs, /redoc, /openapi.json). Off by

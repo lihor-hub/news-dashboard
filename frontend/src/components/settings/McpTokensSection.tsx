@@ -80,9 +80,10 @@ export function McpTokensSection() {
       </div>
       <div className="rounded-lg border border-border bg-card p-4 space-y-4">
         <p className="text-xs text-muted-foreground">
-          Create a scoped token to let an external MCP client (e.g. Claude Desktop) search and read
-          articles visible to you. Tokens are read-only and disabled by default; ask an admin to
-          enable the MCP server on this instance.
+          MCP access is enabled by default and read-only. Create a scoped token for an external
+          client such as Claude Code to search, read, or ask about news visible to you. Ask requires
+          server-side AI configuration and sends the question and selected news context to that
+          provider.
         </p>
 
         {!enabled && state !== 'loading' && (

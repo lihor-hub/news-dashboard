@@ -12,6 +12,7 @@ import re
 from pathlib import Path
 from typing import cast
 
+import pytest
 import yaml  # type: ignore[import-untyped]
 
 REPO_ROOT = Path(__file__).parent.parent.parent
@@ -207,3 +208,33 @@ def test_compose_prod_app_healthcheck_configured() -> None:
 
 def test_compose_demo_app_healthcheck_configured() -> None:
     _assert_app_healthcheck_uses_no_extra_tools(COMPOSE_DEMO_FILE)
+
+
+@pytest.mark.parametrize("compose_file", [COMPOSE_FILE, COMPOSE_DEMO_FILE])
+def test_compose_mcp_is_default_enabled_on_existing_app_listener(compose_file: Path) -> None:
+    compose = yaml.safe_load(compose_file.read_text())
+    app = compose["services"]["news-dashboard"]
+    environment = app["environment"]
+
+    assert environment["MCP_SERVER_ENABLED"] == "${MCP_SERVER_ENABLED:-true}"
+    assert environment["MCP_ALLOWED_HOSTS"] == (
+        "${MCP_ALLOWED_HOSTS:-localhost:8080,127.0.0.1:8080,[::1]:8080}"
+    )
+    assert environment["MCP_ALLOWED_ORIGINS"] == (
+        "${MCP_ALLOWED_ORIGINS:-http://localhost:8080,http://127.0.0.1:8080,http://[::1]:8080}"
+    )
+    assert list(app["ports"]) == ["8080:8080"]
+    assert "mcp" not in compose["services"]
+
+
+def test_production_compose_requires_public_base_url_and_does_not_inject_local_allowlists() -> None:
+    compose = yaml.safe_load(COMPOSE_PROD_FILE.read_text())
+    app = compose["services"]["news-dashboard"]
+    environment = app["environment"]
+
+    assert environment["MCP_SERVER_ENABLED"] == "${MCP_SERVER_ENABLED:-true}"
+    assert environment["APP_BASE_URL"] == "${APP_BASE_URL:?APP_BASE_URL is required}"
+    assert environment["MCP_ALLOWED_HOSTS"] == "${MCP_ALLOWED_HOSTS:-}"
+    assert environment["MCP_ALLOWED_ORIGINS"] == "${MCP_ALLOWED_ORIGINS:-}"
+    assert list(app["ports"]) == ["8080:8080"]
+    assert "mcp" not in compose["services"]

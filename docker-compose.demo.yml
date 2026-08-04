@@ -26,6 +26,9 @@ services:
       POSTGRES_PASSWORD: demo-only-password
       SESSION_SECRET: demo-only-session-secret-not-for-real-deployments
       DEMO_MODE: "1"
+      MCP_SERVER_ENABLED: ${MCP_SERVER_ENABLED:-true}
+      MCP_ALLOWED_HOSTS: ${MCP_ALLOWED_HOSTS:-localhost:8080,127.0.0.1:8080,[::1]:8080}
+      MCP_ALLOWED_ORIGINS: ${MCP_ALLOWED_ORIGINS:-http://localhost:8080,http://127.0.0.1:8080,http://[::1]:8080}
     depends_on:
       postgres:
         condition: service_healthy

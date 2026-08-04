@@ -23,11 +23,17 @@ _ENV_EXAMPLE_LINE_PATTERN = re.compile(r"^([A-Z][A-Z0-9_]*)=")
 # Vars documented in .env.example but intentionally absent from backend Python source:
 #   TOKEN_SECRET       - read dynamically via a tuple loop in digest.py; the
 #                        literal-string scan below cannot discover it.
+#   MCP_ALLOWED_*      - read through the typed MCP config helper by dynamic name.
 #   SENTRY_DSN_DESKTOP - consumed exclusively by the Electron desktop main
 #                        process (desktop/src/instrument.js), never by the
 #                        backend; documented here so operators have a single
 #                        reference for all DSN variables.
-_BACKEND_EXEMPT_VARS = {"TOKEN_SECRET", "SENTRY_DSN_DESKTOP"}
+_BACKEND_EXEMPT_VARS = {
+    "MCP_ALLOWED_HOSTS",
+    "MCP_ALLOWED_ORIGINS",
+    "SENTRY_DSN_DESKTOP",
+    "TOKEN_SECRET",
+}
 
 
 def _vars_read_in_source() -> set[str]:

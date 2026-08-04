@@ -19,11 +19,11 @@ replacement for it.
 The backend publishes an OpenAPI document derived directly from the route
 handlers. When this page and the schema disagree, the schema is right.
 
-| Endpoint | What it serves |
-|----------|----------------|
-| `/docs` | Interactive Swagger UI for the running instance. |
-| `/openapi.json` | The raw OpenAPI document. |
-| `/api/version` | The running application version. |
+| Endpoint        | What it serves                                   |
+| --------------- | ------------------------------------------------ |
+| `/docs`         | Interactive Swagger UI for the running instance. |
+| `/openapi.json` | The raw OpenAPI document.                        |
+| `/api/version`  | The running application version.                 |
 
 The OpenAPI `info.version` and `/api/version` are both read from the `VERSION`
 file at startup, so the documented version always matches the deployed build.
@@ -37,14 +37,15 @@ self-hosted deployment at `https://news.example.com`, the article list is
 Routes are grouped by the router they mount on, which determines their auth
 behavior:
 
-| Prefix | Router | Access |
-|--------|--------|--------|
-| `/api/*` | authenticated `api` router | Requires a valid session. |
-| `/api/admin/*` | `admin` router | Requires a session belonging to an admin user. |
-| `/api/auth/*`, `/auth/*` | public router | Login, registration, and SSO callbacks. |
-| `/mcp/*` | mounted FastMCP server | Bearer-token authenticated, stateless Streamable HTTP. |
-| `/reader/api/0/*`, `/accounts/ClientLogin` | public GReader router | Google Reader-compatible sync. |
-| `/api/health`, `/api/live`, `/api/ready`, `/metrics` | system router | Unauthenticated probes. |
+| Prefix                                               | Router                     | Access                                                                                 |
+| ---------------------------------------------------- | -------------------------- | -------------------------------------------------------------------------------------- |
+| `/api/*`                                             | authenticated `api` router | Requires a valid session.                                                              |
+| `/api/admin/*`                                       | `admin` router             | Requires a session belonging to an admin user.                                         |
+| `/api/auth/*`, `/auth/*`                             | public router              | Login, registration, and SSO callbacks.                                                |
+| `/mcp/*`                                             | mounted FastMCP server     | Bearer-token authenticated, stateless Streamable HTTP.                                 |
+| `/api/mcp/health`                                    | MCP readiness probe        | Unauthenticated, content-free status (`disabled`, `healthy`, or `dependency_failure`). |
+| `/reader/api/0/*`, `/accounts/ClientLogin`           | public GReader router      | Google Reader-compatible sync.                                                         |
+| `/api/health`, `/api/live`, `/api/ready`, `/metrics` | system router              | Unauthenticated probes.                                                                |
 
 ## Response conventions
 
@@ -82,15 +83,15 @@ Errors use FastAPI's standard envelope:
 For request-validation failures (`422`), `detail` is an array of per-field
 objects identifying the offending parameter and the rule it broke.
 
-| Status | Meaning |
-|--------|---------|
-| `400` | The request was understood but rejected by a domain rule. |
-| `401` | No valid session, token, or credential was presented. |
-| `403` | Authenticated, but not permitted — see below. |
-| `404` | The resource does not exist, or is not visible to you. |
-| `422` | Request validation failed (bad query parameter, malformed body). |
-| `429` | A rate limit or generation quota was exceeded. |
-| `5xx` | Server-side failure. |
+| Status | Meaning                                                          |
+| ------ | ---------------------------------------------------------------- |
+| `400`  | The request was understood but rejected by a domain rule.        |
+| `401`  | No valid session, token, or credential was presented.            |
+| `403`  | Authenticated, but not permitted — see below.                    |
+| `404`  | The resource does not exist, or is not visible to you.           |
+| `422`  | Request validation failed (bad query parameter, malformed body). |
+| `429`  | A rate limit or generation quota was exceeded.                   |
+| `5xx`  | Server-side failure.                                             |
 
 `404` is used deliberately in place of `403` for resources that exist but
 belong to another user, so the API does not leak their existence.
@@ -111,14 +112,14 @@ apart:
 
 ## Sections
 
-| Page | Covers |
-|------|--------|
-| [Authentication](authentication.md) | Sessions, SSO, OTP, guests, CSRF, and the token types. |
-| [Articles and search](articles-and-search.md) | The article lifecycle, triage, search, highlights, and tags. |
-| [Sources and ingestion](sources-and-ingestion.md) | Feed management, OPML, ingestion runs, and the scheduler. |
+| Page                                                | Covers                                                       |
+| --------------------------------------------------- | ------------------------------------------------------------ |
+| [Authentication](authentication.md)                 | Sessions, SSO, OTP, guests, CSRF, and the token types.       |
+| [Articles and search](articles-and-search.md)       | The article lifecycle, triage, search, highlights, and tags. |
+| [Sources and ingestion](sources-and-ingestion.md)   | Feed management, OPML, ingestion runs, and the scheduler.    |
 | [Learning and briefings](learning-and-briefings.md) | Briefings, lessons, quizzes, recaps, and podcast generation. |
-| [Integrations](integrations.md) | MCP tools, Google Reader sync, sharing, and podcast feeds. |
-| [Operations](operations.md) | Health probes, metrics, statistics, and admin endpoints. |
+| [Integrations](integrations.md)                     | MCP tools, Google Reader sync, sharing, and podcast feeds.   |
+| [Operations](operations.md)                         | Health probes, metrics, statistics, and admin endpoints.     |
 
 ## Stability
 

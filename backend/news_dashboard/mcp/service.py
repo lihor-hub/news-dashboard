@@ -6,7 +6,9 @@ import secrets
 from collections.abc import Mapping
 from typing import Any
 
-from news_dashboard.db import connect, init_db, row_to_dict
+import psycopg
+
+from news_dashboard.db import active_database_url, connect, init_db, row_to_dict
 
 TOKEN_PREFIX = "ndmcp_"  # noqa: S105 -- token prefix, not a credential
 DEFAULT_SCOPES = ("search", "read", "ask", "briefings")
@@ -23,6 +25,13 @@ def mcp_enabled() -> bool:
         "no",
         "off",
     }
+
+
+def check_mcp_dependency() -> None:
+    """Run a health-specific bounded, read-only PostgreSQL probe."""
+    with psycopg.connect(active_database_url(), connect_timeout=2) as conn:
+        conn.execute("SET statement_timeout = '2s'")
+        conn.execute("SELECT 1")
 
 
 def _hash_token(token: str) -> str:

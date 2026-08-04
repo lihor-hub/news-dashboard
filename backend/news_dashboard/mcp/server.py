@@ -14,11 +14,13 @@ from datetime import datetime
 from functools import partial
 from typing import Any, Literal, TypedDict, cast
 
+import pydantic_core
 from anyio import fail_after, to_thread
 from fastmcp import FastMCP
 from fastmcp.exceptions import AuthorizationError, ToolError
 from fastmcp.server.auth import require_scopes
 from fastmcp.server.dependencies import get_access_token
+from fastmcp.server.http import StarletteWithLifespan
 from fastmcp.server.middleware import CallNext, Middleware, MiddlewareContext
 from fastmcp.server.middleware.rate_limiting import RateLimitError, TokenBucketRateLimiter
 from fastmcp.server.middleware.response_limiting import ResponseLimitingMiddleware
@@ -52,6 +54,7 @@ from news_dashboard.mcp.briefings import (
     build_briefing_get_result,
     build_briefing_list_result,
 )
+from news_dashboard.mcp.config import McpHttpConfig
 from news_dashboard.mcp.models import (
     MAX_FILTER_VALUE_LENGTH,
     MAX_RESULT_LIMIT,
@@ -68,6 +71,13 @@ from news_dashboard.mcp.models import (
     SearchQuery,
     SourceCursor,
     WorkflowStates,
+)
+from news_dashboard.metrics import (
+    mcp_auth_attempts_total,
+    mcp_rate_limits_total,
+    mcp_response_limits_total,
+    mcp_tool_calls_total,
+    mcp_tool_duration_seconds,
 )
 from news_dashboard.sources.service import list_sources_for_user
 
@@ -106,6 +116,17 @@ _ARTICLE_REDUCTION_ORDER = (
     "discovered_at",
 )
 _BRIEFING_NOT_FOUND_MESSAGE = "Briefing not found"
+_TELEMETRY_TOOL_NAMES = frozenset(
+    {
+        "ask_news",
+        "get_briefing",
+        "get_news_article",
+        "list_briefings",
+        "list_latest_news",
+        "list_news_sources",
+        "search_news",
+    }
+)
 
 logger = logging.getLogger("news_dashboard.mcp")
 _mcp_transport_logging = ContextVar("mcp_transport_logging", default=False)
@@ -159,6 +180,27 @@ def _rate_limit_client_id(_context: MiddlewareContext[Any]) -> str:
     raise AuthorizationError(message)
 
 
+def _telemetry_token_id() -> int | None:
+    """Return only the non-secret numeric token identifier for telemetry."""
+    token = get_access_token()
+    if token is None:
+        return None
+    token_id = token.claims.get("token_id")
+    return token_id if isinstance(token_id, int) else None
+
+
+def _telemetry_tool_name(name: str) -> str:
+    return name if name in _TELEMETRY_TOOL_NAMES else "unknown"
+
+
+def _log_bounded_event(message: str, *args: object) -> None:
+    token_id = _telemetry_token_id()
+    if token_id is None:
+        logger.info(message, *args)
+    else:
+        logger.info("%s token_id=%s", message % args, token_id)
+
+
 class _BoundedTokenBuckets:
     def __init__(self, *, max_identities: int, capacity: int, refill_rate: float) -> None:
         self._max_identities = max_identities
@@ -192,9 +234,39 @@ class _BoundedRateLimitingMiddleware(Middleware):
     ) -> Any:
         client_id = _rate_limit_client_id(context)
         if not await self._buckets.for_client(client_id).consume():
+            mcp_rate_limits_total.labels(status="limited").inc()
+            _log_bounded_event("mcp event=rate_limit status=limited")
             message = "Rate limit exceeded"
             raise RateLimitError(message)
         return await call_next(context)
+
+
+class _ObservedResponseLimitingMiddleware(ResponseLimitingMiddleware):
+    async def on_call_tool(
+        self,
+        context: MiddlewareContext[CallToolRequestParams],
+        call_next: CallNext[CallToolRequestParams, ToolResult],
+    ) -> ToolResult:
+        result = await call_next(context)
+        if self.tools is not None and context.message.name not in self.tools:
+            return result
+        if len(pydantic_core.to_json(result, fallback=str)) <= self.max_size:
+            return result
+
+        tool_name = _telemetry_tool_name(context.message.name)
+        mcp_response_limits_total.labels(tool=tool_name).inc()
+        _log_bounded_event(
+            "mcp event=response_limit tool=%s status=limited",
+            tool_name,
+        )
+
+        async def return_result(
+            _context: MiddlewareContext[CallToolRequestParams],
+        ) -> ToolResult:
+            return result
+
+        typed_next = cast("CallNext[CallToolRequestParams, ToolResult]", return_result)
+        return await super().on_call_tool(context, typed_next)
 
 
 class _AskBucket(TypedDict):
@@ -418,9 +490,14 @@ class _SafeToolTelemetryMiddleware(Middleware):
             raise McpError(ErrorData(code=-32603, message=_INTERNAL_ERROR_MESSAGE)) from None
         finally:
             duration_ms = (time.perf_counter() - started_at) * 1_000
-            logger.info(
-                "mcp tool=%s status=%s duration_ms=%.2f",
-                context.message.name,
+            tool_name = _telemetry_tool_name(context.message.name)
+            mcp_tool_calls_total.labels(tool=tool_name, status=status).inc()
+            mcp_tool_duration_seconds.labels(tool=tool_name, status=status).observe(
+                duration_ms / 1_000
+            )
+            _log_bounded_event(
+                "mcp tool=%s status=%s duration_ms=%.2f event=tool",
+                tool_name,
                 status,
                 duration_ms,
             )
@@ -435,7 +512,7 @@ mcp = FastMCP(
 mcp.add_middleware(_SafeToolTelemetryMiddleware())
 mcp.add_middleware(_BoundedRateLimitingMiddleware())
 mcp.add_middleware(_AskRateLimitingMiddleware())
-mcp.add_middleware(ResponseLimitingMiddleware(max_size=MCP_MAX_RESPONSE_BYTES))
+mcp.add_middleware(_ObservedResponseLimitingMiddleware(max_size=MCP_MAX_RESPONSE_BYTES))
 
 
 class ArticleListResult(TypedDict):
@@ -921,11 +998,93 @@ class _RequireMcpEnabled:
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         if scope["type"] == "http" and not service.mcp_enabled():
+            mcp_auth_attempts_total.labels(status="disabled").inc()
+            logger.info("mcp event=auth status=disabled")
             await PlainTextResponse("Not Found", status_code=404)(scope, receive, send)
             return
         await self.app(scope, receive, send)
 
 
-mcp_http_app = mcp.http_app(path="/", stateless_http=True, transport="http")
-mcp_http_app.add_middleware(_RequireMcpEnabled)
-mcp_http_app.add_middleware(_SanitizeMcpResponses)
+class _ObservePreVerifierAuthentication:
+    """Record credentials FastMCP rejects before invoking the token verifier."""
+
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] == "http":
+            authorization = [
+                value for name, value in scope["headers"] if name.lower() == b"authorization"
+            ]
+            status: str | None = None
+            if not authorization:
+                status = "missing"
+            elif len(authorization) != 1:
+                status = "invalid"
+            else:
+                scheme, separator, credential = authorization[0].partition(b" ")
+                if not separator or scheme.lower() != b"bearer" or not credential.strip():
+                    status = "invalid"
+            if status is not None:
+                mcp_auth_attempts_total.labels(status=status).inc()
+                logger.info("mcp event=auth status=%s", status)
+        await self.app(scope, receive, send)
+
+
+class _ExactMcpHostOrigin:
+    """Reject untrusted routing headers before FastMCP authentication runs."""
+
+    def __init__(
+        self,
+        app: ASGIApp,
+        *,
+        allowed_hosts: tuple[str, ...],
+        allowed_origins: tuple[str, ...],
+    ) -> None:
+        self.app = app
+        self.allowed_hosts = frozenset(allowed_hosts)
+        self.allowed_origins = frozenset(allowed_origins)
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        headers = {name.lower(): value for name, value in scope["headers"]}
+        host = headers.get(b"host", b"").decode("latin-1")
+        if host not in self.allowed_hosts:
+            await PlainTextResponse("Misdirected Request", status_code=421)(scope, receive, send)
+            return
+
+        origin_value = headers.get(b"origin")
+        if origin_value is not None:
+            origin = origin_value.decode("latin-1")
+            if origin not in self.allowed_origins:
+                await PlainTextResponse("Forbidden", status_code=403)(scope, receive, send)
+                return
+
+        await self.app(scope, receive, send)
+
+
+def create_mcp_http_app(server: FastMCP[Any], *, config: McpHttpConfig) -> StarletteWithLifespan:
+    """Build the guarded MCP ASGI application mounted by FastAPI."""
+    http_app = server.http_app(
+        path="/",
+        stateless_http=True,
+        transport="http",
+        host_origin_protection=True,
+        allowed_hosts=list(config.allowed_hosts),
+        allowed_origins=list(config.allowed_origins),
+    )
+    http_app.add_middleware(_ObservePreVerifierAuthentication)
+    http_app.add_middleware(_RequireMcpEnabled)
+    http_app.add_middleware(_SanitizeMcpResponses)
+    http_app.add_middleware(
+        _ExactMcpHostOrigin,
+        allowed_hosts=config.allowed_hosts,
+        allowed_origins=config.allowed_origins,
+    )
+    return http_app
+
+
+mcp_http_app = create_mcp_http_app(mcp, config=McpHttpConfig.from_environment())

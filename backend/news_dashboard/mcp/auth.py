@@ -2,14 +2,17 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import logging
 import secrets
 
 from anyio import to_thread
 from fastmcp.server.auth import AccessToken, TokenVerifier
 
 from news_dashboard.mcp import service
+from news_dashboard.metrics import mcp_auth_attempts_total
 
 _RATE_LIMIT_KEY = secrets.token_bytes(32)
+logger = logging.getLogger("news_dashboard.mcp")
 
 
 def _rate_limit_identity(token: str) -> str:
@@ -21,12 +24,21 @@ class NewsDashboardTokenVerifier(TokenVerifier):
     """Adapt News Dashboard's stored MCP tokens for FastMCP authentication."""
 
     async def verify_token(self, token: str) -> AccessToken | None:
-        authenticated = await to_thread.run_sync(service.authenticate_token, token)
+        try:
+            authenticated = await to_thread.run_sync(service.authenticate_token, token)
+        except Exception:
+            mcp_auth_attempts_total.labels(status="error").inc()
+            logger.info("mcp event=auth status=error")
+            raise
         if authenticated is None:
+            mcp_auth_attempts_total.labels(status="invalid").inc()
+            logger.info("mcp event=auth status=invalid")
             return None
         token_id = int(authenticated["token_id"])
         user_id = int(authenticated["user_id"])
         scopes = sorted(str(scope) for scope in authenticated["scopes"])
+        mcp_auth_attempts_total.labels(status="success").inc()
+        logger.info("mcp event=auth status=success token_id=%s", token_id)
         return AccessToken(
             token=token,
             client_id=f"mcp-token:{token_id}",

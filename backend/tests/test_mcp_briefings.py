@@ -71,7 +71,7 @@ async def _briefing_client(
     ) -> httpx.AsyncClient:
         return httpx.AsyncClient(
             transport=httpx.ASGITransport(app=app),
-            base_url="http://mcp.test",
+            base_url="http://localhost:8080",
             headers=headers,
             timeout=timeout,
             auth=auth,
@@ -79,7 +79,7 @@ async def _briefing_client(
         )
 
     transport = StreamableHttpTransport(
-        "http://mcp.test/mcp/", auth=token, httpx_client_factory=client_factory
+        "http://localhost:8080/mcp/", auth=token, httpx_client_factory=client_factory
     )
     async with app.router.lifespan_context(app), Client(transport) as client:
         yield client

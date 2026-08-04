@@ -34,6 +34,31 @@ def _render_chart(*set_values: str) -> str:
     return res.stdout
 
 
+def _render_production_chart() -> str:
+    assert HELM_BIN is not None
+    res = subprocess.run(  # noqa: S603
+        [
+            HELM_BIN,
+            "template",
+            "news-dashboard",
+            str(CHART_DIR),
+            "--values",
+            str(CHART_DIR / "values-production.yaml"),
+            "--set",
+            "app.auth.sessionSecret=dummy-session-secret",
+            "--set-string",
+            "postgresql.password=dummy-postgres-password-for-render-only",
+            "--set-string",
+            "image.digest=sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert res.returncode == 0, f"helm template failed: {res.stderr}"
+    return res.stdout
+
+
 def _manifest_for_kind(output: str, kind: str) -> str:
     for manifest in output.split("---"):
         if f"\nkind: {kind}\n" in f"\n{manifest}\n":
@@ -95,6 +120,56 @@ def test_helm_template_default() -> None:
     assert "backoffLimit: 1" in output
     assert "successfulJobsHistoryLimit: 2" in output
     assert "failedJobsHistoryLimit: 3" in output
+
+
+@pytest.mark.skipif(HELM_BIN is None, reason="helm binary not found on path")
+def test_helm_template_mcp_defaults_to_enabled_with_local_allowlists() -> None:
+    output = _render_chart()
+    deployment_env = _env_block(_manifest_for_kind(output, "Deployment"))
+
+    assert _env_entry(deployment_env, "MCP_SERVER_ENABLED") == (
+        '- name: MCP_SERVER_ENABLED\n  value: "true"'
+    )
+    assert "localhost:8080,127.0.0.1:8080,[::1]:8080" in _env_entry(
+        deployment_env, "MCP_ALLOWED_HOSTS"
+    )
+    assert "http://localhost:8080,http://127.0.0.1:8080,http://[::1]:8080" in _env_entry(
+        deployment_env, "MCP_ALLOWED_ORIGINS"
+    )
+
+
+@pytest.mark.skipif(HELM_BIN is None, reason="helm binary not found on path")
+def test_helm_production_mcp_uses_public_ingress_allowlists() -> None:
+    output = _render_production_chart()
+    deployment_env = _env_block(_manifest_for_kind(output, "Deployment"))
+
+    assert 'value: "news.lihor.ro"' in _env_entry(deployment_env, "MCP_ALLOWED_HOSTS")
+    assert 'value: "https://news.lihor.ro"' in _env_entry(deployment_env, "MCP_ALLOWED_ORIGINS")
+    assert "localhost" not in _env_entry(deployment_env, "MCP_ALLOWED_HOSTS")
+    assert "localhost" not in _env_entry(deployment_env, "MCP_ALLOWED_ORIGINS")
+
+
+@pytest.mark.skipif(HELM_BIN is None, reason="helm binary not found on path")
+def test_helm_mcp_derives_allowlists_from_public_base_url() -> None:
+    output = _render_chart("app.publicBaseUrl=https://news.example.com/dashboard")
+    deployment_env = _env_block(_manifest_for_kind(output, "Deployment"))
+
+    assert 'value: "news.example.com"' in _env_entry(deployment_env, "MCP_ALLOWED_HOSTS")
+    assert 'value: "https://news.example.com"' in _env_entry(deployment_env, "MCP_ALLOWED_ORIGINS")
+
+
+@pytest.mark.skipif(HELM_BIN is None, reason="helm binary not found on path")
+def test_helm_template_mcp_accepts_explicit_shutdown_and_public_allowlists() -> None:
+    output = _render_chart(
+        "app.config.mcpServerEnabled=false",
+        "app.config.mcpAllowedHosts=news.example.com",
+        "app.config.mcpAllowedOrigins=https://news.example.com",
+    )
+    deployment_env = _env_block(_manifest_for_kind(output, "Deployment"))
+
+    assert 'value: "false"' in _env_entry(deployment_env, "MCP_SERVER_ENABLED")
+    assert 'value: "news.example.com"' in _env_entry(deployment_env, "MCP_ALLOWED_HOSTS")
+    assert 'value: "https://news.example.com"' in _env_entry(deployment_env, "MCP_ALLOWED_ORIGINS")
 
 
 @pytest.mark.skipif(HELM_BIN is None, reason="helm binary not found on path")
