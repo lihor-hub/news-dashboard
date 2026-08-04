@@ -115,11 +115,14 @@ The server is enabled by default; setting `MCP_SERVER_ENABLED` to `false`, `0`,
 Existing tokens remain stored so access can resume if the feature is enabled
 again, and revocation invalidates a token immediately.
 
-Scopes are enforced per MCP tool: `search` grants current-news listing and
-`read` grants single-article retrieval. The `ask` scope is used separately by
-the optional A2A question-answering endpoint; it does not grant MCP article
-access. Prefer separate least-privilege tokens for clients that do not need
-both surfaces.
+Scopes are enforced per tool: `search` grants MCP listing, source discovery,
+and search; `read` grants MCP single-article retrieval; and `ask` grants MCP
+`ask_news`. The same `ask` scope can authorize the optional A2A
+question-answering endpoint when A2A is separately enabled. The scope is
+shared, but the routes and feature flags are independent: MCP uses
+`MCP_SERVER_ENABLED`, while A2A remains disabled unless
+`A2A_SERVER_ENABLED=true`. Enabling one does not enable the other. Prefer
+separate least-privilege tokens for clients that do not need both surfaces.
 
 ### Google Reader tokens
 

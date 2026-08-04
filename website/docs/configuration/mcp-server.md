@@ -28,7 +28,7 @@ curl -X POST https://your-instance/api/users/me/mcp-tokens \
 
 The plaintext `ndmcp_` token appears once. News Dashboard stores only its SHA-256 hash and a short display prefix. Each user can hold up to 10 active tokens and can revoke one immediately from Settings or `DELETE /api/users/me/mcp-tokens/{token_id}`.
 
-Available token scopes are `search`, `read`, `ask`, and `briefings`. Omitting `scopes` grants all four; prefer an explicit subset. News discovery and search tools require `search`; `get_news_article` requires `read`; saved-briefing tools require `briefings`. MCP question answering using `ask` is planned and is not available yet.
+Available token scopes are `search`, `read`, `ask`, and `briefings`. Omitting `scopes` grants all four; prefer an explicit subset. News discovery and search tools require `search`; `get_news_article` requires `read`; `ask_news` requires `ask`; saved-briefing tools require `briefings`.
 
 MCP authentication is independent of Keycloak and browser login. The bearer token alone identifies the MCP user; clients never send a user ID as a tool argument.
 
@@ -50,6 +50,7 @@ Use HTTPS outside a trusted local development environment. Do not put the token 
 | `list_news_sources` | `search` | Pages through the token owner's subscribed, enabled sources that can be used with `search_news`. |
 | `search_news` | `search` | Searches visible articles with typed filters and offset pagination. An empty query returns a filtered recent listing. |
 | `get_news_article` | `read` | Retrieves one visible article by its positive integer article ID. |
+| `ask_news` | `ask` | Answers a question from a bounded, user-visible news corpus and returns validated citations. |
 | `list_briefings` | `briefings` | Pages through complete saved briefings owned by the token user. |
 | `get_briefing` | `briefings` | Retrieves one complete saved briefing owned by the token user, including safe visible citations. |
 
@@ -116,6 +117,32 @@ If the visible article has no cached body, retrieval may fetch and populate the 
 
 `body_truncated` means the body was shortened. Top-level `truncated` means any returned text field was shortened to keep the complete structured result within its 4,800-byte limit; the outer transport remains capped at 16 KiB. Required fields remain present when truncation occurs.
 
+### Ask a question about news
+
+Call `ask_news` with a non-empty `question` of at most 2,000 characters and optional `corpus`. `corpus` is `saved_and_read` (the default) or `all_visible`. `saved_and_read` is the public API name for the current product's **Starred + Done** set; it does not mean every article ever opened. `all_visible` widens retrieval to all non-archived articles available through the owner's private sources and enabled global-source subscriptions. Neither option includes another user's private sources, disabled subscriptions, archived articles, or share-only access.
+
+The result contains `answer`, `citations`, nullable `trace_id`, and `truncated`. Citation brackets are positions in the authorized retrieval result, not article database IDs. Only canonical positive brackets such as `[1]` can create a citation. News Dashboard validates the corresponding already-authorized source, permits only well-formed HTTP(S) URLs, removes tracking parameters and fragments, and deduplicates by article ID in first-cited order. Unsupported or ambiguous brackets remain answer text but never become authoritative citations.
+
+`trace_id` is a 32-character Langfuse trace ID when tracing is configured and available; otherwise it is `null`. `truncated: true` means the answer or complete citation list was shortened to fit the 4,800-byte structured-result budget. Citation URLs are validated whole and omitted rather than shortened to a different destination.
+
+The instance needs `FREE_LLM_API_KEY` (preferred) or `OPENAI_API_KEY`, plus the corresponding optional base URL. MCP answering backfills at most 16 missing embeddings, retrieves 8 articles, caps answers at 512 model tokens, uses a 20-second provider timeout, and has a 30-second foreground deadline. A timed-out foreground call abandons the waiting thread; the provider timeout and work caps remain the underlying cost bounds.
+
+The dedicated per-token generation bucket permits a burst of 2 and refills one request every 30 seconds. This is separate from the general MCP limit. Stable errors are:
+
+| Code | Stable public message | Retry guidance |
+|------|-----------------------|----------------|
+| `ask_not_configured` | `News answering is not configured.` | Configure AI credentials; do not retry unchanged. |
+| `embedding_unavailable` | `News retrieval is temporarily unavailable.` | Retry with backoff. |
+| `provider_authentication_failed` | `News answering provider authentication failed.` | Repair provider credentials; do not retry unchanged. |
+| `provider_rate_limited` | `News answering provider is rate limited; retry later.` | Retry with provider-aware backoff. |
+| `ask_timeout` | `News answering timed out; retry later.` | Retry with backoff. |
+| `ask_rate_limited` | `News answering rate limit exceeded; retry later.` | Wait at least 30 seconds before retrying. |
+| `ask_unavailable` | `News answering is temporarily unavailable.` | Retry with backoff. |
+
+When Langfuse is enabled, MCP Ask traces contain operational metadata only: authenticated user attribution, surface and corpus tags, model, token usage, provider-reported cost, character and citation counts, timing, and status. They exclude bearer tokens, questions, article text, prompts, source titles/URLs, generated answers, provider response bodies, and exception details. Application logs follow the same content-free boundary.
+
+MCP `ask_news` and the optional A2A endpoint can share an `ask`-scoped token, but their routes and flags are independent. `/mcp/` follows `MCP_SERVER_ENABLED`; the A2A agent card and `/api/a2a` require `A2A_SERVER_ENABLED=true`. Enabling either does not enable the other. A2A retains its canonical Starred + Done corpus and does not expose MCP's `corpus` selector.
+
 ### Saved briefings
 
 `list_briefings` accepts an integer `limit` from 1 through 25 (default 10) and an integer `offset` from 0 through 10,000 (default 0). Values outside these ranges, booleans, and non-integers are rejected. Results contain only the authenticated token owner's saved briefings whose status is complete, ordered newest first by creation time and then descending briefing ID.
@@ -178,7 +205,7 @@ Citation access is evaluated when the briefing is read, not frozen when it was s
 
 The briefing tools only read previously saved results. They cannot generate or regenerate a briefing, mutate content, chat with a briefing, send email, create a podcast, change a schedule, trigger delivery, or inspect or start agent runs. Internal fields such as owner, status, model, errors, prompts, scripts, delivery data, trace IDs, workflow state, article bodies, and source ownership are not returned.
 
-MCP question answering is planned as a separate addition. MCP clients should use tool discovery instead of assuming that tool exists. The separately configured A2A endpoint remains an ask-only surface and does not advertise briefing tools.
+MCP clients should use tool discovery rather than assuming a deployment exposes every tool. The separately configured A2A endpoint remains ask-only and does not advertise briefing tools.
 
 ## Security boundaries
 
