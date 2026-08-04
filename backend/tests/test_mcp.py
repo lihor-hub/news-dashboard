@@ -2228,6 +2228,7 @@ def test_ask_news_rejects_invalid_question_before_calling_assistant(
 def test_ask_news_calls_canonical_assistant_with_token_identity(
     pg_clean: str,
     monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
     arguments: dict[str, str],
     expected_question: str,
     expected_include_all: bool,
@@ -2239,6 +2240,8 @@ def test_ask_news_calls_canonical_assistant_with_token_identity(
     user_id = _make_user(pg_clean, f"ask-call-{expected_include_all}")
     token = service.create_token(user_id, "client", scopes=("ask",), database_url=pg_clean)["token"]
     captured: dict[str, Any] = {}
+    recorded: list[dict[str, Any]] = []
+    trace_id = "0123456789abcdef0123456789abcdef"
 
     def fake_ask(question: str, **kwargs: Any) -> dict[str, Any]:
         captured["question"] = question
@@ -2246,10 +2249,17 @@ def test_ask_news_calls_canonical_assistant_with_token_identity(
         return {
             "answer": "Grounded answer [1]",
             "sources": [{"id": 17, "title": "A source", "url": "https://example.com/a"}],
-            "trace_id": None,
+            "trace_id": trace_id,
         }
 
     monkeypatch.setattr("news_dashboard.assistant.service.ask", fake_ask)
+    monkeypatch.setattr(
+        "news_dashboard.ai_client.record_mcp_ask_result",
+        lambda recorded_trace_id, **kwargs: recorded.append(
+            {"trace_id": recorded_trace_id, **kwargs}
+        ),
+    )
+    caplog.set_level(logging.DEBUG)
 
     async def exercise() -> None:
         async with _mcp_client(token) as mcp_client:
@@ -2257,7 +2267,7 @@ def test_ask_news_calls_canonical_assistant_with_token_identity(
         assert result.structured_content == {
             "answer": "Grounded answer [1]",
             "citations": [{"id": 17, "title": "A source", "url": "https://example.com/a"}],
-            "trace_id": None,
+            "trace_id": trace_id,
             "truncated": False,
         }
 
@@ -2268,6 +2278,27 @@ def test_ask_news_calls_canonical_assistant_with_token_identity(
         "user_id": user_id,
         "execution_policy": MCP_ASK_EXECUTION_POLICY,
     }
+    assert recorded == [
+        {
+            "trace_id": trace_id,
+            "citation_count": 1,
+            "truncated": False,
+            "status": "ok",
+        }
+    ]
+    formatter = logging.Formatter("%(levelname)s %(name)s %(message)s")
+    server_logs = "\n".join(
+        formatter.format(record)
+        for record in caplog.records
+        if record.name.startswith(("news_dashboard", "fastmcp", "mcp.server"))
+    )
+    for private_value in (
+        expected_question,
+        "Grounded answer [1]",
+        "https://example.com/a",
+        token,
+    ):
+        assert private_value not in server_logs
 
 
 def test_get_news_article_returns_canonical_visible_article(

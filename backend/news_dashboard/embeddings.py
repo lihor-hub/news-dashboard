@@ -11,9 +11,11 @@ from __future__ import annotations
 import logging
 import os
 import time
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 if TYPE_CHECKING:
+    from openai.types.chat import ChatCompletion
+
     from news_dashboard.assistant.service import AskExecutionPolicy
 
 logger = logging.getLogger(__name__)
@@ -118,7 +120,11 @@ def _is_retryable_embedding_error(exc: Exception) -> bool:
 
 
 def _embed(
-    text: str, *, timeout_seconds: float | None = None, trace_content: bool = True
+    text: str,
+    *,
+    timeout_seconds: float | None = None,
+    trace_content: bool = True,
+    operation: str = "query-embedding",
 ) -> list[float]:
     """Embed *text* via the configured OpenAI-compatible endpoint.
 
@@ -127,7 +133,7 @@ def _embed(
     the raw provider exception so callers can distinguish "provider is
     rate-limiting us" from other failures (e.g. bad credentials).
     """
-    from news_dashboard.ai_client import get_chat_client, trace_params
+    from news_dashboard.ai_client import SafeAIObservation, get_chat_client, trace_params
 
     api_key, base_url, model = _embeddings_ai_config()
     client_kwargs: dict[str, Any] = {"api_key": api_key, "base_url": base_url}
@@ -135,6 +141,11 @@ def _embed(
         client_kwargs["timeout_seconds"] = timeout_seconds
     if not trace_content:
         client_kwargs["enable_tracing"] = False
+        client_kwargs["safe_observation"] = SafeAIObservation(
+            operation=operation,
+            as_type="embedding",
+            model=model,
+        )
     client = get_chat_client(**client_kwargs)
 
     attempt = 0
@@ -173,21 +184,56 @@ def _answer(
     *,
     max_tokens: int | None = None,
     timeout_seconds: float | None = None,
+    trace_content: bool = True,
 ) -> str:
     """Generate an answer with a vanilla LangChain prompt/model/parser pipeline."""
     from langchain_core.messages import SystemMessage
     from langchain_core.output_parsers import StrOutputParser
     from langchain_core.prompts import ChatPromptTemplate
 
-    from news_dashboard.ai_client import free_llm_config, get_chat_model
+    from news_dashboard.ai_client import (
+        SafeAIObservation,
+        free_llm_config,
+        get_chat_client,
+        get_chat_model,
+    )
 
     api_key, base_url = free_llm_config()
     if not api_key:
         _require_env("FREE_LLM_API_KEY", "use Ask AI")
+    model_name = os.getenv("OPENAI_ANSWER_MODEL", DEFAULT_ANSWER_MODEL)
+    if not trace_content:
+        client = get_chat_client(
+            api_key=api_key,
+            base_url=base_url,
+            timeout_seconds=timeout_seconds,
+            enable_tracing=False,
+            safe_observation=SafeAIObservation(
+                operation="answer-generation",
+                as_type="generation",
+                model=model_name,
+                model_parameters={"max_tokens": max_tokens} if max_tokens is not None else {},
+            ),
+        )
+        request: dict[str, Any] = {
+            "model": model_name,
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+        }
+        if max_tokens is not None:
+            request["max_tokens"] = max_tokens
+        response = cast("ChatCompletion", client.chat.completions.create(**request))
+        content = response.choices[0].message.content
+        if not isinstance(content, str):
+            message = "AI response must contain string content"
+            raise TypeError(message)
+        return content
     model_kwargs: dict[str, Any] = {
         "api_key": api_key,
         "base_url": base_url,
-        "model": os.getenv("OPENAI_ANSWER_MODEL", DEFAULT_ANSWER_MODEL),
+        "model": model_name,
     }
     if max_tokens is not None:
         model_kwargs["max_tokens"] = max_tokens
@@ -278,6 +324,7 @@ def _answer_with_policy(
         user_prompt,
         max_tokens=execution_policy.answer_max_tokens,
         timeout_seconds=execution_policy.provider_timeout_seconds,
+        trace_content=execution_policy.trace_content,
     )
 
 
@@ -309,7 +356,7 @@ def _generate_answer(
     client = _client()
     if not trace_content:
         with client.start_as_current_observation(
-            name="ask-ai",
+            name="answer-pipeline",
             as_type="chain",
             input=trace_input,
             prompt=prompt.langfuse_prompt,
@@ -462,9 +509,14 @@ def embed_all_eligible(
                     text,
                     timeout_seconds=provider_timeout_seconds,
                     trace_content=trace_content,
+                    operation="article-backfill",
                 )
                 if provider_timeout_seconds is not None
-                else (_embed(text) if trace_content else _embed(text, trace_content=False))
+                else (
+                    _embed(text)
+                    if trace_content
+                    else _embed(text, trace_content=False, operation="article-backfill")
+                )
             )
             from news_dashboard.db import connect as _connect
 
@@ -675,14 +727,27 @@ def ask(
 
     from langfuse import propagate_attributes
 
+    from news_dashboard.ai_client import _client
+
     corpus = "all_visible" if include_all else "saved_and_read"
-    with propagate_attributes(
-        user_id=str(user_id) if user_id is not None else None,
-        tags=["ask-ai", "mcp"],
-        metadata={"surface": execution_policy.trace_surface, "corpus": corpus},
-        trace_name="ask-news",
+    with (
+        propagate_attributes(
+            user_id=str(user_id) if user_id is not None else None,
+            tags=["ask-ai", "mcp"],
+            metadata={"surface": execution_policy.trace_surface, "corpus": corpus},
+            trace_name="ask-news",
+        ),
+        _client().start_as_current_observation(
+            name="ask-ai",
+            as_type="chain",
+            input={
+                "question_chars": len(query),
+                "corpus": corpus,
+                "retrieval_limit": execution_policy.retrieval_limit,
+            },
+        ) as root,
     ):
-        return _ask_impl(
+        result = _ask_impl(
             query,
             db_path,
             include_all=include_all,
@@ -690,3 +755,11 @@ def ask(
             session_id=session_id,
             execution_policy=execution_policy,
         )
+        root.update(
+            output={
+                "answer_chars": len(str(result.get("answer", ""))),
+                "source_count": len(result.get("sources", [])),
+                "status": "ok",
+            }
+        )
+        return result

@@ -260,8 +260,10 @@ def _seed_article_with_embedding(
     source_slug: str = "test-source",
     source_name: str = "TestSource",
     legacy_status: str = "new",
+    *,
+    embedded: bool = True,
 ) -> None:
-    embedding = _test_vector()
+    embedding = _test_vector() if embedded else None
     with connect(db_path) as conn:
         conn.execute(
             """
@@ -451,6 +453,7 @@ def test_mcp_policy_preserves_exact_two_user_visibility_corpora(
             article_id,
             source_slug=source_slug,
             source_name=source_slug,
+            embedded=False,
         )
     for article_id in (1, 2, 3, 4, 5, 7, 8, 10):
         _set_user_article_state(pg_clean, alice, article_id, "done")
@@ -461,9 +464,63 @@ def test_mcp_policy_preserves_exact_two_user_visibility_corpora(
             (alice,),
         )
 
-    _make_openai_stub(monkeypatch, answer="bounded answer")
+    embedded_inputs: list[str] = []
+    answer_messages: list[dict[str, str]] = []
+
+    class FakeEmbeddings:
+        def create(self, **kwargs: Any) -> Any:
+            embedded_inputs.append(str(kwargs["input"]))
+            return type(
+                "EmbeddingResponse",
+                (),
+                {
+                    "data": [
+                        type(
+                            "EmbeddingData",
+                            (),
+                            {"embedding": [0.1] * EMBEDDING_DIMENSIONS},
+                        )()
+                    ],
+                    "usage": type("Usage", (), {"prompt_tokens": 1, "total_tokens": 1})(),
+                },
+            )()
+
+    class FakeCompletions:
+        def create(self, **kwargs: Any) -> Any:
+            answer_messages.extend(kwargs["messages"])
+            return type(
+                "ChatResponse",
+                (),
+                {
+                    "choices": [
+                        type(
+                            "Choice",
+                            (),
+                            {"message": type("Message", (), {"content": "bounded answer"})()},
+                        )()
+                    ],
+                    "usage": type(
+                        "Usage",
+                        (),
+                        {"prompt_tokens": 2, "completion_tokens": 1, "total_tokens": 3},
+                    )(),
+                },
+            )()
+
+    client = type(
+        "FakeOpenAI",
+        (),
+        {
+            "embeddings": FakeEmbeddings(),
+            "chat": type("Chat", (), {"completions": FakeCompletions()})(),
+        },
+    )()
+    monkeypatch.setenv("FREE_LLM_API_KEY", "test-key")
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.setattr("news_dashboard.ai_client.get_openai_client", lambda **_kwargs: client)
     policy = AskExecutionPolicy.mcp()
     saved = ask("question", pg_clean, user_id=alice, execution_policy=policy)
+    first_backfill = [text for text in embedded_inputs if text.startswith("Article")]
     visible = ask(
         "question",
         pg_clean,
@@ -477,6 +534,19 @@ def test_mcp_policy_preserves_exact_two_user_visibility_corpora(
     forbidden = {6, 7, 10}
     assert forbidden.isdisjoint(source["id"] for source in saved["sources"])
     assert forbidden.isdisjoint(source["id"] for source in visible["sources"])
+    assert len(first_backfill) <= 16
+    second_backfill = [
+        text for text in embedded_inputs[len(first_backfill) :] if text.startswith("Article")
+    ]
+    assert len(second_backfill) <= 16
+    provider_content = repr((embedded_inputs, answer_messages))
+    for forbidden_id in forbidden:
+        for secret in (
+            f"Article {forbidden_id}",
+            f"Summary {forbidden_id}",
+            f"https://example.com/{forbidden_id}",
+        ):
+            assert secret not in provider_content
 
 
 # ── POST /api/ask — payload bounds (#602) ────────────────────────────────────

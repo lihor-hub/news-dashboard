@@ -275,7 +275,7 @@ def test_mcp_ask_trace_contains_only_safe_operational_metadata() -> None:
     answer = "PRIVATE ANSWER"
     article_url = "https://private.example/secret"
     captured: dict[str, Any] = {}
-    span = MagicMock()
+    observations: list[tuple[dict[str, Any], MagicMock]] = []
     client = MagicMock()
     client.get_current_trace_id.return_value = "0123456789abcdef0123456789abcdef"
 
@@ -286,7 +286,8 @@ def test_mcp_ask_trace_contains_only_safe_operational_metadata() -> None:
 
     @contextmanager
     def observation(**kwargs: Any) -> Any:
-        captured["observation"] = kwargs
+        span = MagicMock()
+        observations.append((kwargs, span))
         yield span
 
     client.start_as_current_observation.side_effect = observation
@@ -324,22 +325,36 @@ def test_mcp_ask_trace_contains_only_safe_operational_metadata() -> None:
         )
 
     assert result["trace_id"] == "0123456789abcdef0123456789abcdef"
-    assert captured["attributes"] | captured["observation"] == {
+    assert captured["attributes"] | observations[0][0] == {
         "user_id": "7",
         "tags": ["ask-ai", "mcp"],
         "metadata": {"surface": "mcp", "corpus": "saved_and_read"},
         "trace_name": "ask-news",
         "name": "ask-ai",
         "as_type": "chain",
-        "prompt": get_prompt.return_value.langfuse_prompt,
         "input": {
             "question_chars": len(question),
             "corpus": "saved_and_read",
             "retrieval_limit": 8,
         },
     }
-    span.update.assert_called_once_with(output={"answer_chars": len(answer), "status": "ok"})
-    rendered = repr((captured, span.update.call_args))
+    assert observations[1][0] == {
+        "name": "answer-pipeline",
+        "as_type": "chain",
+        "input": {
+            "question_chars": len(question),
+            "corpus": "saved_and_read",
+            "retrieval_limit": 8,
+        },
+        "prompt": get_prompt.return_value.langfuse_prompt,
+    }
+    observations[0][1].update.assert_called_once_with(
+        output={"answer_chars": len(answer), "source_count": 5, "status": "ok"}
+    )
+    observations[1][1].update.assert_called_once_with(
+        output={"answer_chars": len(answer), "status": "ok"}
+    )
+    rendered = repr((captured, observations))
     for secret in (question, article_text, article_url, answer, "PRIVATE PROMPT"):
         assert secret not in rendered
 

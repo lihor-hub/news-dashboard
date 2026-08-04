@@ -593,7 +593,7 @@ async def ask_news(
         )
     )
     sources = cast("list[dict[str, Any]]", result.get("sources", []))
-    return {
+    response: AskNewsResult = {
         "answer": str(result.get("answer", "")),
         "citations": [
             {
@@ -606,6 +606,17 @@ async def ask_news(
         "trace_id": cast("str | None", result.get("trace_id")),
         "truncated": False,
     }
+    trace_id = response["trace_id"]
+    if trace_id is not None:
+        from news_dashboard.ai_client import record_mcp_ask_result
+
+        record_mcp_ask_result(
+            trace_id,
+            citation_count=len(response["citations"]),
+            truncated=response["truncated"],
+            status="ok",
+        )
+    return response
 
 
 @mcp.tool(auth=require_scopes("read"))

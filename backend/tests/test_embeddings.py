@@ -5,7 +5,9 @@ from __future__ import annotations
 import logging
 import time
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
+from unittest.mock import MagicMock
 
 import httpx
 import openai
@@ -297,9 +299,124 @@ def test_private_backfill_logs_no_article_or_provider_content(
         )
 
     assert count == 0
-    rendered = "\n".join(record.getMessage() for record in caplog.records)
+    rendered = caplog.text
     assert hostile not in rendered
     assert str(ids[0]) not in rendered
+
+
+def test_private_embedding_records_safe_provider_usage_at_client_boundary(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from news_dashboard import ai_client
+
+    observation = MagicMock()
+    context = MagicMock()
+    context.__enter__.return_value = observation
+    client = MagicMock()
+    client.start_as_current_observation.return_value = context
+    response = SimpleNamespace(
+        data=[SimpleNamespace(embedding=[0.1, 0.2])],
+        usage=SimpleNamespace(prompt_tokens=7, total_tokens=7),
+    )
+    plain = MagicMock()
+    plain.embeddings.create.return_value = response
+    monkeypatch.setattr(ai_client, "langfuse_enabled", lambda: True)
+    monkeypatch.setattr(ai_client, "_client", lambda: client)
+    monkeypatch.setattr(ai_client, "get_openai_client", lambda **_kwargs: plain)
+    monkeypatch.setattr(
+        embeddings_mod, "_embeddings_ai_config", lambda: ("secret", None, "embed-model")
+    )
+
+    vector = embeddings_mod._embed("PRIVATE INPUT", timeout_seconds=20.0, trace_content=False)
+
+    assert vector == [0.1, 0.2]
+    client.start_as_current_observation.assert_called_once_with(
+        name="query-embedding-primary",
+        as_type="embedding",
+        input=None,
+        model="embed-model",
+        model_parameters={},
+        metadata={
+            "operation": "query-embedding",
+            "provider": "primary",
+            "attempt": 1,
+            "retry": 0,
+        },
+    )
+    observation.update.assert_called_once_with(
+        output={"status": "ok"},
+        usage_details={"input": 7, "total": 7},
+        metadata={
+            "operation": "query-embedding",
+            "provider": "primary",
+            "attempt": 1,
+            "retry": 0,
+            "outcome": "success",
+        },
+    )
+    rendered = repr((client.mock_calls, observation.mock_calls))
+    assert "PRIVATE INPUT" not in rendered
+    assert "secret" not in rendered
+
+
+def test_private_answer_records_safe_generation_usage_at_client_boundary(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from news_dashboard import ai_client
+
+    observation = MagicMock()
+    context = MagicMock()
+    context.__enter__.return_value = observation
+    langfuse = MagicMock()
+    langfuse.start_as_current_observation.return_value = context
+    response = SimpleNamespace(
+        choices=[SimpleNamespace(message=SimpleNamespace(content="PRIVATE ANSWER"))],
+        usage=SimpleNamespace(prompt_tokens=11, completion_tokens=4, total_tokens=15, cost=0.002),
+    )
+    plain = MagicMock()
+    plain.chat.completions.create.return_value = response
+    monkeypatch.setattr(ai_client, "langfuse_enabled", lambda: True)
+    monkeypatch.setattr(ai_client, "_client", lambda: langfuse)
+    monkeypatch.setattr(ai_client, "get_openai_client", lambda **_kwargs: plain)
+    monkeypatch.setattr(ai_client, "free_llm_config", lambda: ("secret", None))
+
+    answer = embeddings_mod._answer(
+        "PRIVATE SYSTEM",
+        "PRIVATE USER PROMPT",
+        max_tokens=512,
+        timeout_seconds=20.0,
+        trace_content=False,
+    )
+
+    assert answer == "PRIVATE ANSWER"
+    langfuse.start_as_current_observation.assert_called_once_with(
+        name="answer-generation-primary",
+        as_type="generation",
+        input=None,
+        model="gpt-4o-mini",
+        model_parameters={"max_tokens": 512},
+        metadata={
+            "operation": "answer-generation",
+            "provider": "primary",
+            "attempt": 1,
+            "retry": 0,
+        },
+    )
+    observation.update.assert_called_once_with(
+        output={"status": "ok"},
+        usage_details={"input": 11, "output": 4, "total": 15},
+        metadata={
+            "operation": "answer-generation",
+            "provider": "primary",
+            "attempt": 1,
+            "retry": 0,
+            "outcome": "success",
+        },
+        cost_details={"total": 0.002},
+    )
+    rendered = repr((langfuse.mock_calls, observation.mock_calls))
+    for secret in ("PRIVATE SYSTEM", "PRIVATE USER PROMPT", "PRIVATE ANSWER", "secret"):
+        assert secret not in rendered
 
 
 # ── /api/ask surfaces a clean error on persistent embedding failure ────────
