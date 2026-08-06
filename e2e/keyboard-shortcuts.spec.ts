@@ -3,11 +3,12 @@
  * All shortcuts are defined in AppShell.tsx.
  */
 import { test, expect } from '@playwright/test';
-import { mockApi } from './fixtures';
+import { mockApi, waitForAppHydration } from './fixtures';
 
 test.beforeEach(async ({ page }) => {
   await mockApi(page);
   await page.goto('/');
+  await waitForAppHydration(page);
   // Ensure no input is focused
   await page.keyboard.press('Escape');
 });
@@ -15,6 +16,7 @@ test.beforeEach(async ({ page }) => {
 test.describe('g-key navigation shortcuts', () => {
   test('g then b navigates to / (Brief)', async ({ page }) => {
     await page.goto('/today');
+    await waitForAppHydration(page);
     await page.keyboard.press('g');
     await page.keyboard.press('b');
     await expect(page).toHaveURL('/');
