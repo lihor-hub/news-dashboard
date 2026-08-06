@@ -116,7 +116,7 @@ def _compile_briefing_graph(
     graph.add_edge(briefing_agent.STAGE_DRAFTING, briefing_agent.STAGE_CITATION_VERIFICATION)
     graph.add_edge(briefing_agent.STAGE_CITATION_VERIFICATION, briefing_agent.STAGE_ASSEMBLY)
     graph.add_edge(briefing_agent.STAGE_ASSEMBLY, END)
-    return graph.compile()  # ty: ignore[invalid-return-type]  # follows suppressed upstream generic
+    return graph.compile()
 
 
 # ── SQL constants ─────────────────────────────────────────────────────────────
