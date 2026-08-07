@@ -3,6 +3,9 @@
 All notable changes to this project will be documented in this file.
 This project adheres to [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.161.4] — 2026-07-31
+- Stability and performance improvements.
+
 ## [1.161.3] — 2026-07-30
 - Security and stability improvements for the desktop app.
 
