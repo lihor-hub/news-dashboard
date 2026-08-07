@@ -93,6 +93,12 @@ async function prepareVisualPage(page: Page, theme: 'light' | 'dark' = 'light') 
 }
 
 async function screenshot(page: Page, name: string) {
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve) =>
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
+      )
+  );
   await expect(page).toHaveScreenshot(name, {
     fullPage: true,
     animations: 'disabled',
@@ -366,6 +372,7 @@ test.describe('@visual core app surfaces', () => {
     await mockLoggedInApp(page);
     await page.goto('/today');
     await expect(page.locator('nav.fixed')).toBeVisible();
+    await expect(page.getByText(SAMPLE_ARTICLE.title)).toBeVisible();
     await screenshot(page, 'app-shell-mobile.png');
   });
 

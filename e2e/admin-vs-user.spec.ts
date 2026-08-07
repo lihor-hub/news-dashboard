@@ -26,6 +26,7 @@ import {
   SUMMARY_DATA,
   SCHEDULER_STATUS,
   SAMPLE_SOURCE,
+  mockUser,
 } from './fixtures';
 
 // ── helpers ────────────────────────────────────────────────────────────────
@@ -36,23 +37,12 @@ function json(data: unknown, status = 200) {
 
 /** Mock /api/auth/me to return an admin user. */
 async function loginAsAdmin(page: Page) {
-  await page.route('/api/auth/me', (r) =>
-    r.fulfill(json({ id: 1, username: 'admin', email: null, is_admin: true }))
-  );
+  mockUser(page, { id: 1, username: 'admin', email: null, is_admin: true });
 }
 
 /** Mock /api/auth/me to return a normal (non-admin) user. */
 async function loginAsUser(page: Page) {
-  await page.route('/api/auth/me', (r) =>
-    r.fulfill(json({ id: 2, username: 'alice', email: null, is_admin: false }))
-  );
-}
-
-/** Override an admin-gated endpoint to return 403 Forbidden. */
-async function block403(page: Page, urlPattern: string) {
-  await page.route(urlPattern, (r) =>
-    r.fulfill({ status: 403, contentType: 'application/json', body: JSON.stringify({ detail: 'Forbidden' }) })
-  );
+  mockUser(page, { id: 2, username: 'alice', email: null, is_admin: false });
 }
 
 // ── Brief page (/) ─────────────────────────────────────────────────────────
@@ -255,7 +245,7 @@ test.describe('Search page — both user types', () => {
     await page.route('/api/search**', (r) => r.fulfill(json({ items: [SAMPLE_ARTICLE] })));
     await page.goto('/search');
     const input = page.getByRole('textbox').first();
-    if (await input.count() > 0) {
+    if ((await input.count()) > 0) {
       await input.fill('AI Safety');
       await page.keyboard.press('Enter');
       await expect(page.getByText(SAMPLE_ARTICLE.title)).toBeVisible();
@@ -311,8 +301,8 @@ test.describe('Settings page — both user types', () => {
       role === 'admin' ? await loginAsAdmin(page) : await loginAsUser(page);
       await mockApi(page);
       await page.goto('/settings');
-      await expect(page.getByText('Light')).toBeVisible();
-      await expect(page.getByText('Dark')).toBeVisible();
+      await expect(page.getByRole('button', { name: 'Light', exact: true })).toBeVisible();
+      await expect(page.getByRole('button', { name: 'Dark', exact: true })).toBeVisible();
     });
   }
 });
@@ -391,10 +381,12 @@ test.describe('Feeds / Schedule tab — admin user', () => {
     );
     await page.goto('/feeds/schedule');
     const btn = page.getByRole('button', { name: /pause/i }).first();
-    if (await btn.count() > 0) {
+    if ((await btn.count()) > 0) {
       await btn.click();
       // Pause request should succeed (no error toast)
-      await expect(page.getByText(/error/i)).not.toBeVisible({ timeout: 2000 }).catch(() => {});
+      await expect(page.getByText(/error/i))
+        .not.toBeVisible({ timeout: 2000 })
+        .catch(() => {});
     }
   });
 
@@ -404,7 +396,7 @@ test.describe('Feeds / Schedule tab — admin user', () => {
     );
     await page.goto('/feeds/schedule');
     const btn = page.getByRole('button', { name: /ingest now/i }).first();
-    if (await btn.count() > 0) {
+    if ((await btn.count()) > 0) {
       await btn.click();
       // Should not crash
       await expect(page.locator('h1').filter({ hasText: 'Feeds' })).toBeVisible();
@@ -418,37 +410,10 @@ test.describe('Feeds / Schedule tab — normal user', () => {
     await mockApi(page);
   });
 
-  test('page renders without crashing', async ({ page }) => {
+  test('shows the admin-only guard', async ({ page }) => {
     await page.goto('/feeds/schedule');
-    await expect(page.locator('h1').filter({ hasText: 'Feeds' })).toBeVisible();
-  });
-
-  test('scheduler status loads (GET is not admin-gated)', async ({ page }) => {
-    await page.goto('/feeds/schedule');
-    // Scheduler status endpoint is readable by all — interval should appear
-    await expect(page.getByText(/60|interval|every|running|paused/i).first()).toBeVisible();
-  });
-
-  test('pause action returns 403, error is shown', async ({ page }) => {
-    await block403(page, '/api/scheduler/pause');
-    await block403(page, '/api/scheduler/resume');
-    await page.goto('/feeds/schedule');
-    const btn = page.getByRole('button', { name: /pause|resume/i }).first();
-    if (await btn.count() > 0) {
-      await btn.click();
-      // Expect some error feedback (toast or error text)
-      await expect(page.getByText(/error|forbidden|403/i).first()).toBeVisible({ timeout: 4000 });
-    }
-  });
-
-  test('ingest now returns 403, error is shown', async ({ page }) => {
-    await block403(page, '/api/ingest');
-    await page.goto('/feeds/schedule');
-    const btn = page.getByRole('button', { name: /ingest now/i }).first();
-    if (await btn.count() > 0) {
-      await btn.click();
-      await expect(page.getByText(/error|forbidden|403/i).first()).toBeVisible({ timeout: 4000 });
-    }
+    await expect(page.getByRole('heading', { name: 'Admins only' })).toBeVisible();
+    await expect(page.getByRole('button', { name: /pause|resume|ingest now/i })).toHaveCount(0);
   });
 });
 
@@ -476,17 +441,11 @@ test.describe('Feeds / Runs tab — normal user', () => {
   test.beforeEach(async ({ page }) => {
     await loginAsUser(page);
     await mockApi(page);
-    await block403(page, '/api/ingest/runs**');
   });
 
-  test('page renders without crashing', async ({ page }) => {
+  test('shows the admin-only guard', async ({ page }) => {
     await page.goto('/feeds/runs');
-    await expect(page.locator('h1').filter({ hasText: 'Feeds' })).toBeVisible();
-  });
-
-  test('shows error state when runs API returns 403', async ({ page }) => {
-    await page.goto('/feeds/runs');
-    await expect(page.getByText(/error|forbidden|403/i).first()).toBeVisible({ timeout: 4000 });
+    await expect(page.getByRole('heading', { name: 'Admins only' })).toBeVisible();
   });
 });
 
@@ -501,19 +460,16 @@ test.describe('Feeds / Logs tab — both user types', () => {
       await expect(page.locator('h1').filter({ hasText: 'Feeds' })).toBeVisible();
     });
 
-    test(`shows Logs heading in content for ${role}`, async ({ page }) => {
+    test(`shows the expected logs access state for ${role}`, async ({ page }) => {
       role === 'admin' ? await loginAsAdmin(page) : await loginAsUser(page);
       await mockApi(page);
       await page.goto('/feeds/logs');
-      await expect(page.getByText('Logs').first()).toBeVisible();
-    });
-
-    test(`shows connection status indicator for ${role}`, async ({ page }) => {
-      role === 'admin' ? await loginAsAdmin(page) : await loginAsUser(page);
-      await mockApi(page);
-      await page.goto('/feeds/logs');
-      // Either "Live" (connected) or "Connecting…"
-      await expect(page.getByText(/live|connecting/i).first()).toBeVisible();
+      if (role === 'admin') {
+        await expect(page.getByText('Logs').first()).toBeVisible();
+        await expect(page.getByText(/live|connecting/i).first()).toBeVisible();
+      } else {
+        await expect(page.getByRole('heading', { name: 'Admins only' })).toBeVisible();
+      }
     });
   }
 });
@@ -534,7 +490,9 @@ test.describe('Stats page — admin user', () => {
   test('renders charts / data', async ({ page }) => {
     await page.goto('/stats');
     // Page should not show an error banner (distinct from "Errors" table column header)
-    await expect(page.getByRole('alert')).not.toBeVisible({ timeout: 3000 }).catch(() => {});
+    await expect(page.getByRole('alert'))
+      .not.toBeVisible({ timeout: 3000 })
+      .catch(() => {});
     await expect(page.getByText(/failed to load stats/i)).not.toBeVisible({ timeout: 3000 });
   });
 });
@@ -543,8 +501,6 @@ test.describe('Stats page — normal user', () => {
   test.beforeEach(async ({ page }) => {
     await loginAsUser(page);
     await mockApi(page);
-    // All stats endpoints are admin-only
-    await block403(page, '/api/stats/**');
   });
 
   test('shows Stats heading', async ({ page }) => {
@@ -552,11 +508,9 @@ test.describe('Stats page — normal user', () => {
     await expect(page.locator('h1').filter({ hasText: 'Stats' })).toBeVisible();
   });
 
-  test('shows error state when stats API returns 403', async ({ page }) => {
+  test('shows the admin-only guard', async ({ page }) => {
     await page.goto('/stats');
-    await expect(page.getByText(/error|forbidden|403|failed/i).first()).toBeVisible({
-      timeout: 6000,
-    });
+    await expect(page.getByRole('heading', { name: 'Admins only' })).toBeVisible();
   });
 });
 
@@ -567,7 +521,9 @@ test.describe('/api/summary — user-scoped nav counts', () => {
     await loginAsAdmin(page);
     await mockApi(page);
     await page.route('/api/summary', (r) =>
-      r.fulfill(json({ byStatus: { new: 99, saved: 5, read: 10, skipped: 2, archived: 0 }, byCategory: {} }))
+      r.fulfill(
+        json({ byStatus: { new: 99, saved: 5, read: 10, skipped: 2, archived: 0 }, byCategory: {} })
+      )
     );
     await page.goto('/');
     await expect(page.locator('aside')).toContainText('99');
@@ -577,7 +533,9 @@ test.describe('/api/summary — user-scoped nav counts', () => {
     await loginAsUser(page);
     await mockApi(page);
     await page.route('/api/summary', (r) =>
-      r.fulfill(json({ byStatus: { new: 3, saved: 1, read: 0, skipped: 0, archived: 0 }, byCategory: {} }))
+      r.fulfill(
+        json({ byStatus: { new: 3, saved: 1, read: 0, skipped: 0, archived: 0 }, byCategory: {} })
+      )
     );
     await page.goto('/');
     await expect(page.locator('aside')).toContainText('3');
@@ -589,7 +547,9 @@ test.describe('/api/summary — user-scoped nav counts', () => {
     await loginAsUser(page);
     await mockApi(page);
     await page.route('/api/summary', (r) =>
-      r.fulfill(json({ byStatus: { new: 7, saved: 0, read: 0, skipped: 0, archived: 0 }, byCategory: {} }))
+      r.fulfill(
+        json({ byStatus: { new: 7, saved: 0, read: 0, skipped: 0, archived: 0 }, byCategory: {} })
+      )
     );
     await page.goto('/');
     // The Today nav entry shows the count

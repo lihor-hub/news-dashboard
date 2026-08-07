@@ -19,7 +19,7 @@ test.beforeEach(async ({ page }) => {
 
 test.describe('PWA — iOS meta tags', () => {
   test('has app favicon and manifest links', async ({ page }) => {
-    const favicon = page.locator('link[rel="icon"]');
+    const favicon = page.locator('link[rel="icon"][href="/favicon.svg"]');
     await expect(favicon).toHaveCount(1);
     expect(await favicon.getAttribute('href')).toBe('/favicon.svg');
 

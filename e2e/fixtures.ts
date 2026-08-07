@@ -153,6 +153,29 @@ export const SAMPLE_USER = {
   is_admin: true,
 };
 
+interface MockUser {
+  id: number;
+  username: string;
+  email: string | null;
+  is_admin: boolean;
+}
+
+const usersByPage = new WeakMap<Page, MockUser>();
+
+export function mockUser(page: Page, user: MockUser) {
+  usersByPage.set(page, user);
+}
+
+export async function waitForAppHydration(page: Page) {
+  await page.locator('header').waitFor({ state: 'visible' });
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve) => {
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+      })
+  );
+}
+
 // ── Mock setup helpers ────────────────────────────────────────────────────────
 
 export function json(data: unknown, status = 200) {
@@ -165,6 +188,11 @@ export function json(data: unknown, status = 200) {
  * matching handler.
  */
 export async function mockApi(page: Page) {
+  await page.addInitScript(() => {
+    window.localStorage.setItem('lastSeenVersion', 'e2e-tests');
+    window.sessionStorage.setItem('onboarding-skipped', '1');
+  });
+
   // Auth
   await page.route('/api/auth/config', (r) =>
     r.fulfill(
@@ -176,8 +204,21 @@ export async function mockApi(page: Page) {
       })
     )
   );
-  await page.route('/api/auth/me', (r) => r.fulfill(json(SAMPLE_USER)));
+  await page.route('/api/auth/me', (r) => r.fulfill(json(usersByPage.get(page) ?? SAMPLE_USER)));
   await page.route('/api/auth/logout', (r) => r.fulfill(json({ status: 'logged_out' })));
+
+  // App-shell requests. Keep these mocked centrally so navigation tests do not
+  // leak requests to Vite's nonexistent backend proxy as the shell evolves.
+  await page.route('/api/config', (r) =>
+    r.fulfill(json({ dify: { enabled: false, base_url: null, app_token: null, title: null } }))
+  );
+  await page.route('/api/changelog', (r) => r.fulfill(json({ version: 'e2e-tests', entries: [] })));
+  await page.route('/api/onboarding/status', (r) => r.fulfill(json({ completed: true })));
+  await page.route('/api/settings/analytics', (r) =>
+    r.fulfill(json({ enabled: false, global_enabled: true }))
+  );
+  await page.route('/api/shares/unread_count', (r) => r.fulfill(json({ unread: 0 })));
+  await page.route('/api/ai-feedback**', (r) => r.fulfill(json({ items: {} })));
 
   // Notification settings — stateful so settings flows can enable channels and preview them.
   let notificationSettings = {
@@ -204,6 +245,17 @@ export async function mockApi(page: Page) {
     }
     return r.fulfill(json(notificationSettings));
   });
+  await page.route('/api/settings/automatic-ai-enrichment', (r) =>
+    r.fulfill(json({ enabled: false, available: false, limit: 0 }))
+  );
+  await page.route('/api/watchlists', (r) => r.fulfill(json({ items: [] })));
+  await page.route('/api/users/me/ai-memories', (r) => r.fulfill(json({ items: [] })));
+  await page.route('/api/users/me/mcp-tokens', (r) =>
+    r.fulfill(json({ items: [], enabled: false }))
+  );
+  await page.route('/api/users/me/greader-tokens', (r) => r.fulfill(json({ items: [] })));
+  await page.route('/api/personalization/nudges', (r) => r.fulfill(json({ items: [] })));
+  await page.route('/api/tags', (r) => r.fulfill(json({ items: [] })));
 
   // Summary / counts
   await page.route('/api/summary', (r) => r.fulfill(json(SUMMARY_DATA)));
@@ -289,10 +341,12 @@ export async function mockApi(page: Page) {
     )
   );
   await page.route('/api/sources/*/enabled', (r) => r.fulfill(json(SAMPLE_SOURCE)));
+  await page.route('/api/sources/cleanup-suggestions', (r) => r.fulfill(json({ items: [] })));
 
   // Scheduler
   await page.route('/api/scheduler/status', (r) => r.fulfill(json(SCHEDULER_STATUS)));
   await page.route('/api/scheduler/**', (r) => r.fulfill(json(SCHEDULER_STATUS)));
+  await page.route('/api/scheduler/job-runs', (r) => r.fulfill(json({ items: [] })));
 
   // Ingest
   await page.route('/api/ingest', async (r: Route) => {

@@ -2,11 +2,12 @@
  * E2E tests for the command palette (⌘K / Ctrl+K).
  */
 import { test, expect } from '@playwright/test';
-import { mockApi } from './fixtures';
+import { mockApi, waitForAppHydration } from './fixtures';
 
 test.beforeEach(async ({ page }) => {
   await mockApi(page);
   await page.goto('/');
+  await waitForAppHydration(page);
 });
 
 test.describe('Command palette — open/close', () => {
@@ -133,6 +134,7 @@ test.describe('Command palette — navigation action', () => {
 
   test('clicking Brief navigates to /', async ({ page }) => {
     await page.goto('/today');
+    await waitForAppHydration(page);
     await page.keyboard.press('Control+k');
     await page.getByRole('option', { name: /^brief$/i }).click();
     await expect(page).toHaveURL('/');

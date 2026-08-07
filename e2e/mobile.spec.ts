@@ -82,9 +82,9 @@ test.describe('Mobile — header', () => {
     await expect(header).toBeVisible();
   });
 
-  test('RD brand mark is visible on mobile', async ({ page }) => {
+  test('ReadingDNA brand mark is visible on mobile', async ({ page }) => {
     await page.goto('/');
-    await expect(page.getByText('RD')).toBeVisible();
+    await expect(page.getByRole('img', { name: 'ReadingDNA' })).toBeVisible();
   });
 
   test('More button is visible on mobile', async ({ page }) => {
@@ -96,10 +96,10 @@ test.describe('Mobile — header', () => {
     await page.goto('/');
     await page.getByRole('button', { name: 'More' }).click();
     const sheet = page.getByRole('dialog');
-    await expect(sheet.getByText('Feeds')).toBeVisible();
-    await expect(sheet.getByText('Stats')).toBeVisible();
-    await expect(sheet.getByText('Archive')).toBeVisible();
-    await expect(sheet.getByText('Settings')).toBeVisible();
+    await expect(sheet.getByRole('link', { name: 'Feeds', exact: true })).toBeVisible();
+    await expect(sheet.getByRole('link', { name: 'Stats', exact: true })).toBeVisible();
+    await expect(sheet.getByRole('link', { name: 'Archive', exact: true })).toBeVisible();
+    await expect(sheet.getByRole('link', { name: 'Settings', exact: true })).toBeVisible();
   });
 
   test('More sheet exposes Later in primary overflow', async ({ page }) => {
