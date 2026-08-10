@@ -7,15 +7,15 @@ license-files = ["LICENSE"]
 authors = [{ name = "lihor-hub" }]
 requires-python = ">=3.14"
 dependencies = [
-  "anyio>=4.0",
+  "anyio>=4.14.2",
   "fastapi>=0.141.1",
   "uvicorn[standard]>=0.52.1",
   "feedparser>=6.0.14",
   "psycopg[binary,pool]>=3.3.4",
-  "typer>=0.27.0",
+  "typer>=0.27.1",
   "apscheduler>=3.11.3",
-  "openai>=2.51.0",
-  "langfuse>=4.14.2",
+  "openai>=2.53.0",
+  "langfuse>=4.14.3",
   "langchain>=1.3.14",
   "langchain-openai>=1.4.1",
   "langgraph>=1.2.10",
@@ -25,7 +25,7 @@ dependencies = [
   "httpx>=0.27.0",
   "idna>=3.18",
   "itsdangerous>=2.2.0",
-  "pywebpush>=2.0.0",
+  "pywebpush>=2.4.0",
   "selenium>=4.46.0",
   "webdriver-manager>=4.0.0",
   "python-multipart>=0.0.20",
@@ -35,7 +35,7 @@ dependencies = [
   "neo4j>=5.0.0",
   "jinja2>=3.1.6",
   "a2a-sdk[http-server]>=1.1.2",
-  "fastmcp>=3.4",
+  "fastmcp>=3.4.6",
 ]
 
 [project.optional-dependencies]
@@ -53,7 +53,7 @@ dev = [
   "ruff>=0.16.1",
   "mypy>=2.3.0",
   "ty>=0.0.67",
-  "pyrefly>=1.1.0",
+  "pyrefly>=1.2.0",
   "pre-commit>=4.6.1",
   "testcontainers[postgres]>=4.15.0",
   "pytest-xdist>=3.0.0",
