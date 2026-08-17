@@ -49,7 +49,8 @@ def test_ci_runs_container_smoke_without_printing_environment() -> None:
 
     assert job["timeout-minutes"] == 20
     assert "merge_group" in job["if"]
-    assert any(step.get("run") == "pip install -e '.[dev]'" for step in steps)
+    assert any(step.get("run") == "uv sync --frozen --all-extras" for step in steps)
+    assert any(step.get("run") == 'echo "$PWD/.venv/bin" >> "$GITHUB_PATH"' for step in steps)
     assert any(step.get("run") == "scripts/smoke-mcp-container.sh" for step in steps)
     assert all("printenv" not in step.get("run", "") for step in steps)
     assert "mcp-container-smoke" in rollup["needs"]

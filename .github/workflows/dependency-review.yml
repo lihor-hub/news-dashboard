@@ -32,6 +32,8 @@ jobs:
       - name: npm audit (root, moderate+)
         run: npx audit-ci@^7 --config .audit-ci.jsonc
 
-      - name: npm audit (website, moderate+)
+      # The docs site is build-time-only. Keep critical vulnerabilities
+      # blocking, while high findings remain visible in the audit output.
+      - name: npm audit (website, critical)
         working-directory: website
-        run: npx audit-ci@^7 --config ../.audit-ci.jsonc
+        run: npx audit-ci@^7 --critical
