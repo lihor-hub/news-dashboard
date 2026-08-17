@@ -7,10 +7,9 @@ types, and reduce only CI work that duplicates required coverage.
 
 ## Design
 
-- Update the three test-only HTTP client imports and annotations to match the
-  types returned or required by their direct dependencies.
-- Keep the existing behavioral tests; the defect is a stale test type contract,
-  not redundant coverage.
+- Make every CI job install the Python dependency graph recorded in `uv.lock`.
+- Keep the existing behavioral tests; the defect is CI resolving a graph that
+  differs from the repository's locked dependencies, not redundant coverage.
 - Diagnose the MCP container-smoke job independently and repair it only when
   it is reproducible from the current workflow.
 - Remove a CI check only if another required job runs the same command over the
