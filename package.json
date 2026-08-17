@@ -22,6 +22,13 @@
     "node": ">=26 <27"
   },
   "overrides": {
+    "brace-expansion": "5.0.9",
+    "filelist": {
+      "minimatch": {
+        "brace-expansion": "2.1.4"
+      }
+    },
+    "nanoid": "3.3.18",
     "tar": "^7.5.16"
   },
   "scripts": {
