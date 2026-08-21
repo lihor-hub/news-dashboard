@@ -9,7 +9,7 @@ from types import SimpleNamespace
 from typing import Any, Literal
 from unittest.mock import MagicMock
 
-import httpx
+import httpx2
 import openai
 import pytest
 from fastapi.testclient import TestClient
@@ -28,8 +28,8 @@ from news_dashboard.main import app
 
 
 def _rate_limit_error() -> openai.RateLimitError:
-    response = httpx.Response(
-        429, request=httpx.Request("POST", "https://api.openai.com/v1/embeddings")
+    response = httpx2.Response(
+        429, request=httpx2.Request("POST", "https://api.openai.com/v1/embeddings")
     )
     return openai.RateLimitError("rate limited", response=response, body=None)
 

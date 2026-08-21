@@ -240,7 +240,7 @@ def test_records_final_mcp_result_on_returned_trace(monkeypatch: pytest.MonkeyPa
 def test_safe_provider_observations_record_primary_failure_and_fallback(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    import httpx
+    import httpx2
     import openai
 
     from news_dashboard import ai_client
@@ -269,7 +269,7 @@ def test_safe_provider_observations_record_primary_failure_and_fallback(
     ]
     primary = MagicMock()
     primary.embeddings.create.side_effect = openai.APIConnectionError(
-        request=httpx.Request("POST", "https://provider.invalid")
+        request=httpx2.Request("POST", "https://provider.invalid")
     )
     response = SimpleNamespace(
         data=[SimpleNamespace(embedding=[0.1])],

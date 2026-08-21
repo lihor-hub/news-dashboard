@@ -11,6 +11,7 @@ from typing import Any
 
 import a2a.types as a2a_types
 import httpx
+import httpx2
 import pytest
 from fastapi.testclient import TestClient
 from google.protobuf.json_format import ParseDict
@@ -55,10 +56,9 @@ def _rpc_payload(text: str = "what is new?") -> dict[str, Any]:
     }
 
 
-def _post_rpc(headers: dict[str, str] | None = None, text: str = "what is new?") -> httpx.Response:
+def _post_rpc(headers: dict[str, str] | None = None, text: str = "what is new?") -> httpx2.Response:
     with TestClient(app, raise_server_exceptions=False) as client:
-        resp: httpx.Response = client.post(RPC_PATH, json=_rpc_payload(text), headers=headers or {})
-    return resp
+        return client.post(RPC_PATH, json=_rpc_payload(text), headers=headers or {})
 
 
 # ─── service.py — enablement ─────────────────────────────────────────────────

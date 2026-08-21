@@ -9,6 +9,7 @@ from threading import Event
 from typing import Any, cast
 
 import httpx
+import httpx2
 import pytest
 from fastapi.testclient import TestClient
 from fastmcp import Client
@@ -2876,8 +2877,8 @@ def test_ask_news_dedicated_rate_is_distinct_from_provider_rate(
         server._public_ask_error(
             __import__("openai").RateLimitError(
                 "upstream private body",
-                response=httpx.Response(
-                    429, request=httpx.Request("POST", "https://provider.test/private")
+                response=httpx2.Response(
+                    429, request=httpx2.Request("POST", "https://provider.test/private")
                 ),
                 body=None,
             )
