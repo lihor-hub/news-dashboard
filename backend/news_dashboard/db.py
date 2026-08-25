@@ -497,6 +497,34 @@ POSTGRES_MULTIUSER_SCHEMA = [
     )
     """,
     """
+    CREATE TABLE IF NOT EXISTS briefing_email_enrichments (
+      id            BIGSERIAL PRIMARY KEY,
+      user_id       INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      briefing_id   BIGINT NOT NULL REFERENCES briefings(id) ON DELETE CASCADE,
+      status        TEXT NOT NULL CHECK(status IN ('running', 'complete', 'failed', 'skipped')),
+      content       JSONB,
+      model         TEXT,
+      error_code    TEXT,
+      attempt_count INTEGER NOT NULL DEFAULT 1,
+      created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE(user_id, briefing_id)
+    )
+    """,
+    (
+        "ALTER TABLE briefing_email_enrichments DROP CONSTRAINT IF EXISTS"
+        " briefing_email_enrichments_status_check"
+    ),
+    (
+        "ALTER TABLE briefing_email_enrichments ADD CONSTRAINT"
+        " briefing_email_enrichments_status_check"
+        " CHECK(status IN ('running', 'complete', 'failed', 'skipped'))"
+    ),
+    (
+        "CREATE INDEX IF NOT EXISTS idx_briefing_email_enrichments_briefing"
+        " ON briefing_email_enrichments(briefing_id)"
+    ),
+    """
     CREATE TABLE IF NOT EXISTS user_push_subscriptions (
       id          SERIAL PRIMARY KEY,
       user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,

@@ -8,7 +8,15 @@ EXECUTIVE SUMMARY
 {{ story.title }}
 {{ story.body }}
 {% for article in story.articles %}- {{ article.title }}{% if article.source_name %} — {{ article.source_name }}{% endif %}{% if article.url %}: {{ article.url }}{% endif %}
-{% endfor %}{% endfor %}
+{% endfor %}{% if story.research %}
+RESEARCH CONTEXT
+{% for takeaway in story.research.key_takeaways %}- {{ takeaway }}
+{% endfor %}{% if story.research.context %}Context: {{ story.research.context }}
+{% endif %}Evidence: {{ story.research.evidence_status|capitalize }}{% if story.research.evidence_summary %} — {{ story.research.evidence_summary }}{% endif %}
+{% if story.research.related_information %}Related: {{ story.research.related_information }}
+{% endif %}{% if story.research.why_it_matters %}Why it matters to you: {{ story.research.why_it_matters }}
+{% endif %}{% for citation in story.research.citations %}- {{ citation.title }}{% if citation.publisher %} — {{ citation.publisher }}{% endif %}: {{ citation.url }}
+{% endfor %}{% endif %}{% endfor %}
 {% if briefing_url %}Open web briefing: {{ briefing_url }}
 {% endif %}{% if preferences_url %}Email preferences: {{ preferences_url }}
 {% endif %}{% if unsubscribe_url %}Unsubscribe: {{ unsubscribe_url }}

@@ -439,6 +439,7 @@ def test_app_base_url_is_used_for_all_briefing_email_links(
     def capture_links(
         briefing: Mapping[str, Any],
         *,
+        enrichment: Mapping[str, Any] | None = None,
         local_date: date,
         timezone_name: str,
         briefing_url: str,
@@ -452,6 +453,7 @@ def test_app_base_url_is_used_for_all_briefing_email_links(
         )
         return render_briefing_email(
             briefing,
+            enrichment=enrichment,
             local_date=local_date,
             timezone_name=timezone_name,
             briefing_url=briefing_url,
@@ -474,6 +476,64 @@ def test_app_base_url_is_used_for_all_briefing_email_links(
     assert captured["unsubscribe_url"].startswith(
         "https://public.example/email/briefing/unsubscribe?token="
     )
+
+
+@pytest.mark.postgres
+def test_delivery_passes_optional_deep_research_to_email_renderer(
+    pg_clean: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    user_id = _make_user(pg_clean, "email_deep_research")
+    now = datetime(2026, 7, 17, 18, 0, tzinfo=timezone.utc)
+    _seed_complete_briefing(pg_clean, user_id, now)
+    _enable_email(pg_clean, user_id)
+    enrichment = {"sections": [{"section_index": 0}]}
+    captured: dict[str, object] = {}
+
+    monkeypatch.setattr(
+        "news_dashboard.briefing_email.service.enrich_briefing_for_email",
+        lambda *_args, **_kwargs: enrichment,
+        raising=False,
+    )
+
+    def capture_render(*_args: Any, **kwargs: Any) -> RenderedEmail:
+        captured["enrichment"] = kwargs.get("enrichment")
+        return RenderedEmail("Subject", "HTML", "Text", 1)
+
+    monkeypatch.setattr(
+        "news_dashboard.briefing_email.service.render_briefing_email", capture_render
+    )
+    monkeypatch.setattr("news_dashboard.briefing_email.service.smtp_configured", lambda: True)
+    monkeypatch.setattr("news_dashboard.briefing_email.service.send_email", lambda **_kwargs: None)
+
+    outcome = deliver_daily_briefing(user_id, now=now, database_url=pg_clean)
+
+    assert outcome.status == "sent"
+    assert captured["enrichment"] == enrichment
+
+
+@pytest.mark.postgres
+def test_unexpected_enrichment_failure_still_sends_canonical_email(
+    pg_clean: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    user_id = _make_user(pg_clean, "email_research_fallback")
+    now = datetime(2026, 7, 17, 18, 0, tzinfo=timezone.utc)
+    _seed_complete_briefing(pg_clean, user_id, now)
+    _enable_email(pg_clean, user_id)
+
+    def fail_enrichment(*_args: Any, **_kwargs: Any) -> None:
+        raise TimeoutError
+
+    monkeypatch.setattr(
+        "news_dashboard.briefing_email.service.enrich_briefing_for_email",
+        fail_enrichment,
+        raising=False,
+    )
+    monkeypatch.setattr("news_dashboard.briefing_email.service.smtp_configured", lambda: True)
+    monkeypatch.setattr("news_dashboard.briefing_email.service.send_email", lambda **_kwargs: None)
+
+    outcome = deliver_daily_briefing(user_id, now=now, database_url=pg_clean)
+
+    assert outcome.status == "sent"
 
 
 @pytest.mark.postgres

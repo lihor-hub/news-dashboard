@@ -122,3 +122,34 @@ def test_rendering_suppresses_links_with_malformed_ports() -> None:
     rendered = render_briefing_email(_briefing(), **urls)
     assert "https://example.com:bad/a" not in rendered.html_body
     assert "https://example.com:bad/a" not in rendered.text_body
+
+
+def test_rendering_adds_distinct_cited_research_to_matching_story() -> None:
+    enrichment = {
+        "sections": [
+            {
+                "section_index": 0,
+                "key_takeaways": ["Adoption accelerated across two independent surveys."],
+                "context": "The release follows a year of tooling consolidation.",
+                "evidence_status": "corroborated",
+                "evidence_summary": "Two independent reports support the central claim.",
+                "related_information": "A competing project announced a similar feature.",
+                "why_it_matters": "This matches your configured agents interest.",
+                "citations": [
+                    {
+                        "title": "Independent report",
+                        "publisher": "Example Research",
+                        "url": "https://research.example/report",
+                    }
+                ],
+            }
+        ]
+    }
+
+    rendered = render_briefing_email(_briefing(), enrichment=enrichment, **_urls())
+
+    assert "RESEARCH CONTEXT" in rendered.text_body
+    assert "Evidence: Corroborated" in rendered.text_body
+    assert "This matches your configured agents interest." in rendered.text_body
+    assert "https://research.example/report" in rendered.text_body
+    assert "Research context" in rendered.html_body
