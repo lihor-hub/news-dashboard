@@ -22,6 +22,21 @@
     {% if article.source_name %}<span> &middot; {{ article.source_name }}</span>{% endif %}
   </p>
   {% endfor %}
+  {% if story.research %}
+  <div style="margin:16px 0 0;padding:14px;background:{{ colors.surface_muted }};
+              border-radius:8px;border:1px solid {{ colors.border }};">
+    <strong style="color:{{ colors.primary }};font-size:11px;letter-spacing:.08em;
+                   text-transform:uppercase;">Research context</strong>
+    {% if story.research.key_takeaways %}<ul style="margin:9px 0 0;padding-left:18px;color:{{ colors.foreground }};font-size:13px;line-height:1.55;">
+      {% for takeaway in story.research.key_takeaways %}<li>{{ takeaway }}</li>{% endfor %}
+    </ul>{% endif %}
+    {% if story.research.context %}<p style="margin:9px 0 0;color:{{ colors.foreground }};font-size:13px;line-height:1.55;"><strong>Context:</strong> {{ story.research.context }}</p>{% endif %}
+    <p style="margin:9px 0 0;color:{{ colors.foreground }};font-size:13px;line-height:1.55;"><strong>Evidence:</strong> {{ story.research.evidence_status|capitalize }}{% if story.research.evidence_summary %} — {{ story.research.evidence_summary }}{% endif %}</p>
+    {% if story.research.related_information %}<p style="margin:9px 0 0;color:{{ colors.foreground }};font-size:13px;line-height:1.55;"><strong>Related:</strong> {{ story.research.related_information }}</p>{% endif %}
+    {% if story.research.why_it_matters %}<p style="margin:9px 0 0;color:{{ colors.foreground }};font-size:13px;line-height:1.55;"><strong>Why it matters to you:</strong> {{ story.research.why_it_matters }}</p>{% endif %}
+    {% for citation in story.research.citations %}<p style="margin:8px 0 0;color:{{ colors.muted }};font-size:11px;"><a href="{{ citation.url }}" style="color:{{ colors.accent }};text-decoration:none;">{{ citation.title }}</a>{% if citation.publisher %} &middot; {{ citation.publisher }}{% endif %}</p>{% endfor %}
+  </div>
+  {% endif %}
 </div>
 {% endfor %}
 {% if briefing_url %}

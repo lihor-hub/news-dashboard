@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ipaddress
+import logging
 import os
 import threading
 import time
@@ -13,6 +14,7 @@ from typing import Any
 from urllib.parse import quote, urlsplit
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
+from news_dashboard.briefing_email.enrichment import enrich_briefing_for_email
 from news_dashboard.briefing_email.rendering import render_briefing_email
 from news_dashboard.briefing_email.tokens import make_unsubscribe_token
 from news_dashboard.db import active_database_url, connect, row_to_dict
@@ -29,6 +31,26 @@ _preview_sent_at: OrderedDict[_PreviewCooldownKey, float] = OrderedDict()
 _preview_lock = threading.Lock()
 _STALE_CLAIM_AFTER = timedelta(minutes=30)
 _RETRY_DELAY = timedelta(minutes=15)
+logger = logging.getLogger(__name__)
+
+
+def _safe_email_enrichment(
+    briefing: dict[str, Any], user_id: int, database_url: str | None
+) -> dict[str, Any] | None:
+    """Keep canonical email delivery independent from optional research."""
+    try:
+        return enrich_briefing_for_email(
+            briefing,
+            user_id=user_id,
+            database_url=database_url,
+        )
+    except Exception:
+        logger.warning(
+            "Unexpected briefing email enrichment failure user_id=%s briefing_id=%s",
+            user_id,
+            briefing.get("id"),
+        )
+        return None
 
 
 @dataclass(frozen=True)
@@ -263,11 +285,13 @@ def deliver_daily_briefing(  # noqa: PLR0911, PLR0912, PLR0915  # explicit ledge
 
     briefing_id = int(briefing["id"])
     try:
+        enrichment = _safe_email_enrichment(briefing, user_id, database_url)
         base_url = _base_url()
         token = make_unsubscribe_token(user_id)
         unsubscribe_url = f"{base_url}/email/briefing/unsubscribe?token={quote(token, safe='')}"
         rendered = render_briefing_email(
             briefing,
+            enrichment=enrichment,
             local_date=local_date,
             timezone_name=timezone_name,
             briefing_url=f"{base_url}/briefings/{briefing_id}",
@@ -542,8 +566,10 @@ def send_preview(user_id: int, *, database_url: str | None = None) -> bool:
         token = make_unsubscribe_token(user_id)
         unsubscribe_url = f"{base_url}/email/briefing/unsubscribe?token={quote(token, safe='')}"
         briefing_id = int(briefing["id"])
+        enrichment = _safe_email_enrichment(briefing, user_id, database_url)
         rendered = render_briefing_email(
             briefing,
+            enrichment=enrichment,
             local_date=datetime.now(zone).date(),
             timezone_name=timezone_name,
             briefing_url=f"{base_url}/briefings/{briefing_id}",

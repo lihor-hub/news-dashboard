@@ -63,6 +63,7 @@ def _as_mappings(value: object) -> list[Mapping[str, Any]]:
 def render_briefing_email(
     briefing: Mapping[str, Any],
     *,
+    enrichment: Mapping[str, Any] | None = None,
     local_date: date,
     timezone_name: str,
     briefing_url: str,
@@ -74,10 +75,16 @@ def render_briefing_email(
     sections = _as_mappings(content.get("sections"))
     articles = _as_mappings(briefing.get("articles"))
     articles_by_id = {article.get("id"): article for article in articles}
+    enrichment_rows = _as_mappings((enrichment or {}).get("sections"))
+    enrichments_by_index = {
+        item.get("section_index"): item
+        for item in enrichment_rows
+        if isinstance(item.get("section_index"), int)
+    }
 
     stories: list[dict[str, Any]] = []
     words: list[str] = [str(briefing.get("summary") or "")]
-    for section in sections:
+    for section_index, section in enumerate(sections):
         citations = section.get("citations")
         cited_articles = []
         if isinstance(citations, list):
@@ -93,7 +100,52 @@ def render_briefing_email(
                     )
         title = str(section.get("title") or "")
         body = str(section.get("body") or "")
-        stories.append({"title": title, "body": body, "articles": cited_articles})
+        research = enrichments_by_index.get(section_index)
+        rendered_research: dict[str, Any] | None = None
+        if research is not None:
+            citation_rows = _as_mappings(research.get("citations"))
+            external_citations = [
+                {
+                    "title": compact_text(item.get("title"), fallback="External source"),
+                    "publisher": compact_text(item.get("publisher"), fallback=""),
+                    "url": _safe_link(item.get("url")),
+                }
+                for item in citation_rows
+                if _safe_link(item.get("url")) is not None
+            ]
+            takeaways_value = research.get("key_takeaways")
+            takeaways = (
+                [str(item) for item in takeaways_value if isinstance(item, str)]
+                if isinstance(takeaways_value, list)
+                else []
+            )
+            if external_citations:
+                rendered_research = {
+                    "key_takeaways": takeaways,
+                    "context": str(research.get("context") or ""),
+                    "evidence_status": str(research.get("evidence_status") or "uncertain"),
+                    "evidence_summary": str(research.get("evidence_summary") or ""),
+                    "related_information": str(research.get("related_information") or ""),
+                    "why_it_matters": str(research.get("why_it_matters") or ""),
+                    "citations": external_citations,
+                }
+                words.extend(
+                    [
+                        *takeaways,
+                        rendered_research["context"],
+                        rendered_research["evidence_summary"],
+                        rendered_research["related_information"],
+                        rendered_research["why_it_matters"],
+                    ]
+                )
+        stories.append(
+            {
+                "title": title,
+                "body": body,
+                "articles": cited_articles,
+                "research": rendered_research,
+            }
+        )
         words.extend((title, body))
 
     estimated_minutes = max(1, math.ceil(len(" ".join(words).split()) / _WORDS_PER_MINUTE))
