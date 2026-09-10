@@ -25,7 +25,7 @@ from fastmcp.server.middleware import CallNext, Middleware, MiddlewareContext
 from fastmcp.server.middleware.rate_limiting import RateLimitError, TokenBucketRateLimiter
 from fastmcp.server.middleware.response_limiting import ResponseLimitingMiddleware
 from fastmcp.tools.base import ToolResult
-from mcp import McpError
+from mcp.shared.exceptions import McpError
 from mcp.types import CallToolRequestParams, ErrorData
 from openai import (
     APIConnectionError,
