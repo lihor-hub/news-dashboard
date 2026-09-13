@@ -1,7 +1,7 @@
 # Documentation index
 
 Technical documentation for News Dashboard. For end-user documentation (how to
-use the app day to day), see the [User Guide](user-guide/README.md) instead.
+use the app day to day), see the [User Guide](https://docs.lihor.ro/docs/user-guide) instead.
 
 Architecture, product spec, authentication, HTTPS, Postgres backup, CI runner,
 contributing, API reference, development guides, and end-user guides are
@@ -22,4 +22,4 @@ Two sections there are the usual starting points when working on the code:
 | [knowledge-graph.md](knowledge-graph.md) | Neo4j knowledge graph architecture, data flow, backfill commands, and degraded behavior. |
 | [learning-agent-roadmap.md](learning-agent-roadmap.md) | Lesson-first Learning Agent roadmap, child implementation slices, and AI generation guardrails. |
 | [adr/](adr/README.md) | Architecture Decision Records — context and rationale behind significant technical decisions. |
-| [user-guide/](user-guide/README.md) | Markdown mirror of the end-user guide; the published version lives at [docs.lihor.ro/docs/user-guide](https://docs.lihor.ro/docs/user-guide). |
+| [User guide source](../website/docs/user-guide/index.md) | Canonical source for the [published end-user guide](https://docs.lihor.ro/docs/user-guide). |

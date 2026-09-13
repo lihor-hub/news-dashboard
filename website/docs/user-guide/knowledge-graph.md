@@ -15,7 +15,8 @@ and how they connect.
 
 Use the relationship filter to focus on all connections, co-occurrence only, or
 typed relationships. If graph storage is not enabled on your instance, the graph
-falls back to cached entity data where possible.
+falls back to cached entity data where possible, but typed relationship
+exploration and Ask AI graph context may be unavailable.
 
 Ask AI can use graph context when it answers over retrieved articles. The answer
 still cites articles; graph context is shown separately so you can audit which
