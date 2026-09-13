@@ -64,6 +64,7 @@ function ConceptNode({ data }: NodeProps<LessonFlowNode>) {
       />
       <span
         className={cn(
+          // RTL exception: physical centering keeps the label over its graph node.
           'pointer-events-none absolute left-1/2 top-0 max-w-32 -translate-x-1/2 -translate-y-full select-none truncate pb-1 text-[11px] font-medium text-foreground',
           data.dimmed && 'opacity-35'
         )}
@@ -309,6 +310,7 @@ export function LessonConceptGraph({ context, detail }: LessonConceptGraphProps)
           <Background color="var(--color-border)" gap={24} />
           <Controls position="bottom-right" showInteractive={false} />
         </ReactFlow>
+        {/* RTL exception: keep this hint opposite ReactFlow's physical bottom-right controls. */}
         <p className="pointer-events-none absolute bottom-2 left-2 select-none text-[10px] text-muted-foreground/50">
           Scroll to zoom · Drag background to pan · Drag nodes to move
         </p>

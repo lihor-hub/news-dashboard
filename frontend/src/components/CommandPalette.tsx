@@ -194,7 +194,7 @@ export function CommandPalette({ open, onOpenChange, onShortcuts }: Props) {
                 >
                   <CheckCheck className="size-4 text-muted-foreground" />
                   <span className="text-sm">{t('command_palette.actions.done')}</span>
-                  <kbd className="ml-auto font-mono text-[10px] px-1 py-0.5 bg-surface-2 border border-border rounded">
+                  <kbd className="ms-auto font-mono text-[10px] px-1 py-0.5 bg-surface-2 border border-border rounded">
                     r / d
                   </kbd>
                 </Command.Item>
@@ -204,7 +204,7 @@ export function CommandPalette({ open, onOpenChange, onShortcuts }: Props) {
                 >
                   <Clock className="size-4 text-muted-foreground" />
                   <span className="text-sm">{t('command_palette.actions.later')}</span>
-                  <kbd className="ml-auto font-mono text-[10px] px-1 py-0.5 bg-surface-2 border border-border rounded">
+                  <kbd className="ms-auto font-mono text-[10px] px-1 py-0.5 bg-surface-2 border border-border rounded">
                     l
                   </kbd>
                 </Command.Item>
@@ -220,7 +220,7 @@ export function CommandPalette({ open, onOpenChange, onShortcuts }: Props) {
                         : 'command_palette.actions.star'
                     )}
                   </span>
-                  <kbd className="ml-auto font-mono text-[10px] px-1 py-0.5 bg-surface-2 border border-border rounded">
+                  <kbd className="ms-auto font-mono text-[10px] px-1 py-0.5 bg-surface-2 border border-border rounded">
                     s
                   </kbd>
                 </Command.Item>
@@ -239,7 +239,7 @@ export function CommandPalette({ open, onOpenChange, onShortcuts }: Props) {
                   >
                     <SkipForward className="size-4 text-muted-foreground" />
                     <span className="text-sm">{t('command_palette.actions.skip')}</span>
-                    <kbd className="ml-auto font-mono text-[10px] px-1 py-0.5 bg-surface-2 border border-border rounded">
+                    <kbd className="ms-auto font-mono text-[10px] px-1 py-0.5 bg-surface-2 border border-border rounded">
                       x
                     </kbd>
                   </Command.Item>
@@ -258,7 +258,7 @@ export function CommandPalette({ open, onOpenChange, onShortcuts }: Props) {
                 >
                   <Archive className="size-4 text-muted-foreground" />
                   <span className="text-sm">{t('command_palette.actions.archive')}</span>
-                  <kbd className="ml-auto font-mono text-[10px] px-1 py-0.5 bg-surface-2 border border-border rounded">
+                  <kbd className="ms-auto font-mono text-[10px] px-1 py-0.5 bg-surface-2 border border-border rounded">
                     e
                   </kbd>
                 </Command.Item>
@@ -272,7 +272,7 @@ export function CommandPalette({ open, onOpenChange, onShortcuts }: Props) {
                 >
                   <ExternalLink className="size-4 text-muted-foreground" />
                   <span className="text-sm">{t('command_palette.actions.open_original')}</span>
-                  <kbd className="ml-auto font-mono text-[10px] px-1 py-0.5 bg-surface-2 border border-border rounded">
+                  <kbd className="ms-auto font-mono text-[10px] px-1 py-0.5 bg-surface-2 border border-border rounded">
                     o
                   </kbd>
                 </Command.Item>
@@ -315,7 +315,7 @@ export function CommandPalette({ open, onOpenChange, onShortcuts }: Props) {
                   <span className="text-sm text-muted-foreground">
                     {t('command_palette.actions.shortcuts')}
                   </span>
-                  <kbd className="ml-auto font-mono text-[10px] px-1 py-0.5 bg-surface-2 border border-border rounded">
+                  <kbd className="ms-auto font-mono text-[10px] px-1 py-0.5 bg-surface-2 border border-border rounded">
                     ?
                   </kbd>
                 </Command.Item>

@@ -89,7 +89,7 @@ describe('ArticleRow — high-priority sources', () => {
     renderRow(makeArticle({ highPriority: true }));
 
     const row = screen.getByRole('link', { name: /high priority.*readable article/i });
-    expect(row.className).toContain('border-l');
+    expect(row.className).toContain('border-s');
     expect(screen.getByText('High priority')).toBeTruthy();
   });
 

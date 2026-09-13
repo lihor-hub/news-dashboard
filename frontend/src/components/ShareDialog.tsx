@@ -135,7 +135,7 @@ export function ShareDialog({ article, open, onOpenChange, pendingHighlight }: S
               onClick={() => setMode('internal')}
             >
               <Users className="h-5 w-5 shrink-0" />
-              <span className="flex flex-col items-start text-left">
+              <span className="flex flex-col items-start text-start">
                 <span className="font-medium">Send inside the platform</span>
                 <span className="text-xs text-muted-foreground">
                   Deliver to another user's inbox
@@ -148,7 +148,7 @@ export function ShareDialog({ article, open, onOpenChange, pendingHighlight }: S
               onClick={() => void handleExternal()}
             >
               <Share className="h-5 w-5 shrink-0" />
-              <span className="flex flex-col items-start text-left">
+              <span className="flex flex-col items-start text-start">
                 <span className="font-medium">Share externally</span>
                 <span className="text-xs text-muted-foreground">
                   Open your apps, or copy the link
@@ -159,13 +159,13 @@ export function ShareDialog({ article, open, onOpenChange, pendingHighlight }: S
         ) : (
           <div className="mt-1 flex flex-col gap-3">
             <div className="relative">
-              <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Search className="pointer-events-none absolute start-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 autoFocus
                 placeholder="Search people…"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                className="pl-8"
+                className="ps-8"
               />
             </div>
             <Input
@@ -199,7 +199,7 @@ export function ShareDialog({ article, open, onOpenChange, pendingHighlight }: S
                         type="button"
                         disabled={sendingTo !== null}
                         onClick={() => void handleSendTo(u.id, u.username)}
-                        className="flex w-full items-center justify-between gap-2 px-3 py-2.5 text-left text-sm hover:bg-accent disabled:opacity-50"
+                        className="flex w-full items-center justify-between gap-2 px-3 py-2.5 text-start text-sm hover:bg-accent disabled:opacity-50"
                       >
                         <span className="flex min-w-0 flex-col">
                           <span className="truncate font-medium">{u.username}</span>

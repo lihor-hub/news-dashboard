@@ -126,7 +126,7 @@ export function ArticleTags({ articleId }: Props) {
                       addMutation.mutate(tag.id);
                       setOpen(false);
                     }}
-                    className="flex w-full items-center gap-1.5 rounded px-2 py-1 text-left text-xs hover:bg-surface"
+                    className="flex w-full items-center gap-1.5 rounded px-2 py-1 text-start text-xs hover:bg-surface"
                   >
                     <TagIcon
                       className="size-3 shrink-0"

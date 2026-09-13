@@ -265,7 +265,7 @@ function InterestStep({ interests, selected, onToggle }: InterestStepProps) {
     );
   }
   return (
-    <div className="grid gap-2 max-h-72 overflow-y-auto pr-1">
+    <div className="grid gap-2 max-h-72 overflow-y-auto pe-1">
       {interests.map((interest) => {
         const isSelected = selected.has(interest.id);
         return (
@@ -273,7 +273,7 @@ function InterestStep({ interests, selected, onToggle }: InterestStepProps) {
             key={interest.id}
             onClick={() => onToggle(interest.id)}
             className={cn(
-              'flex flex-col gap-0.5 rounded-md border px-3 py-2.5 text-left transition-colors',
+              'flex flex-col gap-0.5 rounded-md border px-3 py-2.5 text-start transition-colors',
               isSelected
                 ? 'border-primary bg-primary/5 text-foreground'
                 : 'border-border bg-background text-foreground hover:bg-surface'
@@ -318,7 +318,7 @@ function RecommendationsStep({
     );
   }
   return (
-    <div className="grid gap-2 max-h-72 overflow-y-auto pr-1">
+    <div className="grid gap-2 max-h-72 overflow-y-auto pe-1">
       {recommendations.map((rec) => {
         const isSelected = selected.has(rec.slug);
         return (
@@ -326,7 +326,7 @@ function RecommendationsStep({
             key={rec.slug}
             onClick={() => onToggle(rec.slug)}
             className={cn(
-              'flex flex-col gap-0.5 rounded-md border px-3 py-2.5 text-left transition-colors',
+              'flex flex-col gap-0.5 rounded-md border px-3 py-2.5 text-start transition-colors',
               isSelected
                 ? 'border-primary bg-primary/5 text-foreground'
                 : 'border-border bg-background text-foreground hover:bg-surface'

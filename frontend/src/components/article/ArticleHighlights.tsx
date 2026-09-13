@@ -21,7 +21,7 @@ export function ArticleHighlights({
       </div>
       <ul className="space-y-3">
         {highlights.map((highlight) => (
-          <li key={highlight.id} className="border-l-2 border-accent pl-3">
+          <li key={highlight.id} className="border-s-2 border-accent ps-3">
             <div className="flex items-start justify-between gap-3">
               <p className="text-[13px] leading-snug text-foreground">
                 {highlight.highlighted_text}
