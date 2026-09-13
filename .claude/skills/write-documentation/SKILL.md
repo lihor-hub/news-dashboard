@@ -19,8 +19,9 @@ any other tracked change.
   next sequential 4-digit number, fill the template fields (Status, Deciders,
   Context, Drivers, Options, Consequences), and add the ADR to the index in
   `docs/adr/README.md`.
-- `docs/user-guide/` — markdown mirror of the end-user guide. The published
-  copy lives in `website/docs/`; when you edit one, update the other.
+- `website/docs/user-guide/` — the canonical end-user guide. Edit guide content
+  here only. `docs/user-guide/README.md` is a pointer to the published guide
+  and its source; do not recreate topic copies under `docs/user-guide/`.
 - `website/docs/` — source of the published site (docs.lihor.ro). Pushes to
   `main` touching `website/**` deploy it via `.github/workflows/docs.yml`
   (GitHub Pages).
@@ -50,5 +51,5 @@ any other tracked change.
 
 5. Verify the result.
    Completion: commands, paths, option names, links, and examples are accurate;
-   formatting and terminology match nearby docs; any mirrored copy
-   (`docs/user-guide/` ↔ `website/docs/`) is updated in the same PR.
+   formatting and terminology match nearby docs; end-user guide changes live
+   only in `website/docs/user-guide/`, and links point to the canonical guide.

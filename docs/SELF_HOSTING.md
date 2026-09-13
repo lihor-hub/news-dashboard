@@ -36,7 +36,7 @@ statistics, and analytics.
 
 One person can hold both roles, but host or cluster access does not grant
 application administrator access. After deployment, continue with
-[Administration and operations](user-guide/administration-and-operations.md)
+[Administration and operations](https://docs.lihor.ro/docs/user-guide/administration-and-operations)
 for the in-app controls.
 
 ## Docker Compose: Dev vs Production
@@ -819,6 +819,6 @@ Regularly back up your PostgreSQL database. See [PostgreSQL Backup and Restore](
 - Configure authentication and optional integrations through the
   [Configuration guides](https://docs.lihor.ro/docs/configuration).
 - Sign in as an application administrator and follow
-  [Administration and operations](user-guide/administration-and-operations.md).
+  [Administration and operations](https://docs.lihor.ro/docs/user-guide/administration-and-operations).
 - Set up and verify regular
   [PostgreSQL backups](https://docs.lihor.ro/docs/configuration/postgres-backup).

@@ -26,21 +26,23 @@ whether the article belongs to the day's news corpus.
 | **Later** | Interesting, but not right now. |
 | **Done** | Reviewed and finished. |
 | **Skipped** | Dismissed as not relevant. |
-| **Starred** | Saved as a permanent reference. |
-| **Snoozed** | Hidden until a later time. |
 | **Archived** | Tucked away from active views, but restorable. |
+
+Stars and snooze timers are separate from workflow state. A starred article
+can also be Today, Later, Done, or Archived. Starred articles cannot be
+skipped; unstar first if you want to skip one.
 
 ## Today Feed
 
 The **Today Feed** is your active triage queue. Articles arrive from new
 ingestions and, when enabled, recommendations. You move them to Done, Later,
-Skipped, Starred, Snoozed, or Archived as you work through them.
+Skipped, or Archived as you work through them, and can star or snooze them.
 
 ## Current-Day Report
 
 The **Current-Day Report** is a generated briefing that summarizes all news
-discovered in the current-day window from your available sources. It includes
-articles regardless of workflow state, so marking an item Done or Skipped does
+discovered in the rolling 24-hour current-day window from your available
+sources. It includes articles regardless of workflow state, so marking an item Done or Skipped does
 not remove it from the day's report.
 
 ## Source subscription

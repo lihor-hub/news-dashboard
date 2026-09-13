@@ -5,26 +5,60 @@ sidebar_position: 5
 
 # Search
 
-Search finds articles across your corpus by keyword, topic, or phrase. It uses
-PostgreSQL full-text search, so queries and article contents stay inside your
-instance.
-
-## Indexed fields
-
-The search index includes title, summary, reason, tags, source name, and, when
-article body extraction is enabled, extracted body text.
-
-Results are ranked by PostgreSQL relevance and can include articles in any
-workflow state: Today, Later, Done, Skipped, Starred, Snoozed, or Archived.
+Search finds articles available to your account by keyword, then narrows them
+with filters. PostgreSQL searches title, summary, reason, tags, source name,
+and cached article body text when available.
 
 ## Using search
 
-Open search from the navigation or focus it with `/`. Results show the title,
-summary snippet, source, state, and publication date. Select a result to open
-the article in the main view.
+Choose **Search** in navigation, or press `⌘K` / `Ctrl+K` for the command
+palette's quick search of up to six articles. Select a result to open it in
+the article reader. The Search page shows article titles, summaries, sources,
+categories, workflow states, and publication dates.
 
-If you want to narrow results to a specific state, open that view first and use
-the search control there.
+Search matches word prefixes and requires every searchable word to match:
+`postgres index` finds articles containing both prefixes. Tokens shorter than
+two characters and standalone numbers are ignored. Quoted phrases, explicit
+wildcards, and `OR` expressions are not supported search operators.
+
+## Filters
+
+Filters are stored in the Search URL, so you can bookmark a query and return
+to it. Sharing the URL does not grant access to articles outside the other
+reader's account.
+
+- **Starred** limits results to your starred articles.
+- **Include archived** includes archived articles, which are excluded by
+  default. Selecting **Archived** under State also includes them.
+- **State** selects Today, Later, Done, Skipped, or Archived.
+- **Category** and **Source** narrow the feed selection.
+- **Date** chooses any time, today, past week, or past month, based on article
+  discovery time rather than publication time.
+- **Tag** selects a tag when tags are available.
+
+Multiple choices within a filter group combine with OR; different filter
+groups combine with AND. Results load 100 at a time; select **Load more** for
+the next page. An empty query lets you browse using just the filters.
+
+## Saved Views
+
+Select **Save view** to name and store the current query and filters. Saved
+views are private to your account. Selecting a saved view restores its URL
+parameters and refreshes results. These are manual shortcuts; they do not
+send alerts, scheduled notifications, or email digests.
+
+## Searching article bodies
+
+Body text joins the index when it has been fetched and cached through the
+normal article-reading path. There is no separate body-indexing switch.
+An article whose body has not been fetched can still match its metadata.
+
+## Troubleshooting
+
+If an article is missing, clear the filters, check **Include archived**, and
+try fewer or longer search words. Verify that its source is still available
+to your account. A failed search request is different from an empty result;
+retry the request before changing your filters.
 
 ## Searching from an MCP client
 
@@ -74,9 +108,8 @@ complete article did not fit. See
 [Configuration → MCP server](../configuration/mcp-server.md) for setup and the
 full argument reference.
 
-## Full-text extraction
+## Privacy
 
-Deeper body search depends on optional article body extraction. When enabled,
-the app fetches and caches article text, then indexes it alongside the normal
-metadata fields. This increases storage and ingestion work, so it is kept
-optional.
+Keyword search runs in the instance's PostgreSQL database. It does not send
+your query to an external search service. Optional analytics events record
+feature usage without query text or article contents.
