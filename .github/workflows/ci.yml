@@ -20,6 +20,11 @@ on:
   merge_group:
   workflow_dispatch:
     inputs:
+      validate_multiarch_images:
+        description: 'Measure and verify multi-architecture OCI images without publishing'
+        required: false
+        default: false
+        type: boolean
       full_suite:
         description: 'Run the full test suite (backend + frontend + coverage)'
         required: false
@@ -487,8 +492,92 @@ jobs:
             --set "app.databaseUrl.existingSecret=news-dashboard-db" \
             "${PRODUCTION_HELM_SECRET_ARGS[@]}"
 
+  # Opt-in, isolated builds: no registry login, publication, or deployment.
+  validate-multiarch-images:
+    name: Validate multi-architecture images
+    if: github.event_name == 'workflow_dispatch' && inputs.validate_multiarch_images
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: docker/setup-qemu-action@1f40c72289eff860ee54a304f1438e3cff362e0a # v4
+        with:
+          platforms: arm64
+      - uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4
+      # Named local exports populate statement subjects without publishing.
+      # Exercise real BuildKit attestation output before spending time on QEMU.
+      - name: Verify a tiny dual-architecture OCI fixture
+        run: |
+          mkdir -p "$RUNNER_TEMP/oci-fixture" evidence/fixture
+          printf 'FROM scratch\nCOPY payload /payload\n' > "$RUNNER_TEMP/oci-fixture/Dockerfile"
+          printf 'Attestation verification fixture\n' > "$RUNNER_TEMP/oci-fixture/payload"
+          docker buildx build "$RUNNER_TEMP/oci-fixture" \
+            --platform linux/amd64,linux/arm64 --sbom=true --provenance=mode=max \
+            --tag news-dashboard-validation:fixture \
+            --output "type=oci,dest=$RUNNER_TEMP/fixture.tar" \
+            --metadata-file "$RUNNER_TEMP/fixture-metadata.json"
+          fixture_digest=$(jq -er '."containerimage.digest"' "$RUNNER_TEMP/fixture-metadata.json")
+          bash scripts/verify-oci-attestations.sh "$RUNNER_TEMP/fixture.tar" "$fixture_digest" evidence/fixture
+      - name: Time amd64 build
+        run: echo "BUILD_STARTED=$(date +%s)" >> "$GITHUB_ENV"
+      - name: Build amd64 reference without publishing
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
+        with:
+          context: .
+          platforms: linux/amd64
+          tags: news-dashboard-validation:amd64
+          push: false
+          no-cache: true
+          sbom: true
+          provenance: mode=max
+          outputs: type=oci,dest=${{ runner.temp }}/amd64.tar
+      - name: Record reference time and release its archive
+        run: |
+          echo "AMD64_SECONDS=$(( $(date +%s) - BUILD_STARTED ))" >> "$GITHUB_ENV"
+          rm "$RUNNER_TEMP/amd64.tar"
+          echo "BUILD_STARTED=$(date +%s)" >> "$GITHUB_ENV"
+      # Both runs disable layer reuse; downloaded bases can be reused by the second.
+      - name: Build both architectures without publishing
+        id: multi
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          tags: news-dashboard-validation:multiarch
+          push: false
+          no-cache: true
+          sbom: true
+          provenance: mode=max
+          outputs: type=oci,dest=${{ runner.temp }}/multiarch.tar
+      - name: Verify index and per-architecture SBOM and provenance
+        env:
+          INDEX_DIGEST: ${{ steps.multi.outputs.digest }}
+        run: |
+          multi_seconds=$(( $(date +%s) - BUILD_STARTED ))
+          mkdir -p evidence/application
+          jq -n --argjson amd64 "$AMD64_SECONDS" --argjson multi "$multi_seconds" \
+            '{amd64_seconds: $amd64, multiarch_seconds: $multi, increase_percent: (($multi / $amd64 - 1) * 100)}' \
+            > evidence/application/timings.json
+          {
+            echo '### Multi-architecture validation (no publication)'
+            echo 'Both builds use no-cache; the second may reuse downloaded base images.'
+            echo '```json'
+            cat evidence/application/timings.json
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          bash scripts/verify-oci-attestations.sh "$RUNNER_TEMP/multiarch.tar" "$INDEX_DIGEST" evidence/application
+      - name: Upload verification evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: multiarch-validation
+          path: evidence/
+          retention-days: 14
+
   # ── 9. PUBLISH ─────────────────────────────────────────────────────────────
-  # Builds one image and pushes two tags:
+  # Builds a linux/amd64 + linux/arm64 image index and pushes two tags:
   #   :<sha>    — source-discovery alias for the exact commit
   #   :latest   — floating convenience tag for manual pulls / rollback reference
   #
@@ -610,6 +699,10 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - uses: docker/setup-qemu-action@1f40c72289eff860ee54a304f1438e3cff362e0a # v4
+        with:
+          platforms: arm64
+
       - uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4
 
       - uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
@@ -617,33 +710,59 @@ jobs:
         with:
           context: .
           push: true
+          platforms: linux/amd64,linux/arm64
           cache-from: type=gha
           cache-to: type=gha,mode=max
           tags: |
             ${{ env.IMAGE }}:${{ github.sha }}
             ${{ env.IMAGE }}:latest
 
-      # SBOM (SPDX) for the exact image digest just pushed. Kept as a build
-      # artifact and attested below so consumers can verify contents.
-      - name: Generate SBOM
+      - name: Resolve published platform digests
+        id: platforms
+        env:
+          INDEX_DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          docker buildx imagetools inspect "$IMAGE@$INDEX_DIGEST" --raw > image-index.json
+          bash scripts/resolve-image-platforms.sh image-index.json >> "$GITHUB_OUTPUT"
+
+      # Each SBOM describes one runnable child, never the whole multi-platform index.
+      - name: Generate amd64 SBOM
         uses: anchore/sbom-action@3ad7283483fc7af8ff2b4ea19663c2d5ca935e26 # v0.24.2
         with:
-          image: ${{ env.IMAGE }}@${{ steps.build.outputs.digest }}
+          image: ${{ env.IMAGE }}@${{ steps.platforms.outputs.amd64_digest }}
           format: spdx-json
-          output-file: sbom.spdx.json
+          output-file: sbom-amd64.spdx.json
+          artifact-name: sbom-amd64.spdx.json
           upload-artifact: true
           upload-release-assets: false
 
-      # Cryptographically ties the SBOM and the build to this repo's CI run.
-      # Verify with: gh attestation verify --repo <owner>/<repo> --owner <owner> <image>
-      - name: Attest SBOM
+      - name: Attest amd64 SBOM
         uses: actions/attest-sbom@c604332985a26aa8cf1bdc465b92731239ec6b9e # v4
         with:
           subject-name: ${{ env.IMAGE }}
-          subject-digest: ${{ steps.build.outputs.digest }}
-          sbom-path: sbom.spdx.json
+          subject-digest: ${{ steps.platforms.outputs.amd64_digest }}
+          sbom-path: sbom-amd64.spdx.json
           push-to-registry: true
 
+      - name: Generate arm64 SBOM
+        uses: anchore/sbom-action@3ad7283483fc7af8ff2b4ea19663c2d5ca935e26 # v0.24.2
+        with:
+          image: ${{ env.IMAGE }}@${{ steps.platforms.outputs.arm64_digest }}
+          format: spdx-json
+          output-file: sbom-arm64.spdx.json
+          artifact-name: sbom-arm64.spdx.json
+          upload-artifact: true
+          upload-release-assets: false
+
+      - name: Attest arm64 SBOM
+        uses: actions/attest-sbom@c604332985a26aa8cf1bdc465b92731239ec6b9e # v4
+        with:
+          subject-name: ${{ env.IMAGE }}
+          subject-digest: ${{ steps.platforms.outputs.arm64_digest }}
+          sbom-path: sbom-arm64.spdx.json
+          push-to-registry: true
+
+      # Provenance identifies the complete index consumed by deployment.
       - name: Attest build provenance
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4
         with:
