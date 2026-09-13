@@ -60,7 +60,7 @@ Two related endpoints help prune dead feeds:
 
 | Route | Method | Purpose |
 |-------|--------|---------|
-| `/api/sources/export.opml` | GET | Export all sources as OPML. |
+| `/api/sources/export.opml` | GET | Export enabled RSS-type sources as OPML. |
 | `/api/sources/import` | POST | Import an OPML file. |
 
 Import is bounded at **5 MiB and 1000 outlines**. Larger uploads are rejected
