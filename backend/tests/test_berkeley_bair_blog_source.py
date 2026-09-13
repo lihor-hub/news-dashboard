@@ -33,7 +33,7 @@ def test_berkeley_bair_blog_metadata() -> None:
 def test_berkeley_bair_blog_interest_tags_match_onboarding() -> None:
     """berkeley-bair-blog carries tags that match onboarding interests."""
     src = next(s for s in DEFAULT_SOURCES if s.slug == "berkeley-bair-blog")
-    assert src.interest_tags == ("evals", "model-releases", "research")
+    assert src.interest_tags == ("evals", "model-releases")
 
 
 def test_berkeley_bair_blog_routes_to_rss_feed() -> None:

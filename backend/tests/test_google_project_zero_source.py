@@ -36,8 +36,7 @@ def test_google_project_zero_metadata() -> None:
 def test_google_project_zero_interest_tags() -> None:
     """google-project-zero carries tags that match onboarding interests."""
     src = next(s for s in DEFAULT_SOURCES if s.slug == "google-project-zero")
-    assert "security" in src.interest_tags
-    assert "research" in src.interest_tags
+    assert src.interest_tags == ("security",)
 
 
 def test_google_project_zero_routes_to_rss_feed() -> None:

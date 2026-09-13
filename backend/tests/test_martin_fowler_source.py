@@ -31,9 +31,7 @@ def test_martin_fowler_metadata() -> None:
 def test_martin_fowler_interest_tags() -> None:
     """martin-fowler carries tags that match onboarding interests."""
     src = next(s for s in DEFAULT_SOURCES if s.slug == "martin-fowler")
-    assert "infra" in src.interest_tags
-    assert "software-development" in src.interest_tags
-    assert "architecture" in src.interest_tags
+    assert src.interest_tags == ("infra",)
 
 
 def test_martin_fowler_routes_to_rss_feed() -> None:

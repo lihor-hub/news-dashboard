@@ -33,9 +33,7 @@ def test_trail_of_bits_blog_metadata() -> None:
 def test_trail_of_bits_blog_interest_tags() -> None:
     """trail-of-bits-blog carries tags that match onboarding interests."""
     src = next(s for s in DEFAULT_SOURCES if s.slug == "trail-of-bits-blog")
-    assert "security" in src.interest_tags
-    assert "infra" in src.interest_tags
-    assert "software-development" in src.interest_tags
+    assert src.interest_tags == ("security", "infra")
 
 
 def test_trail_of_bits_blog_routes_to_rss_feed() -> None:

@@ -29,11 +29,9 @@ def test_web_dev_blog_metadata() -> None:
 
 
 def test_web_dev_blog_interest_tags() -> None:
-    """web-dev-blog carries tags that match onboarding interests."""
+    """Web tutorials remain a baseline source until a matching interest exists."""
     src = next(s for s in DEFAULT_SOURCES if s.slug == "web-dev-blog")
-    assert "web" in src.interest_tags
-    assert "frontend" in src.interest_tags
-    assert "performance" in src.interest_tags
+    assert src.interest_tags == ()
 
 
 def test_web_dev_blog_routes_to_rss_feed() -> None:

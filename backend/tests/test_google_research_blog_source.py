@@ -33,10 +33,7 @@ def test_google_research_blog_metadata() -> None:
 def test_google_research_blog_interest_tags() -> None:
     """google-research-blog carries tags that match onboarding interests."""
     src = next(s for s in DEFAULT_SOURCES if s.slug == "google-research-blog")
-    assert "evals" in src.interest_tags
-    assert "model-releases" in src.interest_tags
-    assert "research" in src.interest_tags
-    assert "security" in src.interest_tags
+    assert src.interest_tags == ("evals", "model-releases", "security")
 
 
 def test_google_research_blog_routes_to_rss_feed() -> None:
