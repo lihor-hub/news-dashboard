@@ -1,6 +1,12 @@
-.PHONY: install ci-install lint format typecheck dead-code \
+.DEFAULT_GOAL := help
+
+.PHONY: help install ci-install lint format typecheck dead-code \
         test test-smoke test-backend test-frontend test-e2e test-a11y test-nightly test-full \
         helm-validate check build
+
+## help: show available targets and their descriptions
+help:
+	@awk '/^## [[:alnum:]_-]+: / { name = $$2; sub(/:$$/, "", name); description = $$0; sub(/^## [[:alnum:]_-]+: /, "", description); printf "  %-18s %s\n", name, description }' $(MAKEFILE_LIST)
 
 ## install: install backend (editable + dev tools) and update local frontend dependencies
 install:
