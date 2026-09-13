@@ -7,7 +7,8 @@ store and does not replace it.
 ## Prerequisites
 
 - A Kubernetes cluster, `kubectl` access, and Helm 3 or later
-- A checkout of this repository; run the example from the repository root
+- For source installation or local validation only: a checkout of this repository;
+  run those commands from the repository root. OCI installation needs no checkout.
 - Access to the application image in GHCR, with a `kubernetes.io/dockerconfigjson`
   Secret in the release namespace if the package requires authentication
 - A default StorageClass for the PVC-based example below, or an explicit
@@ -97,8 +98,8 @@ new release.
 Defaults below describe the source [values.yaml](values.yaml). Published
 packages replace `image.tag` with the exact release commit as described above.
 Keep installation-specific settings in your own values file and secrets outside
-version control. The full
-file also documents security contexts, resources, and optional integrations.
+version control. The full file also documents security contexts, resources,
+and optional integrations.
 
 | Value | Default | Purpose |
 |-------|---------|---------|
