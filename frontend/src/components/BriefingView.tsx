@@ -211,7 +211,7 @@ export function BriefingView({
                   disabled={isGeneratingPodcast}
                   className="sm:self-center shrink-0 self-start"
                 >
-                  <Headphones className="size-4 mr-2" />
+                  <Headphones className="size-4 me-2" />
                   {isGeneratingPodcast ? 'Creating Podcast…' : 'Create Podcast'}
                 </Button>
               </div>
@@ -256,14 +256,14 @@ export function BriefingView({
                 </div>
 
                 {showTranscript && briefing.script && (
-                  <div className="mt-4 space-y-3 pt-4 border-t border-border/60 max-h-[350px] overflow-y-auto scrollbar-thin pr-1 flex flex-col">
+                  <div className="mt-4 space-y-3 pt-4 border-t border-border/60 max-h-[350px] overflow-y-auto scrollbar-thin pe-1 flex flex-col">
                     {briefing.script.map((turn, index) => {
                       const isAlex = turn.speaker.toLowerCase() === 'alex';
                       return (
                         <div
                           key={index}
                           className={`flex items-start gap-2.5 max-w-[85%] ${
-                            isAlex ? 'self-start' : 'self-end flex-row-reverse ml-auto'
+                            isAlex ? 'self-start' : 'self-end flex-row-reverse ms-auto'
                           }`}
                         >
                           <div

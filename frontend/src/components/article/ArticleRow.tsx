@@ -57,7 +57,7 @@ function ArticleRowComponent({ article, focused, showLaterUntil }: Props) {
           className={cn(
             'motion-fade-up block px-4 py-3 border-b border-border transition-colors hover:bg-surface md:px-5',
             article.highPriority &&
-              'border-l-4 border-l-[color:var(--err)] bg-[color:color-mix(in_srgb,var(--err)_7%,transparent)]',
+              'border-s-4 border-s-[color:var(--err)] bg-[color:color-mix(in_srgb,var(--err)_7%,transparent)]',
             focused && 'bg-surface-2 focus-row'
           )}
         >
@@ -159,6 +159,7 @@ function RecommendationExplanationIcon({ explanation }: { explanation: string })
         <span
           role="tooltip"
           data-testid="recommendation-explanation-tooltip"
+          // RTL exception: left 50% pairs with translateX(-50%) to center this tooltip.
           className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 z-50 w-56 rounded-md bg-popover border border-border px-2.5 py-1.5 text-[11px] leading-snug text-popover-foreground shadow-md"
         >
           {explanation}

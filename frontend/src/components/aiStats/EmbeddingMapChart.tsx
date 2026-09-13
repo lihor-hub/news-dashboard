@@ -115,7 +115,7 @@ export function EmbeddingMapChart({ points, clusters }: EmbeddingMapChartProps) 
         </svg>
 
         {/* Controls overlay */}
-        <div className="absolute bottom-2 right-2 flex gap-1">
+        <div className="absolute bottom-2 end-2 flex gap-1">
           <button
             type="button"
             title="Reset view"
@@ -127,7 +127,7 @@ export function EmbeddingMapChart({ points, clusters }: EmbeddingMapChartProps) 
         </div>
 
         {/* Hint */}
-        <p className="absolute bottom-2 left-2 select-none text-[10px] text-muted-foreground/50">
+        <p className="absolute bottom-2 start-2 select-none text-[10px] text-muted-foreground/50">
           Scroll to zoom · Drag to pan · Click point to open article
         </p>
       </div>

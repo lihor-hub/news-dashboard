@@ -29,7 +29,7 @@ export function ArticleReaderHeader({
       <div className="mx-auto max-w-2xl flex h-12 items-center justify-between px-3">
         <button
           onClick={goBack}
-          className="inline-flex items-center gap-1 px-2 py-1 -ml-1 rounded-md text-sm text-muted-foreground hover:text-foreground hover:bg-surface"
+          className="inline-flex items-center gap-1 px-2 py-1 -ms-1 rounded-md text-sm text-muted-foreground hover:text-foreground hover:bg-surface"
         >
           <ChevronLeft className="size-4" /> Back
         </button>

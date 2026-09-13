@@ -87,6 +87,7 @@ function EntityNode({ data }: NodeProps<KnowledgeFlowNode>) {
       />
       <span
         className={cn(
+          // RTL exception: physical centering keeps the label over its graph node.
           'pointer-events-none absolute left-1/2 top-0 max-w-28 -translate-x-1/2 -translate-y-full select-none truncate pb-1 text-[11px] font-medium text-foreground',
           data.dimmed && 'opacity-30'
         )}
@@ -324,6 +325,7 @@ export function KnowledgeGraph({ graph }: KnowledgeGraphProps) {
           <Controls position="bottom-right" showInteractive={false} />
         </ReactFlow>
 
+        {/* RTL exception: keep this hint opposite ReactFlow's physical bottom-right controls. */}
         <p className="pointer-events-none absolute bottom-2 left-2 select-none text-[10px] text-muted-foreground/50">
           Scroll to zoom · Drag background to pan · Drag nodes to move
         </p>

@@ -213,6 +213,39 @@ describe('BriefPage — latest briefing', () => {
   });
 });
 
+describe('BriefPage — podcast transcript', () => {
+  it('opens and closes the transcript with both co-hosts and their spoken text', async () => {
+    vi.spyOn(api, 'fetchLatestBriefing').mockResolvedValue({
+      ...COMPLETE_BRIEFING,
+      script: [
+        { speaker: 'Alex', voice: 'alloy', text: 'Here are the latest model releases.' },
+        {
+          speaker: 'Taylor',
+          voice: 'shimmer',
+          text: 'Let us discuss what changed for developers.',
+        },
+      ],
+    });
+    renderBriefPage();
+
+    const showTranscript = await screen.findByRole('button', { name: /show transcript/i });
+    expect(screen.queryByText('Here are the latest model releases.')).toBeNull();
+    await userEvent.click(showTranscript);
+
+    expect(screen.getByText('Alex (alloy)')).toBeTruthy();
+    expect(screen.getByText('Taylor (shimmer)')).toBeTruthy();
+    expect(screen.getByText('Here are the latest model releases.')).toBeTruthy();
+    expect(screen.getByText('Let us discuss what changed for developers.')).toBeTruthy();
+
+    await userEvent.click(screen.getByRole('button', { name: /hide transcript/i }));
+    expect(screen.queryByText('Alex (alloy)')).toBeNull();
+    expect(screen.queryByText('Taylor (shimmer)')).toBeNull();
+    expect(screen.queryByText('Here are the latest model releases.')).toBeNull();
+    expect(screen.queryByText('Let us discuss what changed for developers.')).toBeNull();
+    expect(screen.getByRole('button', { name: /show transcript/i })).toBeTruthy();
+  });
+});
+
 describe('BriefPage — citation navigation', () => {
   beforeEach(() => {
     vi.spyOn(api, 'fetchLatestBriefing').mockResolvedValue(COMPLETE_BRIEFING);

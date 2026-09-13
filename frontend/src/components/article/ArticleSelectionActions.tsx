@@ -13,6 +13,7 @@ export function ArticleSelectionActions({
 }) {
   if (!selectedText) return null;
 
+  // RTL exception: left 50% pairs with translateX(-50%) to center the action bar.
   return (
     <div className="fixed bottom-20 left-1/2 z-30 flex -translate-x-1/2 items-center gap-2 rounded-md border border-border bg-background p-1 shadow-lg">
       {!isShared ? (

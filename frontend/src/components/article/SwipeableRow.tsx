@@ -106,6 +106,7 @@ export function SwipeableRow({
     startX.current = null;
   };
 
+  // RTL exception: these reveal edges follow physical pointer dx and onSwipeRight/onSwipeLeft.
   const showRight = dx > 10;
   const showLeft = dx < -10 && !disableLeft;
 

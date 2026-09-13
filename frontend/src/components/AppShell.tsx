@@ -91,7 +91,7 @@ function DesktopRail({ pathname }: { pathname: string }) {
           : null;
 
   return (
-    <aside className="hidden md:flex md:flex-col md:w-[200px] md:shrink-0 md:border-r md:border-border md:min-h-[calc(100vh-3rem)] md:sticky md:top-12 md:self-start">
+    <aside className="hidden md:flex md:flex-col md:w-[200px] md:shrink-0 md:border-e md:border-border md:min-h-[calc(100vh-3rem)] md:sticky md:top-12 md:self-start">
       <nav className="flex flex-col p-2 gap-0.5">
         {primaryNavigationItems.map((n) => (
           <NavLink

@@ -78,7 +78,7 @@ export function StudyArtifactsView({ artifacts }: StudyArtifactsViewProps) {
                   Q{index + 1}: {item.question}
                 </div>
                 {revealedAnswers[index] ? (
-                  <div className="text-sm bg-muted/40 p-3 rounded text-muted-foreground border-l-2 border-primary">
+                  <div className="text-sm bg-muted/40 p-3 rounded text-muted-foreground border-s-2 border-primary">
                     <div className="font-semibold text-xs text-foreground mb-1">
                       Expected Answer:
                     </div>
@@ -159,7 +159,7 @@ export function StudyArtifactsView({ artifacts }: StudyArtifactsViewProps) {
                           key={oIdx}
                           onClick={() => handleSelectQuizOption(qIdx, oIdx)}
                           disabled={isSubmitted}
-                          className={`w-full text-left px-4 py-3 rounded-md border text-sm flex items-center justify-between transition-colors ${
+                          className={`w-full text-start px-4 py-3 rounded-md border text-sm flex items-center justify-between transition-colors ${
                             !isSubmitted ? 'cursor-pointer' : 'cursor-not-allowed'
                           } ${optionStyle}`}
                         >
@@ -184,7 +184,7 @@ export function StudyArtifactsView({ artifacts }: StudyArtifactsViewProps) {
                       Submit Answer
                     </Button>
                   ) : (
-                    <div className="text-xs bg-muted/40 p-3 rounded text-muted-foreground border-l-2 border-blue-500">
+                    <div className="text-xs bg-muted/40 p-3 rounded text-muted-foreground border-s-2 border-blue-500">
                       <div className="font-semibold text-[10px] uppercase text-foreground mb-1">
                         Feedback:
                       </div>

@@ -50,7 +50,7 @@ export function DifyChatWidget() {
         ref={launcherRef}
         type="button"
         size="icon"
-        className="fixed right-4 bottom-[calc(68px+env(safe-area-inset-bottom))] z-50 size-12 rounded-full shadow-lg focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-background md:bottom-4"
+        className="fixed end-4 bottom-[calc(68px+env(safe-area-inset-bottom))] z-50 size-12 rounded-full shadow-lg focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-background md:bottom-4"
         aria-label={openLabel}
         title={openLabel}
         onClick={() => {
@@ -73,14 +73,14 @@ export function DifyChatWidget() {
           setOpen(false);
         }
       }}
-      className="fixed right-2 bottom-[calc(68px+env(safe-area-inset-bottom))] z-50 flex h-[calc(100dvh-76px-env(safe-area-inset-bottom))] max-h-[44rem] w-[calc(100vw-1rem)] flex-col overflow-visible rounded-xl border border-border bg-background shadow-2xl md:right-4 md:bottom-4 md:h-[min(44rem,calc(100dvh-2rem))] md:max-h-none md:w-96"
+      className="fixed end-2 bottom-[calc(68px+env(safe-area-inset-bottom))] z-50 flex h-[calc(100dvh-76px-env(safe-area-inset-bottom))] max-h-[44rem] w-[calc(100vw-1rem)] flex-col overflow-visible rounded-xl border border-border bg-background shadow-2xl md:end-4 md:bottom-4 md:h-[min(44rem,calc(100dvh-2rem))] md:max-h-none md:w-96"
     >
       <Button
         ref={closeRef}
         type="button"
         size="icon"
         variant="outline"
-        className="absolute -right-2 -top-2 z-10 size-8 rounded-full bg-background shadow-md focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+        className="absolute -end-2 -top-2 z-10 size-8 rounded-full bg-background shadow-md focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-background"
         aria-label={closeLabel}
         title={closeLabel}
         onClick={() => setOpen(false)}
