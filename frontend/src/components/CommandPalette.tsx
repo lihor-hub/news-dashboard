@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router';
 import { Command } from 'cmdk';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
@@ -38,6 +39,7 @@ const ITEM_CLS =
   'flex items-center gap-2 px-2 py-2 rounded-md cursor-pointer data-[selected=true]:bg-surface-2';
 
 export function CommandPalette({ open, onOpenChange, onShortcuts }: Props) {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const mutations = useTriageMutations();
   const { article: focusedArticle } = useFocusedArticle();
@@ -91,14 +93,14 @@ export function CommandPalette({ open, onOpenChange, onShortcuts }: Props) {
   async function handleIngest() {
     close();
     trackFeature('ingest_now');
-    const id = toast.loading('Refreshing feeds…');
+    const id = toast.loading(t('command_palette.ingest.loading'));
     try {
       const result = await ingestNow();
-      toast.success(`Done — ${result.inserted} new article${result.inserted !== 1 ? 's' : ''}`, {
+      toast.success(t('command_palette.ingest.success', { count: result.inserted }), {
         id,
       });
     } catch {
-      toast.error('Ingest failed', { id });
+      toast.error(t('command_palette.ingest.error'), { id });
     }
   }
 
@@ -115,33 +117,43 @@ export function CommandPalette({ open, onOpenChange, onShortcuts }: Props) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="p-0 max-w-xl overflow-hidden gap-0">
-        <DialogTitle className="sr-only">Command palette</DialogTitle>
+        <DialogTitle className="sr-only">{t('command_palette.title')}</DialogTitle>
         <DialogDescription className="sr-only">
-          Jump to views, search articles, and run article actions.
+          {t('command_palette.description')}
         </DialogDescription>
-        <Command shouldFilter={false} className="bg-popover text-popover-foreground">
+        <Command
+          label={t('command_palette.input_label')}
+          shouldFilter={false}
+          className="bg-popover text-popover-foreground"
+        >
           <div className="flex items-center px-3 border-b border-border">
             <Search className="size-4 text-muted-foreground shrink-0" />
             <Command.Input
               autoFocus
               value={q}
               onValueChange={setQ}
-              placeholder="Jump to a view, search articles, run actions…"
+              aria-label={t('command_palette.input_label')}
+              placeholder={t('command_palette.placeholder')}
               className="flex h-11 w-full bg-transparent px-3 text-sm outline-none placeholder:text-subtle"
             />
             {searching && (
-              <span className="text-[10px] text-subtle shrink-0 animate-pulse">searching…</span>
+              <span className="text-[10px] text-subtle shrink-0 animate-pulse">
+                {t('command_palette.searching')}
+              </span>
             )}
           </div>
 
-          <Command.List className="max-h-[60vh] overflow-y-auto p-2">
+          <Command.List
+            label={t('command_palette.suggestions')}
+            className="max-h-[60vh] overflow-y-auto p-2"
+          >
             <Command.Empty className="py-8 text-center text-sm text-muted-foreground">
-              {q.trim() ? 'No articles found' : 'Type to search articles or pick an action'}
+              {t(q.trim() ? 'command_palette.no_results' : 'command_palette.empty')}
             </Command.Empty>
 
             {/* Article search results */}
             {searchResults.length > 0 && (
-              <Command.Group heading="Articles" className={GROUP_CLS}>
+              <Command.Group heading={t('command_palette.groups.articles')} className={GROUP_CLS}>
                 {searchResults.map((a) => (
                   <Command.Item
                     key={a.id}
@@ -164,17 +176,24 @@ export function CommandPalette({ open, onOpenChange, onShortcuts }: Props) {
             {/* Focused article actions */}
             {focusedArticle && (
               <Command.Group
-                heading={`On: ${focusedArticle.title.length > 50 ? focusedArticle.title.slice(0, 50) + '…' : focusedArticle.title}`}
+                heading={t('command_palette.focused_article', {
+                  title:
+                    focusedArticle.title.length > 50
+                      ? focusedArticle.title.slice(0, 50) + '…'
+                      : focusedArticle.title,
+                })}
                 className={GROUP_CLS}
               >
                 <Command.Item
                   onSelect={() =>
-                    articleAction(() => mutations.setState(focusedArticle, 'done', 'Done'))
+                    articleAction(() =>
+                      mutations.setState(focusedArticle, 'done', t('command_palette.status.done'))
+                    )
                   }
                   className={ITEM_CLS}
                 >
                   <CheckCheck className="size-4 text-muted-foreground" />
-                  <span className="text-sm">Mark Done</span>
+                  <span className="text-sm">{t('command_palette.actions.done')}</span>
                   <kbd className="ml-auto font-mono text-[10px] px-1 py-0.5 bg-surface-2 border border-border rounded">
                     r / d
                   </kbd>
@@ -184,7 +203,7 @@ export function CommandPalette({ open, onOpenChange, onShortcuts }: Props) {
                   className={ITEM_CLS}
                 >
                   <Clock className="size-4 text-muted-foreground" />
-                  <span className="text-sm">Send to Later</span>
+                  <span className="text-sm">{t('command_palette.actions.later')}</span>
                   <kbd className="ml-auto font-mono text-[10px] px-1 py-0.5 bg-surface-2 border border-border rounded">
                     l
                   </kbd>
@@ -194,7 +213,13 @@ export function CommandPalette({ open, onOpenChange, onShortcuts }: Props) {
                   className={ITEM_CLS}
                 >
                   <Star className="size-4 text-muted-foreground" />
-                  <span className="text-sm">{focusedArticle.starred ? 'Unstar' : 'Star'}</span>
+                  <span className="text-sm">
+                    {t(
+                      focusedArticle.starred
+                        ? 'command_palette.actions.unstar'
+                        : 'command_palette.actions.star'
+                    )}
+                  </span>
                   <kbd className="ml-auto font-mono text-[10px] px-1 py-0.5 bg-surface-2 border border-border rounded">
                     s
                   </kbd>
@@ -202,12 +227,18 @@ export function CommandPalette({ open, onOpenChange, onShortcuts }: Props) {
                 {!focusedArticle.starred && (
                   <Command.Item
                     onSelect={() =>
-                      articleAction(() => mutations.setState(focusedArticle, 'skipped', 'Skipped'))
+                      articleAction(() =>
+                        mutations.setState(
+                          focusedArticle,
+                          'skipped',
+                          t('command_palette.status.skipped')
+                        )
+                      )
                     }
                     className={ITEM_CLS}
                   >
                     <SkipForward className="size-4 text-muted-foreground" />
-                    <span className="text-sm">Skip</span>
+                    <span className="text-sm">{t('command_palette.actions.skip')}</span>
                     <kbd className="ml-auto font-mono text-[10px] px-1 py-0.5 bg-surface-2 border border-border rounded">
                       x
                     </kbd>
@@ -215,12 +246,18 @@ export function CommandPalette({ open, onOpenChange, onShortcuts }: Props) {
                 )}
                 <Command.Item
                   onSelect={() =>
-                    articleAction(() => mutations.setState(focusedArticle, 'archived', 'Archived'))
+                    articleAction(() =>
+                      mutations.setState(
+                        focusedArticle,
+                        'archived',
+                        t('command_palette.status.archived')
+                      )
+                    )
                   }
                   className={ITEM_CLS}
                 >
                   <Archive className="size-4 text-muted-foreground" />
-                  <span className="text-sm">Archive</span>
+                  <span className="text-sm">{t('command_palette.actions.archive')}</span>
                   <kbd className="ml-auto font-mono text-[10px] px-1 py-0.5 bg-surface-2 border border-border rounded">
                     e
                   </kbd>
@@ -234,7 +271,7 @@ export function CommandPalette({ open, onOpenChange, onShortcuts }: Props) {
                   className={ITEM_CLS}
                 >
                   <ExternalLink className="size-4 text-muted-foreground" />
-                  <span className="text-sm">Open original</span>
+                  <span className="text-sm">{t('command_palette.actions.open_original')}</span>
                   <kbd className="ml-auto font-mono text-[10px] px-1 py-0.5 bg-surface-2 border border-border rounded">
                     o
                   </kbd>
@@ -243,19 +280,19 @@ export function CommandPalette({ open, onOpenChange, onShortcuts }: Props) {
             )}
 
             {/* Navigation */}
-            <Command.Group heading="Navigation" className={GROUP_CLS}>
+            <Command.Group heading={t('command_palette.groups.navigation')} className={GROUP_CLS}>
               {commandNavigationItemsFor(Boolean(user?.is_admin)).map(
-                ({ icon: Icon, label, to }) => (
+                ({ icon: Icon, labelKey, to }) => (
                   <Command.Item key={to} onSelect={() => go(to)} className={ITEM_CLS}>
                     <Icon className="size-4 text-muted-foreground" />
-                    <span className="text-sm">{label}</span>
+                    <span className="text-sm">{t(labelKey)}</span>
                   </Command.Item>
                 )
               )}
             </Command.Group>
 
             {/* App actions */}
-            <Command.Group heading="Actions" className={GROUP_CLS}>
+            <Command.Group heading={t('command_palette.groups.actions')} className={GROUP_CLS}>
               {user?.is_admin && (
                 <Command.Item
                   onSelect={() => {
@@ -264,7 +301,7 @@ export function CommandPalette({ open, onOpenChange, onShortcuts }: Props) {
                   className={ITEM_CLS}
                 >
                   <RefreshCw className="size-4 text-muted-foreground" />
-                  <span className="text-sm">Refresh feeds now</span>
+                  <span className="text-sm">{t('command_palette.actions.refresh')}</span>
                 </Command.Item>
               )}
               {onShortcuts && (
@@ -275,7 +312,9 @@ export function CommandPalette({ open, onOpenChange, onShortcuts }: Props) {
                   }}
                   className={ITEM_CLS}
                 >
-                  <span className="text-sm text-muted-foreground">Keyboard shortcuts</span>
+                  <span className="text-sm text-muted-foreground">
+                    {t('command_palette.actions.shortcuts')}
+                  </span>
                   <kbd className="ml-auto font-mono text-[10px] px-1 py-0.5 bg-surface-2 border border-border rounded">
                     ?
                   </kbd>

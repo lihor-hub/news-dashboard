@@ -57,8 +57,8 @@ test.describe('Command palette — navigation items', () => {
     await expect(page.getByRole('option', { name: /starred/i })).toBeVisible();
   });
 
-  test('shows Ask AI nav item', async ({ page }) => {
-    await expect(page.getByRole('option', { name: /ask ai/i })).toBeVisible();
+  test('shows Ask nav item', async ({ page }) => {
+    await expect(page.getByRole('option', { name: 'Ask', exact: true })).toBeVisible();
   });
 
   test('shows Feeds nav item', async ({ page }) => {

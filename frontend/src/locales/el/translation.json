@@ -290,5 +290,47 @@
       "commandPalette": "Command palette",
       "showOverlay": "Show this overlay"
     }
+  },
+  "command_palette": {
+    "title": "Command palette",
+    "description": "Jump to views, search articles, and run article actions.",
+    "input_label": "Search and commands",
+    "placeholder": "Jump to a view, search articles, run actions…",
+    "searching": "searching…",
+    "no_results": "No articles found",
+    "empty": "Type to search articles or pick an action",
+    "groups": {
+      "articles": "Articles",
+      "navigation": "Navigation",
+      "actions": "Actions"
+    },
+    "focused_article": "On: {{title}}",
+    "actions": {
+      "done": "Mark Done",
+      "later": "Send to Later",
+      "star": "Star",
+      "unstar": "Unstar",
+      "skip": "Skip",
+      "archive": "Archive",
+      "open_original": "Open original",
+      "refresh": "Refresh feeds now",
+      "shortcuts": "Keyboard shortcuts"
+    },
+    "status": {
+      "done": "Done",
+      "skipped": "Skipped",
+      "archived": "Archived"
+    },
+    "ingest": {
+      "loading": "Refreshing feeds…",
+      "error": "Ingest failed",
+      "success_zero": "Done — {{count}} new articles",
+      "success_one": "Done — {{count}} new article",
+      "success_two": "Done — {{count}} new articles",
+      "success_few": "Done — {{count}} new articles",
+      "success_many": "Done — {{count}} new articles",
+      "success_other": "Done — {{count}} new articles"
+    },
+    "suggestions": "Suggestions"
   }
 }
