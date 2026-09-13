@@ -338,7 +338,7 @@ DEFAULT_SOURCES: list[SourceDefinition] = [
         "https://rss.arxiv.org/rss/cs.AI",
         "ai-research",
         priority=70,
-        interest_tags=("evals", "model-releases", "research"),
+        interest_tags=("evals", "model-releases"),
     ),
     SourceDefinition(
         "mistral-ai-news",
@@ -363,7 +363,7 @@ DEFAULT_SOURCES: list[SourceDefinition] = [
         "https://research.google/blog/rss/",
         "ai-research",
         priority=78,
-        interest_tags=("evals", "model-releases", "research", "security"),
+        interest_tags=("evals", "model-releases", "security"),
     ),
     SourceDefinition(
         "berkeley-bair-blog",
@@ -371,7 +371,7 @@ DEFAULT_SOURCES: list[SourceDefinition] = [
         "https://bair.berkeley.edu/blog/feed.xml",
         "ai-research",
         priority=74,
-        interest_tags=("evals", "model-releases", "research"),
+        interest_tags=("evals", "model-releases"),
     ),
     SourceDefinition(
         "langchain-releases",
@@ -407,7 +407,7 @@ DEFAULT_SOURCES: list[SourceDefinition] = [
         "https://blog.trailofbits.com/feed/",
         "security",
         priority=76,
-        interest_tags=("security", "infra", "software-development"),
+        interest_tags=("security", "infra"),
     ),
     SourceDefinition(
         "github-security-lab",
@@ -425,7 +425,7 @@ DEFAULT_SOURCES: list[SourceDefinition] = [
         "https://googleprojectzero.blogspot.com/feeds/posts/summary?alt=rss&max-results=25",
         "security",
         priority=82,
-        interest_tags=("security", "research"),
+        interest_tags=("security",),
     ),
     # ── Cloud / infra ────────────────────────────────────────────────────────
     SourceDefinition(
@@ -458,7 +458,7 @@ DEFAULT_SOURCES: list[SourceDefinition] = [
         "https://developer.chrome.com/static/blog/feed.xml",
         "web",
         priority=70,
-        interest_tags=("web", "frontend", "product-news"),
+        interest_tags=("product-news",),
     ),
     SourceDefinition(
         "cloudflare-blog",
@@ -474,7 +474,7 @@ DEFAULT_SOURCES: list[SourceDefinition] = [
         "https://web.dev/feed.xml",
         "web",
         priority=70,
-        interest_tags=("web", "frontend", "performance"),
+        interest_tags=(),
     ),
     # ── Engineering ──────────────────────────────────────────────────────────
     SourceDefinition(
@@ -507,7 +507,7 @@ DEFAULT_SOURCES: list[SourceDefinition] = [
         "https://martinfowler.com/feed.atom",
         "engineering",
         priority=65,
-        interest_tags=("infra", "software-development", "architecture"),
+        interest_tags=("infra",),
     ),
     SourceDefinition(
         "netflix-techblog",
@@ -515,7 +515,7 @@ DEFAULT_SOURCES: list[SourceDefinition] = [
         "https://netflixtechblog.com/feed",
         "engineering",
         priority=68,
-        interest_tags=("infra", "software-development", "cloud"),
+        interest_tags=("infra", "cloud"),
     ),
     # ── Developer tools ──────────────────────────────────────────────────────
     SourceDefinition(
@@ -524,7 +524,7 @@ DEFAULT_SOURCES: list[SourceDefinition] = [
         "https://devblogs.microsoft.com/typescript/feed/",
         "developer-tools",
         priority=78,
-        interest_tags=("programming", "frontend", "software-development"),
+        interest_tags=("product-news",),
     ),
     SourceDefinition(
         "v8-blog",
@@ -532,7 +532,7 @@ DEFAULT_SOURCES: list[SourceDefinition] = [
         "https://v8.dev/blog.atom",
         "developer-tools",
         priority=72,
-        interest_tags=("javascript", "performance", "frontend"),
+        interest_tags=("product-news",),
     ),
     # ── Trending / repositories ───────────────────────────────────────────────
     SourceDefinition(
@@ -725,7 +725,7 @@ DEFAULT_SOURCES: list[SourceDefinition] = [
         "python",
         "reddit_feed",
         80,
-        interest_tags=("python", "programming"),
+        interest_tags=("python",),
     ),
     SourceDefinition(
         "reddit-machinelearning",
@@ -734,7 +734,7 @@ DEFAULT_SOURCES: list[SourceDefinition] = [
         "ai-llm",
         "reddit_feed",
         75,
-        interest_tags=("ai", "ml", "research"),
+        interest_tags=("evals", "model-releases"),
     ),
     SourceDefinition(
         "reddit-programming",
@@ -743,7 +743,7 @@ DEFAULT_SOURCES: list[SourceDefinition] = [
         "python",
         "reddit_feed",
         70,
-        interest_tags=("programming", "software-development"),
+        interest_tags=(),
     ),
     # ── Lobsters feeds ───────────────────────────────────────────────────────────
     SourceDefinition(
@@ -753,7 +753,7 @@ DEFAULT_SOURCES: list[SourceDefinition] = [
         "tech",
         "lobsters_feed",
         60,
-        interest_tags=("programming", "tech", "startups"),
+        interest_tags=(),
     ),
     SourceDefinition(
         "lobsters-web",
@@ -762,7 +762,7 @@ DEFAULT_SOURCES: list[SourceDefinition] = [
         "web",
         "lobsters_feed",
         55,
-        interest_tags=("web", "frontend", "css"),
+        interest_tags=(),
     ),
     SourceDefinition(
         "lobsters-ruby",
@@ -771,7 +771,7 @@ DEFAULT_SOURCES: list[SourceDefinition] = [
         "ruby",
         "lobsters_feed",
         55,
-        interest_tags=("ruby", "rails", "backend"),
+        interest_tags=(),
     ),
     # ── Mastodon feeds ───────────────────────────────────────────────────────────
     SourceDefinition(
@@ -781,7 +781,7 @@ DEFAULT_SOURCES: list[SourceDefinition] = [
         "tech",
         "mastodon_feed",
         60,
-        interest_tags=("tech", "gadgets", "innovation"),
+        interest_tags=("product-news",),
     ),
     SourceDefinition(
         "mastodon-webdev",
@@ -790,6 +790,6 @@ DEFAULT_SOURCES: list[SourceDefinition] = [
         "web",
         "mastodon_feed",
         55,
-        interest_tags=("web", "development", "javascript"),
+        interest_tags=(),
     ),
 ]
