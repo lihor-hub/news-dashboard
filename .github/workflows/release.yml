@@ -200,11 +200,13 @@ jobs:
             fi
             echo "Signed APK built from ${{ needs.release.outputs.tag }}."
           } > "$NOTES_FILE"
+          # Desktop updates resolve the global latest release for their manifests.
+          # Android updates select android-v tags from the releases list.
           gh release create "android-v$V" \
             "${{ steps.apk.outputs.path }}" \
             --title "Android APK v$V" \
             --notes-file "$NOTES_FILE" \
-            --latest
+            --latest=false
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import re
+import shlex
 import unittest
 from pathlib import Path
 
@@ -57,6 +59,28 @@ class TestManualAppWorkflows(unittest.TestCase):
             self.fail("Desktop release must await all matrix builds")
         if workflow.count('gh release create "desktop-v$V"') != 1:
             self.fail("Desktop release must be created exactly once")
+
+    def test_only_desktop_publication_selects_the_global_latest_release(self) -> None:
+        script = RELEASE.read_text().replace("\\\n", " ")
+        commands = []
+        for line in script.splitlines():
+            if line.strip().startswith("gh release create "):
+                # GitHub expressions are substituted before shell parsing.
+                expanded = re.sub(r"\$\{\{.*?\}\}", "workflow-value", line)
+                commands.append(shlex.split(expanded))
+        for tag, latest in (
+            ("android-v$V", "--latest=false"),
+            ("desktop-v$V", "--latest"),
+        ):
+            with self.subTest(tag=tag):
+                matching = [
+                    args for args in commands if args[:4] == ["gh", "release", "create", tag]
+                ]
+                if len(matching) != 1:
+                    self.fail(f"Expected exactly one publication command for {tag}")
+                latest_flags = [arg for arg in matching[0] if arg.startswith("--latest")]
+                if latest_flags != [latest]:
+                    self.fail(f"{tag} must use {latest}; found {latest_flags}")
 
     def test_manual_artifacts_include_computed_version(self) -> None:
         expected_names = {
