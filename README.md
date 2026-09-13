@@ -446,11 +446,16 @@ the application.
 The production image serves the built frontend through FastAPI on port `8080`.
 
 For Kubernetes, start with the [chart installation guide and values reference](helm/news-dashboard/README.md).
-The command below is the repository-specific production deployment flow:
+The command below upgrades the repository-specific production deployment using
+the versioned chart at `oci://ghcr.io/lihor-hub/charts/news-dashboard`. Set
+`CHART_VERSION` to the application release version without its `v` prefix.
+For a chart from your checkout, replace the OCI reference and `--version` with
+`./helm/news-dashboard`. See the [chart versioning policy](helm/news-dashboard/README.md#versioning-policy).
 
 ```bash
 (
 set -euo pipefail
+CHART_VERSION="${CHART_VERSION:?set CHART_VERSION to the published chart version}"
 IMAGE_DIGEST="${IMAGE_DIGEST:?set IMAGE_DIGEST to sha256:<64 lowercase hex>}"
 : "${SESSION_SECRET:?set SESSION_SECRET}"
 : "${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}"
@@ -459,7 +464,8 @@ source ./scripts/production-deploy-lib.sh
 production_cutover_enabled || { echo "Ingress cutover is not enabled" >&2; exit 2; }
 prepare_production_helm_secret_files
 
-helm upgrade --install news-dashboard ./helm/news-dashboard \
+helm upgrade --install news-dashboard oci://ghcr.io/lihor-hub/charts/news-dashboard \
+  --version "$CHART_VERSION" \
   --namespace news-dashboard --create-namespace \
   --values ./helm/news-dashboard/values-production.yaml \
   --set-string image.digest="${IMAGE_DIGEST}" \

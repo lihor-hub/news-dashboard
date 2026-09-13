@@ -7,7 +7,8 @@ store and does not replace it.
 ## Prerequisites
 
 - A Kubernetes cluster, `kubectl` access, and Helm 3 or later
-- A checkout of this repository; run the example from the repository root
+- For source installation or local validation only: a checkout of this repository;
+  run those commands from the repository root. OCI installation needs no checkout.
 - Access to the application image in GHCR, with a `kubernetes.io/dockerconfigjson`
   Secret in the release namespace if the package requires authentication
 - A default StorageClass for the PVC-based example below, or an explicit
@@ -28,14 +29,20 @@ and bootstrap administrator credentials outside the repository. Set
 do not commit them. Keep the session secret and database password stable across
 upgrades unless performing an intentional rotation.
 
+Choose the published application release version, without its `v` prefix, for
+`CHART_VERSION`. The OCI chart uses that release's exact application commit as
+its default image tag.
+
 ```bash
+CHART_VERSION="${CHART_VERSION:?set CHART_VERSION to the published chart version}"
 kubectl create namespace news-dashboard --dry-run=client -o yaml | kubectl apply -f -
 kubectl --namespace news-dashboard create secret generic news-dashboard-admin \
   --from-file=BOOTSTRAP_ADMIN_USERNAME="$ADMIN_USERNAME_FILE" \
   --from-file=BOOTSTRAP_ADMIN_PASSWORD="$ADMIN_PASSWORD_FILE" \
   --dry-run=client -o yaml | kubectl apply -f -
 
-helm upgrade --install news-dashboard ./helm/news-dashboard \
+helm upgrade --install news-dashboard oci://ghcr.io/lihor-hub/charts/news-dashboard \
+  --version "$CHART_VERSION" \
   --namespace news-dashboard --create-namespace \
   --set app.auth.keycloak.enabled=false \
   --set-string app.auth.bootstrapAdmin.existingSecret=news-dashboard-admin \
@@ -44,6 +51,9 @@ helm upgrade --install news-dashboard ./helm/news-dashboard \
   --set-file app.auth.sessionSecret="$SESSION_SECRET_FILE" \
   --set-file postgresql.password="$POSTGRES_PASSWORD_FILE"
 ```
+
+For source builds, replace the OCI reference and `--version` argument with
+`./helm/news-dashboard`. This uses the chart in your checkout.
 
 Create the `ghcr-pull-secret` image-pull Secret in the same namespace before
 installing. If your chosen image is publicly pullable, explicitly set
@@ -62,11 +72,34 @@ has additional TLS, digest, service, and network-policy safeguards. Follow the
 [production deployment runbook](../../docs/SELF_HOSTING.md#kubernetes-helm)
 before applying it; the minimal example above does not enable production mode.
 
+## Versioning policy
+
+Published chart `version` and `appVersion` both equal the application release
+version, without the `v` prefix. A chart configuration fix should use a `fix:`
+commit (or `feat:` for new behavior) so the normal release workflow produces a
+new version. Documentation-only changes wait for the next application release.
+Do not commit generated version bumps: the tracked metadata is the source
+fallback, and CI injects the release version only into the packaged chart.
+
+The package's default image tag is the exact commit behind the release tag.
+Production installations still supply an immutable registry `image.digest`.
+The image pipeline publishes `latest` and commit-SHA tags; the chart does not
+assume a `v<version>` image tag exists.
+
+The release job waits up to 30 minutes for that commit's image, then packages
+and pushes `news-dashboard-<version>.tgz` to `oci://ghcr.io/lihor-hub/charts`.
+An unavailable image fails the job without publishing its chart. If this wait
+times out, fix or finish image publication and rerun the failed release job;
+rerunning the entire release workflow finds the existing tag and creates no
+new release.
+
 ## Values reference
 
-Defaults below describe [values.yaml](values.yaml). Keep installation-specific
-settings in your own values file and secrets outside version control. The full
-file also documents security contexts, resources, and optional integrations.
+Defaults below describe the source [values.yaml](values.yaml). Published
+packages replace `image.tag` with the exact release commit as described above.
+Keep installation-specific settings in your own values file and secrets outside
+version control. The full file also documents security contexts, resources,
+and optional integrations.
 
 | Value | Default | Purpose |
 |-------|---------|---------|
