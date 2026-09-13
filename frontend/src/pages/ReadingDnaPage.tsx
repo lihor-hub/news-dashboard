@@ -161,7 +161,7 @@ export function ReadingDnaPage() {
                 <div className="min-w-0 space-y-1">
                   <div className="text-2xl font-semibold">
                     {streak?.current_streak_days ?? 0}
-                    <span className="ml-1 text-sm font-normal text-muted-foreground">days</span>
+                    <span className="ms-1 text-sm font-normal text-muted-foreground">days</span>
                   </div>
                   <p className="text-sm text-muted-foreground">
                     Longest streak: {streak?.longest_streak_days ?? 0} days
@@ -529,13 +529,13 @@ function LearningCenter() {
                         <span className="min-w-0">
                           <span className="font-medium">{c.title}</span>
                           {(c.source_name ?? c.category) && (
-                            <span className="ml-1 text-muted-foreground">
+                            <span className="ms-1 text-muted-foreground">
                               {[c.source_name ?? null, c.category ?? null]
                                 .filter(Boolean)
                                 .join(' · ')}
                             </span>
                           )}
-                          {c.goal_matched && <span className="ml-1 text-primary">✓ goal</span>}
+                          {c.goal_matched && <span className="ms-1 text-primary">✓ goal</span>}
                         </span>
                       </li>
                     ))}
@@ -807,7 +807,7 @@ function QuizResultView({
                 )}
                 <p className="min-w-0 break-words text-sm font-medium">{q.question}</p>
               </div>
-              <div className="grid gap-2 pl-5 sm:grid-cols-2">
+              <div className="grid gap-2 ps-5 sm:grid-cols-2">
                 <AnswerReview
                   label="Your answer"
                   value={yourAnswer ?? 'No answer selected'}
@@ -816,7 +816,7 @@ function QuizResultView({
                 <AnswerReview label="Correct answer" value={correctAnswer} tone="correct" />
               </div>
               {q.explanation && (
-                <details className="pl-5 text-xs text-muted-foreground" open>
+                <details className="ps-5 text-xs text-muted-foreground" open>
                   <summary className="cursor-pointer font-medium text-foreground">
                     Explanation
                   </summary>

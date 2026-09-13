@@ -227,7 +227,7 @@ function CitationCard({ citation, index }: { citation: Citation; index: number }
     <button
       onClick={() => void navigate(`/a/${citation.id}`)}
       className={cn(
-        'w-full text-left rounded-md border border-border bg-card p-3',
+        'w-full text-start rounded-md border border-border bg-card p-3',
         'hover:bg-surface transition-colors'
       )}
     >

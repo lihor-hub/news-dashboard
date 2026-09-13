@@ -204,7 +204,7 @@ export function BriefPage() {
             disabled={isGenerating || !focusInput.trim()}
             onClick={() => generate(focusInput.trim())}
           >
-            <Wand2 className="size-3.5 mr-1" />
+            <Wand2 className="size-3.5 me-1" />
             Generate
           </Button>
         </div>

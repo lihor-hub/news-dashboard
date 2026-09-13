@@ -327,7 +327,7 @@ export function SchedulerPage() {
                 <div className="min-w-0">
                   <span className="font-medium">{JOB_LABELS[run.job_name] ?? run.job_name}</span>
                   {run.started_at && (
-                    <span className="ml-2 text-muted-foreground">
+                    <span className="ms-2 text-muted-foreground">
                       {new Date(run.started_at).toLocaleString([], {
                         month: 'short',
                         day: 'numeric',
@@ -337,7 +337,7 @@ export function SchedulerPage() {
                     </span>
                   )}
                   {run.duration_ms != null && (
-                    <span className="ml-2 text-muted-foreground">{run.duration_ms}ms</span>
+                    <span className="ms-2 text-muted-foreground">{run.duration_ms}ms</span>
                   )}
                   {run.message && (
                     <p className="text-muted-foreground truncate mt-0.5">{run.message}</p>

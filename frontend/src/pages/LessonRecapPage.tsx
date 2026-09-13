@@ -152,7 +152,7 @@ export function LessonRecapPage() {
                     <Link to={`/learn/${lesson.id}`} className="hover:underline">
                       {lesson.title}
                     </Link>
-                    <span className="ml-2 text-xs text-muted-foreground capitalize">
+                    <span className="ms-2 text-xs text-muted-foreground capitalize">
                       {lesson.generation_status}
                     </span>
                   </li>

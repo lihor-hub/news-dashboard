@@ -562,7 +562,7 @@ export function SourcesPage() {
                   </span>
                 </p>
                 {importResult.failed.length > 0 && (
-                  <ul className="list-disc pl-4 space-y-0.5">
+                  <ul className="list-disc ps-4 space-y-0.5">
                     {importResult.failed.map((f, i) => (
                       <li key={i} className="truncate">
                         {f.url}: {f.error}
@@ -573,7 +573,7 @@ export function SourcesPage() {
                 {importResult.skipped.length > 0 && (
                   <details className="cursor-pointer">
                     <summary>Skipped ({importResult.skipped.length})</summary>
-                    <ul className="list-disc pl-4 mt-1 space-y-0.5">
+                    <ul className="list-disc ps-4 mt-1 space-y-0.5">
                       {importResult.skipped.map((s, i) => (
                         <li key={i} className="truncate">
                           {s.url}: {s.reason}
@@ -637,16 +637,16 @@ export function SourcesPage() {
       <div className="hidden md:block overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
-            <tr className="text-left text-[10px] uppercase tracking-wider text-muted-foreground border-b border-border">
+            <tr className="text-start text-[10px] uppercase tracking-wider text-muted-foreground border-b border-border">
               <th className="px-5 py-2 font-medium">Source</th>
               <th className="px-3 py-2 font-medium">Kind</th>
               <th className="px-3 py-2 font-medium">Category</th>
               <th className="px-3 py-2 font-medium">Health</th>
               <th className="px-3 py-2 font-medium">Last checked</th>
               <th className="px-3 py-2 font-medium">Last success</th>
-              <th className="px-3 py-2 font-medium text-right">Items (run)</th>
-              <th className="px-3 py-2 font-medium text-right">On</th>
-              <th className="px-3 py-2 font-medium text-right">{t('priorityFeeds.priority')}</th>
+              <th className="px-3 py-2 font-medium text-end">Items (run)</th>
+              <th className="px-3 py-2 font-medium text-end">On</th>
+              <th className="px-3 py-2 font-medium text-end">{t('priorityFeeds.priority')}</th>
               <th className="px-3 py-2 font-medium" />
             </tr>
           </thead>
@@ -684,10 +684,10 @@ export function SourcesPage() {
                   <td className="px-3 py-3 text-muted-foreground">
                     {s.last_success_at ? relativeTime(s.last_success_at) : '—'}
                   </td>
-                  <td className="px-3 py-3 text-right tabular-nums text-muted-foreground">
+                  <td className="px-3 py-3 text-end tabular-nums text-muted-foreground">
                     {s.last_inserted_count ?? 0}/{s.last_fetched_count ?? 0}
                   </td>
-                  <td className="px-3 py-3 text-right">
+                  <td className="px-3 py-3 text-end">
                     <Switch
                       checked={isSourceOn(s)}
                       onCheckedChange={(checked) =>
@@ -696,7 +696,7 @@ export function SourcesPage() {
                       aria-label={`Toggle ${s.name}`}
                     />
                   </td>
-                  <td className="px-3 py-3 text-right">
+                  <td className="px-3 py-3 text-end">
                     <Switch
                       checked={!!s.high_priority}
                       onCheckedChange={(checked) =>
@@ -705,7 +705,7 @@ export function SourcesPage() {
                       aria-label={t('priorityFeeds.sourceLabel', { source: s.name })}
                     />
                   </td>
-                  <td className="px-3 py-3 text-right">
+                  <td className="px-3 py-3 text-end">
                     {isOwned && (
                       <Button
                         size="sm"

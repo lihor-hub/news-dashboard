@@ -156,7 +156,7 @@ export function FeedsRunsPage() {
                               <Table>
                                 <TableHeader>
                                   <TableRow>
-                                    <TableHead className="pl-8">Source name</TableHead>
+                                    <TableHead className="ps-8">Source name</TableHead>
                                     <TableHead>Found</TableHead>
                                     <TableHead>New</TableHead>
                                     <TableHead>Duplicates</TableHead>
@@ -167,7 +167,7 @@ export function FeedsRunsPage() {
                                 <TableBody>
                                   {sourceRows.map((source) => (
                                     <TableRow key={source.id}>
-                                      <TableCell className="pl-8 text-sm font-medium">
+                                      <TableCell className="ps-8 text-sm font-medium">
                                         {source.source_name}
                                       </TableCell>
                                       <TableCell className="text-sm">

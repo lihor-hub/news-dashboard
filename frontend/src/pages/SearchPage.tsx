@@ -292,13 +292,13 @@ export function SearchPage() {
 
         {/* Search input */}
         <div className="relative">
-          <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+          <SearchIcon className="absolute start-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
           <input
             ref={inputRef}
             value={inputValue}
             onChange={(e) => handleInputChange(e.target.value)}
             placeholder="Search titles, summaries, tags, full text…"
-            className="w-full h-10 pl-9 pr-3 rounded-md border border-border bg-surface text-sm outline-none focus:border-border-strong focus:bg-background"
+            className="w-full h-10 ps-9 pe-3 rounded-md border border-border bg-surface text-sm outline-none focus:border-border-strong focus:bg-background"
           />
         </div>
 
@@ -618,7 +618,7 @@ function FilterGroup({
                   on && 'font-medium text-foreground'
                 )}
               >
-                <span className="truncate text-left">{render(v)}</span>
+                <span className="truncate text-start">{render(v)}</span>
                 {on && <span className="text-accent shrink-0">✓</span>}
               </button>
             );
