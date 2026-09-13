@@ -171,3 +171,5 @@ Good first issues often include adding new UI strings following this pattern.
 New to the project? Browse issues labeled [`good first issue`](https://github.com/lihor-hub/news-dashboard/issues?q=is%3Aopen+label%3A%22good+first+issue%22) — these are small, well-scoped tasks that don't require deep codebase context. Each one has clear acceptance criteria so you can start immediately.
 
 If you're unsure which to pick, leave a comment on the issue and a maintainer will help you get started.
+
+For production operation, use the [Self-Hosting guide](https://docs.lihor.ro/docs/self-hosting).

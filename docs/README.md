@@ -17,7 +17,7 @@ Two sections there are the usual starting points when working on the code:
 
 | Doc | Description |
 |-----|--------------|
-| [SELF_HOSTING.md](SELF_HOSTING.md) | Running your own instance of News Dashboard. |
+| [Self-Hosting](https://docs.lihor.ro/docs/self-hosting) | Canonical deployment and operations guide; [source](../website/docs/self-hosting/index.md). |
 | [a2a.md](a2a.md) | Opt-in A2A (Agent2Agent) endpoint exposing the assistant to external agents. |
 | [knowledge-graph.md](knowledge-graph.md) | Neo4j knowledge graph architecture, data flow, backfill commands, and degraded behavior. |
 | [learning-agent-roadmap.md](learning-agent-roadmap.md) | Lesson-first Learning Agent roadmap, child implementation slices, and AI generation guardrails. |

@@ -84,7 +84,7 @@ in-app stats/analytics views. This data:
 
 ## See also
 
-- [Configuration](README.md#configuration) — full environment variable
+- [Configuration](https://docs.lihor.ro/docs/self-hosting/environment-variables) — full environment variable
   reference.
 - [SECURITY.md](SECURITY.md) — vulnerability disclosure policy and
   security-relevant configuration.

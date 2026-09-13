@@ -50,7 +50,7 @@ This app has real security surface worth getting right when self-hosting:
 - **Keycloak (`KEYCLOAK_*`)** — optional external auth; when enabled, review
   [Authentication (Keycloak)](https://docs.lihor.ro/docs/configuration/authentication) for the trust model.
 
-See the [Configuration](README.md#configuration) table in the README for the
+See the [Configuration](https://docs.lihor.ro/docs/self-hosting/environment-variables) reference for the
 full list of environment variables. Never commit secrets, API keys, database
 credentials, or production session values to the repository — use
 environment variables or your deployment platform's secret store.

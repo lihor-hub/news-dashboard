@@ -19,8 +19,7 @@ PRODUCTION_VALUES = CHART / "values-production.yaml"
 ADDITIONAL_EGRESS_EXAMPLE = ROOT / "deploy" / "additional-egress-values.example.json"
 OPERATOR_DOCS = (
     ROOT / "README.md",
-    ROOT / "docs" / "SELF_HOSTING.md",
-    ROOT / "website" / "docs" / "self-hosting" / "index.md",
+    ROOT / "website" / "docs" / "self-hosting" / "deployment.md",
 )
 INVALID_MESSAGE = "Invalid additional egress values.\n"
 VALID_VALUES = {
