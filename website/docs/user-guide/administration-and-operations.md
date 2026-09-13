@@ -47,7 +47,7 @@ administrator-only control plane. Each signed-in user can:
 - subscribe to or unsubscribe from shared sources;
 - add and remove private sources;
 - mark sources as high priority;
-- import or export OPML; and
+- [import or export OPML](sources.md#import-and-export-opml); and
 - review source health and cleanup suggestions.
 
 Those choices affect that account’s subscriptions or private sources. Use the
