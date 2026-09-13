@@ -14,8 +14,8 @@ authentication, Ingress HTTPS, and Postgres backups.
 | [MCP server](mcp-server)                              | Enable scoped, read-only article access for an external AI client.            |
 | [RSS client sync (Google Reader API)](greader-sync)   | Connect a compatible RSS client with a per-user token.                        |
 
-See the root [README](https://github.com/lihor-hub/news-dashboard#configuration)
-for the full environment variable reference.
+See [Environment variables](../self-hosting/environment-variables.md) for the
+full environment variable reference.
 
 ## Email delivery
 

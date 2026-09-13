@@ -17,10 +17,10 @@ PRODUCTION_VALUES = ROOT / "helm" / "news-dashboard" / "values-production.yaml"
 CHART = ROOT / "helm" / "news-dashboard"
 PRODUCTION_DOCS = (
     ROOT / "README.md",
-    ROOT / "docs" / "SELF_HOSTING.md",
+    ROOT / "website" / "docs" / "self-hosting" / "upgrading-and-rolling-back.md",
     ROOT / "website" / "docs" / "architecture" / "product-spec.md",
     ROOT / "website" / "docs" / "configuration" / "https-caddy.md",
-    ROOT / "website" / "docs" / "self-hosting" / "index.md",
+    ROOT / "website" / "docs" / "self-hosting" / "deployment.md",
 )
 
 

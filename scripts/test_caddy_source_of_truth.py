@@ -8,7 +8,8 @@ import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
 PRODUCTION_CADDYFILE = ROOT / "deploy" / "Caddyfile"
-SELF_HOSTING = ROOT / "docs" / "SELF_HOSTING.md"
+SELF_HOSTING_DIR = ROOT / "website" / "docs" / "self-hosting"
+SELF_HOSTING = SELF_HOSTING_DIR / "deployment.md"
 HTTPS_CADDY = ROOT / "website" / "docs" / "configuration" / "https-caddy.md"
 ARCHITECTURE = ROOT / "website" / "docs" / "architecture" / "index.md"
 PRODUCT_SPEC = ROOT / "website" / "docs" / "architecture" / "product-spec.md"
@@ -70,7 +71,11 @@ def test_docs_link_the_manual_appliance_rollout_issue() -> None:
 
 
 def test_operator_docs_do_not_publish_private_inventory() -> None:
-    operator_docs = (SELF_HOSTING, HTTPS_CADDY, POSTGRES_BACKUP)
+    operator_docs = (
+        *(doc for doc in SELF_HOSTING_DIR.glob("*.md") if doc.name != "ci-runner-setup.md"),
+        HTTPS_CADDY,
+        POSTGRES_BACKUP,
+    )
 
     for doc in operator_docs:
         text = doc.read_text()

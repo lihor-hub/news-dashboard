@@ -105,9 +105,9 @@ instance-wide, and each user can opt out under **Settings → Privacy**.
 
 ## Deployment-operator checklist
 
-Use the [Self-Hosting guide](https://docs.lihor.ro/docs/self-hosting) for
+Use the [Self-Hosting guide](../self-hosting/index.md) for
 deployment methods, health endpoints, upgrades, rollbacks, and sizing. Keep the
-[README configuration reference](https://github.com/lihor-hub/news-dashboard#configuration)
+[environment variable reference](../self-hosting/environment-variables.md)
 as the canonical environment-variable catalogue.
 
 For routine operations:

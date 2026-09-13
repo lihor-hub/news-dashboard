@@ -25,7 +25,8 @@ any other tracked change.
 - `website/docs/` — source of the published site (docs.lihor.ro). Pushes to
   `main` touching `website/**` deploy it via `.github/workflows/docs.yml`
   (GitHub Pages).
-- `docs/SELF_HOSTING.md` — running your own instance.
+- `website/docs/self-hosting/` — canonical deployment and operations guides.
+  `docs/SELF_HOSTING.md` is a pointer; edit operational content on the site.
 - The in-app "What's New" changelog (`/api/changelog`) is AI-generated at
   release time — never hand-edit `CHANGELOG.md` as documentation; see the
   `release` skill.
