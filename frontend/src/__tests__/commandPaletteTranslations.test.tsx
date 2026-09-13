@@ -12,10 +12,18 @@ import * as api from '@/api';
 import english from '@/locales/en/translation.json';
 import bulgarian from '@/locales/bg/translation.json';
 
-const mocks = vi.hoisted(() => ({ setState: vi.fn(), sendLater: vi.fn(), toggleStar: vi.fn() }));
+const mocks = vi.hoisted(() => ({
+  setState: vi.fn(),
+  sendLater: vi.fn(),
+  toggleStar: vi.fn(),
+  onOpenChange: vi.fn(),
+  onShortcuts: vi.fn(),
+}));
 vi.mock('@/hooks/useTriageMutations', () => ({ useTriageMutations: () => mocks }));
 vi.mock('@/contexts/auth', () => ({ useAuth: () => ({ user: { is_admin: true } }) }));
-vi.mock('@/contexts/focusedArticle', () => ({ useFocusedArticle: () => ({ article }) }));
+vi.mock('@/contexts/focusedArticle', () => ({
+  useFocusedArticle: () => ({ article: focusedArticle }),
+}));
 vi.mock('sonner', () => ({
   toast: { loading: vi.fn(() => 'toast-id'), success: vi.fn(), error: vi.fn() },
 }));
@@ -38,6 +46,8 @@ const article: WorkflowArticle = {
   starred: false,
 };
 
+let focusedArticle = article;
+
 async function renderPalette(language = 'en') {
   const i18n = createInstance();
   await i18n.init({
@@ -48,7 +58,7 @@ async function renderPalette(language = 'en') {
   render(
     <I18nextProvider i18n={i18n}>
       <MemoryRouter>
-        <CommandPalette open onOpenChange={vi.fn()} onShortcuts={vi.fn()} />
+        <CommandPalette open onOpenChange={mocks.onOpenChange} onShortcuts={mocks.onShortcuts} />
       </MemoryRouter>
     </I18nextProvider>
   );
@@ -57,6 +67,7 @@ async function renderPalette(language = 'en') {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  focusedArticle = article;
 });
 
 describe('command palette translations', () => {
@@ -103,5 +114,66 @@ describe('command palette translations', () => {
     await waitFor(() =>
       expect(toast.error).toHaveBeenCalledWith('Обновяването бе неуспешно', { id: 'toast-id' })
     );
+  });
+
+  it.each([
+    ['Пропуснете', 'skipped', 'Пропуснато'],
+    ['Архивирайте', 'archived', 'Архивирано'],
+  ])(
+    'runs the translated %s action and reports its localized status',
+    async (label, state, status) => {
+      await renderPalette('bg');
+      await userEvent.click(screen.getByRole('option', { name: new RegExp(`^${label}`) }));
+      expect(mocks.setState).toHaveBeenCalledWith(article, state, status);
+      expect(mocks.onOpenChange).toHaveBeenCalledWith(false);
+    }
+  );
+
+  it('sends the focused article to Later through its translated action', async () => {
+    await renderPalette('bg');
+    await userEvent.click(screen.getByText('Изпратете за по-късно'));
+    expect(mocks.sendLater).toHaveBeenCalledWith(article);
+    expect(mocks.onOpenChange).toHaveBeenCalledWith(false);
+  });
+
+  it('offers Unstar instead of Star and hides Skip for a starred article', async () => {
+    focusedArticle = { ...article, starred: true, title: 'A'.repeat(60) };
+    await renderPalette('bg');
+    expect(screen.getByText(`За: ${'A'.repeat(50)}…`)).toBeVisible();
+    expect(screen.queryByText('Пропуснете')).not.toBeInTheDocument();
+    await userEvent.click(screen.getByText('Премахнете от любими'));
+    expect(mocks.toggleStar).toHaveBeenCalledWith(focusedArticle);
+    expect(mocks.onOpenChange).toHaveBeenCalledWith(false);
+  });
+
+  it('opens the original URL from its translated action', async () => {
+    const open = vi.spyOn(window, 'open').mockImplementation(() => null);
+    await renderPalette('bg');
+    await userEvent.click(screen.getByText('Отворете оригинала'));
+    expect(open).toHaveBeenCalledWith(article.url, '_blank', 'noopener,noreferrer');
+    expect(mocks.onOpenChange).toHaveBeenCalledWith(false);
+  });
+
+  it('opens shortcut help from the translated command', async () => {
+    await renderPalette('bg');
+    await userEvent.click(screen.getByText('Клавишни комбинации'));
+    expect(mocks.onShortcuts).toHaveBeenCalledOnce();
+    expect(mocks.onOpenChange).toHaveBeenCalledWith(false);
+  });
+
+  it('shows localized pending search text and clears it when the request fails', async () => {
+    let rejectSearch: (reason: Error) => void = () => {};
+    const pending = new Promise<never>((_resolve, reject) => {
+      rejectSearch = reject;
+    });
+    vi.spyOn(api, 'searchArticles').mockReturnValue(pending);
+    await renderPalette('bg');
+    await userEvent.type(screen.getByRole('combobox'), 'missing article');
+    expect(await screen.findByText('търсене…')).toBeVisible();
+    await act(async () => {
+      rejectSearch(new Error('offline'));
+    });
+    await waitFor(() => expect(screen.queryByText('търсене…')).not.toBeInTheDocument());
+    expect(screen.getByRole('option', { name: /^Днес$/ })).toBeVisible();
   });
 });
