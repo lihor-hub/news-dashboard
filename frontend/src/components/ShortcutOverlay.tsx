@@ -21,6 +21,9 @@ const SECTIONS: { titleKey: string; items: [string, string][] }[] = [
       ['x', 'shortcuts.articleActions.skip'],
       ['e', 'shortcuts.articleActions.archive'],
       ['o', 'shortcuts.articleActions.openOriginal'],
+      ['Esc', 'shortcuts.articleActions.backToList'],
+      ['←', 'shortcuts.articleActions.previousArticle'],
+      ['→', 'shortcuts.articleActions.nextArticle'],
     ],
   },
   {
