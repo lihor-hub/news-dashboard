@@ -44,7 +44,7 @@ behavior:
 | `/api/auth/*`, `/auth/*`                             | public router              | Login, registration, and SSO callbacks.                                                |
 | `/mcp/*`                                             | mounted FastMCP server     | Bearer-token authenticated, stateless Streamable HTTP.                                 |
 | `/api/mcp/health`                                    | MCP readiness probe        | Unauthenticated, content-free status (`disabled`, `healthy`, or `dependency_failure`). |
-| `/reader/api/0/*`, `/accounts/ClientLogin`           | public GReader router      | Google Reader-compatible sync.                                                         |
+| `/api/greader/*`                                   | public GReader router      | Google Reader-compatible sync.                                                         |
 | `/api/health`, `/api/live`, `/api/ready`, `/metrics` | system router              | Unauthenticated probes.                                                                |
 
 ## Response conventions

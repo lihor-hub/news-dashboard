@@ -180,16 +180,21 @@ support.
 Authenticate with a GReader token from
 `/api/users/me/greader-tokens`. Most readers expect the ClientLogin flow:
 
-| Route                                       | Method | Purpose                                  |
-| ------------------------------------------- | ------ | ---------------------------------------- |
-| `/accounts/ClientLogin`                     | POST   | Exchange credentials for a session.      |
-| `/reader/api/0/token`                       | GET    | Fetch the write token.                   |
-| `/reader/api/0/user-info`                   | GET    | Account metadata.                        |
-| `/reader/api/0/subscription/list`           | GET    | Subscribed feeds.                        |
-| `/reader/api/0/stream/contents/{stream_id}` | GET    | Items in a stream.                       |
-| `/reader/api/0/stream/items/ids`            | GET    | Item IDs in a stream.                    |
-| `/reader/api/0/stream/items/contents`       | POST   | Fetch items by ID.                       |
-| `/reader/api/0/edit-tag`                    | POST   | Add or remove tags — read/starred state. |
+| Route                                                   | Method | Purpose                                  |
+| ------------------------------------------------------- | ------ | ---------------------------------------- |
+| `/api/greader/accounts/ClientLogin`                     | POST   | Exchange credentials for a session.      |
+| `/api/greader/reader/api/0/token`                       | GET    | Fetch the write token.                   |
+| `/api/greader/reader/api/0/user-info`                   | GET    | Account metadata.                        |
+| `/api/greader/reader/api/0/subscription/list`           | GET    | Subscribed feeds.                        |
+| `/api/greader/reader/api/0/stream/contents/{stream_id}` | GET    | Items in a stream.                       |
+| `/api/greader/reader/api/0/stream/items/ids`            | GET    | Item IDs in a stream.                    |
+| `/api/greader/reader/api/0/stream/items/contents`       | POST   | Fetch items by ID.                       |
+| `/api/greader/reader/api/0/edit-tag`                    | POST   | Add or remove tags — read/starred state. |
+
+`stream_id` is a path parameter that can contain slashes. For example,
+`/api/greader/reader/api/0/stream/contents/user/-/state/com.google/reading-list`
+returns the reading-list stream; `user/-/state/com.google/starred` and
+`feed/<slug>` select starred articles and a single source, respectively.
 
 `edit-tag` is how third-party readers mark items read or starred; those changes
 map onto the same triage state used by the web UI, so the two stay in sync.
