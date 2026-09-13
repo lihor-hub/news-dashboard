@@ -506,6 +506,7 @@ jobs:
         with:
           platforms: arm64
       - uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4
+      # Named local exports populate statement subjects without publishing.
       # Exercise real BuildKit attestation output before spending time on QEMU.
       - name: Verify a tiny dual-architecture OCI fixture
         run: |
@@ -514,6 +515,7 @@ jobs:
           printf 'Attestation verification fixture\n' > "$RUNNER_TEMP/oci-fixture/payload"
           docker buildx build "$RUNNER_TEMP/oci-fixture" \
             --platform linux/amd64,linux/arm64 --sbom=true --provenance=mode=max \
+            --tag news-dashboard-validation:fixture \
             --output "type=oci,dest=$RUNNER_TEMP/fixture.tar" \
             --metadata-file "$RUNNER_TEMP/fixture-metadata.json"
           fixture_digest=$(jq -er '."containerimage.digest"' "$RUNNER_TEMP/fixture-metadata.json")
@@ -525,6 +527,7 @@ jobs:
         with:
           context: .
           platforms: linux/amd64
+          tags: news-dashboard-validation:amd64
           push: false
           no-cache: true
           sbom: true
@@ -542,6 +545,7 @@ jobs:
         with:
           context: .
           platforms: linux/amd64,linux/arm64
+          tags: news-dashboard-validation:multiarch
           push: false
           no-cache: true
           sbom: true

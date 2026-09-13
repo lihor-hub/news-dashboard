@@ -98,8 +98,13 @@ def test_manual_validation_is_opt_in_and_cannot_publish() -> None:
     assert job["permissions"] == {"contents": "read"}  # noqa: S101
     builds = [s for s in job["steps"] if s.get("uses", "").startswith("docker/build-push-action@")]
     assert len(builds) == 2  # noqa: S101
+    fixture = next(
+        s for s in job["steps"] if s.get("name") == "Verify a tiny dual-architecture OCI fixture"
+    )
+    assert "--tag news-dashboard-validation:fixture" in fixture["run"]  # noqa: S101
     for build in builds:
         assert build["with"]["push"] is False  # noqa: S101
+        assert build["with"].get("tags", "").startswith("news-dashboard-validation:")  # noqa: S101
         assert build["with"]["no-cache"] is True  # noqa: S101
         assert build["with"]["sbom"] is True  # noqa: S101
         assert build["with"]["outputs"].startswith("type=oci,")  # noqa: S101
