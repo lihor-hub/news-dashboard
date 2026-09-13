@@ -1,5 +1,6 @@
 appId: ro.lihor.newsdashboard.desktop
 productName: News Dashboard
+artifactName: news-dashboard-${version}-${arch}.${ext}
 copyright: "Copyright © 2024 Lihor"
 
 directories:
@@ -32,6 +33,9 @@ mac:
     - target: dmg
       arch:
         - universal   # works on both Intel (x64) and Apple Silicon (arm64)
+    - target: zip
+      arch:
+        - universal   # update payload required by electron-updater
 
 dmg:
   title: "${productName} ${version}"
