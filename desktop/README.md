@@ -4,37 +4,8 @@ A thin Electron wrapper that opens `https://news.lihor.ro` in a native desktop
 window. Like the Android TWA, this is not a bundled copy of the frontend — the
 window always loads the live deployed site, so it stays up-to-date automatically.
 
-## Features
-
-- Native window with persistent size/position across launches
-- Standard OS-native menus (File, Edit, View, Window) with keyboard shortcuts
-- Reload (`⌘R`) and Force Reload (`⌘⇧R`)
-- External links open in the system browser, not inside the app window
-- Navigation is locked to `news.lihor.ro` — no accidental browsing
-- Universal macOS binary (Intel + Apple Silicon)
-
-## Download
-
-Go to the [Releases page](https://github.com/lihor-hub/news-dashboard/releases)
-and download the latest `News Dashboard-*.dmg` (macOS) or `News Dashboard-*.AppImage`
-(Linux).
-
-## First launch on macOS (Gatekeeper)
-
-The app is **unsigned** (no Apple Developer certificate). macOS will refuse to
-open it directly. Two options:
-
-**Option A — right-click → Open** (easiest):
-1. In Finder, right-click `News Dashboard.app`
-2. Click **Open**
-3. Click **Open** again in the warning dialog
-
-**Option B — strip quarantine attribute** (once, via Terminal):
-```bash
-xattr -cr "/Applications/News Dashboard.app"
-```
-
-After the first launch, the exception is saved and the app opens normally.
+For downloads, installation, unsigned macOS first-launch steps, and updates,
+see the [desktop installation guide](https://docs.lihor.ro/docs/getting-started/install-desktop-app).
 
 ## Running locally (development)
 
@@ -52,17 +23,21 @@ running via `npm start` (i.e., when the app is not packaged).
 ```bash
 cd desktop
 npm install
-npm run build:mac    # produces dist/News Dashboard-1.0.0.dmg (universal)
-npm run build:linux  # produces dist/News Dashboard-1.0.0.AppImage
-npm run build:win    # produces dist/News Dashboard Setup 1.0.0.exe
+npm run build:mac    # produces a universal .dmg in dist/
+npm run build:linux  # produces an x64 .AppImage in dist/
+npm run build:win    # produces an x64 NSIS .exe in dist/
 ```
 
 ## CI
 
-The GitHub Actions workflow `.github/workflows/desktop.yml` builds the macOS DMG
-on every push to `main` that touches `desktop/**` and on manual
-`workflow_dispatch` triggers. Built installers are published as GitHub Release
-assets tagged `desktop-v{version}-{run_number}`.
+The release workflow `.github/workflows/release.yml` builds the universal
+macOS DMG and publishes it with update metadata as a GitHub Release tagged
+`desktop-v{version}`. Linux and Windows targets are available for local builds;
+the release workflow currently publishes macOS only.
+
+`.github/workflows/desktop.yml` provides manual `workflow_dispatch` builds.
+It uploads the DMG and update metadata as workflow artifacts without creating
+a release.
 
 ## Architecture
 
