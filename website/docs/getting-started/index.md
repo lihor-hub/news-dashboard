@@ -2,18 +2,19 @@
 
 Welcome to **News Dashboard**, your AI research desk for technical news. Find
 what matters across fast-moving sources, understand it with briefings and cited
-AI tools, and retain useful material. There are four ways to start, depending
+AI tools, and retain useful material. There are five ways to start, depending
 on how you want to access the app.
 
 | On-ramp                                                                                | Best for                                          |
 | -------------------------------------------------------------------------------------- | ------------------------------------------------- |
+| [Install the desktop app](install-desktop-app.md) | Reading in a native desktop window |
 | [Install the Android APK](install-android-apk.md)                                      | Reading on an Android phone or tablet             |
 | [Create a web account](create-web-account.md)                                          | Reading in a browser on any device                |
 | [Try the demo](try-the-demo.md)                                                        | Trying the app locally with sample data, no setup |
 | [Self-host your own instance](https://github.com/lihor-hub/news-dashboard#quick-start) | Running News Dashboard on your own infrastructure |
 
 The public instance runs at **[news.lihor.ro](https://news.lihor.ro)**. If you
-are using that instance, follow the APK or web-account guide above.
+are using that instance, follow the desktop, APK, or web-account guide above.
 
 If you are running your own instance (via Docker, Docker Compose, or Helm),
 see the [Self-Hosting guide](/docs/self-hosting) for detailed deployment
