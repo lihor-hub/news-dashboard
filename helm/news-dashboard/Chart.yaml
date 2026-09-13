@@ -4,3 +4,9 @@ description: Private news inbox and reading tracker for news.lihor.ro
 type: application
 version: 0.1.0
 appVersion: "0.1.0"
+home: https://news.lihor.ro
+sources:
+  - https://github.com/lihor-hub/news-dashboard
+maintainers:
+  - name: lihor-hub
+    url: https://github.com/lihor-hub

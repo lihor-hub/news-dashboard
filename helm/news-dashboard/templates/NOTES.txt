@@ -1,0 +1,18 @@
+News Dashboard is installed in namespace {{ .Release.Namespace }}.
+
+{{- if .Values.ingress.enabled }}
+{{- $https := or (not (empty .Values.ingress.tls)) .Values.ingress.traefik.middlewareEnabled }}
+Ingress URL: {{ ternary "https" "http" $https }}://{{ .Values.ingress.host }}
+Ensure DNS points to your ingress controller and any TLS certificate is ready.
+{{ end }}
+Service URL (inside the cluster): http://{{ include "news-dashboard.fullname" . }}.{{ .Release.Namespace }}.svc:{{ .Values.service.port }}
+
+To reach the app locally, run:
+  kubectl --namespace {{ .Release.Namespace }} port-forward service/{{ include "news-dashboard.fullname" . }} 8080:{{ .Values.service.port }}
+Then open http://localhost:8080 while the command is running.
+
+{{- if ne .Values.service.type "ClusterIP" }}
+To inspect your {{ .Values.service.type }} service's assigned address and ports:
+  kubectl --namespace {{ .Release.Namespace }} get service {{ include "news-dashboard.fullname" . }} --output wide
+{{ end }}
+Chart configuration: https://github.com/lihor-hub/news-dashboard/tree/main/helm/news-dashboard

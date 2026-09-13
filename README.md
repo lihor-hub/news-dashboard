@@ -445,7 +445,8 @@ the application.
 
 The production image serves the built frontend through FastAPI on port `8080`.
 
-For Kubernetes:
+For Kubernetes, start with the [chart installation guide and values reference](helm/news-dashboard/README.md).
+The command below is the repository-specific production deployment flow:
 
 ```bash
 (
@@ -490,12 +491,10 @@ operator sets `INGRESS_CUTOVER_ENABLED=true` after completing the readiness
 checks in issue #1302. `scripts/deploy-local-k8s.sh --render` remains available
 without that activation.
 
-When bundled PostgreSQL is enabled (the default), `postgresql.password` is
-required. Helm will fail to render if it is empty. For CI/chart rendering
-only, use `scripts/deploy-local-k8s.sh --render`, which supplies protected
-temporary dummy files and never applies the result.
-An existing Kubernetes Secret can be used instead of the Helm value;
-see `values.yaml` for the `app.postgresExternal` or `app.databaseUrl` paths.
+For bundled or external PostgreSQL configuration and required credentials, see
+the [chart values reference](helm/news-dashboard/README.md#values-reference).
+For render-only validation, `scripts/deploy-local-k8s.sh --render` supplies
+protected temporary dummy files and never applies the result.
 
 **Existing deployments:** if you previously deployed with the old default
 password (`news-dashboard-local-password`), changing the Helm value or
