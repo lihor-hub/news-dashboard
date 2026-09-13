@@ -2,9 +2,17 @@
 
 from __future__ import annotations
 
+from email.message import Message
+from typing import Any
+from urllib.error import HTTPError
+
 import pytest
 
 from news_dashboard.ingest.service import (
+    _entry_media_url,
+    _entry_transcript,
+    _retry_after_seconds,
+    _should_include,
     canonicalize_url,
     clean_html,
     infer_tags,
@@ -13,6 +21,110 @@ from news_dashboard.ingest.service import (
     parse_date,
 )
 from news_dashboard.sources.service import SourceDefinition
+
+
+@pytest.mark.parametrize(
+    ("header", "expected"),
+    [
+        ("2.5", 2.5),
+        ("0", 0.0),
+        ("30", 30.0),
+        ("300", 30.0),
+        ("-1", None),
+        ("later", None),
+        ("Wed, 21 Oct 2015 07:28:00 GMT", None),
+        ("", None),
+        (None, None),
+    ],
+)
+def test_retry_after_seconds(header: str | None, expected: float | None) -> None:
+    headers = Message()
+    if header is not None:
+        headers["Retry-After"] = header
+    error = HTTPError("https://feed.example/rss", 429, "Too Many Requests", headers, None)
+
+    assert _retry_after_seconds(error) == expected
+
+
+@pytest.mark.parametrize(
+    ("entry", "expected"),
+    [
+        (
+            {"enclosures": [{"href": "https://feed.example/episode.mp3"}]},
+            "https://feed.example/episode.mp3",
+        ),
+        ({"links": [{"href": "episode.mp3", "rel": "enclosure"}]}, "episode.mp3"),
+        (
+            {"links": [{"href": "episode.mp3", "rel": "alternate", "type": "audio/mpeg"}]},
+            "episode.mp3",
+        ),
+        (
+            {
+                "enclosures": [{"href": "first.mp3"}, {"href": "second.mp3"}],
+                "links": [{"href": "other.mp3"}],
+            },
+            "first.mp3",
+        ),
+        ({"links": [{"href": "article.html", "rel": "alternate", "type": "text/html"}]}, ""),
+        ({"enclosures": [None, {}, {"rel": "enclosure"}]}, ""),
+        ({}, ""),
+    ],
+)
+def test_entry_media_url(entry: dict[str, Any], expected: str) -> None:
+    assert _entry_media_url(entry) == expected
+
+
+@pytest.mark.parametrize("key", ["transcript", "content", "summary", "description"])
+def test_entry_transcript_accepts_each_fallback(key: str) -> None:
+    assert _entry_transcript({key: "<p>Hello &amp; welcome</p>"}) == "Hello & welcome"
+
+
+def test_entry_transcript_prefers_first_nonempty_field() -> None:
+    entry = {
+        "transcript": "",
+        "content": "<b>Content</b>",
+        "summary": "Summary",
+        "description": "Description",
+    }
+    assert _entry_transcript(entry) == "Content"
+    entry["transcript"] = "Transcript"
+    assert _entry_transcript(entry) == "Transcript"
+
+
+def test_entry_transcript_joins_content_list_and_ignores_non_entries() -> None:
+    assert (
+        _entry_transcript(
+            {"content": [{"value": "<p>Hello</p>"}, None, {"value": "world &amp; friends"}]}
+        )
+        == "Hello world & friends"
+    )
+
+
+def test_entry_transcript_empty() -> None:
+    assert _entry_transcript({}) == ""
+
+
+@pytest.mark.parametrize(
+    ("rule", "title", "description", "expected"),
+    [
+        (None, "Unrelated", "Text", True),
+        ({"keywords": None}, "Unrelated", "Text", True),
+        ({"keywords": ["python"]}, "PYTHON release", "Text", True),
+        ({"keywords": ["python"]}, "Release", "Learn Python today", True),
+        ({"keywords": ["python"]}, "Unrelated", "Text", False),
+    ],
+)
+def test_should_include(
+    monkeypatch: pytest.MonkeyPatch,
+    rule: dict[str, Any] | None,
+    title: str,
+    description: str,
+    expected: bool,
+) -> None:
+    monkeypatch.setattr(
+        "news_dashboard.ingest.service.NOISE_FILTERS", {"test-feed": rule} if rule else {}
+    )
+    assert _should_include(title, description, "test-feed") is expected
 
 
 def _src(
