@@ -446,13 +446,11 @@ the application.
 The production image serves the built frontend through FastAPI on port `8080`.
 
 For Kubernetes, start with the [chart installation guide and values reference](helm/news-dashboard/README.md).
-The command below is the repository-specific production deployment flow:
-
-For Kubernetes, install the versioned chart from
-`oci://ghcr.io/lihor-hub/charts/news-dashboard`. Set `CHART_VERSION` to the
-application release version without its `v` prefix. For a chart from your
-checkout, replace the OCI reference and `--version` with `./helm/news-dashboard`.
-See the [chart versioning policy](helm/news-dashboard/README.md#versioning-policy).
+The command below upgrades the repository-specific production deployment using
+the versioned chart at `oci://ghcr.io/lihor-hub/charts/news-dashboard`. Set
+`CHART_VERSION` to the application release version without its `v` prefix.
+For a chart from your checkout, replace the OCI reference and `--version` with
+`./helm/news-dashboard`. See the [chart versioning policy](helm/news-dashboard/README.md#versioning-policy).
 
 ```bash
 (
