@@ -49,6 +49,7 @@ jobs:
     outputs:
       backend: ${{ steps.filter.outputs.backend }}
       frontend: ${{ steps.filter.outputs.frontend }}
+      desktop: ${{ steps.filter.outputs.desktop }}
       a11y: ${{ steps.filter.outputs.a11y }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -68,6 +69,10 @@ jobs:
               - 'vite.config.ts'
               - 'index.html'
               - 'tsconfig*.json'
+            desktop:
+              - 'desktop/**'
+              - '.github/workflows/ci.yml'
+              - 'scripts/test_desktop_ci_workflow.py'
             a11y:
               - 'frontend/**'
               - 'e2e/a11y.spec.ts'
@@ -261,6 +266,32 @@ jobs:
       - name: build (includes tsc)
         run: npm run build
 
+  # Desktop unit tests run without packaging or signing credentials.
+  desktop:
+    name: Desktop tests
+    needs: detect-changes
+    runs-on: ubuntu-latest
+    if: |
+      github.event_name == 'push' ||
+      github.event_name == 'merge_group' ||
+      (github.event_name == 'workflow_dispatch' && inputs.full_suite == 'true') ||
+      (github.event_name == 'pull_request' && needs.detect-changes.outputs.desktop == 'true')
+    defaults:
+      run:
+        working-directory: desktop
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: '26'
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+      - name: Verify desktop CI routing and result propagation
+        working-directory: .
+        run: python3 -m unittest scripts.test_desktop_ci_workflow
+      - run: npm ci
+      - run: npm test
+
   # ── 5. A11Y ────────────────────────────────────────────────────────────────
   # Runs the accessibility smoke test suite on PRs and pushes.
   # Change-aware: skips when no frontend/a11y-related files changed.
@@ -303,7 +334,7 @@ jobs:
   # (all-skipped = no relevant files changed, so the check still passes).
   test:
     name: Test & build
-    needs: [test-backend, test-frontend, test-a11y, mcp-container-smoke]
+    needs: [test-backend, test-frontend, test-a11y, mcp-container-smoke, desktop]
     runs-on: ubuntu-latest
     if: always()
     steps:
@@ -311,6 +342,7 @@ jobs:
         run: |
           backend="${{ needs.test-backend.result }}"
           frontend="${{ needs.test-frontend.result }}"
+          desktop="${{ needs.desktop.result }}"
           a11y="${{ needs.test-a11y.result }}"
           mcp_container="${{ needs.mcp-container-smoke.result }}"
           if [[ "$backend" == "failure" || "$backend" == "cancelled" ]]; then
@@ -325,7 +357,10 @@ jobs:
           if [[ "$mcp_container" == "failure" || "$mcp_container" == "cancelled" ]]; then
             echo "MCP container smoke failed or was cancelled ($mcp_container)" && exit 1
           fi
-          echo "All test lanes passed (backend=$backend, frontend=$frontend, a11y=$a11y, mcp_container=$mcp_container)"
+          if [[ "$desktop" == "failure" || "$desktop" == "cancelled" ]]; then
+            echo "Desktop tests failed or were cancelled ($desktop)" && exit 1
+          fi
+          echo "All test lanes passed (backend=$backend, frontend=$frontend, a11y=$a11y, mcp_container=$mcp_container, desktop=$desktop)"
   # ── 7. COVERAGE UPLOAD ─────────────────────────────────────────────────────
   # Uploads coverage reports to Codecov for PR comments, status checks, and
   # coverage trends. Merge groups run the full test suite, so they also upload
