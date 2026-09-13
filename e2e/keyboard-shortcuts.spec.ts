@@ -86,6 +86,20 @@ test.describe('? shortcut — keyboard shortcuts overlay', () => {
     await expect(page.getByText(/send to later/i)).toBeVisible();
   });
 
+  test('overlay shows article reader shortcuts with their keys', async ({ page }) => {
+    await page.keyboard.press('?');
+    const dialog = page.getByRole('dialog', { name: 'Keyboard shortcuts' });
+    for (const [key, description] of [
+      ['Esc', 'Back to list'],
+      ['←', 'Previous article'],
+      ['→', 'Next article'],
+    ]) {
+      const row = dialog.getByText(description, { exact: true }).locator('..');
+      await expect(row.getByText(description, { exact: true })).toBeVisible();
+      await expect(row.locator('kbd')).toHaveText(key);
+    }
+  });
+
   test('overlay closes with Escape', async ({ page }) => {
     await page.keyboard.press('?');
     await expect(page.getByText('Keyboard shortcuts')).toBeVisible();

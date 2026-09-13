@@ -281,7 +281,10 @@
       "star": "Star / Unstar",
       "skip": "Skip (unless Starred)",
       "archive": "Archive",
-      "openOriginal": "Open original externally"
+      "openOriginal": "Open original externally",
+      "backToList": "Back to list",
+      "previousArticle": "Previous article",
+      "nextArticle": "Next article"
     },
     "app": {
       "commandPalette": "Command palette",
