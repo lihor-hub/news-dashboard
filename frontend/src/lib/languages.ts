@@ -37,6 +37,7 @@ export const supportedLanguages: SupportedLanguage[] = [
   { code: 'hu', nativeName: 'Magyar' },
   { code: 'el', nativeName: 'Ελληνικά' },
   { code: 'he', nativeName: 'עברית', rtl: true },
+  { code: 'bg', nativeName: 'Български' },
 ];
 
 const rtlLanguageCodes = new Set(supportedLanguages.filter((l) => l.rtl).map((l) => l.code));
