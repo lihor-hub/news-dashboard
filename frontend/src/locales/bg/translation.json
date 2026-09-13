@@ -290,5 +290,47 @@
       "commandPalette": "Command palette",
       "showOverlay": "Show this overlay"
     }
+  },
+  "command_palette": {
+    "title": "Палитра с команди",
+    "description": "Преминавайте към изгледи, търсете статии и изпълнявайте действия със статии.",
+    "input_label": "Търсене и команди",
+    "placeholder": "Към изглед, търсене на статии, изпълнение на действия…",
+    "searching": "търсене…",
+    "no_results": "Няма намерени статии",
+    "empty": "Въведете текст за търсене на статии или изберете действие",
+    "groups": {
+      "articles": "Статии",
+      "navigation": "Навигация",
+      "actions": "Действия"
+    },
+    "focused_article": "За: {{title}}",
+    "actions": {
+      "done": "Маркирайте като готово",
+      "later": "Изпратете за по-късно",
+      "star": "Добавете в любими",
+      "unstar": "Премахнете от любими",
+      "skip": "Пропуснете",
+      "archive": "Архивирайте",
+      "open_original": "Отворете оригинала",
+      "refresh": "Обновете емисиите сега",
+      "shortcuts": "Клавишни комбинации"
+    },
+    "status": {
+      "done": "Готово",
+      "skipped": "Пропуснато",
+      "archived": "Архивирано"
+    },
+    "ingest": {
+      "loading": "Обновяване на емисиите…",
+      "error": "Обновяването бе неуспешно",
+      "success_zero": "Готово — {{count}} нови статии",
+      "success_one": "Готово — {{count}} нова статия",
+      "success_two": "Готово — {{count}} нови статии",
+      "success_few": "Готово — {{count}} нови статии",
+      "success_many": "Готово — {{count}} нови статии",
+      "success_other": "Готово — {{count}} нови статии"
+    },
+    "suggestions": "Предложения"
   }
 }

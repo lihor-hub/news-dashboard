@@ -1,11 +1,14 @@
 // @vitest-environment happy-dom
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { FocusedArticleProvider } from '../contexts/focusedArticle';
 import { AuthProvider } from '../contexts/auth';
+import { createInstance } from 'i18next';
+import { I18nextProvider } from 'react-i18next';
+import english from '@/locales/en/translation.json';
 import { CommandPalette } from '../components/CommandPalette';
 import * as api from '../api';
 import type { Article } from '../types';
@@ -47,31 +50,39 @@ function LocationProbe() {
   return <div data-testid="location">{location.pathname}</div>;
 }
 
+let i18n = createInstance();
+beforeEach(async () => {
+  i18n = createInstance();
+  await i18n.init({ lng: 'en', resources: { en: { translation: english } } });
+});
+
 function renderPalette() {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
 
   return render(
-    <QueryClientProvider client={queryClient}>
-      <AuthProvider>
-        <MemoryRouter initialEntries={['/search']}>
-          <FocusedArticleProvider>
-            <Routes>
-              <Route
-                path="*"
-                element={
-                  <>
-                    <LocationProbe />
-                    <CommandPalette open={true} onOpenChange={vi.fn()} />
-                  </>
-                }
-              />
-            </Routes>
-          </FocusedArticleProvider>
-        </MemoryRouter>
-      </AuthProvider>
-    </QueryClientProvider>
+    <I18nextProvider i18n={i18n}>
+      <QueryClientProvider client={queryClient}>
+        <AuthProvider>
+          <MemoryRouter initialEntries={['/search']}>
+            <FocusedArticleProvider>
+              <Routes>
+                <Route
+                  path="*"
+                  element={
+                    <>
+                      <LocationProbe />
+                      <CommandPalette open={true} onOpenChange={vi.fn()} />
+                    </>
+                  }
+                />
+              </Routes>
+            </FocusedArticleProvider>
+          </MemoryRouter>
+        </AuthProvider>
+      </QueryClientProvider>
+    </I18nextProvider>
   );
 }
 

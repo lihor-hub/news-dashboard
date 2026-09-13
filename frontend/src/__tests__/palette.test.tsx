@@ -5,6 +5,9 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useEffect, type ReactNode } from 'react';
+import { createInstance } from 'i18next';
+import { I18nextProvider } from 'react-i18next';
+import english from '@/locales/en/translation.json';
 import { CommandPalette } from '../components/CommandPalette';
 import { FocusedArticleProvider } from '../contexts/focusedArticle';
 import { AuthProvider, useAuth } from '../contexts/auth';
@@ -36,18 +39,26 @@ function SetUser({ user, children }: { user: User | null; children: ReactNode })
   return <>{children}</>;
 }
 
+let i18n = createInstance();
+beforeEach(async () => {
+  i18n = createInstance();
+  await i18n.init({ lng: 'en', resources: { en: { translation: english } } });
+});
+
 function Wrapper({ children, user = null }: { children: React.ReactNode; user?: User | null }) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return (
-    <QueryClientProvider client={qc}>
-      <AuthProvider>
-        <SetUser user={user}>
-          <MemoryRouter>
-            <FocusedArticleProvider>{children}</FocusedArticleProvider>
-          </MemoryRouter>
-        </SetUser>
-      </AuthProvider>
-    </QueryClientProvider>
+    <I18nextProvider i18n={i18n}>
+      <QueryClientProvider client={qc}>
+        <AuthProvider>
+          <SetUser user={user}>
+            <MemoryRouter>
+              <FocusedArticleProvider>{children}</FocusedArticleProvider>
+            </MemoryRouter>
+          </SetUser>
+        </AuthProvider>
+      </QueryClientProvider>
+    </I18nextProvider>
   );
 }
 
