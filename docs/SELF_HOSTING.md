@@ -14,6 +14,7 @@ This guide explains how to deploy News Dashboard for production use using the pu
 - [Know Your Role](#know-your-role)
 - [Docker Compose: Dev vs Production](#docker-compose-dev-vs-production)
 - [Running with Docker Compose (Production)](#running-with-docker-compose-production)
+- [Supported Architectures](#supported-architectures)
 - [Image Tags and Versioning](#image-tags-and-versioning)
 - [Environment Variables](#environment-variables)
 - [Healthchecks](#healthchecks)
@@ -108,12 +109,38 @@ curl http://localhost:8080/api/health
 # Should return: {"status":"ok"}
 ```
 
+## Supported Architectures
+
+Published `latest` and commit-SHA image tags contain both `linux/amd64` (x86-64)
+and `linux/arm64` (AArch64) images. Docker Compose and Kubernetes automatically
+select the image matching the host. ARM64 includes Apple Silicon Linux VMs,
+ARM servers, and Raspberry Pi devices running a **64-bit** OS; 32-bit ARMv7
+is not supported.
+
+Inspect the index and its platform-specific digests before pinning a deployment:
+
+```bash
+docker buildx imagetools inspect ghcr.io/lihor-hub/news-dashboard:latest
+```
+
+Pinning the index digest preserves automatic architecture selection. Each
+architecture has its own SPDX SBOM attested to its child image digest; build
+provenance is attested to the complete index digest. Use the corresponding child
+digest when verifying an architecture's SBOM, rather than the index digest.
+
+Maintainers can select `validate_multiarch_images` in the **CI / CD** workflow's
+manual-run inputs to build local OCI archives on a GitHub-hosted runner without
+publishing or deploying. The `multiarch-validation` artifact records both child
+digests, digest-verified SBOM/provenance statements, and amd64-versus-multiarch
+build times. Both timed builds disable layer reuse, although the second can reuse
+downloaded base images. The frontend builds on the builder's native platform;
+only target-dependent runtime steps require ARM64 emulation on an x86-64 runner.
+
 ## Image Tags and Versioning
 
 The image is available with the following tags:
 
 - `ghcr.io/lihor-hub/news-dashboard:latest` - Rolling update to the most recent release
-- `ghcr.io/lihor-hub/news-dashboard:v<version>` - Specific version (e.g., `v1.21.0`)
 - `ghcr.io/lihor-hub/news-dashboard:<commit-sha>` - Exact commit (e.g., `a1b2c3d4e5f6`)
 
 For production deployments, resolve the published manifest digest and set
@@ -139,20 +166,32 @@ Every image pushed to GHCR from a push to `main` is attested with a
 (SPDX), generated in `.github/workflows/ci.yml` and verifiable with the
 [GitHub CLI](https://cli.github.com/):
 
-```bash
-# Verify the image was built by this repo's CI (build provenance).
-gh attestation verify oci://ghcr.io/lihor-hub/news-dashboard:v1.21.0 \
-  --owner lihor-hub
+From a checkout of a published `main` commit, resolve its SHA tag once, then
+verify immutable references. This example selects ARM64; use `amd64` for x86-64.
+It requires Docker Buildx, `jq`, and an authenticated GitHub CLI.
 
-# Verify and inspect the SBOM attestation for the same image.
-gh attestation verify oci://ghcr.io/lihor-hub/news-dashboard:v1.21.0 \
-  --owner lihor-hub --predicate-type https://spdx.dev/Document
+```bash
+IMAGE=ghcr.io/lihor-hub/news-dashboard
+COMMIT_SHA=$(git rev-parse HEAD)
+ARCH=arm64
+INDEX_DIGEST=$(docker buildx imagetools inspect "$IMAGE:$COMMIT_SHA" \
+  --format '{{json .Manifest}}' | jq -er '.digest')
+
+# Verify the complete index was built by this repository's CI.
+gh attestation verify "oci://$IMAGE@$INDEX_DIGEST" \
+  --repo lihor-hub/news-dashboard
+
+# Resolve and verify the selected architecture's SBOM.
+CHILD_DIGEST=$(docker buildx imagetools inspect "$IMAGE@$INDEX_DIGEST" --raw | \
+  jq -er --arg arch "$ARCH" \
+    '.manifests[] | select(.platform.os == "linux" and .platform.architecture == $arch) | .digest')
+gh attestation verify "oci://$IMAGE@$CHILD_DIGEST" \
+  --repo lihor-hub/news-dashboard --predicate-type https://spdx.dev/Document
 ```
 
-Both commands exit non-zero if the image digest doesn't match a
-signed attestation from this repository, or if the signature can't be
-verified against GitHub's Sigstore-backed OIDC identity. Substitute
-the tag with a specific commit SHA to verify an exact build.
+Both verification commands exit non-zero if the digest lacks a matching signed
+attestation from this repository or the signature cannot be verified against
+GitHub's Sigstore-backed OIDC identity.
 
 ## Environment Variables
 
