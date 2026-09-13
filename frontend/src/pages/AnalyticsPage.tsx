@@ -208,7 +208,7 @@ export function AnalyticsPage() {
             <tbody>
               {heatmap.map((row, dow) => (
                 <tr key={dow}>
-                  <td className="w-7 pr-2 text-[10px] text-subtle text-right">{DOW[dow]}</td>
+                  <td className="w-7 pe-2 text-[10px] text-subtle text-end">{DOW[dow]}</td>
                   {row.map((value, hour) => (
                     <td key={hour}>
                       <div
@@ -234,14 +234,14 @@ export function AnalyticsPage() {
         <div className="overflow-x-auto -mx-2">
           <table className="w-full text-sm min-w-[560px]">
             <thead>
-              <tr className="text-left text-[10px] uppercase tracking-wider text-subtle border-b border-border">
+              <tr className="text-start text-[10px] uppercase tracking-wider text-subtle border-b border-border">
                 <th className="px-3 py-2 font-medium">User</th>
-                <th className="px-3 py-2 font-medium text-right">Minutes</th>
-                <th className="px-3 py-2 font-medium text-right">Reads</th>
-                <th className="px-3 py-2 font-medium text-right">Skips</th>
-                <th className="px-3 py-2 font-medium text-right">Starred</th>
-                <th className="px-3 py-2 font-medium text-right">Briefings</th>
-                <th className="px-3 py-2 font-medium text-right">Events</th>
+                <th className="px-3 py-2 font-medium text-end">Minutes</th>
+                <th className="px-3 py-2 font-medium text-end">Reads</th>
+                <th className="px-3 py-2 font-medium text-end">Skips</th>
+                <th className="px-3 py-2 font-medium text-end">Starred</th>
+                <th className="px-3 py-2 font-medium text-end">Briefings</th>
+                <th className="px-3 py-2 font-medium text-end">Events</th>
               </tr>
             </thead>
             <tbody>
@@ -255,14 +255,14 @@ export function AnalyticsPage() {
               {(data?.users ?? []).map((u) => (
                 <tr key={u.user_id} className="border-b border-border last:border-b-0">
                   <td className="px-3 py-2">{u.username}</td>
-                  <td className="px-3 py-2 text-right tabular-nums text-star">{u.minutes}</td>
-                  <td className="px-3 py-2 text-right tabular-nums">{u.reads}</td>
-                  <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">
+                  <td className="px-3 py-2 text-end tabular-nums text-star">{u.minutes}</td>
+                  <td className="px-3 py-2 text-end tabular-nums">{u.reads}</td>
+                  <td className="px-3 py-2 text-end tabular-nums text-muted-foreground">
                     {u.skips}
                   </td>
-                  <td className="px-3 py-2 text-right tabular-nums">{u.starred}</td>
-                  <td className="px-3 py-2 text-right tabular-nums">{u.briefings}</td>
-                  <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">
+                  <td className="px-3 py-2 text-end tabular-nums">{u.starred}</td>
+                  <td className="px-3 py-2 text-end tabular-nums">{u.briefings}</td>
+                  <td className="px-3 py-2 text-end tabular-nums text-muted-foreground">
                     {u.events}
                   </td>
                 </tr>
@@ -276,10 +276,10 @@ export function AnalyticsPage() {
         <div className="overflow-x-auto -mx-2">
           <table className="w-full text-sm min-w-[480px]">
             <thead>
-              <tr className="text-left text-[10px] uppercase tracking-wider text-subtle border-b border-border">
+              <tr className="text-start text-[10px] uppercase tracking-wider text-subtle border-b border-border">
                 <th className="px-3 py-2 font-medium">Article</th>
-                <th className="px-3 py-2 font-medium text-right">Opens</th>
-                <th className="px-3 py-2 font-medium text-right">Avg dwell</th>
+                <th className="px-3 py-2 font-medium text-end">Opens</th>
+                <th className="px-3 py-2 font-medium text-end">Avg dwell</th>
               </tr>
             </thead>
             <tbody>
@@ -293,8 +293,8 @@ export function AnalyticsPage() {
               {(data?.article_dwell ?? []).map((a) => (
                 <tr key={a.article_id} className="border-b border-border last:border-b-0">
                   <td className="px-3 py-2 truncate max-w-[320px]">{a.title}</td>
-                  <td className="px-3 py-2 text-right tabular-nums">{a.opens}</td>
-                  <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">
+                  <td className="px-3 py-2 text-end tabular-nums">{a.opens}</td>
+                  <td className="px-3 py-2 text-end tabular-nums text-muted-foreground">
                     {a.avg_dwell_seconds}s
                   </td>
                 </tr>

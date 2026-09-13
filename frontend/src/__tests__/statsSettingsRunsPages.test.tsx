@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import type { ReactElement } from 'react';
 import { MemoryRouter } from 'react-router';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -141,6 +141,36 @@ describe('StatsPage', () => {
     expect(screen.getByText('Acme')).toBeTruthy();
     expect(screen.getByText('55.5%')).toBeTruthy(); // handle_rate.toFixed(1)
     expect(screen.getByText('Category mix over time')).toBeTruthy();
+  });
+
+  it('distinguishes sources with ingestion errors from sources without errors', async () => {
+    resolveAll();
+    apiMock.fetchSourceQuality.mockResolvedValue([
+      {
+        source_name: 'Failing feed',
+        total: 40,
+        skip_rate: 10,
+        save_rate: 20,
+        handle_rate: 50,
+        error_rate: 3,
+      },
+      {
+        source_name: 'Healthy feed',
+        total: 20,
+        skip_rate: 5,
+        save_rate: 25,
+        handle_rate: 60,
+        error_rate: 0,
+      },
+    ]);
+    renderPage(<StatsPage />);
+
+    const failingRow = await screen.findByRole('row', { name: /failing feed/i });
+    const healthyRow = screen.getByRole('row', { name: /healthy feed/i });
+    expect(within(failingRow).getByRole('cell', { name: '3%' })).toBeTruthy();
+    expect(within(failingRow).queryByRole('cell', { name: '—' })).toBeNull();
+    expect(within(healthyRow).getByRole('cell', { name: '—' })).toBeTruthy();
+    expect(within(healthyRow).queryByRole('cell', { name: '0%' })).toBeNull();
   });
 
   it('surfaces an error message when a fetch fails', async () => {

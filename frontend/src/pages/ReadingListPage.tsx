@@ -472,19 +472,19 @@ export function ReadingListPage() {
 
       <div className="px-4 md:px-5 pb-3 flex flex-col gap-2 sm:flex-row sm:items-center">
         <div className="relative w-full max-w-xl">
-          <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+          <Search className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
           <input
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search saved links"
-            className="h-9 w-full rounded-md border border-border bg-surface pl-9 pr-9 text-sm outline-none focus:border-border-strong"
+            className="h-9 w-full rounded-md border border-border bg-surface ps-9 pe-9 text-sm outline-none focus:border-border-strong"
           />
           {searchQuery ? (
             <button
               type="button"
               aria-label="Clear search"
               onClick={() => setSearchQuery('')}
-              className="absolute right-2 top-1/2 rounded-sm p-1 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+              className="absolute end-2 top-1/2 rounded-sm p-1 -translate-y-1/2 text-muted-foreground hover:text-foreground"
             >
               <X className="size-4" strokeWidth={1.75} />
             </button>

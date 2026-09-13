@@ -220,7 +220,7 @@ export function ArticlePage() {
           <div className="mx-auto max-w-2xl flex h-12 items-center px-3">
             <button
               onClick={goBack}
-              className="inline-flex items-center gap-1 px-2 py-1 -ml-1 rounded-md text-sm text-muted-foreground hover:text-foreground hover:bg-surface"
+              className="inline-flex items-center gap-1 px-2 py-1 -ms-1 rounded-md text-sm text-muted-foreground hover:text-foreground hover:bg-surface"
             >
               <ArrowLeft className="size-4" /> Back
             </button>
@@ -297,7 +297,7 @@ export function ArticlePage() {
             <ArticlePerspectives articleId={String(article.id)} />
 
             {/* Why this matters */}
-            <div className="mt-4 rounded-lg border-l-2 border-accent bg-surface/60 px-4 py-3">
+            <div className="mt-4 rounded-lg border-s-2 border-accent bg-surface/60 px-4 py-3">
               <div className="text-[10px] font-medium uppercase tracking-wider text-subtle mb-1">
                 Why this matters
               </div>

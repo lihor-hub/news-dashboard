@@ -253,7 +253,7 @@ export function TopicMapPage() {
                 key={article.id}
                 type="button"
                 onClick={() => handleArticleClick(article.id)}
-                className="group flex flex-col items-start gap-0.5 rounded-lg bg-surface-2 px-3 py-2.5 text-left transition-colors hover:bg-surface-3"
+                className="group flex flex-col items-start gap-0.5 rounded-lg bg-surface-2 px-3 py-2.5 text-start transition-colors hover:bg-surface-3"
               >
                 <span className="text-xs font-medium group-hover:text-primary">
                   {article.title}
