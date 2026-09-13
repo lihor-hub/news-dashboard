@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Verify local BuildKit OCI output; retain small, digest-checked evidence only.
-set -euo pipefail
+set -Eeuo pipefail
+trap 'printf "OCI verification failed at line %s: %s\n" "$LINENO" "$BASH_COMMAND" >&2' ERR
 archive=${1:?Usage: verify-oci-attestations.sh ARCHIVE INDEX_DIGEST OUTPUT_DIR}
 index_digest=${2:?Missing index digest}
 output=${3:?Missing output directory}
@@ -11,12 +12,16 @@ blob() {
   [[ "$digest" =~ ^sha256:[a-f0-9]{64}$ ]] || return 1
   tar -xOf "$archive" "blobs/sha256/${digest#sha256:}" > "$destination"
   actual=$(shasum -a 256 "$destination")
-  [[ "${actual%% *}" == "${digest#sha256:}" ]]
+  if [[ "${actual%% *}" != "${digest#sha256:}" ]]; then
+    printf 'Digest mismatch for %s: expected %s, got %s\n' "$destination" "$digest" "${actual%% *}" >&2
+    return 1
+  fi
 }
 
 blob "$index_digest" "$output/image-index.json"
 bash "$(dirname "$0")/resolve-image-platforms.sh" "$output/image-index.json" > "$output/platforms.txt"
 for architecture in amd64 arm64; do
+  printf 'Verifying %s child and attestations\n' "$architecture"
   child=$(jq -er --arg arch "$architecture" '.manifests[] | select(.platform.os == "linux" and .platform.architecture == $arch) | .digest' "$output/image-index.json")
   blob "$child" "$output/$architecture-manifest.json"
   attestation=$(jq -er --arg child "$child" '
@@ -25,6 +30,7 @@ for architecture in amd64 arm64; do
   ' "$output/image-index.json")
   blob "$attestation" "$output/$architecture-attestation.json"
   for predicate in sbom provenance; do
+    printf 'Verifying %s %s statement\n' "$architecture" "$predicate"
     layer=$(jq -er --arg predicate "$predicate" '
       [.layers[] | select(
         if $predicate == "sbom" then .annotations["in-toto.io/predicate-type"] == "https://spdx.dev/Document"
