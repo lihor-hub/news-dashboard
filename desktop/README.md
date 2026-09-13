@@ -23,21 +23,23 @@ running via `npm start` (i.e., when the app is not packaged).
 ```bash
 cd desktop
 npm install
-npm run build:mac    # produces a universal .dmg in dist/
-npm run build:linux  # produces an x64 .AppImage in dist/
-npm run build:win    # produces an x64 NSIS .exe in dist/
+npm run build:mac    # produces a universal DMG and ZIP update payload in dist/
+npm run build:linux  # produces dist/news-dashboard-{version}-x64.AppImage
+npm run build:win    # produces dist/news-dashboard-{version}-x64.exe
 ```
 
 ## CI
 
-The release workflow `.github/workflows/release.yml` builds the universal
-macOS DMG and publishes it with update metadata as a GitHub Release tagged
-`desktop-v{version}`. Linux and Windows targets are available for local builds;
-the release workflow currently publishes macOS only.
+`.github/workflows/release.yml` builds macOS, Linux, and Windows after a new
+application release tag is created. A single publishing job waits for all three
+builds, then creates `desktop-v{version}` with the installers, update manifests
+(`latest-mac.yml`, `latest-linux.yml`, and `latest.yml`), and update payloads.
+Missing required artifacts fail the build before publication.
 
-`.github/workflows/desktop.yml` provides manual `workflow_dispatch` builds.
-It uploads the DMG and update metadata as workflow artifacts without creating
-a release.
+`.github/workflows/desktop.yml` runs the same platform matrix on manual
+`workflow_dispatch`. It uploads versioned workflow artifacts for seven days
+and does not publish a GitHub Release. Both workflows inject the tag-derived
+version and run desktop unit tests before packaging.
 
 ## Architecture
 

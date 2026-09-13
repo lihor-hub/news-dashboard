@@ -33,17 +33,30 @@ class TestManualAppWorkflows(unittest.TestCase):
             if expected_call not in workflow:
                 self.fail(f"{path.relative_to(ROOT)} is missing {expected_call}")
 
-    def test_manual_desktop_build_never_publishes_and_uploads_update_manifest(self) -> None:
-        workflow = DESKTOP.read_text()
+    def test_desktop_workflows_build_all_platforms_and_collect_updates(self) -> None:
+        for path in (DESKTOP, RELEASE):
+            workflow = path.read_text()
+            for expected in (
+                "os: macos-latest",
+                "platform: mac",
+                "os: ubuntu-latest",
+                "platform: linux",
+                "os: windows-latest",
+                "platform: win",
+                "shell: bash",
+                "--publish never",
+                "scripts/collect_desktop_assets.sh",
+                "if-no-files-found: error",
+            ):
+                if expected not in workflow:
+                    self.fail(f"{path.name} is missing {expected}")
 
-        for expected in (
-            "npm run build:mac -- --publish never",
-            'find desktop/dist -name "latest-mac.yml"',
-            "steps.dmg.outputs.manifest",
-            "latest-mac-v${{ steps.version.outputs.version }}-manual",
-        ):
-            if expected not in workflow:
-                self.fail(f"{DESKTOP.relative_to(ROOT)} is missing {expected}")
+    def test_release_publishes_once_after_all_desktop_builds(self) -> None:
+        workflow = RELEASE.read_text()
+        if "needs: [release, desktop]" not in workflow:
+            self.fail("Desktop release must await all matrix builds")
+        if workflow.count('gh release create "desktop-v$V"') != 1:
+            self.fail("Desktop release must be created exactly once")
 
     def test_manual_artifacts_include_computed_version(self) -> None:
         expected_names = {
@@ -51,7 +64,12 @@ class TestManualAppWorkflows(unittest.TestCase):
                 "news-dashboard-android-v${VERSION}-manual-${{ github.run_number }}.apk",
                 "news-dashboard-apk-v${{ steps.version.outputs.version }}-manual",
             ),
-            DESKTOP: ("news-dashboard-dmg-v${{ steps.version.outputs.version }}-manual",),
+            DESKTOP: (
+                (
+                    "news-dashboard-desktop-${{ matrix.platform }}-v"
+                    "${{ steps.version.outputs.version }}-manual"
+                ),
+            ),
         }
 
         for path, expected_parts in expected_names.items():

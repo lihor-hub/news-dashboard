@@ -7,21 +7,30 @@ instance and does not offer a server-address setting.
 
 ## What you need
 
-- A Mac with an Intel or Apple Silicon processor for the published universal build
+- macOS on Intel or Apple Silicon, Linux x64, or Windows x64
 - Network access to [news.lihor.ro](https://news.lihor.ro)
 - A News Dashboard account; see [Create a web account](create-web-account.md)
 
-Linux and Windows packaging targets are available for local builds, as described
-below. The current published desktop release provides a macOS installer only.
+New desktop releases include installers for all three operating systems. Older releases may contain only the macOS installer;
+check the selected release’s assets.
 
 ## Where to get the build
 
 1. Open the [GitHub Releases page](https://github.com/lihor-hub/news-dashboard/releases).
 2. Find the newest **Desktop App** release, tagged `desktop-v{version}`.
    Android and server releases are separate.
-3. Under **Assets**, download the universal `.dmg` installer.
+3. Under **Assets**, download the installer for your operating system:
 
-For example, [Desktop App v1.171.0](https://github.com/lihor-hub/news-dashboard/releases/tag/desktop-v1.171.0)
+| Operating system | Installer |
+|------------------|-----------|
+| macOS (Intel and Apple Silicon) | `news-dashboard-<version>-universal.dmg` |
+| Linux x64 | `news-dashboard-<version>-x64.AppImage` |
+| Windows x64 | `news-dashboard-<version>-x64.exe` |
+
+The accompanying ZIP, YAML manifests (`latest-mac.yml`, `latest-linux.yml`,
+and `latest.yml`), and blockmaps support updates; they are not separate installers.
+
+For an older example, [Desktop App v1.171.0](https://github.com/lihor-hub/news-dashboard/releases/tag/desktop-v1.171.0)
 provides `News.Dashboard-1.171.0-universal.dmg`. Its other asset,
 `latest-mac.yml`, is update metadata, not an installer. That release has no
 Linux AppImage or Windows installer.
@@ -51,19 +60,17 @@ This command applies only to that installed app. Open it again afterward.
 
 ### Linux
 
-There is currently no published Linux installer. Build the x64 AppImage using
-the [desktop build instructions](https://github.com/lihor-hub/news-dashboard/blob/main/desktop/README.md).
-Make the resulting `.AppImage` executable using its file properties or
-`chmod +x`, then run it. The local build uses the name
-`News Dashboard-<version>.AppImage` in `desktop/dist/`.
+1. Download the `.AppImage` for Linux x64.
+2. Make it executable in the file’s properties, or run `chmod +x` followed by
+   the downloaded filename in a terminal.
+3. Open the AppImage to launch News Dashboard.
 
 ### Windows
 
-There is currently no published Windows installer. Use the
-[desktop build instructions](https://github.com/lihor-hub/news-dashboard/blob/main/desktop/README.md)
-to produce the x64 NSIS installer, `News Dashboard Setup <version>.exe`, in
-`desktop/dist/`. Open it and follow the installation wizard, choosing an
-installation directory when prompted.
+Download the x64 `.exe` installer, open it, and follow the installation wizard.
+You can choose the installation directory when prompted. The installer is
+unsigned, so Windows may display an unknown-publisher warning; confirm that
+it came from the project’s GitHub release before continuing.
 
 ## Verifying the installation
 
@@ -81,8 +88,8 @@ then **Restart and install** when the download finishes.
 
 If the updater fails, quit the app and install the newest desktop release over
 the existing installation. On macOS, download its `.dmg` and replace the copy in
-Applications. Local Linux and Windows builds can be updated by rebuilding and
-installing the resulting package.
+Applications. On Linux, replace the old AppImage with the new one and make it
+executable. On Windows, run the new installer.
 
 ## Troubleshooting
 
@@ -91,7 +98,7 @@ installing the resulting package.
 | macOS blocks the app | Follow the unsigned-build steps above for the copy downloaded from the project release. |
 | Blank window or site does not load | Check your network and open news.lihor.ro in a browser to confirm the server is reachable. |
 | Update check or download fails | Choose **Try again** in Updates, or download and install the latest desktop release manually. |
-| No installer for your operating system | Current published builds are macOS only; use the local build instructions for Linux or Windows. |
+| No installer for your operating system | Older releases may be macOS-only. Check a newer Desktop App release for Linux x64 or Windows x64 assets, or use the local build instructions. |
 | You want to connect to a self-hosted server | Use that server in your browser. The published desktop app connects to news.lihor.ro. |
 
 ## Building the app yourself

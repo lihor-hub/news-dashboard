@@ -13,7 +13,7 @@ name: Release
 #
 # Job graph (push to main):
 #   release  →  android            (ubuntu)
-#            ↘  desktop            (macos)
+#            ↘  desktop            (macos + linux + windows) → desktop-publish
 #            ↘  sync-version-files (self-hosted)
 # android / desktop / sync-version-files run only when a new tag was created.
 # sync-version-files opens a rolling PR so the committed VERSION,
@@ -212,85 +212,96 @@ jobs:
           path: ${{ steps.apk.outputs.path }}
           retention-days: 30
 
-  # ── 2b. Build Desktop DMG ────────────────────────────────────────────────────
+  # ── 2b. Build every desktop platform, then publish one complete release ────
 
   desktop:
-    name: Desktop DMG
+    name: Desktop (${{ matrix.platform }})
     needs: release
     if: needs.release.outputs.released == 'true'
-    runs-on: macos-latest
-
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            platform: mac
+          - os: ubuntu-latest
+            platform: linux
+          - os: windows-latest
+            platform: win
+    defaults:
+      run:
+        shell: bash
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: ${{ needs.release.outputs.tag }}
-
-      - name: Inject version (not committed — only for this build)
+      - name: Inject version (build only)
         env:
           VERSION: ${{ needs.release.outputs.version }}
         run: bash scripts/inject_app_version.sh desktop
-
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
-          node-version: '20'
-          cache: 'npm'
+          node-version: '26'
+          cache: npm
           cache-dependency-path: desktop/package-lock.json
-
       - name: Install dependencies
         working-directory: desktop
         run: npm ci
-
-      - name: Build universal DMG
+      - name: Test desktop helpers
         working-directory: desktop
-        # --publish never: prevent electron-builder from trying to push to
-        # GitHub itself (it reads the publish: config and demands GH_TOKEN in
-        # CI).  The manifest files (latest-mac.yml) are still written to dist/
-        # and uploaded manually by the "Create GitHub Release" step below.
-        run: npm run build:mac -- --publish never
+        run: npm test
+      - name: Build installer and update payloads
+        working-directory: desktop
+        run: npm run build:${{ matrix.platform }} -- --publish never
+      - name: Collect required installers and update metadata
+        run: bash scripts/collect_desktop_assets.sh "${{ matrix.platform }}"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: desktop-release-${{ matrix.platform }}
+          path: desktop/dist/release-assets/*
+          if-no-files-found: error
+          retention-days: 7
 
-      - name: Find DMG and update manifest
-        id: dmg
+  desktop-publish:
+    name: Publish desktop release
+    needs: [release, desktop]
+    if: needs.release.outputs.released == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ needs.release.outputs.tag }}
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          pattern: desktop-release-*
+          path: desktop-release
+          merge-multiple: true
+      - name: Verify all platforms before publishing
         run: |
-          DMG=$(find desktop/dist -name "*.dmg" | head -1)
-          echo "path=$DMG" >> "$GITHUB_OUTPUT"
-          ls -lh "$DMG"
-          # electron-builder generates latest-mac.yml alongside the DMG.
-          # electron-updater fetches this file to discover new versions.
-          MANIFEST=$(find desktop/dist -name "latest-mac.yml" | head -1)
-          echo "manifest=$MANIFEST" >> "$GITHUB_OUTPUT"
-
+          for platform in mac linux win; do
+            bash scripts/collect_desktop_assets.sh "$platform" desktop-release desktop-verified
+          done
       - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.release.outputs.version }}
           CHANGELOG: ${{ needs.release.outputs.notes }}
+          RELEASE_TAG: ${{ needs.release.outputs.tag }}
         run: |
-          V="${{ needs.release.outputs.version }}"
-          NOTES="Unsigned macOS DMG (universal — Intel + Apple Silicon).
-
-          First launch: right-click News Dashboard.app in Finder → Open → Open
-          Or in Terminal: xattr -cr \"/Applications/News Dashboard.app\"
-
-          Built from ${{ needs.release.outputs.tag }}."
-          if [ -n "$CHANGELOG" ]; then
-            NOTES="## What's new
-
-          $CHANGELOG
-
-          ---
-          $NOTES"
-          fi
-
-          ASSETS=("${{ steps.dmg.outputs.path }}")
-          MANIFEST="${{ steps.dmg.outputs.manifest }}"
-          if [ -n "$MANIFEST" ] && [ -f "$MANIFEST" ]; then
-            ASSETS+=("$MANIFEST")
-          fi
-
-          gh release create "desktop-v$V" \
-            "${ASSETS[@]}" \
-            --title "Desktop App v$V" \
-            --notes "$NOTES" \
-            --latest
+          V="$VERSION"
+          {
+            if [ -n "$CHANGELOG" ]; then
+              printf '## What is new\n\n%s\n\n' "$CHANGELOG"
+            fi
+            printf 'Unsigned desktop installers: macOS universal DMG, Linux x64 AppImage, and Windows x64 NSIS installer.\n\n'
+            printf 'macOS first launch: right-click News Dashboard.app in Finder, then Open.\n'
+            printf 'Built from %s.\n' "$RELEASE_TAG"
+          } > desktop-notes.md
+          ASSETS=(desktop-verified/*)
+          gh release create "desktop-v$V" "${ASSETS[@]}" \
+            --target "$(git rev-parse HEAD)" \
+            --title "Desktop App v$V" --notes-file desktop-notes.md --latest
 
   # ── 2c. Catch the committed version files up with the new tag ────────────────
   #
