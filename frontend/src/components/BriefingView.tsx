@@ -278,8 +278,8 @@ export function BriefingView({
                           <div
                             className={`rounded-lg p-2.5 text-xs leading-relaxed ${
                               isAlex
-                                ? 'bg-muted text-foreground rounded-tl-none border border-border/30'
-                                : 'bg-primary/10 text-foreground rounded-tr-none border border-primary/20'
+                                ? 'bg-muted text-foreground rounded-ss-none border border-border/30'
+                                : 'bg-primary/10 text-foreground rounded-se-none border border-primary/20'
                             }`}
                           >
                             <span className="font-semibold block mb-0.5 text-[9px] uppercase tracking-wider text-muted-foreground">
