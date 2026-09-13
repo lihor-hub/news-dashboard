@@ -595,9 +595,17 @@ Use the [chart README](../helm/news-dashboard/README.md) for prerequisites, a
 minimal installation, and the values reference. The following flow upgrades
 the repository-specific production deployment.
 
+Use the published OCI chart pinned to an application release version (without
+its `v` prefix). The chart package uses the corresponding commit-SHA image by
+default; production still requires `image.digest` as shown below. See the
+[chart versioning policy](../helm/news-dashboard/README.md#versioning-policy).
+To deploy the chart from your checkout, replace the OCI reference and
+`--version` with `./helm/news-dashboard`.
+
 ```bash
 (
 set -euo pipefail
+CHART_VERSION="${CHART_VERSION:?set CHART_VERSION to the published chart version}"
 IMAGE_DIGEST="${IMAGE_DIGEST:?set IMAGE_DIGEST to sha256:<64 lowercase hex>}"
 # 1. Deploy the exact published image manifest
 : "${SESSION_SECRET:?set SESSION_SECRET}"
@@ -607,7 +615,8 @@ source ./scripts/production-deploy-lib.sh
 production_cutover_enabled || { echo "Ingress cutover is not enabled" >&2; exit 2; }
 prepare_production_helm_secret_files
 
-helm upgrade news-dashboard ./helm/news-dashboard \
+helm upgrade news-dashboard oci://ghcr.io/lihor-hub/charts/news-dashboard \
+  --version "$CHART_VERSION" \
   --namespace news-dashboard --create-namespace \
   --values ./helm/news-dashboard/values-production.yaml \
   --set-string image.digest="${IMAGE_DIGEST}" \

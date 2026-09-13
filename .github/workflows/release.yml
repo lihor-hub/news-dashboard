@@ -14,8 +14,9 @@ name: Release
 # Job graph (push to main):
 #   release  →  android            (ubuntu)
 #            ↘  desktop            (macos + linux + windows) → desktop-publish
+#            ↘  helm               (OCI chart after image publication)
 #            ↘  sync-version-files (self-hosted)
-# android / desktop / sync-version-files run only when a new tag was created.
+# android / desktop / helm / sync-version-files run only when a new tag was created.
 # sync-version-files opens a rolling PR so the committed VERSION,
 # pyproject.toml, and CHANGELOG.md catch up with the tag through the normal
 # merge queue — it never pushes main and never queues its own merge.
@@ -304,6 +305,47 @@ jobs:
           gh release create "desktop-v$V" "${ASSETS[@]}" \
             --target "$(git rev-parse HEAD)" \
             --title "Desktop App v$V" --notes-file desktop-notes.md --latest
+
+  # The image is published by CI independently; never release a chart pointing
+  # at an image that has not completed that pipeline.
+  helm:
+    name: Publish Helm chart
+    needs: release
+    if: needs.release.outputs.released == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ needs.release.outputs.tag }}
+      - uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5
+        with:
+          version: latest
+      - name: Verify chart release contracts
+        run: python3 -m unittest scripts.test_helm_release
+      - name: Resolve exact release image
+        run: echo "IMAGE_TAG=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+      - name: Authenticate to the container and chart registry
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          printf '%s' "$GH_TOKEN" | docker login ghcr.io --username "${{ github.actor }}" --password-stdin
+          printf '%s' "$GH_TOKEN" | helm registry login ghcr.io --username "${{ github.actor }}" --password-stdin
+      - name: Wait for CI to publish the release image
+        run: bash scripts/wait_for_release_image.sh "ghcr.io/${{ github.repository }}:$IMAGE_TAG"
+      - name: Inject chart and application version
+        env:
+          VERSION: ${{ needs.release.outputs.version }}
+        run: bash scripts/inject_app_version.sh helm
+      - name: Package and publish the versioned chart
+        env:
+          VERSION: ${{ needs.release.outputs.version }}
+        run: |
+          helm package ./helm/news-dashboard --destination ./chart-dist
+          helm push "./chart-dist/news-dashboard-$VERSION.tgz" "oci://ghcr.io/${{ github.repository_owner }}/charts"
 
   # ── 2c. Catch the committed version files up with the new tag ────────────────
   #
