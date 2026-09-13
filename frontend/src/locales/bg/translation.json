@@ -251,5 +251,41 @@
       "regenerate": "Генерирайте отново",
       "slideLabel": "Слайд {{number}}"
     }
+  },
+  "theme": {
+    "label": "Theme",
+    "options": {
+      "light": "Light",
+      "system": "System",
+      "dark": "Dark"
+    }
+  },
+  "shortcuts": {
+    "title": "Keyboard shortcuts",
+    "sections": {
+      "navigation": "Navigation",
+      "articleActions": "Article actions",
+      "app": "App"
+    },
+    "navigation": {
+      "move": "Move down / up in list",
+      "open": "Open selected article",
+      "briefToday": "Go to Brief / Today",
+      "laterStarred": "Go to Later / Starred",
+      "askFeeds": "Go to Ask / Feeds",
+      "history": "Go to Briefing History"
+    },
+    "articleActions": {
+      "done": "Mark Done",
+      "later": "Send to Later",
+      "star": "Star / Unstar",
+      "skip": "Skip (unless Starred)",
+      "archive": "Archive",
+      "openOriginal": "Open original externally"
+    },
+    "app": {
+      "commandPalette": "Command palette",
+      "showOverlay": "Show this overlay"
+    }
   }
 }
