@@ -552,6 +552,10 @@ docker compose -f docker-compose.prod.yml run --rm news-dashboard news-dashboard
 
 ### Kubernetes (Helm)
 
+Use the [chart README](../helm/news-dashboard/README.md) for prerequisites, a
+minimal installation, and the values reference. The following flow upgrades
+the repository-specific production deployment.
+
 ```bash
 (
 set -euo pipefail
@@ -579,15 +583,8 @@ kubectl -n news-dashboard rollout status deployment/news-dashboard
 )
 ```
 
-The `app.config` values in `helm/news-dashboard/values.yaml` expose the
-optional runtime env vars above as structured chart values instead of a
-manifest overlay: `app.config.metricsEnabled` (`METRICS_ENABLED`),
-`app.config.enableApiDocs` (`ENABLE_API_DOCS`),
-`app.config.analyticsRetentionDays` (`ANALYTICS_RETENTION_DAYS`), and
-`app.config.corsOrigins` (`CORS_ORIGINS`). All default to off/unset, matching
-the app's own defaults. Sentry DSNs and other secret-bearing values are
-supplied via `app.sentry.existingSecret` (a pre-existing Secret), never
-committed to `values.yaml`.
+See the [chart values reference](../helm/news-dashboard/README.md#values-reference)
+for structured runtime configuration and Secret references.
 
 The optional Dify iframe assistant is configured separately under `app.dify`: set
 `app.dify.enabled`, `app.dify.baseUrl`, and `app.dify.title`, and provide the
