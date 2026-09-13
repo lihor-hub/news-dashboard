@@ -165,12 +165,12 @@ export function commandNavigationItemsFor(isAdmin: boolean): NavigationItem[] {
 }
 
 export const navigationShortcutRows: [string, string][] = [
-  ['j / k', 'Move down / up in list'],
-  ['Enter', 'Open selected article'],
-  ['g b / g t', 'Go to Brief / Today'],
-  ['g l / g s', 'Go to Later / Starred'],
-  ['g a / g f', 'Go to Ask / Feeds'],
-  ['g h', 'Go to Briefing History'],
+  ['j / k', 'shortcuts.navigation.move'],
+  ['Enter', 'shortcuts.navigation.open'],
+  ['g b / g t', 'shortcuts.navigation.briefToday'],
+  ['g l / g s', 'shortcuts.navigation.laterStarred'],
+  ['g a / g f', 'shortcuts.navigation.askFeeds'],
+  ['g h', 'shortcuts.navigation.history'],
 ];
 
 const shortcutTargets = new Map(
