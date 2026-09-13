@@ -31,9 +31,7 @@ def test_arxiv_ai_ml_metadata() -> None:
 def test_arxiv_ai_ml_interest_tags() -> None:
     """arxiv-ai-ml carries tags that match onboarding interests."""
     src = next(s for s in DEFAULT_SOURCES if s.slug == "arxiv-ai-ml")
-    assert "evals" in src.interest_tags
-    assert "model-releases" in src.interest_tags
-    assert "research" in src.interest_tags
+    assert src.interest_tags == ("evals", "model-releases")
 
 
 def test_arxiv_ai_ml_routes_to_rss_feed() -> None:

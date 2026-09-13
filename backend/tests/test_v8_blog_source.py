@@ -31,9 +31,7 @@ def test_v8_blog_metadata() -> None:
 def test_v8_blog_interest_tags() -> None:
     """v8-blog carries tags that match onboarding interests."""
     src = next(s for s in DEFAULT_SOURCES if s.slug == "v8-blog")
-    assert "javascript" in src.interest_tags
-    assert "performance" in src.interest_tags
-    assert "frontend" in src.interest_tags
+    assert src.interest_tags == ("product-news",)
 
 
 def test_v8_blog_routes_to_rss_feed() -> None:

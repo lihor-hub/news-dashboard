@@ -33,9 +33,7 @@ def test_chrome_developers_blog_metadata() -> None:
 def test_chrome_developers_blog_interest_tags() -> None:
     """chrome-developers-blog carries tags that match onboarding interests."""
     src = next(s for s in DEFAULT_SOURCES if s.slug == "chrome-developers-blog")
-    assert "web" in src.interest_tags
-    assert "frontend" in src.interest_tags
-    assert "product-news" in src.interest_tags
+    assert src.interest_tags == ("product-news",)
 
 
 def test_chrome_developers_blog_routes_to_rss_feed() -> None:

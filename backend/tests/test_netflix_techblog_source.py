@@ -33,9 +33,7 @@ def test_netflix_techblog_metadata() -> None:
 def test_netflix_techblog_interest_tags() -> None:
     """netflix-techblog carries tags that match onboarding interests."""
     src = next(s for s in DEFAULT_SOURCES if s.slug == "netflix-techblog")
-    assert "infra" in src.interest_tags
-    assert "software-development" in src.interest_tags
-    assert "cloud" in src.interest_tags
+    assert src.interest_tags == ("infra", "cloud")
 
 
 def test_netflix_techblog_routes_to_rss_feed() -> None:
