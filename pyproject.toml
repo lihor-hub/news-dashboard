@@ -37,7 +37,7 @@ dependencies = [
   "jinja2>=3.1.6",
   "a2a-sdk[http-server]>=1.1.2",
   "fastmcp>=3.4.7",
-  "mcp<2",
+  "mcp<3",
 ]
 
 [project.optional-dependencies]
