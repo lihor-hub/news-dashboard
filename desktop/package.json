@@ -15,7 +15,7 @@
     "build:win": "electron-builder --win"
   },
   "devDependencies": {
-    "electron": "^44.4.2",
+    "electron": "^44.4.5",
     "electron-builder": "^26.15.3"
   },
   "dependencies": {
