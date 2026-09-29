@@ -473,6 +473,14 @@ describe('scheduler endpoints', () => {
 });
 
 describe('stats endpoints', () => {
+  it('fetchDatasetStats sends the selected range', async () => {
+    const payload = { summary: { article_count: 12 }, trend: [] };
+    const { calls } = stubFetch(() => jsonOk(payload));
+
+    expect(await api.fetchDatasetStats('1y')).toEqual(payload);
+    expect(calls[0].url).toBe('/api/stats/dataset?range=1y');
+  });
+
   it('fetchStatsOverview passes from/to', async () => {
     const { calls } = stubFetch(() => jsonOk({ total: 1 }));
     await api.fetchStatsOverview('2026-01-01', '2026-02-01');

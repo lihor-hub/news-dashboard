@@ -8,6 +8,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 // ── Shared API mock ──────────────────────────────────────────────────────────
 // StatsPage / FeedsRunsPage import from '../api'; SettingsPage from '@/api'.
 const apiMock = vi.hoisted(() => ({
+  fetchDatasetStats: vi.fn(),
   fetchArticleCounts: vi.fn(),
   fetchTriageMetrics: vi.fn(),
   fetchIngestedVsHandled: vi.fn(),
@@ -100,8 +101,35 @@ describe('StatsPage', () => {
     avg_triage_hours: 2,
     save_rate: 25,
   };
+  const dataset = {
+    summary: {
+      article_count: 1234,
+      oldest_discovered_at: '2025-01-01T00:00:00+00:00',
+      newest_discovered_at: '2026-09-29T00:00:00+00:00',
+      coverage_days: 636,
+    },
+    storage: {
+      database_bytes: 10485760,
+      article_heap_bytes: 1048576,
+      article_auxiliary_bytes: 524288,
+      article_index_bytes: 262144,
+      article_total_bytes: 1835008,
+      median_article_bytes: 2048,
+      amortized_article_bytes: 1487,
+    },
+    trend: [{ bucket: '2026-09-29', articles: 12 }],
+    trend_granularity: 'day',
+    retention_preview: {
+      enabled: false,
+      retention_days: null,
+      eligible_articles: 0,
+      protected_articles: 0,
+      estimated_payload_bytes: 0,
+    },
+  };
 
   function resolveAll() {
+    apiMock.fetchDatasetStats.mockResolvedValue(dataset);
     apiMock.fetchArticleCounts.mockResolvedValue(counts);
     apiMock.fetchTriageMetrics.mockResolvedValue(triage);
     apiMock.fetchIngestedVsHandled.mockResolvedValue([
@@ -121,6 +149,7 @@ describe('StatsPage', () => {
   }
 
   it('shows a loading placeholder before data resolves', () => {
+    apiMock.fetchDatasetStats.mockReturnValue(new Promise(vi.fn()));
     apiMock.fetchArticleCounts.mockReturnValue(new Promise(vi.fn()));
     apiMock.fetchTriageMetrics.mockReturnValue(new Promise(vi.fn()));
     apiMock.fetchIngestedVsHandled.mockReturnValue(new Promise(vi.fn()));
@@ -129,6 +158,56 @@ describe('StatsPage', () => {
     renderPage(<StatsPage />);
     expect(screen.getByRole('heading', { name: 'Stats' })).toBeTruthy();
     expect(screen.getByText('Loading…')).toBeTruthy();
+  });
+
+  it('renders dataset coverage and PostgreSQL storage metrics', async () => {
+    resolveAll();
+
+    renderPage(<StatsPage />);
+
+    expect(await screen.findByRole('heading', { name: 'Dataset' })).toBeTruthy();
+    expect(screen.getByText('1,234')).toBeTruthy();
+    expect(screen.getByText('636 days')).toBeTruthy();
+    expect(screen.getByText('10 MB')).toBeTruthy();
+    expect(screen.getByText('2 KB')).toBeTruthy();
+    expect(screen.getByText('Space from deleted rows is reused by PostgreSQL')).toBeTruthy();
+  });
+
+  it('reloads dataset growth when the range changes', async () => {
+    resolveAll();
+    renderPage(<StatsPage />);
+    await screen.findByRole('heading', { name: 'Dataset' });
+
+    fireEvent.click(screen.getByRole('button', { name: '1 year' }));
+
+    await waitFor(() => expect(apiMock.fetchDatasetStats).toHaveBeenLastCalledWith('1y'));
+  });
+
+  it('shows an empty dataset date state', async () => {
+    resolveAll();
+    apiMock.fetchDatasetStats.mockResolvedValue({
+      ...dataset,
+      summary: {
+        article_count: 0,
+        oldest_discovered_at: null,
+        newest_discovered_at: null,
+        coverage_days: 0,
+      },
+    });
+
+    renderPage(<StatsPage />);
+
+    expect(await screen.findByText('No articles yet')).toBeTruthy();
+  });
+
+  it('keeps existing stats visible when dataset loading fails', async () => {
+    resolveAll();
+    apiMock.fetchDatasetStats.mockRejectedValue(new Error('storage unavailable'));
+
+    renderPage(<StatsPage />);
+
+    expect(await screen.findByText('storage unavailable')).toBeTruthy();
+    expect(screen.getByText('15')).toBeTruthy();
   });
 
   it('renders counts, metrics, and source quality once loaded', async () => {

@@ -205,6 +205,37 @@ export interface ArticleCountsResult {
   archived: number;
 }
 
+export type DatasetRange = '30d' | '90d' | '1y' | 'all';
+
+export interface RetentionPreview {
+  enabled: boolean;
+  retention_days: number | null;
+  eligible_articles: number;
+  protected_articles: number;
+  estimated_payload_bytes: number;
+}
+
+export interface DatasetStats {
+  summary: {
+    article_count: number;
+    oldest_discovered_at: string | null;
+    newest_discovered_at: string | null;
+    coverage_days: number;
+  };
+  storage: {
+    database_bytes: number;
+    article_heap_bytes: number;
+    article_auxiliary_bytes: number;
+    article_index_bytes: number;
+    article_total_bytes: number;
+    median_article_bytes: number;
+    amortized_article_bytes: number;
+  };
+  trend: Array<{ bucket: string; articles: number }>;
+  trend_granularity: 'day' | 'week' | 'month';
+  retention_preview: RetentionPreview;
+}
+
 export interface TriageMetrics {
   articles_this_week: number;
   handled_rate: number;

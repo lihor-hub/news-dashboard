@@ -27,6 +27,7 @@ import type {
   SourceQualityRow,
   TriageMetrics,
 } from '../types';
+import { DatasetOverview } from '../components/stats/DatasetOverview';
 
 const CHART_COLORS = [
   'var(--color-chart-1)',
@@ -154,6 +155,8 @@ export function StatsPage() {
           {error}
         </div>
       )}
+
+      <DatasetOverview />
 
       {/* Row 1: status counts */}
       <section className="grid grid-cols-3 md:grid-cols-6 gap-2">

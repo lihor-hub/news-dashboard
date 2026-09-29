@@ -2,6 +2,8 @@ import type {
   ArticleCountsResult,
   ArticlesOverTimePoint,
   CategoryMixPoint,
+  DatasetRange,
+  DatasetStats,
   EmbeddingMapResponse,
   IngestedVsHandledPoint,
   KnowledgeGraphResponse,
@@ -15,6 +17,10 @@ import { requestJson } from './core';
 
 function statsParams(from: string, to: string): string {
   return new URLSearchParams({ from, to }).toString();
+}
+
+export async function fetchDatasetStats(range: DatasetRange): Promise<DatasetStats> {
+  return requestJson<DatasetStats>(`/api/stats/dataset?range=${range}`);
 }
 
 export async function fetchStatsOverview(from: string, to: string): Promise<StatsOverview> {
