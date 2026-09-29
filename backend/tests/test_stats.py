@@ -4,16 +4,87 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from news_dashboard.db import connect, init_db
+from news_dashboard.stats.models import DatasetRange
 from news_dashboard.stats.service import (
     article_counts,
     articles_over_time,
     category_mix,
+    dataset_stats,
     ingested_vs_handled,
     source_quality,
     sources_volume,
     stats_overview,
     triage_metrics,
 )
+
+
+def test_dataset_stats_empty_database_has_safe_zero_values(pg_clean: str) -> None:
+    result = dataset_stats(DatasetRange.THIRTY_DAYS, pg_clean)
+
+    assert result["summary"] == {
+        "article_count": 0,
+        "oldest_discovered_at": None,
+        "newest_discovered_at": None,
+        "coverage_days": 0,
+    }
+    assert result["storage"]["database_bytes"] > 0
+    assert result["storage"]["article_total_bytes"] > 0
+    assert result["storage"]["median_article_bytes"] == 0
+    assert result["storage"]["amortized_article_bytes"] == 0
+    assert len(result["trend"]) == 30
+    assert all(point["articles"] == 0 for point in result["trend"])
+
+
+def test_dataset_stats_reports_coverage_storage_and_daily_growth(pg_clean: str) -> None:
+    _insert_article(
+        pg_clean,
+        url="https://example.com/old",
+        source_name="Example",
+        discovered_at="2026-09-01T12:00:00+00:00",
+    )
+    _insert_article(
+        pg_clean,
+        url="https://example.com/new",
+        source_name="Example",
+        discovered_at="2026-09-03T12:00:00+00:00",
+    )
+
+    result = dataset_stats(
+        DatasetRange.THIRTY_DAYS,
+        pg_clean,
+        now=datetime(2026, 9, 4, 12, tzinfo=timezone.utc),
+    )
+
+    assert result["summary"]["article_count"] == 2
+    assert result["summary"]["oldest_discovered_at"] == "2026-09-01T12:00:00+00:00"
+    assert result["summary"]["newest_discovered_at"] == "2026-09-03T12:00:00+00:00"
+    assert result["summary"]["coverage_days"] == 2
+    assert result["storage"]["article_heap_bytes"] > 0
+    assert result["storage"]["article_index_bytes"] > 0
+    assert result["storage"]["median_article_bytes"] > 0
+    assert result["storage"]["amortized_article_bytes"] > 0
+    by_bucket = {point["bucket"]: point["articles"] for point in result["trend"]}
+    assert by_bucket["2026-09-01"] == 1
+    assert by_bucket["2026-09-02"] == 0
+    assert by_bucket["2026-09-03"] == 1
+
+
+def test_dataset_stats_uses_weekly_and_monthly_buckets(pg_clean: str) -> None:
+    yearly = dataset_stats(
+        DatasetRange.ONE_YEAR,
+        pg_clean,
+        now=datetime(2026, 9, 29, tzinfo=timezone.utc),
+    )
+    all_time = dataset_stats(
+        DatasetRange.ALL,
+        pg_clean,
+        now=datetime(2026, 9, 29, tzinfo=timezone.utc),
+    )
+
+    assert yearly["trend_granularity"] == "week"
+    assert len(yearly["trend"]) >= 52
+    assert all_time["trend_granularity"] == "month"
+    assert all_time["trend"] == []
 
 
 def _insert_run(
@@ -164,7 +235,7 @@ def test_sources_volume_orders_by_total_new_descending(tmp_path: Path) -> None:
 
 
 def _insert_article(  # noqa: PLR0913
-    db_path: Path,
+    db_path: Path | str,
     *,
     url: str,
     source_name: str,

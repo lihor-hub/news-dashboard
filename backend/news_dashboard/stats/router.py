@@ -18,10 +18,12 @@ from news_dashboard.db import describe_database, init_db
 from news_dashboard.scheduler.service import (
     get_next_ingest_at,
 )
+from news_dashboard.stats.models import DatasetRange
 from news_dashboard.stats.service import (
     article_counts,
     articles_over_time,
     category_mix,
+    dataset_stats,
     ingested_vs_handled,
     source_quality,
     sources_volume,
@@ -31,6 +33,13 @@ from news_dashboard.stats.service import (
 
 router = APIRouter()
 _admin_dep = [Depends(require_admin)]
+
+
+@router.get("/api/stats/dataset", dependencies=_admin_dep)
+def stats_dataset_endpoint(
+    range_key: Annotated[DatasetRange, Query(alias="range")] = DatasetRange.THIRTY_DAYS,
+) -> dict[str, Any]:
+    return dataset_stats(range_key)
 
 
 @router.get("/api/health/details", dependencies=_admin_dep)

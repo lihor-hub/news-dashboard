@@ -6,6 +6,149 @@ from pathlib import Path
 from typing import Any
 
 from news_dashboard.db import connect, init_db, placeholders, row_to_dict
+from news_dashboard.stats.models import DatasetRange
+
+
+def dataset_stats(
+    range_key: DatasetRange,
+    database_url: str | None = None,
+    *,
+    now: datetime | None = None,
+) -> dict[str, Any]:
+    """Return dataset coverage, PostgreSQL storage, and ingestion growth."""
+    current = now or datetime.now(timezone.utc)
+    init_db(database_url)
+    with connect(database_url) as conn:
+        summary = row_to_dict(
+            conn.execute(
+                """
+                SELECT COUNT(*) AS article_count,
+                       MIN(discovered_at) AS oldest_discovered_at,
+                       MAX(discovered_at) AS newest_discovered_at
+                FROM articles
+                """
+            ).fetchone()
+        )
+        storage = row_to_dict(
+            conn.execute(
+                """
+                SELECT pg_database_size(current_database()) AS database_bytes,
+                       pg_relation_size('articles'::regclass) AS article_heap_bytes,
+                       pg_table_size('articles'::regclass)
+                         - pg_relation_size('articles'::regclass) AS article_auxiliary_bytes,
+                       pg_indexes_size('articles'::regclass) AS article_index_bytes,
+                       pg_total_relation_size('articles'::regclass) AS article_total_bytes,
+                       COALESCE((
+                         SELECT percentile_cont(0.5) WITHIN GROUP
+                           (ORDER BY pg_column_size(article_row.*))
+                         FROM articles AS article_row
+                       ), 0)::BIGINT AS median_article_bytes
+                """
+            ).fetchone()
+        )
+        trend, granularity = _dataset_trend(conn, range_key, current)
+
+    article_count = _int_value(summary["article_count"])
+    oldest = summary["oldest_discovered_at"]
+    newest = summary["newest_discovered_at"]
+    coverage_days = 0
+    if oldest is not None and newest is not None:
+        coverage_days = (_coerce_datetime(newest).date() - _coerce_datetime(oldest).date()).days
+    total_bytes = _int_value(storage["article_total_bytes"])
+    return {
+        "summary": {
+            "article_count": article_count,
+            "oldest_discovered_at": _isoformat_or_none(oldest),
+            "newest_discovered_at": _isoformat_or_none(newest),
+            "coverage_days": coverage_days,
+        },
+        "storage": {
+            **{key: _int_value(value) for key, value in storage.items()},
+            "amortized_article_bytes": round(total_bytes / article_count) if article_count else 0,
+        },
+        "trend": trend,
+        "trend_granularity": granularity,
+        "retention_preview": {
+            "enabled": False,
+            "retention_days": None,
+            "eligible_articles": 0,
+            "protected_articles": 0,
+            "estimated_payload_bytes": 0,
+        },
+    }
+
+
+def _dataset_trend(
+    conn: Any, range_key: DatasetRange, now: datetime
+) -> tuple[list[dict[str, Any]], str]:
+    if range_key is DatasetRange.ALL:
+        rows = conn.execute(
+            """
+            WITH bounds AS (
+              SELECT date_trunc('month', MIN(discovered_at)) AS first_bucket
+              FROM articles
+            ), buckets AS (
+              SELECT generate_series(first_bucket, date_trunc('month', %s::timestamptz),
+                                     interval '1 month') AS bucket
+              FROM bounds WHERE first_bucket IS NOT NULL
+            ), counts AS (
+              SELECT date_trunc('month', discovered_at) AS bucket, COUNT(*) AS articles
+              FROM articles GROUP BY 1
+            )
+            SELECT buckets.bucket, COALESCE(counts.articles, 0) AS articles
+            FROM buckets LEFT JOIN counts USING (bucket) ORDER BY buckets.bucket
+            """,
+            (now,),
+        ).fetchall()
+        granularity = "month"
+    elif range_key is DatasetRange.ONE_YEAR:
+        rows = conn.execute(
+            """
+            WITH buckets AS (
+              SELECT generate_series(date_trunc('week', %s::timestamptz) - interval '51 weeks',
+                                     date_trunc('week', %s::timestamptz),
+                                     interval '1 week') AS bucket
+            ), counts AS (
+              SELECT date_trunc('week', discovered_at) AS bucket, COUNT(*) AS articles
+              FROM articles
+              WHERE discovered_at >= date_trunc('week', %s::timestamptz) - interval '51 weeks'
+              GROUP BY 1
+            )
+            SELECT buckets.bucket, COALESCE(counts.articles, 0) AS articles
+            FROM buckets LEFT JOIN counts USING (bucket) ORDER BY buckets.bucket
+            """,
+            (now, now, now),
+        ).fetchall()
+        granularity = "week"
+    else:
+        days = 30 if range_key is DatasetRange.THIRTY_DAYS else 90
+        rows = conn.execute(
+            """
+            WITH buckets AS (
+              SELECT generate_series(%s::date - (%s - 1), %s::date, interval '1 day') AS bucket
+            ), counts AS (
+              SELECT date_trunc('day', discovered_at) AS bucket, COUNT(*) AS articles
+              FROM articles WHERE discovered_at >= %s::date - (%s - 1) GROUP BY 1
+            )
+            SELECT buckets.bucket, COALESCE(counts.articles, 0) AS articles
+            FROM buckets LEFT JOIN counts USING (bucket) ORDER BY buckets.bucket
+            """,
+            (now, days, now, now, days),
+        ).fetchall()
+        granularity = "day"
+    return [
+        {
+            "bucket": _coerce_datetime(row["bucket"]).date().isoformat(),
+            "articles": _int_value(row["articles"]),
+        }
+        for row in rows
+    ], granularity
+
+
+def _isoformat_or_none(value: Any) -> str | None:
+    if value is None:
+        return None
+    return _coerce_datetime(value).isoformat()
 
 
 def parse_range(from_value: str, to_value: str) -> tuple[datetime, datetime]:
