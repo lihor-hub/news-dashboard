@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from news_dashboard.db import connect, init_db, placeholders, row_to_dict
+from news_dashboard.scheduler.retention import retention_preview
 from news_dashboard.stats.models import DatasetRange
 
 
@@ -68,13 +69,7 @@ def dataset_stats(
         },
         "trend": trend,
         "trend_granularity": granularity,
-        "retention_preview": {
-            "enabled": False,
-            "retention_days": None,
-            "eligible_articles": 0,
-            "protected_articles": 0,
-            "estimated_payload_bytes": 0,
-        },
+        "retention_preview": retention_preview(database_url=database_url, now=current).as_dict(),
     }
 
 

@@ -15,11 +15,13 @@ from unittest.mock import MagicMock, call, patch
 import pytest
 
 from news_dashboard.briefings.service import BriefingAINotConfiguredError, BriefingGenerationError
+from news_dashboard.scheduler.retention import CleanupResult
 from news_dashboard.scheduler.service import (
     _run_briefing,
     _run_per_user_briefings,
     _run_weekly_lesson_recaps,
     _run_weekly_recaps,
+    run_article_retention_now,
     run_embedding_dedup_now,
 )
 
@@ -156,6 +158,19 @@ def test_run_embedding_dedup_now_records_failure_and_raises() -> None:
     assert save_job_run.call_args.kwargs["job_name"] == "embedding_dedup"
     assert save_job_run.call_args.kwargs["status"] == "failure"
     assert save_job_run.call_args.kwargs["message"] == "embedding service unavailable"
+
+
+def test_run_article_retention_now_records_history_and_returns_summary() -> None:
+    summary = CleanupResult("success", 30, 4, 2, 1024, "deleted 4 articles")
+    with (
+        patch("news_dashboard.scheduler.retention.cleanup_old_articles", return_value=summary),
+        patch("news_dashboard.scheduled_job_history.save_job_run") as save_job_run,
+    ):
+        result = run_article_retention_now()
+
+    assert result == summary.as_dict()
+    assert save_job_run.call_args.kwargs["job_name"] == "article_retention"
+    assert save_job_run.call_args.kwargs["status"] == "success"
 
 
 # ── _run_per_user_briefings ──────────────────────────────────────────────────

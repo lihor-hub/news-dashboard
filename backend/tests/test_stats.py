@@ -4,6 +4,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from news_dashboard.db import connect, init_db
+from news_dashboard.scheduler.retention import set_retention_days
 from news_dashboard.stats.models import DatasetRange
 from news_dashboard.stats.service import (
     article_counts,
@@ -85,6 +86,26 @@ def test_dataset_stats_uses_weekly_and_monthly_buckets(pg_clean: str) -> None:
     assert len(yearly["trend"]) >= 52
     assert all_time["trend_granularity"] == "month"
     assert all_time["trend"] == []
+
+
+def test_dataset_stats_includes_active_retention_preview(pg_clean: str) -> None:
+    set_retention_days(30, pg_clean)
+    _insert_article(
+        pg_clean,
+        url="https://example.com/cleanup-candidate",
+        source_name="Example",
+        discovered_at="2026-07-01T12:00:00+00:00",
+    )
+
+    result = dataset_stats(
+        DatasetRange.THIRTY_DAYS,
+        pg_clean,
+        now=datetime(2026, 9, 29, 12, tzinfo=timezone.utc),
+    )
+
+    assert result["retention_preview"]["enabled"] is True
+    assert result["retention_preview"]["retention_days"] == 30
+    assert result["retention_preview"]["eligible_articles"] == 1
 
 
 def _insert_run(

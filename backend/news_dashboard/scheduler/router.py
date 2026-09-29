@@ -18,6 +18,12 @@ from news_dashboard.auth import (
 from news_dashboard.run_history import get_ingest_run_sources, list_ingest_runs
 from news_dashboard.scheduler.models import (
     IntervalUpdate,
+    RetentionPolicyUpdate,
+)
+from news_dashboard.scheduler.retention import (
+    get_retention_days,
+    retention_preview,
+    set_retention_days,
 )
 from news_dashboard.scheduler.service import (
     get_interval_minutes,
@@ -26,12 +32,40 @@ from news_dashboard.scheduler.service import (
     is_paused,
     pause_scheduler,
     resume_scheduler,
+    run_article_retention_now,
     run_embedding_dedup_now,
     set_interval,
 )
 
 router = APIRouter()
 _admin_dep = [Depends(require_admin)]
+
+
+def _retention_response(days: int | None) -> dict[str, Any]:
+    return {
+        "days": days,
+        "schedule": "03:30 UTC daily",
+        "preview": retention_preview(days).as_dict(),
+    }
+
+
+@router.get("/api/scheduler/article-retention", dependencies=_admin_dep)
+def scheduler_get_article_retention() -> dict[str, Any]:
+    days = get_retention_days()
+    return _retention_response(days)
+
+
+@router.put("/api/scheduler/article-retention", dependencies=_admin_dep)
+def scheduler_set_article_retention(payload: RetentionPolicyUpdate) -> dict[str, Any]:
+    days = set_retention_days(payload.days)
+    return _retention_response(days)
+
+
+@router.post("/api/scheduler/article-retention/run", dependencies=_admin_dep)
+def scheduler_run_article_retention() -> dict[str, Any]:
+    if get_retention_days() is None:
+        raise HTTPException(status_code=409, detail="article retention is disabled")
+    return run_article_retention_now()
 
 
 @router.get("/api/scheduler/status", dependencies=_admin_dep)

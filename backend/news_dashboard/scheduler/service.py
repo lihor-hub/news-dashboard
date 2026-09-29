@@ -619,6 +619,19 @@ def run_embedding_dedup_now() -> dict[str, int | str]:
     return {"status": status, "embedded": embedded, "merged": merged}
 
 
+def run_article_retention_now() -> dict[str, Any]:
+    """Run article cleanup immediately and record it in scheduled-job history."""
+    from news_dashboard.scheduler.retention import cleanup_old_articles
+
+    result = cleanup_old_articles()
+    _run_and_record(
+        "article_retention",
+        lambda: (result.status, result.message),
+        raise_on_failure=True,
+    )
+    return result.as_dict()
+
+
 def _job_digest() -> None:
     _run_and_record("digest", _run_digest)
 
