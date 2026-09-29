@@ -10,6 +10,7 @@ from news_dashboard.db import connect
 from news_dashboard.main import app
 from news_dashboard.scheduler.retention import (
     ARTICLE_RETENTION_LOCK_KEY,
+    MAX_RETENTION_DAYS,
     cleanup_old_articles,
     get_retention_days,
     retention_preview,
@@ -78,7 +79,7 @@ def test_retention_round_trips_positive_days_and_can_be_disabled(pg_clean: str) 
 
 @pytest.mark.parametrize("days", [0, -1])
 def test_retention_rejects_non_positive_days(pg_clean: str, days: int) -> None:
-    with pytest.raises(ValueError, match="at least 1"):
+    with pytest.raises(ValueError, match="between 1"):
         set_retention_days(days, pg_clean)
 
 
@@ -177,6 +178,23 @@ def test_cleanup_repeats_bounded_batches_and_is_idempotent(pg_clean: str) -> Non
     assert second.status == "success"
 
 
+def test_cleanup_drains_canonical_parent_exposed_by_child_deletion(pg_clean: str) -> None:
+    set_retention_days(1, pg_clean)
+    parent = _insert_article(pg_clean, "old-canonical-parent", days_old=3)
+    child = _insert_article(pg_clean, "old-canonical-child", days_old=2)
+    with connect(pg_clean) as conn:
+        conn.execute("UPDATE articles SET canonical_id = %s WHERE id = %s", (parent, child))
+
+    result = cleanup_old_articles(pg_clean)
+
+    assert result.deleted_articles == 2
+    with connect(pg_clean) as conn:
+        assert (
+            conn.execute("SELECT 1 FROM articles WHERE id = ANY(%s)", ([parent, child],)).fetchone()
+            is None
+        )
+
+
 def test_cleanup_skips_when_policy_is_disabled(pg_clean: str) -> None:
     result = cleanup_old_articles(pg_clean)
 
@@ -224,6 +242,16 @@ def test_retention_api_gets_and_updates_policy_without_deleting(
 @pytest.mark.parametrize("days", [0, -2])
 def test_retention_api_rejects_non_positive_days(
     pg_clean: str, client: TestClient, days: int
+) -> None:
+    response = client.put("/api/scheduler/article-retention", json={"days": days})
+
+    assert response.status_code == 422
+    assert get_retention_days(pg_clean) is None
+
+
+@pytest.mark.parametrize("days", [True, MAX_RETENTION_DAYS + 1, 999_999_999_999])
+def test_retention_api_rejects_unsafe_days_without_persisting(
+    pg_clean: str, client: TestClient, days: object
 ) -> None:
     response = client.put("/api/scheduler/article-retention", json={"days": days})
 

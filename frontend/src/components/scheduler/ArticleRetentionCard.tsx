@@ -18,6 +18,8 @@ interface ArticleRetentionCardProps {
   onCleanup: () => Promise<void>;
 }
 
+const MAX_RETENTION_DAYS = 36_500;
+
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   const units = ['KB', 'MB', 'GB', 'TB'];
@@ -56,12 +58,15 @@ export function ArticleRetentionCard({ onCleanup }: ArticleRetentionCardProps) {
   }, [loadPolicy]);
 
   async function handleSave() {
-    const parsedDays = mode === 'forever' ? null : Number.parseInt(days, 10);
+    const parsedDays = mode === 'forever' ? null : Number(days);
     if (
       mode === 'custom' &&
-      (!Number.isInteger(parsedDays) || parsedDays === null || parsedDays < 1)
+      (parsedDays === null ||
+        !Number.isSafeInteger(parsedDays) ||
+        parsedDays < 1 ||
+        parsedDays > MAX_RETENTION_DAYS)
     ) {
-      setError('Retention days must be at least 1');
+      setError(`Retention days must be a whole number from 1 to ${MAX_RETENTION_DAYS}`);
       return;
     }
     setSaving(true);
@@ -86,11 +91,16 @@ export function ArticleRetentionCard({ onCleanup }: ArticleRetentionCardProps) {
     setError(null);
     try {
       const result = await runArticleRetention();
-      toast.success(
-        `Deleted ${result.deleted_articles} old article${result.deleted_articles === 1 ? '' : 's'}`
-      );
+      if (result.status === 'skipped') {
+        toast.info(result.message);
+      } else {
+        toast.success(
+          `Deleted ${result.deleted_articles} old article${result.deleted_articles === 1 ? '' : 's'}`
+        );
+      }
       setConfirmOpen(false);
       await Promise.all([loadPolicy(), onCleanup()]);
+      if (result.status === 'skipped') setError(result.message);
     } catch (reason) {
       const message = reason instanceof Error ? reason.message : 'Article cleanup failed';
       setError(message);
@@ -138,6 +148,8 @@ export function ArticleRetentionCard({ onCleanup }: ArticleRetentionCardProps) {
               aria-label="Retention days"
               type="number"
               min={1}
+              max={MAX_RETENTION_DAYS}
+              step={1}
               value={days}
               onChange={(event) => setDays(event.target.value)}
               className="w-36"

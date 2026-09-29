@@ -13,6 +13,7 @@ from news_dashboard.db import connect, init_db, row_to_dict
 
 _SETTING_KEY = "article_retention_days"
 ARTICLE_RETENTION_LOCK_KEY = 72_563_811
+MAX_RETENTION_DAYS = 36_500
 
 _PROTECTED_PREDICATE = """
 EXISTS (
@@ -66,16 +67,16 @@ def get_retention_days(database_url: str | None = None) -> int | None:
     except (TypeError, ValueError):
         logger.warning("Ignoring malformed article retention setting")
         return None
-    if days < 1:
-        logger.warning("Ignoring non-positive article retention setting")
+    if days < 1 or days > MAX_RETENTION_DAYS:
+        logger.warning("Ignoring out-of-range article retention setting")
         return None
     return days
 
 
 def set_retention_days(days: int | None, database_url: str | None = None) -> int | None:
     """Persist a retention window without running cleanup."""
-    if days is not None and days < 1:
-        message = "retention days must be at least 1"
+    if days is not None and not 1 <= days <= MAX_RETENTION_DAYS:
+        message = f"retention days must be between 1 and {MAX_RETENTION_DAYS}"
         raise ValueError(message)
     init_db(database_url)
     with connect(database_url) as conn:
@@ -139,19 +140,24 @@ def cleanup_old_articles(
         raise ValueError(message)
 
     cutoff = datetime.now(timezone.utc) - timedelta(days=retention_days)
+    candidate_query = sql.SQL(
+        """
+        SELECT a.id
+        FROM articles a
+        WHERE a.discovered_at < %s AND NOT ({protected})
+        ORDER BY a.discovered_at, a.id
+        LIMIT %s
+        FOR UPDATE OF a SKIP LOCKED
+        """
+    ).format(protected=sql.SQL(_PROTECTED_PREDICATE))
     delete_query = sql.SQL(
         """
-        WITH candidates AS (
-          SELECT a.id, pg_column_size(a.*) AS payload_bytes
-          FROM articles a
-          WHERE a.discovered_at < %s AND NOT ({protected})
-          ORDER BY a.discovered_at, a.id
-          LIMIT %s
-          FOR UPDATE OF a SKIP LOCKED
-        ), deleted AS (
-          DELETE FROM articles a USING candidates c
-          WHERE a.id = c.id
-          RETURNING c.payload_bytes
+        WITH deleted AS (
+          DELETE FROM articles a
+          WHERE a.id = ANY(%s)
+            AND a.discovered_at < %s
+            AND NOT ({protected})
+          RETURNING pg_column_size(a.*) AS payload_bytes
         )
         SELECT COUNT(*) AS deleted_articles,
                COALESCE(SUM(payload_bytes), 0) AS deleted_payload_bytes
@@ -171,14 +177,28 @@ def cleanup_old_articles(
             return CleanupResult("skipped", retention_days, 0, 0, 0, "cleanup already running")
         try:
             while True:
-                row = row_to_dict(conn.execute(delete_query, (cutoff, batch_size)).fetchone())
+                candidate_ids = [
+                    int(row["id"])
+                    for row in conn.execute(candidate_query, (cutoff, batch_size)).fetchall()
+                ]
+                if not candidate_ids:
+                    break
+                row = row_to_dict(conn.execute(delete_query, (candidate_ids, cutoff)).fetchone())
                 deleted = int(row["deleted_articles"] or 0)
                 total_deleted += deleted
                 total_payload += int(row["deleted_payload_bytes"] or 0)
                 conn.commit()
-                if deleted < batch_size:
-                    break
-        finally:
+        except BaseException:
+            conn.rollback()
+            try:
+                conn.execute(
+                    "SELECT pg_advisory_unlock(%s, hashtext(current_schema()))",
+                    (ARTICLE_RETENTION_LOCK_KEY,),
+                )
+            except Exception:
+                logger.exception("Failed to release article retention advisory lock")
+            raise
+        else:
             conn.execute(
                 "SELECT pg_advisory_unlock(%s, hashtext(current_schema()))",
                 (ARTICLE_RETENTION_LOCK_KEY,),

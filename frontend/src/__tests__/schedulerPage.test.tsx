@@ -244,6 +244,33 @@ describe('SchedulerPage — article retention', () => {
     expect(apiMock.runArticleRetention).not.toHaveBeenCalled();
   });
 
+  it('parses scientific notation without truncating it', async () => {
+    render(<SchedulerPage />);
+    await screen.findByRole('heading', { name: 'Article retention' });
+    await userEvent.selectOptions(
+      screen.getByRole('combobox', { name: 'Retention policy' }),
+      'custom'
+    );
+    await userEvent.type(screen.getByRole('spinbutton', { name: 'Retention days' }), '1e3');
+    await userEvent.click(screen.getByRole('button', { name: 'Save retention' }));
+
+    await waitFor(() => expect(apiMock.updateArticleRetention).toHaveBeenCalledWith(1000));
+  });
+
+  it('rejects fractional retention values', async () => {
+    render(<SchedulerPage />);
+    await screen.findByRole('heading', { name: 'Article retention' });
+    await userEvent.selectOptions(
+      screen.getByRole('combobox', { name: 'Retention policy' }),
+      'custom'
+    );
+    await userEvent.type(screen.getByRole('spinbutton', { name: 'Retention days' }), '30.9');
+    await userEvent.click(screen.getByRole('button', { name: 'Save retention' }));
+
+    expect(apiMock.updateArticleRetention).not.toHaveBeenCalled();
+    expect(screen.getByText(/whole number/i)).toBeTruthy();
+  });
+
   it('shows eligible and protected preview counts', async () => {
     apiMock.fetchArticleRetention.mockResolvedValue({
       days: 30,
@@ -303,6 +330,32 @@ describe('SchedulerPage — article retention', () => {
     await waitFor(() => expect(apiMock.runArticleRetention).toHaveBeenCalledOnce());
     expect(apiMock.fetchArticleRetention).toHaveBeenCalledTimes(2);
     expect(apiMock.fetchLatestJobRuns).toHaveBeenCalledTimes(2);
+  });
+
+  it('shows the reason when cleanup is skipped', async () => {
+    apiMock.fetchArticleRetention.mockResolvedValue({
+      days: 30,
+      schedule: '03:30 UTC daily',
+      preview: {
+        enabled: true,
+        retention_days: 30,
+        eligible_articles: 0,
+        protected_articles: 0,
+        estimated_payload_bytes: 0,
+      },
+    });
+    apiMock.runArticleRetention.mockResolvedValue({
+      status: 'skipped',
+      deleted_articles: 0,
+      protected_articles: 0,
+      estimated_deleted_payload_bytes: 0,
+      message: 'cleanup already running',
+    });
+    render(<SchedulerPage />);
+    await userEvent.click(await screen.findByRole('button', { name: 'Run cleanup now' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Confirm cleanup' }));
+
+    expect(await screen.findByText('cleanup already running')).toBeTruthy();
   });
 
   it('shows retention loading failures without hiding scheduler controls', async () => {

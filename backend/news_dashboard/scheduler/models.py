@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, StrictInt
+
+from news_dashboard.scheduler.retention import MAX_RETENTION_DAYS
 
 
 class IntervalUpdate(BaseModel):
@@ -10,4 +12,4 @@ class IntervalUpdate(BaseModel):
 
 
 class RetentionPolicyUpdate(BaseModel):
-    days: int | None = Field(default=None, ge=1)
+    days: StrictInt | None = Field(default=None, ge=1, le=MAX_RETENTION_DAYS)

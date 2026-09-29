@@ -171,6 +171,26 @@ describe('StatsPage', () => {
     expect(screen.getByText('10 MB')).toBeTruthy();
     expect(screen.getByText('2 KB')).toBeTruthy();
     expect(screen.getByText('Space from deleted rows is reused by PostgreSQL')).toBeTruthy();
+    expect(screen.getByText(/Median entry estimates row payload/i)).toBeTruthy();
+  });
+
+  it('renders the active retention preview', async () => {
+    resolveAll();
+    apiMock.fetchDatasetStats.mockResolvedValue({
+      ...dataset,
+      retention_preview: {
+        enabled: true,
+        retention_days: 30,
+        eligible_articles: 12,
+        protected_articles: 4,
+        estimated_payload_bytes: 4096,
+      },
+    });
+
+    renderPage(<StatsPage />);
+
+    expect(await screen.findByText('30-day retention preview')).toBeTruthy();
+    expect(screen.getByText('12 eligible · 4 protected · 4 KB estimated payload')).toBeTruthy();
   });
 
   it('reloads dataset growth when the range changes', async () => {

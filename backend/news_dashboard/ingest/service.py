@@ -1447,6 +1447,10 @@ def _upsert_uas(  # noqa: PLR0913
     restored_at: str | None = None,
     updated_at: str,
 ) -> None:
+    # Coordinate existing-row star updates with retention cleanup. Inserts already
+    # acquire a foreign-key key-share lock; this makes updates follow the same
+    # article-row locking protocol before changing protection state.
+    conn.execute("SELECT id FROM articles WHERE id = %s FOR UPDATE", (article_id,))
     conn.execute(
         """
         INSERT INTO user_article_state(

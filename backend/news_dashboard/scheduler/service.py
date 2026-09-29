@@ -629,14 +629,23 @@ def run_embedding_dedup_now() -> dict[str, int | str]:
 
 def run_article_retention_now() -> dict[str, Any]:
     """Run article cleanup immediately and record it in scheduled-job history."""
-    from news_dashboard.scheduler.retention import cleanup_old_articles
+    from news_dashboard.scheduler.retention import CleanupResult, cleanup_old_articles
 
-    result = cleanup_old_articles()
+    result: CleanupResult | None = None
+
+    def cleanup_and_summarize() -> tuple[str, str]:
+        nonlocal result
+        result = cleanup_old_articles()
+        return result.status, result.message
+
     _run_and_record(
         "article_retention",
-        lambda: (result.status, result.message),
+        cleanup_and_summarize,
         raise_on_failure=True,
     )
+    if result is None:  # pragma: no cover - _run_and_record either returns or raises
+        message = "article retention cleanup produced no result"
+        raise RuntimeError(message)
     return result.as_dict()
 
 

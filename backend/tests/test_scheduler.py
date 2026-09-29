@@ -175,6 +175,22 @@ def test_run_article_retention_now_records_history_and_returns_summary() -> None
     assert save_job_run.call_args.kwargs["status"] == "success"
 
 
+def test_run_article_retention_now_records_cleanup_failure() -> None:
+    with (
+        patch(
+            "news_dashboard.scheduler.retention.cleanup_old_articles",
+            side_effect=RuntimeError("retention database unavailable"),
+        ),
+        patch("news_dashboard.scheduled_job_history.save_job_run") as save_job_run,
+        pytest.raises(RuntimeError, match="retention database unavailable"),
+    ):
+        run_article_retention_now()
+
+    save_job_run.assert_called_once()
+    assert save_job_run.call_args.kwargs["job_name"] == "article_retention"
+    assert save_job_run.call_args.kwargs["status"] == "failure"
+
+
 def test_run_article_retention_reports_disabled_policy_as_skipped() -> None:
     result = CleanupResult("skipped", None, 0, 0, 0, "retention disabled")
     with patch("news_dashboard.scheduler.retention.cleanup_old_articles", return_value=result):

@@ -179,8 +179,25 @@ export function DatasetOverview() {
               <p className="mt-3 text-[11px] text-muted-foreground">
                 Space from deleted rows is reused by PostgreSQL
               </p>
+              <p className="mt-1 text-[11px] text-muted-foreground">
+                Median entry estimates row payload; amortized storage includes table, auxiliary, and
+                index overhead per article.
+              </p>
             </div>
           </div>
+
+          {data.retention_preview.enabled && data.retention_preview.retention_days !== null && (
+            <div className="rounded-lg border border-border bg-card p-3 text-sm">
+              <div className="font-semibold">
+                {data.retention_preview.retention_days}-day retention preview
+              </div>
+              <div className="mt-1 text-xs text-muted-foreground">
+                {data.retention_preview.eligible_articles.toLocaleString()} eligible ·{' '}
+                {data.retention_preview.protected_articles.toLocaleString()} protected ·{' '}
+                {formatBytes(data.retention_preview.estimated_payload_bytes)} estimated payload
+              </div>
+            </div>
+          )}
 
           <div className="text-xs text-muted-foreground">
             {data.summary.article_count === 0 ? (
