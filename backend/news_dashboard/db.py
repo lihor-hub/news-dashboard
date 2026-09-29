@@ -91,7 +91,6 @@ POSTGRES_SCHEMA = [
       saved_at TEXT,
       skipped_at TEXT,
       archived_at TEXT,
-      embedding BYTEA,
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     )
     """,
@@ -161,16 +160,6 @@ POSTGRES_SCHEMA = [
     )
     """,
     """
-    ALTER TABLE articles ADD COLUMN IF NOT EXISTS fts_vector tsvector
-      GENERATED ALWAYS AS (
-        to_tsvector(
-          'english',
-          coalesce(title, '') || ' ' || coalesce(summary, '') || ' ' || coalesce(tags, '')
-        )
-      ) STORED
-    """,
-    "CREATE INDEX IF NOT EXISTS idx_articles_fts ON articles USING gin(fts_vector)",
-    """
     CREATE TABLE IF NOT EXISTS settings (
       key   TEXT PRIMARY KEY,
       value TEXT NOT NULL
@@ -197,7 +186,6 @@ POSTGRES_SCHEMA = [
     END $$;
     """,
     "ALTER TABLE articles ADD COLUMN IF NOT EXISTS canonical_id BIGINT REFERENCES articles(id)",
-    "ALTER TABLE articles ADD COLUMN IF NOT EXISTS embedding BYTEA",
     f"ALTER TABLE articles ADD COLUMN IF NOT EXISTS embedding_vec vector({EMBEDDING_DIMENSIONS})",
     "ALTER TABLE articles ADD COLUMN IF NOT EXISTS body TEXT",
     "ALTER TABLE articles ADD COLUMN IF NOT EXISTS body_status TEXT NOT NULL DEFAULT 'missing'",
@@ -215,6 +203,8 @@ POSTGRES_SCHEMA = [
       ) STORED
     """,
     "CREATE INDEX IF NOT EXISTS idx_articles_search ON articles USING gin(search_vector)",
+    "DROP INDEX IF EXISTS idx_articles_fts",
+    "ALTER TABLE articles DROP COLUMN IF EXISTS fts_vector",
     "ALTER TABLE articles ADD COLUMN IF NOT EXISTS state TEXT NOT NULL DEFAULT 'today'",
     "ALTER TABLE articles ADD COLUMN IF NOT EXISTS starred BOOLEAN NOT NULL DEFAULT FALSE",
     """

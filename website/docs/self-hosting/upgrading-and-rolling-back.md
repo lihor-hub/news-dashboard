@@ -125,6 +125,70 @@ If you see a startup error related to a missing column or table, running
 `news-dashboard init` (or restarting the container, which calls `init_db`)
 typically resolves it.
 
+### Removing an `articles_old` repair table
+
+`articles_old` is not used by the application or by schema initialization. If
+it remains after an `articles` table repair, retain it through the rollback
+window and remove it only after the repaired table has served normal traffic,
+article reads and writes have been verified, and a restorable database backup
+exists.
+
+Measure the retained copy before deciding whether removal is worthwhile:
+
+```sql
+SELECT
+  to_regclass('public.articles_old') AS rollback_table,
+  pg_size_pretty(pg_total_relation_size('public.articles_old')) AS total_size,
+  (SELECT count(*) FROM public.articles_old) AS row_count;
+```
+
+Confirm that every rollback row still has a corresponding repaired article.
+Differences in mutable fields are expected if the application has continued to
+ingest or enrich data since the repair, so investigate missing IDs rather than
+requiring the two tables to remain byte-for-byte identical:
+
+```sql
+SELECT
+  count(*) AS rollback_rows,
+  count(*) FILTER (WHERE current_article.id IS NULL) AS missing_from_articles
+FROM public.articles_old AS rollback_article
+LEFT JOIN public.articles AS current_article USING (id);
+```
+
+`missing_from_articles` must be zero unless those articles were deliberately
+deleted after the repair. Verify expected deletes against the full database
+backup before proceeding.
+
+Back up the rollback table separately, then inspect the dump catalog:
+
+```bash
+: "${DATABASE_URL:?set DATABASE_URL to the production PostgreSQL database}"
+backup="articles_old_$(date -u +%Y%m%dT%H%M%SZ).dump"
+pg_dump --dbname="$DATABASE_URL" --format=custom \
+  --table=public.articles_old --file="$backup"
+pg_restore --list "$backup" | grep -E 'TABLE( DATA)? public articles_old'
+```
+
+Restore that dump into a throwaway database and compare its row count before
+removing the production table. A catalog listing alone proves that the archive
+contains table entries, not that it restores successfully. Keep the full
+pre-upgrade database backup as the authoritative rollback artifact.
+
+After the rollback window has expired, stop application jobs that could be
+using an operator session and remove only the named table:
+
+```sql
+BEGIN;
+SET LOCAL lock_timeout = '5s';
+DROP TABLE public.articles_old;
+COMMIT;
+```
+
+Do not add `CASCADE`: if another object depends on the table, let PostgreSQL
+block the drop and investigate the dependency. Dropping the table releases its
+table and index storage; retain the verified dump according to your backup
+policy.
+
 ## Rolling Back
 
 If an upgrade causes issues, roll back using the database backup and the
