@@ -99,6 +99,14 @@ def _run_analytics_retention() -> tuple[str, str | None]:
         return "failure", str(exc)[:500]
 
 
+def _run_article_retention() -> tuple[str, str | None]:
+    from news_dashboard.scheduler.retention import cleanup_old_articles
+
+    result = cleanup_old_articles()
+    logger.info("Article retention: %s", result.message)
+    return result.status, result.message
+
+
 def _run_embedding_dedup() -> tuple[str, str | None]:
     from news_dashboard.embedding_dedup import run_embedding_dedup
 
@@ -644,6 +652,10 @@ def _job_analytics_retention() -> None:
     _run_and_record("analytics_retention", _run_analytics_retention)
 
 
+def _job_article_retention() -> None:
+    _run_and_record("article_retention", _run_article_retention)
+
+
 def _job_briefing() -> None:
     _run_and_record("briefing", _run_briefing)
 
@@ -883,6 +895,15 @@ def start_scheduler() -> None:
         hour="3",
         minute="0",
         id="analytics_retention",
+        replace_existing=True,
+    )
+
+    scheduler.add_job(
+        _job_article_retention,
+        trigger="cron",
+        hour="3",
+        minute="30",
+        id="article_retention",
         replace_existing=True,
     )
 

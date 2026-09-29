@@ -21,6 +21,7 @@ const JOB_LABELS: Record<string, string> = {
   digest: 'Daily digest',
   recommendations: 'Recommendations',
   analytics_retention: 'Analytics retention',
+  article_retention: 'Article retention',
   per_user_briefings: 'Per-user briefings',
   briefing: 'Global briefing',
   embedding_dedup: 'Duplicate cleanup',

@@ -129,6 +129,25 @@ describe('SchedulerPage — job outcomes section', () => {
     expect(screen.getByText('Analytics retention')).toBeTruthy();
     expect(screen.getByText('pruned 42 events older than 90 days')).toBeTruthy();
   });
+
+  it('labels article retention outcomes', async () => {
+    apiMock.fetchLatestJobRuns.mockResolvedValue([
+      {
+        id: 4,
+        job_name: 'article_retention',
+        started_at: '2026-09-29T03:30:00Z',
+        finished_at: '2026-09-29T03:30:01Z',
+        duration_ms: 900,
+        status: 'success',
+        message: 'deleted 12 articles older than 90 days',
+      },
+    ]);
+
+    render(<SchedulerPage />);
+
+    expect(await screen.findByText('Article retention')).toBeTruthy();
+    expect(screen.getByText('deleted 12 articles older than 90 days')).toBeTruthy();
+  });
 });
 
 describe('SchedulerPage — manual duplicate cleanup', () => {
