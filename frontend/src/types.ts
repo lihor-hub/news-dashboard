@@ -215,6 +215,21 @@ export interface RetentionPreview {
   estimated_payload_bytes: number;
 }
 
+export interface ArticleRetentionPolicy {
+  days: number | null;
+  schedule: string;
+  preview: RetentionPreview;
+}
+
+export interface ArticleRetentionCleanupResult {
+  status: 'success' | 'skipped';
+  retention_days: number | null;
+  deleted_articles: number;
+  protected_articles: number;
+  estimated_deleted_payload_bytes: number;
+  message: string;
+}
+
 export interface DatasetStats {
   summary: {
     article_count: number;

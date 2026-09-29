@@ -1,4 +1,9 @@
-import type { IngestRunPage, IngestRunSource } from '../types';
+import type {
+  ArticleRetentionCleanupResult,
+  ArticleRetentionPolicy,
+  IngestRunPage,
+  IngestRunSource,
+} from '../types';
 import { requestJson } from './core';
 
 export async function ingestNow(): Promise<{
@@ -48,6 +53,23 @@ export interface EmbeddingDedupResult {
 
 export async function runEmbeddingDedup(): Promise<EmbeddingDedupResult> {
   return requestJson<EmbeddingDedupResult>('/api/scheduler/jobs/embedding-dedup/run', {
+    method: 'POST',
+  });
+}
+
+export async function fetchArticleRetention(): Promise<ArticleRetentionPolicy> {
+  return requestJson<ArticleRetentionPolicy>('/api/scheduler/article-retention');
+}
+
+export async function updateArticleRetention(days: number | null): Promise<ArticleRetentionPolicy> {
+  return requestJson<ArticleRetentionPolicy>('/api/scheduler/article-retention', {
+    method: 'PUT',
+    body: JSON.stringify({ days }),
+  });
+}
+
+export async function runArticleRetention(): Promise<ArticleRetentionCleanupResult> {
+  return requestJson<ArticleRetentionCleanupResult>('/api/scheduler/article-retention/run', {
     method: 'POST',
   });
 }
