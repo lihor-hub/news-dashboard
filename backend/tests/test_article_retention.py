@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+from unittest.mock import MagicMock
 
 import pytest
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
 from news_dashboard.db import connect
+from news_dashboard.import_export import _upsert_article_state
+from news_dashboard.ingest.service import _upsert_uas
 from news_dashboard.main import app
 from news_dashboard.scheduler.retention import (
     ARTICLE_RETENTION_LOCK_KEY,
@@ -219,6 +222,41 @@ def test_cleanup_skips_when_another_cleanup_holds_lock(pg_clean: str) -> None:
 
     assert result.status == "skipped"
     assert result.message == "cleanup already running"
+
+
+def test_all_existing_star_writers_lock_article_before_upsert() -> None:
+    ingest_conn = MagicMock()
+    archive_conn = MagicMock()
+
+    _upsert_uas(
+        ingest_conn,
+        1,
+        2,
+        state="today",
+        starred=True,
+        updated_at="2026-09-29T00:00:00+00:00",
+    )
+    _upsert_article_state(
+        archive_conn,
+        1,
+        2,
+        state="today",
+        starred=True,
+        done_at=None,
+        starred_at="2026-09-29T00:00:00+00:00",
+        skipped_at=None,
+        archived_at=None,
+        later_until=None,
+        restored_at=None,
+        updated_at="2026-09-29T00:00:00+00:00",
+    )
+
+    for conn in (ingest_conn, archive_conn):
+        first_query = conn.execute.call_args_list[0]
+        assert first_query.args == (
+            "SELECT id FROM articles WHERE id = %s FOR UPDATE",
+            (2,),
+        )
 
 
 def test_retention_api_gets_and_updates_policy_without_deleting(

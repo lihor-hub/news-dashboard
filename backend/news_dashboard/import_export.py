@@ -87,6 +87,9 @@ def _upsert_article_state(  # noqa: PLR0913
     restored_at: str | None,
     updated_at: str | None,
 ) -> None:
+    # Retention cleanup locks candidate article rows before its fresh protection
+    # recheck. Lock here as well so restoring a star cannot race that deletion.
+    conn.execute("SELECT id FROM articles WHERE id = %s FOR UPDATE", (article_id,))
     conn.execute(
         """
         INSERT INTO user_article_state(
