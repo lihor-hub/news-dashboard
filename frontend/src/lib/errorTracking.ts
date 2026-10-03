@@ -34,7 +34,23 @@ export async function initErrorTracking(): Promise<void> {
     if (!config.sentry_dsn) return;
 
     const Sentry = await import('@sentry/react');
-    Sentry.init({ dsn: config.sentry_dsn, sendDefaultPii: false, beforeSend: scrubPii });
+    Sentry.init({
+      dsn: config.sentry_dsn,
+      // SDK defaults may expand collection on upgrades; keep sensitive categories opt-out.
+      dataCollection: {
+        userInfo: false,
+        cookies: false,
+        httpHeaders: false,
+        httpBodies: [],
+        urlQueryParams: false,
+        genAI: { inputs: false, outputs: false },
+        databaseQueryData: false,
+        graphQL: { document: false, variables: false },
+        queues: false,
+        stackFrameVariables: false,
+      },
+      beforeSend: scrubPii,
+    });
     sentryEnabled = true;
   } catch {
     // Network/parse failures must never block app startup.

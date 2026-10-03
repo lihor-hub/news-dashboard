@@ -6,7 +6,19 @@ const sentryOptions = {
   dsn: process.env.SENTRY_DSN_DESKTOP || undefined,
   environment: process.env.SENTRY_ENVIRONMENT || 'production',
   release: process.env.SENTRY_RELEASE || undefined,
-  dataCollection: {},
+  // Keep collection explicit when SDK defaults change between major versions.
+  dataCollection: {
+    userInfo: false,
+    cookies: false,
+    httpHeaders: false,
+    httpBodies: [],
+    urlQueryParams: false,
+    genAI: { inputs: false, outputs: false },
+    databaseQueryData: false,
+    graphQL: { document: false, variables: false },
+    queues: false,
+    stackFrameVariables: false,
+  },
 };
 
 // Only initialize when a DSN is configured; otherwise stay a no-op so a

@@ -39,7 +39,18 @@ describe('initErrorTracking', () => {
 
     expect(sentryInit).toHaveBeenCalledWith({
       dsn,
-      sendDefaultPii: false,
+      dataCollection: {
+        userInfo: false,
+        cookies: false,
+        httpHeaders: false,
+        httpBodies: [],
+        urlQueryParams: false,
+        genAI: { inputs: false, outputs: false },
+        databaseQueryData: false,
+        graphQL: { document: false, variables: false },
+        queues: false,
+        stackFrameVariables: false,
+      },
       beforeSend: expect.any(Function),
     });
   });

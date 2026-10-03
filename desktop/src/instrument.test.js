@@ -29,7 +29,18 @@ try {
   assert.strictEqual(sentryOptions.dsn, testDsn);
   assert.strictEqual(sentryOptions.environment, 'test');
   assert.strictEqual(sentryOptions.release, 'news-dashboard-desktop@test');
-  assert.deepStrictEqual(sentryOptions.dataCollection, {});
+  assert.deepStrictEqual(sentryOptions.dataCollection, {
+    userInfo: false,
+    cookies: false,
+    httpHeaders: false,
+    httpBodies: [],
+    urlQueryParams: false,
+    genAI: { inputs: false, outputs: false },
+    databaseQueryData: false,
+    graphQL: { document: false, variables: false },
+    queues: false,
+    stackFrameVariables: false,
+  });
 } finally {
   Module._load = originalLoad;
   delete process.env.SENTRY_DSN_DESKTOP;
