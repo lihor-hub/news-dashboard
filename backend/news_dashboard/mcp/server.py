@@ -17,7 +17,7 @@ from typing import Any, Literal, TypedDict, cast
 import pydantic_core
 from anyio import fail_after, to_thread
 from fastmcp import FastMCP
-from fastmcp.exceptions import AuthorizationError, ToolError
+from fastmcp.exceptions import AuthorizationError, McpError, ToolError
 from fastmcp.server.auth import require_scopes
 from fastmcp.server.dependencies import get_access_token
 from fastmcp.server.http import StarletteWithLifespan
@@ -25,8 +25,7 @@ from fastmcp.server.middleware import CallNext, Middleware, MiddlewareContext
 from fastmcp.server.middleware.rate_limiting import RateLimitError, TokenBucketRateLimiter
 from fastmcp.server.middleware.response_limiting import ResponseLimitingMiddleware
 from fastmcp.tools.base import ToolResult
-from mcp.shared.exceptions import McpError
-from mcp.types import CallToolRequestParams, ErrorData
+from mcp.types import CallToolRequestParams
 from openai import (
     APIConnectionError,
     APIStatusError,
@@ -236,6 +235,8 @@ class _BoundedRateLimitingMiddleware(Middleware):
         if not await self._buckets.for_client(client_id).consume():
             mcp_rate_limits_total.labels(status="limited").inc()
             _log_bounded_event("mcp event=rate_limit status=limited")
+            if getattr(context, "method", None) == "tools/call":
+                return ToolResult(content=_INTERNAL_ERROR_MESSAGE, is_error=True)
             message = "Rate limit exceeded"
             raise RateLimitError(message)
         return await call_next(context)
@@ -476,18 +477,18 @@ class _SafeToolTelemetryMiddleware(Middleware):
             status = "error"
             if context.message.name == "ask_news":
                 raise
-            raise McpError(ErrorData(code=-32603, message=_INTERNAL_ERROR_MESSAGE)) from None
+            return ToolResult(content=_INTERNAL_ERROR_MESSAGE, is_error=True)
         except ToolError as exc:
             status = "error"
             if str(exc) == _BRIEFING_NOT_FOUND_MESSAGE:
                 raise
-            raise McpError(ErrorData(code=-32603, message=_INTERNAL_ERROR_MESSAGE)) from None
+            return ToolResult(content=_INTERNAL_ERROR_MESSAGE, is_error=True)
         except McpError:
             status = "error"
             raise
         except Exception:
             status = "error"
-            raise McpError(ErrorData(code=-32603, message=_INTERNAL_ERROR_MESSAGE)) from None
+            return ToolResult(content=_INTERNAL_ERROR_MESSAGE, is_error=True)
         finally:
             duration_ms = (time.perf_counter() - started_at) * 1_000
             tool_name = _telemetry_tool_name(context.message.name)
@@ -943,14 +944,18 @@ def _sanitize_mcp_response_body(body: bytes) -> bytes:
     marker = b"data: "
     start = body.find(marker)
     if start < 0:
-        return body
-    data_start = start + len(marker)
-    data_end = body.find(b"\r\n", data_start)
-    if data_end < 0:
-        return body
+        data_start = 0
+        data_end = len(body)
+    else:
+        data_start = start + len(marker)
+        data_end = body.find(b"\r\n", data_start)
+        if data_end < 0:
+            return body
     try:
         payload = json.loads(body[data_start:data_end])
     except (UnicodeDecodeError, json.JSONDecodeError):
+        return body
+    if not isinstance(payload, dict):
         return body
     result = payload.get("result")
     if not isinstance(result, dict) or result.get("isError") is not True:
@@ -980,7 +985,34 @@ class _SanitizeMcpResponses:
         self.app = app
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        json_start: Message | None = None
+        json_parts: list[bytes] = []
+
         async def sanitized_send(message: Message) -> None:
+            nonlocal json_start
+            if message["type"] == "http.response.start":
+                headers = message.get("headers", [])
+                if any(
+                    name.lower() == b"content-type" and value.startswith(b"application/json")
+                    for name, value in headers
+                ):
+                    json_start = message
+                    return
+            if message["type"] == "http.response.body" and json_start is not None:
+                json_parts.append(message.get("body", b""))
+                if message.get("more_body", False):
+                    return
+                body = _sanitize_mcp_response_body(b"".join(json_parts))
+                headers = [
+                    (name, value)
+                    for name, value in json_start.get("headers", [])
+                    if name.lower() != b"content-length"
+                ]
+                headers.append((b"content-length", str(len(body)).encode()))
+                await send({**json_start, "headers": headers})
+                await send({**message, "body": body})
+                json_start = None
+                return
             if message["type"] == "http.response.body" and message.get("body"):
                 message = {**message, "body": _sanitize_mcp_response_body(message["body"])}
             await send(message)

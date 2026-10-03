@@ -8,12 +8,12 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import Any
 
-import httpx
+import httpx2
 import pytest
 from fastapi.testclient import TestClient
 from fastmcp import Client
 from fastmcp.client.transports import StreamableHttpTransport
-from mcp.shared.exceptions import McpError
+from fastmcp.exceptions import McpError
 
 from news_dashboard.db import connect
 from news_dashboard.main import app
@@ -104,13 +104,13 @@ async def _mounted_client(token: str | None) -> AsyncIterator[Client[Any]]:
 
     def client_factory(
         headers: dict[str, str] | None = None,
-        timeout: httpx.Timeout | None = None,
-        auth: httpx.Auth | None = None,
+        timeout: httpx2.Timeout | None = None,
+        auth: httpx2.Auth | None = None,
         *,
         follow_redirects: bool = True,
-    ) -> httpx.AsyncClient:
-        return httpx.AsyncClient(
-            transport=httpx.ASGITransport(app=app),
+    ) -> httpx2.AsyncClient:
+        return httpx2.AsyncClient(
+            transport=httpx2.ASGITransport(app=app),
             base_url="http://localhost:8080",
             headers=headers,
             timeout=timeout,
@@ -126,7 +126,7 @@ async def _mounted_client(token: str | None) -> AsyncIterator[Client[Any]]:
     client_error: BaseException | None = None
     async with mcp_http_app.router.lifespan_context(mcp_http_app):
         try:
-            async with Client(transport) as client:
+            async with Client(transport, mode="legacy") as client:
                 yield client
         except BaseException as exc:
             client_error = exc
@@ -231,16 +231,16 @@ def test_mounted_fastapi_preserves_scope_revocation_and_cross_user_isolation(
         assert denied_briefing.is_error is True
 
         service.revoke_token(alice, alice_token["id"], database_url=pg_clean)
-        with pytest.raises(httpx.HTTPStatusError) as revoked:
+        with pytest.raises(McpError, match="Server returned an error response") as revoked:
             async with _mounted_client(alice_token["token"]):
                 pass
-        assert revoked.value.response.status_code == 401
+        assert revoked.value.error.code == -32603
 
         for unavailable in (None, "ndmcp_invalid-mounted-token"):
-            with pytest.raises(httpx.HTTPStatusError) as rejected:
+            with pytest.raises(McpError, match="Server returned an error response") as rejected:
                 async with _mounted_client(unavailable):
                     pass
-            assert rejected.value.response.status_code == 401
+            assert rejected.value.error.code == -32603
 
     asyncio.run(exercise())
 

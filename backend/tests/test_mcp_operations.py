@@ -331,3 +331,68 @@ def test_response_limit_records_one_metadata_only_event(
     ]
     assert events == ["mcp event=response_limit tool=get_news_article status=limited token_id=41"]
     assert private_content not in caplog.text
+
+
+@pytest.mark.parametrize("streaming", [False, True])
+def test_tool_error_sanitization_covers_json_and_sse(streaming: bool) -> None:
+    import json
+
+    from news_dashboard.mcp.server import _sanitize_mcp_response_body
+
+    payload = {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "result": {
+            "isError": True,
+            "content": [{"type": "text", "text": "private provider credential"}],
+        },
+    }
+    data = json.dumps(payload).encode()
+    body = b"event: message\r\ndata: " + data + b"\r\n\r\n" if streaming else data
+    sanitized = _sanitize_mcp_response_body(body)
+    assert b"private provider credential" not in sanitized
+    assert b"Internal server error" in sanitized
+
+
+def test_json_error_sanitization_buffers_chunks_and_updates_content_length() -> None:
+    import json
+
+    from news_dashboard.mcp.server import _SanitizeMcpResponses
+
+    body = json.dumps(
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "result": {
+                "isError": True,
+                "content": [{"type": "text", "text": "private provider credential"}],
+            },
+        }
+    ).encode()
+    messages: list[dict[str, Any]] = []
+
+    async def app(_scope: Any, _receive: Any, send: Any) -> None:
+        await send(
+            {
+                "type": "http.response.start",
+                "status": 200,
+                "headers": [
+                    (b"content-type", b"application/json"),
+                    (b"content-length", str(len(body)).encode()),
+                ],
+            }
+        )
+        await send({"type": "http.response.body", "body": body[:50], "more_body": True})
+        await send({"type": "http.response.body", "body": body[50:], "more_body": False})
+
+    async def receive() -> Any:
+        return {"type": "http.disconnect"}
+
+    async def send(message: Any) -> None:
+        messages.append(message)
+
+    asyncio.run(_SanitizeMcpResponses(app)({"type": "http"}, receive, send))
+    sanitized = b"".join(message.get("body", b"") for message in messages)
+    assert b"private provider credential" not in sanitized
+    assert b"Internal server error" in sanitized
+    assert dict(messages[0]["headers"])[b"content-length"] == str(len(sanitized)).encode()

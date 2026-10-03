@@ -36,8 +36,8 @@ dependencies = [
   "neo4j>=6.3.1",
   "jinja2>=3.1.6",
   "a2a-sdk[http-server]>=1.1.5",
-  "fastmcp>=3.4.7",
-  "mcp<3",
+  "fastmcp>=4,<5",
+  "mcp>=2.2,<3",
 ]
 
 [project.optional-dependencies]

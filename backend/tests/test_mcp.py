@@ -3,10 +3,11 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import re
 from collections.abc import AsyncIterator, Generator
 from contextlib import asynccontextmanager
 from threading import Event
-from typing import Any, cast
+from typing import Any, Literal, cast
 
 import httpx
 import httpx2
@@ -14,10 +15,9 @@ import pytest
 from fastapi.testclient import TestClient
 from fastmcp import Client
 from fastmcp.client.transports import StreamableHttpTransport
-from fastmcp.exceptions import AuthorizationError, ToolError
+from fastmcp.exceptions import AuthorizationError, McpError, ToolError
 from fastmcp.server.auth import AccessToken
 from fastmcp.server.middleware import MiddlewareContext
-from mcp.shared.exceptions import McpError
 from mcp.types import TextContent
 from starlette.applications import Starlette
 from starlette.routing import Mount
@@ -368,7 +368,10 @@ def test_token_verifier_keeps_event_loop_responsive(monkeypatch: pytest.MonkeyPa
 
 @asynccontextmanager
 async def _mcp_client(
-    token: str | None, *, response_bodies: list[bytes] | None = None
+    token: str | None,
+    *,
+    response_bodies: list[bytes] | None = None,
+    mode: Literal["legacy", "auto"] = "legacy",
 ) -> AsyncIterator[Client[Any]]:
     from news_dashboard.mcp.server import mcp_http_app
 
@@ -391,13 +394,13 @@ async def _mcp_client(
 
     def httpx_client_factory(
         headers: dict[str, str] | None = None,
-        timeout: httpx.Timeout | None = None,
-        auth: httpx.Auth | None = None,
+        timeout: httpx2.Timeout | None = None,
+        auth: httpx2.Auth | None = None,
         *,
         follow_redirects: bool = True,
-    ) -> httpx.AsyncClient:
-        return httpx.AsyncClient(
-            transport=httpx.ASGITransport(app=transport_app),
+    ) -> httpx2.AsyncClient:
+        return httpx2.AsyncClient(
+            transport=httpx2.ASGITransport(app=transport_app),
             base_url="http://localhost:8080",
             headers=headers,
             timeout=timeout,
@@ -413,7 +416,7 @@ async def _mcp_client(
     client_error: BaseException | None = None
     async with transport_app.router.lifespan_context(transport_app):
         try:
-            async with Client(transport) as mcp_client:
+            async with Client(transport, mode=mode) as mcp_client:
                 yield mcp_client
         except BaseException as exc:
             client_error = exc
@@ -432,8 +435,9 @@ def _decode_sse_json_response(body: bytes) -> dict[str, Any]:
     return payload
 
 
+@pytest.mark.parametrize("mode", ["legacy", "auto"])
 def test_fastmcp_initializes_and_lists_search_tools(
-    pg_clean: str, monkeypatch: pytest.MonkeyPatch
+    pg_clean: str, monkeypatch: pytest.MonkeyPatch, mode: Literal["legacy", "auto"]
 ) -> None:
     from news_dashboard.mcp import service
 
@@ -443,7 +447,7 @@ def test_fastmcp_initializes_and_lists_search_tools(
     created = service.create_token(user_id, "client", scopes=("search",), database_url=pg_clean)
 
     async def exercise() -> None:
-        async with _mcp_client(created["token"]) as mcp_client:
+        async with _mcp_client(created["token"], mode=mode) as mcp_client:
             tools = await mcp_client.list_tools()
         assert [tool.name for tool in tools] == [
             "list_latest_news",
@@ -467,7 +471,7 @@ def test_search_tools_publish_strict_generated_schemas_and_descriptions(
         async with _mcp_client(created["token"]) as mcp_client:
             tools = {tool.name: tool for tool in await mcp_client.list_tools()}
         assert set(tools) == {"list_latest_news", "list_news_sources", "search_news"}
-        schema = tools["search_news"].inputSchema
+        schema = tools["search_news"].input_schema
         properties = schema["properties"]
         assert properties["q"]["maxLength"] == 2_000
         assert properties["limit"]["default"] == 10
@@ -482,7 +486,7 @@ def test_search_tools_publish_strict_generated_schemas_and_descriptions(
         description = tools["search_news"].description or ""
         for phrase in ("empty", "OR", "AND", "discovery", "archived", "offset", "bodies"):
             assert phrase in description
-        source_schema = tools["list_news_sources"].inputSchema["properties"]
+        source_schema = tools["list_news_sources"].input_schema["properties"]
         assert source_schema["limit"]["minimum"] == 1
         assert source_schema["limit"]["maximum"] == 25
         cursor_schema = source_schema["cursor"]["anyOf"][0]
@@ -595,12 +599,14 @@ def test_search_news_empty_query_is_ordered_and_paginatable(
         ({"offset": 10_001}, "10001"),
     ],
 )
+@pytest.mark.parametrize("mode", ["legacy", "auto"])
 def test_search_news_rejects_invalid_arguments_without_logging_values(
     pg_clean: str,
     monkeypatch: pytest.MonkeyPatch,
     caplog: pytest.LogCaptureFixture,
     arguments: dict[str, Any],
     secret: str,
+    mode: Literal["legacy", "auto"],
 ) -> None:
     from news_dashboard.mcp import service
 
@@ -610,7 +616,7 @@ def test_search_news_rejects_invalid_arguments_without_logging_values(
     caplog.set_level(logging.DEBUG)
 
     async def exercise() -> None:
-        async with _mcp_client(created["token"]) as mcp_client:
+        async with _mcp_client(created["token"], mode=mode) as mcp_client:
             result = await mcp_client.call_tool("search_news", arguments, raise_on_error=False)
         assert result.is_error is True
 
@@ -620,7 +626,9 @@ def test_search_news_rejects_invalid_arguments_without_logging_values(
         for record in caplog.records
         if record.name in {"news_dashboard.mcp", "fastmcp.server.server"}
     )
-    assert secret not in server_messages
+    # Numeric arguments can coincide with allowed timing and token-ID metadata.
+    content_messages = re.sub(r"(?:duration_ms|token_id)=\d+(?:\.\d+)?", "", server_messages)
+    assert secret not in content_messages
 
 
 def test_search_tools_are_hidden_and_denied_without_search_scope(
@@ -1146,10 +1154,10 @@ def test_get_news_article_revoked_read_token_fails_transport_authentication(
     service.revoke_token(user_id, created["id"], database_url=pg_clean)
 
     async def exercise() -> None:
-        with pytest.raises(httpx.HTTPStatusError) as exc_info:
+        with pytest.raises(McpError, match="Server returned an error response") as exc_info:
             async with _mcp_client(created["token"]):
                 pass
-        assert exc_info.value.response.status_code == 401
+        assert exc_info.value.error.code == -32603
 
     asyncio.run(exercise())
 
@@ -1229,13 +1237,13 @@ def test_get_news_article_outer_response_middleware_intervenes_via_official_tran
 
     def httpx_client_factory(
         headers: dict[str, str] | None = None,
-        timeout: httpx.Timeout | None = None,
-        auth: httpx.Auth | None = None,
+        timeout: httpx2.Timeout | None = None,
+        auth: httpx2.Auth | None = None,
         *,
         follow_redirects: bool = True,
-    ) -> httpx.AsyncClient:
-        return httpx.AsyncClient(
-            transport=httpx.ASGITransport(app=transport_app),
+    ) -> httpx2.AsyncClient:
+        return httpx2.AsyncClient(
+            transport=httpx2.ASGITransport(app=transport_app),
             base_url="http://outer-limit.test",
             headers=headers,
             timeout=timeout,
@@ -1251,12 +1259,13 @@ def test_get_news_article_outer_response_middleware_intervenes_via_official_tran
     async def exercise() -> None:
         async with (
             transport_app.router.lifespan_context(transport_app),
-            Client(transport) as mcp_client,
+            Client(transport, mode="legacy") as mcp_client,
         ):
-            with pytest.raises(RuntimeError, match="did not return structured content"):
-                await mcp_client.call_tool(
-                    "get_news_article", {"article_id": 117}, raise_on_error=False
-                )
+            result = await mcp_client.call_tool(
+                "get_news_article", {"article_id": 117}, raise_on_error=False
+            )
+            assert result.structured_content is None
+            assert truncation_marker in str(result.content)
 
     asyncio.run(exercise())
     tool_response = next(body for body in response_bodies if truncation_marker.encode() in body)
@@ -1987,12 +1996,11 @@ def test_fastmcp_transport_rejects_unavailable_authentication(
         monkeypatch.setenv("MCP_SERVER_ENABLED", "false")
 
     async def exercise() -> None:
-        expected_exception = McpError if mode == "disabled" else httpx.HTTPStatusError
+        expected_exception = McpError
         with pytest.raises(expected_exception) as exc_info:
             async with _mcp_client(token):
                 pass
-        if isinstance(exc_info.value, httpx.HTTPStatusError):
-            assert exc_info.value.response.status_code == 401
+        assert exc_info.value.error.code == (-32601 if mode == "disabled" else -32603)
 
     asyncio.run(exercise())
 
@@ -2194,7 +2202,7 @@ def test_ask_news_schema_exposes_only_bounded_question_and_corpus(
         async with _mcp_client(token) as mcp_client:
             [tool] = await mcp_client.list_tools()
         assert tool.name == "ask_news"
-        schema = tool.inputSchema
+        schema = tool.input_schema
         assert schema["required"] == ["question"]
         assert set(schema["properties"]) == {"question", "corpus"}
         assert schema["properties"]["question"]["minLength"] == 1
