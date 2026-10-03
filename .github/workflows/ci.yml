@@ -66,6 +66,7 @@ jobs:
             backend:
               - 'backend/**'
               - 'pyproject.toml'
+              - 'uv.lock'
               - 'scripts/**'
             frontend:
               - 'frontend/**'
