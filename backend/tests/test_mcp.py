@@ -627,7 +627,9 @@ def test_search_news_rejects_invalid_arguments_without_logging_values(
         if record.name in {"news_dashboard.mcp", "fastmcp.server.server"}
     )
     # Numeric arguments can coincide with allowed timing and token-ID metadata.
-    content_messages = re.sub(r"(?:duration_ms|token_id)=\d+(?:\.\d+)?", "", server_messages)
+    content_messages = re.sub(
+        r"(?:duration_ms|token_id)=\d+(?:\.\d+)?", "<metadata>", server_messages
+    )
     assert secret not in content_messages
 
 
