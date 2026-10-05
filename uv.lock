@@ -8,7 +8,7 @@ resolution-markers = [
 
 [[package]]
 name = "a2a-sdk"
-version = "1.1.5"
+version = "1.2.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "google-api-core" },
@@ -19,9 +19,9 @@ dependencies = [
     { name = "protobuf" },
     { name = "pydantic" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/75/b3/db19deba777c2ac8d963d2d0c123023730502d21c62b725eb4bdcb351c33/a2a_sdk-1.1.5.tar.gz", hash = "sha256:f81837f86a9bbb3ed4909539be642d61e8539ce8300a6578fa71dc901ee65b97", size = 402715, upload-time = "2026-09-21T09:52:26.352Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/32/13/b00cf93d0cb46010d2ea0e3132c33212bd27e44f775c98ee84ca1ba6382f/a2a_sdk-1.2.1.tar.gz", hash = "sha256:05231ade9e05989a344414474440bf2ab04950312ded5519cf779fea1fb918d6", size = 429358, upload-time = "2026-09-30T11:52:41.996Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/0b/91/087e4281bae91e19c4bb0736dc0807725e2e1f641dcc1ac86e625137c32c/a2a_sdk-1.1.5-py3-none-any.whl", hash = "sha256:c1d63d36b79a097c62dd9be001fce21d5939f5a811a9c5afd0ba8082f13f68bf", size = 255110, upload-time = "2026-09-21T09:52:24.741Z" },
+    { url = "https://files.pythonhosted.org/packages/cd/71/eca113a1bf8b8896389181d0cc68692011ccf0fba7b32c5746c32a04518d/a2a_sdk-1.2.1-py3-none-any.whl", hash = "sha256:5be3ed614f0dfb8f1e13c201dc603f7e01f364613951c1d492fddd1ffc010e29", size = 274281, upload-time = "2026-09-30T11:52:40.368Z" },
 ]
 
 [package.optional-dependencies]
@@ -2167,7 +2167,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "a2a-sdk", extras = ["http-server"], specifier = ">=1.1.5" },
+    { name = "a2a-sdk", extras = ["http-server"], specifier = ">=1.2.1" },
     { name = "anyio", specifier = ">=4.15.1" },
     { name = "apscheduler", specifier = ">=3.11.3" },
     { name = "bcrypt", specifier = ">=4.0.0" },
