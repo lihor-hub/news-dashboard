@@ -656,7 +656,9 @@ def test_response_text_accepts_string_content() -> None:
 
 def test_response_text_rejects_unsupported_block_content() -> None:
     with pytest.raises(TypeError, match="string content"):
-        response_text(AIMessage(content=[{"type": "text", "text": "answer"}]))
+        response_text(
+            AIMessage(content=[{"type": "image_url", "image_url": "https://example.test/image"}])
+        )
 
 
 @pytest.mark.usefixtures("_no_langfuse")
@@ -895,3 +897,17 @@ def test_get_chat_client_happy_path_builds_one_client(
 
     assert result == "primary-result"
     assert factory.call_count == 1
+
+
+def test_response_text_extracts_visible_text_without_reasoning() -> None:
+    message = AIMessage(
+        content=[
+            {
+                "type": "reasoning",
+                "summary": [{"type": "summary_text", "text": "private reasoning"}],
+            },
+            {"type": "text", "text": "visible "},
+            {"type": "output_text", "text": "answer"},
+        ]
+    )
+    assert response_text(message) == "visible answer"

@@ -38,6 +38,8 @@ dependencies = [
   "a2a-sdk[http-server]>=1.2.1",
   "fastmcp>=4,<5",
   "mcp>=2.2,<3",
+  "pyjwt[crypto]>=2.15.0",
+  "filelock>=3.29.4",
 ]
 
 [project.optional-dependencies]

@@ -13,6 +13,8 @@ import os
 import time
 from typing import TYPE_CHECKING, Any, cast
 
+from news_dashboard.ai_client import chat_model_name
+
 if TYPE_CHECKING:
     from openai.types.chat import ChatCompletion
 
@@ -193,15 +195,15 @@ def _answer(
 
     from news_dashboard.ai_client import (
         SafeAIObservation,
-        free_llm_config,
         get_chat_client,
         get_chat_model,
+        text_llm_config,
     )
 
-    api_key, base_url = free_llm_config()
+    api_key, base_url = text_llm_config()
     if not api_key:
         _require_env("FREE_LLM_API_KEY", "use Ask AI")
-    model_name = os.getenv("OPENAI_ANSWER_MODEL", DEFAULT_ANSWER_MODEL)
+    model_name = chat_model_name("OPENAI_ANSWER_MODEL", DEFAULT_ANSWER_MODEL)
     if not trace_content:
         client = get_chat_client(
             api_key=api_key,
@@ -561,6 +563,58 @@ def embed_all_eligible(
 # ── Main Q&A entry-point ───────────────────────────────────────────────────
 
 
+def _text_retrieval(
+    query: str,
+    db_path: Any,
+    *,
+    include_all: bool,
+    user_id: int | None,
+    limit: int,
+) -> list[Any]:
+    """Rank an authorized corpus in PostgreSQL when text providers cannot embed."""
+    from news_dashboard.db import connect, init_db
+
+    init_db(db_path)
+    params = {"query": query, "include_all": include_all, "user_id": user_id, "limit": limit}
+    with connect(db_path) as conn:
+        if user_id is None:
+            return list(
+                conn.execute(
+                    """
+                SELECT id, title, url, summary, COUNT(*) OVER () AS eligible_count
+                FROM articles
+                WHERE (%(include_all)s AND status != 'archived')
+                   OR (NOT %(include_all)s AND status IN ('saved', 'read'))
+                ORDER BY ts_rank_cd(search_vector, plainto_tsquery('english', %(query)s)) DESC,
+                         discovered_at DESC, id DESC
+                LIMIT %(limit)s
+                """,
+                    params,
+                ).fetchall()
+            )
+        return list(
+            conn.execute(
+                """
+            SELECT a.id, a.title, a.url, a.summary, COUNT(*) OVER () AS eligible_count
+            FROM articles a
+            JOIN sources src ON src.slug = a.source_slug
+            LEFT JOIN user_sources us_src
+              ON us_src.user_id = %(user_id)s AND us_src.source_slug = a.source_slug
+            LEFT JOIN user_article_state uas
+              ON uas.article_id = a.id AND uas.user_id = %(user_id)s
+            WHERE ((%(include_all)s AND COALESCE(uas.state, 'today') != 'archived')
+                   OR (NOT %(include_all)s AND (uas.state = 'done' OR uas.starred)))
+              AND ((src.owner_user_id IS NULL AND COALESCE(us_src.enabled, TRUE))
+                   OR src.owner_user_id = %(user_id)s)
+            ORDER BY ts_rank_cd(a.search_vector, plainto_tsquery('english', %(query)s)) DESC,
+                     a.discovered_at DESC, a.id DESC
+            LIMIT %(limit)s
+            """,
+                params,
+            ).fetchall()
+        )
+
+
 def _ask_impl(
     query: str,
     db_path: Any = None,
@@ -592,84 +646,98 @@ def _ask_impl(
         execution_policy.provider_timeout_seconds if execution_policy is not None else None
     )
     retrieval_limit = execution_policy.retrieval_limit if execution_policy is not None else TOP_K
-    if execution_policy is None:
-        embed_all_eligible(db_path, include_all=include_all, user_id=user_id)
-    else:
-        embed_all_eligible(
+
+    from news_dashboard.ai_client import free_llm_config, text_provider
+
+    if text_provider() in {"chatgpt", "ollama"} and not free_llm_config()[0]:
+        rows = _text_retrieval(
+            query,
             db_path,
             include_all=include_all,
             user_id=user_id,
-            max_articles=backfill_limit,
-            provider_timeout_seconds=provider_timeout,
-            trace_content=execution_policy.trace_content,
+            limit=retrieval_limit,
         )
-
-    # 2. Embed the user's question, then let Postgres rank + return the top-k
-    #    nearest articles in one query via the pgvector `<=>` cosine-distance
-    #    operator (using the embedding_vec HNSW index), with a COUNT(*) in the
-    #    same round trip for the MIN_ARTICLES eligibility check.
-    query_embedding = (
-        _embed(query)
-        if execution_policy is None
-        else _embed(
-            query,
-            timeout_seconds=provider_timeout,
-            trace_content=execution_policy.trace_content,
-        )
-    )
-    query_vec = vector_literal(query_embedding)
-    init_db(db_path)
-    with connect(db_path) as conn:
-        if user_id is not None:
-            if include_all:
-                sql = """
-                    SELECT a.id, a.title, a.url, a.summary,
-                      COUNT(*) OVER () AS eligible_count
-                    FROM articles a
-                    LEFT JOIN sources src ON src.slug = a.source_slug
-                    LEFT JOIN user_sources us_src
-                        ON us_src.user_id = %(user_id)s AND us_src.source_slug = a.source_slug
-                    LEFT JOIN user_article_state uas
-                        ON uas.article_id = a.id AND uas.user_id = %(user_id)s
-                    WHERE COALESCE(uas.state, 'today') != 'archived'
-                      AND a.embedding_vec IS NOT NULL
-                      AND (
-                        (src.owner_user_id IS NULL AND COALESCE(us_src.enabled, TRUE))
-                        OR src.owner_user_id = %(user_id)s
-                      )
-                    ORDER BY a.embedding_vec <=> %(query_vec)s::vector
-                    LIMIT %(top_k)s
-                """
-            else:
-                sql = """
-                    SELECT a.id, a.title, a.url, a.summary,
-                      COUNT(*) OVER () AS eligible_count
-                    FROM articles a
-                    LEFT JOIN sources src ON src.slug = a.source_slug
-                    LEFT JOIN user_sources us_src
-                        ON us_src.user_id = %(user_id)s AND us_src.source_slug = a.source_slug
-                    JOIN user_article_state uas
-                        ON uas.article_id = a.id AND uas.user_id = %(user_id)s
-                    WHERE (uas.state = 'done' OR uas.starred = TRUE)
-                      AND a.embedding_vec IS NOT NULL
-                      AND (
-                        (src.owner_user_id IS NULL AND COALESCE(us_src.enabled, TRUE))
-                        OR src.owner_user_id = %(user_id)s
-                      )
-                    ORDER BY a.embedding_vec <=> %(query_vec)s::vector
-                    LIMIT %(top_k)s
-                """
-            rows = conn.execute(
-                sql, {"user_id": user_id, "query_vec": query_vec, "top_k": retrieval_limit}
-            ).fetchall()
+    else:
+        if execution_policy is None:
+            embed_all_eligible(db_path, include_all=include_all, user_id=user_id)
         else:
-            status_filter = "status != 'archived'" if include_all else "status IN ('saved', 'read')"
-            rows = conn.execute(
-                "SELECT id, title, url, summary, COUNT(*) OVER () AS eligible_count "
-                f"FROM articles WHERE {status_filter} AND embedding_vec IS NOT NULL "
-                "ORDER BY embedding_vec <=> %(query_vec)s::vector LIMIT %(top_k)s",
-                {"query_vec": query_vec, "top_k": retrieval_limit},
-            ).fetchall()
+            embed_all_eligible(
+                db_path,
+                include_all=include_all,
+                user_id=user_id,
+                max_articles=backfill_limit,
+                provider_timeout_seconds=provider_timeout,
+                trace_content=execution_policy.trace_content,
+            )
+
+        # 2. Embed the user's question, then let Postgres rank + return the top-k
+        #    nearest articles in one query via the pgvector `<=>` cosine-distance
+        #    operator (using the embedding_vec HNSW index), with a COUNT(*) in the
+        #    same round trip for the MIN_ARTICLES eligibility check.
+        query_embedding = (
+            _embed(query)
+            if execution_policy is None
+            else _embed(
+                query,
+                timeout_seconds=provider_timeout,
+                trace_content=execution_policy.trace_content,
+            )
+        )
+        query_vec = vector_literal(query_embedding)
+        init_db(db_path)
+        with connect(db_path) as conn:
+            if user_id is not None:
+                if include_all:
+                    sql = """
+                        SELECT a.id, a.title, a.url, a.summary,
+                          COUNT(*) OVER () AS eligible_count
+                        FROM articles a
+                        LEFT JOIN sources src ON src.slug = a.source_slug
+                        LEFT JOIN user_sources us_src
+                            ON us_src.user_id = %(user_id)s AND us_src.source_slug = a.source_slug
+                        LEFT JOIN user_article_state uas
+                            ON uas.article_id = a.id AND uas.user_id = %(user_id)s
+                        WHERE COALESCE(uas.state, 'today') != 'archived'
+                          AND a.embedding_vec IS NOT NULL
+                          AND (
+                            (src.owner_user_id IS NULL AND COALESCE(us_src.enabled, TRUE))
+                            OR src.owner_user_id = %(user_id)s
+                          )
+                        ORDER BY a.embedding_vec <=> %(query_vec)s::vector
+                        LIMIT %(top_k)s
+                    """
+                else:
+                    sql = """
+                        SELECT a.id, a.title, a.url, a.summary,
+                          COUNT(*) OVER () AS eligible_count
+                        FROM articles a
+                        LEFT JOIN sources src ON src.slug = a.source_slug
+                        LEFT JOIN user_sources us_src
+                            ON us_src.user_id = %(user_id)s AND us_src.source_slug = a.source_slug
+                        JOIN user_article_state uas
+                            ON uas.article_id = a.id AND uas.user_id = %(user_id)s
+                        WHERE (uas.state = 'done' OR uas.starred = TRUE)
+                          AND a.embedding_vec IS NOT NULL
+                          AND (
+                            (src.owner_user_id IS NULL AND COALESCE(us_src.enabled, TRUE))
+                            OR src.owner_user_id = %(user_id)s
+                          )
+                        ORDER BY a.embedding_vec <=> %(query_vec)s::vector
+                        LIMIT %(top_k)s
+                    """
+                rows = conn.execute(
+                    sql, {"user_id": user_id, "query_vec": query_vec, "top_k": retrieval_limit}
+                ).fetchall()
+            else:
+                status_filter = (
+                    "status != 'archived'" if include_all else "status IN ('saved', 'read')"
+                )
+                rows = conn.execute(
+                    "SELECT id, title, url, summary, COUNT(*) OVER () AS eligible_count "
+                    f"FROM articles WHERE {status_filter} AND embedding_vec IS NOT NULL "
+                    "ORDER BY embedding_vec <=> %(query_vec)s::vector LIMIT %(top_k)s",
+                    {"query_vec": query_vec, "top_k": retrieval_limit},
+                ).fetchall()
 
     eligible_count = rows[0]["eligible_count"] if rows else 0
     if eligible_count < MIN_ARTICLES:

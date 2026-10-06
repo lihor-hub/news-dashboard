@@ -12,9 +12,9 @@ from __future__ import annotations
 import json
 import logging
 import math
-import os
 from typing import Any
 
+from news_dashboard.ai_client import chat_model_name
 from news_dashboard.body_fetch import get_article
 from news_dashboard.db import connect, init_db
 from news_dashboard.embeddings import parse_vector
@@ -67,13 +67,13 @@ def _insights_ai_config() -> tuple[str, str | None, str]:
     the shared ``OPENAI_BASE_URL`` / ``OPENAI_API_KEY``. The base URL is
     optional; when unset the official OpenAI endpoint is used.
     """
-    from news_dashboard.ai_client import free_llm_config
+    from news_dashboard.ai_client import text_llm_config
 
-    api_key, base_url = free_llm_config()
+    api_key, base_url = text_llm_config()
     if not api_key:
         msg = "FREE_LLM_API_KEY (or OPENAI_API_KEY) is not configured"
         raise InsightsNotConfiguredError(msg)
-    model = os.getenv("OPENAI_INSIGHTS_MODEL", DEFAULT_INSIGHTS_MODEL)
+    model = chat_model_name("OPENAI_INSIGHTS_MODEL", DEFAULT_INSIGHTS_MODEL)
     return api_key, base_url, model
 
 
@@ -210,13 +210,13 @@ DEFAULT_CLUSTER_MODEL = "gpt-4o-mini"
 
 
 def _cluster_ai_config() -> tuple[str, str | None, str]:
-    from news_dashboard.ai_client import free_llm_config
+    from news_dashboard.ai_client import text_llm_config
 
-    api_key, base_url = free_llm_config()
+    api_key, base_url = text_llm_config()
     if not api_key:
         msg = "FREE_LLM_API_KEY (or OPENAI_API_KEY) is not configured"
         raise InsightsNotConfiguredError(msg)
-    model = os.getenv("OPENAI_INSIGHTS_MODEL", DEFAULT_CLUSTER_MODEL)
+    model = chat_model_name("OPENAI_INSIGHTS_MODEL", DEFAULT_CLUSTER_MODEL)
     return api_key, base_url, model
 
 

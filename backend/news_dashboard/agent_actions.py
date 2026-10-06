@@ -14,7 +14,6 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 from contextlib import nullcontext
 from typing import Any, NotRequired, cast
 
@@ -22,6 +21,7 @@ from langchain_core.runnables import RunnableConfig
 from langgraph.graph import END, START, StateGraph
 from typing_extensions import TypedDict
 
+from news_dashboard.ai_client import chat_model_name
 from news_dashboard.db import connect, init_db, row_to_dict
 
 logger = logging.getLogger(__name__)
@@ -91,13 +91,13 @@ class _ExecutionState(TypedDict):
 
 
 def _agent_actions_ai_config() -> tuple[str, str | None, str]:
-    from news_dashboard.ai_client import free_llm_config
+    from news_dashboard.ai_client import text_llm_config
 
-    api_key, base_url = free_llm_config()
+    api_key, base_url = text_llm_config()
     if not api_key:
         msg = "FREE_LLM_API_KEY (or OPENAI_API_KEY) is not configured"
         raise AgentActionError(msg)
-    model = os.getenv("OPENAI_AGENT_ACTIONS_MODEL", DEFAULT_AGENT_ACTIONS_MODEL)
+    model = chat_model_name("OPENAI_AGENT_ACTIONS_MODEL", DEFAULT_AGENT_ACTIONS_MODEL)
     return api_key, base_url, model
 
 

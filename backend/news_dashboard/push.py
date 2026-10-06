@@ -19,6 +19,7 @@ from urllib.parse import urlparse
 import requests
 from requests.structures import CaseInsensitiveDict
 
+from news_dashboard.ai_client import chat_model_name
 from news_dashboard.url_safety import (
     UnsafeUrlError,
     open_server_fetch_url,
@@ -112,17 +113,17 @@ def generate_push_hook(briefing: dict[str, Any]) -> str:
         from langfuse import propagate_attributes
 
         from news_dashboard.ai_client import (
-            free_llm_config,
             get_chat_model,
             langfuse_enabled,
             response_text,
+            text_llm_config,
         )
 
-        api_key, base_url = free_llm_config()
+        api_key, base_url = text_llm_config()
         if not api_key:
             return fallback
 
-        model = os.getenv("OPENAI_BRIEFING_MODEL", "gpt-4o-mini")
+        model = chat_model_name("OPENAI_BRIEFING_MODEL", "gpt-4o-mini")
 
         if headlines:
             headline_block = "\n".join(f"- {h}" for h in headlines)
@@ -187,17 +188,17 @@ def generate_recap_push_hook(recap: dict[str, Any]) -> str:
         from langfuse import propagate_attributes
 
         from news_dashboard.ai_client import (
-            free_llm_config,
             get_chat_model,
             langfuse_enabled,
             response_text,
+            text_llm_config,
         )
 
-        api_key, base_url = free_llm_config()
+        api_key, base_url = text_llm_config()
         if not api_key:
             return fallback
 
-        model = os.getenv("OPENAI_BRIEFING_MODEL", "gpt-4o-mini")
+        model = chat_model_name("OPENAI_BRIEFING_MODEL", "gpt-4o-mini")
 
         prompt = (
             "Write a single encouraging mobile push notification hook (max 20 words) "

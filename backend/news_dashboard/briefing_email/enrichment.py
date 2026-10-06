@@ -405,8 +405,10 @@ def _research_tools(tavily_api_key: str, budget: _ResearchBudget) -> list[Any]:
 
 
 def _model_configs() -> list[tuple[str, str | None]]:
-    primary = ai_client.free_llm_config()
-    fallback = ai_client.openai_config()
+    if ai_client.text_provider() == "chatgpt":
+        return []
+    primary = ai_client.text_llm_config()
+    fallback = ai_client.openai_config() if ai_client.text_provider() == "gateway" else ("", None)
     configs: list[tuple[str, str | None]] = []
     for item in (primary, fallback):
         if item[0] and item not in configs:
@@ -426,10 +428,8 @@ def _invoke_deep_research(
     from openai import OpenAIError
 
     tavily_api_key = os.environ["TAVILY_API_KEY"]
-    model_name = (
-        os.getenv("OPENAI_BRIEFING_ENRICHMENT_MODEL")
-        or os.getenv("OPENAI_BRIEFING_MODEL")
-        or "gpt-4o-mini"
+    model_name = os.getenv("OPENAI_BRIEFING_ENRICHMENT_MODEL") or ai_client.chat_model_name(
+        "OPENAI_BRIEFING_MODEL", "gpt-4o-mini"
     )
     section_payload = [
         {
@@ -459,6 +459,9 @@ def _invoke_deep_research(
         }
         if base_url is not None:
             model_kwargs["base_url"] = base_url
+        model_kwargs.update(ai_client.chat_model_parameters(model_name))
+        if "reasoning" in model_kwargs:
+            model_kwargs.pop("temperature", None)
         model = ChatOpenAI(**model_kwargs)
         from langchain.agents.middleware import wrap_model_call
 
@@ -604,10 +607,8 @@ def enrich_briefing_for_email(  # noqa: PLR0911 - explicit fail-open outcomes
             payload,
             fetched_urls=fetched_urls,
         )
-        model = (
-            os.getenv("OPENAI_BRIEFING_ENRICHMENT_MODEL")
-            or os.getenv("OPENAI_BRIEFING_MODEL")
-            or "gpt-4o-mini"
+        model = os.getenv("OPENAI_BRIEFING_ENRICHMENT_MODEL") or ai_client.chat_model_name(
+            "OPENAI_BRIEFING_MODEL", "gpt-4o-mini"
         )
         save_completed_enrichment(
             user_id=user_id,

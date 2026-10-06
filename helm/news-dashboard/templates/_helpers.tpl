@@ -31,12 +31,28 @@
 {{- end -}}
 
 {{- define "news-dashboard.aiEnv" -}}
+- name: AI_TEXT_PROVIDER
+  value: {{ .Values.app.ai.textProvider | default "gateway" | quote }}
+- name: AI_REQUEST_TIMEOUT_SECONDS
+  value: {{ .Values.app.ai.requestTimeoutSeconds | default 30 | quote }}
+{{- range $name, $value := dict "AI_MODEL_PRESET" .Values.app.ai.modelPreset "AI_TEXT_MODEL" .Values.app.ai.textModel "AI_REASONING_EFFORT" .Values.app.ai.reasoningEffort "CHATGPT_CREDENTIALS_FILE" .Values.app.ai.chatgptCredentialsFile }}
+{{- if $value }}
+- name: {{ $name }}
+  value: {{ $value | quote }}
+{{- end }}
+{{- end }}
 {{- if .Values.app.ai.existingSecret }}
 - name: OPENAI_API_KEY
   valueFrom:
     secretKeyRef:
       name: {{ .Values.app.ai.existingSecret | quote }}
       key: {{ .Values.app.ai.openaiApiKeyKey | quote }}
+      optional: true
+- name: OLLAMA_API_KEY
+  valueFrom:
+    secretKeyRef:
+      name: {{ .Values.app.ai.existingSecret | quote }}
+      key: {{ .Values.app.ai.ollamaApiKeyKey | default "OLLAMA_API_KEY" | quote }}
       optional: true
 - name: FREE_LLM_API_KEY
   valueFrom:

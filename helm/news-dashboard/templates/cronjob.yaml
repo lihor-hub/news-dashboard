@@ -103,7 +103,20 @@ spec:
               volumeMounts:
                 - name: tmp
                   mountPath: /tmp
+{{- if eq .Values.app.ai.textProvider "chatgpt" }}
+                - name: app-data
+                  mountPath: {{ .Values.app.data.dir | quote }}
+{{- end }}
           volumes:
+{{- if eq .Values.app.ai.textProvider "chatgpt" }}
+            - name: app-data
+  {{- if .Values.app.data.persistence.enabled }}
+              persistentVolumeClaim:
+                claimName: {{ default (printf "%s-data" (include "news-dashboard.fullname" .)) .Values.app.data.persistence.existingClaim | quote }}
+  {{- else }}
+              emptyDir: {}
+  {{- end }}
+{{- end }}
             - name: tmp
               emptyDir: {}
 {{- end }}

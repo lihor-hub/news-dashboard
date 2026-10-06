@@ -12,6 +12,7 @@ health and backups before exposing the instance.
 | Guide | Use it to |
 | ----- | --------- |
 | [Deployment](deployment.md) | Choose a runtime, pin and verify images, configure Ingress and host PostgreSQL, and enable Neo4j. |
+| [AI providers and reasoning models](ai-providers.md) | Connect ChatGPT subscriptions, Luna/Sol presets, OpenAI APIs, and Ollama Cloud. |
 | [Environment variables](environment-variables.md) | Configure credentials, AI, email, privacy, security, and optional integrations. |
 | [Health and probes](health-and-probes.md) | Choose readiness/liveness checks and configure Docker or Kubernetes probes. |
 | [Monitoring and metrics](monitoring-and-metrics.md) | Monitor ingestion, scrape private Prometheus metrics, and configure error tracking. |

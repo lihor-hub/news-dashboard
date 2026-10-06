@@ -9,11 +9,11 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
+from news_dashboard.ai_client import chat_model_name
 from news_dashboard.db import connect, init_db
 
 logger = logging.getLogger(__name__)
@@ -112,13 +112,13 @@ def goal_alignment_adjustment(
 
 
 def _quiz_ai_config() -> tuple[str, str | None, str]:
-    from news_dashboard.ai_client import free_llm_config
+    from news_dashboard.ai_client import text_llm_config
 
-    api_key, base_url = free_llm_config()
+    api_key, base_url = text_llm_config()
     if not api_key:
         msg = "FREE_LLM_API_KEY (or OPENAI_API_KEY) is not configured"
         raise RuntimeError(msg)
-    model = os.getenv("OPENAI_QUIZ_MODEL", DEFAULT_QUIZ_MODEL)
+    model = chat_model_name("OPENAI_QUIZ_MODEL", DEFAULT_QUIZ_MODEL)
     return api_key, base_url, model
 
 

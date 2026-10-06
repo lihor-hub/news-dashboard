@@ -34,7 +34,9 @@ def auto_enrich_limit() -> int:
 
 
 def ai_available() -> bool:
-    return bool(os.getenv("FREE_LLM_API_KEY") or os.getenv("OPENAI_API_KEY"))
+    from news_dashboard.ai_client import text_llm_config
+
+    return bool(text_llm_config()[0])
 
 
 def _candidates(limit: int, database_url: str | None) -> tuple[int, list[dict[str, Any]]]:

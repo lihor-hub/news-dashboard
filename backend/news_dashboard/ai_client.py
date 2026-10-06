@@ -163,6 +163,7 @@ def chat_create(
     trace = trace_params(name, tags=tags, user_id=user_id, session_id=session_id)
     if langfuse_enabled() and prompt is not None and prompt.langfuse_prompt is not None:
         trace["langfuse_prompt"] = prompt.langfuse_prompt
+    kwargs = chat_request_parameters(kwargs)
     completion = client.chat.completions.create(**kwargs, **trace)
     return cast("ChatCompletion", completion)
 
@@ -203,6 +204,98 @@ def free_llm_config() -> tuple[str, str | None]:
     api_key = os.getenv("FREE_LLM_API_KEY") or os.getenv("OPENAI_API_KEY") or ""
     base_url = os.getenv("FREE_LLM_BASE_URL") or os.getenv("OPENAI_BASE_URL") or None
     return api_key, base_url
+
+
+_MODEL_PRESETS = {
+    "luna-medium": ("gpt-6-luna", "medium"),
+    "luna-high": ("gpt-6-luna", "high"),
+    "sol-low": ("gpt-6-sol", "low"),
+    "sol-medium": ("gpt-6-sol", "medium"),
+}
+_CHATGPT_PLAN_KEY = "chatgpt-plan"
+
+
+def text_provider() -> str:
+    """Return the explicitly selected text provider, preserving gateway defaults."""
+    provider = os.getenv("AI_TEXT_PROVIDER") or "gateway"
+    if provider not in {"gateway", "openai", "chatgpt", "ollama"}:
+        message = "AI_TEXT_PROVIDER must be gateway, openai, chatgpt, or ollama"
+        raise ValueError(message)
+    return provider
+
+
+def text_llm_config() -> tuple[str, str | None]:
+    """Resolve text credentials separately from embedding/audio API credentials."""
+    provider = text_provider()
+    if provider == "chatgpt":
+        from news_dashboard.chatgpt_auth import credentials_path
+
+        key = _CHATGPT_PLAN_KEY if credentials_path().is_file() else ""
+        return key, "https://api.openai.com/v1"
+    if provider == "ollama":
+        return os.getenv("OLLAMA_API_KEY", ""), "https://ollama.com/v1"
+    if provider == "openai":
+        return openai_config()
+    return free_llm_config()
+
+
+def _model_preset() -> tuple[str, str] | None:
+    preset = os.getenv("AI_MODEL_PRESET")
+    if not preset:
+        return None
+    if preset not in _MODEL_PRESETS:
+        message = "AI_MODEL_PRESET must be luna-medium, luna-high, sol-low, or sol-medium"
+        raise ValueError(message)
+    return _MODEL_PRESETS[preset]
+
+
+def chat_model_name(env_name: str, default: str) -> str:
+    """Resolve feature override, global text model, preset, then legacy default."""
+    preset = _model_preset()
+    return (
+        os.getenv(env_name)
+        or os.getenv("AI_TEXT_MODEL")
+        or ("gemma4:31b" if text_provider() == "ollama" else None)
+        or (preset[0] if preset else None)
+        or ("gpt-6-luna" if text_provider() == "chatgpt" else default)
+    )
+
+
+def _reasoning_effort(model: str) -> str | None:
+    if not model.startswith(("gpt-6-", "gpt-6.1-")):
+        return None
+    preset = _model_preset()
+    effort = os.getenv("AI_REASONING_EFFORT") or (preset[1] if preset else "medium")
+    if effort not in {"none", "low", "medium", "high", "xhigh", "max"}:
+        message = "AI_REASONING_EFFORT must be none, low, medium, high, xhigh, or max"
+        raise ValueError(message)
+    if effort == "none" and model.startswith(("gpt-6-astra", "gpt-6.1-sol")):
+        message = f"{model} does not support none reasoning effort"
+        raise ValueError(message)
+    return effort
+
+
+def chat_request_parameters(kwargs: dict[str, Any]) -> dict[str, Any]:
+    """Normalize Chat Completions parameters for GPT-6 reasoning models."""
+    result = dict(kwargs)
+    effort = _reasoning_effort(str(result.get("model", "")))
+    if effort is not None:
+        result.setdefault("reasoning_effort", effort)
+        result.pop("temperature", None)
+        max_tokens = result.pop("max_tokens", None)
+        if max_tokens is not None:
+            # Existing feature caps budget visible text only. GPT-6 also bills
+            # reasoning against the output cap, so allow room for both.
+            result.setdefault("max_completion_tokens", max(int(max_tokens), 8192))
+    return result
+
+
+def chat_model_parameters(model: str) -> dict[str, Any]:
+    """Return Responses settings for reasoning and tool-capable LangChain models."""
+    effort = _reasoning_effort(model)
+    if effort is None:
+        return {}
+    return {"use_responses_api": True, "reasoning": {"effort": effort}}
 
 
 def get_openai_client(
@@ -250,6 +343,13 @@ def get_chat_model(
 ) -> Runnable[LanguageModelInput, AIMessage]:
     """Return a LangChain chat model with the existing OpenAI fallback semantics."""
     from langchain_core.runnables import RunnableConfig, RunnableLambda
+
+    if api_key == _CHATGPT_PLAN_KEY:
+        from news_dashboard.chatgpt_plan import get_plan_chat_model
+
+        return get_plan_chat_model(
+            model=model, response_format=response_format, timeout_seconds=timeout_seconds
+        )
     from langchain_openai import ChatOpenAI
     from openai import OpenAIError
 
@@ -266,25 +366,25 @@ def get_chat_model(
         kwargs["temperature"] = temperature
     if response_format is not None:
         kwargs["model_kwargs"] = {"response_format": response_format}
+    kwargs.update(chat_model_parameters(model))
+    if "reasoning" in kwargs:
+        kwargs.pop("temperature", None)
+        if max_tokens is not None:
+            kwargs["max_tokens"] = max(max_tokens, 8192)
     primary = ChatOpenAI(**kwargs)
 
     openai_key, openai_base = openai_config()
-    if not openai_key or (openai_key, openai_base) == (api_key, base_url):
+    if (
+        text_provider() in {"ollama", "openai"}
+        or not openai_key
+        or (openai_key, openai_base) == (api_key, base_url)
+    ):
         return primary
 
-    fallback_kwargs: dict[str, Any] = {
-        "api_key": openai_key,
-        "model": model,
-        "timeout": request_timeout_seconds() if timeout_seconds is None else timeout_seconds,
-    }
+    fallback_kwargs: dict[str, Any] = {**kwargs, "api_key": openai_key}
+    fallback_kwargs.pop("base_url", None)
     if openai_base is not None:
         fallback_kwargs["base_url"] = openai_base
-    if max_tokens is not None:
-        fallback_kwargs["max_tokens"] = max_tokens
-    if temperature is not None:
-        fallback_kwargs["temperature"] = temperature
-    if response_format is not None:
-        fallback_kwargs["model_kwargs"] = {"response_format": response_format}
 
     def invoke_fallback(
         input: LanguageModelInput,  # noqa: A002 - LangChain runnable API terminology
@@ -298,11 +398,24 @@ def get_chat_model(
 
 
 def response_text(message: AIMessage) -> str:
-    """Return text content from a LangChain response, rejecting content blocks."""
+    """Return visible text from Chat Completions or Responses content blocks."""
     if isinstance(message.content, str):
         return message.content
-    msg = "AI response must contain string content"
-    raise TypeError(msg)
+    text: list[str] = []
+    for block in message.content:
+        if isinstance(block, dict) and block.get("type") in {"text", "output_text"}:
+            content = block.get("text")
+            if isinstance(content, str):
+                text.append(content)
+                continue
+        elif isinstance(block, dict) and block.get("type") == "reasoning":
+            continue
+        msg = "AI response must contain string content or supported text blocks"
+        raise TypeError(msg)
+    if not text:
+        msg = "AI response must contain string content or supported text blocks"
+        raise TypeError(msg)
+    return "".join(text)
 
 
 # ── Runtime free-LLM → OpenAI fallback ─────────────────────────────────────
@@ -457,6 +570,7 @@ class _FallbackCompletions:
 
     def create(self, **kwargs: Any) -> Any:
         self._request_attempt += 1
+        kwargs = chat_request_parameters(kwargs)
         return _invoke(
             self._primary,
             self._fallback,
@@ -543,6 +657,10 @@ def get_chat_client(
     ``chat.completions.create`` and ``embeddings.create`` calls made through it.
     The OpenAI fallback client is built lazily, only on the first failure.
     """
+    if api_key == _CHATGPT_PLAN_KEY:
+        from news_dashboard.chatgpt_plan import PlanChatClient
+
+        return cast("OpenAI", PlanChatClient(timeout_seconds=timeout_seconds))
     client_kwargs: dict[str, Any] = {"api_key": api_key, "base_url": base_url}
     if timeout_seconds is not None:
         client_kwargs["timeout_seconds"] = timeout_seconds
@@ -551,7 +669,11 @@ def get_chat_client(
     primary = get_openai_client(**client_kwargs)
     openai_key, openai_base = openai_config()
     fallback: tuple[str, str | None, float | None, bool] | None = None
-    if openai_key and (openai_key, openai_base) != (api_key, base_url):
+    if (
+        openai_key
+        and (openai_key, openai_base) != (api_key, base_url)
+        and base_url != "https://ollama.com/v1"
+    ):
         fallback = (openai_key, openai_base, timeout_seconds, enable_tracing)
     return cast("OpenAI", _FallbackClient(primary, fallback, safe_observation))
 

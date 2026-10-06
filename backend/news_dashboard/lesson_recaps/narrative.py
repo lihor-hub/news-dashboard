@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 from typing import Any
+
+from news_dashboard.ai_client import chat_model_name
 
 logger = logging.getLogger(__name__)
 
@@ -41,17 +42,17 @@ def generate_lesson_recap_narrative(recap: dict[str, Any]) -> str:
         from langfuse import propagate_attributes
 
         from news_dashboard.ai_client import (
-            free_llm_config,
             get_chat_model,
             langfuse_enabled,
             response_text,
+            text_llm_config,
         )
 
-        api_key, base_url = free_llm_config()
+        api_key, base_url = text_llm_config()
         if not api_key:
             return fallback
 
-        model = os.getenv("OPENAI_BRIEFING_MODEL", "gpt-4o-mini")
+        model = chat_model_name("OPENAI_BRIEFING_MODEL", "gpt-4o-mini")
 
         metrics = {k: v for k, v in recap.items() if k != "generated_at"}
 

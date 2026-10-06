@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-import os
 import re
 import time
 from typing import Any, Literal, NotRequired, cast
@@ -15,6 +14,7 @@ from psycopg.types.json import Jsonb
 from pydantic import ValidationError
 from typing_extensions import TypedDict
 
+from news_dashboard.ai_client import chat_model_name
 from news_dashboard.body_fetch import extract_public_content
 from news_dashboard.content_extraction import ExtractionResult
 from news_dashboard.db import connect, init_db, row_to_dict
@@ -813,7 +813,7 @@ def generate_slide_deck_content(lesson: dict[str, Any], user_id: int) -> dict[st
     from news_dashboard.ai_client import get_chat_model, get_prompt, langfuse_enabled, response_text
     from news_dashboard.prompt_catalog import get_chat_prompt
 
-    model = os.getenv("OPENAI_LESSON_CHAT_MODEL", DEFAULT_LESSON_CHAT_MODEL)
+    model = chat_model_name("OPENAI_LESSON_CHAT_MODEL", DEFAULT_LESSON_CHAT_MODEL)
     chat_model = get_chat_model(
         api_key=api_key,
         base_url=base_url,
@@ -993,7 +993,7 @@ def generate_infographic_content(lesson: dict[str, Any], user_id: int) -> dict[s
     from news_dashboard.ai_client import get_chat_model, get_prompt, langfuse_enabled, response_text
     from news_dashboard.prompt_catalog import get_chat_prompt
 
-    model = os.getenv("OPENAI_LESSON_CHAT_MODEL", DEFAULT_LESSON_CHAT_MODEL)
+    model = chat_model_name("OPENAI_LESSON_CHAT_MODEL", DEFAULT_LESSON_CHAT_MODEL)
     chat_model = get_chat_model(
         api_key=api_key,
         base_url=base_url,
@@ -1902,7 +1902,7 @@ def generate_lesson_from_url(
 
     depth = lesson["depth"]
     persona = lesson["persona"]
-    chat_model = os.getenv("OPENAI_LESSON_CHAT_MODEL", DEFAULT_LESSON_CHAT_MODEL)
+    chat_model = chat_model_name("OPENAI_LESSON_CHAT_MODEL", DEFAULT_LESSON_CHAT_MODEL)
     run_id = agent_runs.start_run(
         database_url,
         lesson_id=lesson_id,
@@ -2129,9 +2129,9 @@ def list_lesson_generations(
 
 
 def _lesson_chat_ai_config() -> tuple[str, str | None]:
-    from news_dashboard.ai_client import free_llm_config
+    from news_dashboard.ai_client import text_llm_config
 
-    api_key, base_url = free_llm_config()
+    api_key, base_url = text_llm_config()
     if not api_key:
         msg = "FREE_LLM_API_KEY (or OPENAI_API_KEY) is not configured"
         raise LessonChatNotConfiguredError(msg)
@@ -2173,7 +2173,7 @@ def ask_lesson_question(
         raise LessonNotFoundError
 
     api_key, base_url = _lesson_chat_ai_config()
-    model = os.getenv("OPENAI_LESSON_CHAT_MODEL", DEFAULT_LESSON_CHAT_MODEL)
+    model = chat_model_name("OPENAI_LESSON_CHAT_MODEL", DEFAULT_LESSON_CHAT_MODEL)
 
     lesson_context, source_context = _lesson_chat_context(lesson)
     from langfuse import propagate_attributes
@@ -2312,7 +2312,7 @@ def generate_personal_relevance(
         f"Recent article titles: {[item['title'] for item in recent_articles]}"
     )
     try:
-        model = os.getenv("OPENAI_LESSON_CHAT_MODEL", DEFAULT_LESSON_CHAT_MODEL)
+        model = chat_model_name("OPENAI_LESSON_CHAT_MODEL", DEFAULT_LESSON_CHAT_MODEL)
         chat_model = get_chat_model(
             api_key=api_key,
             base_url=base_url,

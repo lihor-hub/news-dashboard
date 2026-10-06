@@ -10,9 +10,9 @@ Runtime SQL uses psycopg %s parameter style. No SQLite fallback.
 from __future__ import annotations
 
 import logging
-import os
 from typing import Any
 
+from news_dashboard.ai_client import chat_model_name
 from news_dashboard.article_visibility import get_visible_article_row
 from news_dashboard.body_fetch import fetch_and_cache_body
 from news_dashboard.db import connect, row_to_dict
@@ -325,14 +325,14 @@ def generate_share_context(share_id: int) -> str | None:
 
     Returns None if no API key is configured or if the share doesn't exist.
     """
-    from news_dashboard.ai_client import free_llm_config
+    from news_dashboard.ai_client import text_llm_config
 
-    api_key, base_url = free_llm_config()
+    api_key, base_url = text_llm_config()
     if not api_key:
         logger.warning("generate_share_context: no AI API key configured, skipping")
         return None
 
-    model = os.getenv("OPENAI_BRIEFING_MODEL", DEFAULT_SHARE_MODEL)
+    model = chat_model_name("OPENAI_BRIEFING_MODEL", DEFAULT_SHARE_MODEL)
 
     with connect() as conn:
         row = conn.execute(

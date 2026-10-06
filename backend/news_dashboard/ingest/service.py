@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import contextlib
 import logging
-import os
 import re
 import threading
 import time
@@ -20,6 +19,7 @@ from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 import feedparser
 import psycopg
 
+from news_dashboard.ai_client import chat_model_name
 from news_dashboard.article_visibility import get_visible_article_row
 from news_dashboard.db import connect, init_db, insert_article_sql, placeholders, row_to_dict
 from news_dashboard.ingest_events import ingest_events
@@ -715,9 +715,9 @@ def _media_summary(title: str, description: str, entry: dict[str, Any]) -> str:
     fallback = clean_html(description) or transcript or title
     summary = fallback
 
-    from news_dashboard.ai_client import free_llm_config
+    from news_dashboard.ai_client import text_llm_config
 
-    api_key, base_url = free_llm_config()
+    api_key, base_url = text_llm_config()
     if api_key and transcript:
         try:
             from langchain_core.messages import convert_to_messages
@@ -731,7 +731,7 @@ def _media_summary(title: str, description: str, entry: dict[str, Any]) -> str:
                 response_text,
             )
 
-            model = os.getenv("OPENAI_BRIEFING_MODEL", "gpt-4o-mini")
+            model = chat_model_name("OPENAI_BRIEFING_MODEL", "gpt-4o-mini")
             chat_model = get_chat_model(
                 api_key=api_key,
                 base_url=base_url,
@@ -803,9 +803,9 @@ def detect_and_translate_article(
     if not is_non_eng:
         return title, summary, "en", None
 
-    from news_dashboard.ai_client import free_llm_config
+    from news_dashboard.ai_client import text_llm_config
 
-    api_key, base_url = free_llm_config()
+    api_key, base_url = text_llm_config()
     if not api_key:
         return title, summary, source_lang, None
 
@@ -813,7 +813,7 @@ def detect_and_translate_article(
         chat_model = get_chat_model(
             api_key=api_key,
             base_url=base_url,
-            model="gpt-4o-mini",
+            model=chat_model_name("OPENAI_BRIEFING_MODEL", "gpt-4o-mini"),
             max_tokens=1024,
             temperature=0.0,
             response_format={"type": "json_object"},

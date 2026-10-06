@@ -9,9 +9,9 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 from typing import Any
 
+from news_dashboard.ai_client import chat_model_name
 from news_dashboard.body_fetch import get_article
 from news_dashboard.db import connect, init_db
 
@@ -72,13 +72,13 @@ def _build_text(article: dict[str, Any], related: list[dict[str, Any]]) -> str:
 
 def _perspectives_ai_config() -> tuple[str, str | None, str]:
     """Resolve (api_key, base_url, model) for perspective analysis via the free LLM gateway."""
-    from news_dashboard.ai_client import free_llm_config
+    from news_dashboard.ai_client import text_llm_config
 
-    api_key, base_url = free_llm_config()
+    api_key, base_url = text_llm_config()
     if not api_key:
         msg = "FREE_LLM_API_KEY (or OPENAI_API_KEY) is not configured"
         raise PerspectivesNotConfiguredError(msg)
-    model = os.getenv("OPENAI_PERSPECTIVES_MODEL", DEFAULT_PERSPECTIVES_MODEL)
+    model = chat_model_name("OPENAI_PERSPECTIVES_MODEL", DEFAULT_PERSPECTIVES_MODEL)
     return api_key, base_url, model
 
 

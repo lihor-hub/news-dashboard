@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 import logging
-import os
 from typing import Any
 from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
+from news_dashboard.ai_client import chat_model_name
 from news_dashboard.db import connect, init_db
 from news_dashboard.reading_list.importers import ImportedItem
 from news_dashboard.reading_list.metadata import detect_kind, fetch_url_metadata
@@ -254,13 +254,13 @@ def fetch_metadata_for_item(item_id: int, *, database_url: str | None = None) ->
 
 
 def _summary_ai_config() -> tuple[str, str | None, str]:
-    from news_dashboard.ai_client import free_llm_config
+    from news_dashboard.ai_client import text_llm_config
 
-    api_key, base_url = free_llm_config()
+    api_key, base_url = text_llm_config()
     if not api_key:
         message = "FREE_LLM_API_KEY (or OPENAI_API_KEY) is not configured"
         raise ReadingListSummaryNotConfiguredError(message)
-    model = os.getenv("OPENAI_READING_LIST_SUMMARY_MODEL", DEFAULT_SUMMARY_MODEL)
+    model = chat_model_name("OPENAI_READING_LIST_SUMMARY_MODEL", DEFAULT_SUMMARY_MODEL)
     return api_key, base_url, model
 
 

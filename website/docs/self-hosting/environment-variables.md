@@ -44,6 +44,16 @@ Runtime storage is PostgreSQL only. Set `DATABASE_URL` or the split
 SQLite is supported only as a legacy import source for
 `news-dashboard-migrate sqlite-to-postgres`.
 
+### Text provider selection
+
+Use `AI_TEXT_PROVIDER` to select `gateway`, `openai`, `chatgpt`, or `ollama`.
+`AI_MODEL_PRESET` supports `luna-medium`, `luna-high`, `sol-low`, and `sol-medium`.
+`AI_TEXT_MODEL` sets a global text model; feature model overrides take precedence.
+`AI_REASONING_EFFORT` overrides GPT-6 effort. Subscription mode reads
+`CHATGPT_CREDENTIALS_FILE`; Ollama mode reads `OLLAMA_API_KEY`.
+See [AI providers and reasoning models](ai-providers.md) for sign-in, deployment,
+billing, and the separate embedding/audio requirements.
+
 ### AI orchestration and tracing
 
 The backend uses the vanilla LangChain and LangGraph APIs according to the

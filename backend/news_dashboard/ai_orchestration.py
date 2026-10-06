@@ -48,7 +48,7 @@ def invoke_chat_chain(  # noqa: PLR0913 - adapter mirrors provider call metadata
     previous direct-client behavior. Runtime dependencies include LangChain, so
     production and CI exercise the chain path.
     """
-    api_key, base_url = ai_client.free_llm_config()
+    api_key, base_url = ai_client.text_llm_config()
     kwargs: dict[str, Any] = {
         "model": model,
         "messages": messages,
@@ -77,7 +77,6 @@ def invoke_chat_chain(  # noqa: PLR0913 - adapter mirrors provider call metadata
             HumanMessage,
             SystemMessage,
         )
-        from langchain_openai import ChatOpenAI
         from langfuse import propagate_attributes
     except Exception:
         client = ai_client.get_chat_client(api_key=api_key, base_url=base_url)
@@ -103,18 +102,13 @@ def invoke_chat_chain(  # noqa: PLR0913 - adapter mirrors provider call metadata
         else:
             chain_messages.append(HumanMessage(content=content))
 
-    llm_kwargs: dict[str, Any] = {
-        "model": model,
-        "api_key": api_key,
-        "timeout": ai_client.request_timeout_seconds(),
-    }
-    if base_url is not None:
-        llm_kwargs["base_url"] = base_url
-    if max_tokens is not None:
-        llm_kwargs["max_tokens"] = max_tokens
-    if response_format is not None:
-        llm_kwargs["model_kwargs"] = {"response_format": response_format}
-    llm = ChatOpenAI(**llm_kwargs)
+    llm = ai_client.get_chat_model(
+        api_key=api_key,
+        base_url=base_url,
+        model=model,
+        max_tokens=max_tokens,
+        response_format=response_format,
+    )
 
     config: dict[str, Any] = {
         "callbacks": _langfuse_callbacks(),
@@ -133,7 +127,7 @@ def invoke_chat_chain(  # noqa: PLR0913 - adapter mirrors provider call metadata
         tags=tags,
     ):
         result = llm.invoke(chain_messages, config=cast("Any", config))
-    return str(result.content or "")
+    return ai_client.response_text(result)
 
 
 def run_workflow_graph(

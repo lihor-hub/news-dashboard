@@ -18,10 +18,10 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 import re
 from typing import Any
 
+from news_dashboard.ai_client import chat_model_name
 from news_dashboard.db import connect, init_db, row_to_dict
 
 logger = logging.getLogger(__name__)
@@ -96,12 +96,12 @@ def deterministic_match(query: str, article: dict[str, Any]) -> tuple[float, str
 
 
 def _ai_config() -> tuple[str, str | None, str] | None:
-    from news_dashboard.ai_client import free_llm_config
+    from news_dashboard.ai_client import text_llm_config
 
-    api_key, base_url = free_llm_config()
+    api_key, base_url = text_llm_config()
     if not api_key:
         return None
-    model = os.getenv("OPENAI_WATCHLIST_MODEL", "gpt-4o-mini")
+    model = chat_model_name("OPENAI_WATCHLIST_MODEL", "gpt-4o-mini")
     return api_key, base_url, model
 
 

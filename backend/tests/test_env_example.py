@@ -17,7 +17,9 @@ REPO_ROOT = Path(__file__).parent.parent.parent
 ENV_EXAMPLE = REPO_ROOT / ".env.example"
 SOURCE_DIR = REPO_ROOT / "backend" / "news_dashboard"
 
-_ENV_VAR_PATTERN = re.compile(r"os\.(?:environ\.get|getenv)\(\s*[\"']([A-Z][A-Z0-9_]*)[\"']")
+_ENV_VAR_PATTERN = re.compile(
+    r"(?:os\.(?:environ\.get|getenv)|(?:ai_client\.)?chat_model_name|_timeout_seconds_from_env)\(\s*[\"']([A-Z][A-Z0-9_]*)[\"']"
+)
 _ENV_EXAMPLE_LINE_PATTERN = re.compile(r"^([A-Z][A-Z0-9_]*)=")
 
 # Vars documented in .env.example but intentionally absent from backend Python source:

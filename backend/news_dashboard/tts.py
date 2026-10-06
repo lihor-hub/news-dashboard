@@ -13,6 +13,8 @@ import os
 from pathlib import Path
 from typing import Any
 
+from news_dashboard.ai_client import chat_model_name
+
 logger = logging.getLogger(__name__)
 
 _DEFAULT_DATA_DIR = Path("/data")
@@ -49,9 +51,9 @@ def _script_ai_config() -> tuple[str, str | None]:
     ``_tts_ai_config`` because the free LLM gateway supports chat completions but
     not the ``audio/speech`` endpoint required for TTS audio synthesis.
     """
-    from news_dashboard.ai_client import free_llm_config
+    from news_dashboard.ai_client import text_llm_config
 
-    api_key, base_url = free_llm_config()
+    api_key, base_url = text_llm_config()
     if not api_key:
         msg = (
             "Podcast script generation requires an API key. Set FREE_LLM_API_KEY or OPENAI_API_KEY"
@@ -288,7 +290,7 @@ def generate_podcast_script(briefing_content: dict[str, Any]) -> list[dict[str, 
     )
     from news_dashboard.prompt_catalog import get_chat_prompt
 
-    model = os.getenv("OPENAI_BRIEFING_MODEL", "gpt-4o-mini")
+    model = chat_model_name("OPENAI_BRIEFING_MODEL", "gpt-4o-mini")
     chat_model = get_chat_model(
         api_key=api_key,
         base_url=base_url,

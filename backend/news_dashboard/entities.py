@@ -12,9 +12,9 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 from typing import Any
 
+from news_dashboard.ai_client import chat_model_name
 from news_dashboard.db import connect, init_db
 from news_dashboard.graph_store import GraphUnavailableError, graph_store_from_env
 
@@ -54,13 +54,13 @@ class EntitiesNotConfiguredError(Exception):
 
 
 def _entities_ai_config() -> tuple[str, str | None, str]:
-    from news_dashboard.ai_client import free_llm_config
+    from news_dashboard.ai_client import text_llm_config
 
-    api_key, base_url = free_llm_config()
+    api_key, base_url = text_llm_config()
     if not api_key:
         msg = "FREE_LLM_API_KEY (or OPENAI_API_KEY) is not configured"
         raise EntitiesNotConfiguredError(msg)
-    model = os.getenv("OPENAI_ENTITIES_MODEL", DEFAULT_ENTITIES_MODEL)
+    model = chat_model_name("OPENAI_ENTITIES_MODEL", DEFAULT_ENTITIES_MODEL)
     return api_key, base_url, model
 
 

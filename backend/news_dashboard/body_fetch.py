@@ -8,7 +8,6 @@ Subsequent opens serve the cache; no bulk crawling at ingest.
 from __future__ import annotations
 
 import logging
-import os
 import re
 import time
 import urllib.error
@@ -17,6 +16,7 @@ from html.parser import HTMLParser
 from pathlib import Path
 from typing import Any
 
+from news_dashboard.ai_client import chat_model_name
 from news_dashboard.article_visibility import get_visible_article_row
 from news_dashboard.content_extraction import (
     ExtractionAttempt,
@@ -77,13 +77,13 @@ def _ai_extract_body(url: str, *, user_id: int | None = None) -> tuple[str, str]
     Returns (text, 'ok') on success or ('', 'error') if no API key is
     configured, the HTTP fetch fails, or the AI call fails.
     """
-    from news_dashboard.ai_client import free_llm_config
+    from news_dashboard.ai_client import text_llm_config
 
-    api_key, base_url = free_llm_config()
+    api_key, base_url = text_llm_config()
     if not api_key:
         return "", "error"
 
-    model = os.getenv("OPENAI_BRIEFING_MODEL", _AI_MODEL)
+    model = chat_model_name("OPENAI_BRIEFING_MODEL", _AI_MODEL)
 
     try:
         html = _fetch_capped_html(url, byte_cap=_AI_FETCH_BYTE_CAP)[:_AI_HTML_LIMIT]
@@ -630,9 +630,9 @@ def get_article(
 
 def translate_body(body: str, from_lang: str) -> str:
     """Translate the body text to English using the free LLM gateway."""
-    from news_dashboard.ai_client import free_llm_config
+    from news_dashboard.ai_client import text_llm_config
 
-    api_key, base_url = free_llm_config()
+    api_key, base_url = text_llm_config()
     if not api_key or not body.strip():
         return body
 
@@ -652,7 +652,7 @@ def translate_body(body: str, from_lang: str) -> str:
         chat_model = get_chat_model(
             api_key=api_key,
             base_url=base_url,
-            model="gpt-4o-mini",
+            model=chat_model_name("OPENAI_BRIEFING_MODEL", "gpt-4o-mini"),
             max_tokens=2048,
             temperature=0.0,
         )

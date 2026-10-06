@@ -16,12 +16,11 @@ nothing.
 from __future__ import annotations
 
 import logging
-import os
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from news_dashboard.ai_client import _client, langfuse_enabled
+from news_dashboard.ai_client import _client, chat_model_name, langfuse_enabled
 
 logger = logging.getLogger(__name__)
 
@@ -137,9 +136,9 @@ def _optimizer_ai_config() -> tuple[str, str | None]:
     and then the shared ``OPENAI_BASE_URL`` / ``OPENAI_API_KEY``. The base URL
     is optional; when unset the official OpenAI endpoint is used.
     """
-    from news_dashboard.ai_client import free_llm_config
+    from news_dashboard.ai_client import text_llm_config
 
-    api_key, base_url = free_llm_config()
+    api_key, base_url = text_llm_config()
     if not api_key:
         msg = (
             "Prompt optimization requires an API key. Set FREE_LLM_API_KEY "
@@ -192,7 +191,9 @@ def optimize_prompt(
     unavailable.
     """
     resolved_model = (
-        model if model is not None else os.getenv("OPENAI_OPTIMIZER_MODEL", DEFAULT_OPTIMIZER_MODEL)
+        model
+        if model is not None
+        else chat_model_name("OPENAI_OPTIMIZER_MODEL", DEFAULT_OPTIMIZER_MODEL)
     )
     examples = collect_negative_examples(score_name=score_name, days=days, limit=max_examples)
     if not examples:

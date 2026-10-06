@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from news_dashboard.ai_client import chat_model_name
 from news_dashboard.db import connect, init_db, row_to_dict
 
 COLD_START_MODEL_VERSION = "cold-start-v1"
@@ -393,15 +394,14 @@ def generate_recommendation_explanation(
     (under 20 words).  Returns ``None`` when the AI client is not configured or
     the call fails, so callers treat it as an optional enrichment.
     """
-    import os
 
-    from news_dashboard.ai_client import free_llm_config
+    from news_dashboard.ai_client import text_llm_config
 
-    api_key, base_url = free_llm_config()
+    api_key, base_url = text_llm_config()
     if not api_key:
         return None
 
-    model = os.getenv("OPENAI_BRIEFING_MODEL", "gpt-4o-mini")
+    model = chat_model_name("OPENAI_BRIEFING_MODEL", "gpt-4o-mini")
 
     init_db(db_path, database_url=database_url)
     with connect(db_path, database_url=database_url) as conn:

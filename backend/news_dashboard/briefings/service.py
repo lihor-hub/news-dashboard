@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 import time
 from collections.abc import Callable, Mapping
 from copy import deepcopy
@@ -24,6 +23,7 @@ from langgraph.graph.state import CompiledStateGraph
 from typing_extensions import TypedDict
 
 from news_dashboard import briefing_agent
+from news_dashboard.ai_client import chat_model_name
 from news_dashboard.article_visibility import visible_article_sql
 from news_dashboard.db import connect, row_to_dict
 from news_dashboard.reading_list import service as reading_list_service
@@ -291,9 +291,9 @@ def _current_day_since_at(until_at: datetime) -> datetime:
 
 def _briefing_ai_config() -> tuple[str, str | None]:
     """Resolve the (api_key, base_url) for briefing generation via the free LLM gateway."""
-    from news_dashboard.ai_client import free_llm_config
+    from news_dashboard.ai_client import text_llm_config
 
-    api_key, base_url = free_llm_config()
+    api_key, base_url = text_llm_config()
     if not api_key:
         msg = (
             "Briefing generation requires an API key. Set FREE_LLM_API_KEY "
@@ -678,7 +678,7 @@ def generate_briefing(  # noqa: PLR0913, PLR0915
     if recent is not None:
         return recent
 
-    _env_model = os.getenv("OPENAI_BRIEFING_MODEL", DEFAULT_BRIEFING_MODEL)
+    _env_model = chat_model_name("OPENAI_BRIEFING_MODEL", DEFAULT_BRIEFING_MODEL)
     resolved_model = model if model is not None else _env_model
     until_at = datetime.now(timezone.utc)
     since_at = _current_day_since_at(until_at)
@@ -1058,7 +1058,7 @@ def chat_with_briefing(
 ) -> str:
     """Answer a follow-up question grounded in the cited articles of a briefing."""
     api_key, base_url = _briefing_ai_config()
-    model = os.getenv("OPENAI_BRIEFING_MODEL", DEFAULT_BRIEFING_MODEL)
+    model = chat_model_name("OPENAI_BRIEFING_MODEL", DEFAULT_BRIEFING_MODEL)
 
     briefing = get_briefing(briefing_id, database_url=database_url, user_id=user_id)
     if briefing is None:
