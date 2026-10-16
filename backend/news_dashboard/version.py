@@ -12,6 +12,6 @@ _VERSION_FILE = Path(__file__).resolve().parents[2] / "VERSION"
 def read_app_version() -> str:
     """Return the running app version from the VERSION file baked into the image."""
     try:
-        return _VERSION_FILE.read_text().strip() or "unknown"
+        return _VERSION_FILE.read_text(encoding="utf-8").strip() or "unknown"
     except OSError:
         return "unknown"

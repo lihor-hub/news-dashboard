@@ -202,6 +202,24 @@ def test_normalizer_emits_exact_safe_json_and_helm_renders_it(tmp_path: Path) ->
     assert policy["spec"]["egress"] == VALID_VALUES["networkPolicy"]["additionalEgress"]  # noqa: S101
 
 
+def test_normalizer_preserves_unicode_selector_values(tmp_path: Path) -> None:
+    # The normalizer passes through rule contents; Kubernetes validates them.
+    values = {
+        "networkPolicy": {
+            "additionalEgress": [
+                {"to": [{"namespaceSelector": {"matchLabels": {"name": "Café-日本語"}}}]}
+            ]
+        }
+    }
+    result, output = run_normalizer(tmp_path, json.dumps(values, ensure_ascii=False))
+
+    assert result.returncode == 0, result.stderr  # noqa: S101
+    assert result.stdout == ""  # noqa: S101
+    # Preserve JSON's existing ASCII escaping and final newline policy.
+    assert output.read_bytes() == (json.dumps(values, indent=2) + "\n").encode("utf-8")  # noqa: S101
+    assert json.loads(output.read_bytes()) == values  # noqa: S101
+
+
 def test_shared_deploy_library_writes_mode_600_json_and_cleans_it(
     tmp_path: Path,
 ) -> None:

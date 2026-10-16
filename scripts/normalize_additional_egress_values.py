@@ -104,7 +104,7 @@ def main() -> int:
         return 2
 
     try:
-        Path(sys.argv[2]).write_text(normalized)
+        Path(sys.argv[2]).write_text(normalized, encoding="utf-8")
     except (OSError, UnicodeError):
         sys.stderr.write("Unable to write normalized additional egress values.\n")
         return 1

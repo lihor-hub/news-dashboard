@@ -84,11 +84,15 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    body = pathlib.Path(args.body_file).read_text() if args.body_file else sys.stdin.read()
+    body = (
+        pathlib.Path(args.body_file).read_text(encoding="utf-8")
+        if args.body_file
+        else sys.stdin.read()
+    )
 
     path = pathlib.Path(args.file)
-    text = path.read_text() if path.exists() else ""
-    path.write_text(update_changelog(text, args.version, body, date=args.date))
+    text = path.read_text(encoding="utf-8") if path.exists() else ""
+    path.write_text(update_changelog(text, args.version, body, date=args.date), encoding="utf-8")
 
 
 if __name__ == "__main__":
