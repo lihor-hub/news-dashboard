@@ -21,5 +21,6 @@ Two sections there are the usual starting points when working on the code:
 | [a2a.md](a2a.md) | Opt-in A2A (Agent2Agent) endpoint exposing the assistant to external agents. |
 | [knowledge-graph.md](knowledge-graph.md) | Neo4j knowledge graph architecture, data flow, backfill commands, and degraded behavior. |
 | [learning-agent-roadmap.md](learning-agent-roadmap.md) | Lesson-first Learning Agent roadmap, child implementation slices, and AI generation guardrails. |
+| [Python 3.15 compatibility report](python315-compatibility-2026-10-16.md) | Dated audit, platform evidence, reproduction commands and remaining migration gates; supported runtime remains Python 3.14. |
 | [adr/](adr/README.md) | Architecture Decision Records — context and rationale behind significant technical decisions. |
 | [User guide source](../website/docs/user-guide/index.md) | Canonical source for the [published end-user guide](https://docs.lihor.ro/docs/user-guide). |
