@@ -3,8 +3,8 @@
 **Keep the supported Python 3.14 runtime. Python 3.15 cutover is not validated.**
 This report versions the compatibility evidence for maintainers delivering
 [the migration umbrella #1340](https://github.com/lihor-hub/news-dashboard/issues/1340).
-The report does not raise the advertised minimum. The core-preparation refresh below
-records targeted dependency changes and an additional validation workflow; current
+The report does not raise the advertised minimum. The core and optional dependency refreshes below
+record targeted dependency changes and additional validation workflows; current
 runtime declarations, existing CI gates and containers remain on Python 3.14.
 [CPython 3.15.0 is stable, released October 9, 2026](https://www.python.org/downloads/release/python-3150/);
 the earlier prerelease assumption no longer applies to this assessment.
@@ -250,6 +250,137 @@ Fresh fastuuid 0.14.0 source installation still rejects Python 3.15 via
 PyO3 0.26.0. Its current metadata still has no cp315/abi3 wheel; **3.15 all-extras
 remains blocked under #1530**. This core preparation is independently deployable
 on 3.14, and does not advertise full 3.15 support.
+
+## Optional dependency preparation — #1530, 2026-10-17
+
+This refresh starts at `00652956fddff923ea76fe76668783f009269885` and keeps
+the Python >=3.14 minimum, Ruff py313, product behavior and existing CI gates.
+The historical all-extras failure above remains evidence for the old lock.
+A fresh stable macOS arm64 3.15.0 source install reproduced fastuuid 0.14.0's
+PyO3 0.26 rejection before the fix.
+
+Fresh metadata for [Crawl4AI 0.9.5](https://pypi.org/pypi/crawl4ai/0.9.5/json)
+still pins unclecode-litellm 1.81.13. Its only fastuuid import is in
+`litellm._uuid`; main, router and utils call `uuid.uuid4()` and serialize with
+`str()`. Upstream [LiteLLM 1.105.1](https://pypi.org/pypi/litellm/1.105.1/json)
+also depends on fastuuid. No released standard-library-backed replacement path
+was available. The owning LLM package is much larger than fastuuid's source.
+
+The authorized alternative is an identified **fastuuid 0.14.0+nd.1 native source
+patch**, under its original BSD 3-Clause license. It uses supported **PyO3
+0.30.1**, not a compatibility flag. The binding migration replaces six removed
+`downcast` calls with `cast` and explicitly preserves clone-based comparisons;
+UUID algorithms, OS-backed randomness, representations and errors are unchanged.
+See [source, readable patch, ownership and rebuild instructions](../vendor/fastuuid/README.md).
+The manifest activates this source patch only on **Python >=3.15**, retaining
+published fastuuid 0.14.0 wheels on 3.14 to avoid a new Rust prerequisite there.
+It references the source archive at immutable commit
+`310a24220f4c24e098da9a44a75dfcbc7c8419c9`, with SHA-256
+`c025db54352c78802b919cc93504321f94f58974c4bebedf4ac7e323bc0d5c22`.
+Hatch's documented direct-reference metadata option permits ordinary pip to
+consume that same artifact. No resolver override, fabricated distribution,
+omitted dependency or source-build compatibility override is involved.
+
+The lock retains fastuuid 0.14.0 below 3.15 and adds its identified local variant
+for 3.15+. The only other version changes are **SciPy 1.18.0 → 1.18.1**, **Shapely 2.1.2 →
+2.2.0**, and adds **Hypothesis 6.170.1** for upstream property tests. The optional
+extra declares the scientific compatibility floors. Crawl4AI remains 0.9.4 and
+unclecode-litellm remains 1.81.13; no unrelated dependency versions change.
+Building the optional native source on 3.15+ requires Rust >=1.85 and a C linker.
+
+On this supported macOS arm64 host, frozen all-extras installs on **3.14.6 and
+stable 3.15.0** pass, with **237 consistent installed packages** on each.
+The exact 3.15 command uses an isolated environment under the existing worktree
+exclusion so frontend tools do not scan installed Playwright JavaScript:
+
+```sh
+# PY315 points to the stable 3.15.0 interpreter recorded in the provenance.
+UV_PROJECT_ENVIRONMENT=.worktrees/validation315/.venv \
+  uv sync --frozen --all-extras --python "$PY315"
+uv pip check --python .worktrees/validation315/.venv/bin/python
+.worktrees/validation315/.venv/bin/python -m playwright install chromium
+.worktrees/validation315/.venv/bin/python scripts/check_optional_extras.py
+```
+
+The **48 upstream UUID tests** pass on each interpreter with Hypothesis's `ci`
+profile (2,000 examples per property). Consumed API tests cover UUIDv4 strings,
+JSON/pickle/copy round trips, version/variant/time semantics, binding comparisons,
+errors and 4,096 threaded random identifiers. Source tests reconstruct the
+patched archive byte for byte and ensure uuid/rand/getrandom versions and the
+UUID implementation remain unchanged. Gzip compression level is explicit to
+avoid differing Python default levels changing the reconstructed artifact.
+
+Real offline Chromium extraction on 3.15 passes through Crawl4AI with
+`process_in_browser=True` and `CacheMode.BYPASS`, verifies JavaScript-rendered
+Unicode text, and feeds the result into application normalization and quality
+checks (**795 characters, 113 words**). All page requests are intercepted and
+blocked; the fixture attempts **zero**. A separate call exercises the exact
+application lazy-import adapter on raw HTML. The public URL stage remains
+intentionally fail-closed for SSRF protection, including when the optional
+package is installed. A fresh subprocess checks that importing body_fetch and
+calling the public stage do not import Crawl4AI or fastuuid. No product fetch
+boundary is relaxed.
+
+Fresh supported-runtime `make lint`, all typecheckers, `make test` and `make
+build` pass: **3,651 backend/script tests, 2 documented skips, 88% coverage**,
+**1,081 frontend tests**, and both npm security regressions. The focused 3.15
+extraction/source/API selection passes **90 tests**. Full frozen all-extras 3.15
+passes **3,651 backend/script tests, the same 2 skips, 88% coverage**. Dedicated
+PostgreSQL URLs were verified with authenticated read-only queries before tests;
+parallel query workers were disabled, with no shared reset or native 5432 use.
+Native source-patch validation on head
+`c645eaed84161aeae8cc4bb836cce9e78d648146` completed successfully in
+[run 38969645747](https://github.com/lihor-hub/news-dashboard/actions/runs/38969645747):
+**12 successful installs**, frozen all-extras and ordinary unconstrained pip on
+every pair below, each with consistency checks, native imports and real offline
+browser/application extraction. This preparatory run exercised the patched
+native source on both interpreters. The final marker restores 3.14 registry
+wheels; final-head checks and version evidence are linked from
+[PR #1550](https://github.com/lihor-hub/news-dashboard/pull/1550).
+
+| Native runner | Stable interpreter | Result | Evidence artifact |
+|---|---|---|---|
+| ubuntu-24.04 (x86_64) | 3.14.8 | Passed both modes; 17 API/source + 48 upstream tests | [Logs/versions](https://github.com/lihor-hub/news-dashboard/actions/runs/38969645747/artifacts/12076297340) |
+| ubuntu-24.04 (x86_64) | 3.15.0 | Passed both modes; 17 API/source + 48 upstream tests | [Logs/versions](https://github.com/lihor-hub/news-dashboard/actions/runs/38969645747/artifacts/12077480228) |
+| ubuntu-24.04-arm (aarch64) | 3.14.8 | Passed both modes; 17 API/source + 48 upstream tests | [Logs/versions](https://github.com/lihor-hub/news-dashboard/actions/runs/38969645747/artifacts/12076367169) |
+| ubuntu-24.04-arm (aarch64) | 3.15.0 | Passed both modes; 17 API/source + 48 upstream tests | [Logs/versions](https://github.com/lihor-hub/news-dashboard/actions/runs/38969645747/artifacts/12076716316) |
+| macos-15 (arm64) | 3.14.7 | Passed both modes; 17 API/source + 48 upstream tests | [Logs/versions](https://github.com/lihor-hub/news-dashboard/actions/runs/38969645747/artifacts/12075694018) |
+| macos-15 (arm64) | 3.15.0 | Passed both modes; 17 API/source + 48 upstream tests | [Logs/versions](https://github.com/lihor-hub/news-dashboard/actions/runs/38969645747/artifacts/12076457777) |
+
+Frozen optional versions are Crawl4AI 0.9.4, unclecode-litellm 1.81.13, SciPy
+1.18.1, Shapely 2.2.0 and Playwright 1.61.0. Unconstrained pip selects Crawl4AI
+0.9.5 and Playwright 1.64.0, with the same LLM owner and scientific versions;
+both combinations pass. Artifact logs retain exact installed versions.
+
+The opt-in `Python extras compatibility` workflow uses native Linux amd64,
+Linux arm64 and macOS arm64 runners, for 3.14 and 3.15. Each pair runs frozen
+`uv sync --frozen --all-extras`, consistency and source/API/upstream tests, then
+real offline extraction. It separately tests ordinary unconstrained production
+`pip install '.[crawl4ai]'`, `pip check`, native imports and offline extraction.
+The first Linux 3.15 attempts reproduced missing libxml2/libxslt headers while
+building unchanged lxml 6.1.1. The validation stage installs those upstream
+[documented source prerequisites](https://lxml.de/installation.html), plus zlib
+headers, alongside GCC/Rust/libffi; it does not alter lxml or bypass compilation.
+The workflow uploads installed versions and command logs. It does not certify
+containers, devcontainer lifecycle, runtime cutover or deployment.
+
+The independent all-extras `pip-audit` recheck reports **22 distinct existing
+advisories**: one each in langgraph-sdk 0.4.2 and multidict 6.7.1, plus **20 in
+NLTK 3.10.0**, all three versions unchanged from origin/main. The earlier scan's
+37 records contained 15 duplicate NLTK advisory IDs; no new IDs appear in the
+recheck. Its stale duplicate of PYSEC-2026-3740 omitted a fix, while the current
+record lists NLTK 3.10.3. Every advisory now has a reported fix version; no fix
+has been installed or validated by this PR. Core remediation remains in
+#1539/#1540; NLTK remediation is separately tracked by
+[#1549](https://github.com/lihor-hub/news-dashboard/issues/1549).
+The 3.15 local fastuuid version is unknown to PyPI's vulnerability service. A separate
+normal dependency audit of upstream fastuuid 0.14.0 reports no findings;
+**cargo-audit 0.22.2** checks the patched Cargo.lock against RustSec commit
+`f28da8c5d386e507fac79153655184056a20c054`: **zero vulnerabilities**. Its inherited
+informational rand 0.8.5 warning RUSTSEC-2026-0097 requires the `log` feature,
+which the actual native feature graph does not enable. No finding is hidden,
+no allowlist added and no security policy changed. This is not a claim of zero
+vulnerabilities across all extras.
 
 ## Failed attempts and the working core candidate
 
@@ -603,7 +734,7 @@ add their qualifications rather than silently replacing them.
 | [#1527](https://github.com/lihor-hub/news-dashboard/issues/1527) | Explicit UTF-8 preparation | Independent, retain 3.14 and prove non-ASCII round trips |
 | [#1528](https://github.com/lihor-hub/news-dashboard/issues/1528) | Core runtime/dev dependencies and SMTPUTF8 regressions | Implemented in [PR #1547](https://github.com/lihor-hub/news-dashboard/pull/1547); full scoped suites/native production installs pass, CVE findings remain in separate PRs |
 | [#1529](https://github.com/lihor-hub/news-dashboard/issues/1529) | Validated stable-3.15 devcontainer | Needs #1528 and working container runner; missing MCR tag has an official-base alternative |
-| [#1530](https://github.com/lihor-hub/news-dashboard/issues/1530) | Supported crawl4ai all-extras path | Needs #1528 and supported fastuuid/dependency support, replacement or tested custom implementation; 3.15 browser tests outstanding |
+| [#1530](https://github.com/lihor-hub/news-dashboard/issues/1530) | Supported crawl4ai all-extras path | Identified supported native source patch and local 3.15 browser evidence added; see optional preparation and PR acceptance for native matrix/security limits |
 | [#1531](https://github.com/lihor-hub/news-dashboard/issues/1531) | Atomic runtime/tooling/CI/current-docs cutover | Needs all five preceding items and full test, multiarchitecture, CI/security and deployment evidence |
 
 The requested delivery order is serial; steps 1–3 have no hard technical
