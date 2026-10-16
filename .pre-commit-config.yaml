@@ -109,7 +109,8 @@ repos:
         stages: [pre-push]
       - id: pytest
         name: pytest (backend)
-        entry: zsh -c 'set -a; if [ -f .env ]; then source .env; fi; set +a; pytest'
+        # conftest.py loads missing .env values without replacing container env.
+        entry: pytest
         language: system
         types: [python]
         pass_filenames: false

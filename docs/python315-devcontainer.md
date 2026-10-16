@@ -15,7 +15,7 @@ Linux arm64 is
 Both use Debian Bookworm and standard GIL CPython. Microsoft has no 3.15 tag
 in its [Python devcontainer registry](https://mcr.microsoft.com/v2/devcontainers/python/tags/list)
 as checked on 2026-10-17. The official image supplies Python; the Dockerfile
-adds a non-root `vscode` user, Bash and zsh (required by the push hook), Git, sudo, Make, C/C++ build tools,
+adds a non-root `vscode` user, Bash and zsh, Git, sudo, Make, C/C++ build tools,
 PostgreSQL client, Helm 4.3.1 (with architecture-specific SHA-256 checks), jq
 and Rust 1.95.0 for dependencies that need native builds.
 The existing Dev Containers Node feature installs Node 26.
@@ -88,12 +88,14 @@ the dedicated `nd-test-pg` at `localhost:55432/news_dashboard_test` as
 `news_dashboard`, then run `source .env && make test` with the same PGOPTIONS.
 Never aim host tests at native port 5432 or at the container development DB.
 A host `.env` mounted with the workspace does not override the Compose
-process environment.
+process environment, including during the pre-push test hook. Pytest loads
+missing `.env` values without replacing injected environment variables.
 
 ## Executable evidence
 
 The `Development container` workflow builds and opens this exact configuration
-on native `ubuntu-24.04` (amd64) and `ubuntu-24.04-arm` runners. It executes
+on native `ubuntu-24.04` (amd64) and `ubuntu-24.04-arm` runners, with a mounted
+host `.env` containing incompatible host-only database settings. It executes
 post-create, verifies that host dependency sentinels survive, non-root
 permissions, Python/GIL/Node, both PostgreSQL
 connections, initialized sources, hook executables and running backend/frontend
