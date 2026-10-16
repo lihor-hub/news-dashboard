@@ -1,0 +1,92 @@
+name: Python extras compatibility
+
+# Additional evidence for #1530; the supported runtime and existing gates stay.
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened, labeled]
+    paths:
+      - 'uv.lock'
+      - 'pyproject.toml'
+      - 'vendor/fastuuid/**'
+      - 'scripts/rebuild_fastuuid.sh'
+      - 'scripts/check_optional_extras.py'
+      - 'backend/tests/test_fastuuid_source.py'
+      - 'backend/tests/test_optional_uuid.py'
+      - '.github/workflows/python-extras-compatibility.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: python-extras-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  LITELLM_LOCAL_MODEL_COST_MAP: 'True'
+
+jobs:
+  all-extras:
+    if: github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'python-extras-compatibility')
+    name: Extras (${{ matrix.runner }}, Python ${{ matrix.python }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-24.04, ubuntu-24.04-arm, macos-15]
+        python: ['3.14', '3.15']
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: ${{ matrix.python }}
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+      - name: Install Linux build prerequisites
+        if: runner.os == 'Linux'
+        run: sudo apt-get update -qq && sudo apt-get install -y build-essential libffi-dev pkg-config
+      - name: Record platform and native toolchain
+        run: |
+          mkdir evidence
+          uname -m | tee evidence/machine.txt
+          python -VV
+          rustc --version
+          cargo --version
+      - name: Install frozen all-extras and check dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          uv sync --frozen --all-extras --python "$(command -v python)" 2>&1 | tee evidence/frozen-install.log
+          uv pip check --python .venv/bin/python | tee evidence/frozen-check.log
+          uv pip freeze --python .venv/bin/python > evidence/frozen-freeze.txt
+      - name: Verify source and consumed UUID APIs
+        shell: bash
+        run: |
+          set -euo pipefail
+          .venv/bin/python -m pytest backend/tests/test_fastuuid_source.py backend/tests/test_optional_uuid.py -n 0 -q 2>&1 | tee evidence/uuid-tests.log
+          mkdir evidence/upstream
+          tar -xzf vendor/fastuuid/fastuuid-0.14.0+nd.1.tar.gz -C evidence/upstream
+          HYPOTHESIS_PROFILE=ci .venv/bin/python -m pytest -c /dev/null -o addopts= -o cache_dir="$PWD/.pytest_cache" evidence/upstream/fastuuid-0.14.0+nd.1/tests/test_uuid.py -q 2>&1 | tee evidence/upstream-tests.log
+      - name: Install Chromium and exercise offline application extraction
+        shell: bash
+        run: |
+          set -euo pipefail
+          .venv/bin/python -m playwright install --with-deps chromium
+          .venv/bin/python scripts/check_optional_extras.py 2>&1 | tee evidence/frozen-browser.log
+      - name: Install and validate unlocked production optional extra through pip
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m venv unlocked
+          unlocked/bin/python -m pip install '.[crawl4ai]' 2>&1 | tee evidence/unlocked-install.log
+          unlocked/bin/python -m pip check | tee evidence/unlocked-check.log
+          unlocked/bin/python -m pip freeze > evidence/unlocked-freeze.txt
+          unlocked/bin/python -m playwright install --with-deps chromium
+          unlocked/bin/python scripts/check_optional_extras.py 2>&1 | tee evidence/unlocked-browser.log
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: extras-${{ matrix.runner }}-${{ matrix.python }}
+          path: evidence/

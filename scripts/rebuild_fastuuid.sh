@@ -35,5 +35,5 @@ with tarfile.open(fileobj=buffer, mode="w", format=tarfile.PAX_FORMAT) as archiv
         info.size = len(content)
         info.mode = 0o644
         archive.addfile(info, io.BytesIO(content))
-output.write_bytes(gzip.compress(buffer.getvalue(), mtime=0))
+output.write_bytes(gzip.compress(buffer.getvalue(), compresslevel=9, mtime=0))
 PY

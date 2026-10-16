@@ -1,10 +1,11 @@
 """Exercise the UUID API consumed by the pinned Crawl4AI/LiteLLM path."""
 
 import copy
-import importlib
 import json
 import pickle
 import re
+import subprocess
+import sys
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any
@@ -87,5 +88,13 @@ def test_native_uuid4_threads_do_not_repeat(native_uuid: Any) -> None:
 
 
 def test_optional_import_remains_lazy() -> None:
-    body_fetch = importlib.import_module("news_dashboard.body_fetch")
-    assert body_fetch._crawl4ai_extract_body("https://example.com/article") == ("", "error")
+    code = """
+import sys
+from news_dashboard.body_fetch import _crawl4ai_extract_body
+assert "crawl4ai" not in sys.modules
+assert "fastuuid" not in sys.modules
+assert _crawl4ai_extract_body("https://example.com/article") == ("", "error")
+assert "crawl4ai" not in sys.modules
+assert "fastuuid" not in sys.modules
+"""
+    subprocess.run([sys.executable, "-c", code], check=True)  # noqa: S603 - fixed regression code
