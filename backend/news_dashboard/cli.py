@@ -13,8 +13,14 @@ app = typer.Typer(help="News dashboard maintenance CLI")
 
 @app.command()
 def init() -> None:
-    sync_sources()
-    typer.echo("database initialized and sources synced")
+    from news_dashboard.db import close_connection_pool
+
+    try:
+        sync_sources()
+        typer.echo("database initialized and sources synced")
+    finally:
+        # Join pool workers before Python starts finalizing daemon threads.
+        close_connection_pool()
 
 
 @app.command()

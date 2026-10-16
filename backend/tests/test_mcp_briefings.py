@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from collections.abc import AsyncIterator
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from threading import Event
@@ -42,7 +42,7 @@ def _make_user(database_url: str, username: str) -> int:
 @asynccontextmanager
 async def _briefing_client(
     token: str, *, response_bodies: list[bytes] | None = None
-) -> AsyncIterator[Client[Any]]:
+) -> AsyncGenerator[Client[Any]]:
     from news_dashboard.mcp.server import mcp_http_app
 
     async def capture_responses(scope: Scope, receive: Receive, send: Send) -> None:

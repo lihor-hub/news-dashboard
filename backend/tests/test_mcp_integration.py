@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
-from collections.abc import AsyncIterator
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from typing import Any
 
@@ -98,7 +98,7 @@ def _seed_briefing(database_url: str, user_id: int, *, title: str) -> int:
 
 
 @asynccontextmanager
-async def _mounted_client(token: str | None) -> AsyncIterator[Client[Any]]:
+async def _mounted_client(token: str | None) -> AsyncGenerator[Client[Any]]:
     """Use the official client through the real FastAPI route table."""
     from news_dashboard.mcp.server import mcp_http_app
 

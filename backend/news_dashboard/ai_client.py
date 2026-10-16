@@ -18,7 +18,7 @@ from __future__ import annotations
 import importlib
 import logging
 import os
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Generator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Literal, TypeGuard, cast, overload
@@ -610,7 +610,7 @@ def observe(
     name: str,
     *,
     input: Any = None,  # noqa: A002 - mirrors the Langfuse SDK kwarg name
-) -> Iterator[TraceHandle]:
+) -> Generator[TraceHandle]:
     """Group nested AI calls under a single Langfuse trace.
 
     Any wrapped-client calls made inside the ``with`` block (embeddings, chat

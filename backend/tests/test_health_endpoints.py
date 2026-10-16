@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterator
+from collections.abc import Generator
 from contextlib import contextmanager
 from unittest.mock import patch
 
@@ -29,7 +29,7 @@ def test_live_returns_200_without_db() -> None:
 @pytest.mark.smoke
 def test_ready_returns_200_when_db_ok() -> None:
     @contextmanager
-    def fake_connect() -> Iterator[object]:
+    def fake_connect() -> Generator[object]:
         class _Conn:
             def execute(self, sql: str) -> None:
                 pass
@@ -45,7 +45,7 @@ def test_ready_returns_200_when_db_ok() -> None:
 @pytest.mark.smoke
 def test_ready_returns_503_when_db_unavailable() -> None:
     @contextmanager
-    def broken_connect() -> Iterator[object]:
+    def broken_connect() -> Generator[object]:
         class _BrokenConn:
             def execute(self, sql: str) -> None:  # noqa: ARG002
                 msg = "connection refused"

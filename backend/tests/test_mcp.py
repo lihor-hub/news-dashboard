@@ -4,7 +4,7 @@ import asyncio
 import json
 import logging
 import re
-from collections.abc import AsyncIterator, Generator
+from collections.abc import AsyncGenerator, Generator
 from contextlib import asynccontextmanager
 from threading import Event
 from typing import Any, Literal, cast
@@ -372,7 +372,7 @@ async def _mcp_client(
     *,
     response_bodies: list[bytes] | None = None,
     mode: Literal["legacy", "auto"] = "legacy",
-) -> AsyncIterator[Client[Any]]:
+) -> AsyncGenerator[Client[Any]]:
     from news_dashboard.mcp.server import mcp_http_app
 
     async def capture_responses(scope: Scope, receive: Receive, send: Send) -> None:

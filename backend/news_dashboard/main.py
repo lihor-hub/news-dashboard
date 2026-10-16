@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 import os
 import time
-from collections.abc import AsyncIterator, MutableMapping
+from collections.abc import AsyncGenerator, MutableMapping
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
@@ -61,7 +61,7 @@ class SPAStaticFiles(StaticFiles):
 
 
 @asynccontextmanager
-async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+async def lifespan(_: FastAPI) -> AsyncGenerator[None]:
     async with mcp_http_app.lifespan(mcp_http_app):
         init_error_tracking()
         open_connection_pool()
