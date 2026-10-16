@@ -49,8 +49,9 @@ crawl4ai = [
   "crawl4ai>=0.9.4",
   "scipy>=1.18.1",
   "shapely>=2.2.0",
-  # Identified native source patch, with supported PyO3; see vendor/fastuuid/README.md.
-  "fastuuid @ https://raw.githubusercontent.com/lihor-hub/news-dashboard/310a24220f4c24e098da9a44a75dfcbc7c8419c9/vendor/fastuuid/fastuuid-0.14.0+nd.1.tar.gz#sha256=c025db54352c78802b919cc93504321f94f58974c4bebedf4ac7e323bc0d5c22",
+  # Python 3.14 keeps its published wheel; 3.15+ needs supported PyO3.
+  # Identified native patch provenance: vendor/fastuuid/README.md.
+  "fastuuid @ https://raw.githubusercontent.com/lihor-hub/news-dashboard/310a24220f4c24e098da9a44a75dfcbc7c8419c9/vendor/fastuuid/fastuuid-0.14.0+nd.1.tar.gz#sha256=c025db54352c78802b919cc93504321f94f58974c4bebedf4ac7e323bc0d5c22 ; python_version >= '3.15'",
 ]
 dev = [
   "pytest>=9.1.1",

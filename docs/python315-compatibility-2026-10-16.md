@@ -272,18 +272,21 @@ patch**, under its original BSD 3-Clause license. It uses supported **PyO3
 `downcast` calls with `cast` and explicitly preserves clone-based comparisons;
 UUID algorithms, OS-backed randomness, representations and errors are unchanged.
 See [source, readable patch, ownership and rebuild instructions](../vendor/fastuuid/README.md).
-The manifest references the source archive at immutable commit
+The manifest activates this source patch only on **Python >=3.15**, retaining
+published fastuuid 0.14.0 wheels on 3.14 to avoid a new Rust prerequisite there.
+It references the source archive at immutable commit
 `310a24220f4c24e098da9a44a75dfcbc7c8419c9`, with SHA-256
 `c025db54352c78802b919cc93504321f94f58974c4bebedf4ac7e323bc0d5c22`.
 Hatch's documented direct-reference metadata option permits ordinary pip to
 consume that same artifact. No resolver override, fabricated distribution,
 omitted dependency or source-build compatibility override is involved.
 
-The lock changes only fastuuid, **SciPy 1.18.0 → 1.18.1**, **Shapely 2.1.2 →
+The lock retains fastuuid 0.14.0 below 3.15 and adds its identified local variant
+for 3.15+. The only other version changes are **SciPy 1.18.0 → 1.18.1**, **Shapely 2.1.2 →
 2.2.0**, and adds **Hypothesis 6.170.1** for upstream property tests. The optional
 extra declares the scientific compatibility floors. Crawl4AI remains 0.9.4 and
 unclecode-litellm remains 1.81.13; no unrelated dependency versions change.
-Building the optional native source requires Rust >=1.85 and a C linker.
+Building the optional native source on 3.15+ requires Rust >=1.85 and a C linker.
 
 On this supported macOS arm64 host, frozen all-extras installs on **3.14.6 and
 stable 3.15.0** pass, with **237 consistent installed packages** on each.
@@ -325,7 +328,29 @@ extraction/source/API selection passes **90 tests**. Full frozen all-extras 3.15
 passes **3,651 backend/script tests, the same 2 skips, 88% coverage**. Dedicated
 PostgreSQL URLs were verified with authenticated read-only queries before tests;
 parallel query workers were disabled, with no shared reset or native 5432 use.
-Native matrix results are recorded with the PR's final acceptance evidence.
+Native source-patch validation on head
+`c645eaed84161aeae8cc4bb836cce9e78d648146` completed successfully in
+[run 38969645747](https://github.com/lihor-hub/news-dashboard/actions/runs/38969645747):
+**12 successful installs**, frozen all-extras and ordinary unconstrained pip on
+every pair below, each with consistency checks, native imports and real offline
+browser/application extraction. This preparatory run exercised the patched
+native source on both interpreters. The final marker restores 3.14 registry
+wheels; final-head checks and version evidence are linked from
+[PR #1550](https://github.com/lihor-hub/news-dashboard/pull/1550).
+
+| Native runner | Stable interpreter | Result | Evidence artifact |
+|---|---|---|---|
+| ubuntu-24.04 (x86_64) | 3.14.8 | Passed both modes; 17 API/source + 48 upstream tests | [Logs/versions](https://github.com/lihor-hub/news-dashboard/actions/runs/38969645747/artifacts/12076297340) |
+| ubuntu-24.04 (x86_64) | 3.15.0 | Passed both modes; 17 API/source + 48 upstream tests | [Logs/versions](https://github.com/lihor-hub/news-dashboard/actions/runs/38969645747/artifacts/12077480228) |
+| ubuntu-24.04-arm (aarch64) | 3.14.8 | Passed both modes; 17 API/source + 48 upstream tests | [Logs/versions](https://github.com/lihor-hub/news-dashboard/actions/runs/38969645747/artifacts/12076367169) |
+| ubuntu-24.04-arm (aarch64) | 3.15.0 | Passed both modes; 17 API/source + 48 upstream tests | [Logs/versions](https://github.com/lihor-hub/news-dashboard/actions/runs/38969645747/artifacts/12076716316) |
+| macos-15 (arm64) | 3.14.7 | Passed both modes; 17 API/source + 48 upstream tests | [Logs/versions](https://github.com/lihor-hub/news-dashboard/actions/runs/38969645747/artifacts/12075694018) |
+| macos-15 (arm64) | 3.15.0 | Passed both modes; 17 API/source + 48 upstream tests | [Logs/versions](https://github.com/lihor-hub/news-dashboard/actions/runs/38969645747/artifacts/12076457777) |
+
+Frozen optional versions are Crawl4AI 0.9.4, unclecode-litellm 1.81.13, SciPy
+1.18.1, Shapely 2.2.0 and Playwright 1.61.0. Unconstrained pip selects Crawl4AI
+0.9.5 and Playwright 1.64.0, with the same LLM owner and scientific versions;
+both combinations pass. Artifact logs retain exact installed versions.
 
 The opt-in `Python extras compatibility` workflow uses native Linux amd64,
 Linux arm64 and macOS arm64 runners, for 3.14 and 3.15. Each pair runs frozen
@@ -343,8 +368,9 @@ The fresh all-extras `pip-audit` scan reports **37 existing findings**: one each
 in langgraph-sdk 0.4.2 and multidict 6.7.1, plus **35 in NLTK 3.10.0**, all three
 versions unchanged from origin/main. Core remediation remains in #1539/#1540;
 NLTK remediation is separately tracked by
-[#1549](https://github.com/lihor-hub/news-dashboard/issues/1549).
-The local fastuuid version is unknown to PyPI's vulnerability service. A separate
+[#1549](https://github.com/lihor-hub/news-dashboard/issues/1549); one finding,
+PYSEC-2026-3740, currently has no published fix version.
+The 3.15 local fastuuid version is unknown to PyPI's vulnerability service. A separate
 normal dependency audit of upstream fastuuid 0.14.0 reports no findings;
 **cargo-audit 0.22.2** checks the patched Cargo.lock against RustSec commit
 `f28da8c5d386e507fac79153655184056a20c054`: **zero vulnerabilities**. Its inherited

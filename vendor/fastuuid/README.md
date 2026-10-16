@@ -5,6 +5,9 @@ The news-dashboard maintainers own **0.14.0+nd.1**, a source patch of
 unchanged BSD 3-Clause license (see LICENSE). This is the upstream Rust UUID
 implementation, with an identified local version and supported Python bindings.
 It does not substitute a Python module or implement a different UUID algorithm.
+The final manifest activates this patch only on Python >=3.15. Python 3.14
+retains published fastuuid 0.14.0 wheels, avoiding a new Rust prerequisite on
+its supported development platforms.
 
 Crawl4AI 0.9.4 pins unclecode-litellm 1.81.13, whose `litellm._uuid` aliases
 fastuuid and supplies `uuid4()` and `uuid.uuid4()` to three callers. Those callers
@@ -54,7 +57,8 @@ The patched archive SHA-256 is
 
 The optional dependency must reference this archive at an immutable Git commit
 and include its SHA-256, for ordinary pip as well as frozen uv installation.
-Building needs a C linker and Rust >=1.85. There are no prebuilt local wheels.
+Building the 3.15+ source needs a C linker and Rust >=1.85. There are no prebuilt
+local wheels; the built native wheel retains the upstream LICENSE.
 The core production install does not request this optional dependency.
 
 ## Maintenance and security
