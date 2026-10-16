@@ -5,7 +5,7 @@ from __future__ import annotations
 import importlib.util
 from pathlib import Path
 from types import ModuleType
-from unittest.mock import patch
+from unittest.mock import call, patch
 
 import pytest
 
@@ -31,6 +31,39 @@ def test_live_corpus_module_does_not_run_on_import() -> None:
         _load_script()
 
     extract.assert_not_called()
+
+
+@pytest.mark.parametrize("use_custom_urls", [False, True])
+def test_main_preserves_corpus_and_disables_ai(*, use_custom_urls: bool) -> None:
+    module = _load_script()
+    expected_urls: tuple[str, ...] = (
+        "https://capnproto.org/",
+        "https://react.dev/learn/thinking-in-react",
+        "https://developer.mozilla.org/en-US/docs/Web/API/Document_Object_Model",
+        (
+            "https://github.blog/ai-and-ml/generative-ai/"
+            "what-is-retrieval-augmented-generation-and-what-does-it-do-for-generative-ai/"
+        ),
+        "https://blog.cloudflare.com/ai-platform/",
+        "https://quotes.toscrape.com/js/",
+    )
+    argv = []
+    if use_custom_urls:
+        expected_urls = ("https://example.com/first", "https://example.com/second")
+        argv = list(expected_urls)
+    text = "meaningful article word " * 30
+    result = ExtractionResult.success(
+        text=text,
+        method="selenium",
+        quality=assess_extracted_text(text),
+        attempts=(),
+    )
+
+    with patch.object(module, "extract_public_content", return_value=result) as extract:
+        exit_code = module.main(argv)
+
+    assert exit_code == 0
+    assert extract.call_args_list == [call(url, allow_ai=False) for url in expected_urls]
 
 
 def test_run_reports_status_method_quality_and_latency(
