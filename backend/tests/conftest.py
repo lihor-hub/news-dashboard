@@ -176,7 +176,7 @@ _FAKE_ADMIN = {
 
 
 @pytest.fixture(autouse=True)
-def override_auth() -> Generator[None]:
+def override_auth(monkeypatch: pytest.MonkeyPatch) -> Generator[None]:
     """Inject a fake admin user into all tests that use the FastAPI app.
 
     Auth-specific tests that need real session behaviour should call
@@ -185,6 +185,10 @@ def override_auth() -> Generator[None]:
     from news_dashboard.auth import require_admin, require_auth
     from news_dashboard.main import app
 
+    # Development login defaults must not seed users into fixture-owned test DBs.
+    # Bootstrap-specific tests set their own values after this fixture runs.
+    monkeypatch.delenv("BOOTSTRAP_ADMIN_USERNAME", raising=False)
+    monkeypatch.delenv("BOOTSTRAP_ADMIN_PASSWORD", raising=False)
     app.dependency_overrides[require_auth] = lambda: _FAKE_ADMIN
     app.dependency_overrides[require_admin] = lambda: _FAKE_ADMIN
     yield

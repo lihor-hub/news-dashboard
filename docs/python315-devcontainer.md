@@ -16,7 +16,8 @@ Both use Debian Bookworm and standard GIL CPython. Microsoft has no 3.15 tag
 in its [Python devcontainer registry](https://mcr.microsoft.com/v2/devcontainers/python/tags/list)
 as checked on 2026-10-17. The official image supplies Python; the Dockerfile
 adds a non-root `vscode` user, Bash and zsh (required by the push hook), Git, sudo, Make, C/C++ build tools,
-PostgreSQL client and Rust 1.95.0 for dependencies that need native builds.
+PostgreSQL client, Helm 4.3.1 (with architecture-specific SHA-256 checks), jq
+and Rust 1.95.0 for dependencies that need native builds.
 The existing Dev Containers Node feature installs Node 26.
 
 ## Open and rebuild

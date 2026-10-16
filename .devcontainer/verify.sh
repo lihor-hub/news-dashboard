@@ -14,6 +14,9 @@ node --version
 npm --version
 rustc --version
 cargo --version
+helm version --short
+jq --version
+zsh --version
 cat /etc/os-release
 python - <<'PY'
 import json
@@ -37,7 +40,7 @@ print(json.dumps({'python': sys.version, 'machine': platform.machine(), 'os': pl
 PY
 python -m pip check
 python -m pip freeze
-for tool in git make gcc cargo rustc psql ruff mypy ty pyrefly pre-commit news-dashboard; do
+for tool in git make gcc cargo rustc helm jq zsh psql ruff mypy ty pyrefly pre-commit news-dashboard; do
     command -v "$tool"
 done
 test -x "$(git rev-parse --git-path hooks/pre-commit)"
