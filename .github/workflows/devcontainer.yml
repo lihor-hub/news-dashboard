@@ -54,6 +54,7 @@ jobs:
           devcontainer exec --workspace-folder . bash .devcontainer/verify.sh 2>&1 | tee evidence/verify.log
           devcontainer exec --workspace-folder . bash -c 'make lint && make typecheck && make test && make build' 2>&1 | tee evidence/gates.log
           devcontainer exec --workspace-folder . pre-commit run --all-files 2>&1 | tee evidence/hooks.log
+          devcontainer exec --workspace-folder . pre-commit run --hook-stage pre-push --all-files 2>&1 | tee evidence/push-hooks.log
       - name: Rebuild with an actual stale Python 3.14 venv in the isolated volume
         shell: bash
         run: |

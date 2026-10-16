@@ -4,7 +4,7 @@ FROM python:3.15.0-slim-bookworm@sha256:122756f3fe72c4f5d3d71897888204ee85774bc7
 # Native build tools are needed by core dependencies without cp315 wheels.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     bash build-essential ca-certificates curl git libffi-dev pkg-config \
-    postgresql-client sudo util-linux \
+    postgresql-client sudo util-linux zsh \
     && rm -rf /var/lib/apt/lists/* \
     && groupadd --gid 1000 vscode \
     && useradd --uid 1000 --gid vscode --create-home --shell /bin/bash vscode \

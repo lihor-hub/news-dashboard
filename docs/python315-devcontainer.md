@@ -15,7 +15,7 @@ Linux arm64 is
 Both use Debian Bookworm and standard GIL CPython. Microsoft has no 3.15 tag
 in its [Python devcontainer registry](https://mcr.microsoft.com/v2/devcontainers/python/tags/list)
 as checked on 2026-10-17. The official image supplies Python; the Dockerfile
-adds a non-root `vscode` user, Bash, Git, sudo, Make, C/C++ build tools,
+adds a non-root `vscode` user, Bash and zsh (required by the push hook), Git, sudo, Make, C/C++ build tools,
 PostgreSQL client and Rust 1.95.0 for dependencies that need native builds.
 The existing Dev Containers Node feature installs Node 26.
 
@@ -97,7 +97,7 @@ post-create, verifies that host dependency sentinels survive, non-root
 permissions, Python/GIL/Node, both PostgreSQL
 connections, initialized sources, hook executables and running backend/frontend
 servers. It runs lint, typechecks, full tests, frontend build and all-file
-hooks inside the container. Finally it puts a real Python 3.14 venv in the
+commit/push hooks inside the container. Finally it puts a real Python 3.14 venv in the
 container volume, rebuilds, verifies the recovered 3.15 environment and reruns
 representative integration tests. Artifacts preserve build, install, version,
 package-freeze, gate and rebuild logs for each architecture.
