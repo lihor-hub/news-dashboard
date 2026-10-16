@@ -40,15 +40,16 @@
     "lint:fix": "eslint . --fix",
     "format": "prettier --write frontend/src e2e/visual-states.spec.ts vite.config.ts index.html playwright.config.ts",
     "format:check": "prettier --check frontend/src e2e/visual-states.spec.ts vite.config.ts index.html playwright.config.ts",
-    "test:frontend": "vitest run",
+    "test:frontend": "vitest run && npm run test:security",
     "test:frontend:smoke": "vitest run frontend/src/__tests__/appRouter.test.tsx frontend/src/__tests__/routing.test.tsx frontend/src/__tests__/navigation.test.ts frontend/src/__tests__/auth.test.tsx",
-    "test:frontend:coverage": "vitest run --coverage",
+    "test:frontend:coverage": "vitest run --coverage && npm run test:security",
     "test:e2e": "playwright test --grep-invert @visual",
     "test:a11y": "playwright test e2e/a11y.spec.ts",
     "test:visual": "playwright test e2e/visual-states.spec.ts",
     "capture:screenshots": "playwright test --config=scripts/screenshots.playwright.config.ts && python3 scripts/optimize_screenshots.py",
     "dead-code": "knip",
-    "lint:rtl": "node --test scripts/check-rtl-classes.test.mjs && node scripts/check-rtl-classes.mjs"
+    "lint:rtl": "node --test scripts/check-rtl-classes.test.mjs && node scripts/check-rtl-classes.mjs",
+    "test:security": "node --test scripts/npm-security.test.mjs"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
@@ -107,6 +108,8 @@
     "jsdom": "^30.1.1",
     "knip": "^6.39.0",
     "prettier": "^3.9.9",
+    "smol-toml": "^1.9.1",
+    "source-map-js": "^1.2.2",
     "vite-plugin-pwa": "^1.3.0",
     "vitest": "^5.0.3"
   }
