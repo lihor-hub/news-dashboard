@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import smtplib
-from email import message_from_string, policy
+from email import message_from_bytes, message_from_string, policy
 from email.message import Message
 from typing import ClassVar
 from unittest.mock import MagicMock, patch
@@ -377,3 +377,88 @@ def test_send_email_returns_safe_error_text() -> None:
             html_body="<p>html</p>",
         )
     assert result == "smtp_error"
+
+
+@pytest.mark.parametrize("tls_mode", ["none", "starttls", "ssl"])
+@pytest.mark.parametrize(
+    ("sender", "recipient", "international"),
+    [
+        ("Știri <sender@example.com>", "Zoë <reader@example.com>", False),
+        ("sender@example.com", "reader@exämple.com", True),
+        ("știri@example.com", "cititor@example.com", True),
+        ("sender@example.com", "cititoré@example.com", True),
+    ],
+)
+@pytest.mark.parametrize("advertised", [False, True])
+def test_send_email_negotiates_smtputf8(
+    tls_mode: str, sender: str, recipient: str, international: bool, advertised: bool
+) -> None:
+    # Keep the real SMTP.send_message: only the transport is stubbed. Direct
+    # EmailMessage.as_string() does not exercise envelope negotiation.
+    server = smtplib.SMTP()
+    server.ehlo_resp = b"OK"
+    server.does_esmtp = True
+    server.esmtp_features = {"smtputf8": ""} if advertised else {}
+    factory = MagicMock()
+    factory.return_value.__enter__.return_value = server
+    env = {"SMTP_HOST": "relay.example", "SMTP_FROM": sender, "SMTP_TLS": tls_mode}
+    with (
+        patch.dict("os.environ", env, clear=True),
+        patch.object(smtplib, "SMTP_SSL" if tls_mode == "ssl" else "SMTP", factory),
+        patch.object(server, "ehlo"),
+        patch.object(server, "starttls"),
+        patch.object(server, "sendmail", return_value={}) as transport,
+    ):
+        result = send_email(
+            recipient=recipient,
+            subject="Știri pentru Zoë",
+            text_body="Noutăți din București",
+            html_body="<p>Noutăți din București</p>",
+            headers={"Bcc": "hidden@example.com", "List-Unsubscribe": "<https://example.com/u>"},
+        )
+    if international and not advertised:
+        assert result == "smtp_error"
+        transport.assert_not_called()
+        return
+    assert result is None
+    transport.assert_called_once()
+    envelope_sender, envelope_recipients, raw, options, _rcpt_options = transport.call_args.args
+    assert envelope_sender == ("știri@example.com" if "știri@" in sender else "sender@example.com")
+    assert envelope_recipients == [recipient.rsplit("<", maxsplit=1)[-1].rstrip(">")]
+    assert options == (("SMTPUTF8", "BODY=8BITMIME") if international else ())
+    assert isinstance(raw, bytes)
+    message = message_from_bytes(raw, policy=policy.default)
+    assert str(message["Subject"]) == "Știri pentru Zoë"
+    assert str(message["From"]) == sender
+    assert str(message["To"]) == recipient
+    assert message["Bcc"] is None
+    assert message["List-Unsubscribe"] == "<https://example.com/u>"
+    plain = message.get_body(preferencelist=("plain",))
+    html = message.get_body(preferencelist=("html",))
+    assert plain is not None
+    assert html is not None
+    assert plain.get_content().strip() == "Noutăți din București"
+    assert html.get_content().strip() == "<p>Noutăți din București</p>"
+
+
+@pytest.mark.parametrize("field", ["recipient", "subject", "sender", "unsubscribe"])
+def test_send_email_rejects_header_injection_before_transport(field: str) -> None:
+    injected = "safe@example.com\r\nBcc: attacker@example.com"
+    env = {
+        "SMTP_HOST": "relay.example",
+        "SMTP_FROM": injected if field == "sender" else "sender@example.com",
+        "SMTP_TLS": "none",
+    }
+    with (
+        patch.dict("os.environ", env, clear=True),
+        patch.object(smtplib, "SMTP") as transport,
+        pytest.raises(ValueError, match=r"linefeed|carriage return"),
+    ):
+        send_email(
+            recipient=injected if field == "recipient" else "reader@example.com",
+            subject=injected if field == "subject" else "Daily brief",
+            text_body="text",
+            html_body="<p>html</p>",
+            headers={"List-Unsubscribe": injected} if field == "unsubscribe" else None,
+        )
+    transport.assert_not_called()
