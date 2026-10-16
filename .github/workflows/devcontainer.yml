@@ -40,10 +40,13 @@ jobs:
         run: |
           set -euo pipefail
           mkdir evidence
+          mkdir -p .venv node_modules
+          touch .venv/host-preserved node_modules/host-preserved
           uname -m | tee evidence/host-machine.txt
           docker compose -f .devcontainer/docker-compose.yml config --quiet
           devcontainer build --workspace-folder . 2>&1 | tee evidence/build.log
           devcontainer up --workspace-folder . 2>&1 | tee evidence/up.log
+          test -f .venv/host-preserved && test -f node_modules/host-preserved
       - name: Verify tools, non-root permissions, PostgreSQL and development servers
         shell: bash
         run: |
@@ -61,6 +64,7 @@ jobs:
             python:3.14.8-slim-bookworm bash -c 'python -m venv --clear /workspace/.venv && touch /workspace/.venv/stale-python314-marker && cat /workspace/.venv/pyvenv.cfg' \
             2>&1 | tee evidence/stale-venv.log
           devcontainer up --workspace-folder . --remove-existing-container 2>&1 | tee evidence/rebuild.log
+          test -f .venv/host-preserved && test -f node_modules/host-preserved
           devcontainer exec --workspace-folder . bash .devcontainer/verify.sh 2>&1 | tee evidence/rebuild-verify.log
           devcontainer exec --workspace-folder . pytest backend/tests/test_health_endpoints.py backend/tests/test_ingest.py -n 0 -q 2>&1 | tee evidence/rebuild-tests.log
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

@@ -93,7 +93,8 @@ process environment.
 
 The `Development container` workflow builds and opens this exact configuration
 on native `ubuntu-24.04` (amd64) and `ubuntu-24.04-arm` runners. It executes
-post-create, verifies non-root permissions, Python/GIL/Node, both PostgreSQL
+post-create, verifies that host dependency sentinels survive, non-root
+permissions, Python/GIL/Node, both PostgreSQL
 connections, initialized sources, hook executables and running backend/frontend
 servers. It runs lint, typechecks, full tests, frontend build and all-file
 hooks inside the container. Finally it puts a real Python 3.14 venv in the
