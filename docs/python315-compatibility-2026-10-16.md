@@ -149,26 +149,29 @@ ASCII envelopes with Unicode display names, internationalized domains, sender
 and recipient local parts, advertised/absent SMTPUTF8, all three configured TLS
 modes, Unicode MIME bodies, safe `smtp_error`, allowed unsubscribe headers,
 ignored Bcc injection and rejected CRLF headers. These establish the existing
-negotiation behavior on both interpreters; no production SMTP defect was
+negotiation behavior on both interpreters. Replacing negotiated sending with
+direct serialization makes all 24 transport cases fail; restoring the code
+passes all 49 email tests on each interpreter. No production SMTP defect was
 reproduced and no runtime email code or header policy changes.
 
 On macOS 27.0.1 arm64, standard-GIL CPython 3.14.6 and stable 3.15.0 (uv
 python-build-standalone, October 14), the exact lock installs with these commands:
 
 ```sh
-uv sync --frozen --all-extras --python 3.14
+uv sync --frozen --all-extras
 uv pip check
-uv export --frozen --extra dev --no-emit-project -o runtime-dev.txt
-uv venv --python /path/to/stable/python3.15 .core315
-uv pip sync --python .core315/bin/python runtime-dev.txt
-uv pip check --python .core315/bin/python
-uv pip install --python .core315/bin/python --no-deps -e .
+uv export --frozen --extra dev --no-emit-project > .delivery-evidence/runtime-dev.txt
+# PY315 is the installed stable 3.15.0 interpreter described above.
+uv venv --python "$PY315" .delivery-evidence/py315
+uv pip sync --python .delivery-evidence/py315/bin/python .delivery-evidence/runtime-dev.txt
+uv pip check --python .delivery-evidence/py315/bin/python
+uv pip install --python .delivery-evidence/py315/bin/python --no-deps -e .
 source .env
 export PGOPTIONS='-c max_parallel_workers_per_gather=0'
-.core315/bin/python -m pytest backend/tests/test_email.py backend/tests/test_digest.py \
+.delivery-evidence/py315/bin/python -m pytest backend/tests/test_email.py backend/tests/test_digest.py \
   backend/tests/test_briefing_email_deliveries.py backend/tests/test_database_config.py \
   backend/tests/test_prompt_catalog.py backend/tests/test_url_safety.py -n 0 -q
-.core315/bin/python -m pytest --cov --cov-report=term-missing
+.delivery-evidence/py315/bin/python -m pytest --cov --cov-report=term-missing
 ```
 
 Fresh supported-runtime gates (`make lint`, all three Python checkers and
@@ -181,7 +184,8 @@ rerun passed. The failed run is retained in local delivery evidence and is not
 counted as passing.
 
 The supported 3.14 all-extras environment has **236 consistent packages**;
-3.15 runtime/dev has **193**, explicitly excluding crawl4ai. Native imports,
+3.15 runtime/dev has **193 dependencies plus the editable project (194 installed)**,
+explicitly excluding crawl4ai. Native imports,
 FastMCP Client, app import, **190 OpenAPI paths**, Unicode MessagePack/JSON,
 Pydantic validation and offline tiktoken round trips pass on both.
 The focused 3.15 selection passes **167 tests**; full runtime/dev passes
@@ -207,10 +211,31 @@ checking consistency, native/app/FastMCP imports and offline functional probes.
 Artifacts preserve constraints, installed versions and logs. It does not
 publish images or certify the slim-image runtime, optional extras or deployment.
 
+[Native run 38962978516](https://github.com/lihor-hub/news-dashboard/actions/runs/38962978516)
+completed successfully on head `71b52b74d04f91366c52d60cebf117fb9df7551c`.
+All **eight** production pip installs exited 0: exact scoped lock constraints and
+unconstrained `pip install .` on each architecture/interpreter pair below.
+Every install passed `pip check`, native/app/FastMCP imports, 190 OpenAPI paths
+and Unicode MessagePack, JSON, Pydantic and offline tokenizer probes.
+
+| Native runner | Interpreters | Build tools | Frozen and unlocked installs |
+|---|---|---|---|
+| Ubuntu 24.04 amd64, glibc 2.39 | CPython 3.14.8, 3.15.0 | GCC 13.3.0, rustc/cargo 1.99.0, libffi headers | Passed |
+| Ubuntu 24.04 arm64, glibc 2.39 | CPython 3.14.8, 3.15.0 | GCC 13.3.0, rustc/cargo 1.99.0, libffi headers | Passed |
+
+Both install modes selected the eight scoped candidate versions described above.
+Unconstrained resolution also selects newer unrelated dependencies; the artifacts
+retain every installed version, and those broader changes are **not** copied
+into `uv.lock`. Full backend suite evidence above uses the scoped lock.
+The first-head required CI and Dependency Review also passed in
+[run 38962978019](https://github.com/lihor-hub/news-dashboard/actions/runs/38962978019).
+Inspect [PR #1547](https://github.com/lihor-hub/news-dashboard/pull/1547) for
+current-head checks and review; no merge or production deployment is claimed.
+
 The fresh runtime/dev CVE audit command is:
 
 ```sh
-uvx --python 3.14 pip-audit --disable-pip --no-deps -r runtime-dev.txt -f json
+uvx --python 3.14 pip-audit --disable-pip --no-deps -r .delivery-evidence/runtime-dev.txt -f json
 ```
 
 It reports **two unchanged findings**, rather than a zero-vulnerability pass:
@@ -576,7 +601,7 @@ add their qualifications rather than silently replacing them.
 |---|---|---|
 | [#1526](https://github.com/lihor-hub/news-dashboard/issues/1526) | This versioned report and index | Documentation-only, independently mergeable through applicable delivery gates |
 | [#1527](https://github.com/lihor-hub/news-dashboard/issues/1527) | Explicit UTF-8 preparation | Independent, retain 3.14 and prove non-ASCII round trips |
-| [#1528](https://github.com/lihor-hub/news-dashboard/issues/1528) | Core runtime/dev dependencies and SMTPUTF8 regressions | Independent preparation; full PostgreSQL suite, production installs and dependency audit still required |
+| [#1528](https://github.com/lihor-hub/news-dashboard/issues/1528) | Core runtime/dev dependencies and SMTPUTF8 regressions | Implemented in [PR #1547](https://github.com/lihor-hub/news-dashboard/pull/1547); full scoped suites/native production installs pass, CVE findings remain in separate PRs |
 | [#1529](https://github.com/lihor-hub/news-dashboard/issues/1529) | Validated stable-3.15 devcontainer | Needs #1528 and working container runner; missing MCR tag has an official-base alternative |
 | [#1530](https://github.com/lihor-hub/news-dashboard/issues/1530) | Supported crawl4ai all-extras path | Needs #1528 and supported fastuuid/dependency support, replacement or tested custom implementation; 3.15 browser tests outstanding |
 | [#1531](https://github.com/lihor-hub/news-dashboard/issues/1531) | Atomic runtime/tooling/CI/current-docs cutover | Needs all five preceding items and full test, multiarchitecture, CI/security and deployment evidence |
