@@ -364,12 +364,15 @@ headers, alongside GCC/Rust/libffi; it does not alter lxml or bypass compilation
 The workflow uploads installed versions and command logs. It does not certify
 containers, devcontainer lifecycle, runtime cutover or deployment.
 
-The fresh all-extras `pip-audit` scan reports **37 existing findings**: one each
-in langgraph-sdk 0.4.2 and multidict 6.7.1, plus **35 in NLTK 3.10.0**, all three
-versions unchanged from origin/main. Core remediation remains in #1539/#1540;
-NLTK remediation is separately tracked by
-[#1549](https://github.com/lihor-hub/news-dashboard/issues/1549); one finding,
-PYSEC-2026-3740, currently has no published fix version.
+The independent all-extras `pip-audit` recheck reports **22 distinct existing
+advisories**: one each in langgraph-sdk 0.4.2 and multidict 6.7.1, plus **20 in
+NLTK 3.10.0**, all three versions unchanged from origin/main. The earlier scan's
+37 records contained 15 duplicate NLTK advisory IDs; no new IDs appear in the
+recheck. Its stale duplicate of PYSEC-2026-3740 omitted a fix, while the current
+record lists NLTK 3.10.3. Every advisory now has a reported fix version; no fix
+has been installed or validated by this PR. Core remediation remains in
+#1539/#1540; NLTK remediation is separately tracked by
+[#1549](https://github.com/lihor-hub/news-dashboard/issues/1549).
 The 3.15 local fastuuid version is unknown to PyPI's vulnerability service. A separate
 normal dependency audit of upstream fastuuid 0.14.0 reports no findings;
 **cargo-audit 0.22.2** checks the patched Cargo.lock against RustSec commit
