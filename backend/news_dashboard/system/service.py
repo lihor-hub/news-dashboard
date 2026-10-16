@@ -73,7 +73,7 @@ def public_config() -> dict[str, Any]:
 
 def parse_changelog() -> list[dict[str, object]]:
     try:
-        text = _CHANGELOG_FILE.read_text()
+        text = _CHANGELOG_FILE.read_text(encoding="utf-8")
     except OSError:
         return []
     entries: list[dict[str, object]] = []

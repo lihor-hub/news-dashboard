@@ -4,8 +4,11 @@ Run:  python3 -m unittest scripts/test_update_changelog.py
 """
 
 import os
+import subprocess
 import sys
+import tempfile
 import unittest
+from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(__file__))
 from update_changelog import update_changelog
@@ -118,6 +121,57 @@ class TestUpdateChangelogDatedHeadings(unittest.TestCase):
     def test_prose_header_preserved(self):
         out = update_changelog(_EXISTING_DATED, "1.22.0", "- New.", date="2026-07-03")
         self.assertTrue(out.startswith("# Changelog\n\nAll notable changes"))
+
+
+class TestUpdateChangelogCLI(unittest.TestCase):
+    def test_utf8_files_round_trip_with_ascii_default(self) -> None:
+        # Force pathlib's implicit encoding to ASCII even on UTF-8-only hosts.
+        # The child still performs real reads/writes of UTF-8 bytes.
+        runner = """
+import io
+import runpy
+import sys
+io.text_encoding = lambda encoding, _stacklevel=2: encoding or 'ascii'
+sys.argv = sys.argv[1:]
+runpy.run_path(sys.argv[0], run_name='__main__')
+"""
+        for old_item, new_item in (
+            ("Previous note", "Café, știri și 日本語"),
+            ("Déjà publié — 中文", "New note"),
+            ("Previous note", "New note"),  # The dated heading itself is non-ASCII.
+        ):
+            with (
+                self.subTest(old_item=old_item, new_item=new_item),
+                tempfile.TemporaryDirectory() as tmp,
+            ):
+                changelog = Path(tmp) / "CHANGELOG.md"
+                body = Path(tmp) / "notes.md"
+                previous = f"# Changelog\n\n## 1.0.0\n- {old_item}\n"
+                changelog.write_bytes(previous.encode("utf-8"))
+                body.write_bytes(f"- {new_item}\n".encode())
+                command = [
+                    sys.executable,
+                    "-S",
+                    "-c",
+                    runner,
+                    str(Path(__file__).with_name("update_changelog.py")),
+                    "--version",
+                    "1.1.0",
+                    "--date",
+                    "2026-10-16",
+                    "--body-file",
+                    str(body),
+                    "--file",
+                    str(changelog),
+                ]
+                expected = (
+                    f"# Changelog\n\n## [1.1.0] — 2026-10-16\n- {new_item}\n"
+                    f"\n## 1.0.0\n- {old_item}\n"
+                ).encode()
+                for _ in range(2):  # Re-applying must preserve the same bytes.
+                    result = subprocess.run(command, capture_output=True, check=False)  # noqa: S603
+                    self.assertEqual(result.returncode, 0, result.stderr.decode("utf-8"))
+                    self.assertEqual(changelog.read_bytes(), expected)
 
 
 if __name__ == "__main__":

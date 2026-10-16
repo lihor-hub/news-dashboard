@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from textwrap import dedent
 from unittest.mock import patch
 
+import pytest
 from fastapi.testclient import TestClient
 
 from news_dashboard.main import app
@@ -17,6 +19,20 @@ def _client() -> TestClient:
 
 
 # ── parse_changelog unit tests ────────────────────────────────────────────────
+
+
+def test_parse_changelog_reads_utf8_bytes_with_ascii_default(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    changelog = tmp_path / "CHANGELOG.md"
+    changelog.write_bytes("## [1.2.3] — 2026-10-16\n- Café, știri și 日本語\n".encode())
+    monkeypatch.setattr("news_dashboard.system.service._CHANGELOG_FILE", changelog)
+    # Exercise real decoding with an ASCII implicit default on every host.
+    with patch("io.text_encoding", side_effect=lambda encoding, _stacklevel=2: encoding or "ascii"):
+        entries = parse_changelog()
+    assert entries == [
+        {"version": "1.2.3", "date": "2026-10-16", "items": ["Café, știri și 日本語"]}
+    ]
 
 
 def test_parse_changelog_returns_entries() -> None:
