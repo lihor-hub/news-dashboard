@@ -15,11 +15,11 @@
     "build:win": "electron-builder --win"
   },
   "devDependencies": {
-    "electron": "^44.5.1",
+    "electron": "^44.7.0",
     "electron-builder": "^26.15.3"
   },
   "dependencies": {
-    "@sentry/node": "^11.2.0",
+    "@sentry/node": "^11.6.0",
     "electron-updater": "^6.8.9"
   }
 }
