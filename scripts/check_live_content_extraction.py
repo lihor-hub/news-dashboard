@@ -12,8 +12,10 @@ DEFAULT_URLS = (
     "https://capnproto.org/",
     "https://react.dev/learn/thinking-in-react",
     "https://developer.mozilla.org/en-US/docs/Web/API/Document_Object_Model",
-    "https://github.blog/ai-and-ml/generative-ai/"
-    "what-is-retrieval-augmented-generation-and-what-does-it-do-for-generative-ai/",
+    (
+        "https://github.blog/ai-and-ml/generative-ai/"
+        "what-is-retrieval-augmented-generation-and-what-does-it-do-for-generative-ai/"
+    ),
     "https://blog.cloudflare.com/ai-platform/",
     "https://quotes.toscrape.com/js/",
 )
