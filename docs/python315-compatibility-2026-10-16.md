@@ -15,7 +15,8 @@ The first used isolated manifests, environments and a source snapshot; the secon
 inventoried source and ran network-free standard-library probes. The
 [persisted audit evidence and planning rechecks](https://github.com/lihor-hub/news-dashboard/issues/1340#issuecomment-6221077889)
 are the public provenance, including the original 61-component matrix. Results
-below are those observations on **2026-10-16**, not newly executed migration gates.
+below are those observations on **2026-10-16**, except for the explicitly dated
+delivery refresh. Neither set establishes the outstanding migration gates.
 
 The detailed local `python315-audit/audit-report.json` has SHA-256
 `af7abeb1c155efe1e92dae0c1d615f39adc2950d3b84aba5802bd456a5439a7a`.
@@ -23,12 +24,14 @@ Its local location is recorded in the evidence comment; it is a provenance
 pointer, not a required public download. This sanitized report omits local user
 paths, environments, caches, credentials and raw logs.
 
-Executed interpreter evidence is limited to **macOS 27.0.1 arm64, standard-GIL
-CPython 3.15.0 final**, uv python-build-standalone build of October 14, 2026.
+The original audit's executed interpreter evidence is limited to **macOS 27.0.1
+arm64, standard-GIL CPython 3.15.0 final**, uv python-build-standalone build of
+October 14, 2026.
 The isolated tool was [uv 0.13.1](https://github.com/astral-sh/uv/releases/tag/0.13.1);
 host uv 0.11.24 could not provision final 3.15. That provisioning failure does
 not establish Python unavailability. Source-build tools were rustc/cargo 1.96.1.
-No free-threaded compatibility or new platform support is claimed.
+The delivery refresh adds bounded Linux interpreter probes. No free-threaded
+compatibility or new application platform support is claimed.
 
 Evidence levels must remain separate:
 
@@ -39,6 +42,81 @@ Evidence levels must remain separate:
 | Install | Candidate runtime/dev installed 193 packages; `uv pip check` passed | All-extras installation, production pip installation or functional correctness |
 | Import | Candidate app and FastMCP Client imported; OpenAPI generated 190 paths | Working database, SMTP relay or browser extraction |
 | Functional checks | Ten offline native/API checks passed in v2; 58 focused tests passed in v3 | Full backend, Linux/Windows execution, container, CI/security or deployment validation |
+
+## Delivery refresh — 2026-10-16
+
+The documentation branch was rebased onto
+[`ecb6016aaef9bc7f54131ad54449123e1d73d9ff`](https://github.com/lihor-hub/news-dashboard/commit/ecb6016aaef9bc7f54131ad54449123e1d73d9ff).
+This refresh validates report delivery on supported **CPython 3.14.6, macOS arm64**;
+it does not rerun the original 3.15 candidate suite or change the historical
+61-component matrix. Node was 26.7.0, npm 11.19.0 and host uv 0.11.24.
+
+The initial report PR's
+[Dependency Review failure](https://github.com/lihor-hub/news-dashboard/actions/runs/38941852878/job/117111185336)
+identified source-map-js 1.2.1 (high) and smol-toml 1.8.0 (moderate).
+[Separate security PR #1536](https://github.com/lihor-hub/news-dashboard/pull/1536)
+merged fixes, including root versions 1.2.2 and 1.9.1. The inherited all-files
+Ruff ISC004 failure in `scripts/check_live_content_extraction.py` was fixed by
+[PR #1545](https://github.com/lihor-hub/news-dashboard/pull/1545).
+Both commits are in this refresh's base. These are resolved report-delivery
+blockers; they were not Python 3.15 incompatibilities. No security policy or
+Ruff target was weakened.
+
+Fresh commands below exited **0**:
+
+| Check | Bounded result |
+|---|---|
+| `scripts/bootstrap-worktree.sh`; `uv sync --frozen --all-extras --dry-run`; `uv pip check` | Supported 3.14 environment ready, no sync changes proposed, 236 installed packages consistent; not a fresh 3.15 installation |
+| `npm ci`; `make lint`; `make typecheck` | Current lock installed; lint, mypy, ty, pyrefly and frontend typecheck passed |
+| `source .env && export PGOPTIONS='-c max_parallel_workers_per_gather=0' && make test` | **3,597 backend/script tests passed, 2 skipped, 24 warnings, 88% coverage**; **1,081 frontend tests passed in 102 files**, plus **2 security regressions** |
+| `make build`; `pre-commit run --all-files` | Production frontend build, bundle/CSP checks and every all-files hook passed, including formerly failing Ruff |
+| `npx --yes audit-ci@^7 --config .audit-ci.jsonc`; `npm audit --json` | Root policy passed; zero root vulnerabilities |
+| `cd website && npx --yes audit-ci@^7 --critical` | Existing website critical threshold passed; noncritical findings remain visible, not a zero-vulnerability claim |
+
+Both DB URL destinations were checked before tests, followed by authenticated
+read-only queries: `news_dashboard` on `localhost:55432/news_dashboard_test`,
+PostgreSQL 16.14, recovery false, parallel query workers disabled. The existing
+`nd-test-pg` was healthy. No database/container reset or native-5432 connection
+was used. The two skips are the serial-only performance benchmark under xdist
+and unsupported Chrome BiDi interception.
+
+The original Podman/browser prerequisites have also been qualified. A fresh
+offline `AsyncWebCrawler` extraction of `raw:` HTML with `CacheMode.BYPASS`
+passed on **3.14.6 with crawl4ai 0.9.4**. This does not establish 3.15 all-extras
+or browser compatibility. Fresh PyPI metadata still lists fastuuid 0.14.0 with
+no cp315/abi3 wheels and the same crawl4ai 0.9.5 dependency chain described below.
+
+Fresh digest-pinned official-image probes exited 0, asserting CPython 3.15.0,
+standard GIL and the expected architecture before printing interpreter details:
+
+| Platform | Platform manifest digest | Executed interpreter |
+|---|---|---|
+| linux/arm64 | `sha256:f97898458240000890f4d60cc53c24550fc141f4215e8ee881701e5f8a3ff8a7` | Linux aarch64, GCC 12.2.0, `Py_GIL_DISABLED=0` |
+| linux/amd64 | `sha256:c1035719031463035de2f9b5ee86b0ab18842ddee18556ee89999f4b38a3c559` | Linux x86_64 under QEMU, GCC 12.2.0, `Py_GIL_DISABLED=0` |
+
+The exact probe commands were:
+
+```sh
+podman run --rm --platform linux/arm64 \
+  docker.io/library/python@sha256:f97898458240000890f4d60cc53c24550fc141f4215e8ee881701e5f8a3ff8a7 \
+  python -c 'import platform,sys,sysconfig; assert platform.machine() == "aarch64"; assert sys.version_info[:3] == (3,15,0); assert not sysconfig.get_config_var("Py_GIL_DISABLED"); print(platform.system(),platform.machine(),sys.version,sysconfig.get_config_var("Py_GIL_DISABLED"))'
+podman run --rm --platform linux/amd64 \
+  docker.io/library/python@sha256:c1035719031463035de2f9b5ee86b0ab18842ddee18556ee89999f4b38a3c559 \
+  python -c 'import platform,sys,sysconfig; assert platform.machine() == "x86_64"; assert sys.version_info[:3] == (3,15,0); assert not sysconfig.get_config_var("Py_GIL_DISABLED"); print(platform.system(),platform.machine(),sys.version,sysconfig.get_config_var("Py_GIL_DISABLED"))'
+```
+
+An initial mutable-tag
+probe with `--pull=never --platform linux/arm64` exited 0 but warned of a cached
+amd64 image and printed x86_64; it is **not** an arm64 pass. Digest pinning and
+architecture assertions corrected that probe. Neither successful interpreter
+probe installed application dependencies or tested image health, MCP, the
+devcontainer lifecycle, attestations, security scans or deployment.
+
+Current-head PR checks remain a separate delivery gate; inspect
+[PR #1532](https://github.com/lihor-hub/news-dashboard/pull/1532) for their live
+results. Documentation path filtering may skip full CI suites; the local full
+suite above is separate evidence. No merge, production deployment or 3.15
+cutover is implied by this refresh.
 
 ## Failed attempts and the working core candidate
 
@@ -107,8 +185,10 @@ with no cp315/abi3 wheels; the executed source build rejected 3.15.
 [dependency metadata](https://pypi.org/pypi/unclecode-litellm/1.81.13/json) requires
 **fastuuid>=0.13.0**. Version 0.14.0 was the lock selection, not an upstream exact
 pin. A supported future release could satisfy the range. Browser download and
-extraction were not attempted. Do not remove the extra, patch upstream sources
-or use a PyO3 compatibility override to claim success.
+extraction were not attempted in the original audit. A supported dependency
+replacement or tested custom implementation is an authorized path for #1530;
+it must preserve behavior and pass the all-extras and browser gates. Do not
+remove the extra or use a PyO3 compatibility override to claim success.
 
 The [MCR tags API](https://mcr.microsoft.com/v2/devcontainers/python/tags/list)
 had no 3.15 tags. Manifest GET for `3.15-bookworm` returned 404; the `3.14-bookworm`
@@ -136,8 +216,9 @@ listed Python through 3.14 at audit time. Preserve existing source grammar and
 verify actual Python and JS/TS extraction/analysis. This is a grammar-validation
 hazard, not proof that unchanged source cannot be analyzed. Dependency Review,
 dependency CVE audit, npm policies, Trivy HIGH/CRITICAL and SARIF, OS updates,
-SBOM/provenance and multiarchitecture checks must remain effective. CI/security
-and deployment validation are **incomplete**, not waived by this report.
+SBOM/provenance and multiarchitecture checks must remain effective. Python 3.15
+CI/security and deployment validation are **incomplete**, not waived by this report
+or by passing the supported-3.14 documentation checks in the delivery refresh.
 
 ## Platform and wheel evidence matrix
 
@@ -149,7 +230,7 @@ manylinux tags, not an Alpine/musl promise. Install/import columns are executed
 macOS observations from isolated probes, not a complete environment or functional
 test. **— means unexecuted/unknown, not pass.** Later candidate fixes above do
 not rewrite the original results. Windows artifact metadata does not certify a
-Windows runtime; Linux/Windows executable evidence remains absent.
+Windows runtime; the original audit contains no Linux/Windows executable evidence.
 
 | Component | Original selected | Wheels M/Lx/La/W | macOS install | macOS import |
 |---|---|---|---|---|
@@ -389,7 +470,7 @@ add their qualifications rather than silently replacing them.
 | [#1527](https://github.com/lihor-hub/news-dashboard/issues/1527) | Explicit UTF-8 preparation | Independent, retain 3.14 and prove non-ASCII round trips |
 | [#1528](https://github.com/lihor-hub/news-dashboard/issues/1528) | Core runtime/dev dependencies and SMTPUTF8 regressions | Independent preparation; full PostgreSQL suite, production installs and dependency audit still required |
 | [#1529](https://github.com/lihor-hub/news-dashboard/issues/1529) | Validated stable-3.15 devcontainer | Needs #1528 and working container runner; missing MCR tag has an official-base alternative |
-| [#1530](https://github.com/lihor-hub/news-dashboard/issues/1530) | Supported crawl4ai all-extras path | Needs #1528 and published fastuuid support or upstream removal; browser tests outstanding |
+| [#1530](https://github.com/lihor-hub/news-dashboard/issues/1530) | Supported crawl4ai all-extras path | Needs #1528 and supported fastuuid/dependency support, replacement or tested custom implementation; 3.15 browser tests outstanding |
 | [#1531](https://github.com/lihor-hub/news-dashboard/issues/1531) | Atomic runtime/tooling/CI/current-docs cutover | Needs all five preceding items and full test, multiarchitecture, CI/security and deployment evidence |
 
 The requested delivery order is serial; steps 1–3 have no hard technical
