@@ -1,0 +1,110 @@
+name: Python core compatibility
+
+# Evidence for #1528, not a change to the supported runtime or existing gates.
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened, labeled]
+    paths:
+      - 'uv.lock'
+      - 'pyproject.toml'
+      - '.github/workflows/python-core-compatibility.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  production-install:
+    if: github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'python-core-compatibility')
+    name: Core install (${{ matrix.runner }}, Python ${{ matrix.python }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-24.04, ubuntu-24.04-arm]
+        python: ['3.14', '3.15']
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: ${{ matrix.python }}
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+      # Several unchanged locked packages need source builds on 3.15. Native
+      # runners avoid QEMU's rustc crash; this does not certify the slim image.
+      - name: Install native build prerequisites
+        run: sudo apt-get update -qq && sudo apt-get install -y build-essential libffi-dev pkg-config
+      - name: Record native build tools
+        run: |
+          uname -m
+          python -VV
+          gcc --version
+          rustc --version
+          cargo --version
+      - name: Export exact runtime constraints
+        run: uv export --frozen --no-dev --no-emit-project --no-hashes -o runtime.txt
+      - name: Install through production pip, with and without lock constraints
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir evidence
+          for mode in frozen unlocked; do
+            python -m venv "$mode"
+            args=()
+            if [[ "$mode" == frozen ]]; then args=(-c runtime.txt); fi
+            "$mode/bin/pip" install "${args[@]}" . 2>&1 | tee "evidence/$mode-install.log"
+            "$mode/bin/pip" check | tee "evidence/$mode-check.log"
+            "$mode/bin/pip" freeze > "evidence/$mode-freeze.txt"
+            "$mode/bin/python" - <<'PY' | tee "evidence/$mode-imports.log"
+          import importlib
+          import json
+          import platform
+          import sys
+          from importlib.metadata import version
+
+          for name in (
+              'ormsgpack', 'orjson', 'jiter', 'tiktoken', 'pydantic_core',
+              'pydantic', 'beartype', 'uuid_utils', 'numpy', 'psycopg',
+              'uvloop', 'httptools', 'watchfiles', 'deepagents', 'openai',
+              'langgraph.checkpoint.serde.jsonplus', 'news_dashboard.main',
+          ):
+              importlib.import_module(name)
+          from fastmcp import Client
+          from news_dashboard.main import app
+          import ormsgpack
+          import jiter
+          from pydantic import BaseModel
+          from tiktoken.core import Encoding
+
+          payload = {'title': 'Știri'}
+          assert ormsgpack.unpackb(ormsgpack.packb(payload)) == payload
+          assert jiter.from_json(json.dumps(payload).encode()) == payload
+          encoding = Encoding(name='offline', pat_str=r'.',
+                              mergeable_ranks={bytes([i]): i for i in range(256)},
+                              special_tokens={})
+          assert encoding.decode(encoding.encode('Știri')) == 'Știri'
+          class Payload(BaseModel):
+              title: str
+          assert Payload.model_validate_json(json.dumps(payload)).title == 'Știri'
+          assert len(app.openapi()['paths']) >= 190
+          print(json.dumps({
+              'python': sys.version, 'platform': platform.platform(),
+              'machine': platform.machine(), 'paths': len(app.openapi()['paths']),
+              'versions': {p: version(p) for p in (
+                  'ormsgpack', 'jiter', 'tiktoken', 'pydantic', 'pydantic-core',
+                  'beartype', 'typing-extensions', 'typing-inspection',
+              )},
+          }))
+          PY
+          done
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: core-install-${{ matrix.runner }}-${{ matrix.python }}
+          path: |
+            evidence/
+            runtime.txt

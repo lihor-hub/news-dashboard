@@ -3,7 +3,9 @@
 **Keep the supported Python 3.14 runtime. Python 3.15 cutover is not validated.**
 This report versions the compatibility evidence for maintainers delivering
 [the migration umbrella #1340](https://github.com/lihor-hub/news-dashboard/issues/1340).
-It does not raise the advertised minimum or change dependencies, CI or containers.
+The report does not raise the advertised minimum. The core-preparation refresh below
+records targeted dependency changes and an additional validation workflow; current
+runtime declarations, existing CI gates and containers remain on Python 3.14.
 [CPython 3.15.0 is stable, released October 9, 2026](https://www.python.org/downloads/release/python-3150/);
 the earlier prerelease assumption no longer applies to this assessment.
 
@@ -117,6 +119,112 @@ Current-head PR checks remain a separate delivery gate; inspect
 results. Documentation path filtering may skip full CI suites; the local full
 suite above is separate evidence. No merge, production deployment or 3.15
 cutover is implied by this refresh.
+
+## Core dependency preparation — #1528, 2026-10-16
+
+This refresh starts at `28e0437aa99c26e02244c55cdd469a97df945c84`
+and keeps `requires-python >=3.14`, all checker targets (including Ruff py313),
+existing CI runtime declarations, Dockerfile and devcontainer unchanged.
+The report's historical matrix below remains the original audit, not a fresh
+certification of every package or platform.
+
+Fresh [PyPI metadata](https://pypi.org/pypi/ormsgpack/json) selects the same five
+candidates in the table below: ormsgpack 1.13.0, jiter 0.17.0, tiktoken 0.14.0,
+pydantic 2.14.1 and beartype 0.23.1. The targeted lock command updates those
+packages, pydantic-core to 2.50.1, typing-inspection to 0.4.4 and removes the
+3.15-only typing-extensions 4.15.0 selection in favor of existing 4.16.0.
+No other package version changes. No transitive package becomes a direct
+requirement: the app uses no newly introduced APIs, and the production install
+probe also checks current unconstrained resolution separately.
+
+Fresh failures were reproduced before validation: installing the original
+runtime/dev export on stable macOS arm64 3.15 fails building ormsgpack 1.12.2
+because PyO3 0.27.2 supports at most 3.14. An isolated import of original
+beartype 0.22.9 fails on removed `typing.no_type_check_decorator`. No PyO3
+compatibility override is used.
+
+The preparation adds 28 network-free email cases using the **real**
+`smtplib.SMTP.send_message` with only transport operations stubbed. They cover
+ASCII envelopes with Unicode display names, internationalized domains, sender
+and recipient local parts, advertised/absent SMTPUTF8, all three configured TLS
+modes, Unicode MIME bodies, safe `smtp_error`, allowed unsubscribe headers,
+ignored Bcc injection and rejected CRLF headers. These establish the existing
+negotiation behavior on both interpreters; no production SMTP defect was
+reproduced and no runtime email code or header policy changes.
+
+On macOS 27.0.1 arm64, standard-GIL CPython 3.14.6 and stable 3.15.0 (uv
+python-build-standalone, October 14), the exact lock installs with these commands:
+
+```sh
+uv sync --frozen --all-extras --python 3.14
+uv pip check
+uv export --frozen --extra dev --no-emit-project -o runtime-dev.txt
+uv venv --python /path/to/stable/python3.15 .core315
+uv pip sync --python .core315/bin/python runtime-dev.txt
+uv pip check --python .core315/bin/python
+uv pip install --python .core315/bin/python --no-deps -e .
+source .env
+export PGOPTIONS='-c max_parallel_workers_per_gather=0'
+.core315/bin/python -m pytest backend/tests/test_email.py backend/tests/test_digest.py \
+  backend/tests/test_briefing_email_deliveries.py backend/tests/test_database_config.py \
+  backend/tests/test_prompt_catalog.py backend/tests/test_url_safety.py -n 0 -q
+.core315/bin/python -m pytest --cov --cov-report=term-missing
+```
+
+Fresh supported-runtime gates (`make lint`, all three Python checkers and
+frontend typecheck via `make typecheck`, `make build`, all-files pre-commit)
+pass. `source .env && export PGOPTIONS='-c max_parallel_workers_per_gather=0'
+&& make test` passes **3,634 backend tests, 2 skips, 88% coverage**, **1,081
+frontend tests** and both npm security regressions. The first 3.14 run had one
+duplicate-user-key failure in `test_submit_quiz_not_found`; a full sequential
+rerun passed. The failed run is retained in local delivery evidence and is not
+counted as passing.
+
+The supported 3.14 all-extras environment has **236 consistent packages**;
+3.15 runtime/dev has **193**, explicitly excluding crawl4ai. Native imports,
+FastMCP Client, app import, **190 OpenAPI paths**, Unicode MessagePack/JSON,
+Pydantic validation and offline tiktoken round trips pass on both.
+The focused 3.15 selection passes **167 tests**; full runtime/dev passes
+**3,634 tests, 2 skips, 88% coverage**. The skips remain the xdist timing
+benchmark and unavailable Chrome BiDi interception. Dedicated `nd-test-pg`
+destinations were verified for both URLs at localhost:55432 as `news_dashboard`;
+parallel query workers were disabled. No native 5432 connection or database
+reset was performed.
+
+Linux 3.15 attempts used the exact runtime export as pip constraints and the
+same digest-pinned images recorded above. Bare arm64 slim fails because GCC
+is absent. Adding GCC and Rust builds news-dashboard, pyyaml, uuid-utils,
+MarkupSafe, orjson, http-ece, httptools, uvloop, xxhash, zstandard, aiohttp and
+regex, then fails cffi on missing `ffi.h`. The amd64 QEMU attempt fails when
+rustc receives SIGSEGV during uuid-utils metadata preparation. These are failed
+install attempts, not passes or proven package incompatibilities.
+The opt-in `Python core compatibility` workflow (manual dispatch, or a PR
+labeled `python-core-compatibility`) runs on **native**
+`ubuntu-24.04` amd64 and `ubuntu-24.04-arm` with GCC, Rust and libffi headers.
+It checks both 3.14 and 3.15, separately installing through production `pip
+install .` with exact exported runtime constraints and without constraints,
+checking consistency, native/app/FastMCP imports and offline functional probes.
+Artifacts preserve constraints, installed versions and logs. It does not
+publish images or certify the slim-image runtime, optional extras or deployment.
+
+The fresh runtime/dev CVE audit command is:
+
+```sh
+uvx --python 3.14 pip-audit --disable-pip --no-deps -r runtime-dev.txt -f json
+```
+
+It reports **two unchanged findings**, rather than a zero-vulnerability pass:
+[langgraph-sdk 0.4.2 authorization filtering (GHSA-fvww-7h3r-vfhp)](https://github.com/advisories/GHSA-fvww-7h3r-vfhp)
+and [multidict 6.7.1 memory leak (GHSA-54p9-h82j-f925)](https://github.com/advisories/GHSA-54p9-h82j-f925).
+Their fixes are separately tracked by existing
+[PR #1539](https://github.com/lihor-hub/news-dashboard/pull/1539) (0.4.4) and
+[PR #1540](https://github.com/lihor-hub/news-dashboard/pull/1540) (6.9.1).
+No audit allowlist or security gate is changed by this Python preparation.
+
+Fresh fastuuid 0.14.0 source installation still rejects Python 3.15 via
+PyO3 0.26.0. Its current metadata still has no cp315/abi3 wheel; **3.15 all-extras
+remains blocked under #1530**. This core preparation is independently deployable
+on 3.14, and does not advertise full 3.15 support.
 
 ## Failed attempts and the working core candidate
 
