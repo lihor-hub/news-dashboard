@@ -332,6 +332,10 @@ Linux arm64 and macOS arm64 runners, for 3.14 and 3.15. Each pair runs frozen
 `uv sync --frozen --all-extras`, consistency and source/API/upstream tests, then
 real offline extraction. It separately tests ordinary unconstrained production
 `pip install '.[crawl4ai]'`, `pip check`, native imports and offline extraction.
+The first Linux 3.15 attempts reproduced missing libxml2/libxslt headers while
+building unchanged lxml 6.1.1. The validation stage installs those upstream
+[documented source prerequisites](https://lxml.de/installation.html), plus zlib
+headers, alongside GCC/Rust/libffi; it does not alter lxml or bypass compilation.
 The workflow uploads installed versions and command logs. It does not certify
 containers, devcontainer lifecycle, runtime cutover or deployment.
 
