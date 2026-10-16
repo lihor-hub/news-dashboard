@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
+import pytest
 from typer.testing import CliRunner
 
 from news_dashboard.cli import app
@@ -117,3 +118,24 @@ def test_rec_recalc_prints_summary() -> None:
     assert result.exit_code == 0
     assert "recomputed: 6" in result.stdout
     assert "skipped: 1" in result.stdout
+
+
+@pytest.mark.parametrize("fail", [False, True])
+def test_init_closes_pool_before_returning(fail: bool) -> None:
+    calls: list[str] = []
+
+    def sync() -> None:
+        calls.append("sync")
+        if fail:
+            message = "source initialization failed"
+            raise RuntimeError(message)
+
+    with (
+        patch("news_dashboard.cli.sync_sources", side_effect=sync),
+        patch("news_dashboard.db.close_connection_pool", side_effect=lambda: calls.append("close")),
+    ):
+        result = runner.invoke(app, ["init"])
+
+    assert calls == ["sync", "close"]
+    assert result.exit_code == int(fail)
+    assert ("initialized" in result.stdout) is not fail

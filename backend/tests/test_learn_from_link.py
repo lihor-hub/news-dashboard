@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import socket
 from collections.abc import Generator
 from contextlib import contextmanager
 from types import SimpleNamespace
@@ -1029,11 +1028,8 @@ def test_create_lesson_endpoint_rejects_localhost_url(
     monkeypatch.setenv("DATABASE_URL", pg_clean)
     init_db(database_url=pg_clean)
     user_id = _make_user(pg_clean)
-    monkeypatch.setattr(
-        socket,
-        "getaddrinfo",
-        lambda *_args, **_kwargs: [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("127.0.0.1", 80))],
-    )
+    # The real URL guard rejects localhost before DNS. A global resolver mock
+    # would also redirect the container-internal PostgreSQL service to loopback.
 
     with _api_client(user_id) as client:
         response = client.post("/api/learn/lessons", json={"url": "http://localhost/article"})

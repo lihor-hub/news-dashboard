@@ -6,7 +6,7 @@ import http.server
 import threading
 import urllib.error
 import urllib.request
-from collections.abc import Iterator
+from collections.abc import Generator
 from contextlib import contextmanager
 from http.client import HTTPMessage
 from pathlib import Path
@@ -79,7 +79,7 @@ def _start_server(html: bytes) -> tuple[str, threading.Thread]:
 
 
 @contextmanager
-def _allow_local_body_fetches() -> Iterator[None]:
+def _allow_local_body_fetches() -> Generator[None]:
     def local_open(req: urllib.request.Request, *, timeout: float) -> object:
         return urllib.request.urlopen(req, timeout=timeout)  # noqa: S310
 

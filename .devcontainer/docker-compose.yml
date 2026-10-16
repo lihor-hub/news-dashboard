@@ -1,17 +1,24 @@
-version: '3.8'
-
 services:
   app:
-    image: mcr.microsoft.com/devcontainers/python:3.14-bookworm
+    build:
+      context: .
+      dockerfile: Dockerfile
+    user: vscode
+    environment:
+      DATABASE_URL: "postgresql://news_dashboard:news-dashboard-local-password@db:5432/news_dashboard"
+      TEST_DATABASE_URL: "postgresql://news_dashboard:news-dashboard-local-password@db:5432/news_dashboard_test"
+      SESSION_SECRET: "dev-only-secret-change-before-deploying-00000000000"
+      BOOTSTRAP_ADMIN_USERNAME: "admin"
+      BOOTSTRAP_ADMIN_PASSWORD: "change-me"
+      PGOPTIONS: "-c max_parallel_workers_per_gather=0"
     volumes:
       - ..:/workspace:cached
-
-    # Overrides default command so container doesn't exit
+      - devcontainer-venv:/workspace/.venv
+      - devcontainer-node-modules:/workspace/node_modules
     command: sleep infinity
-
-    # Connect to the db service
     depends_on:
-      - db
+      db:
+        condition: service_healthy
 
   db:
     image: pgvector/pgvector:pg16
@@ -22,9 +29,14 @@ services:
       POSTGRES_PASSWORD: news-dashboard-local-password
     volumes:
       - news-dashboard-postgres-dev:/var/lib/postgresql/data
-      - ./postgres-init.sql:/docker-entrypoint-initdb.d/postgres-init.sql
-    ports:
-      - '5432:5432'
+      - ./postgres-init.sql:/docker-entrypoint-initdb.d/postgres-init.sql:ro
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U news_dashboard -d news_dashboard']
+      interval: 2s
+      timeout: 5s
+      retries: 30
 
 volumes:
   news-dashboard-postgres-dev:
+  devcontainer-venv:
+  devcontainer-node-modules:

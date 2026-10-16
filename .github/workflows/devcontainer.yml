@@ -1,0 +1,81 @@
+name: Development container
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.devcontainer/**'
+      - '.github/workflows/devcontainer.yml'
+      - 'backend/tests/test_devcontainer.py'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: devcontainer-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  lifecycle:
+    name: Devcontainer (${{ matrix.runner }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 50
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-24.04, ubuntu-24.04-arm]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: '26'
+      - name: Install the Dev Containers CLI
+        run: npm install --global @devcontainers/cli@0.89.0
+      - name: Build and open the configured container, including post-create
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir evidence
+          mkdir -p .venv node_modules
+          touch .venv/host-preserved node_modules/host-preserved
+          # A developer's mounted host .env must not redirect hooks to host DBs.
+          cat > .env <<'ENV'
+          DATABASE_URL=postgresql://host-only:host-only@localhost:55432/host_only
+          TEST_DATABASE_URL=postgresql://host-only:host-only@localhost:55432/host_only
+          PGOPTIONS=host-only
+          ENV
+          uname -m | tee evidence/host-machine.txt
+          docker compose -f .devcontainer/docker-compose.yml config --quiet
+          devcontainer build --workspace-folder . 2>&1 | tee evidence/build.log
+          devcontainer up --workspace-folder . 2>&1 | tee evidence/up.log
+          test -f .venv/host-preserved && test -f node_modules/host-preserved
+      - name: Verify tools, non-root permissions, PostgreSQL and development servers
+        shell: bash
+        run: |
+          set -euo pipefail
+          devcontainer exec --workspace-folder . bash .devcontainer/verify.sh 2>&1 | tee evidence/verify.log
+          devcontainer exec --workspace-folder . bash -c 'make lint && make typecheck && make test && make build' 2>&1 | tee evidence/gates.log
+          devcontainer exec --workspace-folder . pre-commit run --all-files 2>&1 | tee evidence/hooks.log
+          devcontainer exec --workspace-folder . pre-commit run --hook-stage pre-push --all-files 2>&1 | tee evidence/push-hooks.log
+      - name: Rebuild with an actual stale Python 3.14 venv in the isolated volume
+        shell: bash
+        run: |
+          set -euo pipefail
+          container=$(docker ps -q --filter "label=devcontainer.local_folder=$PWD")
+          test -n "$container"
+          docker run --rm --volumes-from "$container" --user "$(id -u):$(id -g)" \
+            python:3.14.8-slim-bookworm bash -c 'python -m venv --clear /workspace/.venv && touch /workspace/.venv/stale-python314-marker && cat /workspace/.venv/pyvenv.cfg' \
+            2>&1 | tee evidence/stale-venv.log
+          devcontainer up --workspace-folder . --remove-existing-container 2>&1 | tee evidence/rebuild.log
+          test -f .venv/host-preserved && test -f node_modules/host-preserved
+          devcontainer exec --workspace-folder . bash .devcontainer/verify.sh 2>&1 | tee evidence/rebuild-verify.log
+          devcontainer exec --workspace-folder . pytest backend/tests/test_health_endpoints.py backend/tests/test_ingest.py -n 0 -q 2>&1 | tee evidence/rebuild-tests.log
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: devcontainer-${{ matrix.runner }}
+          path: evidence/

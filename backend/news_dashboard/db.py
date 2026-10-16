@@ -5,7 +5,7 @@ import os
 import struct
 import threading
 import time
-from collections.abc import Iterator, Mapping, Sequence
+from collections.abc import Generator, Mapping, Sequence
 from contextlib import contextmanager
 from hashlib import sha256
 from pathlib import Path
@@ -1426,7 +1426,7 @@ def _open_connection(database_url: str | None) -> Any:
 def connect(
     db_path: Path | str | None = None,
     database_url: str | None = None,
-) -> Iterator[Any]:
+) -> Generator[Any]:
     """Open a PostgreSQL connection using psycopg-native SQL and parameters."""
     if isinstance(db_path, str) and db_path.startswith(POSTGRES_PREFIXES):
         database_url = db_path
