@@ -22,7 +22,13 @@ RUN apt-get update \
 COPY pyproject.toml VERSION CHANGELOG.md ./
 COPY backend ./backend
 COPY --from=frontend /app/frontend/dist ./frontend/dist
-RUN pip install --no-cache-dir . && chown -R appuser:appuser /app
+# Installation is complete before dropping the build-time package installer.
+# Removing pip also removes its vulnerable vendored dependency tree; runtime
+# dependencies, source/dev install paths and scanner policy remain unchanged.
+RUN pip install --no-cache-dir . \
+    && pip check \
+    && pip uninstall -y pip \
+    && chown -R appuser:appuser /app
 USER appuser
 EXPOSE 8080
 CMD ["sh", "-c", "news-dashboard init && uvicorn news_dashboard.main:app --host 0.0.0.0 --port 8080 --app-dir backend"]

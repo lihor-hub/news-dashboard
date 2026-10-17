@@ -254,10 +254,11 @@ pip install -e '.[crawl4ai]'      # or: pip install '.[crawl4ai]'
 crawl4ai-setup                    # or: playwright install --with-deps chromium
 ```
 
-In containerized/Kubernetes deployments, run the same two commands in the image
-build (`RUN pip install '.[crawl4ai]' && crawl4ai-setup`) so the Chromium
-browser is baked into the image; the extractor launches a headless browser at
-runtime and does not download anything on demand.
+In containerized/Kubernetes deployments, customize the Dockerfile's dependency
+installation step to install the extra and browser before its final `pip check`
+and removal of pip. The production runtime deliberately excludes the package
+installer and its vendored dependencies. Bake Chromium into the image; the
+extractor launches it at runtime and does not download anything on demand.
 
 Article URLs are still validated by the app's SSRF/scheme safety checks before
 Crawl4AI is invoked, so `file://`, loopback, and private-network URLs never
