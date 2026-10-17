@@ -106,6 +106,10 @@ jobs:
         with:
           version: '0.13.1'
           enable-cache: true
+      - name: Install all-extras native build prerequisites
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y build-essential libffi-dev pkg-config libxml2-dev libxslt1-dev zlib1g-dev
       - run: uv sync --frozen --all-extras
       - run: echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
       - name: ruff (lint)
@@ -153,6 +157,10 @@ jobs:
         with:
           version: '0.13.1'
           enable-cache: true
+      - name: Install all-extras native build prerequisites
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y build-essential libffi-dev pkg-config libxml2-dev libxslt1-dev zlib1g-dev
       - run: uv sync --frozen --all-extras
       - run: echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
       - name: Backend smoke tests
@@ -188,6 +196,10 @@ jobs:
         with:
           version: '0.13.1'
           enable-cache: true
+      - name: Install all-extras native build prerequisites
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y build-essential libffi-dev pkg-config libxml2-dev libxslt1-dev zlib1g-dev
       - run: uv sync --frozen --all-extras
       - run: echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
       - name: Build and probe the supported application container
@@ -229,6 +241,10 @@ jobs:
         with:
           version: '0.13.1'
           enable-cache: true
+      - name: Install all-extras native build prerequisites
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y build-essential libffi-dev pkg-config libxml2-dev libxslt1-dev zlib1g-dev
       - run: uv sync --frozen --all-extras
       - run: echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
       - name: Backend tests

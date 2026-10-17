@@ -46,7 +46,7 @@ existing Trivy HIGH/CRITICAL policy and uploads SARIF. It cannot publish or
 deploy. The Boolean `full_suite` input now selects the requested application
 lanes on manual CI dispatch; a string comparison previously skipped them.
 
-Fresh local final-3.15 gates pass: 3,671 backend/script tests, 2 unchanged
+Fresh local final-3.15 gates pass: 3,672 backend/script tests, 2 unchanged
 skips, 88% coverage, 1,081 frontend tests, both npm security regressions,
 frontend coverage/build, lint/Vulture, all three Python checkers and TypeScript,
 all-files pre-commit, 237-package dependency consistency and real offline
@@ -58,6 +58,12 @@ occurred. The fresh frozen all-extras pip-audit still reports 37 records for
 by #1539/#1540/#1549. No package version was upgraded by cutover; the obsolete
 3.14 fastuuid registry selection and incompatible wheel records were pruned.
 The local fastuuid URL retains the documented audit-service limitation.
+
+The first application CI run reproduced lxml source-build failures because
+the four frozen all-extras jobs lacked libxml2/libxslt development headers.
+The cutover now installs the same native prerequisites used by the successful
+extras preparation workflow before each sync; a regression asserts their
+ordering. The fresh full local suite above includes that repair.
 
 CI, native runtime/security, devcontainer and all-extras artifact URLs will be
 recorded after execution. Pending or skipped jobs are not evidence of success. #1340 and
