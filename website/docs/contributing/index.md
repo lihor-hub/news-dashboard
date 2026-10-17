@@ -5,7 +5,7 @@ News Dashboard.
 
 ## Prerequisites
 
-- Python 3.14+
+- Python 3.15+
 - Node.js LTS
 - PostgreSQL 16+ with the [pgvector](https://github.com/pgvector/pgvector) extension
   (use the `pgvector/pgvector:pg16` image)

@@ -114,7 +114,10 @@ def test_manual_validation_is_opt_in_and_cannot_publish() -> None:
 
 
 @pytest.mark.parametrize("fault", [None, "missing-arm64-sbom", "wrong-subject", "corrupt-index"])
-def test_verifies_oci_attestations_against_each_child(tmp_path: Path, fault: str | None) -> None:
+@pytest.mark.parametrize("platforms", [("amd64", "arm64"), ("amd64",), ("arm64",)])
+def test_verifies_oci_attestations_against_each_child(
+    tmp_path: Path, fault: str | None, platforms: tuple[str, ...]
+) -> None:
     import hashlib
     import io
     import tarfile
@@ -132,14 +135,14 @@ def test_verifies_oci_attestations_against_each_child(tmp_path: Path, fault: str
             return digest
 
         manifests: list[dict[str, object]] = []
-        for architecture in ("amd64", "arm64"):
+        for architecture in platforms:
             child = add_blob({"schemaVersion": 2, "architecture": architecture})
             manifests.append(descriptor(architecture, child))
             layers: list[dict[str, object]] = []
             for predicate in ("sbom", "provenance"):
                 if (
                     fault == "missing-arm64-sbom"
-                    and architecture == "arm64"
+                    and architecture == platforms[-1]
                     and predicate == "sbom"
                 ):
                     continue
@@ -166,6 +169,9 @@ def test_verifies_oci_attestations_against_each_child(tmp_path: Path, fault: str
             }
             manifests.append(attestation)
         index = add_blob({"manifests": manifests}, corrupt=fault == "corrupt-index")
+    evidence = tmp_path / "evidence"
+    evidence.mkdir()
+    (evidence / "platforms.txt").write_text("stale_digest=previous-run\n", encoding="utf-8")
     result = subprocess.run(  # noqa: S603
         [
             "/bin/bash",
@@ -173,6 +179,7 @@ def test_verifies_oci_attestations_against_each_child(tmp_path: Path, fault: str
             str(archive_path),
             index,
             str(tmp_path / "evidence"),
+            *([] if len(platforms) == 2 else list(platforms)),
         ],
         capture_output=True,
         text=True,
@@ -180,5 +187,9 @@ def test_verifies_oci_attestations_against_each_child(tmp_path: Path, fault: str
     )
     assert (result.returncode == 0) is (fault is None), result.stderr  # noqa: S101
     if fault is None:
-        assert (tmp_path / "evidence/arm64-sbom.json").is_file()  # noqa: S101
-        assert (tmp_path / "evidence/amd64-provenance.json").is_file()  # noqa: S101
+        platform_lines = (evidence / "platforms.txt").read_text(encoding="utf-8").splitlines()
+        assert len(platform_lines) == len(platforms)  # noqa: S101
+        assert all("previous-run" not in line for line in platform_lines)  # noqa: S101
+        for architecture in platforms:
+            assert (tmp_path / f"evidence/{architecture}-sbom.json").is_file()  # noqa: S101
+            assert (tmp_path / f"evidence/{architecture}-provenance.json").is_file()  # noqa: S101

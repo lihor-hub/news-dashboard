@@ -1,13 +1,215 @@
 # Python 3.15 compatibility report — 2026-10-16
 
-**Keep the supported Python 3.14 runtime. Python 3.15 cutover is not validated.**
-This report versions the compatibility evidence for maintainers delivering
-[the migration umbrella #1340](https://github.com/lihor-hub/news-dashboard/issues/1340).
-The report does not raise the advertised minimum. The core and optional dependency refreshes below
-record targeted dependency changes and additional validation workflows; current
-runtime declarations, existing CI gates and containers remain on Python 3.14.
-[CPython 3.15.0 is stable, released October 9, 2026](https://www.python.org/downloads/release/python-3150/);
-the earlier prerelease assumption no longer applies to this assessment.
+**The Python 3.15 cutover is implemented in open [PR #1552](https://github.com/lihor-hub/news-dashboard/pull/1552); merge and deployment are not certified.**
+This report records compatibility evidence for [#1531](https://github.com/lihor-hub/news-dashboard/issues/1531)
+and the [migration umbrella #1340](https://github.com/lihor-hub/news-dashboard/issues/1340).
+
+## Current revalidation — 2026-10-17
+
+The cutover was rebased onto `7c6dbadf1accf6de0857c68a1b446efcf98df642`.
+The rebase preserves intervening security upgrades, frontend dependencies and
+screenshot baselines. Prerequisites #1526–1530 and PRs #1555/#1556 are merged;
+their previously open status below is historical. Production combines the
+3.15 same-platform C/Rust wheel-builder with #1555's installer removal:
+install offline, run `pip check`, then uninstall pip before switching users.
+OS upgrades, application dependencies, Trivy thresholds and attestations remain
+unchanged. The lock was regenerated from current main; it adds no package
+versions and removes only the obsolete Python 3.14 fastuuid selection.
+
+Fresh local validation of this rebased implementation passes **3,675
+backend/script tests, 2 skips, 88% coverage; 1,081 frontend tests and both
+npm security regressions**. The 74 focused metadata/workflow/runtime/UUID
+regressions and 48 upstream UUID tests pass. Lint/Vulture, mypy, ty, pyrefly,
+TypeScript, configured root/website npm audits and website typecheck/build
+pass. Both database URLs were verified without exposing credentials as role
+news_dashboard at localhost:55432/news_dashboard_test; query parallelism was
+disabled. No shared database reset or native-host 5432 access occurred.
+
+Fresh frozen all-extras audit exits **1**: NLTK 3.10.0 has **35 records / 20
+distinct advisory IDs**. Main's langgraph-sdk 0.4.4 and multidict 6.9.1 scan
+clean. Separate [PR #1558](https://github.com/lihor-hub/news-dashboard/pull/1558)
+raises optional NLTK to 3.10.3 and removes 19 of those IDs, but its Dependency
+Review fails on [GHSA-8mgp-746c-j5xp](https://github.com/advisories/GHSA-8mgp-746c-j5xp)
+(aliases CVE-2026-81726 / PYSEC-2026-3740). The reviewed advisory still affects
+<=3.10.3 with no patched release, and PyPI still publishes 3.10.3 as latest.
+The prior inference that all aliases were fixed was incorrect. Keep #1549
+open and #1558 separate and unqueued; no advisory suppression or gate change
+is included. PyPI cannot audit the identified local fastuuid version; its
+source/API tests and upstream/Rust audit evidence remain separate limitations.
+
+Current-head native production, compatibility, development-container, full
+CI and nightly results are recorded on [PR #1552](https://github.com/lihor-hub/news-dashboard/pull/1552).
+Only successful executed jobs count: earlier image scans and platform results
+below do not validate the rebased head. The native runtime workflow builds
+both Linux architectures without publication, calculates the preview release
+version, checks CLI/init/version/health/readiness/MCP and verifies digest-bound
+SBOM/provenance before applying the existing Trivy gate. The sanitized
+[evidence manifest](python315-cutover-evidence-2026-10-17.json) records rebased
+source hashes separately from historical installed dependency sets.
+
+#1552 remains open, non-draft, with auto-merge disabled by explicit request.
+No release, production publication or deployment follows from these validation
+runs. NLTK audit remediation and protected delivery/release evidence remain
+outstanding; keep #1340/#1531 open. Sections below preserve earlier snapshots
+and their then-current blockers as historical provenance, superseded by this
+section and the exact-head PR evidence.
+
+## Historical runtime cutover evidence — 2026-10-17 (#1531)
+
+This section supersedes the historical runtime status below. Prerequisites
+#1526–1530 have merged. The cutover branch raises the project and lock minimum
+to Python 3.15 and all three checkers to 3.15, while preserving Ruff py313 and
+runner-system-Python stdlib helpers. CI, nightly and timing use final 3.15;
+the preparation workflows now test only the supported 3.15 interpreter. The
+3.14 devcontainer fixture remains an intentional stale-environment recovery test.
+
+Production uses the same official standard-GIL Debian Bookworm index as the
+validated development container:
+`python:3.15.0-slim-bookworm@sha256:122756f3fe72c4f5d3d71897888204ee85774bc79de952555b8a474e1d0a5d53`.
+The registry was queried again for #1531; both platform digests still match
+[the devcontainer record](python315-devcontainer.md). Bookworm is selected
+explicitly to preserve that tested glibc/platform baseline, rather than follow
+the floating slim tag's Debian Trixie default. OS updates remain enabled.
+
+A fresh arm64 production `pip install .` in the unmodified 3.15 slim image
+failed because `zstandard`'s source preparation requires GCC. The production
+Dockerfile therefore builds unconstrained dependency wheels in a separate,
+same-Python/same-distro stage with C and supported Rust 1.95.0 tools, then
+installs those wheels without network access in the non-root final stage.
+No compiler, Rust toolchain, compatibility override or optional extra is added
+to the runtime image. The official Rust build image is pinned to index
+`sha256:d7482085ff5b415f84dba5647ae71606650bdef00db7aeb69f4b3d170c3e4082`.
+This preserves production's unlocked resolution; it does not claim that every
+dependency publishes cp315 wheels. Frozen all-extras remains a separate gate.
+
+The native `Python runtime validation` workflow builds the actual Dockerfile
+on amd64 and arm64, verifies digest-bound SBOM/provenance, loads the runnable
+child, and executes CLI/init, version, health/readiness, compose/Helm probe
+endpoints and MCP enabled/disabled checks. It scans each image using the
+existing Trivy HIGH/CRITICAL policy and uploads SARIF. It cannot publish or
+deploy. The Boolean `full_suite` input now selects the requested application
+lanes on manual CI dispatch; a string comparison previously skipped them.
+Main pushes now also run MCP container smoke, keeping every test ancestor of
+publication active. This avoids the skipped-ancestor path observed in main
+[CI 38983730258](https://github.com/lihor-hub/news-dashboard/actions/runs/38983730258),
+where successful required checks coexisted with skipped publication/scanning/
+deployment. A workflow regression guards that routing; actual main release
+execution still requires the protected merge and subsequent observation.
+
+Fresh local final-3.15 gates pass: 3,675 backend/script tests, 2 unchanged
+skips, 88% coverage, 1,081 frontend tests, both npm security regressions,
+frontend coverage/build, lint/Vulture, all three Python checkers and TypeScript,
+all-files pre-commit, 237-package dependency consistency and real offline
+Chromium/application extraction. Both database URLs were verified read-only
+as news_dashboard at localhost:55432/news_dashboard_test before the full suite;
+parallel query workers were disabled. No database reset or native-5432 use
+occurred. The fresh frozen all-extras pip-audit still reports 37 records for
+22 existing distinct advisories in langgraph-sdk, multidict and NLTK, tracked
+by #1539/#1540/#1549. No package version was upgraded by cutover; the obsolete
+3.14 fastuuid registry selection and incompatible wheel records were pruned.
+The local fastuuid URL retains the documented audit-service limitation.
+
+The first application CI run reproduced lxml source-build failures because
+the four frozen all-extras jobs lacked libxml2/libxslt development headers.
+The cutover now installs the same native prerequisites used by the successful
+extras preparation workflow before each sync; a regression asserts their
+ordering. The fresh full local suite above includes that repair.
+
+Native core installation paths passed on amd64/arm64 in
+[run 38985078171](https://github.com/lihor-hub/news-dashboard/actions/runs/38985078171).
+Frozen and unlocked all-extras/browser paths passed on Linux amd64, Linux arm64
+and macOS arm64 in
+[run 38985080665](https://github.com/lihor-hub/news-dashboard/actions/runs/38985080665).
+These runs tested implementation `89fe9d9056a38859bdfa2904466116f638490817`;
+subsequent changes add CI headers and validation-helper cleanup, not package
+upgrades. Separate SMTPUTF8/header coverage passes all 49 email tests locally.
+
+Both native actual production images built and passed version/CLI/init,
+health/readiness, MCP and digest-bound attestation checks in
+[run 38985071323](https://github.com/lihor-hub/news-dashboard/actions/runs/38985071323).
+**Trivy failed**, reporting HIGH findings from pip 26.2.1's vendored SBOM
+(msgpack 1.1.2, setuptools 70.3.0 and urllib3 2.7.0); application urllib3 is
+already 2.8.0. The separate security fix is [PR #1555](https://github.com/lihor-hub/news-dashboard/pull/1555),
+retaining the 3.14 runtime on its main-based branch. This cutover does not
+silently include that security remediation. The smoke helper also exposed a
+3.15 interpreter-finalization error after minting a token; it now closes its
+pool in `finally`, with passing success/failure regressions.
+
+[Nightly 38985085807](https://github.com/lihor-hub/news-dashboard/actions/runs/38985085807)
+passes backend/frontend suites but reproduces five existing desktop visual
+cases; [#1554](https://github.com/lihor-hub/news-dashboard/issues/1554) tracks
+separate baseline repair. No screenshot tolerance or security policy is relaxed.
+Both native development-container lifecycles passed in
+[run 38985083529](https://github.com/lihor-hub/news-dashboard/actions/runs/38985083529):
+3,657 backend/script passes, 16 skips in the dev-only environment, 88% coverage,
+1,081 frontend passes and 7 stale-3.14 rebuild integration passes per platform,
+including actual commit/push hooks. Downloaded artifacts were checked.
+
+Implementation `b7634a1b68453cd8c19d46b411ea43ba2f307be5` passes the
+[required application CI](https://github.com/lihor-hub/news-dashboard/actions/runs/38986757838)
+(3,674 backend/script passes, 2 skips, 24 subtests),
+[Dependency Review/npm policies](https://github.com/lihor-hub/news-dashboard/actions/runs/38986757842)
+and [CodeQL extraction/analysis](https://github.com/lihor-hub/news-dashboard/actions/runs/38986757880).
+The native production workflow additionally exercised the real tag-based
+release calculation and VERSION injection: **both architectures served preview
+version 1.172.6**, with no pool-finalization error, in
+[run 38986757874](https://github.com/lihor-hub/news-dashboard/actions/runs/38986757874).
+Its build/runtime/attestation steps pass; Trivy still fails on the unmerged
+installer remediation described above. This is release-build evidence, not
+image publication, tag creation or deployment.
+
+| Production platform at b7634a1b | Runnable child digest |
+|---|---|
+| Linux amd64 | `sha256:6bbbf01e38f58c13c58f88ebc69899349163e68d20d446d035635bdc0746417f` |
+| Linux arm64 | `sha256:e2e7c697d5e1f8d6e3148ea4a11d9825976b451e62709c2affb5b1cbb33b9d5c` |
+
+The [sanitized evidence manifest](python315-cutover-evidence-2026-10-17.json)
+records both OCI index digests, exact source/lock hashes and **12 complete
+installed dependency sets** from frozen/unlocked core, frozen/unlocked extras
+and actual production images. The files came from the referenced native run
+artifacts, not a hypothetical resolution. A fresh RustSec audit reports zero
+vulnerabilities and inherited informational RUSTSEC-2026-0097; a fresh Cargo
+feature tree confirms its required rand `log` feature is absent. All 22 frozen
+Python advisory IDs match the preceding extras audit; no new IDs appeared.
+The audit failures and local fastuuid service limitation remain explicit.
+
+Separate [PR #1555](https://github.com/lihor-hub/news-dashboard/pull/1555)
+passes native amd64/arm64 production scans with zero SARIF findings on its
+main-based 3.14 branch. Separate [PR #1556](https://github.com/lihor-hub/news-dashboard/pull/1556)
+passes the unchanged 24 visual assertions, 513 e2e cases (1 skip), dev-only
+backend and frontend suites in [nightly 38986430784](https://github.com/lihor-hub/news-dashboard/actions/runs/38986430784).
+Both PRs remain unmerged with auto-merge disabled. They are native blocked-by
+prerequisites of #1531; this Python PR does not absorb their diffs.
+
+The opt-in combined OCI/QEMU job in
+[run 38985075762](https://github.com/lihor-hub/news-dashboard/actions/runs/38985075762)
+**passed its combined multiarchitecture job**: OCI index
+`sha256:72dc9b7452c7542ae937f70863a1c9a4858b06c2a2b8b79c7cdb1bd0b9ebf035`
+has both real runnable children with verified SBOM/provenance. Downloaded
+attestations were checked. The emulated cold dual build took 1,847 seconds,
+versus 202 seconds for the amd64 reference (+814.36%); source-build cost is a
+material release-time consideration, not a performance improvement. That
+run's earlier application lanes failed before the separately recorded header
+repair; its overall red status does not certify those lanes. Native platform
+execution and subsequent required-CI proofs are independent completed jobs.
+Final delivery-head checks and subsequent observations are indexed on #1531/PR
+#1552; a pending or skipped job is never evidence of success.
+
+Public TLS health was observed returning `{"status":"ok"}` and existing
+version `1.161.3` on 2026-10-17. This confirms only the previous deployment's
+reachability. No Python 3.15 image was published or deployed in this run.
+Unmerged prerequisites, frozen Python advisories, protected review/queue and
+actual post-merge image/deployment/public-TLS acceptance keep #1531/#1340 open. #1340 and
+#1531 remain open; the requested terminal state for this implementation is an
+unmerged PR. Protected review/queue checks and post-merge release/deployment
+readiness/public TLS evidence remain later delivery requirements.
+
+The stdlib audit was reconsidered for cutover. The useful explicit UTF-8 work
+and SMTPUTF8 regressions have already shipped. No further candidate has a
+measured product benefit or demonstrated need; sampling profiling remains a
+separate development experiment. No new source grammar, URL identity semantics,
+XML handling, typing workarounds or datetime conventions are changed here.
+
 
 ## Provenance and evidence boundaries
 

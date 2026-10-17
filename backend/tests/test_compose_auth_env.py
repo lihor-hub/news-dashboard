@@ -167,7 +167,7 @@ def test_compose_demo_app_service_has_demo_mode_and_session_secret() -> None:
 def _assert_app_healthcheck_uses_no_extra_tools(compose_file: Path) -> None:
     """The news-dashboard service healthcheck must not rely on curl/wget.
 
-    The production image (python:3.14-slim) does not install curl or wget, so
+    The production image (python:3.15.0-slim-bookworm) does not install curl or wget, so
     the healthcheck must use the Python standard library to probe /api/ready.
     """
     compose = yaml.safe_load(compose_file.read_text())

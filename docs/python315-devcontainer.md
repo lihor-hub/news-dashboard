@@ -2,8 +2,8 @@
 
 Use **Dev Containers: Reopen in Container** in VS Code, or open a Codespace,
 for stable CPython 3.15 with Node 26. The project's runtime minimum and
-production Dockerfile still target Python 3.14; this environment prepares the
-later runtime cutover in #1531.
+production Dockerfile target Python 3.15; this environment uses the
+same interpreter and Debian Bookworm base as production.
 
 The image uses official `python:3.15.0-slim-bookworm`, pinned to the
 multiarchitecture index

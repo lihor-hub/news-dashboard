@@ -5,6 +5,11 @@ trap 'printf "OCI verification failed at line %s: %s\n" "$LINENO" "$BASH_COMMAND
 archive=${1:?Usage: verify-oci-attestations.sh ARCHIVE INDEX_DIGEST OUTPUT_DIR}
 index_digest=${2:?Missing index digest}
 output=${3:?Missing output directory}
+architectures=(amd64 arm64)
+if [[ $# == 4 ]]; then
+  [[ "$4" == amd64 || "$4" == arm64 ]] || exit 1
+  architectures=("$4")
+fi
 mkdir -p "$output"
 
 blob() {
@@ -19,10 +24,15 @@ blob() {
 }
 
 blob "$index_digest" "$output/image-index.json"
-bash "$(dirname "$0")/resolve-image-platforms.sh" "$output/image-index.json" > "$output/platforms.txt"
-for architecture in amd64 arm64; do
+: > "$output/platforms.txt"
+for architecture in "${architectures[@]}"; do
+  child=$(jq -er --arg arch "$architecture" '
+    [.manifests[] | select(.platform.os == "linux" and .platform.architecture == $arch)]
+    | if length == 1 and (.[0].digest | test("^sha256:[a-f0-9]{64}$"))
+      then .[0].digest else error("Expected exactly one valid child for " + $arch) end
+  ' "$output/image-index.json")
+  printf '%s_digest=%s\n' "$architecture" "$child" >> "$output/platforms.txt"
   printf 'Verifying %s child and attestations\n' "$architecture"
-  child=$(jq -er --arg arch "$architecture" '.manifests[] | select(.platform.os == "linux" and .platform.architecture == $arch) | .digest' "$output/image-index.json")
   blob "$child" "$output/$architecture-manifest.json"
   attestation=$(jq -er --arg child "$child" '
     [.manifests[] | select(.annotations["vnd.docker.reference.type"] == "attestation-manifest" and .annotations["vnd.docker.reference.digest"] == $child)]

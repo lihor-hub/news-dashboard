@@ -2,13 +2,41 @@
 
 from __future__ import annotations
 
+from contextlib import nullcontext
 from pathlib import Path
 
+import pytest
 import yaml  # type: ignore[import-untyped]
 
 ROOT = Path(__file__).resolve().parents[2]
 SMOKE_SCRIPT = ROOT / "scripts" / "smoke-mcp-container.sh"
 CI_WORKFLOW = ROOT / ".github" / "workflows" / "ci.yml"
+
+
+@pytest.mark.parametrize("failure", [False, True])
+def test_container_token_helper_closes_pool_before_interpreter_shutdown(
+    monkeypatch: pytest.MonkeyPatch, failure: bool
+) -> None:
+    from news_dashboard import auth, db
+    from news_dashboard.mcp import service
+
+    closed: list[bool] = []
+    monkeypatch.setattr(auth, "get_user_by_username", lambda _: {"id": 1})
+    monkeypatch.setattr(db, "close_connection_pool", lambda: closed.append(True))
+
+    def create_token(*_args: object, **_kwargs: object) -> dict[str, str]:
+        if failure:
+            message = "token creation failed"
+            raise RuntimeError(message)
+        return {"token": "test-only-token"}
+
+    monkeypatch.setattr(service, "create_token", create_token)
+    prefix = """smoke_token="$(docker exec "${app_name}" python -c '"""
+    helper = SMOKE_SCRIPT.read_text(encoding="utf-8").split(prefix, 1)[1].split("\n')\"", 1)[0]
+    with pytest.raises(RuntimeError, match="token creation failed") if failure else nullcontext():
+        # Execute the repository-owned helper, with its DB boundaries replaced.
+        exec(compile(helper, "<container-token-helper>", "exec"), {})  # noqa: S102
+    assert closed == [True]
 
 
 def test_container_smoke_uses_supported_image_and_keeps_database_private() -> None:

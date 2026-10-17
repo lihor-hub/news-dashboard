@@ -7,7 +7,7 @@
 [![Trivy](https://github.com/lihor-hub/news-dashboard/actions/workflows/trivy-scan.yml/badge.svg)](https://github.com/lihor-hub/news-dashboard/actions/workflows/trivy-scan.yml)
 [![Version](https://img.shields.io/github/v/tag/lihor-hub/news-dashboard?filter=v*&sort=semver&label=version&color=blue)](https://github.com/lihor-hub/news-dashboard/releases/latest)
 [![License: MIT](https://img.shields.io/github/license/lihor-hub/news-dashboard)](LICENSE)
-![Python 3.14+](https://img.shields.io/badge/python-3.14%2B-blue)
+![Python 3.15+](https://img.shields.io/badge/python-3.15%2B-blue)
 ![Node 26](https://img.shields.io/badge/node-26-339933)
 ![PostgreSQL 16+ pgvector](https://img.shields.io/badge/postgresql-16%2B%20pgvector-4169E1)
 [![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/lihor-hub/news-dashboard)
@@ -63,14 +63,14 @@ your sources, reading data, and AI-provider configuration.
 
 ## Stack
 
-- Backend: Python 3.14, FastAPI, Typer, psycopg, APScheduler, LangChain, LangGraph.
+- Backend: Python 3.15, FastAPI, Typer, psycopg, APScheduler, LangChain, LangGraph.
 - Frontend: React, TypeScript, Vite, TanStack Query.
 - Database: PostgreSQL.
 - Tooling: Ruff, mypy, pytest, ESLint, Prettier, Vitest, Playwright.
 
 ## Requirements
 
-- Python 3.14+
+- Python 3.15+
 - Node.js and npm compatible with `package-lock.json`
 - PostgreSQL 16+ with the [pgvector](https://github.com/pgvector/pgvector) extension (the `pgvector/pgvector:pg16` image, or install `vector` on an external Postgres)
 - Docker and Docker Compose for the container flow

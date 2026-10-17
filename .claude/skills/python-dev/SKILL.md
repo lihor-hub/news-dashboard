@@ -52,7 +52,7 @@ Preserve these repo decisions:
 - **PostgreSQL only.** `CLAUDE.md` and
   [ADR 0001](../../../docs/adr/0001-postgresql-only-runtime.md) are the source
   of truth: PostgreSQL SQL + psycopg param style, no SQLite fallbacks.
-- **Ruff `target-version = py313`** on a `requires-python >=3.14` project is
+- **Ruff `target-version = py313`** on a `requires-python >=3.15` project is
   intentional (avoids PEP 758 rewrites mypy can't parse). Leave it.
 - **Lazy imports are deliberate** (`PLC0415` ignored) for optional deps / startup
   cost / cycles — keep them where they are.

@@ -23,7 +23,7 @@ News Dashboard exposes several health and readiness endpoints for monitoring and
 
 ## Docker Probe Configuration
 
-The production image is based on `python:3.14-slim` and does not install `curl`
+The production image is based on `python:3.15.0-slim-bookworm` and does not install `curl`
 or `wget`, so `docker-compose.yml` and `docker-compose.prod.yml` ship a
 healthcheck that calls `/api/ready` with the Python standard library instead:
 

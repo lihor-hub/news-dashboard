@@ -101,10 +101,15 @@ jobs:
 
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
         with:
-          python-version: '3.14'
+          python-version: '3.15'
       - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
+          version: '0.13.1'
           enable-cache: true
+      - name: Install all-extras native build prerequisites
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y build-essential libffi-dev pkg-config libxml2-dev libxslt1-dev zlib1g-dev
       - run: uv sync --frozen --all-extras
       - run: echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
       - name: ruff (lint)
@@ -147,10 +152,15 @@ jobs:
 
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
         with:
-          python-version: '3.14'
+          python-version: '3.15'
       - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
+          version: '0.13.1'
           enable-cache: true
+      - name: Install all-extras native build prerequisites
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y build-essential libffi-dev pkg-config libxml2-dev libxslt1-dev zlib1g-dev
       - run: uv sync --frozen --all-extras
       - run: echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
       - name: Backend smoke tests
@@ -175,16 +185,23 @@ jobs:
     name: MCP container smoke
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    if: github.event_name == 'pull_request' || github.event_name == 'merge_group' || github.event_name == 'workflow_dispatch'
+    # Keep every test aggregate ancestor active on main so a skipped smoke
+    # job cannot suppress downstream publication, scanning and deployment.
+    if: github.event_name == 'push' || github.event_name == 'pull_request' || github.event_name == 'merge_group' || github.event_name == 'workflow_dispatch'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
         with:
-          python-version: '3.14'
+          python-version: '3.15'
       - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
+          version: '0.13.1'
           enable-cache: true
+      - name: Install all-extras native build prerequisites
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y build-essential libffi-dev pkg-config libxml2-dev libxslt1-dev zlib1g-dev
       - run: uv sync --frozen --all-extras
       - run: echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
       - name: Build and probe the supported application container
@@ -200,7 +217,7 @@ jobs:
     if: |
       github.event_name == 'push' ||
       github.event_name == 'merge_group' ||
-      (github.event_name == 'workflow_dispatch' && inputs.full_suite == 'true') ||
+      (github.event_name == 'workflow_dispatch' && inputs.full_suite) ||
       (github.event_name == 'pull_request' && needs.detect-changes.outputs.backend == 'true')
     services:
       postgres:
@@ -221,10 +238,15 @@ jobs:
 
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
         with:
-          python-version: '3.14'
+          python-version: '3.15'
       - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
+          version: '0.13.1'
           enable-cache: true
+      - name: Install all-extras native build prerequisites
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y build-essential libffi-dev pkg-config libxml2-dev libxslt1-dev zlib1g-dev
       - run: uv sync --frozen --all-extras
       - run: echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
       - name: Backend tests
@@ -251,7 +273,7 @@ jobs:
     if: |
       github.event_name == 'push' ||
       github.event_name == 'merge_group' ||
-      (github.event_name == 'workflow_dispatch' && inputs.full_suite == 'true') ||
+      (github.event_name == 'workflow_dispatch' && inputs.full_suite) ||
       (github.event_name == 'pull_request' && needs.detect-changes.outputs.frontend == 'true')
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -280,7 +302,7 @@ jobs:
     if: |
       github.event_name == 'push' ||
       github.event_name == 'merge_group' ||
-      (github.event_name == 'workflow_dispatch' && inputs.full_suite == 'true') ||
+      (github.event_name == 'workflow_dispatch' && inputs.full_suite) ||
       (github.event_name == 'pull_request' && needs.detect-changes.outputs.desktop == 'true')
     defaults:
       run:
@@ -309,7 +331,7 @@ jobs:
     if: |
       github.event_name == 'push' ||
       github.event_name == 'merge_group' ||
-      (github.event_name == 'workflow_dispatch' && inputs.full_suite == 'true') ||
+      (github.event_name == 'workflow_dispatch' && inputs.full_suite) ||
       (github.event_name == 'pull_request' && needs.detect-changes.outputs.a11y == 'true')
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7

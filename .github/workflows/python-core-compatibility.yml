@@ -31,13 +31,15 @@ jobs:
       fail-fast: false
       matrix:
         runner: [ubuntu-24.04, ubuntu-24.04-arm]
-        python: ['3.14', '3.15']
+        python: ['3.15']
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
         with:
           python-version: ${{ matrix.python }}
       - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          version: '0.13.1'
       # Several unchanged locked packages need source builds on 3.15. Native
       # runners avoid QEMU's rustc crash; this does not certify the slim image.
       - name: Install native build prerequisites

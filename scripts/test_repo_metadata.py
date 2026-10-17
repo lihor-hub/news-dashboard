@@ -4,11 +4,25 @@ Run: python3 -m unittest scripts/test_repo_metadata.py
 """
 
 import re
+import tomllib
 import unittest
 from pathlib import Path
 from typing import ClassVar
 
 ROOT = Path(__file__).parent.parent
+
+
+class TestPythonRuntime(unittest.TestCase):
+    def test_runtime_and_lock_minimum_agree(self) -> None:
+        project = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+        lock = tomllib.loads((ROOT / "uv.lock").read_text(encoding="utf-8"))
+        assert project["project"]["requires-python"] == ">=3.15"
+        assert lock["requires-python"] == ">=3.15"
+        assert project["tool"]["mypy"]["python_version"] == "3.15"
+        assert project["tool"]["ty"]["environment"]["python-version"] == "3.15"
+        assert project["tool"]["pyrefly"]["python-version"] == "3.15"
+        # Keep older source grammar until mypy/CodeQL support the newer syntax.
+        assert project["tool"]["ruff"]["target-version"] == "py313"
 
 
 class TestVersionConsistency(unittest.TestCase):

@@ -5,7 +5,7 @@ smoke_suffix="${GITHUB_RUN_ID:-local}-$$"
 network_name="nd-mcp-smoke-${smoke_suffix}"
 postgres_name="nd-mcp-postgres-${smoke_suffix}"
 app_name="nd-mcp-app-${smoke_suffix}"
-image_name="news-dashboard:mcp-smoke-${smoke_suffix}"
+image_name="${MCP_SMOKE_IMAGE:-news-dashboard:mcp-smoke-${smoke_suffix}}"
 postgres_password="mcp-smoke-postgres-password"
 session_secret="mcp-smoke-session-secret-000000000000000000000000"
 app_port=""
@@ -15,7 +15,9 @@ cleanup() {
   rm -f "/tmp/mcp-smoke-response-$$" "/tmp/mcp-smoke-disabled-$$"
   docker rm -f "${app_name}" "${postgres_name}" >/dev/null 2>&1 || true
   docker network rm "${network_name}" >/dev/null 2>&1 || true
-  docker image rm "${image_name}" >/dev/null 2>&1 || true
+  if [[ -z "${MCP_SMOKE_IMAGE:-}" ]]; then
+    docker image rm "${image_name}" >/dev/null 2>&1 || true
+  fi
 }
 trap cleanup EXIT
 
@@ -35,7 +37,21 @@ for _attempt in $(seq 1 60); do
 done
 docker exec "${postgres_name}" pg_isready -U news_dashboard -d news_dashboard >/dev/null
 
-docker build -t "${image_name}" . >/dev/null
+if [[ -z "${MCP_SMOKE_IMAGE:-}" ]]; then
+  docker build -t "${image_name}" . >/dev/null
+fi
+
+docker run --rm "${image_name}" python -c '
+import os, shutil, sys, sysconfig
+assert sys.version_info[:2] == (3, 15) and sys.version_info.releaselevel == "final"
+assert not sysconfig.get_config_var("Py_GIL_DISABLED")
+assert os.getuid() != 0
+assert all(shutil.which(tool) is None for tool in ("gcc", "cc", "rustc", "cargo"))
+print(sys.version)
+'
+# Dockerfile runs pip check before finalizing the image. Runtime probes must
+# also work when the unused package installer is removed by image hardening.
+docker run --rm "${image_name}" news-dashboard --help >/dev/null
 
 start_app() {
   local enabled="$1"
@@ -72,16 +88,34 @@ wait_for_app() {
 
 start_app true
 wait_for_app
+docker exec "${app_name}" news-dashboard init
+# Execute the compose readiness command inside the image. Helm uses the same
+# readiness endpoint and /api/live for liveness; both must work without auth.
+docker exec "${app_name}" python -c 'import urllib.request; urllib.request.urlopen("http://127.0.0.1:8080/api/ready", timeout=5).read()'
+for endpoint in health live ready; do
+  response="$(curl --fail --silent --show-error -H 'Host: localhost:8080' \
+    "http://127.0.0.1:${app_port}/api/${endpoint}")"
+  test "$response" = '{"status":"ok"}'
+done
+expected_version="$(docker exec "${app_name}" python -c 'from pathlib import Path; print(Path("/app/VERSION").read_text(encoding="utf-8").strip())')"
+curl --fail --silent --show-error -H 'Host: localhost:8080' \
+  "http://127.0.0.1:${app_port}/api/version" | \
+  python -c 'import json, sys; assert json.load(sys.stdin)["version"] == sys.argv[1]' "$expected_version"
+echo "Container health/readiness and version ${expected_version} passed"
 
 # Mint inside the container and capture stdout only in memory. The bearer never
 # appears in a command argument, image layer, tracked file, or CI log.
 smoke_token="$(docker exec "${app_name}" python -c '
 from news_dashboard.auth import get_user_by_username
+from news_dashboard.db import close_connection_pool
 from news_dashboard.mcp.service import create_token
-user = get_user_by_username("mcp-smoke-admin")
-if user is None:
-    raise SystemExit("bootstrap user missing")
-print(create_token(int(user["id"]), "container smoke", scopes=("search",))["token"])
+try:
+    user = get_user_by_username("mcp-smoke-admin")
+    if user is None:
+        raise SystemExit("bootstrap user missing")
+    print(create_token(int(user["id"]), "container smoke", scopes=("search",))["token"])
+finally:
+    close_connection_pool()
 ')"
 test -n "${smoke_token}"
 
