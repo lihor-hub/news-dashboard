@@ -75,7 +75,7 @@ jobs:
           skopeo copy "oci-archive:$RUNNER_TEMP/runtime.tar" docker-daemon:news-dashboard-validation:runtime
           docker image inspect news-dashboard-validation:runtime > evidence/image-inspect.json
           docker run --rm news-dashboard-validation:runtime python -VV | tee evidence/python.txt
-          docker run --rm news-dashboard-validation:runtime pip freeze > evidence/production-freeze.txt
+          docker run --rm news-dashboard-validation:runtime python -c 'from importlib.metadata import distributions; print("\n".join(sorted(d.metadata["Name"] + "==" + d.version for d in distributions())))' > evidence/production-freeze.txt
       - name: Execute version, CLI, init, health, readiness and MCP probes
         shell: bash
         run: |

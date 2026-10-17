@@ -46,7 +46,7 @@ existing Trivy HIGH/CRITICAL policy and uploads SARIF. It cannot publish or
 deploy. The Boolean `full_suite` input now selects the requested application
 lanes on manual CI dispatch; a string comparison previously skipped them.
 
-Fresh local final-3.15 gates pass: 3,672 backend/script tests, 2 unchanged
+Fresh local final-3.15 gates pass: 3,674 backend/script tests, 2 unchanged
 skips, 88% coverage, 1,081 frontend tests, both npm security regressions,
 frontend coverage/build, lint/Vulture, all three Python checkers and TypeScript,
 all-files pre-commit, 237-package dependency consistency and real offline
@@ -65,8 +65,32 @@ The cutover now installs the same native prerequisites used by the successful
 extras preparation workflow before each sync; a regression asserts their
 ordering. The fresh full local suite above includes that repair.
 
-CI, native runtime/security, devcontainer and all-extras artifact URLs will be
-recorded after execution. Pending or skipped jobs are not evidence of success. #1340 and
+Native core installation paths passed on amd64/arm64 in
+[run 38985078171](https://github.com/lihor-hub/news-dashboard/actions/runs/38985078171).
+Frozen and unlocked all-extras/browser paths passed on Linux amd64, Linux arm64
+and macOS arm64 in
+[run 38985080665](https://github.com/lihor-hub/news-dashboard/actions/runs/38985080665).
+These runs tested implementation `89fe9d9056a38859bdfa2904466116f638490817`;
+subsequent changes add CI headers and validation-helper cleanup, not package
+upgrades. Separate SMTPUTF8/header coverage passes all 49 email tests locally.
+
+Both native actual production images built and passed version/CLI/init,
+health/readiness, MCP and digest-bound attestation checks in
+[run 38985071323](https://github.com/lihor-hub/news-dashboard/actions/runs/38985071323).
+**Trivy failed**, reporting HIGH findings from pip 26.2.1's vendored SBOM
+(msgpack 1.1.2, setuptools 70.3.0 and urllib3 2.7.0); application urllib3 is
+already 2.8.0. The separate security fix is [PR #1555](https://github.com/lihor-hub/news-dashboard/pull/1555),
+retaining the 3.14 runtime on its main-based branch. This cutover does not
+silently include that security remediation. The smoke helper also exposed a
+3.15 interpreter-finalization error after minting a token; it now closes its
+pool in `finally`, with passing success/failure regressions.
+
+[Nightly 38985085807](https://github.com/lihor-hub/news-dashboard/actions/runs/38985085807)
+passes backend/frontend suites but reproduces five existing desktop visual
+cases; [#1554](https://github.com/lihor-hub/news-dashboard/issues/1554) tracks
+separate baseline repair. No screenshot tolerance or security policy is relaxed.
+Devcontainer and final-head CI outcomes remain to be recorded. Pending or
+skipped jobs are not evidence of success. #1340 and
 #1531 remain open; the requested terminal state for this implementation is an
 unmerged PR. Protected review/queue checks and post-merge release/deployment
 readiness/public TLS evidence remain later delivery requirements.
