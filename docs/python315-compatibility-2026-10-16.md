@@ -89,8 +89,61 @@ pool in `finally`, with passing success/failure regressions.
 passes backend/frontend suites but reproduces five existing desktop visual
 cases; [#1554](https://github.com/lihor-hub/news-dashboard/issues/1554) tracks
 separate baseline repair. No screenshot tolerance or security policy is relaxed.
-Devcontainer and final-head CI outcomes remain to be recorded. Pending or
-skipped jobs are not evidence of success. #1340 and
+Both native development-container lifecycles passed in
+[run 38985083529](https://github.com/lihor-hub/news-dashboard/actions/runs/38985083529):
+3,657 backend/script passes, 16 skips in the dev-only environment, 88% coverage,
+1,081 frontend passes and 7 stale-3.14 rebuild integration passes per platform,
+including actual commit/push hooks. Downloaded artifacts were checked.
+
+Implementation `b7634a1b68453cd8c19d46b411ea43ba2f307be5` passes the
+[required application CI](https://github.com/lihor-hub/news-dashboard/actions/runs/38986757838)
+(3,674 backend/script passes, 2 skips, 24 subtests),
+[Dependency Review/npm policies](https://github.com/lihor-hub/news-dashboard/actions/runs/38986757842)
+and [CodeQL extraction/analysis](https://github.com/lihor-hub/news-dashboard/actions/runs/38986757880).
+The native production workflow additionally exercised the real tag-based
+release calculation and VERSION injection: **both architectures served preview
+version 1.172.6**, with no pool-finalization error, in
+[run 38986757874](https://github.com/lihor-hub/news-dashboard/actions/runs/38986757874).
+Its build/runtime/attestation steps pass; Trivy still fails on the unmerged
+installer remediation described above. This is release-build evidence, not
+image publication, tag creation or deployment.
+
+| Production platform at b7634a1b | Runnable child digest |
+|---|---|
+| Linux amd64 | `sha256:6bbbf01e38f58c13c58f88ebc69899349163e68d20d446d035635bdc0746417f` |
+| Linux arm64 | `sha256:e2e7c697d5e1f8d6e3148ea4a11d9825976b451e62709c2affb5b1cbb33b9d5c` |
+
+The [sanitized evidence manifest](python315-cutover-evidence-2026-10-17.json)
+records both OCI index digests, exact source/lock hashes and **12 complete
+installed dependency sets** from frozen/unlocked core, frozen/unlocked extras
+and actual production images. The files came from the referenced native run
+artifacts, not a hypothetical resolution. A fresh RustSec audit reports zero
+vulnerabilities and inherited informational RUSTSEC-2026-0097; a fresh Cargo
+feature tree confirms its required rand `log` feature is absent. All 22 frozen
+Python advisory IDs match the preceding extras audit; no new IDs appeared.
+The audit failures and local fastuuid service limitation remain explicit.
+
+Separate [PR #1555](https://github.com/lihor-hub/news-dashboard/pull/1555)
+passes native amd64/arm64 production scans with zero SARIF findings on its
+main-based 3.14 branch. Separate [PR #1556](https://github.com/lihor-hub/news-dashboard/pull/1556)
+passes the unchanged 24 visual assertions, 513 e2e cases (1 skip), dev-only
+backend and frontend suites in [nightly 38986430784](https://github.com/lihor-hub/news-dashboard/actions/runs/38986430784).
+Both PRs remain unmerged with auto-merge disabled. They are native blocked-by
+prerequisites of #1531; this Python PR does not absorb their diffs.
+
+The opt-in combined OCI/QEMU job in
+[run 38985075762](https://github.com/lihor-hub/news-dashboard/actions/runs/38985075762)
+is still running at this report snapshot and is **not certified**. Its earlier
+application lanes failed before the separately recorded header repair. The
+native platform build/execution proofs above are independent completed jobs.
+Final delivery-head checks and subsequent observations are indexed on #1531/PR
+#1552; a pending or skipped job is never evidence of success.
+
+Public TLS health was observed returning `{"status":"ok"}` and existing
+version `1.161.3` on 2026-10-17. This confirms only the previous deployment's
+reachability. No Python 3.15 image was published or deployed in this run.
+Unmerged prerequisites, frozen Python advisories, protected review/queue and
+actual post-merge image/deployment/public-TLS acceptance keep #1531/#1340 open. #1340 and
 #1531 remain open; the requested terminal state for this implementation is an
 unmerged PR. Protected review/queue checks and post-merge release/deployment
 readiness/public TLS evidence remain later delivery requirements.
