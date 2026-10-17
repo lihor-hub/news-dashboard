@@ -24,6 +24,7 @@ blob() {
 }
 
 blob "$index_digest" "$output/image-index.json"
+: > "$output/platforms.txt"
 for architecture in "${architectures[@]}"; do
   child=$(jq -er --arg arch "$architecture" '
     [.manifests[] | select(.platform.os == "linux" and .platform.architecture == $arch)]

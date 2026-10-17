@@ -169,6 +169,9 @@ def test_verifies_oci_attestations_against_each_child(
             }
             manifests.append(attestation)
         index = add_blob({"manifests": manifests}, corrupt=fault == "corrupt-index")
+    evidence = tmp_path / "evidence"
+    evidence.mkdir()
+    (evidence / "platforms.txt").write_text("stale_digest=previous-run\n", encoding="utf-8")
     result = subprocess.run(  # noqa: S603
         [
             "/bin/bash",
@@ -184,6 +187,9 @@ def test_verifies_oci_attestations_against_each_child(
     )
     assert (result.returncode == 0) is (fault is None), result.stderr  # noqa: S101
     if fault is None:
+        platform_lines = (evidence / "platforms.txt").read_text(encoding="utf-8").splitlines()
+        assert len(platform_lines) == len(platforms)  # noqa: S101
+        assert all("previous-run" not in line for line in platform_lines)  # noqa: S101
         for architecture in platforms:
             assert (tmp_path / f"evidence/{architecture}-sbom.json").is_file()  # noqa: S101
             assert (tmp_path / f"evidence/{architecture}-provenance.json").is_file()  # noqa: S101
