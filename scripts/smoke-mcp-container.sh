@@ -97,7 +97,7 @@ for endpoint in health live ready; do
     "http://127.0.0.1:${app_port}/api/${endpoint}")"
   test "$response" = '{"status":"ok"}'
 done
-expected_version="$(docker exec "${app_name}" python -c 'from importlib.metadata import version; print(version("news-dashboard"))')"
+expected_version="$(docker exec "${app_name}" python -c 'from pathlib import Path; print(Path("/app/VERSION").read_text(encoding="utf-8").strip())')"
 curl --fail --silent --show-error -H 'Host: localhost:8080' \
   "http://127.0.0.1:${app_port}/api/version" | \
   python -c 'import json, sys; assert json.load(sys.stdin)["version"] == sys.argv[1]' "$expected_version"

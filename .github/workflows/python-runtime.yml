@@ -41,6 +41,8 @@ jobs:
             arch: arm64
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
         with:
           python-version: '3.15'
@@ -54,6 +56,14 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y skopeo
           mkdir evidence
+      - name: Exercise production release-version calculation and injection
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash scripts/next_version.sh > evidence/release-version.txt
+          build_version=$(sed -n 's/^version=//p' evidence/release-version.txt)
+          [[ "$build_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          printf '%s\n' "$build_version" > VERSION
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4
       - name: Build the actual production Dockerfile with SBOM and provenance
         id: build
