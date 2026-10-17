@@ -4,9 +4,13 @@ Run: python3 -m unittest scripts/test_repo_metadata.py
 """
 
 import re
+import subprocess
+import sys
 import unittest
 from pathlib import Path
 from typing import ClassVar
+
+import pytest
 
 ROOT = Path(__file__).parent.parent
 
@@ -123,19 +127,66 @@ class TestNoPrivatePersonalPhrases(unittest.TestCase):
     def test_no_forbidden_phrases_in_tracked_files(self) -> None:
         this_file = Path(__file__).resolve()
         violations: list[str] = []
-        for ext in self._EXTENSIONS:
-            for path in ROOT.rglob(f"*{ext}"):
-                if path.resolve() == this_file:
-                    continue
-                if any(part.startswith(".") for part in path.parts):
-                    continue
-                text = path.read_text(errors="replace")
-                violations.extend(
-                    f"{path.relative_to(ROOT)}: contains '{phrase}'"
-                    for phrase in self._FORBIDDEN
-                    if phrase.lower() in text.lower()
-                )
+        tracked = subprocess.run(
+            ["git", "ls-files", "-z"],  # noqa: S607 — Git is required by the repository workflow
+            cwd=ROOT,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        for name in tracked.stdout.split("\0"):
+            relative = Path(name)
+            path = ROOT / relative
+            if (
+                path.suffix not in self._EXTENSIONS
+                or not path.is_file()
+                or path.resolve() == this_file
+                or any(part.startswith(".") for part in relative.parts)
+            ):
+                continue
+            text = path.read_text(errors="replace")
+            violations.extend(
+                f"{relative}: contains '{phrase}'"
+                for phrase in self._FORBIDDEN
+                if phrase.lower() in text.lower()
+            )
         assert not violations, "Forbidden phrases found:\n" + "\n".join(violations)
+
+
+def test_phrase_guard_ignores_untracked_dependencies(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    subprocess.run(  # noqa: S603 — fixed Git command in an isolated fixture
+        ["git", "init", "--quiet", str(tmp_path)],  # noqa: S607 — Git is a required tool
+        check=True,
+    )
+    source = tmp_path / "tracked source.md"
+    source.write_text("Public project documentation")
+    subprocess.run(  # noqa: S603 — stage only the controlled test fixture
+        ["git", "-C", str(tmp_path), "add", str(source)],  # noqa: S607 — required Git tool
+        check=True,
+    )
+    dependency = tmp_path / "website" / "node_modules" / "hashes" / "types.ts"
+    dependency.parent.mkdir(parents=True)
+    dependency.write_text(TestNoPrivatePersonalPhrases._FORBIDDEN[0])
+    monkeypatch.setattr(sys.modules[__name__], "ROOT", tmp_path)
+    TestNoPrivatePersonalPhrases().test_no_forbidden_phrases_in_tracked_files()
+
+
+def test_phrase_guard_rejects_tracked_text(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    subprocess.run(  # noqa: S603 — fixed Git command in an isolated fixture
+        ["git", "init", "--quiet", str(tmp_path)],  # noqa: S607 — Git is a required tool
+        check=True,
+    )
+    source = tmp_path / "tracked source.md"
+    source.write_text(TestNoPrivatePersonalPhrases._FORBIDDEN[0])
+    subprocess.run(  # noqa: S603 — stage only the controlled test fixture
+        ["git", "-C", str(tmp_path), "add", str(source)],  # noqa: S607 — required Git tool
+        check=True,
+    )
+    monkeypatch.setattr(sys.modules[__name__], "ROOT", tmp_path)
+    with pytest.raises(AssertionError, match=r"tracked source\.md"):
+        TestNoPrivatePersonalPhrases().test_no_forbidden_phrases_in_tracked_files()
 
 
 if __name__ == "__main__":
