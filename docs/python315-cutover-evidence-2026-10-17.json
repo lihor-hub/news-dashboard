@@ -9682,7 +9682,7 @@
     "Security and visual prerequisite PRs remain unmerged by instruction.",
     "Existing frozen Python advisory IDs remain unresolved.",
     "Protected merge-queue and post-merge release/deployment acceptance remain unverified.",
-    "Manual combined multiarchitecture OCI run 38985075762 remains in progress at this snapshot; do not count it as passed."
+    "Emulated cold multiarchitecture build measured 1847 seconds versus 202 seconds for amd64-only; performance cost is recorded, not an assertion of improvement."
   ],
   "required_ci_snapshot": {
     "source_sha": "b7634a1b68453cd8c19d46b411ea43ba2f307be5",
@@ -9694,5 +9694,31 @@
     "aggregate_test_build": "passed",
     "dependency_review": "https://github.com/lihor-hub/news-dashboard/actions/runs/38986757842",
     "codeql": "https://github.com/lihor-hub/news-dashboard/actions/runs/38986757880"
+  },
+  "combined_multiarchitecture": {
+    "source_sha": "89fe9d9056a38859bdfa2904466116f638490817",
+    "run": "https://github.com/lihor-hub/news-dashboard/actions/runs/38985075762",
+    "job": "https://github.com/lihor-hub/news-dashboard/actions/runs/38985075762/job/117254540886",
+    "job_status": "passed",
+    "overall_run_status": "failed on earlier application-header defect; repaired and revalidated in later CI",
+    "index_digest": "sha256:72dc9b7452c7542ae937f70863a1c9a4858b06c2a2b8b79c7cdb1bd0b9ebf035",
+    "children": {
+      "amd64_digest": "sha256:9b47157d6b64d7aeb8ccd92299fec827c0cdf9f9501ce8136c6c9007766087a2",
+      "arm64_digest": "sha256:a3daa6170dbb88f6b868636d3d1784ba5adedde87469591ca3f159627fd6eee3"
+    },
+    "timings": {
+      "amd64_seconds": 202,
+      "multiarch_seconds": 1847,
+      "increase_percent": 814.3564356435643
+    },
+    "attestations": "both per-child SBOM/provenance digest/subject checks passed"
+  },
+  "production_source_objects": {
+    "Dockerfile": "739e76478235e0f7c56aedaa4e326d9e92b4bf2d",
+    "backend": "bd13ca0c0fb9de83e2cf041977206666c97c6a24",
+    "frontend": "9b9413f249a50b9ddeaa4582c29cf41b31e63718",
+    "public": "fcc5ce223ec3bc7c7255cac5083ea73719fc8f7e",
+    "package-lock.json": "bb06706e838aabd53cfdaec577e5c6f0d3472e2c",
+    "pyproject.toml": "837bf370483217c335b4754c040f8cceb0299db7"
   }
 }

@@ -133,9 +133,15 @@ prerequisites of #1531; this Python PR does not absorb their diffs.
 
 The opt-in combined OCI/QEMU job in
 [run 38985075762](https://github.com/lihor-hub/news-dashboard/actions/runs/38985075762)
-is still running at this report snapshot and is **not certified**. Its earlier
-application lanes failed before the separately recorded header repair. The
-native platform build/execution proofs above are independent completed jobs.
+**passed its combined multiarchitecture job**: OCI index
+`sha256:72dc9b7452c7542ae937f70863a1c9a4858b06c2a2b8b79c7cdb1bd0b9ebf035`
+has both real runnable children with verified SBOM/provenance. Downloaded
+attestations were checked. The emulated cold dual build took 1,847 seconds,
+versus 202 seconds for the amd64 reference (+814.36%); source-build cost is a
+material release-time consideration, not a performance improvement. That
+run's earlier application lanes failed before the separately recorded header
+repair; its overall red status does not certify those lanes. Native platform
+execution and subsequent required-CI proofs are independent completed jobs.
 Final delivery-head checks and subsequent observations are indexed on #1531/PR
 #1552; a pending or skipped job is never evidence of success.
 
