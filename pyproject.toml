@@ -47,6 +47,8 @@ dependencies = [
 # browser. When absent, body extraction gracefully skips this layer.
 crawl4ai = [
   "crawl4ai>=0.9.4",
+  # Security floor for Crawl4AI's NLTK dependency (issue #1549).
+  "nltk>=3.10.3",
   "scipy>=1.18.1",
   "shapely>=2.2.0",
   # Python 3.14 keeps its published wheel; 3.15+ needs supported PyO3.
