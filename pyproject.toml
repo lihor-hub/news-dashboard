@@ -5,7 +5,7 @@ description = "Self-hosted news inbox: curated feeds, triage, search, and AI bri
 license = "MIT"
 license-files = ["LICENSE"]
 authors = [{ name = "lihor-hub" }]
-requires-python = ">=3.14"
+requires-python = ">=3.15"
 dependencies = [
   "anyio>=4.15.1",
   "fastapi>=0.141.1",
@@ -51,7 +51,7 @@ crawl4ai = [
   "nltk>=3.10.3",
   "scipy>=1.18.1",
   "shapely>=2.2.0",
-  # Python 3.14 keeps its published wheel; 3.15+ needs supported PyO3.
+  # Python 3.15+ needs supported PyO3 for this optional native dependency.
   # Identified native patch provenance: vendor/fastuuid/README.md.
   "fastuuid @ https://raw.githubusercontent.com/lihor-hub/news-dashboard/310a24220f4c24e098da9a44a75dfcbc7c8419c9/vendor/fastuuid/fastuuid-0.14.0+nd.1.tar.gz#sha256=c025db54352c78802b919cc93504321f94f58974c4bebedf4ac7e323bc0d5c22 ; python_version >= '3.15'",
 ]
@@ -228,7 +228,7 @@ docstring-code-format = true
 
 # ── mypy ─────────────────────────────────────────────────────────────────────
 [tool.mypy]
-python_version = "3.14"
+python_version = "3.15"
 files = ["backend"]
 strict = true
 warn_unreachable = true
@@ -250,7 +250,7 @@ disallow_untyped_decorators = false
 # backend/tests is included too: pytest has no backend/tests/__init__.py, so it
 # inserts that directory onto sys.path at collection time, letting test modules
 # do `from conftest import ...` as a bare top-level import.
-python-version = "3.14"
+python-version = "3.15"
 extra-paths = ["backend", "backend/tests"]
 
 [tool.ty.src]
@@ -258,7 +258,7 @@ include = ["backend", "backend/tests"]
 
 # ── pyrefly (Meta type checker) ──────────────────────────────────────────────
 [tool.pyrefly]
-python-version = "3.14"
+python-version = "3.15"
 project-includes = ["backend"]
 search-path = ["backend", "backend/tests"]
 

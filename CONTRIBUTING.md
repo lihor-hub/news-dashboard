@@ -35,7 +35,7 @@ For deeper orientation, see the [Architecture Decision Records](docs/adr/) and t
 
 ## Prerequisites
 
-- Python 3.14+
+- Python 3.15+
 - Node.js LTS
 - PostgreSQL 16+
 - A running PostgreSQL instance (see the local-dev section in the README)

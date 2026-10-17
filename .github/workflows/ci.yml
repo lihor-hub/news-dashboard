@@ -101,9 +101,10 @@ jobs:
 
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
         with:
-          python-version: '3.14'
+          python-version: '3.15'
       - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
+          version: '0.13.1'
           enable-cache: true
       - run: uv sync --frozen --all-extras
       - run: echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
@@ -147,9 +148,10 @@ jobs:
 
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
         with:
-          python-version: '3.14'
+          python-version: '3.15'
       - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
+          version: '0.13.1'
           enable-cache: true
       - run: uv sync --frozen --all-extras
       - run: echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
@@ -181,9 +183,10 @@ jobs:
 
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
         with:
-          python-version: '3.14'
+          python-version: '3.15'
       - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
+          version: '0.13.1'
           enable-cache: true
       - run: uv sync --frozen --all-extras
       - run: echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
@@ -200,7 +203,7 @@ jobs:
     if: |
       github.event_name == 'push' ||
       github.event_name == 'merge_group' ||
-      (github.event_name == 'workflow_dispatch' && inputs.full_suite == 'true') ||
+      (github.event_name == 'workflow_dispatch' && inputs.full_suite) ||
       (github.event_name == 'pull_request' && needs.detect-changes.outputs.backend == 'true')
     services:
       postgres:
@@ -221,9 +224,10 @@ jobs:
 
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
         with:
-          python-version: '3.14'
+          python-version: '3.15'
       - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
+          version: '0.13.1'
           enable-cache: true
       - run: uv sync --frozen --all-extras
       - run: echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
@@ -251,7 +255,7 @@ jobs:
     if: |
       github.event_name == 'push' ||
       github.event_name == 'merge_group' ||
-      (github.event_name == 'workflow_dispatch' && inputs.full_suite == 'true') ||
+      (github.event_name == 'workflow_dispatch' && inputs.full_suite) ||
       (github.event_name == 'pull_request' && needs.detect-changes.outputs.frontend == 'true')
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -280,7 +284,7 @@ jobs:
     if: |
       github.event_name == 'push' ||
       github.event_name == 'merge_group' ||
-      (github.event_name == 'workflow_dispatch' && inputs.full_suite == 'true') ||
+      (github.event_name == 'workflow_dispatch' && inputs.full_suite) ||
       (github.event_name == 'pull_request' && needs.detect-changes.outputs.desktop == 'true')
     defaults:
       run:
@@ -309,7 +313,7 @@ jobs:
     if: |
       github.event_name == 'push' ||
       github.event_name == 'merge_group' ||
-      (github.event_name == 'workflow_dispatch' && inputs.full_suite == 'true') ||
+      (github.event_name == 'workflow_dispatch' && inputs.full_suite) ||
       (github.event_name == 'pull_request' && needs.detect-changes.outputs.a11y == 'true')
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7

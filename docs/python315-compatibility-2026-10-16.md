@@ -1,6 +1,6 @@
 # Python 3.15 compatibility report — 2026-10-16
 
-**Keep the supported Python 3.14 runtime. Python 3.15 cutover is not validated.**
+**Python 3.15 cutover is under validation in #1531; deployment is not certified.**
 This report versions the compatibility evidence for maintainers delivering
 [the migration umbrella #1340](https://github.com/lihor-hub/news-dashboard/issues/1340).
 The report does not raise the advertised minimum. The core and optional dependency refreshes below
@@ -8,6 +8,69 @@ record targeted dependency changes and additional validation workflows; current
 runtime declarations, existing CI gates and containers remain on Python 3.14.
 [CPython 3.15.0 is stable, released October 9, 2026](https://www.python.org/downloads/release/python-3150/);
 the earlier prerelease assumption no longer applies to this assessment.
+
+
+## Runtime cutover — 2026-10-17 (#1531)
+
+This section supersedes the historical runtime status below. Prerequisites
+#1526–1530 have merged. The cutover branch raises the project and lock minimum
+to Python 3.15 and all three checkers to 3.15, while preserving Ruff py313 and
+runner-system-Python stdlib helpers. CI, nightly and timing use final 3.15;
+the preparation workflows now test only the supported 3.15 interpreter. The
+3.14 devcontainer fixture remains an intentional stale-environment recovery test.
+
+Production uses the same official standard-GIL Debian Bookworm index as the
+validated development container:
+`python:3.15.0-slim-bookworm@sha256:122756f3fe72c4f5d3d71897888204ee85774bc79de952555b8a474e1d0a5d53`.
+The registry was queried again for #1531; both platform digests still match
+[the devcontainer record](python315-devcontainer.md). Bookworm is selected
+explicitly to preserve that tested glibc/platform baseline, rather than follow
+the floating slim tag's Debian Trixie default. OS updates remain enabled.
+
+A fresh arm64 production `pip install .` in the unmodified 3.15 slim image
+failed because `zstandard`'s source preparation requires GCC. The production
+Dockerfile therefore builds unconstrained dependency wheels in a separate,
+same-Python/same-distro stage with C and supported Rust 1.95.0 tools, then
+installs those wheels without network access in the non-root final stage.
+No compiler, Rust toolchain, compatibility override or optional extra is added
+to the runtime image. The official Rust build image is pinned to index
+`sha256:d7482085ff5b415f84dba5647ae71606650bdef00db7aeb69f4b3d170c3e4082`.
+This preserves production's unlocked resolution; it does not claim that every
+dependency publishes cp315 wheels. Frozen all-extras remains a separate gate.
+
+The native `Python runtime validation` workflow builds the actual Dockerfile
+on amd64 and arm64, verifies digest-bound SBOM/provenance, loads the runnable
+child, and executes CLI/init, version, health/readiness, compose/Helm probe
+endpoints and MCP enabled/disabled checks. It scans each image using the
+existing Trivy HIGH/CRITICAL policy and uploads SARIF. It cannot publish or
+deploy. The Boolean `full_suite` input now selects the requested application
+lanes on manual CI dispatch; a string comparison previously skipped them.
+
+Fresh local final-3.15 gates pass: 3,671 backend/script tests, 2 unchanged
+skips, 88% coverage, 1,081 frontend tests, both npm security regressions,
+frontend coverage/build, lint/Vulture, all three Python checkers and TypeScript,
+all-files pre-commit, 237-package dependency consistency and real offline
+Chromium/application extraction. Both database URLs were verified read-only
+as news_dashboard at localhost:55432/news_dashboard_test before the full suite;
+parallel query workers were disabled. No database reset or native-5432 use
+occurred. The fresh frozen all-extras pip-audit still reports 37 records for
+22 existing distinct advisories in langgraph-sdk, multidict and NLTK, tracked
+by #1539/#1540/#1549. No package version was upgraded by cutover; the obsolete
+3.14 fastuuid registry selection and incompatible wheel records were pruned.
+The local fastuuid URL retains the documented audit-service limitation.
+
+CI, native runtime/security, devcontainer and all-extras artifact URLs will be
+recorded after execution. Pending or skipped jobs are not evidence of success. #1340 and
+#1531 remain open; the requested terminal state for this implementation is an
+unmerged PR. Protected review/queue checks and post-merge release/deployment
+readiness/public TLS evidence remain later delivery requirements.
+
+The stdlib audit was reconsidered for cutover. The useful explicit UTF-8 work
+and SMTPUTF8 regressions have already shipped. No further candidate has a
+measured product benefit or demonstrated need; sampling profiling remains a
+separate development experiment. No new source grammar, URL identity semantics,
+XML handling, typing workarounds or datetime conventions are changed here.
+
 
 ## Provenance and evidence boundaries
 

@@ -11,7 +11,7 @@ WORKFLOWS = [
 ]
 DOCKERFILE = ROOT / "Dockerfile"
 RUNTIME_STAGE = re.compile(
-    r"^FROM python:3.14-slim@sha256:[0-9a-f]{64} AS runtime$",
+    r"^FROM python:3.15.0-slim-bookworm@sha256:[0-9a-f]{64} AS runtime$",
     re.MULTILINE,
 )
 

@@ -12,7 +12,7 @@ the setup mistakes that produce confusing failures later.
 
 | Tool | Version |
 |------|---------|
-| Python | 3.14+ |
+| Python | 3.15+ |
 | Node.js | LTS |
 | PostgreSQL | 16+ with the [pgvector](https://github.com/pgvector/pgvector) extension |
 
