@@ -185,7 +185,9 @@ jobs:
     name: MCP container smoke
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    if: github.event_name == 'pull_request' || github.event_name == 'merge_group' || github.event_name == 'workflow_dispatch'
+    # Keep every test aggregate ancestor active on main so a skipped smoke
+    # job cannot suppress downstream publication, scanning and deployment.
+    if: github.event_name == 'push' || github.event_name == 'pull_request' || github.event_name == 'merge_group' || github.event_name == 'workflow_dispatch'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 

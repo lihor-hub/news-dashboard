@@ -45,8 +45,14 @@ endpoints and MCP enabled/disabled checks. It scans each image using the
 existing Trivy HIGH/CRITICAL policy and uploads SARIF. It cannot publish or
 deploy. The Boolean `full_suite` input now selects the requested application
 lanes on manual CI dispatch; a string comparison previously skipped them.
+Main pushes now also run MCP container smoke, keeping every test ancestor of
+publication active. This avoids the skipped-ancestor path observed in main
+[CI 38983730258](https://github.com/lihor-hub/news-dashboard/actions/runs/38983730258),
+where successful required checks coexisted with skipped publication/scanning/
+deployment. A workflow regression guards that routing; actual main release
+execution still requires the protected merge and subsequent observation.
 
-Fresh local final-3.15 gates pass: 3,674 backend/script tests, 2 unchanged
+Fresh local final-3.15 gates pass: 3,675 backend/script tests, 2 unchanged
 skips, 88% coverage, 1,081 frontend tests, both npm security regressions,
 frontend coverage/build, lint/Vulture, all three Python checkers and TypeScript,
 all-files pre-commit, 237-package dependency consistency and real offline

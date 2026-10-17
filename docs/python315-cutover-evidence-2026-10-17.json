@@ -8,7 +8,7 @@
   "pyproject_sha256": "e863fb5f7f4b5dc72ee20ab9f6a2322f5520edb18f2e54efed3ffeadd196c5f2",
   "local": {
     "python": "3.15.0 final, standard GIL, macOS arm64",
-    "backend_passed": 3674,
+    "backend_passed": 3675,
     "backend_skipped": 2,
     "coverage_percent": 88,
     "frontend_passed": 1081,
@@ -17,7 +17,8 @@
     "lint_typecheck_build_hooks": "passed",
     "offline_browser_application_adapter": "passed",
     "database": "dedicated nd-test-pg, localhost:55432/news_dashboard_test, role news_dashboard",
-    "pgoptions": "-c max_parallel_workers_per_gather=0"
+    "pgoptions": "-c max_parallel_workers_per_gather=0",
+    "note": "Includes final main-push routing and reusable-output verifier regressions after the referenced image snapshots; final delivery-head checks are recorded on #1531."
   },
   "production_images": {
     "amd64": {

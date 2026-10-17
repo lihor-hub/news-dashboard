@@ -32,6 +32,14 @@ def test_manual_full_suite_uses_boolean_inputs() -> None:
         assert "inputs.full_suite == 'true'" not in condition  # noqa: S101
 
 
+def test_main_runs_every_test_ancestor_of_image_publication() -> None:
+    jobs = yaml.safe_load(CI_WORKFLOW.read_text(encoding="utf-8"))["jobs"]
+    for name in jobs["test"]["needs"]:
+        # A skipped ancestor can suppress downstream publication even when
+        # the always-running test aggregate reports success.
+        assert "github.event_name == 'push'" in jobs[name]["if"], name  # noqa: S101
+
+
 def test_frozen_all_extras_jobs_install_native_headers_before_sync() -> None:
     jobs = yaml.safe_load(CI_WORKFLOW.read_text(encoding="utf-8"))["jobs"]
     for name in ("lint", "smoke", "mcp-container-smoke", "test-backend"):
