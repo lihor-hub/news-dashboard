@@ -1,16 +1,60 @@
 # Python 3.15 compatibility report — 2026-10-16
 
-**Python 3.15 cutover is under validation in #1531; deployment is not certified.**
-This report versions the compatibility evidence for maintainers delivering
-[the migration umbrella #1340](https://github.com/lihor-hub/news-dashboard/issues/1340).
-The report does not raise the advertised minimum. The core and optional dependency refreshes below
-record targeted dependency changes and additional validation workflows; current
-runtime declarations, existing CI gates and containers remain on Python 3.14.
-[CPython 3.15.0 is stable, released October 9, 2026](https://www.python.org/downloads/release/python-3150/);
-the earlier prerelease assumption no longer applies to this assessment.
+**The Python 3.15 cutover is implemented in open [PR #1552](https://github.com/lihor-hub/news-dashboard/pull/1552); merge and deployment are not certified.**
+This report records compatibility evidence for [#1531](https://github.com/lihor-hub/news-dashboard/issues/1531)
+and the [migration umbrella #1340](https://github.com/lihor-hub/news-dashboard/issues/1340).
 
+## Current revalidation — 2026-10-17
 
-## Runtime cutover — 2026-10-17 (#1531)
+The cutover was rebased onto `7c6dbadf1accf6de0857c68a1b446efcf98df642`.
+The rebase preserves intervening security upgrades, frontend dependencies and
+screenshot baselines. Prerequisites #1526–1530 and PRs #1555/#1556 are merged;
+their previously open status below is historical. Production combines the
+3.15 same-platform C/Rust wheel-builder with #1555's installer removal:
+install offline, run `pip check`, then uninstall pip before switching users.
+OS upgrades, application dependencies, Trivy thresholds and attestations remain
+unchanged. The lock was regenerated from current main; it adds no package
+versions and removes only the obsolete Python 3.14 fastuuid selection.
+
+Fresh local validation of this rebased implementation passes **3,675
+backend/script tests, 2 skips, 88% coverage; 1,081 frontend tests and both
+npm security regressions**. The 74 focused metadata/workflow/runtime/UUID
+regressions and 48 upstream UUID tests pass. Lint/Vulture, mypy, ty, pyrefly,
+TypeScript, configured root/website npm audits and website typecheck/build
+pass. Both database URLs were verified without exposing credentials as role
+news_dashboard at localhost:55432/news_dashboard_test; query parallelism was
+disabled. No shared database reset or native-host 5432 access occurred.
+
+Fresh frozen all-extras audit exits **1**: NLTK 3.10.0 has **35 records / 20
+distinct advisory IDs**. Main's langgraph-sdk 0.4.4 and multidict 6.9.1 scan
+clean. Separate [PR #1558](https://github.com/lihor-hub/news-dashboard/pull/1558)
+raises optional NLTK to 3.10.3 and removes 19 of those IDs, but its Dependency
+Review fails on [GHSA-8mgp-746c-j5xp](https://github.com/advisories/GHSA-8mgp-746c-j5xp)
+(aliases CVE-2026-81726 / PYSEC-2026-3740). The reviewed advisory still affects
+<=3.10.3 with no patched release, and PyPI still publishes 3.10.3 as latest.
+The prior inference that all aliases were fixed was incorrect. Keep #1549
+open and #1558 separate and unqueued; no advisory suppression or gate change
+is included. PyPI cannot audit the identified local fastuuid version; its
+source/API tests and upstream/Rust audit evidence remain separate limitations.
+
+Current-head native production, compatibility, development-container, full
+CI and nightly results are recorded on [PR #1552](https://github.com/lihor-hub/news-dashboard/pull/1552).
+Only successful executed jobs count: earlier image scans and platform results
+below do not validate the rebased head. The native runtime workflow builds
+both Linux architectures without publication, calculates the preview release
+version, checks CLI/init/version/health/readiness/MCP and verifies digest-bound
+SBOM/provenance before applying the existing Trivy gate. The sanitized
+[evidence manifest](python315-cutover-evidence-2026-10-17.json) records rebased
+source hashes separately from historical installed dependency sets.
+
+#1552 remains open, non-draft, with auto-merge disabled by explicit request.
+No release, production publication or deployment follows from these validation
+runs. NLTK audit remediation and protected delivery/release evidence remain
+outstanding; keep #1340/#1531 open. Sections below preserve earlier snapshots
+and their then-current blockers as historical provenance, superseded by this
+section and the exact-head PR evidence.
+
+## Historical runtime cutover evidence — 2026-10-17 (#1531)
 
 This section supersedes the historical runtime status below. Prerequisites
 #1526–1530 have merged. The cutover branch raises the project and lock minimum

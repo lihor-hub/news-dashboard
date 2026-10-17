@@ -1,4 +1,34 @@
 {
+  "current_revalidation": {
+    "date": "2026-10-17",
+    "rebased_implementation_sha": "1aa1f80ae85b96e94f2c094bf72aaec0630ac98e",
+    "base_sha": "7c6dbadf1accf6de0857c68a1b446efcf98df642",
+    "source_sha256": {
+      "Dockerfile": "55d87c239c738bba6f5701a3efb92b0c60ef8411e53a22aa6442b993cfdda652",
+      "pyproject.toml": "e863fb5f7f4b5dc72ee20ab9f6a2322f5520edb18f2e54efed3ffeadd196c5f2",
+      "uv.lock": "3399b72c17ddff81cb26b6dba5375b39de907a65ddf9c33a7f43840581c4b5a8"
+    },
+    "local": {
+      "backend_passed": 3675,
+      "backend_skipped": 2,
+      "coverage_percent": 88,
+      "frontend_passed": 1081,
+      "focused_passed": 74,
+      "upstream_uuid_passed": 48,
+      "lint_typecheck_website_npm_gates": "passed"
+    },
+    "frozen_audit": {
+      "exit": 1,
+      "package": "nltk",
+      "version": "3.10.0",
+      "records": 35,
+      "distinct_ids": 20,
+      "separate_partial_fix_pr": 1558,
+      "unpatched_id": "GHSA-8mgp-746c-j5xp"
+    },
+    "remote_evidence": "https://github.com/lihor-hub/news-dashboard/pull/1552",
+    "status": "Open, non-draft; no auto-merge or deployment. Exact-head remote validation is recorded on the PR; remaining sections are historical."
+  },
   "recorded_date": "2026-10-17",
   "cutover_issue": "https://github.com/lihor-hub/news-dashboard/issues/1531",
   "parent_issue": "https://github.com/lihor-hub/news-dashboard/issues/1340",
