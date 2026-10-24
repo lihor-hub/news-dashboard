@@ -28,14 +28,21 @@ docker run -d --name "${postgres_name}" --network "${network_name}" \
   -e POSTGRES_PASSWORD="${postgres_password}" \
   pgvector/pgvector:pg16 >/dev/null
 
+postgres_ready=false
 for _attempt in $(seq 1 60); do
-  if docker exec "${postgres_name}" pg_isready -U news_dashboard -d news_dashboard \
+  # The image's temporary initialization server accepts Unix-socket connections
+  # before shutting down. TCP becomes available only on the final server.
+  if docker exec "${postgres_name}" pg_isready -h 127.0.0.1 -U news_dashboard -d news_dashboard \
     >/dev/null 2>&1; then
+    postgres_ready=true
     break
   fi
   sleep 1
 done
-docker exec "${postgres_name}" pg_isready -U news_dashboard -d news_dashboard >/dev/null
+if [[ "${postgres_ready}" != true ]]; then
+  docker logs "${postgres_name}" >&2
+  exit 1
+fi
 
 if [[ -z "${MCP_SMOKE_IMAGE:-}" ]]; then
   docker build -t "${image_name}" . >/dev/null
