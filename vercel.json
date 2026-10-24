@@ -1,0 +1,29 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "services": {
+    "app": {
+      "root": ".",
+      "framework": "vite",
+      "buildCommand": "npm run build",
+      "outputDirectory": "frontend/dist",
+      "ignoreCommand": "git diff --quiet \"${VERCEL_GIT_PREVIOUS_SHA:-HEAD^}\" HEAD -- frontend/ public/ index.html package.json package-lock.json vite.config.ts 'tsconfig*.json' scripts/check-bundle-budget.mjs scripts/check-csp-build.mjs vercel.json",
+      "rewrites": [
+        {
+          "source": "/api/:path*",
+          "destination": "https://stage.news.lihor.ro/api/:path*"
+        },
+        {
+          "source": "/auth/:path*",
+          "destination": "https://stage.news.lihor.ro/auth/:path*"
+        },
+        {
+          "source": "/email/:path*",
+          "destination": "https://stage.news.lihor.ro/email/:path*"
+        },
+        { "source": "/(.*)", "destination": "/index.html" }
+      ]
+    }
+  },
+  "rewrites": [{ "source": "/(.*)", "destination": { "service": "app" } }],
+  "git": { "deploymentEnabled": { "main": false } }
+}

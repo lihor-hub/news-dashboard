@@ -9,6 +9,52 @@ Production (`news.lihor.ro`, [`values-production.yaml`](../helm/news-dashboard/v
 is unaffected. It keeps its own release, namespace, and values, and the
 operator deploys it by hand.
 
+## For contributors
+
+- Each PR that touches the frontend gets a **Vercel** preview link from the
+  Vercel bot. Sign in with `guest` / `demo`.
+- The preview is **read-only**: saving, starring, settings changes, and other
+  writes return `403 Guest accounts cannot modify data`.
+- Only the frontend is built from your branch. `/api`, `/auth`, and `/email`
+  are proxied to the staging backend, which runs the latest `main` image. If
+  your PR changes the API or the backend, the preview won't show that. Verify
+  it locally (`docker compose -f docker-compose.demo.yml up` or the
+  [development setup](../CONTRIBUTING.md#development-setup)).
+- PRs that change no frontend files (`frontend/`, `public/`, `index.html`,
+  `package*.json`, `vite.config.ts`, `tsconfig*.json`, the build check
+  scripts, `vercel.json`) skip the preview build.
+- Data is shared and reset whenever staging restarts. Don't expect anything to
+  persist.
+
+## Vercel project
+
+[`vercel.json`](../vercel.json) uses Vercel
+[Services](https://vercel.com/docs/services) with a single static `app`
+service. It runs `npm run build` and serves `frontend/dist`. Its rewrites
+proxy `/api/*`, `/auth/*`, and `/email/*` to `https://stage.news.lihor.ro`,
+then fall back to `/index.html` for SPA routes. `git.deploymentEnabled.main`
+is `false`, so Vercel never deploys `main`. Production lives on Kubernetes.
+
+The Vercel project is `news-dashboard` in the `ioachim-lihors-projects` scope.
+To set it up again (Vercel dashboard):
+
+1. **Add New → Project**, import `lihor-hub/news-dashboard` through the Vercel
+   GitHub App. Keep the root directory at the repository root. The framework
+   (Vite), build command, and output come from `vercel.json`. Leave the
+   dashboard build overrides off.
+2. Set **Node.js Version** to the newest offered (24.x). See the note below.
+3. No environment variables are needed. The SPA calls relative `/api` paths.
+4. Optional: in GitHub branch protection, make the **Vercel** status check
+   required.
+5. Preview hostnames must match `app.config.csrfTrustedOriginRegex` in
+   `values-staging.yaml` (scope `ioachim-lihors-projects`). If the project
+   moves scope, update it and `helm upgrade` staging.
+
+> **Node.js version:** `package.json` pins `engines.node` to `>=26 <27`, but
+> Vercel's build image offers Node.js 24.x and 22.x. If Vercel rejects the
+> engines range, the preview build fails until that is resolved. The frontend
+> build itself succeeds on Node 22/24.
+
 ## Staging backend
 
 [`values-staging.yaml`](../helm/news-dashboard/values-staging.yaml) layers on
