@@ -400,5 +400,15 @@
     "caught_up_title": "הכול נקרא",
     "caught_up_body": "קראת את כל הכתבות בתקציר הזה.",
     "caught_up_action": "עיון בהיום"
+  },
+  "reader": {
+    "summary_title": "ב־30 שניות",
+    "why_matters": "למה זה חשוב",
+    "why_for_you": "למה בשבילך",
+    "why_details": "למה זה מומלץ?",
+    "why_hide": "הסתר פרטים",
+    "ask": "שאל",
+    "more_actions": "פעולות נוספות",
+    "progress": "התקדמות הקריאה"
   }
 }

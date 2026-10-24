@@ -400,5 +400,15 @@
     "caught_up_title": "Alles gelesen",
     "caught_up_body": "Du hast alle Meldungen in diesem Briefing gelesen.",
     "caught_up_action": "Zu Heute"
+  },
+  "reader": {
+    "summary_title": "In 30 Sekunden",
+    "why_matters": "Warum das wichtig ist",
+    "why_for_you": "Warum für dich",
+    "why_details": "Warum empfohlen?",
+    "why_hide": "Details ausblenden",
+    "ask": "Fragen",
+    "more_actions": "Weitere Aktionen",
+    "progress": "Lesefortschritt"
   }
 }

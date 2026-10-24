@@ -400,5 +400,15 @@
     "caught_up_title": "Vše přečteno",
     "caught_up_body": "Přečetli jste všechny články v tomto přehledu.",
     "caught_up_action": "Procházet Dnes"
+  },
+  "reader": {
+    "summary_title": "Za 30 sekund",
+    "why_matters": "Proč na tom záleží",
+    "why_for_you": "Proč pro vás",
+    "why_details": "Proč doporučeno?",
+    "why_hide": "Skrýt podrobnosti",
+    "ask": "Zeptat se",
+    "more_actions": "Další akce",
+    "progress": "Průběh čtení"
   }
 }

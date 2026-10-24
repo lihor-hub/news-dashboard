@@ -400,5 +400,15 @@
     "caught_up_title": "Kaikki luettu",
     "caught_up_body": "Olet lukenut kaikki tämän katsauksen uutiset.",
     "caught_up_action": "Selaa Tänään"
+  },
+  "reader": {
+    "summary_title": "30 sekunnissa",
+    "why_matters": "Miksi tällä on väliä",
+    "why_for_you": "Miksi sinulle",
+    "why_details": "Miksi suositeltu?",
+    "why_hide": "Piilota tiedot",
+    "ask": "Kysy",
+    "more_actions": "Lisää toimintoja",
+    "progress": "Lukemisen edistyminen"
   }
 }

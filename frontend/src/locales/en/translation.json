@@ -400,5 +400,15 @@
     "caught_up_title": "All caught up",
     "caught_up_body": "You've read every story in this brief.",
     "caught_up_action": "Browse Today"
+  },
+  "reader": {
+    "summary_title": "In 30 seconds",
+    "why_matters": "Why this matters",
+    "why_for_you": "Why for you",
+    "why_details": "Why recommended?",
+    "why_hide": "Hide details",
+    "ask": "Ask",
+    "more_actions": "More actions",
+    "progress": "Reading progress"
   }
 }

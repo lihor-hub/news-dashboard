@@ -400,5 +400,15 @@
     "caught_up_title": "Đã đọc hết",
     "caught_up_body": "Bạn đã đọc tất cả tin trong bản tin này.",
     "caught_up_action": "Xem Hôm nay"
+  },
+  "reader": {
+    "summary_title": "Trong 30 giây",
+    "why_matters": "Vì sao điều này quan trọng",
+    "why_for_you": "Vì sao dành cho bạn",
+    "why_details": "Vì sao được đề xuất?",
+    "why_hide": "Ẩn chi tiết",
+    "ask": "Hỏi",
+    "more_actions": "Thao tác khác",
+    "progress": "Tiến độ đọc"
   }
 }

@@ -400,5 +400,15 @@
     "caught_up_title": "全部读完",
     "caught_up_body": "你已读完本简报中的所有报道。",
     "caught_up_action": "浏览今日"
+  },
+  "reader": {
+    "summary_title": "30 秒速览",
+    "why_matters": "为何重要",
+    "why_for_you": "为何推荐给你",
+    "why_details": "为什么推荐？",
+    "why_hide": "隐藏详情",
+    "ask": "提问",
+    "more_actions": "更多操作",
+    "progress": "阅读进度"
   }
 }

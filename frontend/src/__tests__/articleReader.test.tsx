@@ -5,6 +5,7 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Routes, Route } from 'react-router';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ArticlePage } from '../pages/ArticlePage';
+import { ArticleReader } from '../components/article/ArticleReader';
 import * as api from '../api';
 import * as workflowApi from '../api/workflowApi';
 import type { Article } from '../types';
@@ -1008,5 +1009,250 @@ describe('ArticlePage — Listen / TTS', () => {
     await userEvent.click(screen.getByText('Listen'));
 
     await waitFor(() => expect(screen.getByText('Listen')).toBeTruthy());
+  });
+});
+
+// ─── Reader layout (#1581) ────────────────────────────────────────────────────
+
+describe('ArticlePage — reading progress', () => {
+  beforeEach(() => {
+    vi.spyOn(api, 'fetchArticle').mockResolvedValue(
+      makeArticle({ body_status: 'ok', body: 'Text' })
+    );
+    vi.spyOn(api, 'fetchArticleBody').mockResolvedValue(
+      makeArticle({ body_status: 'ok', body: 'Text' })
+    );
+  });
+
+  it('renders a reading progress bar that follows window scroll', async () => {
+    const root = document.documentElement;
+    const scrollHeight = Object.getOwnPropertyDescriptor(root, 'scrollHeight');
+    Object.defineProperty(root, 'scrollHeight', { configurable: true, value: 3000 });
+    Object.defineProperty(window, 'innerHeight', { configurable: true, value: 1000 });
+    try {
+      renderReader();
+      await waitFor(() => screen.getByText('Test Article Title'));
+      const bar = screen.getByRole('progressbar', { name: 'Reading progress' });
+      expect(bar.getAttribute('aria-valuenow')).toBe('0');
+
+      Object.defineProperty(window, 'scrollY', { configurable: true, value: 1000 });
+      fireEvent.scroll(window);
+      await waitFor(() => expect(bar.getAttribute('aria-valuenow')).toBe('50'));
+    } finally {
+      if (scrollHeight) Object.defineProperty(root, 'scrollHeight', scrollHeight);
+      else delete (root as { scrollHeight?: number }).scrollHeight;
+      Object.defineProperty(window, 'scrollY', { configurable: true, value: 0 });
+    }
+  });
+});
+
+describe('ArticlePage — "In 30 seconds" summary card', () => {
+  beforeEach(() => {
+    const scored = makeArticle({
+      body_status: 'ok',
+      body: 'Full article text here.',
+      recommendation_score: 88,
+      recommendation_signals: { affinity_adjustment: 8, semantic_adjustment: 12 },
+    });
+    vi.spyOn(api, 'fetchArticle').mockResolvedValue(scored);
+    vi.spyOn(api, 'fetchArticleBody').mockResolvedValue(scored);
+  });
+
+  it('shows the AI summary and why-this-matters before the article body', async () => {
+    renderReader();
+    await waitFor(() => screen.getByText('Full article text here.'));
+    const card = screen.getByTestId('summary-card');
+    expect(card.textContent).toContain('In 30 seconds');
+    expect(card.textContent).toContain('A short summary of the article.');
+    expect(card.textContent).toContain('Why this matters to you');
+    const body = screen.getByText('Full article text here.');
+    expect(card.compareDocumentPosition(body) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('shows the top "why for you" reason inline without expanding details', async () => {
+    renderReader();
+    await waitFor(() => screen.getByTestId('summary-card'));
+    const inline = screen.getByTestId('why-recommended-inline');
+    expect(inline.textContent).toContain('Why for you');
+    expect(inline.textContent).toContain('Matches sources and topics you engage with');
+    expect(screen.queryByTestId('why-recommended-section')).toBeNull();
+  });
+
+  it('keeps on-demand key takeaways inside the card', async () => {
+    renderReader();
+    await waitFor(() => screen.getByTestId('summary-card'));
+    expect(screen.getByTestId('summary-card').contains(screen.getByTestId('insights-button'))).toBe(
+      true
+    );
+  });
+});
+
+describe('ArticlePage — floating action bar', () => {
+  beforeEach(() => {
+    vi.spyOn(api, 'fetchArticle').mockResolvedValue(
+      makeArticle({ body_status: 'ok', body: 'Text' })
+    );
+    vi.spyOn(api, 'fetchArticleBody').mockResolvedValue(
+      makeArticle({ body_status: 'ok', body: 'Text' })
+    );
+  });
+
+  it('offers an Ask action that opens AI key takeaways', async () => {
+    const insights = vi.spyOn(api, 'fetchArticleInsights').mockResolvedValue(['Bullet one']);
+    renderReader();
+    await waitFor(() => screen.getByText('Test Article Title'));
+    await userEvent.click(screen.getByRole('button', { name: 'Ask' }));
+    await waitFor(() => expect(insights).toHaveBeenCalledWith('42'));
+    await waitFor(() => screen.getByText('Bullet one'));
+  });
+
+  it('groups Done, Skip and Archive behind a More menu for mobile', async () => {
+    renderReader();
+    await waitFor(() => screen.getByText('Test Article Title'));
+    const more = screen.getByRole('button', { name: 'More actions' });
+    expect(more.getAttribute('aria-expanded')).toBe('false');
+    expect(screen.queryByTestId('more-actions')).toBeNull();
+    await userEvent.click(more);
+    expect(more.getAttribute('aria-expanded')).toBe('true');
+    const menu = screen.getByTestId('more-actions');
+    expect(menu.textContent).toContain('Done');
+    expect(menu.textContent).toContain('Skip');
+    expect(menu.textContent).toContain('Archive');
+    await userEvent.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByTestId('more-actions')).toBeNull());
+  });
+
+  it('runs Archive from the More menu and closes the menu', async () => {
+    renderReader();
+    await waitFor(() => screen.getByText('Test Article Title'));
+    await userEvent.click(screen.getByRole('button', { name: 'More actions' }));
+    const menu = screen.getByTestId('more-actions');
+    const archive = Array.from(menu.querySelectorAll('button')).find((b) =>
+      b.textContent?.includes('Archive')
+    )!;
+    await userEvent.click(archive);
+    await waitFor(() =>
+      expect(workflowApi.patchArticleState).toHaveBeenCalledWith('42', 'archived', false)
+    );
+    expect(screen.queryByTestId('more-actions')).toBeNull();
+  });
+
+  it('keeps the floating bar clear of the safe area and host bottom chrome', async () => {
+    renderReader();
+    await waitFor(() => screen.getByText('Test Article Title'));
+    const bar = screen.getByTestId('action-bar');
+    expect(bar.className).toContain('safe-area-inset-bottom');
+    expect(bar.className).toContain('--reader-bottom-offset');
+  });
+
+  it('publishes the height of fixed bottom bars (shell nav + player) as --reader-bottom-offset', async () => {
+    Object.defineProperty(window, 'innerHeight', { configurable: true, value: 800 });
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 390 });
+    const nav = document.createElement('nav');
+    nav.style.position = 'fixed';
+    nav.getBoundingClientRect = () => ({ top: 732, height: 68, width: 390 }) as DOMRect;
+    const player = document.createElement('div');
+    player.setAttribute('role', 'region');
+    player.style.position = 'fixed';
+    player.getBoundingClientRect = () => ({ top: 676, height: 56, width: 390 }) as DOMRect;
+    document.body.append(nav, player);
+    try {
+      const { unmount } = renderReader();
+      await waitFor(() => screen.getByText('Test Article Title'));
+      // Player top sits 124px above the viewport bottom, +12px raised-button clearance.
+      await waitFor(() =>
+        expect(document.documentElement.style.getPropertyValue('--reader-bottom-offset')).toBe(
+          '136px'
+        )
+      );
+      unmount();
+      expect(document.documentElement.style.getPropertyValue('--reader-bottom-offset')).toBe('');
+    } finally {
+      nav.remove();
+      player.remove();
+    }
+  });
+
+  it('uses no offset when the reader has no bottom chrome', async () => {
+    renderReader();
+    await waitFor(() => screen.getByText('Test Article Title'));
+    await waitFor(() =>
+      expect(document.documentElement.style.getPropertyValue('--reader-bottom-offset')).toBe('0px')
+    );
+  });
+});
+
+describe('ArticleReader — pane variant', () => {
+  beforeEach(() => {
+    vi.spyOn(api, 'fetchArticle').mockResolvedValue(
+      makeArticle({ body_status: 'ok', body: 'Text' })
+    );
+    vi.spyOn(api, 'fetchArticleBody').mockResolvedValue(
+      makeArticle({ body_status: 'ok', body: 'Text' })
+    );
+  });
+
+  function renderPane(onClose = vi.fn()) {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    });
+    return render(
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter>
+          <div data-testid="pane-host">
+            <ArticleReader articleId="42" variant="pane" onBack={onClose} />
+          </div>
+        </MemoryRouter>
+      </QueryClientProvider>
+    );
+  }
+
+  it('renders the article by id with an in-flow action bar (no portal, no slide-in)', async () => {
+    renderPane();
+    await waitFor(() => screen.getByText('Test Article Title'));
+    const host = screen.getByTestId('pane-host');
+    expect(host.contains(screen.getByTestId('action-bar'))).toBe(true);
+    expect(host.querySelector('.motion-slide-in-right')).toBeNull();
+    expect(screen.getByRole('button', { name: /done/i })).toBeTruthy();
+  });
+
+  it('reports triage actions through onActionComplete instead of closing', async () => {
+    const onClose = vi.fn();
+    const onActionComplete = vi.fn();
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    });
+    render(
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter>
+          <ArticleReader
+            articleId="42"
+            variant="pane"
+            onBack={onClose}
+            onActionComplete={onActionComplete}
+            enableShortcuts={false}
+          />
+        </MemoryRouter>
+      </QueryClientProvider>
+    );
+    await waitFor(() => screen.getByText('Test Article Title'));
+    await userEvent.click(screen.getByRole('button', { name: /done/i }));
+    await waitFor(() => expect(onActionComplete).toHaveBeenCalledTimes(1));
+    expect(workflowApi.patchArticleState).toHaveBeenCalledWith('42', 'done', false);
+    // Shortcuts are disabled, so Esc does not close the pane.
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it('tracks reading progress on its own scroll container', async () => {
+    renderPane();
+    await waitFor(() => screen.getByText('Test Article Title'));
+    const scroller = screen.getByTestId('article-reader');
+    Object.defineProperty(scroller, 'scrollHeight', { configurable: true, value: 1200 });
+    Object.defineProperty(scroller, 'clientHeight', { configurable: true, value: 400 });
+    scroller.scrollTop = 200;
+    fireEvent.scroll(scroller);
+    const bar = screen.getByRole('progressbar', { name: 'Reading progress' });
+    await waitFor(() => expect(bar.getAttribute('aria-valuenow')).toBe('25'));
   });
 });

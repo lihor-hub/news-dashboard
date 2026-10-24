@@ -400,5 +400,15 @@
     "caught_up_title": "Ești la zi",
     "caught_up_body": "Ai citit toate știrile din acest rezumat.",
     "caught_up_action": "Vezi Azi"
+  },
+  "reader": {
+    "summary_title": "În 30 de secunde",
+    "why_matters": "De ce contează",
+    "why_for_you": "De ce pentru tine",
+    "why_details": "De ce este recomandat?",
+    "why_hide": "Ascunde detaliile",
+    "ask": "Întreabă",
+    "more_actions": "Mai multe acțiuni",
+    "progress": "Progresul lecturii"
   }
 }

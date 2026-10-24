@@ -15,12 +15,12 @@ export function ArticleSelectionActions({
 
   // RTL exception: left 50% pairs with translateX(-50%) to center the action bar.
   return (
-    <div className="fixed bottom-20 left-1/2 z-30 flex -translate-x-1/2 items-center gap-2 rounded-md border border-border bg-background p-1 shadow-lg">
+    <div className="fixed bottom-[calc(max(env(safe-area-inset-bottom),var(--reader-bottom-offset,0px))+5.5rem)] left-1/2 z-30 flex -translate-x-1/2 items-center gap-1 rounded-full border border-border bg-background p-1 shadow-elevation-3">
       {!isShared ? (
         <button
           type="button"
           onClick={onHighlight}
-          className="inline-flex items-center gap-2 rounded px-3 py-2 text-sm font-medium text-foreground hover:bg-surface"
+          className="inline-flex min-h-touch items-center gap-2 rounded-full px-4 text-sm font-medium text-foreground hover:bg-surface md:min-h-9"
         >
           <Highlighter className="size-4" strokeWidth={1.75} />
           Highlight
@@ -30,7 +30,7 @@ export function ArticleSelectionActions({
         type="button"
         onClick={onShare}
         aria-label="Share selected text"
-        className="inline-flex items-center gap-2 rounded px-3 py-2 text-sm font-medium text-foreground hover:bg-surface"
+        className="inline-flex min-h-touch items-center gap-2 rounded-full px-4 text-sm font-medium text-foreground hover:bg-surface md:min-h-9"
       >
         <Share2 className="size-4" strokeWidth={1.75} />
         Share

@@ -68,18 +68,22 @@ export function ArticleTags({ articleId }: Props) {
       {articleTags.map((tag) => (
         <span
           key={tag.id}
-          className="inline-flex items-center gap-1 rounded-full border border-border bg-surface px-2 py-0.5 text-[11px] font-medium text-foreground"
+          className="inline-flex items-center gap-1 rounded-full border border-border bg-surface min-h-8 px-2.5 py-0.5 text-meta font-medium text-foreground md:min-h-0"
           data-testid="article-tag-chip"
         >
-          <TagIcon className="size-2.5" strokeWidth={2} style={{ color: tag.color ?? undefined }} />
+          <TagIcon
+            className="size-4"
+            strokeWidth={1.75}
+            style={{ color: tag.color ?? undefined }}
+          />
           {tag.name}
           <button
             type="button"
             aria-label={`Remove tag ${tag.name}`}
             onClick={() => removeMutation.mutate(tag.id)}
-            className="text-muted-foreground hover:text-foreground"
+            className="-me-1.5 inline-flex size-8 items-center justify-center rounded-full text-muted-foreground hover:text-foreground md:size-5"
           >
-            <X className="size-3" strokeWidth={2} />
+            <X className="size-4" strokeWidth={1.75} />
           </button>
         </span>
       ))}
@@ -89,10 +93,10 @@ export function ArticleTags({ articleId }: Props) {
           type="button"
           onClick={() => setOpen((v) => !v)}
           className={cn(
-            'inline-flex items-center gap-1 rounded-full border border-dashed border-border px-2 py-0.5 text-[11px] font-medium text-muted-foreground hover:text-foreground hover:border-border-strong'
+            'inline-flex min-h-8 items-center gap-1 rounded-full border border-dashed border-border px-2.5 py-0.5 text-meta font-medium text-muted-foreground hover:text-foreground hover:border-border-strong md:min-h-0'
           )}
         >
-          <Plus className="size-3" strokeWidth={2} />
+          <Plus className="size-4" strokeWidth={1.75} />
           Add tag
         </button>
         {open && (
@@ -105,13 +109,13 @@ export function ArticleTags({ articleId }: Props) {
                   if (e.key === 'Enter') handleCreate();
                 }}
                 placeholder="New tag…"
-                className="h-7 flex-1 min-w-0 rounded border border-border bg-background px-2 text-xs outline-none focus:border-border-strong"
+                className="h-9 flex-1 min-w-0 rounded border border-border bg-background px-2 text-sm md:h-7 md:text-xs outline-none focus:border-border-strong"
               />
               <button
                 type="button"
                 onClick={handleCreate}
                 disabled={!newTagName.trim() || createMutation.isPending}
-                className="h-7 px-2 rounded bg-foreground text-background text-xs disabled:opacity-50"
+                className="h-9 px-3 rounded bg-foreground text-background text-sm md:h-7 md:px-2 md:text-xs disabled:opacity-50"
               >
                 Add
               </button>
@@ -126,10 +130,10 @@ export function ArticleTags({ articleId }: Props) {
                       addMutation.mutate(tag.id);
                       setOpen(false);
                     }}
-                    className="flex w-full items-center gap-1.5 rounded px-2 py-1 text-start text-xs hover:bg-surface"
+                    className="flex w-full items-center gap-1.5 min-h-touch rounded px-2 py-1 text-start text-sm hover:bg-surface md:min-h-0 md:text-xs"
                   >
                     <TagIcon
-                      className="size-3 shrink-0"
+                      className="size-4 shrink-0"
                       strokeWidth={2}
                       style={{ color: tag.color ?? undefined }}
                     />

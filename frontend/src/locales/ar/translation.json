@@ -400,5 +400,15 @@
     "caught_up_title": "لقد اطلعت على كل شيء",
     "caught_up_body": "لقد قرأت كل القصص في هذا الموجز.",
     "caught_up_action": "تصفح اليوم"
+  },
+  "reader": {
+    "summary_title": "في 30 ثانية",
+    "why_matters": "لماذا يهم هذا",
+    "why_for_you": "لماذا لك",
+    "why_details": "لماذا يُوصى به؟",
+    "why_hide": "إخفاء التفاصيل",
+    "ask": "اسأل",
+    "more_actions": "إجراءات أخرى",
+    "progress": "تقدم القراءة"
   }
 }

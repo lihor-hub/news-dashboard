@@ -400,5 +400,15 @@
     "caught_up_title": "모두 읽었습니다",
     "caught_up_body": "이 브리핑의 모든 기사를 읽었습니다.",
     "caught_up_action": "오늘 보기"
+  },
+  "reader": {
+    "summary_title": "30초 요약",
+    "why_matters": "중요한 이유",
+    "why_for_you": "추천 이유",
+    "why_details": "왜 추천되었나요?",
+    "why_hide": "세부 정보 숨기기",
+    "ask": "질문하기",
+    "more_actions": "추가 작업",
+    "progress": "읽기 진행률"
   }
 }
