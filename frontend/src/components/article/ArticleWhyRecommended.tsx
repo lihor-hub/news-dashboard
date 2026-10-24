@@ -71,7 +71,7 @@ export function ArticleWhyRecommended({
           onClick={() => setShowWhyRecommended((v) => !v)}
           data-testid="why-recommended-button"
           aria-expanded={showWhyRecommended}
-          className="-ms-2 inline-flex min-h-11 items-center gap-1 rounded-md px-2 text-[13px] font-medium text-muted-foreground transition-colors hover:bg-surface hover:text-foreground md:min-h-8 md:text-xs"
+          className="-ms-2 inline-flex min-h-touch items-center gap-1 rounded-md px-2 text-meta font-medium text-muted-foreground transition-colors hover:bg-surface hover:text-foreground md:min-h-8"
         >
           {showWhyRecommended
             ? t('reader.why_hide', 'Hide details')

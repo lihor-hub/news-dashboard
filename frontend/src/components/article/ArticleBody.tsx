@@ -33,7 +33,7 @@ export function ArticleBody({
           href={article.url}
           target="_blank"
           rel="noreferrer"
-          className="inline-flex min-h-11 items-center gap-1.5 rounded-md bg-foreground px-4 text-sm font-medium text-background hover:opacity-90 md:min-h-9"
+          className="inline-flex min-h-touch items-center gap-1.5 rounded-md bg-foreground px-4 text-sm font-medium text-background hover:opacity-90 md:min-h-9"
         >
           Open original <ExternalLink className="size-4" />
         </a>
@@ -43,7 +43,7 @@ export function ArticleBody({
 
   return (
     <div
-      className="reader-prose max-w-[70ch] text-[1.0625rem] leading-[1.75] md:text-[1.125rem]"
+      className="reader-prose max-w-[70ch] text-reading md:text-[1.125rem]"
       onMouseUp={onSelectText}
       onKeyUp={onSelectText}
       dangerouslySetInnerHTML={{

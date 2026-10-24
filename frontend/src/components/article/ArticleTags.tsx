@@ -68,7 +68,7 @@ export function ArticleTags({ articleId }: Props) {
       {articleTags.map((tag) => (
         <span
           key={tag.id}
-          className="inline-flex items-center gap-1 rounded-full border border-border bg-surface min-h-8 px-2.5 py-0.5 text-[13px] font-medium text-foreground md:min-h-0 md:text-xs"
+          className="inline-flex items-center gap-1 rounded-full border border-border bg-surface min-h-8 px-2.5 py-0.5 text-meta font-medium text-foreground md:min-h-0"
           data-testid="article-tag-chip"
         >
           <TagIcon
@@ -93,7 +93,7 @@ export function ArticleTags({ articleId }: Props) {
           type="button"
           onClick={() => setOpen((v) => !v)}
           className={cn(
-            'inline-flex min-h-8 items-center gap-1 rounded-full border border-dashed border-border px-2.5 py-0.5 text-[13px] font-medium text-muted-foreground hover:text-foreground hover:border-border-strong md:min-h-0 md:text-xs'
+            'inline-flex min-h-8 items-center gap-1 rounded-full border border-dashed border-border px-2.5 py-0.5 text-meta font-medium text-muted-foreground hover:text-foreground hover:border-border-strong md:min-h-0'
           )}
         >
           <Plus className="size-4" strokeWidth={1.75} />
@@ -130,7 +130,7 @@ export function ArticleTags({ articleId }: Props) {
                       addMutation.mutate(tag.id);
                       setOpen(false);
                     }}
-                    className="flex w-full items-center gap-1.5 min-h-11 rounded px-2 py-1 text-start text-sm hover:bg-surface md:min-h-0 md:text-xs"
+                    className="flex w-full items-center gap-1.5 min-h-touch rounded px-2 py-1 text-start text-sm hover:bg-surface md:min-h-0 md:text-xs"
                   >
                     <TagIcon
                       className="size-4 shrink-0"

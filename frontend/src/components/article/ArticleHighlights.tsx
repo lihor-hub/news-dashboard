@@ -29,16 +29,14 @@ export function ArticleHighlights({
               <button
                 type="button"
                 onClick={() => onDelete(highlight.id)}
-                className="inline-flex size-11 shrink-0 md:size-8 items-center justify-center rounded-md text-muted-foreground hover:bg-surface hover:text-foreground"
+                className="inline-flex size-touch shrink-0 md:size-8 items-center justify-center rounded-md text-muted-foreground hover:bg-surface hover:text-foreground"
                 aria-label="Delete highlight"
               >
                 <XIcon className="size-4" />
               </button>
             </div>
             {highlight.note ? (
-              <p className="mt-1 text-[13px] leading-snug text-muted-foreground md:text-xs">
-                {highlight.note}
-              </p>
+              <p className="mt-1 text-meta leading-snug text-muted-foreground">{highlight.note}</p>
             ) : null}
           </li>
         ))}

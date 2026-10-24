@@ -4,7 +4,7 @@ import { isOfflineCacheSupported } from '@/lib/offline';
 import { cn } from '@/lib/utils';
 
 const iconBtn =
-  'inline-flex size-11 items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-surface md:size-9';
+  'inline-flex size-touch items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-surface md:size-9';
 
 export function ArticleReaderHeader({
   goBack,
@@ -46,7 +46,7 @@ export function ArticleReaderHeader({
         {goBack ? (
           <button
             onClick={goBack}
-            className="inline-flex min-h-11 items-center gap-1 rounded-md px-2 text-[15px] text-muted-foreground hover:bg-surface hover:text-foreground md:min-h-9 md:text-sm"
+            className="inline-flex min-h-touch items-center gap-1 rounded-md px-2 text-[15px] text-muted-foreground hover:bg-surface hover:text-foreground md:min-h-9 md:text-sm"
           >
             <ChevronLeft className="size-5 rtl:-scale-x-100 md:size-4" /> Back
           </button>

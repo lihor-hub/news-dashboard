@@ -1122,12 +1122,63 @@ describe('ArticlePage — floating action bar', () => {
     await waitFor(() => expect(screen.queryByTestId('more-actions')).toBeNull());
   });
 
-  it('keeps the floating bar clear of the safe area and the app bottom nav', async () => {
+  it('runs Archive from the More menu and closes the menu', async () => {
+    renderReader();
+    await waitFor(() => screen.getByText('Test Article Title'));
+    await userEvent.click(screen.getByRole('button', { name: 'More actions' }));
+    const menu = screen.getByTestId('more-actions');
+    const archive = Array.from(menu.querySelectorAll('button')).find((b) =>
+      b.textContent?.includes('Archive')
+    )!;
+    await userEvent.click(archive);
+    await waitFor(() =>
+      expect(workflowApi.patchArticleState).toHaveBeenCalledWith('42', 'archived', false)
+    );
+    expect(screen.queryByTestId('more-actions')).toBeNull();
+  });
+
+  it('keeps the floating bar clear of the safe area and host bottom chrome', async () => {
     renderReader();
     await waitFor(() => screen.getByText('Test Article Title'));
     const bar = screen.getByTestId('action-bar');
     expect(bar.className).toContain('safe-area-inset-bottom');
-    expect(bar.className).toContain('--app-bottom-nav-height');
+    expect(bar.className).toContain('--reader-bottom-offset');
+  });
+
+  it('publishes the height of fixed bottom bars (shell nav + player) as --reader-bottom-offset', async () => {
+    Object.defineProperty(window, 'innerHeight', { configurable: true, value: 800 });
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 390 });
+    const nav = document.createElement('nav');
+    nav.style.position = 'fixed';
+    nav.getBoundingClientRect = () => ({ top: 732, height: 68, width: 390 }) as DOMRect;
+    const player = document.createElement('div');
+    player.setAttribute('role', 'region');
+    player.style.position = 'fixed';
+    player.getBoundingClientRect = () => ({ top: 676, height: 56, width: 390 }) as DOMRect;
+    document.body.append(nav, player);
+    try {
+      const { unmount } = renderReader();
+      await waitFor(() => screen.getByText('Test Article Title'));
+      // Player top sits 124px above the viewport bottom, +12px raised-button clearance.
+      await waitFor(() =>
+        expect(document.documentElement.style.getPropertyValue('--reader-bottom-offset')).toBe(
+          '136px'
+        )
+      );
+      unmount();
+      expect(document.documentElement.style.getPropertyValue('--reader-bottom-offset')).toBe('');
+    } finally {
+      nav.remove();
+      player.remove();
+    }
+  });
+
+  it('uses no offset when the reader has no bottom chrome', async () => {
+    renderReader();
+    await waitFor(() => screen.getByText('Test Article Title'));
+    await waitFor(() =>
+      expect(document.documentElement.style.getPropertyValue('--reader-bottom-offset')).toBe('0px')
+    );
   });
 });
 
@@ -1163,6 +1214,34 @@ describe('ArticleReader — pane variant', () => {
     expect(host.contains(screen.getByTestId('action-bar'))).toBe(true);
     expect(host.querySelector('.motion-slide-in-right')).toBeNull();
     expect(screen.getByRole('button', { name: /done/i })).toBeTruthy();
+  });
+
+  it('reports triage actions through onActionComplete instead of closing', async () => {
+    const onClose = vi.fn();
+    const onActionComplete = vi.fn();
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    });
+    render(
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter>
+          <ArticleReader
+            articleId="42"
+            variant="pane"
+            onBack={onClose}
+            onActionComplete={onActionComplete}
+            enableShortcuts={false}
+          />
+        </MemoryRouter>
+      </QueryClientProvider>
+    );
+    await waitFor(() => screen.getByText('Test Article Title'));
+    await userEvent.click(screen.getByRole('button', { name: /done/i }));
+    await waitFor(() => expect(onActionComplete).toHaveBeenCalledTimes(1));
+    expect(workflowApi.patchArticleState).toHaveBeenCalledWith('42', 'done', false);
+    // Shortcuts are disabled, so Esc does not close the pane.
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(onClose).not.toHaveBeenCalled();
   });
 
   it('tracks reading progress on its own scroll container', async () => {

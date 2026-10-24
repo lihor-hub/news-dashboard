@@ -13,7 +13,7 @@ export function ArticlePerspectives({ articleId }: { articleId: string }) {
         <button
           onClick={() => perspectivesMutation.mutate()}
           data-testid="perspectives-button"
-          className="inline-flex min-h-11 items-center gap-1.5 rounded-full border border-border bg-background px-3.5 text-[13px] font-medium text-muted-foreground transition-colors hover:bg-surface hover:text-foreground md:min-h-9 md:text-xs"
+          className="inline-flex min-h-touch items-center gap-1.5 rounded-full border border-border bg-background px-3.5 text-meta font-medium text-muted-foreground transition-colors hover:bg-surface hover:text-foreground md:min-h-9"
         >
           <Scale className="size-4" strokeWidth={1.75} />
           Context &amp; Perspectives

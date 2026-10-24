@@ -50,7 +50,7 @@ function ActionBtn({
       aria-haspopup={expanded === undefined ? undefined : 'menu'}
       title={compactLabel ? label : undefined}
       className={cn(
-        'inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center gap-1.5 rounded-full px-2 text-sm font-medium transition-colors md:min-h-9 md:px-3 md:text-xs',
+        'inline-flex min-h-touch min-w-touch shrink-0 items-center justify-center gap-1.5 rounded-full px-2 text-sm font-medium transition-colors md:min-h-9 md:px-3 md:text-xs',
         active ? 'text-star' : 'text-muted-foreground hover:bg-surface hover:text-foreground',
         disabled && 'cursor-not-allowed opacity-30 hover:bg-transparent',
         className
@@ -86,7 +86,7 @@ function MenuItem({
       role="menuitem"
       onClick={onClick}
       disabled={disabled}
-      className="flex min-h-11 w-full items-center gap-3 rounded-lg px-3 text-start text-[15px] font-medium text-foreground transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:bg-transparent"
+      className="flex min-h-touch w-full items-center gap-3 rounded-lg px-3 text-start text-[15px] font-medium text-foreground transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:bg-transparent"
     >
       <Icon className="size-5 text-muted-foreground" strokeWidth={1.75} />
       {label}
@@ -227,7 +227,7 @@ export function ArticleActionBar({
               role="menu"
               data-testid="more-actions"
               aria-label={t('reader.more_actions', 'More actions')}
-              className="absolute bottom-full end-0 mb-3 w-48 rounded-xl border border-border bg-background p-1 shadow-lg"
+              className="absolute bottom-full end-0 mb-3 w-48 rounded-xl border border-border bg-background p-1 shadow-elevation-3"
             >
               <MenuItem onClick={closeThen(onDone)} icon={Check} label="Done" />
               <MenuItem onClick={closeThen(onSkip)} icon={XIcon} label="Skip" disabled={starred} />
@@ -256,13 +256,14 @@ export function ArticleActionBar({
   // (motion-slide-in-right carries transform:translateX in its from-keyframe;
   // even as a sibling, some mobile browser compositors bleed this transform
   // onto nearby fixed elements for the first paint). The bar floats above the
-  // safe area and above the app's bottom nav when one is present.
+  // safe area and above any host bottom chrome (see useBottomObstruction).
   return createPortal(
     <div
       data-testid="action-bar"
-      className="pointer-events-none fixed inset-x-0 bottom-[calc(env(safe-area-inset-bottom)+var(--app-bottom-nav-height,0px)+0.75rem)] z-20 flex justify-center px-3 md:bottom-[calc(env(safe-area-inset-bottom)+var(--app-bottom-nav-height,0px)+1.25rem)]"
+      data-reader-floating=""
+      className="pointer-events-none fixed inset-x-0 bottom-[calc(max(env(safe-area-inset-bottom),var(--reader-bottom-offset,0px))+0.75rem)] z-20 flex justify-center px-3 md:bottom-[calc(max(env(safe-area-inset-bottom),var(--reader-bottom-offset,0px))+1.25rem)]"
     >
-      <div className="pointer-events-auto flex max-w-full items-center gap-0.5 rounded-full border border-border bg-background/95 p-1 shadow-lg backdrop-blur">
+      <div className="pointer-events-auto flex max-w-full items-center gap-0.5 rounded-full border border-border bg-background/95 p-1 shadow-elevation-2 backdrop-blur">
         {actions}
       </div>
     </div>,

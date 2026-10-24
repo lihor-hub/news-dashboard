@@ -22,6 +22,7 @@ import { ArticleBody } from '@/components/article/ArticleBody';
 import { ArticleSelectionActions } from '@/components/article/ArticleSelectionActions';
 import { ArticleSummaryCard } from '@/components/article/ArticleSummaryCard';
 import { ReadingProgress } from '@/components/article/ReadingProgress';
+import { useBottomObstruction } from '@/components/article/useBottomObstruction';
 
 export type ArticleReaderVariant = 'page' | 'pane';
 
@@ -152,6 +153,8 @@ export function ArticleReader({
   const afterAction = onActionComplete ?? goBack;
 
   const { swipeDx, touchHandlers } = useArticleSwipeNav(onPrev, onNext);
+  // The floating bar must clear any host bottom chrome (shell nav, player).
+  useBottomObstruction(!isPane);
 
   // Triage mutations — inline (no extra hook so we stay self-contained)
   const doAction = useCallback(
@@ -267,7 +270,7 @@ export function ArticleReader({
             {onBack && (
               <button
                 onClick={goBack}
-                className="inline-flex min-h-11 items-center gap-1 rounded-md px-2 text-[15px] text-muted-foreground hover:bg-surface hover:text-foreground md:min-h-9 md:text-sm"
+                className="inline-flex min-h-touch items-center gap-1 rounded-md px-2 text-[15px] text-muted-foreground hover:bg-surface hover:text-foreground md:min-h-9 md:text-sm"
               >
                 <ArrowLeft className="size-5 rtl:-scale-x-100 md:size-4" /> Back
               </button>
@@ -286,7 +289,7 @@ export function ArticleReader({
                   type="button"
                   onClick={() => void refetch()}
                   disabled={isFetching}
-                  className="mt-4 inline-flex min-h-11 items-center rounded-md border border-border px-4 text-sm font-medium text-foreground hover:bg-surface disabled:opacity-50 md:min-h-9"
+                  className="mt-4 inline-flex min-h-touch items-center rounded-md border border-border px-4 text-sm font-medium text-foreground hover:bg-surface disabled:opacity-50 md:min-h-9"
                 >
                   {isFetching ? 'Retrying...' : 'Retry'}
                 </button>

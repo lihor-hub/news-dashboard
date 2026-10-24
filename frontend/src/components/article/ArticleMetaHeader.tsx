@@ -50,7 +50,7 @@ export function ArticleMetaHeader({
 
   return (
     <>
-      <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[13px] text-subtle md:text-xs">
+      <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-meta text-subtle">
         <span className="font-semibold text-foreground">{article.sourceName}</span>
         <span aria-hidden="true">·</span>
         <span>{article.category}</span>
@@ -62,7 +62,7 @@ export function ArticleMetaHeader({
         {showOriginal && article.originalTitle ? article.originalTitle : article.title}
       </h1>
 
-      <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2 text-[13px] text-muted-foreground md:text-xs">
+      <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2 text-meta text-muted-foreground">
         <span
           className={cn(
             'inline-flex items-center rounded-full border px-2.5 py-0.5 font-medium',
@@ -82,7 +82,7 @@ export function ArticleMetaHeader({
           href={article.url}
           target="_blank"
           rel="noreferrer"
-          className="inline-flex min-h-11 items-center gap-1 hover:text-foreground md:min-h-0"
+          className="inline-flex min-h-touch items-center gap-1 hover:text-foreground md:min-h-0"
           aria-label="Open original article"
         >
           <ExternalLink className="size-4" strokeWidth={1.75} />
@@ -91,7 +91,7 @@ export function ArticleMetaHeader({
         {article.detectedLang && article.detectedLang !== 'en' && article.originalTitle && (
           <button
             onClick={() => setShowOriginal(!showOriginal)}
-            className="inline-flex min-h-11 items-center gap-1 rounded-md border border-border bg-surface px-2 text-xs font-medium text-accent transition-colors hover:bg-surface-hover hover:text-foreground md:min-h-7"
+            className="inline-flex min-h-touch items-center gap-1 rounded-md border border-border bg-surface px-2 text-xs font-medium text-accent transition-colors hover:bg-surface-hover hover:text-foreground md:min-h-7"
           >
             {showOriginal
               ? `Show English (Translated from ${translatedFrom})`
