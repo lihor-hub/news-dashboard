@@ -10,7 +10,7 @@ function BackLink() {
   return (
     <Link
       to="/briefs"
-      className="mx-auto flex w-full max-w-5xl min-h-11 items-center gap-1.5 px-4 md:px-6 pt-3 pb-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+      className="mx-auto flex w-full max-w-5xl min-h-touch items-center gap-1.5 px-4 md:px-6 pt-3 pb-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
     >
       <ArrowLeft className="size-4 rtl:-scale-x-100" />
       Briefing history

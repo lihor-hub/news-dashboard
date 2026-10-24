@@ -75,7 +75,7 @@ export function BriefingChat({ briefingId }: { briefingId: number }) {
         <Button
           size="sm"
           variant="outline"
-          className="min-h-11 md:min-h-9 shrink-0"
+          className="min-h-touch md:min-h-9 shrink-0"
           aria-label="Ask assistant"
         >
           <MessageCircle className="size-4" />

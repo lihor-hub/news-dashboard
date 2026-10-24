@@ -17,7 +17,7 @@ function BriefingRow({ briefing }: { briefing: Briefing }) {
   return (
     <Link
       to={`/briefs/${briefing.id}`}
-      className="flex min-h-11 items-center gap-3 px-4 py-3.5 hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring transition-colors group"
+      className="flex min-h-touch items-center gap-3 px-4 py-3.5 hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring transition-colors group"
     >
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2 flex-wrap">
@@ -27,11 +27,11 @@ function BriefingRow({ briefing }: { briefing: Briefing }) {
               Failed
             </span>
           ) : null}
-          <span className="text-[13px] md:text-xs text-muted-foreground tabular-nums">
+          <span className="text-meta text-muted-foreground tabular-nums">
             {formatDate(briefing.created_at)}
           </span>
           {briefing.since_at && briefing.until_at && (
-            <span className="text-[13px] md:text-xs text-muted-foreground">
+            <span className="text-meta text-muted-foreground">
               · {formatWindow(briefing.since_at, briefing.until_at)}
             </span>
           )}
@@ -44,7 +44,7 @@ function BriefingRow({ briefing }: { briefing: Briefing }) {
           )}
         </div>
         {briefing.summary && !isFailed && (
-          <div className="text-[13px] md:text-xs text-muted-foreground mt-1 line-clamp-2">
+          <div className="text-meta text-muted-foreground mt-1 line-clamp-2">
             {briefing.summary}
           </div>
         )}
@@ -99,7 +99,7 @@ function PodcastFeedCard() {
           type="button"
           variant="outline"
           size="sm"
-          className="min-h-11 md:min-h-9"
+          className="min-h-touch md:min-h-9"
           onClick={copyUrl}
           disabled={isLoading || !data}
         >
@@ -110,7 +110,7 @@ function PodcastFeedCard() {
           type="button"
           variant="ghost"
           size="sm"
-          className="min-h-11 min-w-11 md:min-h-9 md:min-w-9"
+          className="min-h-touch min-w-touch md:min-h-9 md:min-w-9"
           aria-label="Regenerate podcast feed URL (revokes the old one)"
           onClick={() => regenerate.mutate()}
           disabled={regenerate.isPending}
@@ -150,9 +150,7 @@ export function BriefingsHistoryPage() {
     <div className="mx-auto w-full max-w-3xl px-4 md:px-6 pb-8">
       <div className="pt-5 pb-4">
         <h2 className="text-2xl md:text-[28px] font-semibold tracking-tight">Briefing History</h2>
-        <p className="text-[13px] md:text-xs text-muted-foreground mt-1">
-          All generated daily briefs
-        </p>
+        <p className="text-meta text-muted-foreground mt-1">All generated daily briefs</p>
       </div>
 
       <PodcastFeedCard />

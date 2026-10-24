@@ -47,7 +47,7 @@ function SourceStack({ sources, label }: { sources: string[]; label: string }) {
           ))}
         </span>
       )}
-      <span className="text-[13px] md:text-xs text-muted-foreground">{label}</span>
+      <span className="text-meta text-muted-foreground">{label}</span>
     </span>
   );
 }
@@ -131,7 +131,7 @@ export function StoryCard({
         onClick={toggle}
         aria-expanded={expanded}
         aria-controls={panelId}
-        className="block w-full min-h-11 rounded-2xl p-4 md:p-5 text-start hover:bg-surface-2/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring motion-safe:transition-colors"
+        className="block w-full min-h-touch rounded-2xl p-4 md:p-5 text-start hover:bg-surface-2/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring motion-safe:transition-colors"
       >
         <span
           className={`flex items-center gap-2 text-xs font-semibold uppercase tracking-wider ${
@@ -174,14 +174,14 @@ export function StoryCard({
             <li key={article.id}>
               <Link
                 to={`/a/${article.id}`}
-                className="flex min-h-11 items-center gap-3 rounded-lg px-2 py-2 hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring motion-safe:transition-colors"
+                className="flex min-h-touch items-center gap-3 rounded-lg px-2 py-2 hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring motion-safe:transition-colors"
               >
                 <SourceAvatar name={article.source_name} />
                 <span className="min-w-0 flex-1">
                   <span className="block text-sm font-medium leading-snug text-foreground line-clamp-2 break-words">
                     {article.title}
                   </span>
-                  <span className="block text-[13px] md:text-xs text-muted-foreground truncate">
+                  <span className="block text-meta text-muted-foreground truncate">
                     {article.source_name}
                   </span>
                 </span>
@@ -205,7 +205,7 @@ function TopicChips({
 }) {
   const { t } = useTranslation();
   const chipClass = (on: boolean) =>
-    `inline-flex min-h-11 md:min-h-9 shrink-0 items-center gap-1.5 rounded-full px-4 text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring motion-safe:transition-colors ${
+    `inline-flex min-h-touch md:min-h-9 shrink-0 items-center gap-1.5 rounded-full px-4 text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring motion-safe:transition-colors ${
       on ? 'bg-foreground text-background' : 'bg-surface text-foreground hover:bg-surface-2'
     }`;
   return (
@@ -250,7 +250,7 @@ function AllCaughtUp() {
       <p className="max-w-sm text-sm text-muted-foreground">{t('brief.caught_up_body')}</p>
       <Link
         to="/today"
-        className="mt-1 inline-flex min-h-11 items-center rounded-full px-4 text-sm font-medium text-accent hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        className="mt-1 inline-flex min-h-touch items-center rounded-full px-4 text-sm font-medium text-accent hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
         {t('brief.caught_up_action')}
       </Link>
@@ -270,15 +270,13 @@ export function WorthOpening({ articles }: { articles: BriefingArticle[] }) {
           <Link
             key={article.id}
             to={`/a/${article.id}`}
-            className="flex min-h-11 items-start gap-3 rounded-lg p-2 hover:bg-surface-2 transition-colors group"
+            className="flex min-h-touch items-start gap-3 rounded-lg p-2 hover:bg-surface-2 transition-colors group"
           >
             <div className="min-w-0">
               <div className="text-sm font-medium text-foreground leading-snug break-words">
                 {article.title}
               </div>
-              <div className="text-[13px] md:text-xs text-muted-foreground mt-0.5">
-                {article.source_name}
-              </div>
+              <div className="text-meta text-muted-foreground mt-0.5">{article.source_name}</div>
             </div>
           </Link>
         ))}
@@ -384,13 +382,11 @@ export function BriefingView({
       <header className="px-4 md:px-6 pt-5 pb-4">
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0">
-            <div className="text-[13px] md:text-xs font-medium text-muted-foreground">
-              {eyebrow}
-            </div>
+            <div className="text-meta font-medium text-muted-foreground">{eyebrow}</div>
             <h2 className="mt-1 text-2xl md:text-[28px] font-semibold tracking-tight leading-tight break-words">
               {briefing.title}
             </h2>
-            <div className="text-[13px] md:text-xs text-muted-foreground mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1">
+            <div className="text-meta text-muted-foreground mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1">
               <span>
                 {formatWindow(briefing.since_at, briefing.until_at)} · {articleCount}{' '}
                 {articleCount === 1 ? 'article' : 'articles'}
@@ -411,7 +407,7 @@ export function BriefingView({
                 variant="ghost"
                 onClick={onGenerate}
                 disabled={isGenerating}
-                className="min-h-11 md:min-h-9"
+                className="min-h-touch md:min-h-9"
                 aria-label="Generate new briefing"
               >
                 <RefreshCw className={`size-4 ${isGenerating ? 'animate-spin' : ''}`} />
@@ -457,7 +453,7 @@ export function BriefingView({
                     void handleGeneratePodcast();
                   }}
                   disabled={isGeneratingPodcast}
-                  className="min-h-11 md:min-h-9 sm:self-center shrink-0 self-start"
+                  className="min-h-touch md:min-h-9 sm:self-center shrink-0 self-start"
                 >
                   <Headphones className="size-4 me-2" />
                   {isGeneratingPodcast ? 'Creating Podcast…' : 'Create Podcast'}
@@ -481,7 +477,7 @@ export function BriefingView({
                     size="sm"
                     variant="ghost"
                     onClick={() => setShowTranscript(!showTranscript)}
-                    className="min-h-11 md:min-h-9 text-xs gap-1"
+                    className="min-h-touch md:min-h-9 text-xs gap-1"
                   >
                     {showTranscript ? (
                       <>

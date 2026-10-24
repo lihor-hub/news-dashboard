@@ -200,7 +200,7 @@ export function BriefPage() {
             <BriefingChat briefingId={data.id} />
             <Link
               to="/briefs"
-              className="inline-flex min-h-11 md:min-h-9 items-center gap-1.5 rounded-md px-3 text-xs font-medium text-muted-foreground hover:bg-surface-2 hover:text-foreground transition-colors"
+              className="inline-flex min-h-touch md:min-h-9 items-center gap-1.5 rounded-md px-3 text-xs font-medium text-muted-foreground hover:bg-surface-2 hover:text-foreground transition-colors"
             >
               <History className="size-4" />
               View history
@@ -222,7 +222,7 @@ export function BriefPage() {
           <Button
             size="sm"
             variant="outline"
-            className="min-h-11 md:min-h-9 shrink-0"
+            className="min-h-touch md:min-h-9 shrink-0"
             disabled={isGenerating || !focusInput.trim()}
             onClick={() => generate(focusInput.trim())}
           >
