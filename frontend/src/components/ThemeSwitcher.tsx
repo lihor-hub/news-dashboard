@@ -4,12 +4,15 @@ import { useTheme } from '../hooks/useTheme';
 import { cn } from '../lib/utils';
 import type { Theme } from '../lib/theme';
 
-const OPTIONS: { value: Theme; labelKey: string; Icon: React.ComponentType<{ size?: number }> }[] =
-  [
-    { value: 'light', labelKey: 'theme.options.light', Icon: Sun },
-    { value: 'system', labelKey: 'theme.options.system', Icon: Monitor },
-    { value: 'dark', labelKey: 'theme.options.dark', Icon: Moon },
-  ];
+const OPTIONS: {
+  value: Theme;
+  labelKey: string;
+  Icon: React.ComponentType<{ size?: number; 'aria-hidden'?: boolean }>;
+}[] = [
+  { value: 'light', labelKey: 'theme.options.light', Icon: Sun },
+  { value: 'system', labelKey: 'theme.options.system', Icon: Monitor },
+  { value: 'dark', labelKey: 'theme.options.dark', Icon: Moon },
+];
 
 export function ThemeSwitcher() {
   const { t } = useTranslation();
@@ -17,7 +20,7 @@ export function ThemeSwitcher() {
 
   return (
     <div
-      className="flex items-center gap-0.5 rounded-md bg-[var(--muted)] p-0.5"
+      className="flex items-center gap-0.5 rounded-md bg-muted p-0.5"
       role="group"
       aria-label={t('theme.label')}
     >
@@ -30,13 +33,13 @@ export function ThemeSwitcher() {
           title={t(labelKey)}
           aria-pressed={theme === value}
           className={cn(
-            'flex items-center justify-center rounded p-1.5 transition-colors',
+            'flex size-9 items-center justify-center rounded transition-colors duration-(--duration-fast) focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring pointer-coarse:size-touch',
             theme === value
-              ? 'bg-[var(--background)] text-[var(--foreground)] shadow-xs'
-              : 'text-[var(--muted-foreground)] hover:text-[var(--foreground)]'
+              ? 'bg-background text-foreground shadow-xs'
+              : 'text-muted-foreground hover:text-foreground'
           )}
         >
-          <Icon size={14} />
+          <Icon size={16} aria-hidden />
         </button>
       ))}
     </div>

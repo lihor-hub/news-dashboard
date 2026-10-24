@@ -39,6 +39,29 @@ describe('ThemeSwitcher', () => {
     expect(screen.getByLabelText('Dark')).toBeTruthy();
   });
 
+  it('meets touch-target and icon size minimums with token colours and a focus ring', () => {
+    render(
+      <I18nextProvider i18n={i18n}>
+        <ThemeSwitcher />
+      </I18nextProvider>
+    );
+    const group = screen.getByRole('group', { name: 'Theme' });
+    expect(group.className).toContain('bg-muted');
+    expect(group.className).not.toContain('var(--');
+
+    for (const label of ['Light', 'System', 'Dark']) {
+      const button = screen.getByLabelText(label);
+      const classes = button.className.split(/\s+/);
+      expect(classes).toContain('size-9');
+      expect(classes).toContain('pointer-coarse:size-touch');
+      expect(classes).toContain('focus-visible:ring-2');
+      expect(button.className).not.toContain('var(--');
+      const icon = button.querySelector('svg');
+      expect(Number(icon?.getAttribute('width'))).toBeGreaterThanOrEqual(16);
+      expect(icon?.getAttribute('aria-hidden')).toBe('true');
+    }
+  });
+
   it('marks the active theme as pressed and switches on click', () => {
     render(
       <I18nextProvider i18n={i18n}>
