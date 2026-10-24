@@ -26,10 +26,12 @@ const TONE_TEXT: Record<Tone, string> = {
   low: 'text-signal-low',
 };
 
-const TONE_PILL_BG: Record<Tone, string> = {
-  high: 'bg-signal-high/12',
-  mid: 'bg-signal-mid/12',
-  low: 'bg-signal-low/12',
+// Opaque background + tinted ring keeps label text at AA contrast even on the
+// tinted focused / high-priority row backgrounds.
+const TONE_PILL_RING: Record<Tone, string> = {
+  high: 'ring-signal-high/35',
+  mid: 'ring-signal-mid/35',
+  low: 'ring-signal-low/35',
 };
 
 const TONE_BAR: Record<Tone, string> = {
@@ -173,9 +175,9 @@ function ArticleRowComponent({ article, focused, showLaterUntil }: Props) {
             <div className="mt-2 flex min-h-6 flex-wrap items-center gap-x-2.5 gap-y-1 text-[13px] md:text-xs">
               <span
                 className={cn(
-                  'inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold',
+                  'inline-flex items-center rounded-full bg-background px-2 py-0.5 text-xs font-semibold ring-1 ring-inset',
                   TONE_TEXT[tone],
-                  TONE_PILL_BG[tone]
+                  TONE_PILL_RING[tone]
                 )}
                 data-testid="recommendation-label"
                 data-source={recLabel ? 'recommendation' : 'signal'}
