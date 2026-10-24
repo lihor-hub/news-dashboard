@@ -400,5 +400,15 @@
     "caught_up_title": "Wszystko przeczytane",
     "caught_up_body": "Przeczytano wszystkie artykuły w tym przeglądzie.",
     "caught_up_action": "Przejdź do Dziś"
+  },
+  "reader": {
+    "summary_title": "W 30 sekund",
+    "why_matters": "Dlaczego to ważne",
+    "why_for_you": "Dlaczego dla ciebie",
+    "why_details": "Dlaczego polecane?",
+    "why_hide": "Ukryj szczegóły",
+    "ask": "Zapytaj",
+    "more_actions": "Więcej działań",
+    "progress": "Postęp czytania"
   }
 }

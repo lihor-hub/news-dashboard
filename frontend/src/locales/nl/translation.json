@@ -400,5 +400,15 @@
     "caught_up_title": "Helemaal bij",
     "caught_up_body": "Je hebt alle verhalen in deze briefing gelezen.",
     "caught_up_action": "Naar Vandaag"
+  },
+  "reader": {
+    "summary_title": "In 30 seconden",
+    "why_matters": "Waarom dit belangrijk is",
+    "why_for_you": "Waarom voor jou",
+    "why_details": "Waarom aanbevolen?",
+    "why_hide": "Details verbergen",
+    "ask": "Vragen",
+    "more_actions": "Meer acties",
+    "progress": "Leesvoortgang"
   }
 }

@@ -400,5 +400,15 @@
     "caught_up_title": "Vous êtes à jour",
     "caught_up_body": "Vous avez lu tous les articles de ce brief.",
     "caught_up_action": "Parcourir Aujourd'hui"
+  },
+  "reader": {
+    "summary_title": "En 30 secondes",
+    "why_matters": "Pourquoi c’est important",
+    "why_for_you": "Pourquoi pour vous",
+    "why_details": "Pourquoi recommandé ?",
+    "why_hide": "Masquer les détails",
+    "ask": "Demander",
+    "more_actions": "Plus d’actions",
+    "progress": "Progression de lecture"
   }
 }

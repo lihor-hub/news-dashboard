@@ -400,5 +400,15 @@
     "caught_up_title": "Hepsini okudunuz",
     "caught_up_body": "Bu özetteki tüm haberleri okudunuz.",
     "caught_up_action": "Bugün'e göz atın"
+  },
+  "reader": {
+    "summary_title": "30 saniyede",
+    "why_matters": "Bu neden önemli",
+    "why_for_you": "Neden senin için",
+    "why_details": "Neden önerildi?",
+    "why_hide": "Ayrıntıları gizle",
+    "ask": "Sor",
+    "more_actions": "Diğer işlemler",
+    "progress": "Okuma ilerlemesi"
   }
 }

@@ -400,5 +400,15 @@
     "caught_up_title": "全部讀完",
     "caught_up_body": "你已讀完本簡報中的所有報導。",
     "caught_up_action": "瀏覽今日"
+  },
+  "reader": {
+    "summary_title": "30 秒速覽",
+    "why_matters": "為何重要",
+    "why_for_you": "為何推薦給你",
+    "why_details": "為什麼推薦？",
+    "why_hide": "隱藏詳情",
+    "ask": "提問",
+    "more_actions": "更多操作",
+    "progress": "閱讀進度"
   }
 }

@@ -400,5 +400,15 @@
     "caught_up_title": "Mindent elolvastál",
     "caught_up_body": "Elolvastad az összefoglaló összes hírét.",
     "caught_up_action": "Mai hírek"
+  },
+  "reader": {
+    "summary_title": "30 másodpercben",
+    "why_matters": "Miért fontos",
+    "why_for_you": "Miért neked",
+    "why_details": "Miért ajánlott?",
+    "why_hide": "Részletek elrejtése",
+    "ask": "Kérdezz",
+    "more_actions": "További műveletek",
+    "progress": "Olvasási előrehaladás"
   }
 }

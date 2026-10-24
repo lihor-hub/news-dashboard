@@ -400,5 +400,15 @@
     "caught_up_title": "Semua sudah dibaca",
     "caught_up_body": "Anda telah membaca semua berita dalam ringkasan ini.",
     "caught_up_action": "Lihat Hari Ini"
+  },
+  "reader": {
+    "summary_title": "Dalam 30 detik",
+    "why_matters": "Mengapa ini penting",
+    "why_for_you": "Mengapa untuk Anda",
+    "why_details": "Mengapa direkomendasikan?",
+    "why_hide": "Sembunyikan detail",
+    "ask": "Tanya",
+    "more_actions": "Tindakan lainnya",
+    "progress": "Kemajuan membaca"
   }
 }

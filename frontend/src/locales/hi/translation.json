@@ -400,5 +400,15 @@
     "caught_up_title": "सब पढ़ लिया",
     "caught_up_body": "आपने इस सारांश की सभी ख़बरें पढ़ ली हैं।",
     "caught_up_action": "आज देखें"
+  },
+  "reader": {
+    "summary_title": "30 सेकंड में",
+    "why_matters": "यह क्यों मायने रखता है",
+    "why_for_you": "आपके लिए क्यों",
+    "why_details": "क्यों सुझाया गया?",
+    "why_hide": "विवरण छिपाएँ",
+    "ask": "पूछें",
+    "more_actions": "और कार्रवाइयाँ",
+    "progress": "पढ़ने की प्रगति"
   }
 }

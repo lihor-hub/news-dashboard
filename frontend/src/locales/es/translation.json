@@ -400,5 +400,15 @@
     "caught_up_title": "Todo al día",
     "caught_up_body": "Has leído todas las historias de este resumen.",
     "caught_up_action": "Ver Hoy"
+  },
+  "reader": {
+    "summary_title": "En 30 segundos",
+    "why_matters": "Por qué importa",
+    "why_for_you": "Por qué para ti",
+    "why_details": "¿Por qué se recomienda?",
+    "why_hide": "Ocultar detalles",
+    "ask": "Preguntar",
+    "more_actions": "Más acciones",
+    "progress": "Progreso de lectura"
   }
 }

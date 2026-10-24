@@ -400,5 +400,15 @@
     "caught_up_title": "Alt er lest",
     "caught_up_body": "Du har lest alle sakene i denne oversikten.",
     "caught_up_action": "Gå til I dag"
+  },
+  "reader": {
+    "summary_title": "På 30 sekunder",
+    "why_matters": "Hvorfor dette er viktig",
+    "why_for_you": "Hvorfor for deg",
+    "why_details": "Hvorfor anbefalt?",
+    "why_hide": "Skjul detaljer",
+    "ask": "Spør",
+    "more_actions": "Flere handlinger",
+    "progress": "Lesefremdrift"
   }
 }

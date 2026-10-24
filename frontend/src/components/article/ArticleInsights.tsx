@@ -1,11 +1,26 @@
+import { useEffect } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { Loader2, Sparkles } from 'lucide-react';
 import { fetchArticleInsights } from '@/api';
 
-export function ArticleInsights({ articleId }: { articleId: string }) {
+export function ArticleInsights({
+  articleId,
+  requestSignal = 0,
+}: {
+  articleId: string;
+  /** Bump to start the fetch from outside (e.g. the action bar's Ask button). */
+  requestSignal?: number;
+}) {
   const insightsMutation = useMutation({
     mutationFn: () => fetchArticleInsights(articleId),
   });
+  const { isIdle, mutate } = insightsMutation;
+
+  useEffect(() => {
+    if (requestSignal > 0 && isIdle) mutate();
+    // Only react to new requests; isIdle/mutate changing must not refire.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [requestSignal]);
 
   return (
     <>
@@ -13,33 +28,33 @@ export function ArticleInsights({ articleId }: { articleId: string }) {
         <button
           onClick={() => insightsMutation.mutate()}
           data-testid="insights-button"
-          className="mt-4 inline-flex items-center gap-1.5 rounded-md border border-border bg-surface/40 px-3 py-1.5 text-[12px] font-medium text-muted-foreground hover:text-foreground hover:bg-surface transition-colors"
+          className="inline-flex min-h-11 items-center gap-1.5 rounded-full border border-border bg-background px-3.5 text-[13px] font-medium text-muted-foreground transition-colors hover:bg-surface hover:text-foreground md:min-h-9 md:text-xs"
         >
-          <Sparkles className="size-3.5" strokeWidth={1.75} />
+          <Sparkles className="size-4" strokeWidth={1.75} />
           Key takeaways
         </button>
       )}
       {insightsMutation.isPending && (
-        <div className="mt-4 rounded-lg border border-border bg-surface/40 px-4 py-3">
+        <div className="w-full basis-full rounded-lg border border-border bg-background px-4 py-3">
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <Loader2 className="size-3.5 animate-spin" />
+            <Loader2 className="size-4 animate-spin" />
             <span>Analyzing…</span>
           </div>
         </div>
       )}
       {insightsMutation.isSuccess && insightsMutation.data.length > 0 && (
         <div
-          className="mt-4 rounded-lg border border-border bg-surface/40 px-4 py-3"
+          className="w-full basis-full rounded-lg border border-border bg-background px-4 py-3"
           data-testid="insights-section"
         >
-          <div className="text-[10px] font-medium uppercase tracking-wider text-subtle mb-2">
+          <div className="mb-2 text-xs font-medium uppercase tracking-wider text-subtle">
             Key takeaways
           </div>
           <ul className="space-y-1.5">
             {insightsMutation.data.map((bullet, i) => (
               <li
                 key={i}
-                className="flex items-start gap-2 text-[13px] leading-snug text-foreground"
+                className="flex items-start gap-2 text-[14px] leading-snug text-foreground"
               >
                 <span className="mt-0.5 shrink-0 text-accent">•</span>
                 <span>{bullet}</span>

@@ -400,5 +400,15 @@
     "caught_up_title": "すべて読みました",
     "caught_up_body": "このブリーフのストーリーをすべて読みました。",
     "caught_up_action": "今日を見る"
+  },
+  "reader": {
+    "summary_title": "30秒でわかる",
+    "why_matters": "重要な理由",
+    "why_for_you": "あなたへのおすすめ理由",
+    "why_details": "おすすめの理由は？",
+    "why_hide": "詳細を隠す",
+    "ask": "質問する",
+    "more_actions": "その他の操作",
+    "progress": "読書の進捗"
   }
 }
