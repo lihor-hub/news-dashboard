@@ -275,7 +275,7 @@ export function StatsPage() {
         <div className="overflow-x-auto -mx-2">
           <table className="w-full text-sm min-w-[480px]">
             <thead>
-              <tr className="text-start text-[10px] uppercase tracking-wider text-subtle border-b border-border">
+              <tr className="text-start text-xs uppercase tracking-wider text-subtle border-b border-border">
                 <th className="px-3 py-2 font-medium">Source</th>
                 <th className="px-3 py-2 font-medium text-end">Inserted</th>
                 <th className="px-3 py-2 font-medium text-end">Skip rate</th>
@@ -378,7 +378,7 @@ function SmallStat({
 }) {
   return (
     <div className="rounded-md border border-border bg-card p-3">
-      <div className="text-[10px] uppercase tracking-wider text-subtle font-medium">{label}</div>
+      <div className="text-xs uppercase tracking-wider text-subtle font-medium">{label}</div>
       <div className={`text-xl font-semibold mt-1 tabular-nums ${accent ? 'text-star' : ''}`}>
         {value}
       </div>
@@ -389,9 +389,9 @@ function SmallStat({
 function BigStat({ label, value, sub }: { label: string; value: number | string; sub?: string }) {
   return (
     <div className="rounded-lg border border-border bg-card p-4">
-      <div className="text-[10px] uppercase tracking-wider text-subtle font-medium">{label}</div>
+      <div className="text-xs uppercase tracking-wider text-subtle font-medium">{label}</div>
       <div className="text-3xl font-semibold mt-1 tabular-nums tracking-tight">{value}</div>
-      {sub && <div className="text-[11px] text-muted-foreground mt-1">{sub}</div>}
+      {sub && <div className="text-xs text-muted-foreground mt-1">{sub}</div>}
     </div>
   );
 }
@@ -409,7 +409,7 @@ function ChartSection({
     <section>
       <div className="mb-2">
         <div className="text-sm font-semibold">{title}</div>
-        {sub && <div className="text-[11px] text-subtle">{sub}</div>}
+        {sub && <div className="text-xs text-subtle">{sub}</div>}
       </div>
       <div className="rounded-lg border border-border bg-card p-3">{children}</div>
     </section>

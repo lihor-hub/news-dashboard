@@ -363,7 +363,7 @@ export function LessonDetailView({
                           {item.matched_signals.length > 0 ? (
                             <div className="mt-2 flex flex-wrap gap-1">
                               {item.matched_signals.map((signal) => (
-                                <Badge key={signal} variant="outline" className="text-[11px]">
+                                <Badge key={signal} variant="outline" className="text-xs">
                                   {signal}
                                 </Badge>
                               ))}

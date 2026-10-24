@@ -75,7 +75,7 @@ export function McpTokensSection() {
 
   return (
     <section>
-      <div className="text-[10px] uppercase tracking-wider text-subtle font-medium mb-2">
+      <div className="text-xs uppercase tracking-wider text-subtle font-medium mb-2">
         MCP Client Access
       </div>
       <div className="rounded-lg border border-border bg-card p-4 space-y-4">
@@ -129,7 +129,7 @@ export function McpTokensSection() {
           </div>
 
           <fieldset className="space-y-1.5">
-            <legend className="text-[11px] text-muted-foreground mb-1">
+            <legend className="text-xs text-muted-foreground mb-1">
               Scopes — the token can only use the tool groups selected here.
             </legend>
             <div className="flex flex-wrap gap-3">
@@ -150,7 +150,7 @@ export function McpTokensSection() {
               ))}
             </div>
             {newScopes.length === 0 && (
-              <p className="text-[11px] text-destructive">Select at least one scope.</p>
+              <p className="text-xs text-destructive">Select at least one scope.</p>
             )}
           </fieldset>
         </div>
@@ -169,7 +169,7 @@ export function McpTokensSection() {
             >
               <div className="min-w-0 space-y-1">
                 <p className="truncate text-sm text-foreground">{token.name}</p>
-                <p className="text-[11px] text-muted-foreground">
+                <p className="text-xs text-muted-foreground">
                   {token.token_prefix}… · scopes: {token.scopes.join(', ')}
                   {token.revoked_at ? ' · revoked' : ''}
                   {token.last_used_at ? ` · last used ${token.last_used_at}` : ' · never used'}

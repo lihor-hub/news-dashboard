@@ -239,7 +239,7 @@ export function DailyBriefSection() {
 
   return (
     <section>
-      <div className="text-[10px] uppercase tracking-wider text-subtle font-medium mb-2">
+      <div className="text-xs uppercase tracking-wider text-subtle font-medium mb-2">
         Daily Brief
       </div>
       <div className="rounded-lg border border-border bg-card p-4 space-y-4">
@@ -258,7 +258,7 @@ export function DailyBriefSection() {
             />
             {timeSaving && <RefreshCw className="size-3 animate-spin text-muted-foreground" />}
           </div>
-          <p className="text-[11px] text-muted-foreground">
+          <p className="text-xs text-muted-foreground">
             Your brief will be generated automatically at this local time each day.
           </p>
         </div>
@@ -304,7 +304,7 @@ export function DailyBriefSection() {
               <option key={timezone} value={timezone} />
             ))}
           </datalist>
-          <p id="briefing-timezone-help" className="text-[11px] text-muted-foreground">
+          <p id="briefing-timezone-help" className="text-xs text-muted-foreground">
             IANA timezone name (e.g. America/New_York). DST is applied automatically.
           </p>
           {timezoneError && (
@@ -410,7 +410,7 @@ export function DailyBriefSection() {
               Could not send preview email. Please try again.
             </p>
           )}
-          <p className="text-[11px] text-muted-foreground">
+          <p className="text-xs text-muted-foreground">
             Receive your daily brief at the shared generation time and timezone above.
           </p>
         </div>
@@ -462,11 +462,11 @@ export function DailyBriefSection() {
             </p>
           )}
           {!vapidKey && !window.electronAPI && (
-            <p className="text-[11px] text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
               Push notifications require server configuration (VAPID keys).
             </p>
           )}
-          <p className="text-[11px] text-muted-foreground">
+          <p className="text-xs text-muted-foreground">
             You'll receive a notification when your daily brief is ready.
           </p>
         </div>

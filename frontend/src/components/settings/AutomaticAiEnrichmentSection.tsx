@@ -45,12 +45,12 @@ export function AutomaticAiEnrichmentSection() {
 
   return (
     <section>
-      <div className="text-[10px] uppercase tracking-wider text-subtle font-medium mb-2">AI</div>
+      <div className="text-xs uppercase tracking-wider text-subtle font-medium mb-2">AI</div>
       <div className="rounded-lg border border-border bg-card p-4 space-y-2">
         <div className="flex items-center justify-between gap-4">
           <div>
             <div className="text-xs font-medium">Automatic AI article enrichment</div>
-            <p className="text-[11px] text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
               Uses the configured AI model after ingestion for up to {settings.limit} newly ingested
               articles per run. Existing takeaways and perspectives are reused.
             </p>
@@ -65,12 +65,12 @@ export function AutomaticAiEnrichmentSection() {
           />
         </div>
         {!settings.available && (
-          <p className="text-[11px] text-muted-foreground">AI credentials are not configured.</p>
+          <p className="text-xs text-muted-foreground">AI credentials are not configured.</p>
         )}
         {settings.limit === 0 && (
-          <p className="text-[11px] text-muted-foreground">Background generation is disabled.</p>
+          <p className="text-xs text-muted-foreground">Background generation is disabled.</p>
         )}
-        {error && <p className="text-[11px] text-destructive">Could not save this preference.</p>}
+        {error && <p className="text-xs text-destructive">Could not save this preference.</p>}
       </div>
     </section>
   );

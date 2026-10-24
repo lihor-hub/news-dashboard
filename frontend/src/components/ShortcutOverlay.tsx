@@ -47,14 +47,14 @@ export function ShortcutOverlay({ open, onOpenChange }: Props) {
         <div className="space-y-5">
           {SECTIONS.map((s) => (
             <div key={s.titleKey}>
-              <div className="text-[10px] font-medium uppercase tracking-wider text-subtle mb-2">
+              <div className="text-xs font-medium uppercase tracking-wider text-subtle mb-2">
                 {t(s.titleKey)}
               </div>
               <div className="space-y-1.5">
                 {s.items.map(([k, d]) => (
                   <div key={k} className="flex items-center justify-between text-sm">
                     <span className="text-muted-foreground">{t(d)}</span>
-                    <kbd className="font-mono text-[11px] px-1.5 py-0.5 bg-surface-2 border border-border rounded">
+                    <kbd className="font-mono text-xs px-1.5 py-0.5 bg-surface-2 border border-border rounded">
                       {k}
                     </kbd>
                   </div>

@@ -176,7 +176,7 @@ export function ShareDialog({ article, open, onOpenChange, pendingHighlight }: S
             />
             {pendingHighlight?.text ? (
               <div className="rounded-md border border-border bg-surface/70 px-3 py-2">
-                <div className="mb-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                <div className="mb-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
                   Selected passage
                 </div>
                 <p className="line-clamp-3 text-sm text-foreground">{pendingHighlight.text}</p>

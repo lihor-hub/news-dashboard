@@ -93,7 +93,7 @@ export function AiStatsPage() {
           <Type className="size-4 text-muted-foreground" />
           <h2 className="text-sm font-semibold">Word Cloud</h2>
           {wordCloud.data && (
-            <span className="text-[11px] text-muted-foreground">
+            <span className="text-xs text-muted-foreground">
               {wordCloud.data.article_count} articles, last {wordCloud.data.days} days
             </span>
           )}
@@ -120,7 +120,7 @@ export function AiStatsPage() {
           <ScatterChart className="size-4 text-muted-foreground" />
           <h2 className="text-sm font-semibold">Embedding Space</h2>
           {embeddingMap.data && (
-            <span className="text-[11px] text-muted-foreground">
+            <span className="text-xs text-muted-foreground">
               {embeddingMap.data.embedded_count} of {embeddingMap.data.total_count} articles
               embedded
             </span>
@@ -151,7 +151,7 @@ export function AiStatsPage() {
           <Network className="size-4 text-muted-foreground" />
           <h2 className="text-sm font-semibold">Knowledge Graph</h2>
           {knowledgeGraph.data && knowledgeGraph.data.pending_count > 0 && (
-            <span className="text-[11px] text-muted-foreground">
+            <span className="text-xs text-muted-foreground">
               extraction pending for {knowledgeGraph.data.pending_count} article
               {knowledgeGraph.data.pending_count !== 1 ? 's' : ''}
             </span>

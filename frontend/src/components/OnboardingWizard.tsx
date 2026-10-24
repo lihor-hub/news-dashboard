@@ -334,7 +334,7 @@ function RecommendationsStep({
           >
             <div className="flex items-center justify-between gap-2">
               <span className="text-sm font-medium">{rec.name}</span>
-              <span className="text-[10px] text-muted-foreground uppercase tracking-wide shrink-0">
+              <span className="text-xs text-muted-foreground uppercase tracking-wide shrink-0">
                 {rec.category}
               </span>
             </div>
@@ -344,7 +344,7 @@ function RecommendationsStep({
                 {rec.matched_interests.map((id) => (
                   <span
                     key={id}
-                    className="inline-block rounded-sm bg-surface-2 px-1.5 py-0.5 text-[10px] text-muted-foreground"
+                    className="inline-block rounded-sm bg-surface-2 px-1.5 py-0.5 text-xs text-muted-foreground"
                   >
                     {id}
                   </span>

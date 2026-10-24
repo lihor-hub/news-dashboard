@@ -126,7 +126,7 @@ export function DatasetOverview() {
               <div className="mb-2 flex items-center justify-between gap-2">
                 <div>
                   <div className="text-sm font-semibold">Dataset growth</div>
-                  <div className="text-[11px] text-subtle">
+                  <div className="text-xs text-subtle">
                     New entries per {data.trend_granularity}
                   </div>
                 </div>
@@ -176,10 +176,10 @@ export function DatasetOverview() {
                   bytes={data.storage.amortized_article_bytes}
                 />
               </dl>
-              <p className="mt-3 text-[11px] text-muted-foreground">
+              <p className="mt-3 text-xs text-muted-foreground">
                 Space from deleted rows is reused by PostgreSQL
               </p>
-              <p className="mt-1 text-[11px] text-muted-foreground">
+              <p className="mt-1 text-xs text-muted-foreground">
                 Median entry estimates row payload; amortized storage includes table, auxiliary, and
                 index overhead per article.
               </p>
@@ -218,7 +218,7 @@ export function DatasetOverview() {
 function Metric({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-lg border border-border bg-card p-3">
-      <div className="text-[10px] font-medium uppercase tracking-wider text-subtle">{label}</div>
+      <div className="text-xs font-medium uppercase tracking-wider text-subtle">{label}</div>
       <div className="mt-1 text-xl font-semibold tabular-nums">{value}</div>
     </div>
   );

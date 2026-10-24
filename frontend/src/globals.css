@@ -18,6 +18,10 @@
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
+  --radius-2xl: calc(var(--radius) + 6px);
+  --shadow-elevation-1: var(--shadow-1);
+  --shadow-elevation-2: var(--shadow-2);
+  --shadow-elevation-3: var(--shadow-3);
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-surface: var(--surface);
@@ -58,8 +62,44 @@
   --font-serif: 'Source Serif 4 Variable', 'Iowan Old Style', Georgia, serif;
 }
 
+/* ── Layout tokens (non-colour) ─────────────────────────────────────────────
+   Radius: controls (buttons/inputs) use rounded-md = 8px, cards rounded-lg/xl
+   = 10–14px, dialogs/sheets rounded-2xl = 16px.
+   Touch: --spacing-touch (44px) yields h-touch / size-touch / min-h-touch.
+   Motion: ease-standard / ease-emphasized / ease-spring utilities; durations
+   live in :root as --duration-* so prefers-reduced-motion can zero them. */
+@theme static {
+  --spacing-touch: 2.75rem;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --ease-emphasized: cubic-bezier(0.3, 0, 0, 1);
+  --ease-spring: cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+/* Secondary/meta text: never below 12px, 13px on small (touch) screens. */
+@utility text-meta {
+  font-size: 0.8125rem;
+  line-height: 1.125rem;
+  @media (width >= 48rem) {
+    font-size: 0.75rem;
+    line-height: 1rem;
+  }
+}
+
+/* Comfortable long-form reading size for summaries and article bodies. */
+@utility text-reading {
+  font-size: 1.0625rem;
+  line-height: 1.65;
+}
+
 :root {
-  --radius: 0.5rem;
+  --radius: 0.625rem;
+  --shadow-1: 0 1px 2px oklch(0 0 0 / 0.05), 0 1px 3px oklch(0 0 0 / 0.06);
+  --shadow-2: 0 4px 12px oklch(0 0 0 / 0.08), 0 2px 4px oklch(0 0 0 / 0.05);
+  --shadow-3: 0 16px 40px oklch(0 0 0 / 0.14), 0 4px 12px oklch(0 0 0 / 0.08);
+  --duration-fast: 120ms;
+  --duration-base: 200ms;
+  --duration-slow: 320ms;
+  --duration-sheet: 420ms;
   --background: oklch(0.985 0.003 80);
   --foreground: oklch(0.2 0.012 70);
   --surface: oklch(0.97 0.005 80);
@@ -98,6 +138,9 @@
 }
 
 [data-theme='dark'] {
+  --shadow-1: 0 1px 2px oklch(0 0 0 / 0.3), 0 1px 3px oklch(0 0 0 / 0.25);
+  --shadow-2: 0 6px 16px oklch(0 0 0 / 0.4), 0 2px 4px oklch(0 0 0 / 0.3);
+  --shadow-3: 0 20px 48px oklch(0 0 0 / 0.55), 0 6px 16px oklch(0 0 0 / 0.35);
   --background: oklch(0.155 0.008 80);
   --foreground: oklch(0.94 0.005 80);
   --surface: oklch(0.185 0.008 80);
@@ -305,16 +348,25 @@
   }
 }
 
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --duration-fast: 0ms;
+    --duration-base: 0ms;
+    --duration-slow: 0ms;
+    --duration-sheet: 0ms;
+  }
+}
+
 /* Bottom nav active indicator transition */
 .bottom-nav-item {
   transition:
-    color 0.15s ease,
-    opacity 0.15s ease;
+    color var(--duration-fast) var(--ease-standard),
+    opacity var(--duration-fast) var(--ease-standard);
 }
 
 /* Desktop nav link hover */
 .nav-link-hover {
   transition:
-    background-color 0.12s ease,
-    color 0.12s ease;
+    background-color var(--duration-fast) var(--ease-standard),
+    color var(--duration-fast) var(--ease-standard);
 }

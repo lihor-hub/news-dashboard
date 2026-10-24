@@ -22,16 +22,16 @@ function BriefingRow({ briefing }: { briefing: Briefing }) {
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2 flex-wrap">
           {isFailed ? (
-            <span className="flex items-center gap-1 text-[10px] font-medium text-destructive bg-destructive/10 border border-destructive/20 px-1.5 py-0.5 rounded-full">
+            <span className="flex items-center gap-1 text-xs font-medium text-destructive bg-destructive/10 border border-destructive/20 px-1.5 py-0.5 rounded-full">
               <AlertCircle className="size-2.5" />
               Failed
             </span>
           ) : null}
-          <span className="text-[11px] text-muted-foreground tabular-nums">
+          <span className="text-xs text-muted-foreground tabular-nums">
             {formatDate(briefing.created_at)}
           </span>
           {briefing.since_at && briefing.until_at && (
-            <span className="text-[11px] text-subtle">
+            <span className="text-xs text-subtle">
               · {formatWindow(briefing.since_at, briefing.until_at)}
             </span>
           )}

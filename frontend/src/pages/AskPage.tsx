@@ -127,7 +127,7 @@ function AgentActionRunResult({ run }: { run: AgentActionRun }) {
                 <span className="text-muted-foreground"> &mdash; {step.article_title}</span>
               )}
               {step.status === 'failed' && step.result_summary && (
-                <span className="block text-[11px] text-red-600">{step.result_summary}</span>
+                <span className="block text-xs text-red-600">{step.result_summary}</span>
               )}
             </span>
           </li>
@@ -148,11 +148,11 @@ function AnswerFeedback({ traceId }: { traceId: string }) {
   }
 
   if (sent !== null) {
-    return <p className="text-[11px] text-muted-foreground">Thanks for the feedback.</p>;
+    return <p className="text-xs text-muted-foreground">Thanks for the feedback.</p>;
   }
   return (
     <div className="flex items-center gap-2">
-      <span className="text-[11px] text-muted-foreground">Was this helpful?</span>
+      <span className="text-xs text-muted-foreground">Was this helpful?</span>
       <button
         type="button"
         aria-label="Helpful"
@@ -232,11 +232,11 @@ function CitationCard({ citation, index }: { citation: Citation; index: number }
       )}
     >
       <div className="flex items-baseline justify-between gap-2 mb-0.5">
-        <span className="text-[10px] text-muted-foreground">[{index + 1}]</span>
+        <span className="text-xs text-muted-foreground">[{index + 1}]</span>
         <BookOpen className="size-3 text-muted-foreground shrink-0" />
       </div>
       <div className="text-sm font-medium leading-snug">{citation.title}</div>
-      <div className="mt-0.5 text-[11px] text-muted-foreground truncate">{citation.url}</div>
+      <div className="mt-0.5 text-xs text-muted-foreground truncate">{citation.url}</div>
     </button>
   );
 }
@@ -305,7 +305,7 @@ export function AskPage() {
           )}
         />
         <div className="flex items-center justify-between gap-2">
-          <label className="flex items-center gap-1.5 text-[11px] text-muted-foreground cursor-pointer">
+          <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
             <input
               type="checkbox"
               checked={includeAll}
@@ -354,7 +354,7 @@ export function AskPage() {
 
           {result.graph_context?.relationships && result.graph_context.relationships.length > 0 && (
             <div>
-              <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium mb-2">
+              <div className="text-xs uppercase tracking-wider text-muted-foreground font-medium mb-2">
                 Knowledge graph context
               </div>
               <ul className="space-y-1.5 rounded-md border border-border bg-surface-2 p-3">
@@ -379,7 +379,7 @@ export function AskPage() {
 
           {result.sources.length > 0 && (
             <div>
-              <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium mb-2">
+              <div className="text-xs uppercase tracking-wider text-muted-foreground font-medium mb-2">
                 Citations
               </div>
               <div className="space-y-2">
