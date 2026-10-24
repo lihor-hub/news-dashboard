@@ -2,11 +2,11 @@ import { useEffect, useMemo } from 'react';
 import type { ReactNode } from 'react';
 import { useNavigate } from 'react-router';
 import { useInfiniteQuery, type QueryKey } from '@tanstack/react-query';
-import { Headphones, type LucideIcon } from 'lucide-react';
+import { Headphones } from 'lucide-react';
 import { ArticleRow } from '@/components/article/ArticleRow';
 import { CategoryFilter } from '@/components/CategoryFilter';
-import { EmptyState } from '@/components/EmptyState';
-import { InlineError, RetryableErrorState } from '@/components/PageState';
+import { EmptyState, type EmptyStateProps } from '@/components/EmptyState';
+import { InlineError, ListSkeleton, RetryableErrorState } from '@/components/PageState';
 import { useFocusedArticle } from '@/contexts/focusedArticle';
 import { useListenQueue } from '@/contexts/listenQueue';
 import { useArticleListNav } from '@/hooks/useArticleListNav';
@@ -27,11 +27,9 @@ interface ArticleListViewProps {
   }) => ReactNode;
   queryKey: QueryKey;
   queryFn: (params: { limit: number; offset: number }) => Promise<TriageArticlePage>;
-  empty: {
-    icon: LucideIcon;
-    title: string;
-    subtitle?: string;
-  };
+  empty: EmptyStateProps;
+  /** Custom empty view (e.g. Today's caught-up state); overrides `empty` when set. */
+  emptyContent?: ReactNode;
   showCategoryFilter?: boolean;
   showLaterUntil?: boolean;
   sortArticles?: (articles: WorkflowArticle[]) => WorkflowArticle[];
@@ -45,6 +43,7 @@ export function ArticleListView({
   queryKey,
   queryFn,
   empty,
+  emptyContent,
   showCategoryFilter,
   showLaterUntil,
   sortArticles,
@@ -135,7 +134,7 @@ export function ArticleListView({
           isRetrying={isFetching}
         />
       ) : list.length === 0 ? (
-        <EmptyState icon={empty.icon} title={empty.title} subtitle={empty.subtitle} />
+        (emptyContent ?? <EmptyState {...empty} />)
       ) : (
         <>
           {list.map((article, index) => (
@@ -170,15 +169,5 @@ export function ArticleListView({
 }
 
 export function ArticleListSkeleton() {
-  return (
-    <div className="divide-y divide-border">
-      {Array.from({ length: 6 }).map((_, index) => (
-        <div key={index} className="px-4 py-3 md:px-5 animate-pulse">
-          <div className="h-2.5 bg-muted rounded w-32 mb-2" />
-          <div className="h-4 bg-muted rounded w-3/4 mb-2" />
-          <div className="h-3 bg-muted rounded w-1/2" />
-        </div>
-      ))}
-    </div>
-  );
+  return <ListSkeleton rows={6} />;
 }

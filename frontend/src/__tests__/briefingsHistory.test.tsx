@@ -93,7 +93,7 @@ describe('BriefingsHistoryPage — loading state', () => {
 
   it('renders without crashing while loading', () => {
     const { container } = renderHistory();
-    expect(container.querySelector('.animate-pulse')).toBeTruthy();
+    expect(container.querySelector('[class*="animate-pulse"]')).toBeTruthy();
   });
 
   it('shows the page heading', () => {
@@ -195,7 +195,7 @@ describe('BriefingDetailPage — loading state', () => {
 
   it('shows skeleton while loading', () => {
     const { container } = renderDetail('7');
-    expect(container.querySelector('.animate-pulse')).toBeTruthy();
+    expect(container.querySelector('[class*="animate-pulse"]')).toBeTruthy();
   });
 
   it('shows back link while loading', () => {

@@ -332,5 +332,35 @@
       "success_other": "Done — {{count}} new articles"
     },
     "suggestions": "Suggestions"
+  },
+  "states": {
+    "loading": "Laddar",
+    "caughtUp": {
+      "title": "Du är helt i fas",
+      "body": "Inget kvar att sortera i dag. Använd den lugna stunden till att lära dig något nytt.",
+      "learn": "Lär dig något",
+      "recap": "Veckosammanfattning",
+      "later": "Öppna Senare"
+    },
+    "noFeeds": {
+      "title": "Lägg till 3 flöden för att få din första Brief",
+      "body": "Följ några källor du litar på så rangordnar och sammanfattar vi dem åt dig.",
+      "action": "Lägg till flöden"
+    },
+    "categoryClear": {
+      "title": "Inget nytt i den här kategorin",
+      "body": "Allt här är sorterat. Titta i de andra kategorierna.",
+      "action": "Visa alla kategorier"
+    },
+    "actions": {
+      "today": "Gå till Idag",
+      "search": "Sök artiklar"
+    },
+    "archive": {
+      "body": "Arkiverade artiklar går fortfarande att söka här."
+    },
+    "search": {
+      "clear": "Rensa sökning"
+    }
   }
 }

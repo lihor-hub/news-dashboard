@@ -1,4 +1,5 @@
-import { Star } from 'lucide-react';
+import { Inbox, Star } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { useSearchParams } from 'react-router';
 import { ArticleListView } from '@/components/article/ArticleListView';
 import { fetchTriageArticles } from '@/api/workflowApi';
@@ -12,6 +13,7 @@ function sortByStarredDate(articles: WorkflowArticle[]) {
 }
 
 export function StarredPage() {
+  const { t } = useTranslation();
   const [searchParams] = useSearchParams();
   const category = searchParams.get('category') ?? undefined;
 
@@ -27,6 +29,7 @@ export function StarredPage() {
         icon: Star,
         title: 'No stars yet',
         subtitle: 'Star articles you want to keep as reference material.',
+        actions: [{ label: t('states.actions.today'), to: '/today', icon: Inbox }],
       }}
       showCategoryFilter
       sortArticles={sortByStarredDate}

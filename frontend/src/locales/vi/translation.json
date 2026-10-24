@@ -332,5 +332,35 @@
       "success_other": "Done — {{count}} new articles"
     },
     "suggestions": "Suggestions"
+  },
+  "states": {
+    "loading": "Đang tải",
+    "caughtUp": {
+      "title": "Bạn đã xem hết",
+      "body": "Hôm nay không còn gì để phân loại. Tận dụng lúc rảnh để học điều mới.",
+      "learn": "Học điều mới",
+      "recap": "Tổng kết tuần",
+      "later": "Mở Để sau"
+    },
+    "noFeeds": {
+      "title": "Thêm 3 nguồn tin để nhận Brief đầu tiên",
+      "body": "Theo dõi vài nguồn bạn tin cậy, chúng tôi sẽ xếp hạng và tóm tắt cho bạn.",
+      "action": "Thêm nguồn tin"
+    },
+    "categoryClear": {
+      "title": "Không có gì mới trong danh mục này",
+      "body": "Mọi thứ ở đây đã được phân loại. Xem các danh mục khác.",
+      "action": "Hiện tất cả danh mục"
+    },
+    "actions": {
+      "today": "Đến Hôm nay",
+      "search": "Tìm bài viết"
+    },
+    "archive": {
+      "body": "Bài viết đã lưu trữ vẫn tìm được ở đây."
+    },
+    "search": {
+      "clear": "Xóa tìm kiếm"
+    }
   }
 }

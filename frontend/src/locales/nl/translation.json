@@ -332,5 +332,35 @@
       "success_other": "Done — {{count}} new articles"
     },
     "suggestions": "Suggestions"
+  },
+  "states": {
+    "loading": "Laden",
+    "caughtUp": {
+      "title": "Je bent helemaal bij",
+      "body": "Vandaag valt er niets meer te sorteren. Gebruik het rustige moment om iets nieuws te leren.",
+      "learn": "Iets leren",
+      "recap": "Weekoverzicht",
+      "later": "Later openen"
+    },
+    "noFeeds": {
+      "title": "Voeg 3 feeds toe voor je eerste Brief",
+      "body": "Volg een paar bronnen die je vertrouwt; wij rangschikken en vatten ze voor je samen.",
+      "action": "Feeds toevoegen"
+    },
+    "categoryClear": {
+      "title": "Niets nieuws in deze categorie",
+      "body": "Alles hier is gesorteerd. Bekijk de andere categorieën.",
+      "action": "Alle categorieën tonen"
+    },
+    "actions": {
+      "today": "Naar Vandaag",
+      "search": "Artikelen zoeken"
+    },
+    "archive": {
+      "body": "Gearchiveerde artikelen blijven hier doorzoekbaar."
+    },
+    "search": {
+      "clear": "Zoekopdracht wissen"
+    }
   }
 }

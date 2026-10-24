@@ -332,5 +332,35 @@
       "success_other": "Done — {{count}} new articles"
     },
     "suggestions": "Suggestions"
+  },
+  "states": {
+    "loading": "読み込み中",
+    "caughtUp": {
+      "title": "すべて確認済みです",
+      "body": "今日の仕分けは完了しました。この時間で新しいことを学びましょう。",
+      "learn": "学習する",
+      "recap": "週間まとめ",
+      "later": "後で読むを開く"
+    },
+    "noFeeds": {
+      "title": "フィードを3件追加して最初のブリーフを受け取りましょう",
+      "body": "信頼できるソースをいくつかフォローすると、ランク付けと要約を行います。",
+      "action": "フィードを追加"
+    },
+    "categoryClear": {
+      "title": "このカテゴリに新着はありません",
+      "body": "ここはすべて仕分け済みです。他のカテゴリを確認してください。",
+      "action": "すべてのカテゴリを表示"
+    },
+    "actions": {
+      "today": "今日へ移動",
+      "search": "記事を検索"
+    },
+    "archive": {
+      "body": "アーカイブした記事はここで検索できます。"
+    },
+    "search": {
+      "clear": "検索をクリア"
+    }
   }
 }

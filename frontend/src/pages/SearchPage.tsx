@@ -1,9 +1,11 @@
 import { useNavigate, useSearchParams } from 'react-router';
 import { useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Search as SearchIcon } from 'lucide-react';
 import { ArticleRow } from '@/components/article/ArticleRow';
 import { EmptyState } from '@/components/EmptyState';
+import { ListSkeleton } from '@/components/PageState';
 import { useArticleListNav } from '@/hooks/useArticleListNav';
 import { useTriageMutations } from '@/hooks/useTriageMutations';
 import { useFocusedArticle } from '@/contexts/focusedArticle';
@@ -116,6 +118,7 @@ function filtersToParams(filters: SavedSearchFilters): URLSearchParams {
 // ─── Page ────────────────────────────────────────────────────────────────────
 
 export function SearchPage() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const queryClient = useQueryClient();
@@ -403,12 +406,21 @@ export function SearchPage() {
           subtitle="Type a query or apply filters to find articles."
         />
       ) : isLoading ? (
-        <SearchSkeleton />
+        <ListSkeleton />
       ) : results.length === 0 ? (
         <EmptyState
           icon={SearchIcon}
           title="No results"
           subtitle="Try different search terms or filters."
+          actions={[
+            {
+              label: t('states.search.clear'),
+              onClick: () => {
+                setInputValue('');
+                setSearchParams(new URLSearchParams(), { replace: true });
+              },
+            },
+          ]}
         />
       ) : (
         <div>
@@ -641,22 +653,6 @@ function FilterGroup({
           )}
         </div>
       )}
-    </div>
-  );
-}
-
-// ─── Skeleton ────────────────────────────────────────────────────────────────
-
-function SearchSkeleton() {
-  return (
-    <div className="divide-y divide-border">
-      {Array.from({ length: 5 }).map((_, i) => (
-        <div key={i} className="px-4 md:px-5 py-3">
-          <div className="h-3 w-32 bg-surface-2 rounded animate-pulse mb-2" />
-          <div className="h-4 w-3/4 bg-surface-2 rounded animate-pulse mb-2" />
-          <div className="h-3 w-1/2 bg-surface-2 rounded animate-pulse" />
-        </div>
-      ))}
     </div>
   );
 }

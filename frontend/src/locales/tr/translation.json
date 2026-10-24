@@ -332,5 +332,35 @@
       "success_other": "Done — {{count}} new articles"
     },
     "suggestions": "Suggestions"
+  },
+  "states": {
+    "loading": "Yükleniyor",
+    "caughtUp": {
+      "title": "Her şeye yetiştiniz",
+      "body": "Bugün ayıklanacak bir şey kalmadı. Bu sakin anı yeni bir şey öğrenmek için kullanın.",
+      "learn": "Bir şey öğren",
+      "recap": "Haftalık özet",
+      "later": "Sonra'yı aç"
+    },
+    "noFeeds": {
+      "title": "İlk Brief'inizi almak için 3 akış ekleyin",
+      "body": "Güvendiğiniz birkaç kaynağı takip edin; biz sizin için sıralayıp özetleyelim.",
+      "action": "Akış ekle"
+    },
+    "categoryClear": {
+      "title": "Bu kategoride yeni bir şey yok",
+      "body": "Buradaki her şey ayıklandı. Diğer kategorilere göz atın.",
+      "action": "Tüm kategorileri göster"
+    },
+    "actions": {
+      "today": "Bugün'e git",
+      "search": "Makale ara"
+    },
+    "archive": {
+      "body": "Arşivlenen makaleler burada aranabilir kalır."
+    },
+    "search": {
+      "clear": "Aramayı temizle"
+    }
   }
 }

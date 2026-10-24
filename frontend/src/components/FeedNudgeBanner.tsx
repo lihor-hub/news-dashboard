@@ -31,16 +31,18 @@ export function NudgeCard({ nudge }: { nudge: PersonalizationNudge }) {
   const isPending = applyMutation.isPending || dismissMutation.isPending;
 
   return (
-    <div className="mx-4 md:mx-5 my-2 flex items-start gap-3 rounded-lg border border-border bg-muted/50 px-4 py-3">
-      <VolumeX className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+    <div className="mx-4 my-3 flex items-start gap-3 rounded-xl border border-border bg-muted/50 py-3 ps-4 pe-2 md:mx-5">
+      <VolumeX className="mt-0.5 size-5 shrink-0 text-muted-foreground" aria-hidden="true" />
       <div className="min-w-0 flex-1">
-        <p className="text-sm font-medium leading-snug">{nudge.title}</p>
-        <p className="mt-0.5 text-xs text-muted-foreground">{nudge.message}</p>
-        <div className="mt-2 flex flex-wrap gap-2">
+        <p className="pt-0.5 text-sm font-medium leading-snug">{nudge.title}</p>
+        <p className="mt-1 text-[13px] leading-relaxed text-muted-foreground md:text-xs">
+          {nudge.message}
+        </p>
+        <div className="mt-3 flex flex-wrap gap-2">
           <Button
             size="sm"
             variant="outline"
-            className="h-7 text-xs"
+            className="h-11 px-4 text-sm md:h-8 md:text-xs"
             onClick={() => applyMutation.mutate()}
             disabled={isPending}
           >
@@ -49,7 +51,7 @@ export function NudgeCard({ nudge }: { nudge: PersonalizationNudge }) {
           <Button
             size="sm"
             variant="ghost"
-            className="h-7 text-xs text-muted-foreground"
+            className="h-11 px-4 text-sm text-muted-foreground md:h-8 md:text-xs"
             onClick={() => dismissMutation.mutate()}
             disabled={isPending}
           >
@@ -58,7 +60,7 @@ export function NudgeCard({ nudge }: { nudge: PersonalizationNudge }) {
         </div>
       </div>
       <button
-        className="shrink-0 text-muted-foreground hover:text-foreground"
+        className="flex size-11 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground md:size-8"
         onClick={() => dismissMutation.mutate()}
         disabled={isPending}
         aria-label="Dismiss"
