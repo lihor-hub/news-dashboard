@@ -362,5 +362,26 @@
     "search": {
       "clear": "Clear search"
     }
+  },
+  "brief": {
+    "greeting_morning": "Good morning",
+    "greeting_afternoon": "Good afternoon",
+    "greeting_evening": "Good evening",
+    "reading_time": "{{count}} min brief",
+    "progress_label": "Stories read",
+    "progress_value": "{{read}} of {{total}} stories read",
+    "topics": "Topics",
+    "all_topics": "All",
+    "sources_zero": "{{count}} sources",
+    "sources_one": "{{count}} source",
+    "sources_two": "{{count}} sources",
+    "sources_few": "{{count}} sources",
+    "sources_many": "{{count}} sources",
+    "sources_other": "{{count}} sources",
+    "read": "Read",
+    "topic_fallback": "Story",
+    "caught_up_title": "All caught up",
+    "caught_up_body": "You've read every story in this brief.",
+    "caught_up_action": "Browse Today"
   }
 }

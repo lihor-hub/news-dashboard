@@ -362,5 +362,26 @@
     "search": {
       "clear": "검색 지우기"
     }
+  },
+  "brief": {
+    "greeting_morning": "좋은 아침입니다",
+    "greeting_afternoon": "좋은 오후입니다",
+    "greeting_evening": "좋은 저녁입니다",
+    "reading_time": "{{count}}분 브리핑",
+    "progress_label": "읽은 기사",
+    "progress_value": "{{total}}개 중 {{read}}개 읽음",
+    "topics": "주제",
+    "all_topics": "전체",
+    "sources_zero": "출처 {{count}}개",
+    "sources_one": "출처 {{count}}개",
+    "sources_two": "출처 {{count}}개",
+    "sources_few": "출처 {{count}}개",
+    "sources_many": "출처 {{count}}개",
+    "sources_other": "출처 {{count}}개",
+    "read": "읽음",
+    "topic_fallback": "기사",
+    "caught_up_title": "모두 읽었습니다",
+    "caught_up_body": "이 브리핑의 모든 기사를 읽었습니다.",
+    "caught_up_action": "오늘 보기"
   }
 }

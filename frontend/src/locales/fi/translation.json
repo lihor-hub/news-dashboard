@@ -362,5 +362,26 @@
     "search": {
       "clear": "Tyhjennä haku"
     }
+  },
+  "brief": {
+    "greeting_morning": "Hyvää huomenta",
+    "greeting_afternoon": "Hyvää iltapäivää",
+    "greeting_evening": "Hyvää iltaa",
+    "reading_time": "{{count}} min katsaus",
+    "progress_label": "Luetut uutiset",
+    "progress_value": "{{read}}/{{total}} uutista luettu",
+    "topics": "Aiheet",
+    "all_topics": "Kaikki",
+    "sources_zero": "{{count}} lähdettä",
+    "sources_one": "{{count}} lähde",
+    "sources_two": "{{count}} lähdettä",
+    "sources_few": "{{count}} lähdettä",
+    "sources_many": "{{count}} lähdettä",
+    "sources_other": "{{count}} lähdettä",
+    "read": "Luettu",
+    "topic_fallback": "Uutinen",
+    "caught_up_title": "Kaikki luettu",
+    "caught_up_body": "Olet lukenut kaikki tämän katsauksen uutiset.",
+    "caught_up_action": "Selaa Tänään"
   }
 }

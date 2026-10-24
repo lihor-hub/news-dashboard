@@ -362,5 +362,26 @@
     "search": {
       "clear": "Cancella ricerca"
     }
+  },
+  "brief": {
+    "greeting_morning": "Buongiorno",
+    "greeting_afternoon": "Buon pomeriggio",
+    "greeting_evening": "Buonasera",
+    "reading_time": "Brief di {{count}} min",
+    "progress_label": "Notizie lette",
+    "progress_value": "{{read}} di {{total}} notizie lette",
+    "topics": "Argomenti",
+    "all_topics": "Tutti",
+    "sources_zero": "{{count}} fonti",
+    "sources_one": "{{count}} fonte",
+    "sources_two": "{{count}} fonti",
+    "sources_few": "{{count}} fonti",
+    "sources_many": "{{count}} fonti",
+    "sources_other": "{{count}} fonti",
+    "read": "Letta",
+    "topic_fallback": "Notizia",
+    "caught_up_title": "Sei in pari",
+    "caught_up_body": "Hai letto tutte le notizie di questo brief.",
+    "caught_up_action": "Vai a Oggi"
   }
 }

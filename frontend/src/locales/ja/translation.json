@@ -362,5 +362,26 @@
     "search": {
       "clear": "検索をクリア"
     }
+  },
+  "brief": {
+    "greeting_morning": "おはようございます",
+    "greeting_afternoon": "こんにちは",
+    "greeting_evening": "こんばんは",
+    "reading_time": "{{count}}分で読めるブリーフ",
+    "progress_label": "既読のストーリー",
+    "progress_value": "{{total}}件中{{read}}件を既読",
+    "topics": "トピック",
+    "all_topics": "すべて",
+    "sources_zero": "{{count}}件のソース",
+    "sources_one": "{{count}}件のソース",
+    "sources_two": "{{count}}件のソース",
+    "sources_few": "{{count}}件のソース",
+    "sources_many": "{{count}}件のソース",
+    "sources_other": "{{count}}件のソース",
+    "read": "既読",
+    "topic_fallback": "ストーリー",
+    "caught_up_title": "すべて読みました",
+    "caught_up_body": "このブリーフのストーリーをすべて読みました。",
+    "caught_up_action": "今日を見る"
   }
 }

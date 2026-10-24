@@ -362,5 +362,26 @@
     "search": {
       "clear": "Εκκαθάριση αναζήτησης"
     }
+  },
+  "brief": {
+    "greeting_morning": "Καλημέρα",
+    "greeting_afternoon": "Καλό απόγευμα",
+    "greeting_evening": "Καλησπέρα",
+    "reading_time": "Ενημέρωση {{count}} λεπτών",
+    "progress_label": "Ιστορίες που διαβάστηκαν",
+    "progress_value": "Διαβάστηκαν {{read}} από {{total}} ιστορίες",
+    "topics": "Θέματα",
+    "all_topics": "Όλα",
+    "sources_zero": "{{count}} πηγές",
+    "sources_one": "{{count}} πηγή",
+    "sources_two": "{{count}} πηγές",
+    "sources_few": "{{count}} πηγές",
+    "sources_many": "{{count}} πηγές",
+    "sources_other": "{{count}} πηγές",
+    "read": "Διαβάστηκε",
+    "topic_fallback": "Ιστορία",
+    "caught_up_title": "Είστε ενημερωμένοι",
+    "caught_up_body": "Διαβάσατε όλες τις ιστορίες αυτής της ενημέρωσης.",
+    "caught_up_action": "Δείτε το Σήμερα"
   }
 }

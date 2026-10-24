@@ -362,5 +362,26 @@
     "search": {
       "clear": "Wyczyść wyszukiwanie"
     }
+  },
+  "brief": {
+    "greeting_morning": "Dzień dobry",
+    "greeting_afternoon": "Dzień dobry",
+    "greeting_evening": "Dobry wieczór",
+    "reading_time": "Przegląd na {{count}} min",
+    "progress_label": "Przeczytane artykuły",
+    "progress_value": "Przeczytano {{read}} z {{total}} artykułów",
+    "topics": "Tematy",
+    "all_topics": "Wszystkie",
+    "sources_zero": "{{count}} źródeł",
+    "sources_one": "{{count}} źródło",
+    "sources_two": "{{count}} źródeł",
+    "sources_few": "{{count}} źródła",
+    "sources_many": "{{count}} źródeł",
+    "sources_other": "{{count}} źródeł",
+    "read": "Przeczytane",
+    "topic_fallback": "Artykuł",
+    "caught_up_title": "Wszystko przeczytane",
+    "caught_up_body": "Przeczytano wszystkie artykuły w tym przeglądzie.",
+    "caught_up_action": "Przejdź do Dziś"
   }
 }

@@ -362,5 +362,26 @@
     "search": {
       "clear": "खोज साफ़ करें"
     }
+  },
+  "brief": {
+    "greeting_morning": "सुप्रभात",
+    "greeting_afternoon": "नमस्कार",
+    "greeting_evening": "शुभ संध्या",
+    "reading_time": "{{count}} मिनट का सारांश",
+    "progress_label": "पढ़ी गई ख़बरें",
+    "progress_value": "{{total}} में से {{read}} ख़बरें पढ़ी गईं",
+    "topics": "विषय",
+    "all_topics": "सभी",
+    "sources_zero": "{{count}} स्रोत",
+    "sources_one": "{{count}} स्रोत",
+    "sources_two": "{{count}} स्रोत",
+    "sources_few": "{{count}} स्रोत",
+    "sources_many": "{{count}} स्रोत",
+    "sources_other": "{{count}} स्रोत",
+    "read": "पढ़ा गया",
+    "topic_fallback": "ख़बर",
+    "caught_up_title": "सब पढ़ लिया",
+    "caught_up_body": "आपने इस सारांश की सभी ख़बरें पढ़ ली हैं।",
+    "caught_up_action": "आज देखें"
   }
 }

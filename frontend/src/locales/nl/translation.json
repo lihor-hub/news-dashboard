@@ -362,5 +362,26 @@
     "search": {
       "clear": "Zoekopdracht wissen"
     }
+  },
+  "brief": {
+    "greeting_morning": "Goedemorgen",
+    "greeting_afternoon": "Goedemiddag",
+    "greeting_evening": "Goedenavond",
+    "reading_time": "Briefing van {{count}} min",
+    "progress_label": "Gelezen verhalen",
+    "progress_value": "{{read}} van {{total}} verhalen gelezen",
+    "topics": "Onderwerpen",
+    "all_topics": "Alles",
+    "sources_zero": "{{count}} bronnen",
+    "sources_one": "{{count}} bron",
+    "sources_two": "{{count}} bronnen",
+    "sources_few": "{{count}} bronnen",
+    "sources_many": "{{count}} bronnen",
+    "sources_other": "{{count}} bronnen",
+    "read": "Gelezen",
+    "topic_fallback": "Verhaal",
+    "caught_up_title": "Helemaal bij",
+    "caught_up_body": "Je hebt alle verhalen in deze briefing gelezen.",
+    "caught_up_action": "Naar Vandaag"
   }
 }

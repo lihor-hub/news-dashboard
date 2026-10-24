@@ -362,5 +362,26 @@
     "search": {
       "clear": "Xóa tìm kiếm"
     }
+  },
+  "brief": {
+    "greeting_morning": "Chào buổi sáng",
+    "greeting_afternoon": "Chào buổi chiều",
+    "greeting_evening": "Chào buổi tối",
+    "reading_time": "Bản tin {{count}} phút",
+    "progress_label": "Tin đã đọc",
+    "progress_value": "Đã đọc {{read}}/{{total}} tin",
+    "topics": "Chủ đề",
+    "all_topics": "Tất cả",
+    "sources_zero": "{{count}} nguồn",
+    "sources_one": "{{count}} nguồn",
+    "sources_two": "{{count}} nguồn",
+    "sources_few": "{{count}} nguồn",
+    "sources_many": "{{count}} nguồn",
+    "sources_other": "{{count}} nguồn",
+    "read": "Đã đọc",
+    "topic_fallback": "Tin",
+    "caught_up_title": "Đã đọc hết",
+    "caught_up_body": "Bạn đã đọc tất cả tin trong bản tin này.",
+    "caught_up_action": "Xem Hôm nay"
   }
 }

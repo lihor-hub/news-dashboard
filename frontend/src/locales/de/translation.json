@@ -362,5 +362,26 @@
     "search": {
       "clear": "Suche zurücksetzen"
     }
+  },
+  "brief": {
+    "greeting_morning": "Guten Morgen",
+    "greeting_afternoon": "Guten Tag",
+    "greeting_evening": "Guten Abend",
+    "reading_time": "{{count}} Min. Briefing",
+    "progress_label": "Gelesene Meldungen",
+    "progress_value": "{{read}} von {{total}} Meldungen gelesen",
+    "topics": "Themen",
+    "all_topics": "Alle",
+    "sources_zero": "{{count}} Quellen",
+    "sources_one": "{{count}} Quelle",
+    "sources_two": "{{count}} Quellen",
+    "sources_few": "{{count}} Quellen",
+    "sources_many": "{{count}} Quellen",
+    "sources_other": "{{count}} Quellen",
+    "read": "Gelesen",
+    "topic_fallback": "Meldung",
+    "caught_up_title": "Alles gelesen",
+    "caught_up_body": "Du hast alle Meldungen in diesem Briefing gelesen.",
+    "caught_up_action": "Zu Heute"
   }
 }

@@ -362,5 +362,26 @@
     "search": {
       "clear": "Effacer la recherche"
     }
+  },
+  "brief": {
+    "greeting_morning": "Bonjour",
+    "greeting_afternoon": "Bon après-midi",
+    "greeting_evening": "Bonsoir",
+    "reading_time": "Brief de {{count}} min",
+    "progress_label": "Articles lus",
+    "progress_value": "{{read}} sur {{total}} articles lus",
+    "topics": "Sujets",
+    "all_topics": "Tout",
+    "sources_zero": "{{count}} sources",
+    "sources_one": "{{count}} source",
+    "sources_two": "{{count}} sources",
+    "sources_few": "{{count}} sources",
+    "sources_many": "{{count}} sources",
+    "sources_other": "{{count}} sources",
+    "read": "Lu",
+    "topic_fallback": "Article",
+    "caught_up_title": "Vous êtes à jour",
+    "caught_up_body": "Vous avez lu tous les articles de ce brief.",
+    "caught_up_action": "Parcourir Aujourd'hui"
   }
 }
