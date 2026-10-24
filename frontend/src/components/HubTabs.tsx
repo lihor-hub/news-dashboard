@@ -19,7 +19,7 @@ export function HubTabs({ pathname, isAdmin, counts }: HubTabsProps) {
   const stripRef = useRef<HTMLDivElement>(null);
   const hub = getActiveHub(pathname);
   const items = hub ? hubItemsFor(hub, isAdmin) : [];
-  const activeTo = hub ? getActiveHubItem(hub, pathname)?.to : undefined;
+  const activeTo = getActiveHubItem(items, pathname)?.to;
 
   useEffect(() => {
     const active = stripRef.current?.querySelector<HTMLElement>('[aria-current="page"]');

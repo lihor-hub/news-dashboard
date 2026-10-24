@@ -11,7 +11,8 @@ import {
   hubTarget,
   isAccountRoute,
   isNavigationItemActive,
-  mobileBarHubIds,
+  insightsHub,
+  mobileBarHubs,
   navigationHubs,
   navigationItemsFor,
 } from '../lib/navigation';
@@ -103,7 +104,8 @@ describe('navigation hubs', () => {
   });
 
   it('puts four hubs in the mobile bar with Ask in the centre', () => {
-    expect(mobileBarHubIds).toEqual(['read', 'library', 'ask', 'learn']);
+    expect(mobileBarHubs.map((h) => h.id)).toEqual(['read', 'library', 'ask', 'learn']);
+    expect(insightsHub.id).toBe('insights');
   });
 });
 
@@ -132,12 +134,19 @@ describe('active hub and tab', () => {
   });
 
   it('picks the most specific tab inside a hub', () => {
-    expect(getActiveHubItem(hub('learn'), '/learn/library')?.to).toBe('/learn/library');
-    expect(getActiveHubItem(hub('learn'), '/learn/42')?.to).toBe('/learn');
-    expect(getActiveHubItem(hub('read'), '/today')?.to).toBe('/today');
-    expect(getActiveHubItem(hub('read'), '/briefs/9')?.to).toBe('/briefs');
+    const items = (id: string) => hub(id).items;
+    expect(getActiveHubItem(items('learn'), '/learn/library')?.to).toBe('/learn/library');
+    expect(getActiveHubItem(items('learn'), '/learn/42')?.to).toBe('/learn');
+    expect(getActiveHubItem(items('read'), '/today')?.to).toBe('/today');
+    expect(getActiveHubItem(items('read'), '/briefs/9')?.to).toBe('/briefs');
     // /recap (Insights) must not light up from /learn/recap.
-    expect(getActiveHubItem(hub('insights'), '/learn/recap')).toBeNull();
+    expect(getActiveHubItem(items('insights'), '/learn/recap')).toBeNull();
+  });
+
+  it('never sends a hub button to an admin-only page', () => {
+    for (const h of navigationHubs) {
+      expect(h.items.find((i) => i.to === hubTarget(h))?.adminOnly).toBeFalsy();
+    }
   });
 });
 
@@ -197,5 +206,8 @@ describe('navigation metadata', () => {
     expect(isNavigationItemActive('/briefs', '/briefs/123')).toBe(true);
     expect(isNavigationItemActive('/feeds', '/stats')).toBe(false);
     expect(isNavigationItemActive('/learn', '/learn/library')).toBe(false);
+    // Prefix matches respect path segments.
+    expect(isNavigationItemActive('/feeds', '/feeds/runs')).toBe(true);
+    expect(isNavigationItemActive('/feeds', '/feeds-archive')).toBe(false);
   });
 });

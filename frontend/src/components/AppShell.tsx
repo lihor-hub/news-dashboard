@@ -35,7 +35,8 @@ import {
   hubTarget,
   isAccountRoute,
   isNavigationItemActive,
-  mobileBarHubIds,
+  insightsHub,
+  mobileBarHubs,
   navigationHubs,
   type NavigationHub,
 } from '@/lib/navigation';
@@ -53,8 +54,10 @@ const OnboardingWizard = lazy(() =>
   import('./OnboardingWizard').then((m) => ({ default: m.OnboardingWizard }))
 );
 
+type RouteCounts = Partial<Record<string, number | null>>;
+
 /** Badge counts keyed by route, shared by the rail and the hub tab strip. */
-function useCountsByRoute(): Partial<Record<string, number | null>> {
+function useCountsByRoute(): RouteCounts {
   const { data } = useQuery({
     queryKey: ['summary'],
     queryFn: fetchSummary,
@@ -90,7 +93,7 @@ function useOnlineStatus() {
 }
 
 // Badge shown on a hub button: Read surfaces new arrivals, Library surfaces unread shares.
-function hubCount(hub: NavigationHub, counts: Partial<Record<string, number | null>>) {
+function hubCount(hub: NavigationHub, counts: RouteCounts) {
   if (hub.id === 'read') return counts['/today'];
   if (hub.id === 'library') return counts['/shared'];
   return null;
@@ -124,7 +127,6 @@ function AccountMenuContent({
   const { user } = useAuth();
   const handleLogout = useLogout();
   const isAdmin = Boolean(user?.is_admin);
-  const insights = navigationHubs.find((hub) => hub.id === 'insights');
 
   return (
     <>
@@ -138,12 +140,12 @@ function AccountMenuContent({
         </div>
       </SheetHeader>
       <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-2 pb-3">
-        {includeInsights && insights && (
-          <nav aria-label={t(insights.labelKey)} className="pb-2">
+        {includeInsights && (
+          <nav aria-label={t(insightsHub.labelKey)} className="pb-2">
             <div className="px-3 pt-1 pb-1.5 text-xs font-medium uppercase tracking-wider text-subtle">
-              {t(insights.labelKey)}
+              {t(insightsHub.labelKey)}
             </div>
-            {hubItemsFor(insights, isAdmin).map((item) => (
+            {hubItemsFor(insightsHub, isAdmin).map((item) => (
               <NavLink
                 key={item.to}
                 to={item.to}
@@ -188,9 +190,8 @@ function AccountMenuContent({
   );
 }
 
-function DesktopRail({ pathname }: { pathname: string }) {
+function DesktopRail({ pathname, counts }: { pathname: string; counts: RouteCounts }) {
   const { t, i18n } = useTranslation();
-  const counts = useCountsByRoute();
   const { user } = useAuth();
   const [accountOpen, setAccountOpen] = useState(false);
   const activeHub = getActiveHub(pathname);
@@ -261,8 +262,7 @@ function MobileBottomBar({ pathname }: { pathname: string }) {
       className="fixed inset-x-0 bottom-0 z-30 border-t border-border bg-background/95 ps-[env(safe-area-inset-left)] pe-[env(safe-area-inset-right)] pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden"
     >
       <div className="grid grid-cols-5 items-end">
-        {mobileBarHubIds.map((id) => {
-          const hub = navigationHubs.find((h) => h.id === id)!;
+        {mobileBarHubs.map((hub) => {
           const Icon = hub.icon;
           const active = activeHub?.id === hub.id;
           const raised = hub.id === 'ask';
@@ -279,7 +279,7 @@ function MobileBottomBar({ pathname }: { pathname: string }) {
               {raised ? (
                 <span
                   className={cn(
-                    '-mt-6 mb-0.5 flex size-12 items-center justify-center rounded-full bg-accent text-accent-foreground shadow-md ring-4 ring-background',
+                    '-mt-3 flex size-11 items-center justify-center rounded-full bg-accent text-accent-foreground shadow-md ring-4 ring-background',
                     active && 'ring-surface-2'
                   )}
                 >
@@ -422,7 +422,7 @@ export function AppShell() {
       className="app-shell flex min-h-dvh bg-background text-foreground"
       style={{ '--shell-content-max': '72rem' } as CSSProperties}
     >
-      <DesktopRail pathname={pathname} />
+      <DesktopRail pathname={pathname} counts={countsByRoute} />
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="sticky top-0 z-30 border-b border-border bg-background/85 backdrop-blur">
           <div className="flex h-12 items-center justify-between gap-2 ps-[max(1rem,env(safe-area-inset-left))] pe-[max(1rem,env(safe-area-inset-right))] md:px-5">

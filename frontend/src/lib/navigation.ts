@@ -197,14 +197,19 @@ export function commandNavigationItemsFor(isAdmin: boolean): NavigationItem[] {
   }));
 }
 
-/** Where a hub's rail / bottom-bar button leads: its first visible page. */
+/** Where a hub's rail / bottom-bar button leads: its first page visible to everyone. */
 export function hubTarget(hub: NavigationHub): string {
-  return hub.items[0].to;
+  return (hub.items.find((item) => !item.adminOnly) ?? hub.items[0]).to;
 }
+
+const hubById = new Map(navigationHubs.map((hub) => [hub.id, hub]));
 
 // The mobile bottom bar shows four hubs plus the "You" sheet, with Ask raised in
 // the centre. Insights lives inside the "You" sheet on small screens.
-export const mobileBarHubIds: readonly HubId[] = ['read', 'library', 'ask', 'learn'];
+export const mobileBarHubs: NavigationHub[] = (['read', 'library', 'ask', 'learn'] as const).map(
+  (id) => hubById.get(id)!
+);
+export const insightsHub: NavigationHub = hubById.get('insights')!;
 
 function matchesRoute(to: string, pathname: string): boolean {
   if (to === '/') return pathname === '/';
@@ -218,16 +223,16 @@ export function getActiveHub(pathname: string): NavigationHub | null {
   );
 }
 
-/** The hub tab for the current page: the longest route in the hub that contains it. */
-export function getActiveHubItem(hub: NavigationHub, pathname: string): NavigationItem | null {
-  return hub.items.reduce<NavigationItem | null>(
+/** The tab for the current page: the longest of `items` whose route contains it. */
+export function getActiveHubItem(items: NavigationItem[], pathname: string): NavigationItem | null {
+  return items.reduce<NavigationItem | null>(
     (best, item) =>
       matchesRoute(item.to, pathname) && item.to.length > (best?.to.length ?? -1) ? item : best,
     null
   );
 }
 
-/** True when the current page is reached through the "You" menu (account pages or Insights). */
+/** True for account pages (Feeds, Settings, admin) that live only in the "You" / avatar menu. */
 export function isAccountRoute(pathname: string): boolean {
   return accountNavigationItems.some((item) => matchesRoute(item.to, pathname));
 }
@@ -249,9 +254,11 @@ export function getShortcutTarget(key: string): string | null {
   return shortcutTargets.get(key.toLowerCase()) ?? null;
 }
 
+// Hub roots whose sub-routes are separate pages (or detail views) of their own.
+const exactMatchRoutes = new Set(['/', '/today', '/learn']);
+
 export function isNavigationItemActive(to: string, pathname: string): boolean {
-  if (to === '/' || to === '/today' || to === '/learn') return pathname === to;
-  return pathname.startsWith(to);
+  return exactMatchRoutes.has(to) ? pathname === to : matchesRoute(to, pathname);
 }
 // Single source of truth for page titles: each rule pairs a route match with
 // its English label and i18next key, so the two can never drift out of sync.
