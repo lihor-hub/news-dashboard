@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { Clock, Download } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
+import { Clock, Download, Inbox } from 'lucide-react';
 import { ArticleListView } from '@/components/article/ArticleListView';
 import { fetchTriageArticles } from '@/api/workflowApi';
 import { ARTICLES_KEY } from '@/hooks/useTriageMutations';
@@ -13,6 +14,7 @@ function sortByReturnDate(articles: WorkflowArticle[]) {
 }
 
 export function LaterPage() {
+  const { t } = useTranslation();
   const [saving, setSaving] = useState(false);
   const [savedCount, setSavedCount] = useState<number | null>(null);
 
@@ -34,6 +36,7 @@ export function LaterPage() {
         icon: Clock,
         title: 'Nothing snoozed',
         subtitle: 'Articles you send to Later will appear here with their return date.',
+        actions: [{ label: t('states.actions.today'), to: '/today', icon: Inbox }],
       }}
       showLaterUntil
       sortArticles={sortByReturnDate}

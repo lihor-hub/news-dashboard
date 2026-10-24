@@ -332,5 +332,35 @@
       "success_other": "Done — {{count}} new articles"
     },
     "suggestions": "Suggestions"
+  },
+  "states": {
+    "loading": "Laster inn",
+    "caughtUp": {
+      "title": "Du er helt oppdatert",
+      "body": "Det er ingenting igjen å sortere i dag. Bruk det rolige øyeblikket til å lære noe nytt.",
+      "learn": "Lær noe",
+      "recap": "Ukentlig oppsummering",
+      "later": "Åpne Senere"
+    },
+    "noFeeds": {
+      "title": "Legg til 3 feeder for å få din første Brief",
+      "body": "Følg noen kilder du stoler på, så rangerer og oppsummerer vi dem for deg.",
+      "action": "Legg til feeder"
+    },
+    "categoryClear": {
+      "title": "Ingenting nytt i denne kategorien",
+      "body": "Alt her er sortert. Sjekk de andre kategoriene.",
+      "action": "Vis alle kategorier"
+    },
+    "actions": {
+      "today": "Gå til I dag",
+      "search": "Søk i artikler"
+    },
+    "archive": {
+      "body": "Arkiverte artikler er fortsatt søkbare her."
+    },
+    "search": {
+      "clear": "Tøm søk"
+    }
   }
 }

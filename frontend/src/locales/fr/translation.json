@@ -332,5 +332,35 @@
       "success_other": "Done — {{count}} new articles"
     },
     "suggestions": "Suggestions"
+  },
+  "states": {
+    "loading": "Chargement",
+    "caughtUp": {
+      "title": "Vous êtes à jour",
+      "body": "Plus rien à trier aujourd'hui. Profitez de ce moment calme pour apprendre quelque chose.",
+      "learn": "Apprendre",
+      "recap": "Récap hebdomadaire",
+      "later": "Ouvrir Plus tard"
+    },
+    "noFeeds": {
+      "title": "Ajoutez 3 flux pour recevoir votre premier Brief",
+      "body": "Suivez quelques sources de confiance : nous les classons et les résumons pour vous.",
+      "action": "Ajouter des flux"
+    },
+    "categoryClear": {
+      "title": "Rien de nouveau dans cette catégorie",
+      "body": "Tout est trié ici. Consultez les autres catégories.",
+      "action": "Afficher toutes les catégories"
+    },
+    "actions": {
+      "today": "Aller à Aujourd'hui",
+      "search": "Rechercher des articles"
+    },
+    "archive": {
+      "body": "Les articles archivés restent consultables ici."
+    },
+    "search": {
+      "clear": "Effacer la recherche"
+    }
   }
 }

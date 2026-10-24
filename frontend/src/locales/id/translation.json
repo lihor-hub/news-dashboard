@@ -332,5 +332,35 @@
       "success_other": "Done — {{count}} new articles"
     },
     "suggestions": "Suggestions"
+  },
+  "states": {
+    "loading": "Memuat",
+    "caughtUp": {
+      "title": "Anda sudah membaca semuanya",
+      "body": "Tidak ada lagi yang perlu dipilah hari ini. Manfaatkan waktu senggang untuk mempelajari hal baru.",
+      "learn": "Pelajari sesuatu",
+      "recap": "Rekap mingguan",
+      "later": "Buka Nanti"
+    },
+    "noFeeds": {
+      "title": "Tambahkan 3 feed untuk mendapatkan Brief pertama Anda",
+      "body": "Ikuti beberapa sumber tepercaya, kami akan memeringkat dan merangkumnya untuk Anda.",
+      "action": "Tambah feed"
+    },
+    "categoryClear": {
+      "title": "Tidak ada yang baru di kategori ini",
+      "body": "Semua di sini sudah dipilah. Lihat kategori lain.",
+      "action": "Tampilkan semua kategori"
+    },
+    "actions": {
+      "today": "Ke Hari Ini",
+      "search": "Cari artikel"
+    },
+    "archive": {
+      "body": "Artikel yang diarsipkan tetap dapat dicari di sini."
+    },
+    "search": {
+      "clear": "Hapus pencarian"
+    }
   }
 }

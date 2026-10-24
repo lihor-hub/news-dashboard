@@ -332,5 +332,35 @@
       "success_other": "Done — {{count}} new articles"
     },
     "suggestions": "Suggestions"
+  },
+  "states": {
+    "loading": "Ladataan",
+    "caughtUp": {
+      "title": "Olet ajan tasalla",
+      "body": "Tänään ei ole enää mitään lajiteltavaa. Käytä hiljainen hetki oppiaksesi jotain uutta.",
+      "learn": "Opi jotain",
+      "recap": "Viikkokooste",
+      "later": "Avaa Myöhemmin"
+    },
+    "noFeeds": {
+      "title": "Lisää 3 syötettä saadaksesi ensimmäisen Briefin",
+      "body": "Seuraa muutamaa luotettavaa lähdettä, niin järjestämme ja tiivistämme ne puolestasi.",
+      "action": "Lisää syötteitä"
+    },
+    "categoryClear": {
+      "title": "Ei mitään uutta tässä kategoriassa",
+      "body": "Kaikki täällä on lajiteltu. Katso muut kategoriat.",
+      "action": "Näytä kaikki kategoriat"
+    },
+    "actions": {
+      "today": "Siirry Tänään-näkymään",
+      "search": "Hae artikkeleita"
+    },
+    "archive": {
+      "body": "Arkistoidut artikkelit ovat yhä haettavissa täällä."
+    },
+    "search": {
+      "clear": "Tyhjennä haku"
+    }
   }
 }

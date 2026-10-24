@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router';
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
-import { Send, ExternalLink, Ban } from 'lucide-react';
+import { Send, ExternalLink, Ban, Inbox } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { EmptyState } from '@/components/EmptyState';
 import { ListSkeleton, RetryableErrorState } from '@/components/PageState';
@@ -16,6 +17,7 @@ const SENT_SHARES_KEY = ['shares-sent'];
 type Tab = 'received' | 'sent';
 
 function ReceivedTab() {
+  const { t } = useTranslation();
   const queryClient = useQueryClient();
   const { data, isLoading, isError, isFetching, refetch } = useQuery({
     queryKey: SHARES_KEY,
@@ -42,7 +44,7 @@ function ReceivedTab() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [shares.map((s) => (s.read_at ? '' : s.id)).join(',')]);
 
-  if (isLoading) return <ListSkeleton rows={3} />;
+  if (isLoading) return <ListSkeleton rows={3} variant="card" />;
 
   if (isError) {
     return (
@@ -61,6 +63,7 @@ function ReceivedTab() {
         icon={Send}
         title="Nothing shared yet"
         subtitle="When someone sends you an article, it shows up here."
+        actions={[{ label: t('states.actions.today'), to: '/today', icon: Inbox }]}
       />
     );
   }
@@ -114,6 +117,7 @@ function ReceivedTab() {
 }
 
 function SentTab() {
+  const { t } = useTranslation();
   const queryClient = useQueryClient();
   const { data, isLoading, isError, isFetching, refetch } = useQuery({
     queryKey: SENT_SHARES_KEY,
@@ -131,7 +135,7 @@ function SentTab() {
     onError: () => toast.error('Could not revoke share'),
   });
 
-  if (isLoading) return <ListSkeleton rows={3} />;
+  if (isLoading) return <ListSkeleton rows={3} variant="card" />;
 
   if (isError) {
     return (
@@ -150,6 +154,7 @@ function SentTab() {
         icon={Send}
         title="Nothing sent yet"
         subtitle="Articles you share with other people show up here."
+        actions={[{ label: t('states.actions.today'), to: '/today', icon: Inbox }]}
       />
     );
   }

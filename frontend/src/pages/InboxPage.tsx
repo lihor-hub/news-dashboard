@@ -2,6 +2,7 @@ import { Inbox } from 'lucide-react';
 import { useSearchParams } from 'react-router';
 import { ArticleListView } from '@/components/article/ArticleListView';
 import { FeedNudgeBanner } from '@/components/FeedNudgeBanner';
+import { TodayEmptyState } from '@/components/TodayEmptyState';
 import { fetchTriageArticles } from '@/api/workflowApi';
 import { ARTICLES_KEY } from '@/hooks/useTriageMutations';
 
@@ -18,6 +19,7 @@ export function InboxPage() {
       queryKey={[ARTICLES_KEY, 'today', category]}
       queryFn={(params) => fetchTriageArticles('today', category, params)}
       empty={{ icon: Inbox, title: 'Queue clear', subtitle: 'Nothing left to triage today.' }}
+      emptyContent={<TodayEmptyState category={category} />}
       showCategoryFilter
       banner={<FeedNudgeBanner />}
     />

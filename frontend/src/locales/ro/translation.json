@@ -332,5 +332,35 @@
       "success_other": "Done — {{count}} new articles"
     },
     "suggestions": "Suggestions"
+  },
+  "states": {
+    "loading": "Se încarcă",
+    "caughtUp": {
+      "title": "Ești la zi",
+      "body": "Nu mai e nimic de triat azi. Folosește momentul liniștit ca să înveți ceva nou.",
+      "learn": "Învață ceva",
+      "recap": "Rezumat săptămânal",
+      "later": "Deschide Mai târziu"
+    },
+    "noFeeds": {
+      "title": "Adaugă 3 fluxuri ca să primești primul Brief",
+      "body": "Urmărește câteva surse de încredere, iar noi le ordonăm și le rezumăm pentru tine.",
+      "action": "Adaugă fluxuri"
+    },
+    "categoryClear": {
+      "title": "Nimic nou în această categorie",
+      "body": "Totul aici e triat. Verifică celelalte categorii.",
+      "action": "Arată toate categoriile"
+    },
+    "actions": {
+      "today": "Mergi la Azi",
+      "search": "Caută articole"
+    },
+    "archive": {
+      "body": "Articolele arhivate rămân căutabile aici."
+    },
+    "search": {
+      "clear": "Șterge căutarea"
+    }
   }
 }

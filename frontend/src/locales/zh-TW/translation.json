@@ -332,5 +332,35 @@
       "success_other": "Done — {{count}} new articles"
     },
     "suggestions": "Suggestions"
+  },
+  "states": {
+    "loading": "載入中",
+    "caughtUp": {
+      "title": "你已全部看完",
+      "body": "今天沒有需要處理的內容了。趁這段空檔學點新東西吧。",
+      "learn": "學點新東西",
+      "recap": "每週回顧",
+      "later": "開啟稍後閱讀"
+    },
+    "noFeeds": {
+      "title": "新增 3 個訂閱來源，取得你的第一份簡報",
+      "body": "追蹤幾個你信任的來源，我們會為你排序並摘要。",
+      "action": "新增訂閱來源"
+    },
+    "categoryClear": {
+      "title": "此分類沒有新內容",
+      "body": "這裡已全部處理。看看其他分類吧。",
+      "action": "顯示所有分類"
+    },
+    "actions": {
+      "today": "前往今日",
+      "search": "搜尋文章"
+    },
+    "archive": {
+      "body": "已封存的文章仍可在此搜尋。"
+    },
+    "search": {
+      "clear": "清除搜尋"
+    }
   }
 }

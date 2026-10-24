@@ -332,5 +332,35 @@
       "success_other": "Done — {{count}} new articles"
     },
     "suggestions": "Suggestions"
+  },
+  "states": {
+    "loading": "Načítání",
+    "caughtUp": {
+      "title": "Máte vše přečteno",
+      "body": "Dnes už není co třídit. Využijte klidnou chvíli a naučte se něco nového.",
+      "learn": "Naučit se něco",
+      "recap": "Týdenní souhrn",
+      "later": "Otevřít Později"
+    },
+    "noFeeds": {
+      "title": "Přidejte 3 zdroje a získejte svůj první Brief",
+      "body": "Sledujte několik důvěryhodných zdrojů a my je seřadíme a shrneme za vás.",
+      "action": "Přidat zdroje"
+    },
+    "categoryClear": {
+      "title": "V této kategorii nic nového",
+      "body": "Vše je zde roztříděno. Podívejte se do dalších kategorií.",
+      "action": "Zobrazit všechny kategorie"
+    },
+    "actions": {
+      "today": "Přejít na Dnes",
+      "search": "Hledat články"
+    },
+    "archive": {
+      "body": "Archivované články zde zůstávají vyhledatelné."
+    },
+    "search": {
+      "clear": "Vymazat hledání"
+    }
   }
 }

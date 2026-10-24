@@ -102,7 +102,7 @@ describe('BriefPage — loading state', () => {
     renderBriefPage();
     // Skeleton elements are present (animate-pulse divs)
     const { container } = renderBriefPage();
-    expect(container.querySelector('.animate-pulse')).toBeTruthy();
+    expect(container.querySelector('[class*="animate-pulse"]')).toBeTruthy();
   });
 });
 

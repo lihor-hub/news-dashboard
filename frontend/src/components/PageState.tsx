@@ -1,6 +1,8 @@
 import { AlertCircle, type LucideIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
+import { Skeleton } from '@/components/ui/skeleton';
 
 interface RetryableErrorStateProps {
   title: string;
@@ -41,15 +43,51 @@ export function RetryableErrorState({
   );
 }
 
-export function ListSkeleton({ rows = 5 }: { rows?: number }) {
+/** Placeholder row shaped like an article row: thumbnail + meta line + title line. */
+export function RowSkeleton() {
   return (
-    <div className="divide-y divide-border border-t border-border">
+    <div className="flex items-start gap-3 px-4 py-3 md:px-5">
+      <Skeleton className="size-12 shrink-0 rounded-lg bg-muted" />
+      <div className="min-w-0 flex-1 space-y-2 pt-0.5">
+        <Skeleton className="h-3 w-32 rounded-full bg-muted" />
+        <Skeleton className="h-4 w-4/5 rounded-full bg-muted" />
+      </div>
+    </div>
+  );
+}
+
+/** Placeholder card shaped like a story card: avatar + title + one line of meta. */
+export function CardSkeleton() {
+  return (
+    <div className="flex items-start gap-3 rounded-xl border border-border p-3">
+      <Skeleton className="size-10 shrink-0 rounded-full bg-muted" />
+      <div className="min-w-0 flex-1 space-y-2 pt-0.5">
+        <Skeleton className="h-4 w-3/4 rounded-full bg-muted" />
+        <Skeleton className="h-3 w-1/2 rounded-full bg-muted" />
+      </div>
+    </div>
+  );
+}
+
+export function ListSkeleton({
+  rows = 5,
+  variant = 'row',
+}: {
+  rows?: number;
+  variant?: 'row' | 'card';
+}) {
+  const { t } = useTranslation();
+  const Item = variant === 'card' ? CardSkeleton : RowSkeleton;
+  return (
+    <div
+      role="status"
+      aria-busy="true"
+      data-testid="list-skeleton"
+      className={variant === 'card' ? 'grid gap-2' : 'divide-y divide-border'}
+    >
+      <span className="sr-only">{t('states.loading')}</span>
       {Array.from({ length: rows }).map((_, index) => (
-        <div key={index} className="px-4 py-3 md:px-5">
-          <div className="mb-2 h-3 w-28 animate-pulse rounded bg-muted" />
-          <div className="mb-2 h-4 w-2/3 animate-pulse rounded bg-muted" />
-          <div className="h-3 w-1/2 animate-pulse rounded bg-muted" />
-        </div>
+        <Item key={index} />
       ))}
     </div>
   );

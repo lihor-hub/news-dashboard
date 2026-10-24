@@ -332,5 +332,35 @@
       "success_other": "Done — {{count}} new articles"
     },
     "suggestions": "Suggestions"
+  },
+  "states": {
+    "loading": "Loading",
+    "caughtUp": {
+      "title": "You're all caught up",
+      "body": "Nothing left to triage today. Use the quiet moment to learn something new.",
+      "learn": "Learn something",
+      "recap": "Weekly recap",
+      "later": "Open Later"
+    },
+    "noFeeds": {
+      "title": "Add 3 feeds to get your first Brief",
+      "body": "Follow a few sources you trust and we'll rank and summarise them for you.",
+      "action": "Add feeds"
+    },
+    "categoryClear": {
+      "title": "Nothing new in this category",
+      "body": "Everything here is triaged. Check the other categories.",
+      "action": "Show all categories"
+    },
+    "actions": {
+      "today": "Go to Today",
+      "search": "Search articles"
+    },
+    "archive": {
+      "body": "Archived articles stay searchable here."
+    },
+    "search": {
+      "clear": "Clear search"
+    }
   }
 }

@@ -332,5 +332,35 @@
       "success_other": "Done — {{count}} new articles"
     },
     "suggestions": "Suggestions"
+  },
+  "states": {
+    "loading": "Betöltés",
+    "caughtUp": {
+      "title": "Mindent átnéztél",
+      "body": "Ma már nincs mit átnézni. Használd ki a nyugodt percet, és tanulj valami újat.",
+      "learn": "Tanulj valamit",
+      "recap": "Heti összefoglaló",
+      "later": "Később megnyitása"
+    },
+    "noFeeds": {
+      "title": "Adj hozzá 3 hírcsatornát az első Briefhez",
+      "body": "Kövess néhány megbízható forrást, mi rangsoroljuk és összefoglaljuk őket.",
+      "action": "Hírcsatornák hozzáadása"
+    },
+    "categoryClear": {
+      "title": "Nincs újdonság ebben a kategóriában",
+      "body": "Itt minden át van nézve. Nézd meg a többi kategóriát.",
+      "action": "Összes kategória"
+    },
+    "actions": {
+      "today": "Ugrás a Mára",
+      "search": "Cikkek keresése"
+    },
+    "archive": {
+      "body": "Az archivált cikkek itt továbbra is kereshetők."
+    },
+    "search": {
+      "clear": "Keresés törlése"
+    }
   }
 }

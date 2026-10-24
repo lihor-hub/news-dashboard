@@ -1,4 +1,5 @@
-import { Archive as ArchiveIcon } from 'lucide-react';
+import { Archive as ArchiveIcon, Search } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { useSearchParams } from 'react-router';
 import { ArticleListView } from '@/components/article/ArticleListView';
 import { fetchTriageArticles } from '@/api/workflowApi';
@@ -12,6 +13,7 @@ function sortByArchivedDate(articles: WorkflowArticle[]) {
 }
 
 export function ArchivePage() {
+  const { t } = useTranslation();
   const [searchParams] = useSearchParams();
   const category = searchParams.get('category') ?? undefined;
 
@@ -23,7 +25,12 @@ export function ArchivePage() {
       }
       queryKey={[ARTICLES_KEY, 'archived', category]}
       queryFn={(params) => fetchTriageArticles('archived', category, params)}
-      empty={{ icon: ArchiveIcon, title: 'Archive empty' }}
+      empty={{
+        icon: ArchiveIcon,
+        title: 'Archive empty',
+        subtitle: t('states.archive.body'),
+        actions: [{ label: t('states.actions.search'), to: '/search', icon: Search }],
+      }}
       showCategoryFilter
       sortArticles={sortByArchivedDate}
     />

@@ -10,6 +10,7 @@ import {
   DialogTitle,
   DialogFooter,
 } from '@/components/ui/dialog';
+import { ListSkeleton } from '@/components/PageState';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import {
@@ -20,6 +21,9 @@ import {
 import type { OnboardingSourceRecommendation } from '@/types';
 import { trackFeature } from '@/lib/analytics';
 import { BRIEF_ROUTE, TODAY_ROUTE } from '@/lib/navigation';
+
+// Footer actions keep a 44px tap target on touch layouts.
+const FOOTER_BUTTON = 'h-11 px-4 text-sm sm:h-9';
 
 interface Props {
   open: boolean;
@@ -142,8 +146,8 @@ export function OnboardingWizard({ open, onClose }: Props) {
         </DialogHeader>
 
         {isLoading ? (
-          <div className="flex items-center justify-center py-12" data-testid="onboarding-loading">
-            <Loader2 className="size-6 animate-spin text-muted-foreground" />
+          <div data-testid="onboarding-loading">
+            <ListSkeleton rows={4} variant="card" />
           </div>
         ) : step === 'interests' ? (
           <InterestStep
@@ -162,14 +166,15 @@ export function OnboardingWizard({ open, onClose }: Props) {
           <WorkflowStep />
         )}
 
-        <DialogFooter className="gap-2 sm:gap-0">
+        <DialogFooter className="gap-2">
           {step === 'interests' ? (
             <>
-              <Button variant="ghost" size="sm" onClick={handleSkip}>
+              <Button variant="ghost" size="sm" className={FOOTER_BUTTON} onClick={handleSkip}>
                 Skip for now
               </Button>
               <Button
                 size="sm"
+                className={FOOTER_BUTTON}
                 disabled={selectedInterests.size === 0 || loadingInterests}
                 onClick={handleGoToRecommendations}
               >
@@ -178,11 +183,12 @@ export function OnboardingWizard({ open, onClose }: Props) {
             </>
           ) : step === 'recommendations' ? (
             <>
-              <Button variant="ghost" size="sm" onClick={handleBack}>
+              <Button variant="ghost" size="sm" className={FOOTER_BUTTON} onClick={handleBack}>
                 Back
               </Button>
               <Button
                 size="sm"
+                className={FOOTER_BUTTON}
                 disabled={saveMutation.isPending || loadingRecs}
                 onClick={handleApply}
               >
@@ -194,12 +200,14 @@ export function OnboardingWizard({ open, onClose }: Props) {
               <Button
                 variant="outline"
                 size="sm"
+                className={FOOTER_BUTTON}
                 onClick={() => handleWorkflowAction(BRIEF_ROUTE, 'onboarding_ai_workflow_brief')}
               >
                 {t('onboarding.workflow.briefAction')}
               </Button>
               <Button
                 size="sm"
+                className={FOOTER_BUTTON}
                 autoFocus
                 onClick={() => handleWorkflowAction(TODAY_ROUTE, 'onboarding_ai_workflow_today')}
               >
@@ -273,7 +281,7 @@ function InterestStep({ interests, selected, onToggle }: InterestStepProps) {
             key={interest.id}
             onClick={() => onToggle(interest.id)}
             className={cn(
-              'flex flex-col gap-0.5 rounded-md border px-3 py-2.5 text-start transition-colors',
+              'flex min-h-11 flex-col gap-0.5 rounded-lg border px-3 py-3 text-start transition-colors',
               isSelected
                 ? 'border-primary bg-primary/5 text-foreground'
                 : 'border-border bg-background text-foreground hover:bg-surface'
@@ -304,11 +312,7 @@ function RecommendationsStep({
   loading,
 }: RecommendationsStepProps) {
   if (loading) {
-    return (
-      <div className="flex items-center justify-center py-8">
-        <Loader2 className="size-5 animate-spin text-muted-foreground" />
-      </div>
-    );
+    return <ListSkeleton rows={3} variant="card" />;
   }
   if (recommendations.length === 0) {
     return (
@@ -326,7 +330,7 @@ function RecommendationsStep({
             key={rec.slug}
             onClick={() => onToggle(rec.slug)}
             className={cn(
-              'flex flex-col gap-0.5 rounded-md border px-3 py-2.5 text-start transition-colors',
+              'flex min-h-11 flex-col gap-0.5 rounded-lg border px-3 py-3 text-start transition-colors',
               isSelected
                 ? 'border-primary bg-primary/5 text-foreground'
                 : 'border-border bg-background text-foreground hover:bg-surface'
