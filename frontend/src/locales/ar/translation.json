@@ -253,7 +253,10 @@
     "swipeSkip": "تخطٍّ",
     "swipeHint": "اسحب يمينًا للإنهاء، ويسارًا للتخطي، أو اضغط مطولًا لإضافة نجمة.",
     "dismissHint": "إغلاق التلميح",
-    "filterByCategory": "التصفية حسب الفئة"
+    "filterByCategory": "التصفية حسب الفئة",
+    "readingPane": "جزء القراءة",
+    "selectArticle": "اختر مقالًا",
+    "selectArticleHint": "اختر قصة من القائمة، أو اضغط J / K للتنقل بينها."
   },
   "substackWizard": {
     "open": "Follow Substack",

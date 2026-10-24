@@ -253,7 +253,10 @@
     "swipeSkip": "Hopp over",
     "swipeHint": "Sveip til høyre for ferdig, til venstre for å hoppe over, eller hold inne for å stjernemerke.",
     "dismissHint": "Lukk tips",
-    "filterByCategory": "Filtrer etter kategori"
+    "filterByCategory": "Filtrer etter kategori",
+    "readingPane": "Leserute",
+    "selectArticle": "Velg en artikkel",
+    "selectArticleHint": "Velg en sak fra listen, eller trykk J / K for å bla gjennom den."
   },
   "substackWizard": {
     "open": "Follow Substack",

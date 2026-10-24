@@ -253,7 +253,10 @@
     "swipeSkip": "छोड़ें",
     "swipeHint": "पूरा करने के लिए दाएँ, छोड़ने के लिए बाएँ स्वाइप करें, या स्टार के लिए दबाकर रखें।",
     "dismissHint": "सुझाव बंद करें",
-    "filterByCategory": "श्रेणी के अनुसार फ़िल्टर करें"
+    "filterByCategory": "श्रेणी के अनुसार फ़िल्टर करें",
+    "readingPane": "पठन पैनल",
+    "selectArticle": "कोई लेख चुनें",
+    "selectArticleHint": "सूची से कोई खबर चुनें, या उसमें आगे-पीछे जाने के लिए J / K दबाएँ।"
   },
   "substackWizard": {
     "open": "Follow Substack",

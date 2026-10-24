@@ -253,7 +253,10 @@
     "swipeSkip": "Pomiń",
     "swipeHint": "Przesuń w prawo, aby oznaczyć jako gotowe, w lewo, aby pominąć, lub przytrzymaj, aby oznaczyć gwiazdką.",
     "dismissHint": "Zamknij wskazówkę",
-    "filterByCategory": "Filtruj według kategorii"
+    "filterByCategory": "Filtruj według kategorii",
+    "readingPane": "Panel czytania",
+    "selectArticle": "Wybierz artykuł",
+    "selectArticleHint": "Wybierz artykuł z listy lub przechodź po niej klawiszami J / K."
   },
   "substackWizard": {
     "open": "Follow Substack",

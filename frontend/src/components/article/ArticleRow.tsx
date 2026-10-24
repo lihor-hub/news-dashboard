@@ -13,6 +13,10 @@ interface Props {
   article: WorkflowArticle;
   focused?: boolean;
   showLaterUntil?: boolean;
+  /** Link target; defaults to the full article page. */
+  to?: string;
+  /** Row is the article shown in the reading pane. */
+  current?: boolean;
 }
 
 const MAX_ALSO_FROM_SHOWN = 3;
@@ -66,7 +70,7 @@ function SourceAvatar({ name }: { name: string }) {
   );
 }
 
-function ArticleRowComponent({ article, focused, showLaterUntil }: Props) {
+function ArticleRowComponent({ article, focused, showLaterUntil, to, current }: Props) {
   const { t } = useTranslation();
   const { setState, toggleStar } = useTriageMutations();
 
@@ -113,7 +117,9 @@ function ArticleRowComponent({ article, focused, showLaterUntil }: Props) {
         leftLabel={t('articleList.swipeSkip')}
       >
         <Link
-          to={`/a/${article.id}`}
+          to={to ?? `/a/${article.id}`}
+          aria-current={current ? 'true' : undefined}
+          data-article-row
           className={cn(
             'motion-fade-up relative flex min-h-12 gap-3 border-b border-border px-4 py-4 transition-colors hover:bg-surface md:px-5 md:py-3',
             article.highPriority &&

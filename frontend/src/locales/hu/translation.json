@@ -253,7 +253,10 @@
     "swipeSkip": "Kihagyás",
     "swipeHint": "Húzd jobbra a késznek jelöléshez, balra a kihagyáshoz, vagy tartsd lenyomva a csillagozáshoz.",
     "dismissHint": "Tipp bezárása",
-    "filterByCategory": "Szűrés kategória szerint"
+    "filterByCategory": "Szűrés kategória szerint",
+    "readingPane": "Olvasópanel",
+    "selectArticle": "Válasszon cikket",
+    "selectArticleHint": "Válasszon egy hírt a listából, vagy lépkedjen a J / K billentyűkkel."
   },
   "substackWizard": {
     "open": "Follow Substack",

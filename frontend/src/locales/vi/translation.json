@@ -253,7 +253,10 @@
     "swipeSkip": "Bỏ qua",
     "swipeHint": "Vuốt phải để đánh dấu xong, vuốt trái để bỏ qua, hoặc nhấn giữ để gắn sao.",
     "dismissHint": "Đóng mẹo",
-    "filterByCategory": "Lọc theo danh mục"
+    "filterByCategory": "Lọc theo danh mục",
+    "readingPane": "Khung đọc",
+    "selectArticle": "Chọn một bài viết",
+    "selectArticleHint": "Chọn một tin trong danh sách, hoặc nhấn J / K để duyệt qua."
   },
   "substackWizard": {
     "open": "Follow Substack",

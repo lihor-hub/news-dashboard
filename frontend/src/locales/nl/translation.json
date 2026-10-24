@@ -253,7 +253,10 @@
     "swipeSkip": "Overslaan",
     "swipeHint": "Veeg naar rechts voor klaar, naar links om over te slaan, of houd ingedrukt voor een ster.",
     "dismissHint": "Tip sluiten",
-    "filterByCategory": "Filteren op categorie"
+    "filterByCategory": "Filteren op categorie",
+    "readingPane": "Leesvenster",
+    "selectArticle": "Selecteer een artikel",
+    "selectArticleHint": "Kies een artikel uit de lijst of blader met J / K."
   },
   "substackWizard": {
     "open": "Follow Substack",

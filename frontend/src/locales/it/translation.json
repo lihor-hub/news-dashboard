@@ -253,7 +253,10 @@
     "swipeSkip": "Salta",
     "swipeHint": "Scorri a destra per segnare come fatto, a sinistra per saltare o tieni premuto per aggiungere una stella.",
     "dismissHint": "Chiudi suggerimento",
-    "filterByCategory": "Filtra per categoria"
+    "filterByCategory": "Filtra per categoria",
+    "readingPane": "Riquadro di lettura",
+    "selectArticle": "Seleziona un articolo",
+    "selectArticleHint": "Scegli una notizia dall'elenco o scorrilo con J / K."
   },
   "substackWizard": {
     "open": "Follow Substack",

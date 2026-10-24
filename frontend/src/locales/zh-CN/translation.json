@@ -253,7 +253,10 @@
     "swipeSkip": "跳过",
     "swipeHint": "向右滑动标记完成，向左滑动跳过，长按加星标。",
     "dismissHint": "关闭提示",
-    "filterByCategory": "按类别筛选"
+    "filterByCategory": "按类别筛选",
+    "readingPane": "阅读窗格",
+    "selectArticle": "选择一篇文章",
+    "selectArticleHint": "从列表中选择一篇文章，或按 J / K 逐条浏览。"
   },
   "substackWizard": {
     "open": "Follow Substack",

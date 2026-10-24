@@ -253,7 +253,10 @@
     "swipeSkip": "Пропустить",
     "swipeHint": "Смахните вправо — готово, влево — пропустить, удерживайте — добавить в избранное.",
     "dismissHint": "Скрыть подсказку",
-    "filterByCategory": "Фильтр по категории"
+    "filterByCategory": "Фильтр по категории",
+    "readingPane": "Панель чтения",
+    "selectArticle": "Выберите статью",
+    "selectArticleHint": "Выберите материал из списка или листайте его клавишами J / K."
   },
   "substackWizard": {
     "open": "Follow Substack",

@@ -1,21 +1,58 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { WorkflowArticle } from '../lib/workflowTypes';
 import type { useTriageMutations } from './useTriageMutations';
 
 type Mutations = ReturnType<typeof useTriageMutations>;
 
+// Enter on these keeps its native meaning (press the button, follow the link);
+// article row links are the exception and open the focused article.
+const NATIVE_ENTER_TARGET =
+  'button, summary, select, [role="button"], [role="menuitem"], [role="tab"], a:not([data-article-row])';
+
+export interface ArticleListNavOptions {
+  /**
+   * Controlled focus: when `onFocusChange` is set the host owns the focused
+   * index (e.g. a URL-synced reading-pane selection; -1 = nothing selected).
+   */
+  focused?: number;
+  onFocusChange?: (index: number) => void;
+  /** Bound to Esc when set. */
+  onEscape?: () => void;
+}
+
 export function useArticleListNav(
   list: WorkflowArticle[],
   openArticle: (a: WorkflowArticle) => void,
-  mutations: Mutations
+  mutations: Mutations,
+  { focused: controlledFocused, onFocusChange, onEscape }: ArticleListNavOptions = {}
 ) {
-  const [focused, setFocused] = useState(0);
+  const [internalFocused, setInternalFocused] = useState(0);
+  const controlled = onFocusChange != null;
+  const focused = controlled ? (controlledFocused ?? -1) : internalFocused;
+  // Controlled steps land on the next render; chain fast repeats off the last
+  // requested index instead of the not-yet-updated prop.
+  const pendingFocus = useRef<number | null>(null);
 
   useEffect(() => {
-    if (focused >= list.length) setFocused(Math.max(0, list.length - 1));
-  }, [list.length, focused]);
+    pendingFocus.current = null;
+  }, [focused]);
 
   useEffect(() => {
+    if (controlled) return;
+    if (internalFocused >= list.length) setInternalFocused(Math.max(0, list.length - 1));
+  }, [controlled, list.length, internalFocused]);
+
+  useEffect(() => {
+    const move = (delta: number) => {
+      if (list.length === 0) return;
+      const clamp = (index: number) => Math.min(list.length - 1, Math.max(0, index));
+      if (onFocusChange) {
+        const next = clamp((pendingFocus.current ?? focused) + delta);
+        pendingFocus.current = next;
+        onFocusChange(next);
+      } else setInternalFocused((f) => clamp(f + delta));
+    };
+
     const handler = (e: KeyboardEvent) => {
       const t = e.target as HTMLElement;
       if (t?.tagName === 'INPUT' || t?.tagName === 'TEXTAREA' || t?.isContentEditable) return;
@@ -25,12 +62,15 @@ export function useArticleListNav(
       const key = e.key.toLowerCase();
 
       if (key === 'j') {
-        setFocused((f) => Math.min(list.length - 1, f + 1));
+        move(1);
         e.preventDefault();
       } else if (key === 'k') {
-        setFocused((f) => Math.max(0, f - 1));
+        move(-1);
         e.preventDefault();
-      } else if (key === 'enter' && cur) {
+      } else if (key === 'escape' && onEscape) {
+        // Radix layers (dialogs, menus) prevent the Esc they consume.
+        if (!e.defaultPrevented) onEscape();
+      } else if (key === 'enter' && cur && !t?.closest?.(NATIVE_ENTER_TARGET)) {
         openArticle(cur);
         e.preventDefault();
       } else if ((key === 'r' || key === 'd') && cur) {
@@ -50,7 +90,7 @@ export function useArticleListNav(
 
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [list, focused, openArticle, mutations]);
+  }, [list, focused, openArticle, mutations, onFocusChange, onEscape]);
 
-  return { focused, setFocused };
+  return { focused, setFocused: setInternalFocused };
 }

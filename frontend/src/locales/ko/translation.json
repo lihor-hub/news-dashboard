@@ -253,7 +253,10 @@
     "swipeSkip": "건너뛰기",
     "swipeHint": "오른쪽으로 밀어 완료, 왼쪽으로 밀어 건너뛰기, 길게 눌러 별표.",
     "dismissHint": "팁 닫기",
-    "filterByCategory": "카테고리별 필터"
+    "filterByCategory": "카테고리별 필터",
+    "readingPane": "읽기 창",
+    "selectArticle": "기사를 선택하세요",
+    "selectArticleHint": "목록에서 기사를 고르거나 J / K 키로 이동하세요."
   },
   "substackWizard": {
     "open": "Follow Substack",

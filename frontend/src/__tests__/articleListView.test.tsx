@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -102,6 +102,24 @@ function renderArticleList(
 }
 
 describe('ArticleListView', () => {
+  let matchMediaSpy: ReturnType<typeof vi.spyOn>;
+  // happy-dom's default 1024px viewport hits the lg split pane, which has its
+  // own suite (articleSplitPane.test.tsx); these cover the single-column list.
+  beforeEach(() => {
+    matchMediaSpy = vi.spyOn(window, 'matchMedia').mockImplementation(
+      (query: string) =>
+        ({
+          matches: false,
+          media: query,
+          addEventListener: vi.fn(),
+          removeEventListener: vi.fn(),
+        }) as unknown as MediaQueryList
+    );
+  });
+  afterEach(() => {
+    matchMediaSpy.mockRestore();
+  });
+
   it('renders a configured heading, category filter, count, and article links', async () => {
     renderArticleList(() => Promise.resolve(page([makeArticle()])));
 

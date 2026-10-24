@@ -253,7 +253,10 @@
     "swipeSkip": "Lewati",
     "swipeHint": "Geser ke kanan untuk selesai, ke kiri untuk melewati, atau tahan untuk memberi bintang.",
     "dismissHint": "Tutup tips",
-    "filterByCategory": "Filter menurut kategori"
+    "filterByCategory": "Filter menurut kategori",
+    "readingPane": "Panel baca",
+    "selectArticle": "Pilih artikel",
+    "selectArticleHint": "Pilih berita dari daftar, atau tekan J / K untuk menelusurinya."
   },
   "substackWizard": {
     "open": "Follow Substack",

@@ -253,7 +253,10 @@
     "swipeSkip": "Omitir",
     "swipeHint": "Desliza a la derecha para marcar como hecho, a la izquierda para omitir o mantén pulsado para destacar.",
     "dismissHint": "Cerrar consejo",
-    "filterByCategory": "Filtrar por categoría"
+    "filterByCategory": "Filtrar por categoría",
+    "readingPane": "Panel de lectura",
+    "selectArticle": "Selecciona un artículo",
+    "selectArticleHint": "Elige una noticia de la lista o pulsa J / K para recorrerla."
   },
   "substackWizard": {
     "open": "Follow Substack",
