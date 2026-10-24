@@ -135,7 +135,7 @@ function AccountMenuContent({
         <div className="min-w-0">
           <SheetTitle className="truncate text-sm">{user?.username ?? t('nav.you')}</SheetTitle>
           {user?.email && (
-            <SheetDescription className="truncate text-xs">{user.email}</SheetDescription>
+            <SheetDescription className="truncate text-meta">{user.email}</SheetDescription>
           )}
         </div>
       </SheetHeader>
@@ -173,14 +173,14 @@ function AccountMenuContent({
           ))}
         </nav>
         <div className="mx-1 my-2 h-px bg-border" />
-        <div className="flex min-h-11 items-center justify-between gap-3 px-3">
+        <div className="flex min-h-touch items-center justify-between gap-3 px-3">
           <span className="text-sm text-muted-foreground">{t('theme.label')}</span>
           <ThemeSwitcher />
         </div>
         <button
           type="button"
           onClick={() => void handleLogout()}
-          className="flex min-h-11 w-full items-center gap-3 rounded-md px-3 py-2.5 text-sm text-muted-foreground hover:bg-surface hover:text-foreground"
+          className="flex min-h-touch w-full items-center gap-3 rounded-md px-3 py-2.5 text-sm text-muted-foreground hover:bg-surface hover:text-foreground"
         >
           <LogOut className="size-4" aria-hidden="true" />
           {t('shell.log_out')}
@@ -224,7 +224,7 @@ function DesktopRail({ pathname, counts }: { pathname: string; counts: RouteCoun
               type="button"
               title={t('shell.account_menu')}
               className={cn(
-                'flex min-h-11 w-full flex-col items-center justify-center gap-1 rounded-lg px-1 py-2 text-xs font-medium leading-tight transition-colors motion-reduce:transition-none',
+                'flex min-h-touch w-full flex-col items-center justify-center gap-1 rounded-lg px-1 py-2 text-xs font-medium leading-tight transition-colors motion-reduce:transition-none',
                 'outline-none focus-visible:ring-2 focus-visible:ring-ring',
                 accountActive
                   ? 'bg-surface-2 text-foreground'
@@ -254,7 +254,7 @@ function MobileBottomBar({ pathname }: { pathname: string }) {
   const activeHub = getActiveHub(pathname);
   const youActive = activeHub?.id === 'insights' || isAccountRoute(pathname);
   const slotClass =
-    'flex min-h-14 flex-col items-center justify-center gap-0.5 px-1 pt-1.5 pb-1 text-xs font-medium tracking-tight transition-colors motion-reduce:transition-none outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring';
+    'flex min-h-touch flex-col items-center justify-center gap-0.5 px-1 pt-1.5 pb-1 text-meta font-medium tracking-tight transition-colors motion-reduce:transition-none outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring';
 
   return (
     <nav
@@ -279,7 +279,7 @@ function MobileBottomBar({ pathname }: { pathname: string }) {
               {raised ? (
                 <span
                   className={cn(
-                    '-mt-3 flex size-11 items-center justify-center rounded-full bg-accent text-accent-foreground shadow-md ring-4 ring-background',
+                    '-mt-3 flex size-touch items-center justify-center rounded-full bg-accent text-accent-foreground shadow-elevation-2 ring-4 ring-background',
                     active && 'ring-surface-2'
                   )}
                 >
@@ -309,10 +309,7 @@ function MobileBottomBar({ pathname }: { pathname: string }) {
               {t('nav.you')}
             </button>
           </SheetTrigger>
-          <SheetContent
-            side="bottom"
-            className="flex max-h-[85dvh] flex-col gap-0 rounded-t-2xl p-0 pb-[env(safe-area-inset-bottom)]"
-          >
+          <SheetContent side="bottom" className="gap-0 px-0 sm:px-0">
             <AccountMenuContent
               pathname={pathname}
               includeInsights

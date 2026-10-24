@@ -20,17 +20,17 @@ const focusRing =
 
 const variantClasses: Record<NavLinkVariant, { base: string; active: string; inactive: string }> = {
   rail: {
-    base: 'relative flex min-h-11 w-full flex-col items-center justify-center gap-1 rounded-lg px-1 py-2 text-xs font-medium leading-tight transition-colors motion-reduce:transition-none',
+    base: 'relative flex min-h-touch w-full flex-col items-center justify-center gap-1 rounded-lg px-1 py-2 text-xs font-medium leading-tight transition-colors motion-reduce:transition-none',
     active: 'bg-surface-2 text-foreground',
     inactive: 'text-muted-foreground hover:bg-surface hover:text-foreground',
   },
   sheet: {
-    base: 'flex min-h-11 items-center gap-3 rounded-md px-3 py-2.5 text-sm transition-colors motion-reduce:transition-none',
+    base: 'flex min-h-touch items-center gap-3 rounded-md px-3 py-2.5 text-sm transition-colors motion-reduce:transition-none',
     active: 'bg-surface-2 text-foreground font-medium',
     inactive: 'text-muted-foreground hover:bg-surface hover:text-foreground',
   },
   tab: {
-    base: 'inline-flex min-h-11 shrink-0 snap-start items-center gap-1.5 whitespace-nowrap rounded-md px-3 text-sm transition-colors motion-reduce:transition-none md:min-h-9',
+    base: 'inline-flex min-h-touch shrink-0 snap-start items-center gap-1.5 whitespace-nowrap rounded-md px-3 text-sm transition-colors motion-reduce:transition-none md:min-h-9',
     active: 'bg-background text-foreground font-medium shadow-xs',
     inactive: 'text-muted-foreground hover:text-foreground',
   },
