@@ -159,6 +159,25 @@ describe('mobile bottom bar', () => {
     for (const slot of slots) expect(slot.className).toContain('min-h-touch');
   });
 
+  it('sizes the bar and the main bottom padding from the shared bar-height token', () => {
+    const { container } = renderShell('/');
+    const bar = bottomBar(container);
+    expect(bar.className).toContain('pb-[env(safe-area-inset-bottom)]');
+    expect(bar.querySelector(':scope > div')!.className).toContain('h-mobile-nav');
+    const main = container.querySelector('main')!;
+    expect(main.className).toContain('pb-(--mobile-nav-h)');
+    expect(main.className).toContain('md:pb-0');
+    expect(main.className).not.toMatch(/pb-\[calc\(4\.5rem/);
+  });
+
+  it('extends the main bottom padding to clear the listen player while it is shown', () => {
+    const { container } = renderShell('/');
+    expect(container.querySelector('.app-shell')!.className).toContain('group/shell');
+    expect(container.querySelector('main')!.className).toContain(
+      'max-md:group-has-[[data-listen-player]]/shell:pb-[calc(var(--mobile-nav-h)+var(--listen-player-h))]'
+    );
+  });
+
   it('marks You active on Insights and account pages', () => {
     const { container } = renderShell('/reading-dna');
     expect(within(bottomBar(container)).getByRole('button', { name: 'You' }).dataset.active).toBe(

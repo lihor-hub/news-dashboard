@@ -87,6 +87,18 @@ describe('ListenQueuePlayer', () => {
     expect(screen.getByText('1/2')).toBeTruthy();
   });
 
+  it('sits above the mobile bottom bar using the shared bar-height token', async () => {
+    renderPlayer([makeArticle()]);
+    fireEvent.click(screen.getByText('start'));
+
+    const player = await screen.findByRole('region', { name: /listen queue player/i });
+    expect(player.hasAttribute('data-listen-player')).toBe(true);
+    expect(player.className).toContain('bottom-(--mobile-nav-h)');
+    expect(player.className).toContain('max-md:min-h-(--listen-player-h)');
+    expect(player.className).toContain('md:bottom-0');
+    expect(player.className).not.toContain('bottom-[68px]');
+  });
+
   it('closing the player clears the queue', async () => {
     renderPlayer([makeArticle({ id: '1', title: 'First' })]);
     fireEvent.click(screen.getByText('start'));

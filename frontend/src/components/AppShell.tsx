@@ -261,7 +261,7 @@ function MobileBottomBar({ pathname }: { pathname: string }) {
       aria-label={t('shell.main_navigation')}
       className="fixed inset-x-0 bottom-0 z-30 border-t border-border bg-background/95 ps-[env(safe-area-inset-left)] pe-[env(safe-area-inset-right)] pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden"
     >
-      <div className="grid grid-cols-5 items-end">
+      <div className="grid h-mobile-nav grid-cols-5 items-end">
         {mobileBarHubs.map((hub) => {
           const Icon = hub.icon;
           const active = activeHub?.id === hub.id;
@@ -417,7 +417,7 @@ export function AppShell() {
     // pane ([data-split-pane]) instead gets the full width and a viewport-tall
     // column so each pane scrolls on its own.
     <div
-      className="app-shell flex min-h-dvh bg-background text-foreground lg:has-[[data-split-pane]]:h-dvh lg:has-[[data-split-pane]]:overflow-hidden"
+      className="app-shell group/shell flex min-h-dvh bg-background text-foreground lg:has-[[data-split-pane]]:h-dvh lg:has-[[data-split-pane]]:overflow-hidden"
       style={{ '--shell-content-max': '72rem' } as CSSProperties}
     >
       <DesktopRail pathname={pathname} counts={countsByRoute} />
@@ -448,7 +448,7 @@ export function AppShell() {
           </div>
         </header>
 
-        <main className="flex-1 pb-[calc(4.5rem+env(safe-area-inset-bottom))] md:pb-0 lg:has-[[data-split-pane]]:flex lg:has-[[data-split-pane]]:min-h-0 lg:has-[[data-split-pane]]:flex-col">
+        <main className="flex-1 pb-(--mobile-nav-h) max-md:group-has-[[data-listen-player]]/shell:pb-[calc(var(--mobile-nav-h)+var(--listen-player-h))] md:pb-0 lg:has-[[data-split-pane]]:flex lg:has-[[data-split-pane]]:min-h-0 lg:has-[[data-split-pane]]:flex-col">
           <div className="mx-auto w-full max-w-(--shell-content-max) lg:has-[[data-split-pane]]:flex lg:has-[[data-split-pane]]:min-h-0 lg:has-[[data-split-pane]]:max-w-none lg:has-[[data-split-pane]]:flex-1 lg:has-[[data-split-pane]]:flex-col">
             <HubTabs pathname={pathname} isAdmin={Boolean(user?.is_admin)} counts={countsByRoute} />
             <ErrorBoundary resetKey={pathname} compact>

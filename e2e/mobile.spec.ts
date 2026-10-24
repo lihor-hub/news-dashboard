@@ -123,3 +123,25 @@ test.describe('Mobile — no layout overflow', () => {
     expect(bodyWidth).toBeLessThanOrEqual(410);
   });
 });
+
+test.describe('Mobile — Listen queue player', () => {
+  test('sits above the bottom bar without covering the raised Ask circle', async ({ page }) => {
+    await page.route('**/api/articles/*/tts**', (r) =>
+      r.fulfill({ status: 200, contentType: 'audio/mpeg', body: Buffer.from('') })
+    );
+    await page.goto('/starred');
+    await page.getByRole('button', { name: 'Listen', exact: true }).first().click();
+    const player = page.getByRole('region', { name: 'Listen queue player' });
+    await expect(player).toBeVisible();
+
+    const ask = page
+      .locator('nav.fixed')
+      .first()
+      .getByRole('link', { name: 'Ask' })
+      .locator('span');
+    const playerBox = (await player.boundingBox())!;
+    const askBox = (await ask.boundingBox())!;
+    // The Ask circle's 4px ring is a box-shadow outside its bounding box.
+    expect(playerBox.y + playerBox.height).toBeLessThanOrEqual(askBox.y - 4);
+  });
+});

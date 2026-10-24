@@ -32,7 +32,8 @@ export function ListenQueuePlayer() {
     <div
       role="region"
       aria-label="Listen queue player"
-      className="fixed inset-x-0 bottom-[68px] z-40 border-t border-border bg-background/95 backdrop-blur md:bottom-0"
+      data-listen-player
+      className="fixed inset-x-0 bottom-(--mobile-nav-h) z-40 max-md:min-h-(--listen-player-h) border-t border-border bg-background/95 backdrop-blur md:bottom-0"
     >
       <input
         type="range"
