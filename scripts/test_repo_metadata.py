@@ -3,6 +3,7 @@
 Run: python3 -m unittest scripts/test_repo_metadata.py
 """
 
+import os
 import re
 import subprocess
 import sys
@@ -14,6 +15,21 @@ from typing import ClassVar
 import pytest
 
 ROOT = Path(__file__).parent.parent
+
+
+def _isolated_git_env() -> dict[str, str]:
+    """Return os.environ without repo-local Git variables such as GIT_DIR.
+
+    Git hooks (e.g. pre-commit's pre-push pytest) export GIT_DIR; inheriting
+    it makes ``git init <tmp>`` reinitialise the real repository instead.
+    """
+    local_vars = subprocess.run(
+        ["git", "rev-parse", "--local-env-vars"],  # noqa: S607 — Git is a required tool
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.split()
+    return {key: value for key, value in os.environ.items() if key not in local_vars}
 
 
 class TestPythonRuntime(unittest.TestCase):
@@ -147,6 +163,7 @@ class TestNoPrivatePersonalPhrases(unittest.TestCase):
             check=True,
             capture_output=True,
             text=True,
+            env=_isolated_git_env(),
         )
         for name in tracked.stdout.split("\0"):
             relative = Path(name)
@@ -173,12 +190,14 @@ def test_phrase_guard_ignores_untracked_dependencies(
     subprocess.run(  # noqa: S603 — fixed Git command in an isolated fixture
         ["git", "init", "--quiet", str(tmp_path)],  # noqa: S607 — Git is a required tool
         check=True,
+        env=_isolated_git_env(),
     )
     source = tmp_path / "tracked source.md"
     source.write_text("Public project documentation")
     subprocess.run(  # noqa: S603 — stage only the controlled test fixture
         ["git", "-C", str(tmp_path), "add", str(source)],  # noqa: S607 — required Git tool
         check=True,
+        env=_isolated_git_env(),
     )
     dependency = tmp_path / "website" / "node_modules" / "hashes" / "types.ts"
     dependency.parent.mkdir(parents=True)
@@ -191,16 +210,55 @@ def test_phrase_guard_rejects_tracked_text(tmp_path: Path, monkeypatch: pytest.M
     subprocess.run(  # noqa: S603 — fixed Git command in an isolated fixture
         ["git", "init", "--quiet", str(tmp_path)],  # noqa: S607 — Git is a required tool
         check=True,
+        env=_isolated_git_env(),
     )
     source = tmp_path / "tracked source.md"
     source.write_text(TestNoPrivatePersonalPhrases._FORBIDDEN[0])
     subprocess.run(  # noqa: S603 — stage only the controlled test fixture
         ["git", "-C", str(tmp_path), "add", str(source)],  # noqa: S607 — required Git tool
         check=True,
+        env=_isolated_git_env(),
     )
     monkeypatch.setattr(sys.modules[__name__], "ROOT", tmp_path)
     with pytest.raises(AssertionError, match=r"tracked source\.md"):
         TestNoPrivatePersonalPhrases().test_no_forbidden_phrases_in_tracked_files()
+
+
+def test_phrase_guard_fixtures_ignore_inherited_git_dir(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Hooks run from a worktree export GIT_DIR; fixtures must not reinitialise it."""
+    decoy = tmp_path / "decoy"
+    for command in (
+        ["git", "init", "--quiet", str(decoy)],
+        [
+            "git",
+            "-C",
+            str(decoy),
+            "-c",
+            "user.name=t",
+            "-c",
+            "user.email=t@t",
+            "commit",
+            "--quiet",
+            "--allow-empty",
+            "-m",
+            "init",
+        ],
+        ["git", "-C", str(decoy), "worktree", "add", "--quiet", str(tmp_path / "wt")],
+    ):
+        subprocess.run(command, check=True, env=_isolated_git_env())  # noqa: S603
+    monkeypatch.setenv("GIT_DIR", str(decoy / ".git" / "worktrees" / "wt"))
+    fixture = tmp_path / "fixture"
+    fixture.mkdir()
+    test_phrase_guard_rejects_tracked_text(fixture, monkeypatch)
+    bare = subprocess.run(  # noqa: S603 — read-only Git query on the decoy
+        ["git", "config", "--file", str(decoy / ".git" / "config"), "core.bare"],  # noqa: S607
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    assert bare.stdout.strip() == "false"
 
 
 if __name__ == "__main__":
