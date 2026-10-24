@@ -253,7 +253,10 @@
     "swipeSkip": "Überspringen",
     "swipeHint": "Nach rechts wischen für erledigt, nach links zum Überspringen, gedrückt halten für Stern.",
     "dismissHint": "Tipp schließen",
-    "filterByCategory": "Nach Kategorie filtern"
+    "filterByCategory": "Nach Kategorie filtern",
+    "readingPane": "Lesebereich",
+    "selectArticle": "Artikel auswählen",
+    "selectArticleHint": "Wähle einen Artikel aus der Liste oder blättere mit J / K durch."
   },
   "substackWizard": {
     "open": "Follow Substack",

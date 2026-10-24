@@ -253,7 +253,10 @@
     "swipeSkip": "Omite",
     "swipeHint": "Glisează la dreapta pentru gata, la stânga pentru a omite sau ține apăsat pentru stea.",
     "dismissHint": "Închide sfatul",
-    "filterByCategory": "Filtrează după categorie"
+    "filterByCategory": "Filtrează după categorie",
+    "readingPane": "Panou de citire",
+    "selectArticle": "Selectează un articol",
+    "selectArticleHint": "Alege o știre din listă sau apasă J / K pentru a te deplasa prin ea."
   },
   "substackWizard": {
     "open": "Follow Substack",

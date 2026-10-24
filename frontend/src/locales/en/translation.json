@@ -143,7 +143,10 @@
     "swipeSkip": "Skip",
     "swipeHint": "Swipe right to mark done, left to skip, or hold to star.",
     "dismissHint": "Dismiss tip",
-    "filterByCategory": "Filter by category"
+    "filterByCategory": "Filter by category",
+    "readingPane": "Reading pane",
+    "selectArticle": "Select an article",
+    "selectArticleHint": "Pick a story from the list, or press J / K to step through it."
   },
   "substackWizard": {
     "open": "Follow Substack",

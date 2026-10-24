@@ -253,7 +253,10 @@
     "swipeSkip": "Pular",
     "swipeHint": "Deslize para a direita para concluir, para a esquerda para pular ou mantenha pressionado para favoritar.",
     "dismissHint": "Fechar dica",
-    "filterByCategory": "Filtrar por categoria"
+    "filterByCategory": "Filtrar por categoria",
+    "readingPane": "Painel de leitura",
+    "selectArticle": "Selecione um artigo",
+    "selectArticleHint": "Escolha uma notícia da lista ou use J / K para percorrê-la."
   },
   "substackWizard": {
     "open": "Follow Substack",

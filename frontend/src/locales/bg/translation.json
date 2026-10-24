@@ -143,7 +143,10 @@
     "swipeSkip": "Пропусни",
     "swipeHint": "Плъзнете надясно за готово, наляво за пропускане или задръжте за звезда.",
     "dismissHint": "Скрий съвета",
-    "filterByCategory": "Филтриране по категория"
+    "filterByCategory": "Филтриране по категория",
+    "readingPane": "Панел за четене",
+    "selectArticle": "Изберете статия",
+    "selectArticleHint": "Изберете материал от списъка или натиснете J / K, за да преминавате през него."
   },
   "substackWizard": {
     "open": "Следвайте Substack",

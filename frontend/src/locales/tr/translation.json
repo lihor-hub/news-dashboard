@@ -253,7 +253,10 @@
     "swipeSkip": "Atla",
     "swipeHint": "Tamamlamak için sağa, atlamak için sola kaydırın veya yıldızlamak için basılı tutun.",
     "dismissHint": "İpucunu kapat",
-    "filterByCategory": "Kategoriye göre filtrele"
+    "filterByCategory": "Kategoriye göre filtrele",
+    "readingPane": "Okuma bölmesi",
+    "selectArticle": "Bir makale seçin",
+    "selectArticleHint": "Listeden bir haber seçin veya J / K ile aralarında gezinin."
   },
   "substackWizard": {
     "open": "Follow Substack",

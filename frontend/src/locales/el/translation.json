@@ -253,7 +253,10 @@
     "swipeSkip": "Παράλειψη",
     "swipeHint": "Σύρετε δεξιά για ολοκλήρωση, αριστερά για παράλειψη ή κρατήστε πατημένο για αστέρι.",
     "dismissHint": "Απόρριψη συμβουλής",
-    "filterByCategory": "Φιλτράρισμα κατά κατηγορία"
+    "filterByCategory": "Φιλτράρισμα κατά κατηγορία",
+    "readingPane": "Παράθυρο ανάγνωσης",
+    "selectArticle": "Επιλέξτε ένα άρθρο",
+    "selectArticleHint": "Διαλέξτε ένα άρθρο από τη λίστα ή πατήστε J / K για να μετακινηθείτε."
   },
   "substackWizard": {
     "open": "Follow Substack",

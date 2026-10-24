@@ -253,7 +253,10 @@
     "swipeSkip": "Passer",
     "swipeHint": "Balayez vers la droite pour terminer, vers la gauche pour passer, ou maintenez pour ajouter une étoile.",
     "dismissHint": "Fermer l’astuce",
-    "filterByCategory": "Filtrer par catégorie"
+    "filterByCategory": "Filtrer par catégorie",
+    "readingPane": "Volet de lecture",
+    "selectArticle": "Sélectionnez un article",
+    "selectArticleHint": "Choisissez un article dans la liste ou parcourez-la avec J / K."
   },
   "substackWizard": {
     "open": "Follow Substack",

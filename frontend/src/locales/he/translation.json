@@ -253,7 +253,10 @@
     "swipeSkip": "דילוג",
     "swipeHint": "החליקו ימינה לסימון כבוצע, שמאלה לדילוג, או לחיצה ארוכה לסימון בכוכב.",
     "dismissHint": "סגירת הטיפ",
-    "filterByCategory": "סינון לפי קטגוריה"
+    "filterByCategory": "סינון לפי קטגוריה",
+    "readingPane": "חלונית קריאה",
+    "selectArticle": "בחרו כתבה",
+    "selectArticleHint": "בחרו כתבה מהרשימה, או הקישו J / K כדי לעבור ביניהן."
   },
   "substackWizard": {
     "open": "Follow Substack",

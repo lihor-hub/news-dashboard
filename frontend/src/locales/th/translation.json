@@ -253,7 +253,10 @@
     "swipeSkip": "ข้าม",
     "swipeHint": "ปัดขวาเพื่อทำเสร็จ ปัดซ้ายเพื่อข้าม หรือกดค้างเพื่อติดดาว",
     "dismissHint": "ปิดคำแนะนำ",
-    "filterByCategory": "กรองตามหมวดหมู่"
+    "filterByCategory": "กรองตามหมวดหมู่",
+    "readingPane": "บานหน้าต่างอ่าน",
+    "selectArticle": "เลือกบทความ",
+    "selectArticleHint": "เลือกข่าวจากรายการ หรือกด J / K เพื่อเลื่อนดู"
   },
   "substackWizard": {
     "open": "Follow Substack",

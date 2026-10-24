@@ -253,7 +253,10 @@
     "swipeSkip": "スキップ",
     "swipeHint": "右スワイプで完了、左スワイプでスキップ、長押しでスター。",
     "dismissHint": "ヒントを閉じる",
-    "filterByCategory": "カテゴリで絞り込む"
+    "filterByCategory": "カテゴリで絞り込む",
+    "readingPane": "閲覧ウィンドウ",
+    "selectArticle": "記事を選択",
+    "selectArticleHint": "リストから記事を選ぶか、J / K キーで移動します。"
   },
   "substackWizard": {
     "open": "Follow Substack",

@@ -253,7 +253,10 @@
     "swipeSkip": "Ohita",
     "swipeHint": "Pyyhkäise oikealle merkitäksesi valmiiksi, vasemmalle ohittaaksesi tai pidä painettuna tähdittääksesi.",
     "dismissHint": "Sulje vinkki",
-    "filterByCategory": "Suodata luokan mukaan"
+    "filterByCategory": "Suodata luokan mukaan",
+    "readingPane": "Lukuruutu",
+    "selectArticle": "Valitse artikkeli",
+    "selectArticleHint": "Valitse juttu listasta tai selaa sitä näppäimillä J / K."
   },
   "substackWizard": {
     "open": "Follow Substack",

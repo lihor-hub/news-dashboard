@@ -4,18 +4,40 @@ import type { useTriageMutations } from './useTriageMutations';
 
 type Mutations = ReturnType<typeof useTriageMutations>;
 
+export interface ArticleListNavOptions {
+  /**
+   * Controlled focus: when `onFocusChange` is set the host owns the focused
+   * index (e.g. a URL-synced reading-pane selection; -1 = nothing selected).
+   */
+  focused?: number;
+  onFocusChange?: (index: number) => void;
+  /** Bound to Esc when set. */
+  onEscape?: () => void;
+}
+
 export function useArticleListNav(
   list: WorkflowArticle[],
   openArticle: (a: WorkflowArticle) => void,
-  mutations: Mutations
+  mutations: Mutations,
+  { focused: controlledFocused, onFocusChange, onEscape }: ArticleListNavOptions = {}
 ) {
-  const [focused, setFocused] = useState(0);
+  const [internalFocused, setInternalFocused] = useState(0);
+  const controlled = onFocusChange != null;
+  const focused = controlled ? (controlledFocused ?? -1) : internalFocused;
 
   useEffect(() => {
-    if (focused >= list.length) setFocused(Math.max(0, list.length - 1));
-  }, [list.length, focused]);
+    if (controlled) return;
+    if (internalFocused >= list.length) setInternalFocused(Math.max(0, list.length - 1));
+  }, [controlled, list.length, internalFocused]);
 
   useEffect(() => {
+    const move = (delta: number) => {
+      if (list.length === 0) return;
+      const clamp = (index: number) => Math.min(list.length - 1, Math.max(0, index));
+      if (onFocusChange) onFocusChange(clamp(focused + delta));
+      else setInternalFocused((f) => clamp(f + delta));
+    };
+
     const handler = (e: KeyboardEvent) => {
       const t = e.target as HTMLElement;
       if (t?.tagName === 'INPUT' || t?.tagName === 'TEXTAREA' || t?.isContentEditable) return;
@@ -25,11 +47,14 @@ export function useArticleListNav(
       const key = e.key.toLowerCase();
 
       if (key === 'j') {
-        setFocused((f) => Math.min(list.length - 1, f + 1));
+        move(1);
         e.preventDefault();
       } else if (key === 'k') {
-        setFocused((f) => Math.max(0, f - 1));
+        move(-1);
         e.preventDefault();
+      } else if (key === 'escape' && onEscape) {
+        // Radix layers (dialogs, menus) prevent the Esc they consume.
+        if (!e.defaultPrevented) onEscape();
       } else if (key === 'enter' && cur) {
         openArticle(cur);
         e.preventDefault();
@@ -50,7 +75,7 @@ export function useArticleListNav(
 
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [list, focused, openArticle, mutations]);
+  }, [list, focused, openArticle, mutations, onFocusChange, onEscape]);
 
-  return { focused, setFocused };
+  return { focused, setFocused: setInternalFocused };
 }

@@ -253,7 +253,10 @@
     "swipeSkip": "Пропустити",
     "swipeHint": "Проведіть праворуч — готово, ліворуч — пропустити, утримуйте — додати зірку.",
     "dismissHint": "Закрити підказку",
-    "filterByCategory": "Фільтр за категорією"
+    "filterByCategory": "Фільтр за категорією",
+    "readingPane": "Панель читання",
+    "selectArticle": "Виберіть статтю",
+    "selectArticleHint": "Виберіть матеріал зі списку або гортайте його клавішами J / K."
   },
   "substackWizard": {
     "open": "Follow Substack",

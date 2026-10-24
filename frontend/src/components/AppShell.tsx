@@ -413,14 +413,15 @@ export function AppShell() {
   const title = t(getPageTitleKey(pathname));
 
   return (
-    // --shell-content-max caps the reading column; layouts that need the full
-    // width (e.g. list + reading pane) can override it.
+    // --shell-content-max caps the reading column. A desktop list + reading
+    // pane ([data-split-pane]) instead gets the full width and a viewport-tall
+    // column so each pane scrolls on its own.
     <div
-      className="app-shell flex min-h-dvh bg-background text-foreground"
+      className="app-shell flex min-h-dvh bg-background text-foreground lg:has-[[data-split-pane]]:h-dvh lg:has-[[data-split-pane]]:overflow-hidden"
       style={{ '--shell-content-max': '72rem' } as CSSProperties}
     >
       <DesktopRail pathname={pathname} counts={countsByRoute} />
-      <div className="flex min-w-0 flex-1 flex-col">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         <header className="sticky top-0 z-30 border-b border-border bg-background/85 backdrop-blur">
           <div className="flex h-12 items-center justify-between gap-2 ps-[max(1rem,env(safe-area-inset-left))] pe-[max(1rem,env(safe-area-inset-right))] md:px-5">
             <div className="flex min-w-0 items-center gap-2">
@@ -447,8 +448,8 @@ export function AppShell() {
           </div>
         </header>
 
-        <main className="flex-1 pb-[calc(4.5rem+env(safe-area-inset-bottom))] md:pb-0">
-          <div className="mx-auto w-full max-w-(--shell-content-max)">
+        <main className="flex-1 pb-[calc(4.5rem+env(safe-area-inset-bottom))] md:pb-0 lg:has-[[data-split-pane]]:flex lg:has-[[data-split-pane]]:min-h-0 lg:has-[[data-split-pane]]:flex-col">
+          <div className="mx-auto w-full max-w-(--shell-content-max) lg:has-[[data-split-pane]]:flex lg:has-[[data-split-pane]]:min-h-0 lg:has-[[data-split-pane]]:max-w-none lg:has-[[data-split-pane]]:flex-1 lg:has-[[data-split-pane]]:flex-col">
             <HubTabs pathname={pathname} isAdmin={Boolean(user?.is_admin)} counts={countsByRoute} />
             <ErrorBoundary resetKey={pathname} compact>
               <Outlet />

@@ -253,7 +253,10 @@
     "swipeSkip": "Přeskočit",
     "swipeHint": "Přejeďte doprava pro hotovo, doleva pro přeskočení, nebo podržte pro hvězdičku.",
     "dismissHint": "Zavřít tip",
-    "filterByCategory": "Filtrovat podle kategorie"
+    "filterByCategory": "Filtrovat podle kategorie",
+    "readingPane": "Panel čtení",
+    "selectArticle": "Vyberte článek",
+    "selectArticleHint": "Vyberte článek ze seznamu nebo jím procházejte klávesami J / K."
   },
   "substackWizard": {
     "open": "Follow Substack",
