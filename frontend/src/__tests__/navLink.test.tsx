@@ -51,7 +51,7 @@ describe('NavLink accessibility and sizing', () => {
   it('keeps every variant at least 44px tall on touch screens', () => {
     for (const variant of ['rail', 'sheet', 'tab'] as const) {
       const { unmount } = renderNavLink({ variant });
-      expect(screen.getByRole('link', { name: 'Today' }).className).toContain('min-h-11');
+      expect(screen.getByRole('link', { name: 'Today' }).className).toContain('min-h-touch');
       unmount();
     }
   });

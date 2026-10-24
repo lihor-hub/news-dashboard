@@ -153,6 +153,12 @@ describe('mobile bottom bar', () => {
     expect(within(sheet).queryByRole('link', { name: 'Stats' })).toBeNull();
   });
 
+  it('uses the shared touch-size token for every slot', () => {
+    const { container } = renderShell('/');
+    const slots = Array.from(bottomBar(container).querySelectorAll(':scope > div > *'));
+    for (const slot of slots) expect(slot.className).toContain('min-h-touch');
+  });
+
   it('marks You active on Insights and account pages', () => {
     const { container } = renderShell('/reading-dna');
     expect(within(bottomBar(container)).getByRole('button', { name: 'You' }).dataset.active).toBe(

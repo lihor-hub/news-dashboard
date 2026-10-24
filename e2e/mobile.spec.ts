@@ -76,7 +76,7 @@ test.describe('Mobile — navigation', () => {
 test.describe('Mobile — header', () => {
   test('header is visible on mobile', async ({ page }) => {
     await page.goto('/');
-    const header = page.locator('header');
+    const header = page.getByRole('banner');
     await expect(header).toBeVisible();
   });
 
