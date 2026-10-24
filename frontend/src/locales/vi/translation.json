@@ -238,6 +238,17 @@
     "description": "Make every article from this source stand out.",
     "sourceLabel": "High priority {{source}}"
   },
+  "articleList": {
+    "moreSources": "+{{count}} nguồn",
+    "moreSources_one": "+{{count}} nguồn",
+    "alsoCoveredBy": "Cũng được đưa tin bởi {{names}}",
+    "andMore": "+{{count}} khác",
+    "swipeDone": "Xong",
+    "swipeSkip": "Bỏ qua",
+    "swipeHint": "Vuốt phải để đánh dấu xong, vuốt trái để bỏ qua, hoặc nhấn giữ để gắn sao.",
+    "dismissHint": "Đóng mẹo",
+    "filterByCategory": "Lọc theo danh mục"
+  },
   "substackWizard": {
     "open": "Follow Substack",
     "title": "Follow a Substack publication",

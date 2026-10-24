@@ -238,6 +238,17 @@
     "description": "Make every article from this source stand out.",
     "sourceLabel": "High priority {{source}}"
   },
+  "articleList": {
+    "moreSources": "+{{count}} แหล่งข่าว",
+    "moreSources_one": "+{{count}} แหล่งข่าว",
+    "alsoCoveredBy": "รายงานโดย {{names}} ด้วย",
+    "andMore": "+อีก {{count}}",
+    "swipeDone": "เสร็จ",
+    "swipeSkip": "ข้าม",
+    "swipeHint": "ปัดขวาเพื่อทำเสร็จ ปัดซ้ายเพื่อข้าม หรือกดค้างเพื่อติดดาว",
+    "dismissHint": "ปิดคำแนะนำ",
+    "filterByCategory": "กรองตามหมวดหมู่"
+  },
   "substackWizard": {
     "open": "Follow Substack",
     "title": "Follow a Substack publication",

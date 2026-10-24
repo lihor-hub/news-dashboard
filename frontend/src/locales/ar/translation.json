@@ -238,6 +238,17 @@
     "description": "Make every article from this source stand out.",
     "sourceLabel": "High priority {{source}}"
   },
+  "articleList": {
+    "moreSources": "+{{count}} مصادر",
+    "moreSources_one": "+{{count}} مصدر",
+    "alsoCoveredBy": "تمت تغطيته أيضًا بواسطة {{names}}",
+    "andMore": "+{{count}} أخرى",
+    "swipeDone": "تم",
+    "swipeSkip": "تخطٍّ",
+    "swipeHint": "اسحب يمينًا للإنهاء، ويسارًا للتخطي، أو اضغط مطولًا لإضافة نجمة.",
+    "dismissHint": "إغلاق التلميح",
+    "filterByCategory": "التصفية حسب الفئة"
+  },
   "substackWizard": {
     "open": "Follow Substack",
     "title": "Follow a Substack publication",

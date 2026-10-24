@@ -238,6 +238,17 @@
     "description": "Make every article from this source stand out.",
     "sourceLabel": "High priority {{source}}"
   },
+  "articleList": {
+    "moreSources": "+{{count}} πηγές",
+    "moreSources_one": "+{{count}} πηγή",
+    "alsoCoveredBy": "Καλύφθηκε επίσης από {{names}}",
+    "andMore": "+{{count}} ακόμη",
+    "swipeDone": "Τέλος",
+    "swipeSkip": "Παράλειψη",
+    "swipeHint": "Σύρετε δεξιά για ολοκλήρωση, αριστερά για παράλειψη ή κρατήστε πατημένο για αστέρι.",
+    "dismissHint": "Απόρριψη συμβουλής",
+    "filterByCategory": "Φιλτράρισμα κατά κατηγορία"
+  },
   "substackWizard": {
     "open": "Follow Substack",
     "title": "Follow a Substack publication",

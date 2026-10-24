@@ -238,6 +238,17 @@
     "description": "Make every article from this source stand out.",
     "sourceLabel": "High priority {{source}}"
   },
+  "articleList": {
+    "moreSources": "+{{count}} מקורות",
+    "moreSources_one": "+{{count}} מקור",
+    "alsoCoveredBy": "סוקר גם על ידי {{names}}",
+    "andMore": "+{{count}} נוספים",
+    "swipeDone": "בוצע",
+    "swipeSkip": "דילוג",
+    "swipeHint": "החליקו ימינה לסימון כבוצע, שמאלה לדילוג, או לחיצה ארוכה לסימון בכוכב.",
+    "dismissHint": "סגירת הטיפ",
+    "filterByCategory": "סינון לפי קטגוריה"
+  },
   "substackWizard": {
     "open": "Follow Substack",
     "title": "Follow a Substack publication",

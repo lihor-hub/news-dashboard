@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { Check, X } from 'lucide-react';
+import { Check, Hand, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface Props {
@@ -8,7 +8,13 @@ interface Props {
   onSwipeLeft?: () => void;
   onLongPress?: () => void;
   disableLeft?: boolean;
+  /** Visible name of the swipe-right action, shown in the colour reveal. */
+  rightLabel?: string;
+  /** Visible name of the swipe-left action, shown in the colour reveal. */
+  leftLabel?: string;
 }
+
+export const SWIPE_HINT_STORAGE_KEY = 'nd.swipeHintDismissed';
 
 const THRESHOLD = 80;
 const LONG_PRESS_MS = 500;
@@ -20,6 +26,8 @@ export function SwipeableRow({
   onSwipeLeft,
   onLongPress,
   disableLeft,
+  rightLabel,
+  leftLabel,
 }: Props) {
   const [dx, setDx] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
@@ -115,28 +123,32 @@ export function SwipeableRow({
       {showRight && (
         <div
           className={cn(
-            'absolute inset-y-0 left-0 flex items-center px-5 text-emerald-500 transition-all duration-150',
-            dx > THRESHOLD ? 'bg-emerald-500/25' : 'bg-emerald-500/15'
+            'absolute inset-y-0 left-0 flex items-center gap-2 px-5 text-sm font-semibold text-ok transition-colors duration-150',
+            dx > THRESHOLD ? 'bg-ok/25' : 'bg-ok/15'
           )}
         >
           <Check
+            aria-hidden="true"
             className={cn(
-              'size-5 transition-transform duration-150',
+              'size-5 transition-transform duration-150 motion-reduce:transition-none',
               dx > THRESHOLD && 'scale-110'
             )}
           />
+          {rightLabel && <span>{rightLabel}</span>}
         </div>
       )}
       {showLeft && (
         <div
           className={cn(
-            'absolute inset-y-0 right-0 flex items-center px-5 text-destructive transition-all duration-150',
+            'absolute inset-y-0 right-0 flex items-center gap-2 px-5 text-sm font-semibold text-destructive transition-colors duration-150',
             dx < -THRESHOLD ? 'bg-destructive/25' : 'bg-destructive/15'
           )}
         >
+          {leftLabel && <span>{leftLabel}</span>}
           <X
+            aria-hidden="true"
             className={cn(
-              'size-5 transition-transform duration-150',
+              'size-5 transition-transform duration-150 motion-reduce:transition-none',
               dx < -THRESHOLD && 'scale-110'
             )}
           />
@@ -149,7 +161,7 @@ export function SwipeableRow({
             ? 'motion-swipe-confirm'
             : isDragging
               ? ''
-              : 'transition-transform duration-150'
+              : 'transition-transform duration-150 motion-reduce:transition-none'
         )}
         style={committing ? undefined : { transform: `translateX(${dx}px)` }}
         onClickCapture={(e) => {
@@ -186,6 +198,50 @@ export function SwipeableRow({
       >
         {children}
       </div>
+    </div>
+  );
+}
+
+function readHintDismissed(): boolean {
+  try {
+    return localStorage.getItem(SWIPE_HINT_STORAGE_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * One-time tip that teaches the row gestures. Only rendered for coarse
+ * (touch) pointers; dismissal is remembered in localStorage.
+ */
+export function SwipeHint({ message, dismissLabel }: { message: string; dismissLabel: string }) {
+  const [dismissed, setDismissed] = useState(readHintDismissed);
+  if (dismissed) return null;
+
+  const dismiss = () => {
+    setDismissed(true);
+    try {
+      localStorage.setItem(SWIPE_HINT_STORAGE_KEY, '1');
+    } catch {
+      // Storage unavailable (private mode): the tip just reappears next visit.
+    }
+  };
+
+  return (
+    <div
+      role="note"
+      className="mx-4 my-2 hidden items-center gap-3 rounded-xl border border-border bg-surface ps-3 text-[13px] leading-snug text-muted-foreground pointer-coarse:flex md:mx-5"
+    >
+      <Hand className="size-5 shrink-0 text-accent" aria-hidden="true" />
+      <p className="flex-1 py-2.5">{message}</p>
+      <button
+        type="button"
+        aria-label={dismissLabel}
+        onClick={dismiss}
+        className="grid size-11 shrink-0 place-items-center rounded-xl text-muted-foreground hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring"
+      >
+        <X className="size-4" aria-hidden="true" />
+      </button>
     </div>
   );
 }

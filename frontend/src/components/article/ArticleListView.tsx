@@ -1,9 +1,11 @@
 import { useEffect, useMemo } from 'react';
 import type { ReactNode } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router';
 import { useInfiniteQuery, type QueryKey } from '@tanstack/react-query';
 import { Headphones } from 'lucide-react';
 import { ArticleRow } from '@/components/article/ArticleRow';
+import { SwipeHint } from '@/components/article/SwipeableRow';
 import { CategoryFilter } from '@/components/CategoryFilter';
 import { EmptyState, type EmptyStateProps } from '@/components/EmptyState';
 import { InlineError, ListSkeleton, RetryableErrorState } from '@/components/PageState';
@@ -50,6 +52,7 @@ export function ArticleListView({
   banner,
   action,
 }: ArticleListViewProps) {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const {
     data,
@@ -96,7 +99,7 @@ export function ArticleListView({
 
   return (
     <div>
-      <div className="flex items-start justify-between gap-3 px-4 md:px-5 pt-4 pb-3">
+      <div className="flex items-start justify-between gap-3 px-4 pt-5 pb-3 md:px-5 md:pt-4">
         <div>
           <h2 className="text-[22px] font-semibold tracking-tight">{title}</h2>
           <p className="text-xs text-muted-foreground mt-0.5">
@@ -114,9 +117,9 @@ export function ArticleListView({
             <button
               type="button"
               onClick={() => startListenQueue(list)}
-              className="flex shrink-0 items-center gap-1.5 rounded-md border border-border bg-background px-3 py-1.5 text-xs font-medium text-foreground hover:bg-muted"
+              className="flex min-h-11 shrink-0 items-center gap-1.5 rounded-full border border-border bg-background px-4 text-[13px] font-medium text-foreground hover:bg-muted md:min-h-8 md:px-3 md:text-xs"
             >
-              <Headphones className="size-3.5" />
+              <Headphones className="size-4" aria-hidden="true" />
               Listen
             </button>
           </div>
@@ -137,6 +140,10 @@ export function ArticleListView({
         (emptyContent ?? <EmptyState {...empty} />)
       ) : (
         <>
+          <SwipeHint
+            message={t('articleList.swipeHint')}
+            dismissLabel={t('articleList.dismissHint')}
+          />
           {list.map((article, index) => (
             <ArticleRow
               key={article.id}

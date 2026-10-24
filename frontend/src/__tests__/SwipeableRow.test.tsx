@@ -1,7 +1,11 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, fireEvent, act } from '@testing-library/react';
-import { SwipeableRow } from '../components/article/SwipeableRow';
+import {
+  SwipeableRow,
+  SwipeHint,
+  SWIPE_HINT_STORAGE_KEY,
+} from '../components/article/SwipeableRow';
 
 describe('SwipeableRow — swipe gestures', () => {
   it('fires onSwipeRight when dragged past threshold', () => {
@@ -237,5 +241,44 @@ describe('SwipeableRow — long-press gesture', () => {
     // The remaining 200 ms pass — timer must NOT fire after unmount
     void act(() => vi.advanceTimersByTime(200));
     expect(onLongPress).not.toHaveBeenCalled();
+  });
+});
+
+describe('SwipeableRow — action reveal', () => {
+  it('shows the right-swipe label while dragging right', () => {
+    const { getByTestId, getByText } = render(
+      <SwipeableRow onSwipeRight={vi.fn()} rightLabel="Done" leftLabel="Skip">
+        <div data-testid="inner">content</div>
+      </SwipeableRow>
+    );
+    const inner = getByTestId('inner');
+    fireEvent.touchStart(inner, { touches: [{ clientX: 0, clientY: 0 }] });
+    fireEvent.touchMove(inner, { touches: [{ clientX: 40, clientY: 0 }] });
+    expect(getByText('Done')).toBeTruthy();
+  });
+});
+
+describe('SwipeHint', () => {
+  beforeEach(() => localStorage.removeItem(SWIPE_HINT_STORAGE_KEY));
+
+  it('renders the hint until dismissed and remembers the dismissal', () => {
+    const { getByRole, queryByRole, unmount } = render(
+      <SwipeHint message="Swipe right to mark done" dismissLabel="Dismiss tip" />
+    );
+    expect(getByRole('note').textContent).toContain('Swipe right to mark done');
+    fireEvent.click(getByRole('button', { name: 'Dismiss tip' }));
+    expect(queryByRole('note')).toBeNull();
+    expect(localStorage.getItem(SWIPE_HINT_STORAGE_KEY)).toBe('1');
+    unmount();
+
+    const again = render(
+      <SwipeHint message="Swipe right to mark done" dismissLabel="Dismiss tip" />
+    );
+    expect(again.queryByRole('note')).toBeNull();
+  });
+
+  it('gives the dismiss button a 44px tap target', () => {
+    const { getByRole } = render(<SwipeHint message="Tip" dismissLabel="Dismiss tip" />);
+    expect(getByRole('button', { name: 'Dismiss tip' }).className).toContain('size-11');
   });
 });

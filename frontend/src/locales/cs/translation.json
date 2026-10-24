@@ -238,6 +238,17 @@
     "description": "Make every article from this source stand out.",
     "sourceLabel": "High priority {{source}}"
   },
+  "articleList": {
+    "moreSources": "+{{count}} zdrojů",
+    "moreSources_one": "+{{count}} zdroj",
+    "alsoCoveredBy": "Píší o tom také {{names}}",
+    "andMore": "+{{count}} další",
+    "swipeDone": "Hotovo",
+    "swipeSkip": "Přeskočit",
+    "swipeHint": "Přejeďte doprava pro hotovo, doleva pro přeskočení, nebo podržte pro hvězdičku.",
+    "dismissHint": "Zavřít tip",
+    "filterByCategory": "Filtrovat podle kategorie"
+  },
   "substackWizard": {
     "open": "Follow Substack",
     "title": "Follow a Substack publication",

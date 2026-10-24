@@ -238,6 +238,17 @@
     "description": "Make every article from this source stand out.",
     "sourceLabel": "High priority {{source}}"
   },
+  "articleList": {
+    "moreSources": "+{{count}} sumber",
+    "moreSources_one": "+{{count}} sumber",
+    "alsoCoveredBy": "Juga diliput oleh {{names}}",
+    "andMore": "+{{count}} lainnya",
+    "swipeDone": "Selesai",
+    "swipeSkip": "Lewati",
+    "swipeHint": "Geser ke kanan untuk selesai, ke kiri untuk melewati, atau tahan untuk memberi bintang.",
+    "dismissHint": "Tutup tips",
+    "filterByCategory": "Filter menurut kategori"
+  },
   "substackWizard": {
     "open": "Follow Substack",
     "title": "Follow a Substack publication",

@@ -238,6 +238,17 @@
     "description": "Make every article from this source stand out.",
     "sourceLabel": "High priority {{source}}"
   },
+  "articleList": {
+    "moreSources": "+{{count}} 件のソース",
+    "moreSources_one": "+{{count}} 件のソース",
+    "alsoCoveredBy": "{{names}} でも報道",
+    "andMore": "他 {{count}} 件",
+    "swipeDone": "完了",
+    "swipeSkip": "スキップ",
+    "swipeHint": "右スワイプで完了、左スワイプでスキップ、長押しでスター。",
+    "dismissHint": "ヒントを閉じる",
+    "filterByCategory": "カテゴリで絞り込む"
+  },
   "substackWizard": {
     "open": "Follow Substack",
     "title": "Follow a Substack publication",

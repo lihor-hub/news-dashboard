@@ -238,6 +238,17 @@
     "description": "Make every article from this source stand out.",
     "sourceLabel": "High priority {{source}}"
   },
+  "articleList": {
+    "moreSources": "+{{count}} 個來源",
+    "moreSources_one": "+{{count}} 個來源",
+    "alsoCoveredBy": "{{names}} 也有報導",
+    "andMore": "另外 {{count}} 個",
+    "swipeDone": "完成",
+    "swipeSkip": "略過",
+    "swipeHint": "向右滑動標記完成，向左滑動略過，長按加星號。",
+    "dismissHint": "關閉提示",
+    "filterByCategory": "依類別篩選"
+  },
   "substackWizard": {
     "open": "Follow Substack",
     "title": "Follow a Substack publication",
