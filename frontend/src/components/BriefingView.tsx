@@ -133,7 +133,11 @@ export function StoryCard({
         aria-controls={panelId}
         className="block w-full min-h-11 rounded-2xl p-4 md:p-5 text-start hover:bg-surface-2/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring motion-safe:transition-colors"
       >
-        <span className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-accent">
+        <span
+          className={`flex items-center gap-2 text-xs font-semibold uppercase tracking-wider ${
+            isRead ? 'text-muted-foreground' : 'text-accent'
+          }`}
+        >
           <span className="tabular-nums">{String(index + 1).padStart(2, '0')}</span>
           <span aria-hidden="true">·</span>
           <span className="truncate">{topic}</span>
@@ -437,8 +441,8 @@ export function BriefingView({
                   <div>
                     <h4 className="text-sm font-semibold text-foreground flex items-center gap-1.5">
                       Co-host Podcast Briefing
-                      <span className="inline-flex items-center gap-0.5 rounded bg-accent/15 px-1.5 py-0.5 text-xs font-medium text-accent">
-                        <Sparkles className="size-4" /> New
+                      <span className="inline-flex items-center gap-0.5 rounded bg-surface-2 px-1.5 py-0.5 text-xs font-medium text-foreground">
+                        <Sparkles className="size-4 text-accent" aria-hidden="true" /> New
                       </span>
                     </h4>
                     <p className="text-xs text-muted-foreground mt-0.5">
@@ -512,7 +516,7 @@ export function BriefingView({
                         >
                           <div
                             className={`size-7 rounded-full flex items-center justify-center text-xs font-semibold shrink-0 select-none ${
-                              isAlex ? 'bg-primary/10 text-primary' : 'bg-accent/15 text-accent'
+                              isAlex ? 'bg-primary/10 text-primary' : 'bg-surface-2 text-foreground'
                             }`}
                           >
                             {turn.speaker[0]}
