@@ -66,10 +66,14 @@
    Radius: controls (buttons/inputs) use rounded-md = 8px, cards rounded-lg/xl
    = 10–14px, dialogs/sheets rounded-2xl = 16px.
    Touch: --spacing-touch (44px) yields h-touch / size-touch / min-h-touch.
+   Mobile bar: --spacing-mobile-nav is the bottom bar row (h-mobile-nav);
+   :root --mobile-nav-h adds the raised Ask circle and the safe-area inset and
+   is the single offset main padding and the listen player use to clear it.
    Motion: ease-standard / ease-emphasized / ease-spring utilities; durations
    live in :root as --duration-* so prefers-reduced-motion can zero them. */
 @theme static {
   --spacing-touch: 2.75rem;
+  --spacing-mobile-nav: 4rem;
   --ease-standard: cubic-bezier(0.2, 0, 0, 1);
   --ease-emphasized: cubic-bezier(0.3, 0, 0, 1);
   --ease-spring: cubic-bezier(0.32, 0.72, 0, 1);
@@ -100,6 +104,10 @@
   --duration-base: 200ms;
   --duration-slow: 320ms;
   --duration-sheet: 420ms;
+  /* 0.5rem: how far the raised Ask circle (ring included) rises above the bar. */
+  --mobile-nav-h: calc(var(--spacing-mobile-nav) + 0.5rem + env(safe-area-inset-bottom));
+  /* Mobile listen player min height; main adds it to its padding while shown. */
+  --listen-player-h: 4.625rem;
   --background: oklch(0.985 0.003 80);
   --foreground: oklch(0.2 0.012 70);
   --surface: oklch(0.97 0.005 80);

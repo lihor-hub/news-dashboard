@@ -53,6 +53,14 @@ describe('layout design tokens', () => {
     expect(css).toMatch(/@utility text-reading\s*\{/);
   });
 
+  it('defines one mobile bottom bar height token that includes the safe-area inset', () => {
+    expect(css).toMatch(/--spacing-mobile-nav:\s*4rem/);
+    expect(rootBlock).toMatch(
+      /--mobile-nav-h:\s*calc\(var\(--spacing-mobile-nav\) \+ [\d.]+rem \+ env\(safe-area-inset-bottom\)\)/
+    );
+    expect(rootBlock).toMatch(/--listen-player-h:\s*[\d.]+rem/);
+  });
+
   it('keeps meta/reading text sizes separate from text colours when merging classes', () => {
     expect(cn('text-meta', 'text-muted-foreground')).toBe('text-meta text-muted-foreground');
     expect(cn('text-sm', 'text-meta')).toBe('text-meta');
