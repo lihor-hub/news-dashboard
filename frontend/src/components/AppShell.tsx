@@ -1,14 +1,23 @@
 import { useLocation, useNavigate, Outlet, Link } from 'react-router';
-import { useState, useEffect, lazy, Suspense } from 'react';
+import { useState, useEffect, lazy, Suspense, type CSSProperties } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useQuery } from '@tanstack/react-query';
-import { LogOut, MoreHorizontal, Search, WifiOff } from 'lucide-react';
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
+import { CircleUser, LogOut, Search, UserRound, WifiOff } from 'lucide-react';
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from '@/components/ui/sheet';
 import { AppLogo } from './AppLogo';
 import { ErrorBoundary } from './ErrorBoundary';
 import { ListenQueuePlayer } from './ListenQueuePlayer';
 import { DifyChatWidget } from './DifyChatWidget';
+import { HubTabs } from './HubTabs';
 import { NavLink } from './NavLink';
+import { ThemeSwitcher } from './ThemeSwitcher';
 import { useWhatsNew } from '@/hooks/useWhatsNew';
 import { useOnboardingWizard } from '@/hooks/useOnboardingWizard';
 import { useElectronBriefNotifier } from '@/hooks/useElectronBriefNotifier';
@@ -18,14 +27,18 @@ import { fetchSummary, fetchSharesUnreadCount, fetchAnalyticsSettings } from '@/
 import { startAnalytics, stopAnalytics, trackRoute, setAnalyticsAllowed } from '@/lib/analytics';
 import { useAuth } from '@/contexts/auth';
 import {
+  accountNavigationItemsFor,
+  getActiveHub,
   getPageTitleKey,
   getShortcutTarget,
+  hubItemsFor,
+  hubTarget,
+  isAccountRoute,
   isNavigationItemActive,
-  mobilePrimaryOverflowItems,
-  mobileNavigationItems,
-  primaryNavigationItems,
-  secondaryNavigationItemsFor,
-  type NavigationItem,
+  insightsHub,
+  mobileBarHubs,
+  navigationHubs,
+  type NavigationHub,
 } from '@/lib/navigation';
 
 const CommandPalette = lazy(() =>
@@ -41,7 +54,10 @@ const OnboardingWizard = lazy(() =>
   import('./OnboardingWizard').then((m) => ({ default: m.OnboardingWizard }))
 );
 
-function useNavCounts() {
+type RouteCounts = Partial<Record<string, number | null>>;
+
+/** Badge counts keyed by route, shared by the rail and the hub tab strip. */
+function useCountsByRoute(): RouteCounts {
   const { data } = useQuery({
     queryKey: ['summary'],
     queryFn: fetchSummary,
@@ -54,9 +70,9 @@ function useNavCounts() {
     staleTime: 30_000,
   });
   return {
-    today: data?.byStatus?.new ?? null,
-    starred: data?.byStatus?.saved ?? null,
-    shared: sharesUnread ?? null,
+    '/today': data?.byStatus?.new ?? null,
+    '/starred': data?.byStatus?.saved ?? null,
+    '/shared': sharesUnread ?? null,
   };
 }
 
@@ -76,61 +92,236 @@ function useOnlineStatus() {
   return online;
 }
 
-function DesktopRail({ pathname }: { pathname: string }) {
+// Badge shown on a hub button: Read surfaces new arrivals, Library surfaces unread shares.
+function hubCount(hub: NavigationHub, counts: RouteCounts) {
+  if (hub.id === 'read') return counts['/today'];
+  if (hub.id === 'library') return counts['/shared'];
+  return null;
+}
+
+function UserAvatar({ name, className }: { name: string | undefined; className?: string }) {
+  return (
+    <span
+      aria-hidden="true"
+      className={cn(
+        'flex shrink-0 items-center justify-center rounded-full border border-border bg-surface-2 font-semibold uppercase text-foreground',
+        className
+      )}
+    >
+      {name ? name.charAt(0) : <UserRound className="size-4" />}
+    </span>
+  );
+}
+
+/** Pages behind the avatar / "You" menu: Insights (mobile), account pages, theme, log out. */
+function AccountMenuContent({
+  pathname,
+  includeInsights,
+  onNavigate,
+}: {
+  pathname: string;
+  includeInsights: boolean;
+  onNavigate: () => void;
+}) {
   const { t } = useTranslation();
-  const counts = useNavCounts();
   const { user } = useAuth();
   const handleLogout = useLogout();
-  const countFor = (item: NavigationItem): number | null =>
-    item.to === '/today'
-      ? counts.today
-      : item.to === '/starred'
-        ? counts.starred
-        : item.to === '/shared'
-          ? counts.shared
-          : null;
+  const isAdmin = Boolean(user?.is_admin);
 
   return (
-    <aside className="hidden md:flex md:flex-col md:w-[200px] md:shrink-0 md:border-e md:border-border md:min-h-[calc(100vh-3rem)] md:sticky md:top-12 md:self-start">
-      <nav className="flex flex-col p-2 gap-0.5">
-        {primaryNavigationItems.map((n) => (
-          <NavLink
-            key={n.to}
-            to={n.to}
-            label={t(n.labelKey)}
-            icon={n.icon}
-            isActive={isNavigationItemActive(n.to, pathname)}
-            count={countFor(n)}
-            variant="rail"
-          />
-        ))}
-      </nav>
-      <div className="mx-2 my-2 h-px bg-border" />
-      <nav className="flex flex-col p-2 gap-0.5">
-        {secondaryNavigationItemsFor(Boolean(user?.is_admin)).map((m) => (
-          <NavLink
-            key={m.to}
-            to={m.to}
-            label={t(m.labelKey)}
-            icon={m.icon}
-            isActive={isNavigationItemActive(m.to, pathname)}
-            variant="rail"
-          />
-        ))}
-      </nav>
-      <div className="mt-auto mx-2 mb-2 pt-2 border-t border-border">
-        {user && (
-          <div className="px-2.5 py-1 text-[11px] text-subtle truncate">{user.username}</div>
+    <>
+      <SheetHeader className="flex-row items-center gap-3 space-y-0 px-5 pt-5 pb-3 pe-12 text-start">
+        <UserAvatar name={user?.username} className="size-10 text-sm" />
+        <div className="min-w-0">
+          <SheetTitle className="truncate text-sm">{user?.username ?? t('nav.you')}</SheetTitle>
+          {user?.email && (
+            <SheetDescription className="truncate text-xs">{user.email}</SheetDescription>
+          )}
+        </div>
+      </SheetHeader>
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-2 pb-3">
+        {includeInsights && (
+          <nav aria-label={t(insightsHub.labelKey)} className="pb-2">
+            <div className="px-3 pt-1 pb-1.5 text-xs font-medium uppercase tracking-wider text-subtle">
+              {t(insightsHub.labelKey)}
+            </div>
+            {hubItemsFor(insightsHub, isAdmin).map((item) => (
+              <NavLink
+                key={item.to}
+                to={item.to}
+                label={t(item.labelKey)}
+                icon={item.icon}
+                isActive={isNavigationItemActive(item.to, pathname)}
+                variant="sheet"
+                onClick={onNavigate}
+              />
+            ))}
+            <div className="mx-1 mt-2 h-px bg-border" />
+          </nav>
         )}
+        <nav aria-label={t('shell.account_menu')}>
+          {accountNavigationItemsFor(isAdmin).map((item) => (
+            <NavLink
+              key={item.to}
+              to={item.to}
+              label={t(item.labelKey)}
+              icon={item.icon}
+              isActive={isNavigationItemActive(item.to, pathname)}
+              variant="sheet"
+              onClick={onNavigate}
+            />
+          ))}
+        </nav>
+        <div className="mx-1 my-2 h-px bg-border" />
+        <div className="flex min-h-11 items-center justify-between gap-3 px-3">
+          <span className="text-sm text-muted-foreground">{t('theme.label')}</span>
+          <ThemeSwitcher />
+        </div>
         <button
+          type="button"
           onClick={() => void handleLogout()}
-          className="flex w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-sm text-muted-foreground hover:bg-surface hover:text-foreground"
+          className="flex min-h-11 w-full items-center gap-3 rounded-md px-3 py-2.5 text-sm text-muted-foreground hover:bg-surface hover:text-foreground"
         >
-          <LogOut className="size-4" />
+          <LogOut className="size-4" aria-hidden="true" />
           {t('shell.log_out')}
         </button>
       </div>
+    </>
+  );
+}
+
+function DesktopRail({ pathname, counts }: { pathname: string; counts: RouteCounts }) {
+  const { t, i18n } = useTranslation();
+  const { user } = useAuth();
+  const [accountOpen, setAccountOpen] = useState(false);
+  const activeHub = getActiveHub(pathname);
+  const accountActive = isAccountRoute(pathname);
+  // Sheet sides are physical; open the account drawer from the rail's (start) edge.
+  const side = i18n?.dir?.() === 'rtl' ? 'right' : 'left';
+
+  return (
+    <aside className="hidden md:sticky md:top-0 md:z-20 md:flex md:h-dvh md:w-[76px] md:shrink-0 md:flex-col md:border-e md:border-border md:bg-background">
+      <div className="flex h-12 shrink-0 items-center justify-center">
+        <AppLogo className="size-7 rounded-md" />
+      </div>
+      <nav aria-label={t('shell.main_navigation')} className="flex flex-col gap-1 px-2 pt-2">
+        {navigationHubs.map((hub) => (
+          <NavLink
+            key={hub.id}
+            to={hubTarget(hub)}
+            label={t(hub.labelKey)}
+            icon={hub.icon}
+            isActive={activeHub?.id === hub.id}
+            count={hubCount(hub, counts)}
+            variant="rail"
+          />
+        ))}
+      </nav>
+      <div className="mt-auto px-2 pb-3">
+        <Sheet open={accountOpen} onOpenChange={setAccountOpen}>
+          <SheetTrigger asChild>
+            <button
+              type="button"
+              title={t('shell.account_menu')}
+              className={cn(
+                'flex min-h-11 w-full flex-col items-center justify-center gap-1 rounded-lg px-1 py-2 text-xs font-medium leading-tight transition-colors motion-reduce:transition-none',
+                'outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                accountActive
+                  ? 'bg-surface-2 text-foreground'
+                  : 'text-muted-foreground hover:bg-surface hover:text-foreground'
+              )}
+            >
+              <UserAvatar name={user?.username} className="size-8 text-xs" />
+              <span className="max-w-full truncate">{user?.username ?? t('nav.you')}</span>
+            </button>
+          </SheetTrigger>
+          <SheetContent side={side} className="flex w-[300px] flex-col gap-0 p-0">
+            <AccountMenuContent
+              pathname={pathname}
+              includeInsights={false}
+              onNavigate={() => setAccountOpen(false)}
+            />
+          </SheetContent>
+        </Sheet>
+      </div>
     </aside>
+  );
+}
+
+function MobileBottomBar({ pathname }: { pathname: string }) {
+  const { t } = useTranslation();
+  const [youOpen, setYouOpen] = useState(false);
+  const activeHub = getActiveHub(pathname);
+  const youActive = activeHub?.id === 'insights' || isAccountRoute(pathname);
+  const slotClass =
+    'flex min-h-14 flex-col items-center justify-center gap-0.5 px-1 pt-1.5 pb-1 text-xs font-medium tracking-tight transition-colors motion-reduce:transition-none outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring';
+
+  return (
+    <nav
+      aria-label={t('shell.main_navigation')}
+      className="fixed inset-x-0 bottom-0 z-30 border-t border-border bg-background/95 ps-[env(safe-area-inset-left)] pe-[env(safe-area-inset-right)] pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden"
+    >
+      <div className="grid grid-cols-5 items-end">
+        {mobileBarHubs.map((hub) => {
+          const Icon = hub.icon;
+          const active = activeHub?.id === hub.id;
+          const raised = hub.id === 'ask';
+          return (
+            <Link
+              key={hub.id}
+              to={hubTarget(hub)}
+              aria-current={active ? 'true' : undefined}
+              className={cn(
+                slotClass,
+                active ? 'text-foreground' : 'text-subtle hover:text-muted-foreground'
+              )}
+            >
+              {raised ? (
+                <span
+                  className={cn(
+                    '-mt-3 flex size-11 items-center justify-center rounded-full bg-accent text-accent-foreground shadow-md ring-4 ring-background',
+                    active && 'ring-surface-2'
+                  )}
+                >
+                  <Icon className="size-6" aria-hidden="true" />
+                </span>
+              ) : (
+                <Icon className={cn('size-5', active && 'stroke-[2.25]')} aria-hidden="true" />
+              )}
+              {t(hub.labelKey)}
+            </Link>
+          );
+        })}
+        <Sheet open={youOpen} onOpenChange={setYouOpen}>
+          <SheetTrigger asChild>
+            <button
+              type="button"
+              data-active={youActive ? 'true' : undefined}
+              className={cn(
+                slotClass,
+                youActive ? 'text-foreground' : 'text-subtle hover:text-muted-foreground'
+              )}
+            >
+              <CircleUser
+                className={cn('size-5', youActive && 'stroke-[2.25]')}
+                aria-hidden="true"
+              />
+              {t('nav.you')}
+            </button>
+          </SheetTrigger>
+          <SheetContent
+            side="bottom"
+            className="flex max-h-[85dvh] flex-col gap-0 rounded-t-2xl p-0 pb-[env(safe-area-inset-bottom)]"
+          >
+            <AccountMenuContent
+              pathname={pathname}
+              includeInsights
+              onNavigate={() => setYouOpen(false)}
+            />
+          </SheetContent>
+        </Sheet>
+      </div>
+    </nav>
   );
 }
 
@@ -139,8 +330,7 @@ export function AppShell() {
   const { pathname } = useLocation();
   const navigate = useNavigate();
   const { user } = useAuth();
-  const handleLogout = useLogout();
-  const [moreOpen, setMoreOpen] = useState(false);
+  const countsByRoute = useCountsByRoute();
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const whatsNew = useWhatsNew();
@@ -226,119 +416,51 @@ export function AppShell() {
   const title = t(getPageTitleKey(pathname));
 
   return (
-    <div className="app-shell min-h-screen flex flex-col bg-background text-foreground">
-      {/* Header */}
-      <header className="sticky top-0 z-30 border-b border-border bg-background/85 backdrop-blur">
-        <div className="mx-auto max-w-6xl flex h-12 items-center justify-between px-4">
-          <div className="flex items-center gap-2 min-w-0">
-            <AppLogo className="size-6 rounded-md" />
-            <h1 className="text-[13px] font-semibold tracking-tight truncate">{title}</h1>
+    // --shell-content-max caps the reading column; layouts that need the full
+    // width (e.g. list + reading pane) can override it.
+    <div
+      className="app-shell flex min-h-dvh bg-background text-foreground"
+      style={{ '--shell-content-max': '72rem' } as CSSProperties}
+    >
+      <DesktopRail pathname={pathname} counts={countsByRoute} />
+      <div className="flex min-w-0 flex-1 flex-col">
+        <header className="sticky top-0 z-30 border-b border-border bg-background/85 backdrop-blur">
+          <div className="flex h-12 items-center justify-between gap-2 ps-[max(1rem,env(safe-area-inset-left))] pe-[max(1rem,env(safe-area-inset-right))] md:px-5">
+            <div className="flex min-w-0 items-center gap-2">
+              <AppLogo className="size-6 rounded-md md:hidden" />
+              <h1 className="truncate text-sm font-semibold tracking-tight">{title}</h1>
+            </div>
+            <div className="flex items-center gap-1">
+              {!online && (
+                <div className="inline-flex items-center gap-1 rounded-md border border-border bg-surface px-2 py-1 text-xs font-medium text-muted-foreground">
+                  <WifiOff className="size-4" aria-hidden="true" />
+                  {t('shell.offline')}
+                </div>
+              )}
+              <button
+                type="button"
+                onClick={() => setPaletteOpen(true)}
+                className="hidden md:inline-flex items-center gap-2 rounded-md border border-border bg-surface px-2.5 py-1.5 text-xs text-muted-foreground hover:text-foreground hover:border-border-strong transition-colors motion-reduce:transition-none"
+              >
+                <Search className="size-4" aria-hidden="true" />
+                <span>{t('shell.command')}</span>
+                <kbd className="font-mono text-xs text-subtle">⌘K</kbd>
+              </button>
+            </div>
           </div>
-          <div className="flex items-center gap-1">
-            {!online && (
-              <div className="inline-flex items-center gap-1 rounded-md border border-border bg-surface px-2 py-1 text-xs font-medium text-muted-foreground">
-                <WifiOff className="size-3.5" />
-                {t('shell.offline')}
-              </div>
-            )}
-            <button
-              onClick={() => setPaletteOpen(true)}
-              className="hidden md:inline-flex items-center gap-2 rounded-md border border-border bg-surface px-2.5 py-1 text-xs text-muted-foreground hover:text-foreground hover:border-border-strong transition-colors"
-            >
-              <Search className="size-3.5" />
-              <span>{t('shell.command')}</span>
-              <kbd className="font-mono text-[10px] text-subtle">⌘K</kbd>
-            </button>
-            <Sheet open={moreOpen} onOpenChange={setMoreOpen}>
-              <SheetTrigger asChild>
-                <button
-                  className="inline-flex size-9 items-center justify-center rounded-md hover:bg-surface-2 text-muted-foreground hover:text-foreground transition-colors"
-                  aria-label={t('shell.more')}
-                >
-                  <MoreHorizontal className="size-5" />
-                </button>
-              </SheetTrigger>
-              <SheetContent side="right" className="w-[280px] p-0">
-                <SheetHeader className="px-5 pt-5 pb-3">
-                  <SheetTitle className="text-sm">{t('shell.menu')}</SheetTitle>
-                  {user && (
-                    <p className="text-xs text-muted-foreground truncate">{user.username}</p>
-                  )}
-                </SheetHeader>
-                <nav className="p-2">
-                  {mobilePrimaryOverflowItems.map((m) => (
-                    <NavLink
-                      key={m.to}
-                      to={m.to}
-                      label={t(m.labelKey)}
-                      icon={m.icon}
-                      isActive={isNavigationItemActive(m.to, pathname)}
-                      variant="sheet"
-                      onClick={() => setMoreOpen(false)}
-                    />
-                  ))}
-                  {mobilePrimaryOverflowItems.length > 0 && (
-                    <div className="mx-1 my-1 h-px bg-border" />
-                  )}
-                  {secondaryNavigationItemsFor(Boolean(user?.is_admin)).map((m) => (
-                    <NavLink
-                      key={m.to}
-                      to={m.to}
-                      label={t(m.labelKey)}
-                      icon={m.icon}
-                      isActive={isNavigationItemActive(m.to, pathname)}
-                      variant="sheet"
-                      onClick={() => setMoreOpen(false)}
-                    />
-                  ))}
-                  <button
-                    onClick={() => void handleLogout()}
-                    className="flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-sm text-muted-foreground hover:bg-surface hover:text-foreground"
-                  >
-                    <LogOut className="size-4" />
-                    {t('shell.log_out')}
-                  </button>
-                </nav>
-              </SheetContent>
-            </Sheet>
-          </div>
-        </div>
-      </header>
+        </header>
 
-      {/* Main content + desktop rail */}
-      <main className="flex-1 pb-[68px] md:pb-0">
-        <div className="md:flex md:max-w-6xl md:mx-auto md:gap-0">
-          <DesktopRail pathname={pathname} />
-          <div className="flex-1 min-w-0">
+        <main className="flex-1 pb-[calc(4.5rem+env(safe-area-inset-bottom))] md:pb-0">
+          <div className="mx-auto w-full max-w-(--shell-content-max)">
+            <HubTabs pathname={pathname} isAdmin={Boolean(user?.is_admin)} counts={countsByRoute} />
             <ErrorBoundary resetKey={pathname} compact>
               <Outlet />
             </ErrorBoundary>
           </div>
-        </div>
-      </main>
+        </main>
+      </div>
 
-      {/* Mobile bottom nav */}
-      <nav className="md:hidden fixed bottom-0 inset-x-0 z-30 border-t border-border bg-background/95 backdrop-blur pb-[env(safe-area-inset-bottom)]">
-        <div className="grid grid-cols-5">
-          {mobileNavigationItems.map((n) => {
-            const Icon = n.icon;
-            const active = isNavigationItemActive(n.to, pathname);
-            return (
-              <Link
-                key={n.to}
-                to={n.to}
-                className={cn(
-                  'flex flex-col items-center justify-center gap-0.5 py-2.5 text-[10px] font-medium tracking-tight transition-colors',
-                  active ? 'text-foreground' : 'text-subtle hover:text-muted-foreground'
-                )}
-              >
-                <Icon className={cn('size-5', active && 'stroke-[2.25]')} />
-                {t(n.labelKey)}
-              </Link>
-            );
-          })}
-        </div>
-      </nav>
+      <MobileBottomBar pathname={pathname} />
 
       <ErrorBoundary silent resetKey={pathname}>
         <Suspense fallback={null}>

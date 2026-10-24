@@ -86,7 +86,13 @@
     "offline_saved": "Offline Saved",
     "learn": "Learn",
     "lesson_library": "Lesson Library",
-    "learning_recap": "Learning Recap"
+    "learning_recap": "Learning Recap",
+    "hub_read": "اقرأ",
+    "hub_library": "المكتبة",
+    "hub_ask": "اسأل",
+    "hub_learn": "Learn",
+    "hub_insights": "رؤى",
+    "you": "أنت"
   },
   "page_title": {
     "brief": "الموجز",
@@ -118,9 +124,9 @@
   "shell": {
     "offline": "غير متصل",
     "command": "أمر",
-    "menu": "القائمة",
-    "more": "المزيد",
-    "log_out": "تسجيل الخروج"
+    "log_out": "تسجيل الخروج",
+    "main_navigation": "التنقل الرئيسي",
+    "account_menu": "قائمة الحساب"
   },
   "settings": {
     "title": "الإعدادات",

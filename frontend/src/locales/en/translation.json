@@ -86,7 +86,13 @@
     "offline_saved": "Offline Saved",
     "learn": "Learn",
     "lesson_library": "Lesson Library",
-    "learning_recap": "Learning Recap"
+    "learning_recap": "Learning Recap",
+    "hub_read": "Read",
+    "hub_library": "Library",
+    "hub_ask": "Ask",
+    "hub_learn": "Learn",
+    "hub_insights": "Insights",
+    "you": "You"
   },
   "page_title": {
     "brief": "Brief",
@@ -118,9 +124,9 @@
   "shell": {
     "offline": "Offline",
     "command": "Command",
-    "menu": "Menu",
-    "more": "More",
-    "log_out": "Log out"
+    "log_out": "Log out",
+    "main_navigation": "Main navigation",
+    "account_menu": "Account menu"
   },
   "priorityFeeds": {
     "highPriority": "High priority",

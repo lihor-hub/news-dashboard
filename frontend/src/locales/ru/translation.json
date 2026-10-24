@@ -86,7 +86,13 @@
     "offline_saved": "Offline Saved",
     "learn": "Learn",
     "lesson_library": "Lesson Library",
-    "learning_recap": "Learning Recap"
+    "learning_recap": "Learning Recap",
+    "hub_read": "Чтение",
+    "hub_library": "Библиотека",
+    "hub_ask": "Спросить",
+    "hub_learn": "Learn",
+    "hub_insights": "Аналитика",
+    "you": "Вы"
   },
   "page_title": {
     "brief": "Сводка",
@@ -118,9 +124,9 @@
   "shell": {
     "offline": "Нет сети",
     "command": "Команда",
-    "menu": "Меню",
-    "more": "Ещё",
-    "log_out": "Выйти"
+    "log_out": "Выйти",
+    "main_navigation": "Основная навигация",
+    "account_menu": "Меню аккаунта"
   },
   "settings": {
     "title": "Настройки",

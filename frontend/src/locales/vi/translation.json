@@ -86,7 +86,13 @@
     "offline_saved": "Offline Saved",
     "learn": "Learn",
     "lesson_library": "Lesson Library",
-    "learning_recap": "Learning Recap"
+    "learning_recap": "Learning Recap",
+    "hub_read": "Đọc",
+    "hub_library": "Thư viện",
+    "hub_ask": "Hỏi",
+    "hub_learn": "Learn",
+    "hub_insights": "Thống kê",
+    "you": "Bạn"
   },
   "page_title": {
     "brief": "Tóm tắt",
@@ -118,9 +124,9 @@
   "shell": {
     "offline": "Ngoại tuyến",
     "command": "Lệnh",
-    "menu": "Menu",
-    "more": "Thêm",
-    "log_out": "Đăng xuất"
+    "log_out": "Đăng xuất",
+    "main_navigation": "Điều hướng chính",
+    "account_menu": "Menu tài khoản"
   },
   "settings": {
     "title": "Cài đặt",

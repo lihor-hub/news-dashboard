@@ -86,7 +86,13 @@
     "offline_saved": "Offline Saved",
     "learn": "Learn",
     "lesson_library": "Lesson Library",
-    "learning_recap": "Learning Recap"
+    "learning_recap": "Learning Recap",
+    "hub_read": "อ่าน",
+    "hub_library": "คลัง",
+    "hub_ask": "ถาม",
+    "hub_learn": "Learn",
+    "hub_insights": "ข้อมูลเชิงลึก",
+    "you": "คุณ"
   },
   "page_title": {
     "brief": "สรุปข่าว",
@@ -118,9 +124,9 @@
   "shell": {
     "offline": "ออฟไลน์",
     "command": "คำสั่ง",
-    "menu": "เมนู",
-    "more": "เพิ่มเติม",
-    "log_out": "ออกจากระบบ"
+    "log_out": "ออกจากระบบ",
+    "main_navigation": "การนำทางหลัก",
+    "account_menu": "เมนูบัญชี"
   },
   "settings": {
     "title": "การตั้งค่า",

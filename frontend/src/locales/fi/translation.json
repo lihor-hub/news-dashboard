@@ -86,7 +86,13 @@
     "offline_saved": "Offline Saved",
     "learn": "Learn",
     "lesson_library": "Lesson Library",
-    "learning_recap": "Learning Recap"
+    "learning_recap": "Learning Recap",
+    "hub_read": "Lue",
+    "hub_library": "Kirjasto",
+    "hub_ask": "Kysy",
+    "hub_learn": "Learn",
+    "hub_insights": "Näkemykset",
+    "you": "Sinä"
   },
   "page_title": {
     "brief": "Yhteenveto",
@@ -118,9 +124,9 @@
   "shell": {
     "offline": "Offline",
     "command": "Komento",
-    "menu": "Valikko",
-    "more": "Lisää",
-    "log_out": "Kirjaudu ulos"
+    "log_out": "Kirjaudu ulos",
+    "main_navigation": "Päänavigaatio",
+    "account_menu": "Tilivalikko"
   },
   "settings": {
     "title": "Asetukset",

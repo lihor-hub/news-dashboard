@@ -251,8 +251,9 @@ describe('#118 — Briefing History in secondary nav', () => {
 });
 
 describe('#943 — Offline Saved navigation', () => {
+  // Offline Saved is a tab of the Library hub, so it shows on Library pages.
   it('shows Offline Saved in shell navigation', async () => {
-    renderShell('/');
+    renderShell('/later');
     await waitFor(() => {
       const links = screen.getAllByRole('link', { name: /offline saved/i });
       expect(links.length).toBeGreaterThan(0);
@@ -260,7 +261,7 @@ describe('#943 — Offline Saved navigation', () => {
   });
 
   it('Offline Saved link points to /offline-saved', async () => {
-    renderShell('/');
+    renderShell('/later');
     await waitFor(() => {
       const link = screen
         .getAllByRole('link', { name: /offline saved/i })

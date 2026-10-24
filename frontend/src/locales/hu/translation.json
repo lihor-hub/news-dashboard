@@ -86,7 +86,13 @@
     "offline_saved": "Offline Saved",
     "learn": "Learn",
     "lesson_library": "Lesson Library",
-    "learning_recap": "Learning Recap"
+    "learning_recap": "Learning Recap",
+    "hub_read": "Olvasás",
+    "hub_library": "Könyvtár",
+    "hub_ask": "Kérdezés",
+    "hub_learn": "Learn",
+    "hub_insights": "Elemzések",
+    "you": "Te"
   },
   "page_title": {
     "brief": "Összefoglaló",
@@ -118,9 +124,9 @@
   "shell": {
     "offline": "Offline",
     "command": "Parancs",
-    "menu": "Menü",
-    "more": "Több",
-    "log_out": "Kijelentkezés"
+    "log_out": "Kijelentkezés",
+    "main_navigation": "Fő navigáció",
+    "account_menu": "Fiókmenü"
   },
   "settings": {
     "title": "Beállítások",

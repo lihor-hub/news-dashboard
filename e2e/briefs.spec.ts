@@ -107,19 +107,21 @@ test.describe('Brief page — View history link', () => {
 test.describe('Navigation — Briefing History entries', () => {
   test.use({ viewport: { width: 1280, height: 800 } });
 
-  test('desktop rail secondary nav shows Briefing History', async ({ page }) => {
+  test('Read hub tabs show Briefing History', async ({ page }) => {
     await page.goto('/');
-    await expect(page.locator('aside a[href="/briefs"]').first()).toBeVisible();
+    const tabs = page.getByRole('navigation', { name: 'Read' });
+    await expect(tabs.locator('a[href="/briefs"]')).toBeVisible();
   });
 
-  test('Briefing History is active at /briefs', async ({ page }) => {
+  test('Briefing History tab is current at /briefs', async ({ page }) => {
     await page.goto('/briefs');
-    await expect(page.locator('aside a[href="/briefs"]').first()).toHaveClass(/bg-surface-2/);
+    const tabs = page.getByRole('navigation', { name: 'Read' });
+    await expect(tabs.locator('a[href="/briefs"]')).toHaveAttribute('aria-current', 'page');
   });
 
-  test('clicking Briefing History in nav navigates to /briefs', async ({ page }) => {
+  test('clicking Briefing History tab navigates to /briefs', async ({ page }) => {
     await page.goto('/');
-    await page.locator('aside a[href="/briefs"]').first().click();
+    await page.getByRole('navigation', { name: 'Read' }).locator('a[href="/briefs"]').click();
     await expect(page).toHaveURL('/briefs');
   });
 });

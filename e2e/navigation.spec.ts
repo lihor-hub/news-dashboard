@@ -45,114 +45,89 @@ test.describe('Header', () => {
   });
 });
 
-test.describe('Desktop navigation rail', () => {
+test.describe('Desktop hub rail', () => {
   test.use({ viewport: { width: 1280, height: 800 } });
 
-  test('shows Brief link pointing to /', async ({ page }) => {
+  test('shows the five hubs in the rail', async ({ page }) => {
     await page.goto('/');
-    const briefLink = page.locator('aside a[href="/"]').first();
-    await expect(briefLink).toBeVisible();
+    for (const href of ['/', '/later', '/ask', '/learn', '/recap']) {
+      await expect(page.locator(`aside a[href="${href}"]`).first()).toBeVisible();
+    }
   });
 
-  test('shows Today link pointing to /today', async ({ page }) => {
+  test('Read hub is active at / and /today', async ({ page }) => {
     await page.goto('/');
-    const todayLink = page.locator('aside a[href="/today"]').first();
-    await expect(todayLink).toBeVisible();
-  });
-
-  test('shows Later link', async ({ page }) => {
-    await page.goto('/');
-    await expect(page.locator('aside a[href="/later"]').first()).toBeVisible();
-  });
-
-  test('shows Starred link', async ({ page }) => {
-    await page.goto('/');
-    await expect(page.locator('aside a[href="/starred"]').first()).toBeVisible();
-  });
-
-  test('Brief is active at /', async ({ page }) => {
-    await page.goto('/');
-    const briefLink = page.locator('aside a[href="/"]').first();
-    // Active link has bg-surface-2 class
-    await expect(briefLink).toHaveClass(/bg-surface-2/);
-  });
-
-  test('Today is active at /today', async ({ page }) => {
+    await expect(page.locator('aside a[href="/"]').first()).toHaveClass(/bg-surface-2/);
     await page.goto('/today');
-    const todayLink = page.locator('aside a[href="/today"]').first();
-    await expect(todayLink).toHaveClass(/bg-surface-2/);
+    await expect(page.locator('aside a[href="/"]').first()).toHaveClass(/bg-surface-2/);
   });
 
-  test('Brief is NOT active at /today', async ({ page }) => {
-    await page.goto('/today');
-    const briefLink = page.locator('aside a[href="/"]').first();
-    await expect(briefLink).not.toHaveClass(/bg-surface-2/);
+  test('Read hub is NOT active in the Library hub', async ({ page }) => {
+    await page.goto('/later');
+    await expect(page.locator('aside a[href="/"]').first()).not.toHaveClass(/bg-surface-2/);
+    await expect(page.locator('aside a[href="/later"]').first()).toHaveClass(/bg-surface-2/);
   });
 
-  test('clicking Today link navigates to /today', async ({ page }) => {
+  test('hub tabs switch between Brief and Today', async ({ page }) => {
     await page.goto('/');
-    await page.locator('aside a[href="/today"]').first().click();
+    const tabs = page.getByRole('navigation', { name: 'Read' });
+    await tabs.getByRole('link', { name: 'Today' }).click();
     await expect(page).toHaveURL('/today');
-    await expect(page.locator('h1').filter({ hasText: 'Today' })).toBeVisible();
-  });
-
-  test('clicking Brief link navigates to /', async ({ page }) => {
-    await page.goto('/today');
-    await page.locator('aside a[href="/"]').first().click();
+    await expect(tabs.getByRole('link', { name: 'Today' })).toHaveAttribute('aria-current', 'page');
+    await tabs.getByRole('link', { name: 'Brief', exact: true }).click();
     await expect(page).toHaveURL('/');
   });
 
-  test('secondary nav shows Feeds, Stats, Archive, Settings', async ({ page }) => {
+  test('Library hub tabs show Later, Starred, Archive', async ({ page }) => {
+    await page.goto('/later');
+    const tabs = page.getByRole('navigation', { name: 'Library' });
+    for (const href of ['/later', '/starred', '/archive']) {
+      await expect(tabs.locator(`a[href="${href}"]`)).toBeVisible();
+    }
+  });
+
+  test('account menu shows Feeds, Settings and admin pages', async ({ page }) => {
     await page.goto('/');
-    await expect(page.locator('aside a[href="/feeds"]').first()).toBeVisible();
-    await expect(page.locator('aside a[href="/stats"]').first()).toBeVisible();
-    await expect(page.locator('aside a[href="/archive"]').first()).toBeVisible();
-    await expect(page.locator('aside a[href="/settings"]').first()).toBeVisible();
+    await page.locator('aside').getByRole('button').last().click();
+    const menu = page.getByRole('dialog');
+    await expect(menu.getByRole('link', { name: 'Feeds', exact: true })).toBeVisible();
+    await expect(menu.getByRole('link', { name: 'Settings', exact: true })).toBeVisible();
+    await expect(menu.getByRole('group', { name: 'Theme' })).toBeVisible();
   });
 });
 
 test.describe('Mobile bottom navigation', () => {
   test.use({ viewport: { width: 390, height: 844 } });
 
-  test('shows Brief in mobile nav', async ({ page }) => {
+  test('shows Read, Library, Ask, Learn and You', async ({ page }) => {
     await page.goto('/');
-    const briefLink = page.locator('nav.fixed a[href="/"]').first();
-    await expect(briefLink).toBeVisible();
+    const bar = page.locator('nav.fixed').first();
+    for (const href of ['/', '/later', '/ask', '/learn']) {
+      await expect(bar.locator(`a[href="${href}"]`)).toBeVisible();
+    }
+    await expect(bar.getByRole('button', { name: 'You' })).toBeVisible();
   });
 
-  test('shows Today in mobile nav', async ({ page }) => {
+  test('Later is reachable from the Library hub', async ({ page }) => {
     await page.goto('/');
-    const todayLink = page.locator('nav.fixed a[href="/today"]').first();
-    await expect(todayLink).toBeVisible();
+    await page.locator('nav.fixed a[href="/later"]').first().click();
+    await expect(page).toHaveURL('/later');
   });
 
-  test('Later is absent from fixed mobile nav but reachable from More sheet', async ({ page }) => {
-    await page.goto('/');
-    // Later must not be in the fixed bottom bar.
-    await expect(page.locator('nav.fixed a[href="/later"]')).toHaveCount(0);
-    // Later must be reachable via the More sheet.
-    await page.getByRole('button', { name: 'More' }).click();
-    const sheet = page.getByRole('dialog');
-    await expect(sheet.getByRole('link', { name: 'Later' })).toBeVisible();
-  });
-
-  test('shows Starred in mobile nav', async ({ page }) => {
-    await page.goto('/');
-    const starredLink = page.locator('nav.fixed a[href="/starred"]').first();
-    await expect(starredLink).toBeVisible();
-  });
-
-  test('mobile nav has 5 items', async ({ page }) => {
+  test('mobile nav has 5 slots', async ({ page }) => {
     await page.goto('/');
     const mobileNav = page.locator('nav.fixed').first();
-    const links = mobileNav.locator('a');
-    await expect(links).toHaveCount(5);
+    await expect(mobileNav.locator('a')).toHaveCount(4);
+    await expect(mobileNav.locator('button')).toHaveCount(1);
   });
 
-  test('clicking Today in mobile nav navigates', async ({ page }) => {
+  test('You sheet exposes Insights and account pages', async ({ page }) => {
     await page.goto('/');
-    await page.locator('nav.fixed a[href="/today"]').first().click();
-    await expect(page).toHaveURL('/today');
+    await page.getByRole('button', { name: 'You' }).click();
+    const sheet = page.getByRole('dialog');
+    await expect(sheet.getByRole('link', { name: 'Weekly Recap' })).toBeVisible();
+    await expect(sheet.getByRole('link', { name: 'Feeds', exact: true })).toBeVisible();
+    await expect(sheet.getByRole('link', { name: 'Settings', exact: true })).toBeVisible();
   });
 });
 

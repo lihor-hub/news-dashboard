@@ -86,7 +86,13 @@
     "offline_saved": "Offline Saved",
     "learn": "Learn",
     "lesson_library": "Lesson Library",
-    "learning_recap": "Learning Recap"
+    "learning_recap": "Learning Recap",
+    "hub_read": "阅读",
+    "hub_library": "资料库",
+    "hub_ask": "提问",
+    "hub_learn": "Learn",
+    "hub_insights": "洞察",
+    "you": "我"
   },
   "page_title": {
     "brief": "简报",
@@ -118,9 +124,9 @@
   "shell": {
     "offline": "离线",
     "command": "命令",
-    "menu": "菜单",
-    "more": "更多",
-    "log_out": "退出登录"
+    "log_out": "退出登录",
+    "main_navigation": "主导航",
+    "account_menu": "账户菜单"
   },
   "settings": {
     "title": "设置",

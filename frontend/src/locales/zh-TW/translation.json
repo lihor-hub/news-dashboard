@@ -86,7 +86,13 @@
     "offline_saved": "Offline Saved",
     "learn": "Learn",
     "lesson_library": "Lesson Library",
-    "learning_recap": "Learning Recap"
+    "learning_recap": "Learning Recap",
+    "hub_read": "閱讀",
+    "hub_library": "資料庫",
+    "hub_ask": "提問",
+    "hub_learn": "Learn",
+    "hub_insights": "洞察",
+    "you": "我"
   },
   "page_title": {
     "brief": "簡報",
@@ -118,9 +124,9 @@
   "shell": {
     "offline": "離線",
     "command": "指令",
-    "menu": "選單",
-    "more": "更多",
-    "log_out": "登出"
+    "log_out": "登出",
+    "main_navigation": "主導覽",
+    "account_menu": "帳戶選單"
   },
   "settings": {
     "title": "設定",

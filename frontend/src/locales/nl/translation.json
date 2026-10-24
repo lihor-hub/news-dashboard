@@ -86,7 +86,13 @@
     "offline_saved": "Offline Saved",
     "learn": "Learn",
     "lesson_library": "Lesson Library",
-    "learning_recap": "Learning Recap"
+    "learning_recap": "Learning Recap",
+    "hub_read": "Lezen",
+    "hub_library": "Bibliotheek",
+    "hub_ask": "Vraag",
+    "hub_learn": "Learn",
+    "hub_insights": "Inzichten",
+    "you": "Jij"
   },
   "page_title": {
     "brief": "Overzicht",
@@ -118,9 +124,9 @@
   "shell": {
     "offline": "Offline",
     "command": "Commando",
-    "menu": "Menu",
-    "more": "Meer",
-    "log_out": "Uitloggen"
+    "log_out": "Uitloggen",
+    "main_navigation": "Hoofdnavigatie",
+    "account_menu": "Accountmenu"
   },
   "settings": {
     "title": "Instellingen",
