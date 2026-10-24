@@ -39,13 +39,13 @@ export function SettingsPage() {
       <DeleteAccountSection />
 
       <section className="text-xs text-muted-foreground space-y-2">
-        <div className="text-[10px] uppercase tracking-wider text-subtle font-medium">
+        <div className="text-xs uppercase tracking-wider text-subtle font-medium">
           {t('settings.about_heading')}
         </div>
         <p>{t('settings.about_body')}</p>
         <p>
           {t('settings.shortcuts_hint_prefix')}{' '}
-          <kbd className="font-mono text-[10px] px-1 py-0.5 bg-surface-2 border border-border rounded">
+          <kbd className="font-mono text-xs px-1 py-0.5 bg-surface-2 border border-border rounded">
             ?
           </kbd>{' '}
           {t('settings.shortcuts_hint_suffix')}

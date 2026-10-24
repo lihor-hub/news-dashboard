@@ -53,14 +53,12 @@ export function PrivacySection() {
 
   return (
     <section>
-      <div className="text-[10px] uppercase tracking-wider text-subtle font-medium mb-2">
-        Privacy
-      </div>
+      <div className="text-xs uppercase tracking-wider text-subtle font-medium mb-2">Privacy</div>
       <div className="rounded-lg border border-border bg-card p-4 space-y-3">
         <div className="flex items-center justify-between">
           <div className="space-y-0.5">
             <div className="text-xs font-medium text-foreground">Usage analytics</div>
-            <p className="text-[11px] text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
               Lets Radar track route views, time-on-app, and article dwell time to improve your
               recommendations and reading insights.
             </p>
@@ -73,7 +71,7 @@ export function PrivacySection() {
           />
         </div>
         {!globalEnabled && (
-          <p className="text-[11px] text-muted-foreground">
+          <p className="text-xs text-muted-foreground">
             Analytics have been disabled instance-wide by the administrator.
           </p>
         )}

@@ -82,7 +82,7 @@ function HealthBadge({ health }: { health: HealthState }) {
   }[health];
   const { Icon } = cfg;
   return (
-    <span className={cn('inline-flex items-center gap-1 text-[11px] font-medium', cfg.cls)}>
+    <span className={cn('inline-flex items-center gap-1 text-xs font-medium', cfg.cls)}>
       <Icon className="size-3.5" />
       {cfg.label}
     </span>
@@ -637,7 +637,7 @@ export function SourcesPage() {
       <div className="hidden md:block overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
-            <tr className="text-start text-[10px] uppercase tracking-wider text-muted-foreground border-b border-border">
+            <tr className="text-start text-xs uppercase tracking-wider text-muted-foreground border-b border-border">
               <th className="px-5 py-2 font-medium">Source</th>
               <th className="px-3 py-2 font-medium">Kind</th>
               <th className="px-3 py-2 font-medium">Category</th>
@@ -659,14 +659,14 @@ export function SourcesPage() {
                     <div className="flex items-center gap-2">
                       <span className="font-medium">{s.name}</span>
                       {isOwned && (
-                        <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-primary/10 text-primary">
+                        <span className="text-xs font-medium px-1.5 py-0.5 rounded bg-primary/10 text-primary">
                           mine
                         </span>
                       )}
                     </div>
                     {s.last_error && (
                       <div
-                        className="text-[11px] text-[color:var(--err)] mt-0.5 max-w-xs truncate"
+                        className="text-xs text-[color:var(--err)] mt-0.5 max-w-xs truncate"
                         title={s.last_error}
                       >
                         {s.last_error}
@@ -737,12 +737,12 @@ export function SourcesPage() {
                   <div className="flex items-center gap-1.5">
                     <span className="text-sm font-medium truncate">{s.name}</span>
                     {isOwned && (
-                      <span className="text-[10px] font-medium px-1 py-0.5 rounded bg-primary/10 text-primary shrink-0">
+                      <span className="text-xs font-medium px-1 py-0.5 rounded bg-primary/10 text-primary shrink-0">
                         mine
                       </span>
                     )}
                   </div>
-                  <div className="text-[11px] text-muted-foreground mt-0.5">
+                  <div className="text-xs text-muted-foreground mt-0.5">
                     {kindLabel(s.kind)} · {s.category}
                   </div>
                 </div>
@@ -775,7 +775,7 @@ export function SourcesPage() {
                   />
                 </div>
               </div>
-              <div className="mt-2 flex items-center justify-between text-[11px]">
+              <div className="mt-2 flex items-center justify-between text-xs">
                 <HealthBadge health={computeHealth(s)} />
                 <span className="text-muted-foreground">
                   {s.last_checked_at ? relativeTime(s.last_checked_at) : '—'} ·{' '}
@@ -783,10 +783,7 @@ export function SourcesPage() {
                 </span>
               </div>
               {s.last_error && (
-                <div
-                  className="mt-1 text-[11px] text-[color:var(--err)] truncate"
-                  title={s.last_error}
-                >
+                <div className="mt-1 text-xs text-[color:var(--err)] truncate" title={s.last_error}>
                   {s.last_error}
                 </div>
               )}

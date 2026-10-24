@@ -32,13 +32,14 @@ SheetOverlay.displayName = SheetPrimitive.Overlay.displayName;
 
 // RTL exception: side="left"/"right" is a physical API; anchors, borders, and slide animations stay paired.
 const sheetVariants = cva(
-  "fixed z-50 gap-4 bg-background p-6 shadow-lg transition ease-in-out data-[state=closed]:duration-300 data-[state=open]:duration-500 data-[state=open]:animate-in data-[state=closed]:animate-out",
+  "fixed z-50 gap-4 bg-background p-6 shadow-elevation-2 transition ease-spring data-[state=closed]:duration-(--duration-slow) data-[state=open]:duration-(--duration-sheet) data-[state=open]:animate-in data-[state=closed]:animate-out",
   {
     variants: {
       side: {
         top: "inset-x-0 top-0 border-b data-[state=closed]:slide-out-to-top data-[state=open]:slide-in-from-top",
+        // Mobile bottom sheet: rounded top, grab handle, scrollable, clears the home indicator.
         bottom:
-          "inset-x-0 bottom-0 border-t data-[state=closed]:slide-out-to-bottom data-[state=open]:slide-in-from-bottom",
+          "inset-x-0 bottom-0 mx-auto flex max-h-[85dvh] w-full max-w-2xl flex-col overflow-y-auto rounded-t-2xl border-t px-4 pt-2 pb-[max(1rem,env(safe-area-inset-bottom))] data-[state=closed]:slide-out-to-bottom data-[state=open]:slide-in-from-bottom sm:px-6",
         left: "inset-y-0 left-0 h-full w-3/4 border-r data-[state=closed]:slide-out-to-left data-[state=open]:slide-in-from-left sm:max-w-sm",
         right:
           "inset-y-0 right-0 h-full w-3/4 border-l data-[state=closed]:slide-out-to-right data-[state=open]:slide-in-from-right sm:max-w-sm",
@@ -62,7 +63,14 @@ const SheetContent = React.forwardRef<
   <SheetPortal>
     <SheetOverlay />
     <SheetPrimitive.Content ref={ref} className={cn(sheetVariants({ side }), className)} {...props}>
-      <SheetPrimitive.Close className="absolute end-4 top-4 rounded-sm opacity-70 ring-offset-background cursor-pointer transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-secondary">
+      {side === "bottom" && (
+        <div
+          data-slot="sheet-handle"
+          aria-hidden="true"
+          className="mx-auto h-1 w-9 shrink-0 rounded-full bg-border-strong"
+        />
+      )}
+      <SheetPrimitive.Close className="absolute end-2 top-2 inline-flex size-touch items-center justify-center rounded-md opacity-70 ring-offset-background cursor-pointer transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none sm:end-3 sm:top-3 sm:pointer-fine:size-8">
         <X className="h-4 w-4" />
         <span className="sr-only">Close</span>
       </SheetPrimitive.Close>

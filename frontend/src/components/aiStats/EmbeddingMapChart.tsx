@@ -90,7 +90,7 @@ export function EmbeddingMapChart({ points, clusters }: EmbeddingMapChartProps) 
                   x={cx}
                   y={topY - 6}
                   textAnchor="middle"
-                  className="select-none fill-muted-foreground text-[11px] font-medium"
+                  className="select-none fill-muted-foreground text-xs font-medium"
                 >
                   {cluster.label}
                 </text>
@@ -120,14 +120,14 @@ export function EmbeddingMapChart({ points, clusters }: EmbeddingMapChartProps) 
             type="button"
             title="Reset view"
             onClick={resetViewport}
-            className="rounded-md bg-background/80 px-2 py-1 text-[11px] font-medium text-muted-foreground shadow-sm backdrop-blur hover:text-foreground"
+            className="rounded-md bg-background/80 px-2 py-1 text-xs font-medium text-muted-foreground shadow-sm backdrop-blur hover:text-foreground"
           >
             Reset
           </button>
         </div>
 
         {/* Hint */}
-        <p className="absolute bottom-2 start-2 select-none text-[10px] text-muted-foreground/50">
+        <p className="absolute bottom-2 start-2 select-none text-xs text-muted-foreground/50">
           Scroll to zoom · Drag to pan · Click point to open article
         </p>
       </div>
@@ -135,10 +135,7 @@ export function EmbeddingMapChart({ points, clusters }: EmbeddingMapChartProps) 
       {/* Legend */}
       <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1">
         {[...colors.entries()].map(([category, color]) => (
-          <span
-            key={category}
-            className="flex items-center gap-1.5 text-[11px] text-muted-foreground"
-          >
+          <span key={category} className="flex items-center gap-1.5 text-xs text-muted-foreground">
             <span className="size-2.5 rounded-full" style={{ backgroundColor: color }} />
             {category}
           </span>

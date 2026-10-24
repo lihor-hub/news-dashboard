@@ -6,7 +6,7 @@ export function LanguageSection() {
 
   return (
     <section>
-      <div className="text-[10px] uppercase tracking-wider text-subtle font-medium mb-2">
+      <div className="text-xs uppercase tracking-wider text-subtle font-medium mb-2">
         {t('settings.language.heading')}
       </div>
       <p className="text-xs text-muted-foreground mb-2">{t('settings.language.description')}</p>

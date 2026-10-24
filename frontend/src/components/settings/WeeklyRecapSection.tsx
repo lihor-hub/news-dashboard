@@ -68,14 +68,14 @@ export function WeeklyRecapSection() {
 
   return (
     <section>
-      <div className="text-[10px] uppercase tracking-wider text-subtle font-medium mb-2">
+      <div className="text-xs uppercase tracking-wider text-subtle font-medium mb-2">
         Weekly Recap
       </div>
       <div className="rounded-lg border border-border bg-card p-4 space-y-4">
         <div className="flex items-center justify-between">
           <div className="space-y-0.5">
             <div className="text-xs font-medium text-foreground">Send weekly recap</div>
-            <p className="text-[11px] text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
               A summary of your reading week, delivered via push.
             </p>
           </div>
@@ -104,7 +104,7 @@ export function WeeklyRecapSection() {
                 </option>
               ))}
             </select>
-            <p className="text-[11px] text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
               Delivered at your daily brief time, in your briefing timezone.
             </p>
           </div>

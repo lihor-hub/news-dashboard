@@ -34,7 +34,7 @@ export function DataExportSection() {
 
   return (
     <section>
-      <div className="text-[10px] uppercase tracking-wider text-subtle font-medium mb-2">
+      <div className="text-xs uppercase tracking-wider text-subtle font-medium mb-2">
         Data Export
       </div>
       <div className="rounded-lg border border-border bg-card p-4 space-y-3">

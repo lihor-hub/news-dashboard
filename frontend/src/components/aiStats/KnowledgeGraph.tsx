@@ -76,7 +76,7 @@ function EntityNode({ data }: NodeProps<KnowledgeFlowNode>) {
           data.entity.count !== 1 ? 's' : ''
         }`}
         className={cn(
-          'grid place-items-center rounded-full border-[1.5px] border-background text-[10px] font-semibold text-background shadow-sm transition-opacity',
+          'grid place-items-center rounded-full border-[1.5px] border-background text-xs font-semibold text-background shadow-sm transition-opacity',
           data.dimmed ? 'opacity-30' : 'opacity-90'
         )}
         style={{
@@ -88,7 +88,7 @@ function EntityNode({ data }: NodeProps<KnowledgeFlowNode>) {
       <span
         className={cn(
           // RTL exception: physical centering keeps the label over its graph node.
-          'pointer-events-none absolute left-1/2 top-0 max-w-28 -translate-x-1/2 -translate-y-full select-none truncate pb-1 text-[11px] font-medium text-foreground',
+          'pointer-events-none absolute left-1/2 top-0 max-w-28 -translate-x-1/2 -translate-y-full select-none truncate pb-1 text-xs font-medium text-foreground',
           data.dimmed && 'opacity-30'
         )}
       >
@@ -326,14 +326,14 @@ export function KnowledgeGraph({ graph }: KnowledgeGraphProps) {
         </ReactFlow>
 
         {/* RTL exception: keep this hint opposite ReactFlow's physical bottom-right controls. */}
-        <p className="pointer-events-none absolute bottom-2 left-2 select-none text-[10px] text-muted-foreground/50">
+        <p className="pointer-events-none absolute bottom-2 left-2 select-none text-xs text-muted-foreground/50">
           Scroll to zoom · Drag background to pan · Drag nodes to move
         </p>
       </div>
 
       <div className="flex flex-wrap gap-x-4 gap-y-1">
         {(Object.keys(TYPE_COLORS) as EntityType[]).map((type) => (
-          <span key={type} className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+          <span key={type} className="flex items-center gap-1.5 text-xs text-muted-foreground">
             <span
               className="size-2.5 rounded-full"
               style={{ backgroundColor: TYPE_COLORS[type] }}
@@ -341,8 +341,8 @@ export function KnowledgeGraph({ graph }: KnowledgeGraphProps) {
             {type}
           </span>
         ))}
-        <span className="text-[11px] text-muted-foreground">solid: co-occurrence</span>
-        <span className="text-[11px] text-muted-foreground">dashed: typed relationship</span>
+        <span className="text-xs text-muted-foreground">solid: co-occurrence</span>
+        <span className="text-xs text-muted-foreground">dashed: typed relationship</span>
       </div>
 
       {selected && (

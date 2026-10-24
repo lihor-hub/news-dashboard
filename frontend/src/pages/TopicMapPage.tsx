@@ -206,7 +206,7 @@ export function TopicMapPage() {
                 x={cx}
                 y={topY - 8}
                 textAnchor="middle"
-                className="pointer-events-none select-none fill-foreground text-[11px] font-semibold"
+                className="pointer-events-none select-none fill-foreground text-xs font-semibold"
               >
                 {cluster.headline}
               </text>
@@ -221,7 +221,7 @@ export function TopicMapPage() {
           >
             <p className="text-xs font-semibold leading-snug">{tooltip.content.title}</p>
             {tooltip.content.subtitle && (
-              <p className="mt-0.5 text-[11px] leading-snug text-muted-foreground">
+              <p className="mt-0.5 text-xs leading-snug text-muted-foreground">
                 {tooltip.content.subtitle}
               </p>
             )}
@@ -231,10 +231,7 @@ export function TopicMapPage() {
 
       <div className="flex flex-wrap gap-x-4 gap-y-1">
         {[...colors.entries()].map(([category, color]) => (
-          <span
-            key={category}
-            className="flex items-center gap-1.5 text-[11px] text-muted-foreground"
-          >
+          <span key={category} className="flex items-center gap-1.5 text-xs text-muted-foreground">
             <span className="size-2.5 rounded-full" style={{ backgroundColor: color }} />
             {category}
           </span>
@@ -259,7 +256,7 @@ export function TopicMapPage() {
                   {article.title}
                 </span>
                 {article.summary && (
-                  <span className="line-clamp-2 text-[11px] text-muted-foreground">
+                  <span className="line-clamp-2 text-xs text-muted-foreground">
                     {article.summary}
                   </span>
                 )}
@@ -269,7 +266,7 @@ export function TopicMapPage() {
         </div>
       )}
 
-      <p className="text-center text-[11px] text-muted-foreground">
+      <p className="text-center text-xs text-muted-foreground">
         Click a cluster outline to inspect its articles · Click a point to open the article
       </p>
     </div>

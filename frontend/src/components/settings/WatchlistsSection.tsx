@@ -86,7 +86,7 @@ export function WatchlistsSection() {
 
   return (
     <section>
-      <div className="text-[10px] uppercase tracking-wider text-subtle font-medium mb-2">
+      <div className="text-xs uppercase tracking-wider text-subtle font-medium mb-2">
         AI Watchlists
       </div>
       <div className="rounded-lg border border-border bg-card p-4 space-y-3">
@@ -104,7 +104,7 @@ export function WatchlistsSection() {
               >
                 <div className="min-w-0">
                   <div className="text-xs font-medium truncate">{w.label}</div>
-                  <div className="text-[11px] text-muted-foreground truncate">{w.query}</div>
+                  <div className="text-xs text-muted-foreground truncate">{w.query}</div>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
                   <Switch checked={w.enabled} onCheckedChange={() => void handleToggle(w)} />
@@ -159,7 +159,7 @@ export function WatchlistsSection() {
 
         {preview && (
           <div className="space-y-1.5 pt-1">
-            <div className="text-[11px] text-muted-foreground">
+            <div className="text-xs text-muted-foreground">
               {preview.length === 0
                 ? 'No recent articles match yet.'
                 : `${preview.length} recent match${preview.length === 1 ? '' : 'es'}:`}
@@ -167,7 +167,7 @@ export function WatchlistsSection() {
             {preview.map((m) => (
               <div key={m.article.id} className="text-xs rounded-md bg-surface px-2.5 py-1.5">
                 <div className="font-medium truncate">{m.article.title}</div>
-                <div className="text-[11px] text-muted-foreground truncate">{m.explanation}</div>
+                <div className="text-xs text-muted-foreground truncate">{m.explanation}</div>
               </div>
             ))}
           </div>

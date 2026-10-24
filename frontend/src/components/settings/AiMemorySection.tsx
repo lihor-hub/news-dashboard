@@ -97,9 +97,7 @@ export function AiMemorySection() {
 
   return (
     <section>
-      <div className="text-[10px] uppercase tracking-wider text-subtle font-medium mb-2">
-        AI Memory
-      </div>
+      <div className="text-xs uppercase tracking-wider text-subtle font-medium mb-2">AI Memory</div>
       <div className="rounded-lg border border-border bg-card p-4 space-y-4">
         <div className="flex gap-2">
           <input
@@ -175,7 +173,7 @@ export function AiMemorySection() {
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0 space-y-1">
                     <p className="break-words text-sm text-foreground">{memory.content}</p>
-                    <p className="text-[11px] text-muted-foreground">
+                    <p className="text-xs text-muted-foreground">
                       {memory.memory_type} / {memory.source} / {Math.round(memory.confidence * 100)}
                       %
                     </p>

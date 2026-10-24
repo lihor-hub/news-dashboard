@@ -26,7 +26,7 @@ export function UpdatesSection() {
   }, [platform, checkElectron]);
 
   const sectionLabel = (
-    <div className="text-[10px] uppercase tracking-wider text-subtle font-medium mb-2">Updates</div>
+    <div className="text-xs uppercase tracking-wider text-subtle font-medium mb-2">Updates</div>
   );
 
   // ── Electron ──────────────────────────────────────────────────────────────
@@ -165,7 +165,7 @@ export function UpdatesSection() {
                       <Download className="size-3" />
                       Download APK
                     </a>
-                    <p className="text-[11px] text-subtle">
+                    <p className="text-xs text-subtle">
                       Android will prompt you to confirm the install — tap Install when it appears.
                     </p>
                   </div>

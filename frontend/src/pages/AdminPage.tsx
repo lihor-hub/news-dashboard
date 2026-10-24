@@ -47,14 +47,14 @@ function CredentialsCard({ user }: { user: GeneratedUser }) {
       <div className="space-y-2">
         <div className="flex items-center justify-between gap-3 rounded-md bg-background px-3 py-2">
           <div className="min-w-0">
-            <div className="text-[10px] uppercase tracking-wider text-subtle">Username</div>
+            <div className="text-xs uppercase tracking-wider text-subtle">Username</div>
             <div className="truncate font-mono text-sm text-foreground">{user.username}</div>
           </div>
           <CopyButton value={user.username} label="username" />
         </div>
         <div className="flex items-center justify-between gap-3 rounded-md bg-background px-3 py-2">
           <div className="min-w-0">
-            <div className="text-[10px] uppercase tracking-wider text-subtle">Password</div>
+            <div className="text-xs uppercase tracking-wider text-subtle">Password</div>
             <div className="truncate font-mono text-sm text-foreground">{user.password}</div>
           </div>
           <CopyButton value={user.password} label="password" />
@@ -193,7 +193,7 @@ export function AdminPage() {
                   <div className="flex items-center gap-2">
                     <span className="truncate text-sm text-foreground">{u.username}</span>
                     {u.is_admin && (
-                      <span className="rounded bg-secondary px-1.5 py-0.5 text-[10px] uppercase tracking-wider text-secondary-foreground">
+                      <span className="rounded bg-secondary px-1.5 py-0.5 text-xs uppercase tracking-wider text-secondary-foreground">
                         Admin
                       </span>
                     )}

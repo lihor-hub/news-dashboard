@@ -58,7 +58,7 @@ export function GreaderTokensSection() {
 
   return (
     <section>
-      <div className="text-[10px] uppercase tracking-wider text-subtle font-medium mb-2">
+      <div className="text-xs uppercase tracking-wider text-subtle font-medium mb-2">
         RSS Client Sync (Google Reader API)
       </div>
       <div className="rounded-lg border border-border bg-card p-4 space-y-4">
@@ -115,7 +115,7 @@ export function GreaderTokensSection() {
             >
               <div className="min-w-0 space-y-1">
                 <p className="truncate text-sm text-foreground">{token.name}</p>
-                <p className="text-[11px] text-muted-foreground">
+                <p className="text-xs text-muted-foreground">
                   {token.token_prefix}…{token.revoked_at ? ' · revoked' : ''}
                   {token.last_used_at ? ` · last used ${token.last_used_at}` : ' · never used'}
                 </p>

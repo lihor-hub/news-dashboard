@@ -107,7 +107,7 @@ export function StudyArtifactsView({ artifacts }: StudyArtifactsViewProps) {
                 className="group relative cursor-pointer min-h-[140px] rounded-lg border border-border p-5 flex flex-col justify-between transition-all hover:shadow-sm hover:border-primary bg-muted/15"
               >
                 <div>
-                  <Badge variant="outline" className="mb-2 uppercase text-[10px]">
+                  <Badge variant="outline" className="mb-2 uppercase text-xs">
                     {item.concept}
                   </Badge>
                   <p className="text-sm text-foreground leading-relaxed">
@@ -116,7 +116,7 @@ export function StudyArtifactsView({ artifacts }: StudyArtifactsViewProps) {
                       : 'Click to flip and reveal details...'}
                   </p>
                 </div>
-                <div className="text-[10px] text-muted-foreground mt-4 group-hover:text-primary transition-colors">
+                <div className="text-xs text-muted-foreground mt-4 group-hover:text-primary transition-colors">
                   {revealedAnswers[index + 100] ? 'Click to hide details' : 'Click to show details'}
                 </div>
               </div>
@@ -185,7 +185,7 @@ export function StudyArtifactsView({ artifacts }: StudyArtifactsViewProps) {
                     </Button>
                   ) : (
                     <div className="text-xs bg-muted/40 p-3 rounded text-muted-foreground border-s-2 border-blue-500">
-                      <div className="font-semibold text-[10px] uppercase text-foreground mb-1">
+                      <div className="font-semibold text-xs uppercase text-foreground mb-1">
                         Feedback:
                       </div>
                       {item.explanation}

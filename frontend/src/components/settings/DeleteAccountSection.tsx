@@ -33,7 +33,7 @@ export function DeleteAccountSection() {
 
   return (
     <section>
-      <div className="text-[10px] uppercase tracking-wider text-subtle font-medium mb-2">
+      <div className="text-xs uppercase tracking-wider text-subtle font-medium mb-2">
         Danger Zone
       </div>
       <div className="rounded-lg border border-destructive/40 bg-card p-4 space-y-3">

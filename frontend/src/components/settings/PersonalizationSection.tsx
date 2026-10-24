@@ -31,7 +31,7 @@ export function PersonalizationSection() {
 
   return (
     <section>
-      <div className="text-[10px] uppercase tracking-wider text-subtle font-medium mb-2">
+      <div className="text-xs uppercase tracking-wider text-subtle font-medium mb-2">
         Personalization
       </div>
       <div className="rounded-lg border border-border bg-card p-4 space-y-3">

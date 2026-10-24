@@ -15,7 +15,7 @@ export function ThemeSection() {
 
   return (
     <section>
-      <div className="text-[10px] uppercase tracking-wider text-subtle font-medium mb-2">Theme</div>
+      <div className="text-xs uppercase tracking-wider text-subtle font-medium mb-2">Theme</div>
       <div className="grid grid-cols-3 gap-2">
         {THEME_OPTS.map(({ v, label, Icon }) => {
           const active = theme === v;
