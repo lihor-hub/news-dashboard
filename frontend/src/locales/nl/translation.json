@@ -238,6 +238,17 @@
     "description": "Make every article from this source stand out.",
     "sourceLabel": "High priority {{source}}"
   },
+  "articleList": {
+    "moreSources": "+{{count}} bronnen",
+    "moreSources_one": "+{{count}} bron",
+    "alsoCoveredBy": "Ook gemeld door {{names}}",
+    "andMore": "+{{count}} meer",
+    "swipeDone": "Klaar",
+    "swipeSkip": "Overslaan",
+    "swipeHint": "Veeg naar rechts voor klaar, naar links om over te slaan, of houd ingedrukt voor een ster.",
+    "dismissHint": "Tip sluiten",
+    "filterByCategory": "Filteren op categorie"
+  },
   "substackWizard": {
     "open": "Follow Substack",
     "title": "Follow a Substack publication",

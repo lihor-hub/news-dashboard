@@ -238,6 +238,17 @@
     "description": "Make every article from this source stand out.",
     "sourceLabel": "High priority {{source}}"
   },
+  "articleList": {
+    "moreSources": "+{{count}} forrás",
+    "moreSources_one": "+{{count}} forrás",
+    "alsoCoveredBy": "Erről ír még: {{names}}",
+    "andMore": "+{{count}} további",
+    "swipeDone": "Kész",
+    "swipeSkip": "Kihagyás",
+    "swipeHint": "Húzd jobbra a késznek jelöléshez, balra a kihagyáshoz, vagy tartsd lenyomva a csillagozáshoz.",
+    "dismissHint": "Tipp bezárása",
+    "filterByCategory": "Szűrés kategória szerint"
+  },
   "substackWizard": {
     "open": "Follow Substack",
     "title": "Follow a Substack publication",

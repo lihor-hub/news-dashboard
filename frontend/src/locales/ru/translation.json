@@ -238,6 +238,17 @@
     "description": "Make every article from this source stand out.",
     "sourceLabel": "High priority {{source}}"
   },
+  "articleList": {
+    "moreSources": "+{{count}} источников",
+    "moreSources_one": "+{{count}} источник",
+    "alsoCoveredBy": "Также освещают {{names}}",
+    "andMore": "+{{count}} ещё",
+    "swipeDone": "Готово",
+    "swipeSkip": "Пропустить",
+    "swipeHint": "Смахните вправо — готово, влево — пропустить, удерживайте — добавить в избранное.",
+    "dismissHint": "Скрыть подсказку",
+    "filterByCategory": "Фильтр по категории"
+  },
   "substackWizard": {
     "open": "Follow Substack",
     "title": "Follow a Substack publication",

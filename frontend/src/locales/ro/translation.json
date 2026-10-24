@@ -238,6 +238,17 @@
     "description": "Make every article from this source stand out.",
     "sourceLabel": "High priority {{source}}"
   },
+  "articleList": {
+    "moreSources": "+{{count}} surse",
+    "moreSources_one": "+{{count}} sursă",
+    "alsoCoveredBy": "Relatat și de {{names}}",
+    "andMore": "+{{count}} în plus",
+    "swipeDone": "Gata",
+    "swipeSkip": "Omite",
+    "swipeHint": "Glisează la dreapta pentru gata, la stânga pentru a omite sau ține apăsat pentru stea.",
+    "dismissHint": "Închide sfatul",
+    "filterByCategory": "Filtrează după categorie"
+  },
   "substackWizard": {
     "open": "Follow Substack",
     "title": "Follow a Substack publication",

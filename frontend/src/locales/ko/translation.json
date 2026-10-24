@@ -238,6 +238,17 @@
     "description": "Make every article from this source stand out.",
     "sourceLabel": "High priority {{source}}"
   },
+  "articleList": {
+    "moreSources": "+{{count}}개 출처",
+    "moreSources_one": "+{{count}}개 출처",
+    "alsoCoveredBy": "{{names}}에서도 보도",
+    "andMore": "외 {{count}}개",
+    "swipeDone": "완료",
+    "swipeSkip": "건너뛰기",
+    "swipeHint": "오른쪽으로 밀어 완료, 왼쪽으로 밀어 건너뛰기, 길게 눌러 별표.",
+    "dismissHint": "팁 닫기",
+    "filterByCategory": "카테고리별 필터"
+  },
   "substackWizard": {
     "open": "Follow Substack",
     "title": "Follow a Substack publication",

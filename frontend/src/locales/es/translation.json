@@ -238,6 +238,17 @@
     "description": "Make every article from this source stand out.",
     "sourceLabel": "High priority {{source}}"
   },
+  "articleList": {
+    "moreSources": "+{{count}} fuentes",
+    "moreSources_one": "+{{count}} fuente",
+    "alsoCoveredBy": "También cubierto por {{names}}",
+    "andMore": "+{{count}} más",
+    "swipeDone": "Hecho",
+    "swipeSkip": "Omitir",
+    "swipeHint": "Desliza a la derecha para marcar como hecho, a la izquierda para omitir o mantén pulsado para destacar.",
+    "dismissHint": "Cerrar consejo",
+    "filterByCategory": "Filtrar por categoría"
+  },
   "substackWizard": {
     "open": "Follow Substack",
     "title": "Follow a Substack publication",

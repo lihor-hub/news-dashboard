@@ -238,6 +238,17 @@
     "description": "Make every article from this source stand out.",
     "sourceLabel": "High priority {{source}}"
   },
+  "articleList": {
+    "moreSources": "+{{count}} kilder",
+    "moreSources_one": "+{{count}} kilde",
+    "alsoCoveredBy": "Også dekket av {{names}}",
+    "andMore": "+{{count}} til",
+    "swipeDone": "Ferdig",
+    "swipeSkip": "Hopp over",
+    "swipeHint": "Sveip til høyre for ferdig, til venstre for å hoppe over, eller hold inne for å stjernemerke.",
+    "dismissHint": "Lukk tips",
+    "filterByCategory": "Filtrer etter kategori"
+  },
   "substackWizard": {
     "open": "Follow Substack",
     "title": "Follow a Substack publication",

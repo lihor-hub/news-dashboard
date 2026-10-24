@@ -238,6 +238,17 @@
     "description": "Make every article from this source stand out.",
     "sourceLabel": "High priority {{source}}"
   },
+  "articleList": {
+    "moreSources": "+{{count}} kaynak",
+    "moreSources_one": "+{{count}} kaynak",
+    "alsoCoveredBy": "Ayrıca {{names}} tarafından da haberleştirildi",
+    "andMore": "+{{count}} daha",
+    "swipeDone": "Tamam",
+    "swipeSkip": "Atla",
+    "swipeHint": "Tamamlamak için sağa, atlamak için sola kaydırın veya yıldızlamak için basılı tutun.",
+    "dismissHint": "İpucunu kapat",
+    "filterByCategory": "Kategoriye göre filtrele"
+  },
   "substackWizard": {
     "open": "Follow Substack",
     "title": "Follow a Substack publication",

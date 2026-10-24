@@ -238,6 +238,17 @@
     "description": "Make every article from this source stand out.",
     "sourceLabel": "High priority {{source}}"
   },
+  "articleList": {
+    "moreSources": "+{{count}} lähdettä",
+    "moreSources_one": "+{{count}} lähde",
+    "alsoCoveredBy": "Myös lähteissä {{names}}",
+    "andMore": "+{{count}} lisää",
+    "swipeDone": "Valmis",
+    "swipeSkip": "Ohita",
+    "swipeHint": "Pyyhkäise oikealle merkitäksesi valmiiksi, vasemmalle ohittaaksesi tai pidä painettuna tähdittääksesi.",
+    "dismissHint": "Sulje vinkki",
+    "filterByCategory": "Suodata luokan mukaan"
+  },
   "substackWizard": {
     "open": "Follow Substack",
     "title": "Follow a Substack publication",
