@@ -14,6 +14,7 @@ import { InlineError, ListSkeleton, RetryableErrorState } from '@/components/Pag
 import { useFocusedArticle } from '@/contexts/focusedArticle';
 import { useListenQueue } from '@/contexts/listenQueue';
 import { useArticleListNav } from '@/hooks/useArticleListNav';
+import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { DESKTOP_SPLIT_QUERY, useMediaQuery } from '@/hooks/useMediaQuery';
 import { useTriageMutations } from '@/hooks/useTriageMutations';
 import { setReaderList } from '@/lib/readerList';
@@ -21,6 +22,7 @@ import type { WorkflowArticle } from '@/lib/workflowTypes';
 import type { TriageArticlePage } from '@/api/workflowApi';
 
 const ARTICLE_PAGE_SIZE = 100;
+const PANE_SETTLE_MS = 120;
 /** Search param holding the article shown in the desktop reading pane. */
 export const SELECTED_ARTICLE_PARAM = 'a';
 
@@ -126,22 +128,28 @@ export function ArticleListView({
   );
 
   // When the selected article leaves the list (triaged in the pane or via a
-  // shortcut), move on to whatever now sits in its slot.
-  const lastSelectedIndex = useRef(-1);
+  // shortcut), move on to whatever now sits in its slot. Only for the article
+  // we were just showing — Back/Forward to an older, since-triaged entry must
+  // not be rewritten.
+  const lastSelected = useRef<{ id: string; index: number } | null>(null);
   useEffect(() => {
     if (!split || !selectedId) {
-      lastSelectedIndex.current = -1;
+      lastSelected.current = null;
       return;
     }
     if (selectedIndex >= 0) {
-      lastSelectedIndex.current = selectedIndex;
+      lastSelected.current = { id: selectedId, index: selectedIndex };
       return;
     }
-    if (lastSelectedIndex.current < 0 || isFetching) return;
-    const fallback = list[Math.min(lastSelectedIndex.current, list.length - 1)];
-    lastSelectedIndex.current = -1;
-    select(fallback?.id ?? null);
+    const last = lastSelected.current;
+    if (!last || last.id !== selectedId || isFetching) return;
+    lastSelected.current = null;
+    select(list[Math.min(last.index, list.length - 1)]?.id ?? null);
   }, [split, selectedId, selectedIndex, list, isFetching, select]);
+
+  // Rapid J/K would mount (and body-scrape) every article passed; let the
+  // pane settle on the selection first.
+  const paneArticleId = useDebouncedValue(selectedId, PANE_SETTLE_MS);
 
   useEffect(() => {
     if (split && autoSelectFirst && !selectedId && list[0]) select(list[0].id);
@@ -283,8 +291,10 @@ export function ArticleListView({
         selectedId ? (
           <ArticleReader
             variant="pane"
-            articleId={selectedId}
-            enableShortcuts={false}
+            articleId={paneArticleId ?? selectedId}
+            // The list owns the keyboard unless the article isn't in it
+            // (deep link past the loaded pages), where only the reader can act.
+            enableShortcuts={selectedIndex < 0}
             onBack={clearSelection}
             onPrev={() => prevId && select(prevId)}
             onNext={() => nextId && select(nextId)}

@@ -119,6 +119,7 @@ function ArticleRowComponent({ article, focused, showLaterUntil, to, current }: 
         <Link
           to={to ?? `/a/${article.id}`}
           aria-current={current ? 'true' : undefined}
+          data-article-row
           className={cn(
             'motion-fade-up relative flex min-h-12 gap-3 border-b border-border px-4 py-4 transition-colors hover:bg-surface md:px-5 md:py-3',
             article.highPriority &&

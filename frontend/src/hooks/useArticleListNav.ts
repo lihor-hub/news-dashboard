@@ -1,8 +1,13 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { WorkflowArticle } from '../lib/workflowTypes';
 import type { useTriageMutations } from './useTriageMutations';
 
 type Mutations = ReturnType<typeof useTriageMutations>;
+
+// Enter on these keeps its native meaning (press the button, follow the link);
+// article row links are the exception and open the focused article.
+const NATIVE_ENTER_TARGET =
+  'button, summary, select, [role="button"], [role="menuitem"], [role="tab"], a:not([data-article-row])';
 
 export interface ArticleListNavOptions {
   /**
@@ -24,6 +29,13 @@ export function useArticleListNav(
   const [internalFocused, setInternalFocused] = useState(0);
   const controlled = onFocusChange != null;
   const focused = controlled ? (controlledFocused ?? -1) : internalFocused;
+  // Controlled steps land on the next render; chain fast repeats off the last
+  // requested index instead of the not-yet-updated prop.
+  const pendingFocus = useRef<number | null>(null);
+
+  useEffect(() => {
+    pendingFocus.current = null;
+  }, [focused]);
 
   useEffect(() => {
     if (controlled) return;
@@ -34,8 +46,11 @@ export function useArticleListNav(
     const move = (delta: number) => {
       if (list.length === 0) return;
       const clamp = (index: number) => Math.min(list.length - 1, Math.max(0, index));
-      if (onFocusChange) onFocusChange(clamp(focused + delta));
-      else setInternalFocused((f) => clamp(f + delta));
+      if (onFocusChange) {
+        const next = clamp((pendingFocus.current ?? focused) + delta);
+        pendingFocus.current = next;
+        onFocusChange(next);
+      } else setInternalFocused((f) => clamp(f + delta));
     };
 
     const handler = (e: KeyboardEvent) => {
@@ -55,7 +70,7 @@ export function useArticleListNav(
       } else if (key === 'escape' && onEscape) {
         // Radix layers (dialogs, menus) prevent the Esc they consume.
         if (!e.defaultPrevented) onEscape();
-      } else if (key === 'enter' && cur) {
+      } else if (key === 'enter' && cur && !t?.closest?.(NATIVE_ENTER_TARGET)) {
         openArticle(cur);
         e.preventDefault();
       } else if ((key === 'r' || key === 'd') && cur) {

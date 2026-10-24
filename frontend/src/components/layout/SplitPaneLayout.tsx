@@ -1,5 +1,10 @@
 import type { ReactNode, Ref } from 'react';
 import { cn } from '@/lib/utils';
+import { useBottomObstruction } from '@/components/article/useBottomObstruction';
+
+// Both panes end at the viewport bottom, so reserve room for fixed bottom
+// chrome (e.g. the listen-queue player) measured by useBottomObstruction.
+const CLEAR_BOTTOM_CHROME = 'pb-[var(--reader-bottom-offset,0px)]';
 
 interface SplitPaneLayoutProps {
   /** Pinned above the list scroller (title, filters, banners). */
@@ -27,6 +32,7 @@ export function SplitPaneLayout({
   listScrollRef,
   className,
 }: SplitPaneLayoutProps) {
+  useBottomObstruction(true);
   return (
     <div
       data-split-pane
@@ -39,10 +45,10 @@ export function SplitPaneLayout({
       <section aria-label={listLabel} className="flex min-h-0 flex-col border-e border-border">
         {listHeader && <div className="shrink-0">{listHeader}</div>}
         <div ref={listScrollRef} className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
-          {list}
+          <div className={CLEAR_BOTTOM_CHROME}>{list}</div>
         </div>
       </section>
-      <section aria-label={detailLabel} className="min-h-0 min-w-0">
+      <section aria-label={detailLabel} className={cn('min-h-0 min-w-0', CLEAR_BOTTOM_CHROME)}>
         {detail}
       </section>
     </div>

@@ -85,7 +85,8 @@ function LocationProbe() {
 
 function renderList(
   initialEntry = '/today',
-  queryFn: () => Promise<TriageArticlePage> = () => Promise.resolve(page(ARTICLES))
+  queryFn: () => Promise<TriageArticlePage> = () => Promise.resolve(page(ARTICLES)),
+  { autoSelectFirst = false }: { autoSelectFirst?: boolean } = {}
 ) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
@@ -105,6 +106,7 @@ function renderList(
                     queryKey={['articles', 'today']}
                     queryFn={queryFn}
                     empty={{ icon: Inbox, title: 'Queue clear' }}
+                    autoSelectFirst={autoSelectFirst}
                   />
                 }
               />
@@ -175,13 +177,46 @@ describe('ArticleListView split pane (lg+)', () => {
     await waitFor(() => expect(location()).toBe('/today?a=1'));
     fireEvent.keyDown(window, { key: 'j' });
     await waitFor(() => expect(location()).toBe('/today?a=2'));
-    expect(screen.getByTestId('pane-reader').getAttribute('data-article-id')).toBe('2');
+    await waitFor(() =>
+      expect(screen.getByTestId('pane-reader').getAttribute('data-article-id')).toBe('2')
+    );
     fireEvent.keyDown(window, { key: 'k' });
     await waitFor(() => expect(location()).toBe('/today?a=1'));
 
     fireEvent.keyDown(window, { key: 'Enter' });
     await screen.findByTestId('full-reader');
     expect(location()).toBe('/a/1');
+  });
+
+  it('steps once per key press even when presses outrun the re-render', async () => {
+    renderList();
+    await screen.findByText('First story');
+
+    fireEvent.keyDown(window, { key: 'j' });
+    fireEvent.keyDown(window, { key: 'j' });
+    fireEvent.keyDown(window, { key: 'j' });
+
+    await waitFor(() => expect(location()).toBe('/today?a=3'));
+  });
+
+  it('leaves Enter to focused controls instead of opening the full page', async () => {
+    renderList('/today?a=2');
+    await screen.findByTestId('pane-reader');
+
+    const close = screen.getByRole('button', { name: 'close pane' });
+    fireEvent.keyDown(close, { key: 'Enter' });
+
+    expect(screen.queryByTestId('full-reader')).toBeNull();
+    expect(location()).toBe('/today?a=2');
+  });
+
+  it('hands the keyboard to the reader when the article is not in the loaded list', async () => {
+    renderList('/today?a=99');
+    await screen.findByText('First story');
+
+    const props = readerProps.mock.calls.at(-1)![0] as ArticleReaderProps;
+    expect(props.articleId).toBe('99');
+    expect(props.enableShortcuts).toBe(true);
   });
 
   it('clears the selection with Escape and with the pane close action', async () => {
@@ -207,7 +242,14 @@ describe('ArticleListView split pane (lg+)', () => {
     await act(() => queryClient.invalidateQueries({ queryKey: ['articles'] }));
 
     await waitFor(() => expect(location()).toBe('/today?a=3'));
-    expect(screen.getByTestId('pane-reader').getAttribute('data-article-id')).toBe('3');
+    await waitFor(() =>
+      expect(screen.getByTestId('pane-reader').getAttribute('data-article-id')).toBe('3')
+    );
+  });
+
+  it('auto-selects the first article only when asked to', async () => {
+    renderList('/today', undefined, { autoSelectFirst: true });
+    await waitFor(() => expect(location()).toBe('/today?a=1'));
   });
 
   it('keeps the regular empty state when the list is empty', async () => {
