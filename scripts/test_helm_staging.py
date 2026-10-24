@@ -15,9 +15,9 @@ PRODUCTION_VALUES = CHART / "values-production.yaml"
 STAGING_HOST = "stage.news.lihor.ro"
 
 
-def render_chart(*arguments: str) -> list[dict[str, object]]:
-    """Render the chart with the secrets needed only for manifest rendering."""
-    command = [
+def helm_template_command(*arguments: str) -> list[str]:
+    """Return a `helm template` command with render-only secrets."""
+    return [
         "helm",
         "template",
         "release",
@@ -30,7 +30,13 @@ def render_chart(*arguments: str) -> list[dict[str, object]]:
         f"image.digest=sha256:{'a' * 64}",
         *arguments,
     ]
-    result = subprocess.run(command, check=True, capture_output=True, text=True)  # noqa: S603
+
+
+def render_chart(*arguments: str) -> list[dict[str, object]]:
+    """Render the chart with the secrets needed only for manifest rendering."""
+    result = subprocess.run(  # noqa: S603
+        helm_template_command(*arguments), check=True, capture_output=True, text=True
+    )
     return [document for document in yaml.safe_load_all(result.stdout) if document]
 
 
@@ -80,3 +86,18 @@ def test_default_and_production_renders_keep_demo_and_preview_origins_off() -> N
         env = app_env(render_chart(*arguments))
         assert "DEMO_MODE" not in env
         assert "CSRF_TRUSTED_ORIGIN_REGEX" not in env
+
+
+def test_production_render_rejects_demo_mode_and_preview_origins() -> None:
+    for override in (
+        "app.config.demoMode=true",
+        "app.config.csrfTrustedOriginRegex=https://.*",
+    ):
+        result = subprocess.run(  # noqa: S603 — offline Helm rendering
+            helm_template_command("-f", str(PRODUCTION_VALUES), "--set-string", override),
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert result.returncode != 0
+        assert "must not be set in production" in result.stderr

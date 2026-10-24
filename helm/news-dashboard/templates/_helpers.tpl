@@ -168,6 +168,9 @@
 - name: CORS_ORIGINS
   value: {{ .Values.app.config.corsOrigins | quote }}
 {{- end }}
+{{- if and .Values.production (or .Values.app.config.demoMode .Values.app.config.csrfTrustedOriginRegex) }}
+{{- fail "app.config.demoMode and app.config.csrfTrustedOriginRegex must not be set in production" }}
+{{- end }}
 {{- if .Values.app.config.demoMode }}
 - name: DEMO_MODE
   value: "true"

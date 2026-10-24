@@ -269,7 +269,13 @@ def _is_trusted_csrf_origin(origin: str, request: Request) -> bool:
     if origin in _allowed_csrf_origins(request):
         return True
     pattern = os.getenv("CSRF_TRUSTED_ORIGIN_REGEX", "").strip()
-    return bool(pattern) and re.fullmatch(pattern, origin) is not None
+    if not pattern:
+        return False
+    try:
+        return re.fullmatch(pattern, origin) is not None
+    except re.error:
+        logger.warning("Ignoring invalid CSRF_TRUSTED_ORIGIN_REGEX")
+        return False
 
 
 @app.middleware("http")

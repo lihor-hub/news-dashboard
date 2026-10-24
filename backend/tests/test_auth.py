@@ -978,6 +978,14 @@ def test_csrf_guard_requires_full_trusted_regex_match(
     assert authenticate("csrf_preview_rejected", "pw2") is None
 
 
+def test_csrf_guard_fails_closed_on_invalid_trusted_regex(
+    tmp_db: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("CSRF_TRUSTED_ORIGIN_REGEX", "https://(unclosed")
+    assert _admin_create_user_from("https://attacker.example", "csrf_bad_regex") == 403
+    assert authenticate("csrf_bad_regex", "pw2") is None
+
+
 def test_csrf_guard_allows_missing_origin_header(tmp_db: str) -> None:
     """Non-browser clients (curl, mobile apps) don't send Origin/Referer."""
     admin = create_user("csrf_no_origin", "pw", is_admin=True)

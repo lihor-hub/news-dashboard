@@ -144,7 +144,7 @@ and optional integrations.
 | `app.config.metricsEnabled` / `app.config.enableApiDocs` | `false` | Enable metrics or interactive API docs. |
 | `app.config.analyticsRetentionDays` / `app.config.corsOrigins` | `""` | Override analytics retention or CORS origins. |
 | `app.config.demoMode` | `false` | Sets `DEMO_MODE`: seed sample data and a read-only guest account. For the staging demo only ([values-staging.yaml](values-staging.yaml)). |
-| `app.config.csrfTrustedOriginRegex` | `""` | Sets `CSRF_TRUSTED_ORIGIN_REGEX`: full-match regex of extra origins allowed to make cookie-authenticated mutations (Vercel PR previews on staging). Leave empty in production. |
+| `app.config.csrfTrustedOriginRegex` | `""` | Sets `CSRF_TRUSTED_ORIGIN_REGEX`: full-match regex of extra origins allowed to make cookie-authenticated mutations (Vercel PR previews on staging). An invalid pattern matches nothing. Rendering fails if this or `demoMode` is set with `production: true`. |
 | `app.sentry.existingSecret` | `""` | Existing Secret containing optional Sentry DSNs. |
 
 ## External PostgreSQL
