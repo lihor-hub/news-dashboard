@@ -128,9 +128,8 @@ Don't hardcode a version literal anywhere else — read `VERSION` (or `app.versi
 4. Open a PR with a Conventional Commit or Scoped Commit title and a clear description.
 5. Link any related issue (`Closes #123`).
 
-PRs that touch the frontend get a Vercel preview backed by the read-only
-staging demo backend (sign in as `guest` / `demo`). Previews only rebuild the
-frontend, so backend/API changes won't show there. See
+PRs get a full-stack Vercel preview: frontend and demo backend, both built
+from your branch, read-only, sign in as `guest` / `demo`. See
 [PR previews](docs/pr-previews.md).
 
 ## Internationalization (i18n)

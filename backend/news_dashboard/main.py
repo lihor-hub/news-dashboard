@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import logging
 import os
-import re
 import time
 from collections.abc import AsyncGenerator, MutableMapping
 from contextlib import asynccontextmanager
@@ -259,25 +258,6 @@ def _allowed_csrf_origins(request: Request) -> set[str]:
     return origins
 
 
-def _is_trusted_csrf_origin(origin: str, request: Request) -> bool:
-    """Return whether ``origin`` may perform cookie-authenticated mutations.
-
-    ``CSRF_TRUSTED_ORIGIN_REGEX`` is an opt-in, full-match pattern for origins
-    that reach the app through a rewriting proxy on another host, such as the
-    staging backend behind Vercel PR previews. It's unset by default.
-    """
-    if origin in _allowed_csrf_origins(request):
-        return True
-    pattern = os.getenv("CSRF_TRUSTED_ORIGIN_REGEX", "").strip()
-    if not pattern:
-        return False
-    try:
-        return re.fullmatch(pattern, origin) is not None
-    except re.error:
-        logger.warning("Ignoring invalid CSRF_TRUSTED_ORIGIN_REGEX")
-        return False
-
-
 @app.middleware("http")
 async def enforce_csrf_origin(request: Request, call_next: Any) -> Any:
     """Reject cross-origin unsafe requests carrying the session cookie.
@@ -303,7 +283,7 @@ async def enforce_csrf_origin(request: Request, call_next: Any) -> Any:
         return await call_next(request)
 
     origin = _request_origin(request)
-    if origin is not None and not _is_trusted_csrf_origin(origin, request):
+    if origin is not None and origin not in _allowed_csrf_origins(request):
         return JSONResponse(
             status_code=403,
             content={"detail": "Cross-origin request rejected"},

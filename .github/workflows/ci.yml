@@ -294,6 +294,29 @@ jobs:
       - name: build (includes tsc)
         run: npm run build
 
+  # package.json allows Node 24 because Vercel's PR-preview build image tops
+  # out at 24.x; everything else builds on 26. Keep the lower bound honest.
+  # Not part of the required "Test & build" aggregate.
+  build-frontend-node24:
+    name: Frontend build (Node 24)
+    needs: detect-changes
+    runs-on: ubuntu-latest
+    if: |
+      github.event_name == 'push' ||
+      github.event_name == 'merge_group' ||
+      (github.event_name == 'workflow_dispatch' && inputs.full_suite) ||
+      (github.event_name == 'pull_request' && needs.detect-changes.outputs.frontend == 'true')
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - name: build (includes tsc)
+        run: npm run build
+
   # Desktop unit tests run without packaging or signing credentials.
   desktop:
     name: Desktop tests

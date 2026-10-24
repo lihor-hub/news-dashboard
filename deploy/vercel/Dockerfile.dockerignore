@@ -1,0 +1,8 @@
+*
+!pyproject.toml
+!VERSION
+!CHANGELOG.md
+!backend/
+backend/tests/
+!deploy/vercel/demo-entrypoint.sh
+**/__pycache__
