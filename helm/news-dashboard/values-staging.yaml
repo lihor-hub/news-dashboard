@@ -1,0 +1,85 @@
+# Staging demo backend for Vercel PR previews (https://stage.news.lihor.ro).
+#
+# Read-only DEMO_MODE install: seeded sample data plus a guest/demo account,
+# local password auth only. Vercel preview deployments proxy /api, /auth, and
+# /email here (see vercel.json). Install into its own namespace, never into
+# the production release:
+#
+#   helm upgrade --install news-dashboard-stage helm/news-dashboard \
+#     -f helm/news-dashboard/values-staging.yaml -n news-dashboard-stage ...
+#
+# See docs/pr-previews.md for the full operator runbook.
+
+image:
+  # Follow the floating tag CI pushes from every main build.
+  tag: latest
+  digest: ""
+  pullPolicy: Always
+
+service:
+  type: ClusterIP
+
+ingress:
+  enabled: true
+  className: traefik
+  host: stage.news.lihor.ro
+  traefik:
+    middlewareEnabled: true
+  tls:
+    # Provisioned out-of-band like production's news-dashboard-tls Secret.
+    - secretName: news-dashboard-stage-tls
+      hosts: [stage.news.lihor.ro]
+
+networkPolicy:
+  enabled: true
+  ingressController:
+    namespaceSelector:
+      matchLabels:
+        kubernetes.io/metadata.name: traefik
+    podSelector:
+      matchLabels:
+        app.kubernetes.io/name: traefik
+
+app:
+  publicBaseUrl: https://stage.news.lihor.ro
+  auth:
+    keycloak:
+      # Local password auth; the demo seed creates the guest account.
+      enabled: false
+  config:
+    enableHsts: true
+    demoMode: true
+    # Vercel preview URLs for this project:
+    #   news-dashboard-<hash>-<scope>.vercel.app
+    #   news-dashboard-git-<branch>-<scope>.vercel.app
+    # Replace "lihor-hub" with the Vercel team/account slug if it differs
+    # (the suffix of the first preview URL). The browser sends the preview
+    # origin, while the backend sees Host stage.news.lihor.ro via the rewrite.
+    csrfTrustedOriginRegex: 'https://news-dashboard-[a-z0-9-]+-lihor-hub\.vercel\.app'
+
+resources:
+  requests:
+    cpu: 25m
+    memory: 128Mi
+  limits:
+    cpu: 250m
+    memory: 384Mi
+
+postgresql:
+  resources:
+    requests:
+      cpu: 25m
+      memory: 64Mi
+    limits:
+      cpu: 250m
+      memory: 256Mi
+  persistence:
+    # Ephemeral emptyDir: demo data is reseeded on startup. Clearing hostPath
+    # also guarantees staging never mounts production's data directory.
+    enabled: false
+    hostPath: ""
+  backup:
+    enabled: false
+
+neo4j:
+  enabled: false

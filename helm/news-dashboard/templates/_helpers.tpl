@@ -168,6 +168,14 @@
 - name: CORS_ORIGINS
   value: {{ .Values.app.config.corsOrigins | quote }}
 {{- end }}
+{{- if .Values.app.config.demoMode }}
+- name: DEMO_MODE
+  value: "true"
+{{- end }}
+{{- if .Values.app.config.csrfTrustedOriginRegex }}
+- name: CSRF_TRUSTED_ORIGIN_REGEX
+  value: {{ .Values.app.config.csrfTrustedOriginRegex | quote }}
+{{- end }}
 {{- end -}}
 
 {{- define "news-dashboard.image" -}}

@@ -143,6 +143,8 @@ and optional integrations.
 | `ingress.tls` | `[]` | TLS host/Secret entries. |
 | `app.config.metricsEnabled` / `app.config.enableApiDocs` | `false` | Enable metrics or interactive API docs. |
 | `app.config.analyticsRetentionDays` / `app.config.corsOrigins` | `""` | Override analytics retention or CORS origins. |
+| `app.config.demoMode` | `false` | Sets `DEMO_MODE`: seed sample data and a read-only guest account. For the staging demo only ([values-staging.yaml](values-staging.yaml)). |
+| `app.config.csrfTrustedOriginRegex` | `""` | Sets `CSRF_TRUSTED_ORIGIN_REGEX`: full-match regex of extra origins allowed to make cookie-authenticated mutations (Vercel PR previews on staging). Leave empty in production. |
 | `app.sentry.existingSecret` | `""` | Existing Secret containing optional Sentry DSNs. |
 
 ## External PostgreSQL
