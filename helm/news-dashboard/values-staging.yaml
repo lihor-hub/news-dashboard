@@ -52,10 +52,10 @@ app:
     # Vercel preview URLs for this project:
     #   news-dashboard-<hash>-<scope>.vercel.app
     #   news-dashboard-git-<branch>-<scope>.vercel.app
-    # Replace "lihor-hub" with the Vercel team/account slug if it differs
-    # (the suffix of the first preview URL). The browser sends the preview
-    # origin, while the backend sees Host stage.news.lihor.ro via the rewrite.
-    csrfTrustedOriginRegex: 'https://news-dashboard-[a-z0-9-]+-lihor-hub\.vercel\.app'
+    # with the Vercel scope "ioachim-lihors-projects". The browser sends the
+    # preview origin, while the backend sees Host stage.news.lihor.ro via the
+    # rewrite. Update the scope if the Vercel project moves.
+    csrfTrustedOriginRegex: 'https://news-dashboard-[a-z0-9-]+-ioachim-lihors-projects\.vercel\.app'
 
 resources:
   requests:

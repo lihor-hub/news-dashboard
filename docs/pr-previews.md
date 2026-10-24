@@ -62,8 +62,12 @@ the chart defaults:
   cookie-authenticated mutations from previews. `CSRF_TRUSTED_ORIGIN_REGEX`
   adds a full-match allowlist for those origins. It is unset by default, and
   only `values-staging.yaml` sets it, restricted to this project's preview
-  hostnames under the Vercel scope slug. If the Vercel scope slug is not
-  `lihor-hub`, update the regex to match the real preview URLs.
+  hostnames under the Vercel scope `ioachim-lihors-projects`. If the Vercel
+  project moves to another scope, update the regex. The pattern is defense in depth,
+  not the primary control. A project in another Vercel account could claim a
+  matching `*.vercel.app` alias, but `SameSite=Strict` already keeps the
+  staging cookie off cross-site requests. The worst case is staging-only and
+  limited to a read-only demo.
 - The session cookie is host-only (no `Domain`), `Secure`, and
   `SameSite=Strict`. Through the rewrite it is stored for the preview host,
   and `vercel.app` is on the Public Suffix List. As a result, other Vercel

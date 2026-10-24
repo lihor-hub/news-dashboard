@@ -929,7 +929,7 @@ def test_csrf_guard_allows_configured_dev_origin(tmp_db: str) -> None:
     assert resp.status_code == 200
 
 
-_VERCEL_PREVIEW_REGEX = r"https://news-dashboard-[a-z0-9-]+-lihor-hub\.vercel\.app"
+_VERCEL_PREVIEW_REGEX = r"https://news-dashboard-[a-z0-9-]+-ioachim-lihors-projects\.vercel\.app"
 
 
 def _admin_create_user_from(origin: str, username: str) -> int:
@@ -948,7 +948,7 @@ def test_csrf_guard_ignores_preview_origins_without_trusted_regex(
     tmp_db: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.delenv("CSRF_TRUSTED_ORIGIN_REGEX", raising=False)
-    origin = "https://news-dashboard-git-feat-x-lihor-hub.vercel.app"
+    origin = "https://news-dashboard-git-feat-x-ioachim-lihors-projects.vercel.app"
     assert _admin_create_user_from(origin, "csrf_preview_default") == 403
     assert authenticate("csrf_preview_default", "pw2") is None
 
@@ -957,16 +957,16 @@ def test_csrf_guard_allows_origin_matching_trusted_regex(
     tmp_db: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setenv("CSRF_TRUSTED_ORIGIN_REGEX", _VERCEL_PREVIEW_REGEX)
-    origin = "https://news-dashboard-git-feat-x-lihor-hub.vercel.app"
+    origin = "https://news-dashboard-git-feat-x-ioachim-lihors-projects.vercel.app"
     assert _admin_create_user_from(origin, "csrf_preview_allowed") == 200
 
 
 @pytest.mark.parametrize(
     "origin",
     [
-        "https://news-dashboard-git-feat-x-lihor-hub.vercel.app.attacker.example",
-        "https://evil.example/https://news-dashboard-a-lihor-hub.vercel.app",
-        "http://news-dashboard-git-feat-x-lihor-hub.vercel.app",
+        "https://news-dashboard-git-feat-x-ioachim-lihors-projects.vercel.app.attacker.example",
+        "https://evil.example/https://news-dashboard-a-ioachim-lihors-projects.vercel.app",
+        "http://news-dashboard-git-feat-x-ioachim-lihors-projects.vercel.app",
         "https://news-dashboard-git-feat-x-someone-else.vercel.app",
     ],
 )
