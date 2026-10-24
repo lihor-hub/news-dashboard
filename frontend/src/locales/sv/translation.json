@@ -86,7 +86,13 @@
     "offline_saved": "Offline Saved",
     "learn": "Learn",
     "lesson_library": "Lesson Library",
-    "learning_recap": "Learning Recap"
+    "learning_recap": "Learning Recap",
+    "hub_read": "Läs",
+    "hub_library": "Bibliotek",
+    "hub_ask": "Fråga",
+    "hub_learn": "Learn",
+    "hub_insights": "Insikter",
+    "you": "Du"
   },
   "page_title": {
     "brief": "Överblick",
@@ -118,9 +124,9 @@
   "shell": {
     "offline": "Offline",
     "command": "Kommando",
-    "menu": "Meny",
-    "more": "Mer",
-    "log_out": "Logga ut"
+    "log_out": "Logga ut",
+    "main_navigation": "Huvudnavigering",
+    "account_menu": "Kontomeny"
   },
   "settings": {
     "title": "Inställningar",

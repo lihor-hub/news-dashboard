@@ -86,7 +86,13 @@
     "offline_saved": "Offline Saved",
     "learn": "Learn",
     "lesson_library": "Lesson Library",
-    "learning_recap": "Learning Recap"
+    "learning_recap": "Learning Recap",
+    "hub_read": "Читання",
+    "hub_library": "Бібліотека",
+    "hub_ask": "Запитати",
+    "hub_learn": "Learn",
+    "hub_insights": "Аналітика",
+    "you": "Ви"
   },
   "page_title": {
     "brief": "Огляд",
@@ -118,9 +124,9 @@
   "shell": {
     "offline": "Офлайн",
     "command": "Команда",
-    "menu": "Меню",
-    "more": "Більше",
-    "log_out": "Вийти"
+    "log_out": "Вийти",
+    "main_navigation": "Основна навігація",
+    "account_menu": "Меню облікового запису"
   },
   "settings": {
     "title": "Налаштування",

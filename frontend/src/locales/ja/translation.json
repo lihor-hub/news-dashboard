@@ -86,7 +86,13 @@
     "offline_saved": "Offline Saved",
     "learn": "Learn",
     "lesson_library": "Lesson Library",
-    "learning_recap": "Learning Recap"
+    "learning_recap": "Learning Recap",
+    "hub_read": "読む",
+    "hub_library": "ライブラリ",
+    "hub_ask": "質問",
+    "hub_learn": "Learn",
+    "hub_insights": "インサイト",
+    "you": "あなた"
   },
   "page_title": {
     "brief": "ブリーフ",
@@ -118,9 +124,9 @@
   "shell": {
     "offline": "オフライン",
     "command": "コマンド",
-    "menu": "メニュー",
-    "more": "その他",
-    "log_out": "ログアウト"
+    "log_out": "ログアウト",
+    "main_navigation": "メインナビゲーション",
+    "account_menu": "アカウントメニュー"
   },
   "settings": {
     "title": "設定",

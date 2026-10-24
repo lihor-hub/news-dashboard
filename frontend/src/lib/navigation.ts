@@ -3,6 +3,7 @@ import {
   Archive,
   BarChart3,
   Bookmark,
+  ChartPie,
   Download,
   GraduationCap,
   BrainCircuit,
@@ -11,6 +12,7 @@ import {
   History,
   Inbox,
   Library,
+  LibraryBig,
   Network,
   Newspaper,
   Podcast,
@@ -29,7 +31,7 @@ import {
 export interface NavigationItem {
   to: string;
   label: string;
-  /** i18next key for the translated label, used by shell surfaces (rail, mobile nav, sheet menu). */
+  /** i18next key for the translated label, used by shell surfaces (rail, tabs, sheet menu). */
   labelKey: string;
   icon: LucideIcon;
   commandLabel?: string;
@@ -37,131 +39,197 @@ export interface NavigationItem {
   adminOnly?: boolean;
 }
 
+export type HubId = 'read' | 'library' | 'ask' | 'learn' | 'insights';
+
+/** A top-level destination in the rail / bottom bar that groups related pages as tabs. */
+export interface NavigationHub {
+  id: HubId;
+  label: string;
+  labelKey: string;
+  icon: LucideIcon;
+  items: NavigationItem[];
+}
+
 export const BRIEF_ROUTE = '/';
 export const TODAY_ROUTE = '/today';
 
-export const primaryNavigationItems: NavigationItem[] = [
-  { to: BRIEF_ROUTE, label: 'Brief', labelKey: 'nav.brief', icon: Newspaper, shortcut: 'b' },
-  { to: TODAY_ROUTE, label: 'Today', labelKey: 'nav.today', icon: Inbox, shortcut: 't' },
-  { to: '/later', label: 'Later', labelKey: 'nav.later', icon: Clock, shortcut: 'l' },
-  { to: '/starred', label: 'Starred', labelKey: 'nav.starred', icon: Star, shortcut: 's' },
-  { to: '/shared', label: 'Shared', labelKey: 'nav.shared', icon: Send },
-  { to: '/search', label: 'Search', labelKey: 'nav.search', icon: Search },
+export const navigationHubs: NavigationHub[] = [
   {
-    to: '/ask',
+    id: 'read',
+    label: 'Read',
+    labelKey: 'nav.hub_read',
+    icon: Newspaper,
+    items: [
+      { to: BRIEF_ROUTE, label: 'Brief', labelKey: 'nav.brief', icon: Newspaper, shortcut: 'b' },
+      { to: TODAY_ROUTE, label: 'Today', labelKey: 'nav.today', icon: Inbox, shortcut: 't' },
+      {
+        to: '/briefs',
+        label: 'Briefing History',
+        labelKey: 'nav.briefing_history',
+        icon: History,
+        shortcut: 'h',
+      },
+    ],
+  },
+  {
+    id: 'library',
+    label: 'Library',
+    labelKey: 'nav.hub_library',
+    icon: LibraryBig,
+    items: [
+      { to: '/later', label: 'Later', labelKey: 'nav.later', icon: Clock, shortcut: 'l' },
+      { to: '/starred', label: 'Starred', labelKey: 'nav.starred', icon: Star, shortcut: 's' },
+      { to: '/shared', label: 'Shared', labelKey: 'nav.shared', icon: Send },
+      { to: '/collections', label: 'Collections', labelKey: 'nav.collections', icon: Tag },
+      {
+        to: '/reading-list',
+        label: 'Reading List',
+        labelKey: 'nav.reading_list',
+        icon: Bookmark,
+        shortcut: 'r',
+      },
+      {
+        to: '/offline-saved',
+        label: 'Offline Saved',
+        labelKey: 'nav.offline_saved',
+        icon: Download,
+        shortcut: 'o',
+      },
+      { to: '/archive', label: 'Archive', labelKey: 'nav.archive', icon: Archive },
+    ],
+  },
+  {
+    id: 'ask',
     label: 'Ask',
-    labelKey: 'nav.ask',
-    commandLabel: 'Ask AI',
+    labelKey: 'nav.hub_ask',
     icon: Sparkles,
-    shortcut: 'a',
+    items: [
+      {
+        to: '/ask',
+        label: 'Ask',
+        labelKey: 'nav.ask',
+        commandLabel: 'Ask AI',
+        icon: Sparkles,
+        shortcut: 'a',
+      },
+      { to: '/search', label: 'Search', labelKey: 'nav.search', icon: Search },
+    ],
   },
-];
-
-export const secondaryNavigationItems: NavigationItem[] = [
   {
-    to: '/reading-list',
-    label: 'Reading List',
-    labelKey: 'nav.reading_list',
-    icon: Bookmark,
-    shortcut: 'r',
-  },
-  {
-    to: '/learn',
+    id: 'learn',
     label: 'Learn',
-    labelKey: 'nav.learn',
+    labelKey: 'nav.hub_learn',
     icon: GraduationCap,
+    items: [
+      { to: '/learn', label: 'Learn', labelKey: 'nav.learn', icon: GraduationCap },
+      {
+        to: '/learn/library',
+        label: 'Lesson Library',
+        labelKey: 'nav.lesson_library',
+        icon: Library,
+      },
+      {
+        to: '/learn/recap',
+        label: 'Learning Recap',
+        labelKey: 'nav.learning_recap',
+        icon: Podcast,
+      },
+    ],
   },
   {
-    to: '/learn/library',
-    label: 'Lesson Library',
-    labelKey: 'nav.lesson_library',
-    icon: Library,
+    id: 'insights',
+    label: 'Insights',
+    labelKey: 'nav.hub_insights',
+    icon: ChartPie,
+    items: [
+      { to: '/recap', label: 'Weekly Recap', labelKey: 'nav.weekly_recap', icon: Flame },
+      {
+        to: '/reading-dna',
+        label: 'Reading DNA',
+        labelKey: 'nav.reading_dna',
+        icon: SlidersHorizontal,
+      },
+      { to: '/topic-map', label: 'Topic Map', labelKey: 'nav.topic_map', icon: Network },
+      { to: '/stats', label: 'Stats', labelKey: 'nav.stats', icon: BarChart3, adminOnly: true },
+      { to: '/ai-stats', label: 'AI Stats', labelKey: 'nav.ai_stats', icon: BrainCircuit },
+    ],
   },
-  {
-    to: '/learn/recap',
-    label: 'Learning Recap',
-    labelKey: 'nav.learning_recap',
-    icon: Podcast,
-  },
-  {
-    to: '/offline-saved',
-    label: 'Offline Saved',
-    labelKey: 'nav.offline_saved',
-    icon: Download,
-    shortcut: 'o',
-  },
-  {
-    to: '/briefs',
-    label: 'Briefing History',
-    labelKey: 'nav.briefing_history',
-    icon: History,
-    shortcut: 'h',
-  },
-  { to: '/topic-map', label: 'Topic Map', labelKey: 'nav.topic_map', icon: Network },
-  { to: '/ai-stats', label: 'AI Stats', labelKey: 'nav.ai_stats', icon: BrainCircuit },
+];
+
+// Pages that belong to no hub; they live in the "You" / avatar menu.
+export const accountNavigationItems: NavigationItem[] = [
   { to: '/feeds', label: 'Feeds', labelKey: 'nav.feeds', icon: Radio, shortcut: 'f' },
-  {
-    to: '/reading-dna',
-    label: 'Reading DNA',
-    labelKey: 'nav.reading_dna',
-    icon: SlidersHorizontal,
-  },
-  { to: '/recap', label: 'Weekly Recap', labelKey: 'nav.weekly_recap', icon: Flame },
-  { to: '/archive', label: 'Archive', labelKey: 'nav.archive', icon: Archive },
-  { to: '/collections', label: 'Collections', labelKey: 'nav.collections', icon: Tag },
   { to: '/settings', label: 'Settings', labelKey: 'nav.settings', icon: Settings },
+  {
+    to: '/analytics',
+    label: 'Analytics',
+    labelKey: 'nav.analytics',
+    icon: Activity,
+    adminOnly: true,
+  },
+  { to: '/admin', label: 'Users', labelKey: 'nav.users', icon: Users, adminOnly: true },
 ];
 
-// Shown in the secondary nav only for admin users.
-export const adminNavigationItems: NavigationItem[] = [
-  { to: '/stats', label: 'Stats', labelKey: 'nav.stats', icon: BarChart3 },
-  { to: '/analytics', label: 'Analytics', labelKey: 'nav.analytics', icon: Activity },
-  { to: '/admin', label: 'Users', labelKey: 'nav.users', icon: Users },
-];
+const visibleFor = (isAdmin: boolean) => (item: NavigationItem) => isAdmin || !item.adminOnly;
 
-export function secondaryNavigationItemsFor(isAdmin: boolean): NavigationItem[] {
-  return isAdmin
-    ? [...secondaryNavigationItems, ...adminNavigationItems]
-    : secondaryNavigationItems;
+export function hubItemsFor(hub: NavigationHub, isAdmin: boolean): NavigationItem[] {
+  return hub.items.filter(visibleFor(isAdmin));
 }
 
-// The mobile bottom bar is a fixed 5-column grid. List the five destinations in
-// display order so adding desktop-only items does not silently push one off the
-// bar. Mobile surfaces Shared (articles sent to you by other people) here in
-// place of Later, which remains reachable on desktop.
-const mobileNavigationOrder = ['/', '/today', '/shared', '/starred', '/search'];
-const mobileNavigationSet = new Set(mobileNavigationOrder);
-const primaryNavigationByTo = new Map(primaryNavigationItems.map((item) => [item.to, item]));
-export const mobileNavigationItems = mobileNavigationOrder.flatMap((to) => {
-  const item = primaryNavigationByTo.get(to);
-  return item ? [item] : [];
-});
+export function accountNavigationItemsFor(isAdmin: boolean): NavigationItem[] {
+  return accountNavigationItems.filter(visibleFor(isAdmin));
+}
 
-// Primary destinations omitted from the mobile bottom bar (e.g. Later, Ask).
-// Rendered in the mobile More sheet so they remain reachable on small screens.
-export const mobilePrimaryOverflowItems = primaryNavigationItems.filter(
-  (item) => !mobileNavigationSet.has(item.to)
-);
+const allNavigationItems = [
+  ...navigationHubs.flatMap((hub) => hub.items),
+  ...accountNavigationItems,
+];
 
-export const commandNavigationItems = [...primaryNavigationItems, ...secondaryNavigationItems].map(
-  (item) => ({
-    ...item,
-    label: item.commandLabel ?? item.label,
-  })
-);
+/** Every page reachable from the shell, in hub order, filtered by role. */
+export function navigationItemsFor(isAdmin: boolean): NavigationItem[] {
+  return allNavigationItems.filter(visibleFor(isAdmin));
+}
 
 export function commandNavigationItemsFor(isAdmin: boolean): NavigationItem[] {
-  const baseItems = [...primaryNavigationItems, ...secondaryNavigationItems];
-  if (isAdmin) {
-    return [...baseItems, ...adminNavigationItems].map((item) => ({
-      ...item,
-      label: item.commandLabel ?? item.label,
-    }));
-  }
-  return baseItems.map((item) => ({
+  return navigationItemsFor(isAdmin).map((item) => ({
     ...item,
     label: item.commandLabel ?? item.label,
   }));
+}
+
+/** Where a hub's rail / bottom-bar button leads: its first visible page. */
+export function hubTarget(hub: NavigationHub): string {
+  return hub.items[0].to;
+}
+
+// The mobile bottom bar shows four hubs plus the "You" sheet, with Ask raised in
+// the centre. Insights lives inside the "You" sheet on small screens.
+export const mobileBarHubIds: readonly HubId[] = ['read', 'library', 'ask', 'learn'];
+
+function matchesRoute(to: string, pathname: string): boolean {
+  if (to === '/') return pathname === '/';
+  return pathname === to || pathname.startsWith(`${to}/`);
+}
+
+/** The hub that owns the current page, or null for account/admin pages and unknown routes. */
+export function getActiveHub(pathname: string): NavigationHub | null {
+  return (
+    navigationHubs.find((hub) => hub.items.some((item) => matchesRoute(item.to, pathname))) ?? null
+  );
+}
+
+/** The hub tab for the current page: the longest route in the hub that contains it. */
+export function getActiveHubItem(hub: NavigationHub, pathname: string): NavigationItem | null {
+  return hub.items.reduce<NavigationItem | null>(
+    (best, item) =>
+      matchesRoute(item.to, pathname) && item.to.length > (best?.to.length ?? -1) ? item : best,
+    null
+  );
+}
+
+/** True when the current page is reached through the "You" menu (account pages or Insights). */
+export function isAccountRoute(pathname: string): boolean {
+  return accountNavigationItems.some((item) => matchesRoute(item.to, pathname));
 }
 
 export const navigationShortcutRows: [string, string][] = [
@@ -174,9 +242,7 @@ export const navigationShortcutRows: [string, string][] = [
 ];
 
 const shortcutTargets = new Map(
-  [...primaryNavigationItems, ...secondaryNavigationItems]
-    .filter((item) => item.shortcut)
-    .map((item) => [item.shortcut!, item.to])
+  allNavigationItems.filter((item) => item.shortcut).map((item) => [item.shortcut!, item.to])
 );
 
 export function getShortcutTarget(key: string): string | null {
@@ -187,7 +253,6 @@ export function isNavigationItemActive(to: string, pathname: string): boolean {
   if (to === '/' || to === '/today' || to === '/learn') return pathname === to;
   return pathname.startsWith(to);
 }
-
 // Single source of truth for page titles: each rule pairs a route match with
 // its English label and i18next key, so the two can never drift out of sync.
 const pageTitleRules: { test: (pathname: string) => boolean; en: string; key: string }[] = [

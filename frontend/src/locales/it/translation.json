@@ -86,7 +86,13 @@
     "offline_saved": "Offline Saved",
     "learn": "Learn",
     "lesson_library": "Lesson Library",
-    "learning_recap": "Learning Recap"
+    "learning_recap": "Learning Recap",
+    "hub_read": "Leggi",
+    "hub_library": "Libreria",
+    "hub_ask": "Chiedi",
+    "hub_learn": "Learn",
+    "hub_insights": "Approfondimenti",
+    "you": "Tu"
   },
   "page_title": {
     "brief": "Riepilogo",
@@ -118,9 +124,9 @@
   "shell": {
     "offline": "Offline",
     "command": "Comando",
-    "menu": "Menu",
-    "more": "Altro",
-    "log_out": "Esci"
+    "log_out": "Esci",
+    "main_navigation": "Navigazione principale",
+    "account_menu": "Menu account"
   },
   "settings": {
     "title": "Impostazioni",

@@ -36,3 +36,28 @@ describe('NavLink', () => {
     expect(screen.queryByText('0')).toBeNull();
   });
 });
+
+describe('NavLink accessibility and sizing', () => {
+  it('marks the active tab as the current page', () => {
+    renderNavLink({ variant: 'tab', isActive: true });
+    expect(screen.getByRole('link', { name: 'Today' }).getAttribute('aria-current')).toBe('page');
+  });
+
+  it('does not mark inactive links as current', () => {
+    renderNavLink({ variant: 'sheet', isActive: false });
+    expect(screen.getByRole('link', { name: 'Today' }).getAttribute('aria-current')).toBeNull();
+  });
+
+  it('keeps every variant at least 44px tall on touch screens', () => {
+    for (const variant of ['rail', 'sheet', 'tab'] as const) {
+      const { unmount } = renderNavLink({ variant });
+      expect(screen.getByRole('link', { name: 'Today' }).className).toContain('min-h-11');
+      unmount();
+    }
+  });
+
+  it('includes the count in the accessible name of the rail link', () => {
+    renderNavLink({ variant: 'rail', count: 7 });
+    expect(screen.getByRole('link').textContent).toContain('7');
+  });
+});

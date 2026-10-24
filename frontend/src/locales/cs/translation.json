@@ -86,7 +86,13 @@
     "offline_saved": "Offline Saved",
     "learn": "Learn",
     "lesson_library": "Lesson Library",
-    "learning_recap": "Learning Recap"
+    "learning_recap": "Learning Recap",
+    "hub_read": "Číst",
+    "hub_library": "Knihovna",
+    "hub_ask": "Zeptat se",
+    "hub_learn": "Learn",
+    "hub_insights": "Přehledy",
+    "you": "Vy"
   },
   "page_title": {
     "brief": "Přehled",
@@ -118,9 +124,9 @@
   "shell": {
     "offline": "Offline",
     "command": "Příkaz",
-    "menu": "Nabídka",
-    "more": "Více",
-    "log_out": "Odhlásit se"
+    "log_out": "Odhlásit se",
+    "main_navigation": "Hlavní navigace",
+    "account_menu": "Nabídka účtu"
   },
   "settings": {
     "title": "Nastavení",

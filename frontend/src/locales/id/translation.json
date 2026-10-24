@@ -86,7 +86,13 @@
     "offline_saved": "Offline Saved",
     "learn": "Learn",
     "lesson_library": "Lesson Library",
-    "learning_recap": "Learning Recap"
+    "learning_recap": "Learning Recap",
+    "hub_read": "Baca",
+    "hub_library": "Pustaka",
+    "hub_ask": "Tanya",
+    "hub_learn": "Learn",
+    "hub_insights": "Wawasan",
+    "you": "Anda"
   },
   "page_title": {
     "brief": "Ringkasan",
@@ -118,9 +124,9 @@
   "shell": {
     "offline": "Offline",
     "command": "Perintah",
-    "menu": "Menu",
-    "more": "Lainnya",
-    "log_out": "Keluar"
+    "log_out": "Keluar",
+    "main_navigation": "Navigasi utama",
+    "account_menu": "Menu akun"
   },
   "settings": {
     "title": "Pengaturan",

@@ -86,7 +86,13 @@
     "offline_saved": "Offline Saved",
     "learn": "Learn",
     "lesson_library": "Lesson Library",
-    "learning_recap": "Learning Recap"
+    "learning_recap": "Learning Recap",
+    "hub_read": "पढ़ें",
+    "hub_library": "लाइब्रेरी",
+    "hub_ask": "पूछें",
+    "hub_learn": "Learn",
+    "hub_insights": "इनसाइट्स",
+    "you": "आप"
   },
   "page_title": {
     "brief": "ब्रीफ़",
@@ -118,9 +124,9 @@
   "shell": {
     "offline": "ऑफ़लाइन",
     "command": "कमांड",
-    "menu": "मेनू",
-    "more": "अधिक",
-    "log_out": "लॉग आउट करें"
+    "log_out": "लॉग आउट करें",
+    "main_navigation": "मुख्य नेविगेशन",
+    "account_menu": "खाता मेनू"
   },
   "settings": {
     "title": "सेटिंग्स",

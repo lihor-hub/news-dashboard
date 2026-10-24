@@ -86,7 +86,13 @@
     "offline_saved": "Offline Saved",
     "learn": "Learn",
     "lesson_library": "Lesson Library",
-    "learning_recap": "Learning Recap"
+    "learning_recap": "Learning Recap",
+    "hub_read": "Oku",
+    "hub_library": "Kitaplık",
+    "hub_ask": "Sor",
+    "hub_learn": "Learn",
+    "hub_insights": "İçgörüler",
+    "you": "Sen"
   },
   "page_title": {
     "brief": "Özet",
@@ -118,9 +124,9 @@
   "shell": {
     "offline": "Çevrimdışı",
     "command": "Komut",
-    "menu": "Menü",
-    "more": "Daha fazla",
-    "log_out": "Çıkış yap"
+    "log_out": "Çıkış yap",
+    "main_navigation": "Ana gezinme",
+    "account_menu": "Hesap menüsü"
   },
   "settings": {
     "title": "Ayarlar",

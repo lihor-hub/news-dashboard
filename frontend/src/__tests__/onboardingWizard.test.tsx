@@ -9,7 +9,7 @@ import * as analytics from '../lib/analytics';
 import i18n from '../lib/i18n';
 import { useOnboardingWizard } from '../hooks/useOnboardingWizard';
 import { OnboardingWizard } from '../components/OnboardingWizard';
-import { BRIEF_ROUTE, TODAY_ROUTE, primaryNavigationItems } from '../lib/navigation';
+import { BRIEF_ROUTE, TODAY_ROUTE, navigationItemsFor } from '../lib/navigation';
 
 // ── helpers ────────────────────────────────────────────────────────────────────
 
@@ -287,7 +287,7 @@ describe('OnboardingWizard', () => {
       await screen.findByText('Find what matters');
       fireEvent.click(screen.getByRole('button', { name: label }));
 
-      const productionRoute = primaryNavigationItems.find((item) => item.label === navLabel)?.to;
+      const productionRoute = navigationItemsFor(false).find((item) => item.label === navLabel)?.to;
       expect(productionRoute).toBe(route);
       expect(screen.getByLabelText('current route').textContent).toBe(productionRoute);
       expect(trackFeature).toHaveBeenCalledWith(analyticsEvent);

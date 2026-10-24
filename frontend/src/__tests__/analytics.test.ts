@@ -9,7 +9,7 @@ import {
   trackFeature,
   trackRoute,
 } from '../lib/analytics';
-import { secondaryNavigationItemsFor } from '../lib/navigation';
+import { navigationItemsFor } from '../lib/navigation';
 
 describe('analytics tracker', () => {
   let fetchMock: ReturnType<typeof vi.fn>;
@@ -221,8 +221,8 @@ describe('analytics pagehide lifecycle', () => {
 
 describe('analytics navigation', () => {
   it('exposes the analytics route to admins only', () => {
-    const adminRoutes = secondaryNavigationItemsFor(true).map((i) => i.to);
-    const userRoutes = secondaryNavigationItemsFor(false).map((i) => i.to);
+    const adminRoutes = navigationItemsFor(true).map((i) => i.to);
+    const userRoutes = navigationItemsFor(false).map((i) => i.to);
     expect(adminRoutes).toContain('/analytics');
     expect(userRoutes).not.toContain('/analytics');
   });

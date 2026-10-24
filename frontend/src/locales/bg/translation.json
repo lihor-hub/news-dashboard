@@ -86,7 +86,13 @@
     "offline_saved": "Запазени офлайн",
     "learn": "Учете",
     "lesson_library": "Библиотека с уроци",
-    "learning_recap": "Преговор на наученото"
+    "learning_recap": "Преговор на наученото",
+    "hub_read": "Четене",
+    "hub_library": "Библиотека",
+    "hub_ask": "Попитайте",
+    "hub_learn": "Учете",
+    "hub_insights": "Анализи",
+    "you": "Вие"
   },
   "page_title": {
     "brief": "Обзор",
@@ -118,9 +124,9 @@
   "shell": {
     "offline": "Офлайн",
     "command": "Команда",
-    "menu": "Меню",
-    "more": "Още",
-    "log_out": "Изход"
+    "log_out": "Изход",
+    "main_navigation": "Основна навигация",
+    "account_menu": "Меню на профила"
   },
   "priorityFeeds": {
     "highPriority": "Висок приоритет",

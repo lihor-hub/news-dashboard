@@ -543,7 +543,7 @@ test.describe('/api/summary — user-scoped nav counts', () => {
     await expect(page.locator('aside')).not.toContainText('99');
   });
 
-  test('summary count appears in Today nav link', async ({ page }) => {
+  test('summary count appears on the Today hub tab', async ({ page }) => {
     await loginAsUser(page);
     await mockApi(page);
     await page.route('/api/summary', (r) =>
@@ -552,8 +552,8 @@ test.describe('/api/summary — user-scoped nav counts', () => {
       )
     );
     await page.goto('/');
-    // The Today nav entry shows the count
-    const todayLink = page.locator('aside a[href="/today"]').first();
+    // The Today tab of the Read hub shows the count
+    const todayLink = page.getByRole('navigation', { name: 'Read' }).locator('a[href="/today"]');
     await expect(todayLink).toContainText('7');
   });
 });

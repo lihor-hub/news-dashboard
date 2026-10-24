@@ -86,7 +86,13 @@
     "offline_saved": "Offline Saved",
     "learn": "Learn",
     "lesson_library": "Lesson Library",
-    "learning_recap": "Learning Recap"
+    "learning_recap": "Learning Recap",
+    "hub_read": "읽기",
+    "hub_library": "보관함",
+    "hub_ask": "질문하기",
+    "hub_learn": "Learn",
+    "hub_insights": "인사이트",
+    "you": "나"
   },
   "page_title": {
     "brief": "브리핑",
@@ -118,9 +124,9 @@
   "shell": {
     "offline": "오프라인",
     "command": "명령",
-    "menu": "메뉴",
-    "more": "더 보기",
-    "log_out": "로그아웃"
+    "log_out": "로그아웃",
+    "main_navigation": "기본 탐색",
+    "account_menu": "계정 메뉴"
   },
   "settings": {
     "title": "설정",

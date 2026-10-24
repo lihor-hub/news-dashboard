@@ -30,11 +30,11 @@ test.describe('Mobile — Brief page', () => {
     await expect(mobileNav).toBeVisible();
   });
 
-  test('all 5 mobile nav items are visible', async ({ page }) => {
+  test('all 5 mobile nav slots are visible', async ({ page }) => {
     await page.goto('/');
     const mobileNav = page.locator('nav.fixed').first();
-    const links = mobileNav.locator('a');
-    await expect(links).toHaveCount(5);
+    await expect(mobileNav.locator('a')).toHaveCount(4);
+    await expect(mobileNav.getByRole('button', { name: 'You' })).toBeVisible();
   });
 });
 
@@ -53,24 +53,22 @@ test.describe('Mobile — navigation', () => {
     await expect(page.locator('h1').filter({ hasText: 'Brief' })).toBeVisible();
   });
 
-  test('tapping Today in mobile nav goes to /today', async ({ page }) => {
+  test('tapping the Today tab of the Read hub goes to /today', async ({ page }) => {
     await page.goto('/');
-    await page.locator('nav.fixed a[href="/today"]').first().click();
+    await page.getByRole('navigation', { name: 'Read' }).locator('a[href="/today"]').click();
     await expect(page).toHaveURL('/today');
     await expect(page.locator('h1').filter({ hasText: 'Today' })).toBeVisible();
   });
 
-  test('Later is reachable from the More sheet', async ({ page }) => {
+  test('Later is reachable from the Library hub', async ({ page }) => {
     await page.goto('/');
-    await page.getByRole('button', { name: 'More' }).click();
-    const sheet = page.getByRole('dialog');
-    await sheet.getByRole('link', { name: 'Later' }).click();
+    await page.locator('nav.fixed a[href="/later"]').first().click();
     await expect(page).toHaveURL('/later');
   });
 
-  test('tapping Starred in mobile nav goes to /starred', async ({ page }) => {
-    await page.goto('/');
-    await page.locator('nav.fixed a[href="/starred"]').first().click();
+  test('tapping the Starred tab of the Library hub goes to /starred', async ({ page }) => {
+    await page.goto('/later');
+    await page.getByRole('navigation', { name: 'Library' }).locator('a[href="/starred"]').click();
     await expect(page).toHaveURL('/starred');
   });
 });
@@ -87,26 +85,26 @@ test.describe('Mobile — header', () => {
     await expect(page.getByRole('img', { name: 'ReadingDNA' })).toBeVisible();
   });
 
-  test('More button is visible on mobile', async ({ page }) => {
+  test('You button is visible on mobile', async ({ page }) => {
     await page.goto('/');
-    await expect(page.getByRole('button', { name: 'More' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'You' })).toBeVisible();
   });
 
-  test('More button opens sheet with secondary nav', async ({ page }) => {
+  test('You sheet lists Insights and account pages', async ({ page }) => {
     await page.goto('/');
-    await page.getByRole('button', { name: 'More' }).click();
+    await page.getByRole('button', { name: 'You' }).click();
     const sheet = page.getByRole('dialog');
     await expect(sheet.getByRole('link', { name: 'Feeds', exact: true })).toBeVisible();
     await expect(sheet.getByRole('link', { name: 'Stats', exact: true })).toBeVisible();
-    await expect(sheet.getByRole('link', { name: 'Archive', exact: true })).toBeVisible();
+    await expect(sheet.getByRole('link', { name: 'Weekly Recap', exact: true })).toBeVisible();
     await expect(sheet.getByRole('link', { name: 'Settings', exact: true })).toBeVisible();
   });
 
-  test('More sheet exposes Later in primary overflow', async ({ page }) => {
-    await page.goto('/');
-    await page.getByRole('button', { name: 'More' }).click();
-    const sheet = page.getByRole('dialog');
-    await expect(sheet.getByRole('link', { name: 'Later' })).toBeVisible();
+  test('Library hub tabs scroll to Archive', async ({ page }) => {
+    await page.goto('/later');
+    const tabs = page.getByRole('navigation', { name: 'Library' });
+    await tabs.getByRole('link', { name: 'Archive' }).click();
+    await expect(page).toHaveURL('/archive');
   });
 });
 

@@ -86,7 +86,13 @@
     "offline_saved": "Offline Saved",
     "learn": "Learn",
     "lesson_library": "Lesson Library",
-    "learning_recap": "Learning Recap"
+    "learning_recap": "Learning Recap",
+    "hub_read": "Lesen",
+    "hub_library": "Bibliothek",
+    "hub_ask": "Fragen",
+    "hub_learn": "Learn",
+    "hub_insights": "Einblicke",
+    "you": "Du"
   },
   "page_title": {
     "brief": "Übersicht",
@@ -118,9 +124,9 @@
   "shell": {
     "offline": "Offline",
     "command": "Befehl",
-    "menu": "Menü",
-    "more": "Mehr",
-    "log_out": "Abmelden"
+    "log_out": "Abmelden",
+    "main_navigation": "Hauptnavigation",
+    "account_menu": "Kontomenü"
   },
   "settings": {
     "title": "Einstellungen",
