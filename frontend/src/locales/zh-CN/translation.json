@@ -362,5 +362,26 @@
     "search": {
       "clear": "清除搜索"
     }
+  },
+  "brief": {
+    "greeting_morning": "早上好",
+    "greeting_afternoon": "下午好",
+    "greeting_evening": "晚上好",
+    "reading_time": "{{count}} 分钟简报",
+    "progress_label": "已读报道",
+    "progress_value": "已读 {{read}}/{{total}} 篇报道",
+    "topics": "话题",
+    "all_topics": "全部",
+    "sources_zero": "{{count}} 个来源",
+    "sources_one": "{{count}} 个来源",
+    "sources_two": "{{count}} 个来源",
+    "sources_few": "{{count}} 个来源",
+    "sources_many": "{{count}} 个来源",
+    "sources_other": "{{count}} 个来源",
+    "read": "已读",
+    "topic_fallback": "报道",
+    "caught_up_title": "全部读完",
+    "caught_up_body": "你已读完本简报中的所有报道。",
+    "caught_up_action": "浏览今日"
   }
 }

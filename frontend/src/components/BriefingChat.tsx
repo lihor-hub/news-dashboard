@@ -72,7 +72,12 @@ export function BriefingChat({ briefingId }: { briefingId: number }) {
   return (
     <Sheet open={open} onOpenChange={setOpen}>
       <SheetTrigger asChild>
-        <Button size="sm" variant="outline" className="shrink-0 mt-1" aria-label="Ask assistant">
+        <Button
+          size="sm"
+          variant="outline"
+          className="min-h-touch md:min-h-9 shrink-0"
+          aria-label="Ask assistant"
+        >
           <MessageCircle className="size-4" />
           Ask Assistant
         </Button>

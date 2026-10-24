@@ -362,5 +362,26 @@
     "search": {
       "clear": "Aramayı temizle"
     }
+  },
+  "brief": {
+    "greeting_morning": "Günaydın",
+    "greeting_afternoon": "Tünaydın",
+    "greeting_evening": "İyi akşamlar",
+    "reading_time": "{{count}} dk'lık özet",
+    "progress_label": "Okunan haberler",
+    "progress_value": "{{total}} haberden {{read}} tanesi okundu",
+    "topics": "Konular",
+    "all_topics": "Tümü",
+    "sources_zero": "{{count}} kaynak",
+    "sources_one": "{{count}} kaynak",
+    "sources_two": "{{count}} kaynak",
+    "sources_few": "{{count}} kaynak",
+    "sources_many": "{{count}} kaynak",
+    "sources_other": "{{count}} kaynak",
+    "read": "Okundu",
+    "topic_fallback": "Haber",
+    "caught_up_title": "Hepsini okudunuz",
+    "caught_up_body": "Bu özetteki tüm haberleri okudunuz.",
+    "caught_up_action": "Bugün'e göz atın"
   }
 }

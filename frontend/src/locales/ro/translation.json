@@ -362,5 +362,26 @@
     "search": {
       "clear": "Șterge căutarea"
     }
+  },
+  "brief": {
+    "greeting_morning": "Bună dimineața",
+    "greeting_afternoon": "Bună ziua",
+    "greeting_evening": "Bună seara",
+    "reading_time": "Rezumat de {{count}} min",
+    "progress_label": "Știri citite",
+    "progress_value": "{{read}} din {{total}} știri citite",
+    "topics": "Subiecte",
+    "all_topics": "Toate",
+    "sources_zero": "{{count}} surse",
+    "sources_one": "{{count}} sursă",
+    "sources_two": "{{count}} surse",
+    "sources_few": "{{count}} surse",
+    "sources_many": "{{count}} surse",
+    "sources_other": "{{count}} surse",
+    "read": "Citită",
+    "topic_fallback": "Știre",
+    "caught_up_title": "Ești la zi",
+    "caught_up_body": "Ai citit toate știrile din acest rezumat.",
+    "caught_up_action": "Vezi Azi"
   }
 }

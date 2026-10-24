@@ -362,5 +362,26 @@
     "search": {
       "clear": "مسح البحث"
     }
+  },
+  "brief": {
+    "greeting_morning": "صباح الخير",
+    "greeting_afternoon": "مساء الخير",
+    "greeting_evening": "مساء الخير",
+    "reading_time": "موجز {{count}} دقيقة",
+    "progress_label": "القصص المقروءة",
+    "progress_value": "تمت قراءة {{read}} من {{total}} قصص",
+    "topics": "المواضيع",
+    "all_topics": "الكل",
+    "sources_zero": "{{count}} مصادر",
+    "sources_one": "{{count}} مصدر",
+    "sources_two": "{{count}} مصادر",
+    "sources_few": "{{count}} مصادر",
+    "sources_many": "{{count}} مصادر",
+    "sources_other": "{{count}} مصادر",
+    "read": "مقروءة",
+    "topic_fallback": "قصة",
+    "caught_up_title": "لقد اطلعت على كل شيء",
+    "caught_up_body": "لقد قرأت كل القصص في هذا الموجز.",
+    "caught_up_action": "تصفح اليوم"
   }
 }

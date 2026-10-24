@@ -362,5 +362,26 @@
     "search": {
       "clear": "Сбросить поиск"
     }
+  },
+  "brief": {
+    "greeting_morning": "Доброе утро",
+    "greeting_afternoon": "Добрый день",
+    "greeting_evening": "Добрый вечер",
+    "reading_time": "Обзор на {{count}} мин",
+    "progress_label": "Прочитанные истории",
+    "progress_value": "Прочитано {{read}} из {{total}} историй",
+    "topics": "Темы",
+    "all_topics": "Все",
+    "sources_zero": "{{count}} источников",
+    "sources_one": "{{count}} источник",
+    "sources_two": "{{count}} источников",
+    "sources_few": "{{count}} источника",
+    "sources_many": "{{count}} источников",
+    "sources_other": "{{count}} источников",
+    "read": "Прочитано",
+    "topic_fallback": "История",
+    "caught_up_title": "Всё прочитано",
+    "caught_up_body": "Вы прочитали все истории в этом обзоре.",
+    "caught_up_action": "Перейти в Сегодня"
   }
 }

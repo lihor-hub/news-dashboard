@@ -362,5 +362,26 @@
     "search": {
       "clear": "Очистити пошук"
     }
+  },
+  "brief": {
+    "greeting_morning": "Доброго ранку",
+    "greeting_afternoon": "Добрий день",
+    "greeting_evening": "Добрий вечір",
+    "reading_time": "Огляд на {{count}} хв",
+    "progress_label": "Прочитані історії",
+    "progress_value": "Прочитано {{read}} з {{total}} історій",
+    "topics": "Теми",
+    "all_topics": "Усі",
+    "sources_zero": "{{count}} джерел",
+    "sources_one": "{{count}} джерело",
+    "sources_two": "{{count}} джерел",
+    "sources_few": "{{count}} джерела",
+    "sources_many": "{{count}} джерел",
+    "sources_other": "{{count}} джерел",
+    "read": "Прочитано",
+    "topic_fallback": "Історія",
+    "caught_up_title": "Усе прочитано",
+    "caught_up_body": "Ви прочитали всі історії в цьому огляді.",
+    "caught_up_action": "Перейти до Сьогодні"
   }
 }

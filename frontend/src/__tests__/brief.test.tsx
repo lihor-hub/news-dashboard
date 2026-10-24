@@ -1,14 +1,25 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { createInstance } from 'i18next';
+import { I18nextProvider, initReactI18next } from 'react-i18next';
+import english from '../locales/en/translation.json';
 import { BriefPage } from '../pages/BriefPage';
 import * as api from '../api';
 import { HttpError } from '../api';
 
 vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+const i18n = createInstance();
+void i18n.use(initReactI18next).init({
+  lng: 'en',
+  fallbackLng: 'en',
+  resources: { en: { translation: english } },
+  interpolation: { escapeValue: false },
+});
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 
@@ -83,11 +94,13 @@ function makeQueryClient() {
 function renderBriefPage() {
   const qc = makeQueryClient();
   return render(
-    <QueryClientProvider client={qc}>
-      <MemoryRouter initialEntries={['/brief']}>
-        <BriefPage />
-      </MemoryRouter>
-    </QueryClientProvider>
+    <I18nextProvider i18n={i18n}>
+      <QueryClientProvider client={qc}>
+        <MemoryRouter initialEntries={['/brief']}>
+          <BriefPage />
+        </MemoryRouter>
+      </QueryClientProvider>
+    </I18nextProvider>
   );
 }
 
@@ -166,8 +179,9 @@ describe('BriefPage — latest briefing', () => {
     expect(screen.getByText('LangGraph and related updates shape production AI.')).toBeTruthy();
   });
 
-  it('renders citation chip for cited article', async () => {
+  it('renders citation chip for cited article once the story is expanded', async () => {
     renderBriefPage();
+    await userEvent.click(await storyToggle(/Agent frameworks/));
     await waitFor(() => expect(screen.getByText('Claude 4 Released')).toBeTruthy());
   });
 
@@ -253,6 +267,7 @@ describe('BriefPage — citation navigation', () => {
 
   it('citation chip links to /a/:id', async () => {
     renderBriefPage();
+    await userEvent.click(await storyToggle(/Agent frameworks/));
     await waitFor(() => expect(screen.getByText('Claude 4 Released')).toBeTruthy());
     const link = screen.getByText('Claude 4 Released').closest('a');
     expect(link).toBeTruthy();
@@ -437,5 +452,126 @@ describe('BriefPage — podcast generation generic failure', () => {
     );
     await userEvent.click(screen.getByRole('button', { name: /create podcast/i }));
     await waitFor(() => expect(screen.getByText('boom from provider')).toBeTruthy());
+  });
+});
+
+// ── Story cards layout ─────────────────────────────────────────────────────────
+
+const STORY_BRIEFING = {
+  ...COMPLETE_BRIEFING,
+  id: 7,
+  content: {
+    sections: [
+      {
+        title: 'Agent frameworks',
+        body: 'LangGraph and related updates shape production AI.',
+        citations: [42, 43],
+      },
+      {
+        title: 'Chip export rules',
+        body: 'New export rules hit accelerator vendors.',
+        citations: [44],
+      },
+    ],
+    worth_opening: [99],
+  },
+  articles: [
+    ARTICLE_CITED,
+    { ...ARTICLE_CITED, id: 43, title: 'LangGraph 1.0', source_name: 'Dev Weekly' },
+    {
+      ...ARTICLE_CITED,
+      id: 44,
+      title: 'Export controls widen',
+      source_name: 'Policy Wire',
+      category: 'policy',
+      section_index: 1,
+    },
+    ARTICLE_WORTH,
+  ],
+};
+
+async function storyToggle(name: RegExp) {
+  const card = await screen.findByRole('article', { name });
+  return within(card).getByRole('button');
+}
+
+describe('BriefPage — story cards', () => {
+  beforeEach(() => {
+    localStorage.clear();
+    vi.spyOn(api, 'fetchLatestBriefing').mockResolvedValue(STORY_BRIEFING);
+  });
+
+  it('shows the estimated reading time and a progress ring starting at zero', async () => {
+    renderBriefPage();
+    expect(await screen.findByText(/1 min brief/)).toBeTruthy();
+    const ring = screen.getByRole('progressbar', { name: /stories read/i });
+    expect(ring.getAttribute('aria-valuenow')).toBe('0');
+    expect(ring.getAttribute('aria-valuemax')).toBe('2');
+    expect(ring.textContent).toContain('0/2');
+  });
+
+  it('renders each story as a numbered card with topic eyebrow and source count', async () => {
+    renderBriefPage();
+    const card = await screen.findByRole('article', {
+      name: /Briefing section 1: Agent frameworks/,
+    });
+    expect(within(card).getByText('01')).toBeTruthy();
+    expect(within(card).getByText('ai')).toBeTruthy();
+    expect(within(card).getByText('2 sources')).toBeTruthy();
+    const second = screen.getByRole('article', { name: /Briefing section 2: Chip export rules/ });
+    expect(within(second).getByText('1 source')).toBeTruthy();
+  });
+
+  it('expands a card to reveal its articles and counts the story as read', async () => {
+    renderBriefPage();
+    const toggle = await storyToggle(/Agent frameworks/);
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+    expect(screen.queryByRole('link', { name: /LangGraph 1.0/ })).toBeNull();
+
+    await userEvent.click(toggle);
+
+    expect(toggle.getAttribute('aria-expanded')).toBe('true');
+    expect(screen.getByRole('link', { name: /LangGraph 1.0/ }).getAttribute('href')).toBe('/a/43');
+    const ring = screen.getByRole('progressbar', { name: /stories read/i });
+    expect(ring.getAttribute('aria-valuenow')).toBe('1');
+    expect(JSON.parse(localStorage.getItem('brief.read.7') ?? '[]')).toEqual([0]);
+  });
+
+  it('filters stories with topic chips', async () => {
+    renderBriefPage();
+    await screen.findByRole('article', { name: /Agent frameworks/ });
+    const chips = screen.getByRole('group', { name: /topics/i });
+
+    await userEvent.click(within(chips).getByRole('button', { name: /Chip export rules/ }));
+
+    expect(screen.queryByRole('article', { name: /Agent frameworks/ })).toBeNull();
+    expect(screen.getByRole('article', { name: /Chip export rules/ })).toBeTruthy();
+
+    await userEvent.click(within(chips).getByRole('button', { name: /^all$/i }));
+    expect(screen.getByRole('article', { name: /Agent frameworks/ })).toBeTruthy();
+  });
+
+  it('shows the all caught up state once every story is read', async () => {
+    renderBriefPage();
+    await screen.findByRole('article', { name: /Agent frameworks/ });
+    expect(screen.queryByText('All caught up')).toBeNull();
+
+    await userEvent.click(await storyToggle(/Agent frameworks/));
+    await userEvent.click(await storyToggle(/Chip export rules/));
+
+    expect(screen.getByText('All caught up')).toBeTruthy();
+  });
+
+  it('restores read progress for the same briefing from localStorage', async () => {
+    localStorage.setItem('brief.read.7', JSON.stringify([0, 1]));
+    renderBriefPage();
+    expect(await screen.findByText('All caught up')).toBeTruthy();
+  });
+
+  it('keeps the listen and ask entry points reachable', async () => {
+    renderBriefPage();
+    expect(await screen.findByRole('button', { name: /create podcast/i })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /ask assistant/i })).toBeTruthy();
+    expect(screen.getByRole('link', { name: /view history/i })).toBeTruthy();
   });
 });

@@ -362,5 +362,26 @@
     "search": {
       "clear": "ล้างการค้นหา"
     }
+  },
+  "brief": {
+    "greeting_morning": "สวัสดีตอนเช้า",
+    "greeting_afternoon": "สวัสดีตอนบ่าย",
+    "greeting_evening": "สวัสดีตอนเย็น",
+    "reading_time": "สรุป {{count}} นาที",
+    "progress_label": "ข่าวที่อ่านแล้ว",
+    "progress_value": "อ่านแล้ว {{read}} จาก {{total}} ข่าว",
+    "topics": "หัวข้อ",
+    "all_topics": "ทั้งหมด",
+    "sources_zero": "{{count}} แหล่งที่มา",
+    "sources_one": "{{count}} แหล่งที่มา",
+    "sources_two": "{{count}} แหล่งที่มา",
+    "sources_few": "{{count}} แหล่งที่มา",
+    "sources_many": "{{count}} แหล่งที่มา",
+    "sources_other": "{{count}} แหล่งที่มา",
+    "read": "อ่านแล้ว",
+    "topic_fallback": "ข่าว",
+    "caught_up_title": "อ่านครบแล้ว",
+    "caught_up_body": "คุณอ่านข่าวทั้งหมดในสรุปนี้แล้ว",
+    "caught_up_action": "ดูวันนี้"
   }
 }

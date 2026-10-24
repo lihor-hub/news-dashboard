@@ -362,5 +362,26 @@
     "search": {
       "clear": "Vymazat hledání"
     }
+  },
+  "brief": {
+    "greeting_morning": "Dobré ráno",
+    "greeting_afternoon": "Dobré odpoledne",
+    "greeting_evening": "Dobrý večer",
+    "reading_time": "Přehled na {{count}} min",
+    "progress_label": "Přečtené články",
+    "progress_value": "Přečteno {{read}} z {{total}} článků",
+    "topics": "Témata",
+    "all_topics": "Vše",
+    "sources_zero": "{{count}} zdrojů",
+    "sources_one": "{{count}} zdroj",
+    "sources_two": "{{count}} zdrojů",
+    "sources_few": "{{count}} zdroje",
+    "sources_many": "{{count}} zdrojů",
+    "sources_other": "{{count}} zdrojů",
+    "read": "Přečteno",
+    "topic_fallback": "Článek",
+    "caught_up_title": "Vše přečteno",
+    "caught_up_body": "Přečetli jste všechny články v tomto přehledu.",
+    "caught_up_action": "Procházet Dnes"
   }
 }

@@ -17,26 +17,26 @@ function BriefingRow({ briefing }: { briefing: Briefing }) {
   return (
     <Link
       to={`/briefs/${briefing.id}`}
-      className="flex items-center gap-3 px-4 md:px-5 py-3.5 border-b border-border hover:bg-surface transition-colors group"
+      className="flex min-h-touch items-center gap-3 px-4 py-3.5 hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring transition-colors group"
     >
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2 flex-wrap">
           {isFailed ? (
             <span className="flex items-center gap-1 text-xs font-medium text-destructive bg-destructive/10 border border-destructive/20 px-1.5 py-0.5 rounded-full">
-              <AlertCircle className="size-2.5" />
+              <AlertCircle className="size-4" />
               Failed
             </span>
           ) : null}
-          <span className="text-xs text-muted-foreground tabular-nums">
+          <span className="text-meta text-muted-foreground tabular-nums">
             {formatDate(briefing.created_at)}
           </span>
           {briefing.since_at && briefing.until_at && (
-            <span className="text-xs text-subtle">
+            <span className="text-meta text-muted-foreground">
               · {formatWindow(briefing.since_at, briefing.until_at)}
             </span>
           )}
         </div>
-        <div className="text-sm font-medium text-foreground leading-snug mt-0.5 group-hover:text-foreground line-clamp-1">
+        <div className="text-[15px] md:text-sm font-semibold text-foreground leading-snug mt-1 line-clamp-2">
           {isFailed ? (
             <span className="text-muted-foreground italic">Generation failed</span>
           ) : (
@@ -44,7 +44,7 @@ function BriefingRow({ briefing }: { briefing: Briefing }) {
           )}
         </div>
         {briefing.summary && !isFailed && (
-          <div className="text-xs text-muted-foreground mt-0.5 line-clamp-1">
+          <div className="text-meta text-muted-foreground mt-1 line-clamp-2">
             {briefing.summary}
           </div>
         )}
@@ -54,7 +54,7 @@ function BriefingRow({ briefing }: { briefing: Briefing }) {
           </div>
         )}
       </div>
-      <ChevronRight className="size-4 text-subtle shrink-0 group-hover:text-muted-foreground transition-colors" />
+      <ChevronRight className="size-4 text-subtle shrink-0 group-hover:text-muted-foreground transition-colors rtl:-scale-x-100" />
     </Link>
   );
 }
@@ -86,8 +86,8 @@ function PodcastFeedCard() {
   };
 
   return (
-    <div className="mx-4 md:mx-5 mb-3 rounded-lg border border-border bg-surface px-4 py-3 flex items-center gap-3">
-      <Rss className="size-4 text-accent shrink-0" />
+    <div className="mb-4 rounded-2xl border border-border bg-surface px-4 py-3 flex flex-col gap-3 sm:flex-row sm:items-center">
+      <Rss className="size-5 text-accent shrink-0 hidden sm:block" />
       <div className="min-w-0 flex-1">
         <div className="text-sm font-medium text-foreground">Subscribe as a podcast</div>
         <div className="text-xs text-muted-foreground mt-0.5">
@@ -99,21 +99,23 @@ function PodcastFeedCard() {
           type="button"
           variant="outline"
           size="sm"
+          className="min-h-touch md:min-h-9"
           onClick={copyUrl}
           disabled={isLoading || !data}
         >
-          {copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
+          {copied ? <Check className="size-4" /> : <Copy className="size-4" />}
           {copied ? 'Copied' : 'Copy feed URL'}
         </Button>
         <Button
           type="button"
           variant="ghost"
           size="sm"
+          className="min-h-touch min-w-touch md:min-h-9 md:min-w-9"
           aria-label="Regenerate podcast feed URL (revokes the old one)"
           onClick={() => regenerate.mutate()}
           disabled={regenerate.isPending}
         >
-          <RefreshCw className={`size-3.5 ${regenerate.isPending ? 'animate-spin' : ''}`} />
+          <RefreshCw className={`size-4 ${regenerate.isPending ? 'animate-spin' : ''}`} />
         </Button>
       </div>
     </div>
@@ -122,9 +124,9 @@ function PodcastFeedCard() {
 
 function HistorySkeleton() {
   return (
-    <div className="divide-y divide-border">
+    <div className="divide-y divide-border rounded-2xl border border-border">
       {[1, 2, 3, 4, 5].map((i) => (
-        <div key={i} className="px-4 md:px-5 py-3.5">
+        <div key={i} className="px-4 py-3.5">
           <Skeleton className="h-3 w-32 mb-2" />
           <Skeleton className="h-4 w-3/4 mb-1.5" />
           <Skeleton className="h-3 w-2/3" />
@@ -145,10 +147,10 @@ export function BriefingsHistoryPage() {
   const briefings = data?.items ?? [];
 
   return (
-    <div>
-      <div className="px-4 md:px-5 pt-4 pb-3">
-        <h2 className="text-[22px] font-semibold tracking-tight">Briefing History</h2>
-        <p className="text-xs text-muted-foreground mt-0.5">All generated daily briefs</p>
+    <div className="mx-auto w-full max-w-3xl px-4 md:px-6 pb-8">
+      <div className="pt-5 pb-4">
+        <h2 className="text-2xl md:text-[28px] font-semibold tracking-tight">Briefing History</h2>
+        <p className="text-meta text-muted-foreground mt-1">All generated daily briefs</p>
       </div>
 
       <PodcastFeedCard />
@@ -175,7 +177,7 @@ export function BriefingsHistoryPage() {
           </div>
         </div>
       ) : (
-        <div>
+        <div className="divide-y divide-border overflow-hidden rounded-2xl border border-border bg-card">
           {briefings.map((b) => (
             <BriefingRow key={b.id} briefing={b} />
           ))}

@@ -16,7 +16,9 @@ test.describe('Briefing History list — /briefs', () => {
 
   test('shows page sub-heading', async ({ page }) => {
     await page.goto('/briefs');
-    await expect(page.getByRole('heading', { name: 'Briefing History', exact: true })).toBeVisible();
+    await expect(
+      page.getByRole('heading', { name: 'Briefing History', exact: true })
+    ).toBeVisible();
   });
 
   test('renders briefing title in the list', async ({ page }) => {
@@ -33,9 +35,7 @@ test.describe('Briefing History list — /briefs', () => {
 
   test('briefing summary snippet is shown', async ({ page }) => {
     await page.goto('/briefs');
-    await expect(page.locator('main')).toContainText(
-      SAMPLE_BRIEFING.summary.slice(0, 30)
-    );
+    await expect(page.locator('main')).toContainText(SAMPLE_BRIEFING.summary.slice(0, 30));
   });
 
   test('clicking a row navigates to the detail page', async ({ page }) => {
@@ -72,7 +72,7 @@ test.describe('Briefing History detail — /briefs/:id', () => {
   test('renders section heading', async ({ page }) => {
     await page.goto(`/briefs/${SAMPLE_BRIEFING.id}`);
     const sectionTitle = SAMPLE_BRIEFING.content.sections[0].title;
-    await expect(page.getByText(sectionTitle, { exact: true })).toBeVisible();
+    await expect(page.getByRole('heading', { name: sectionTitle, exact: true })).toBeVisible();
   });
 
   test('back link navigates to /briefs', async ({ page }) => {

@@ -362,5 +362,26 @@
     "search": {
       "clear": "Hapus pencarian"
     }
+  },
+  "brief": {
+    "greeting_morning": "Selamat pagi",
+    "greeting_afternoon": "Selamat siang",
+    "greeting_evening": "Selamat malam",
+    "reading_time": "Ringkasan {{count}} menit",
+    "progress_label": "Berita dibaca",
+    "progress_value": "{{read}} dari {{total}} berita dibaca",
+    "topics": "Topik",
+    "all_topics": "Semua",
+    "sources_zero": "{{count}} sumber",
+    "sources_one": "{{count}} sumber",
+    "sources_two": "{{count}} sumber",
+    "sources_few": "{{count}} sumber",
+    "sources_many": "{{count}} sumber",
+    "sources_other": "{{count}} sumber",
+    "read": "Dibaca",
+    "topic_fallback": "Berita",
+    "caught_up_title": "Semua sudah dibaca",
+    "caught_up_body": "Anda telah membaca semua berita dalam ringkasan ini.",
+    "caught_up_action": "Lihat Hari Ini"
   }
 }

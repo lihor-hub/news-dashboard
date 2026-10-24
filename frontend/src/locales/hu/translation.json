@@ -362,5 +362,26 @@
     "search": {
       "clear": "Keresés törlése"
     }
+  },
+  "brief": {
+    "greeting_morning": "Jó reggelt",
+    "greeting_afternoon": "Jó napot",
+    "greeting_evening": "Jó estét",
+    "reading_time": "{{count}} perces összefoglaló",
+    "progress_label": "Elolvasott hírek",
+    "progress_value": "{{total}} hírből {{read}} elolvasva",
+    "topics": "Témák",
+    "all_topics": "Összes",
+    "sources_zero": "{{count}} forrás",
+    "sources_one": "{{count}} forrás",
+    "sources_two": "{{count}} forrás",
+    "sources_few": "{{count}} forrás",
+    "sources_many": "{{count}} forrás",
+    "sources_other": "{{count}} forrás",
+    "read": "Elolvasva",
+    "topic_fallback": "Hír",
+    "caught_up_title": "Mindent elolvastál",
+    "caught_up_body": "Elolvastad az összefoglaló összes hírét.",
+    "caught_up_action": "Mai hírek"
   }
 }

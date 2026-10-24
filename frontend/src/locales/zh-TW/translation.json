@@ -362,5 +362,26 @@
     "search": {
       "clear": "清除搜尋"
     }
+  },
+  "brief": {
+    "greeting_morning": "早安",
+    "greeting_afternoon": "午安",
+    "greeting_evening": "晚安",
+    "reading_time": "{{count}} 分鐘簡報",
+    "progress_label": "已讀報導",
+    "progress_value": "已讀 {{read}}/{{total}} 篇報導",
+    "topics": "主題",
+    "all_topics": "全部",
+    "sources_zero": "{{count}} 個來源",
+    "sources_one": "{{count}} 個來源",
+    "sources_two": "{{count}} 個來源",
+    "sources_few": "{{count}} 個來源",
+    "sources_many": "{{count}} 個來源",
+    "sources_other": "{{count}} 個來源",
+    "read": "已讀",
+    "topic_fallback": "報導",
+    "caught_up_title": "全部讀完",
+    "caught_up_body": "你已讀完本簡報中的所有報導。",
+    "caught_up_action": "瀏覽今日"
   }
 }

@@ -362,5 +362,26 @@
     "search": {
       "clear": "Tøm søk"
     }
+  },
+  "brief": {
+    "greeting_morning": "God morgen",
+    "greeting_afternoon": "God ettermiddag",
+    "greeting_evening": "God kveld",
+    "reading_time": "{{count}} min oversikt",
+    "progress_label": "Leste saker",
+    "progress_value": "{{read}} av {{total}} saker lest",
+    "topics": "Emner",
+    "all_topics": "Alle",
+    "sources_zero": "{{count}} kilder",
+    "sources_one": "{{count}} kilde",
+    "sources_two": "{{count}} kilder",
+    "sources_few": "{{count}} kilder",
+    "sources_many": "{{count}} kilder",
+    "sources_other": "{{count}} kilder",
+    "read": "Lest",
+    "topic_fallback": "Sak",
+    "caught_up_title": "Alt er lest",
+    "caught_up_body": "Du har lest alle sakene i denne oversikten.",
+    "caught_up_action": "Gå til I dag"
   }
 }

@@ -1,8 +1,17 @@
 /**
  * E2E tests for the Brief page (/) — the default home.
  */
-import { test, expect } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
 import { mockApi, SAMPLE_BRIEFING } from './fixtures';
+
+// Story cards collapse their cited articles until the reader opens the story.
+async function expandStory(page: Page, title: string) {
+  await page
+    .getByRole('article', { name: new RegExp(`Briefing section \\d+: ${title}`) })
+    .getByRole('button')
+    .first()
+    .click();
+}
 
 test.beforeEach(async ({ page }) => {
   await mockApi(page);
@@ -16,16 +25,14 @@ test.describe('Brief page — layout and content', () => {
 
   test('renders the executive summary', async ({ page }) => {
     await page.goto('/');
-    await expect(
-      page.getByText(/New safety frameworks and model releases/)
-    ).toBeVisible();
+    await expect(page.getByText(/New safety frameworks and model releases/)).toBeVisible();
   });
 
   test('renders section headings', async ({ page }) => {
     await page.goto('/');
-    // Use exact match: 'Safety Research' also appears inside the article title string
-    await expect(page.getByText('Safety Research', { exact: true })).toBeVisible();
-    await expect(page.getByText('Model Releases', { exact: true })).toBeVisible();
+    // Section titles also label the topic chips, so target the story card headings.
+    await expect(page.getByRole('heading', { name: 'Safety Research', exact: true })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Model Releases', exact: true })).toBeVisible();
   });
 
   test('renders section body text', async ({ page }) => {
@@ -35,6 +42,7 @@ test.describe('Brief page — layout and content', () => {
 
   test('renders citation chip for cited article', async ({ page }) => {
     await page.goto('/');
+    await expandStory(page, 'Safety Research');
     await expect(
       page.getByText('AI Safety Researchers Publish New Framework').first()
     ).toBeVisible();
@@ -61,6 +69,7 @@ test.describe('Brief page — layout and content', () => {
 test.describe('Brief page — citation navigation', () => {
   test('citation chip links to /a/:id', async ({ page }) => {
     await page.goto('/');
+    await expandStory(page, 'Safety Research');
     const chip = page
       .locator('a[href="/a/1"]')
       .filter({ hasText: 'AI Safety Researchers Publish New Framework' })
@@ -81,7 +90,11 @@ test.describe('Brief page — citation navigation', () => {
 test.describe('Brief page — empty state', () => {
   test.beforeEach(async ({ page }) => {
     await page.route('/api/briefings/latest', (r) =>
-      r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'empty' }) })
+      r.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ status: 'empty' }),
+      })
     );
   });
 
@@ -102,7 +115,11 @@ test.describe('Brief page — empty state', () => {
 
   test('Review Today feed navigates to /today', async ({ page }) => {
     await page.route('/api/articles**', (r) =>
-      r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ items: [] }) })
+      r.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ items: [] }),
+      })
     );
     await page.goto('/');
     await page.getByRole('button', { name: /review today feed/i }).click();
@@ -114,14 +131,26 @@ test.describe('Brief page — generating state', () => {
   test('Generate button shows loading state while generating', async ({ page }) => {
     // Make POST take a long time
     await page.route('/api/briefings/latest', (r) =>
-      r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'empty' }) })
+      r.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ status: 'empty' }),
+      })
     );
     await page.route('/api/briefings', async (r) => {
       if (r.request().method() === 'POST') {
         await new Promise((res) => setTimeout(res, 3000));
-        return r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(SAMPLE_BRIEFING) });
+        return r.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify(SAMPLE_BRIEFING),
+        });
       }
-      return r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ items: [] }) });
+      return r.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ items: [] }),
+      });
     });
 
     await page.goto('/');
@@ -134,13 +163,25 @@ test.describe('Brief page — generating state', () => {
 test.describe('Brief page — AI not configured error', () => {
   test.beforeEach(async ({ page }) => {
     await page.route('/api/briefings/latest', (r) =>
-      r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'empty' }) })
+      r.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ status: 'empty' }),
+      })
     );
     await page.route('/api/briefings', async (r) => {
       if (r.request().method() === 'POST') {
-        return r.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ detail: 'OPENAI_API_KEY not set' }) });
+        return r.fulfill({
+          status: 503,
+          contentType: 'application/json',
+          body: JSON.stringify({ detail: 'OPENAI_API_KEY not set' }),
+        });
       }
-      return r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ items: [] }) });
+      return r.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ items: [] }),
+      });
     });
   });
 

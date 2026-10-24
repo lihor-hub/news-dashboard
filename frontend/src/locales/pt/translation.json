@@ -362,5 +362,26 @@
     "search": {
       "clear": "Limpar pesquisa"
     }
+  },
+  "brief": {
+    "greeting_morning": "Bom dia",
+    "greeting_afternoon": "Boa tarde",
+    "greeting_evening": "Boa noite",
+    "reading_time": "Resumo de {{count}} min",
+    "progress_label": "Histórias lidas",
+    "progress_value": "{{read}} de {{total}} histórias lidas",
+    "topics": "Tópicos",
+    "all_topics": "Tudo",
+    "sources_zero": "{{count}} fontes",
+    "sources_one": "{{count}} fonte",
+    "sources_two": "{{count}} fontes",
+    "sources_few": "{{count}} fontes",
+    "sources_many": "{{count}} fontes",
+    "sources_other": "{{count}} fontes",
+    "read": "Lida",
+    "topic_fallback": "História",
+    "caught_up_title": "Tudo em dia",
+    "caught_up_body": "Você leu todas as histórias deste resumo.",
+    "caught_up_action": "Ver Hoje"
   }
 }

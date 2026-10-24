@@ -362,5 +362,26 @@
     "search": {
       "clear": "Изчисти търсенето"
     }
+  },
+  "brief": {
+    "greeting_morning": "Добро утро",
+    "greeting_afternoon": "Добър ден",
+    "greeting_evening": "Добър вечер",
+    "reading_time": "Обзор за {{count}} мин",
+    "progress_label": "Прочетени истории",
+    "progress_value": "Прочетени {{read}} от {{total}} истории",
+    "topics": "Теми",
+    "all_topics": "Всички",
+    "sources_zero": "{{count}} източника",
+    "sources_one": "{{count}} източник",
+    "sources_two": "{{count}} източника",
+    "sources_few": "{{count}} източника",
+    "sources_many": "{{count}} източника",
+    "sources_other": "{{count}} източника",
+    "read": "Прочетено",
+    "topic_fallback": "История",
+    "caught_up_title": "Всичко е прочетено",
+    "caught_up_body": "Прочетохте всички истории в този обзор.",
+    "caught_up_action": "Към Днес"
   }
 }

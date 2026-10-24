@@ -362,5 +362,26 @@
     "search": {
       "clear": "ניקוי החיפוש"
     }
+  },
+  "brief": {
+    "greeting_morning": "בוקר טוב",
+    "greeting_afternoon": "צהריים טובים",
+    "greeting_evening": "ערב טוב",
+    "reading_time": "תקציר של {{count}} דק׳",
+    "progress_label": "כתבות שנקראו",
+    "progress_value": "נקראו {{read}} מתוך {{total}} כתבות",
+    "topics": "נושאים",
+    "all_topics": "הכול",
+    "sources_zero": "{{count}} מקורות",
+    "sources_one": "מקור {{count}}",
+    "sources_two": "{{count}} מקורות",
+    "sources_few": "{{count}} מקורות",
+    "sources_many": "{{count}} מקורות",
+    "sources_other": "{{count}} מקורות",
+    "read": "נקרא",
+    "topic_fallback": "כתבה",
+    "caught_up_title": "הכול נקרא",
+    "caught_up_body": "קראת את כל הכתבות בתקציר הזה.",
+    "caught_up_action": "עיון בהיום"
   }
 }

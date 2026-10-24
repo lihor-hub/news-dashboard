@@ -85,7 +85,7 @@ export function BriefPage() {
             <div className="text-sm font-medium text-foreground">{generateError.title}</div>
             <div className="text-xs text-muted-foreground mt-1">{generateError.message}</div>
             {generateError.detail && (
-              <div className="text-[11px] text-muted-foreground/70 mt-1 font-mono">
+              <div className="text-xs text-muted-foreground/70 mt-1 font-mono">
                 {generateError.detail}
               </div>
             )}
@@ -165,7 +165,7 @@ export function BriefPage() {
             <div className="text-sm font-medium text-foreground">{failedBriefing.title}</div>
             <div className="text-xs text-muted-foreground mt-1">{failedBriefing.message}</div>
             {failedBriefing.detail && (
-              <div className="text-[11px] text-muted-foreground/70 mt-1 font-mono">
+              <div className="text-xs text-muted-foreground/70 mt-1 font-mono">
                 {failedBriefing.detail}
               </div>
             )}
@@ -187,8 +187,29 @@ export function BriefPage() {
 
   return (
     <div>
-      <div className="px-4 md:px-5 pt-4 pb-2">
-        <div className="flex gap-2 items-center">
+      <BriefingView
+        briefing={data}
+        onGenerate={generateDefault}
+        isGenerating={isGenerating}
+        showGreeting
+        onRefreshBriefing={() => {
+          void refetch();
+        }}
+        afterMeta={
+          <>
+            <BriefingChat briefingId={data.id} />
+            <Link
+              to="/briefs"
+              className="inline-flex min-h-touch md:min-h-9 items-center gap-1.5 rounded-md px-3 text-xs font-medium text-muted-foreground hover:bg-surface-2 hover:text-foreground transition-colors"
+            >
+              <History className="size-4" />
+              View history
+            </Link>
+          </>
+        }
+      />
+      <div className="mx-auto w-full max-w-5xl px-4 md:px-6 pb-8">
+        <div className="flex gap-2 items-center rounded-2xl border border-border bg-surface p-2">
           <Input
             placeholder="Focus on… (e.g. AI safety, tech policy)"
             value={focusInput}
@@ -196,39 +217,20 @@ export function BriefPage() {
             onKeyDown={(e) => {
               if (e.key === 'Enter' && focusInput.trim()) generate(focusInput.trim());
             }}
-            className="h-8 text-sm"
+            className="h-11 md:h-9 text-sm border-0 bg-transparent shadow-none"
           />
           <Button
             size="sm"
             variant="outline"
+            className="min-h-touch md:min-h-9 shrink-0"
             disabled={isGenerating || !focusInput.trim()}
             onClick={() => generate(focusInput.trim())}
           >
-            <Wand2 className="size-3.5 me-1" />
+            <Wand2 className="size-4 me-1" />
             Generate
           </Button>
         </div>
       </div>
-      <BriefingView
-        briefing={data}
-        onGenerate={generateDefault}
-        isGenerating={isGenerating}
-        onRefreshBriefing={() => {
-          void refetch();
-        }}
-        afterMeta={
-          <div className="flex items-center gap-2 mt-1">
-            <Link
-              to="/briefs"
-              className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
-            >
-              <History className="size-3" />
-              View history
-            </Link>
-            <BriefingChat briefingId={data.id} />
-          </div>
-        }
-      />
     </div>
   );
 }

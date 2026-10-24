@@ -362,5 +362,26 @@
     "search": {
       "clear": "Rensa sökning"
     }
+  },
+  "brief": {
+    "greeting_morning": "God morgon",
+    "greeting_afternoon": "God eftermiddag",
+    "greeting_evening": "God kväll",
+    "reading_time": "{{count}} min sammanfattning",
+    "progress_label": "Lästa nyheter",
+    "progress_value": "{{read}} av {{total}} nyheter lästa",
+    "topics": "Ämnen",
+    "all_topics": "Alla",
+    "sources_zero": "{{count}} källor",
+    "sources_one": "{{count}} källa",
+    "sources_two": "{{count}} källor",
+    "sources_few": "{{count}} källor",
+    "sources_many": "{{count}} källor",
+    "sources_other": "{{count}} källor",
+    "read": "Läst",
+    "topic_fallback": "Nyhet",
+    "caught_up_title": "Allt är läst",
+    "caught_up_body": "Du har läst alla nyheter i den här sammanfattningen.",
+    "caught_up_action": "Gå till Idag"
   }
 }
