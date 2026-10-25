@@ -180,7 +180,10 @@ def test_public_smoke_runs_only_after_the_deploy_step_reports_an_apply() -> None
     default_index = script.index('echo "applied=false" >> "$GITHUB_OUTPUT"')
     gate_index = script.index("if ! production_cutover_enabled; then")
     helm_index = script.index('helm "${helm_args[@]}"')
-    applied_index = script.index('echo "applied=true" >> "$GITHUB_OUTPUT"')
+    # Both modes report an apply, but only after their own mutation succeeds.
+    applied_index = script.rindex('echo "applied=true" >> "$GITHUB_OUTPUT"')
+    legacy_index = script.index("bash scripts/deploy-image-only.sh")
+    assert gate_index < legacy_index < helm_index  # noqa: S101
     assert default_index < gate_index < helm_index < applied_index  # noqa: S101
 
 
