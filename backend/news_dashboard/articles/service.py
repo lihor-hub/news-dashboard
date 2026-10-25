@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import threading
 from typing import Any
 from urllib.parse import urlparse
 
@@ -12,16 +13,25 @@ from news_dashboard.ingest.service import now_iso
 from news_dashboard.url_safety import validate_server_fetch_url
 
 logger = logging.getLogger(__name__)
+_EMBEDDING_LOCK = threading.Lock()
+_EMBEDDING_IN_FLIGHT: set[int] = set()
 
 
 def embed_article_background(article_id: int) -> None:
-    """Generate an embedding after a state change, tolerating optional-service errors."""
+    """Coalesce overlapping done requests; tolerate optional-service errors."""
+    with _EMBEDDING_LOCK:
+        if article_id in _EMBEDDING_IN_FLIGHT:
+            return
+        _EMBEDDING_IN_FLIGHT.add(article_id)
     try:
         from news_dashboard.embeddings import ensure_article_embedded
 
         ensure_article_embedded(article_id)
     except Exception:
         logger.debug("Background embedding skipped for article %d", article_id, exc_info=True)
+    finally:
+        with _EMBEDDING_LOCK:
+            _EMBEDDING_IN_FLIGHT.discard(article_id)
 
 
 def save_shared_url(

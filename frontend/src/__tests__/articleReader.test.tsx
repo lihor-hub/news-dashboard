@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor, fireEvent } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent, act } from '@testing-library/react';
+import * as analytics from '../lib/analytics';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Routes, Route } from 'react-router';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -105,6 +106,112 @@ function renderSharedReader(shareId = '42') {
   );
 }
 
+describe('ArticleReader — overlapping requests and actions', () => {
+  function deferred<T>() {
+    let resolve!: (value: T) => void;
+    const promise = new Promise<T>((done) => {
+      resolve = done;
+    });
+    return { promise, resolve };
+  }
+
+  function setup() {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const onActionComplete = vi.fn();
+    const view = (id: string) => (
+      <QueryClientProvider client={client}>
+        <MemoryRouter>
+          <ArticleReader articleId={id} onActionComplete={onActionComplete} />
+        </MemoryRouter>
+      </QueryClientProvider>
+    );
+    return { client, onActionComplete, view };
+  }
+
+  it('keeps a fast hydrated body when metadata resolves later', async () => {
+    const metadata = deferred<Article>();
+    vi.spyOn(api, 'fetchArticle').mockReturnValue(metadata.promise);
+    vi.spyOn(api, 'fetchArticleBody').mockResolvedValue(
+      makeArticle({ body_status: 'ok', body: 'Hydrated body' })
+    );
+    const { client, view } = setup();
+    render(view('42'));
+    await screen.findByText('Hydrated body');
+    await act(async () => metadata.resolve(makeArticle()));
+    expect(client.getQueryData<Article>(['article', '42'])?.body).toBe('Hydrated body');
+  });
+
+  it('aborts old requests and ignores a late body after switching articles', async () => {
+    const oldBody = deferred<Article>();
+    const metadata = vi
+      .spyOn(api, 'fetchArticle')
+      .mockImplementation(async (id) => makeArticle({ id: Number(id), title: `Article ${id}` }));
+    const body = vi
+      .spyOn(api, 'fetchArticleBody')
+      .mockImplementation((id) =>
+        id === '42'
+          ? oldBody.promise
+          : Promise.resolve(
+              makeArticle({ id: 43, title: 'Article 43', body_status: 'ok', body: 'New body' })
+            )
+      );
+    const { client, view } = setup();
+    const rendered = render(view('42'));
+    await screen.findByText('Article 42');
+    rendered.rerender(view('43'));
+    await screen.findByText('New body');
+    expect(metadata.mock.calls[0][1]).toBeInstanceOf(AbortSignal);
+    expect(body.mock.calls[0][1]?.aborted).toBe(true);
+    await act(async () =>
+      oldBody.resolve(makeArticle({ body_status: 'ok', body: 'Old late body' }))
+    );
+    expect(screen.queryByText('Old late body')).toBeNull();
+    expect(client.getQueryData<Article>(['article', '43'])?.id).toBe(43);
+    expect(client.getQueryData<Article>(['article', '42'])?.body).toBeNull();
+    rendered.unmount();
+  });
+
+  it('aborts metadata and body requests when a loading reader closes', () => {
+    const metadata = vi.spyOn(api, 'fetchArticle').mockReturnValue(new Promise(() => {}));
+    const body = vi.spyOn(api, 'fetchArticleBody').mockReturnValue(new Promise(() => {}));
+    const { view } = setup();
+    const rendered = render(view('42'));
+    rendered.unmount();
+    expect(metadata.mock.calls[0][1]?.aborted).toBe(true);
+    expect(body.mock.calls[0][1]?.aborted).toBe(true);
+  });
+
+  it('completes triage immediately and does not navigate again when its request finishes', async () => {
+    const write = deferred<void>();
+    vi.mocked(workflowApi.patchArticleState).mockReturnValueOnce(write.promise);
+    vi.spyOn(api, 'fetchArticle').mockResolvedValue(makeArticle({ body_status: 'ok' }));
+    const { view, onActionComplete } = setup();
+    const rendered = render(view('42'));
+    await screen.findByText('Test Article Title');
+    await userEvent.click(screen.getByRole('button', { name: /^done/i }));
+    expect(onActionComplete).toHaveBeenCalledTimes(1);
+    rendered.rerender(view('43'));
+    await act(async () => write.resolve());
+    expect(onActionComplete).toHaveBeenCalledTimes(1);
+  });
+
+  it('records one dwell session despite metadata/body refreshes', async () => {
+    const body = deferred<Article>();
+    const opened = vi.spyOn(analytics, 'trackArticleOpen').mockImplementation(() => undefined);
+    const closed = vi.spyOn(analytics, 'trackArticleClose').mockImplementation(() => undefined);
+    vi.spyOn(api, 'fetchArticle').mockResolvedValue(makeArticle());
+    vi.spyOn(api, 'fetchArticleBody').mockReturnValue(body.promise);
+    const { view } = setup();
+    const rendered = render(view('42'));
+    await screen.findByText('Test Article Title');
+    await act(async () => body.resolve(makeArticle({ body_status: 'ok', body: 'Updated body' })));
+    expect(opened).toHaveBeenCalledTimes(1);
+    expect(closed).not.toHaveBeenCalled();
+    rendered.unmount();
+    expect(closed).toHaveBeenCalledTimes(1);
+  });
+});
+
 // ─── Rendering ────────────────────────────────────────────────────────────────
 
 describe('ArticlePage — rendering', () => {
@@ -138,8 +245,8 @@ describe('ArticlePage — rendering', () => {
     renderSharedReader('123');
 
     await waitFor(() => expect(screen.getByText('Shared private article')).toBeTruthy());
-    expect(fetchSharedArticleSpy).toHaveBeenCalledWith('123');
-    expect(fetchSharedArticleBodySpy).toHaveBeenCalledWith('123');
+    expect(fetchSharedArticleSpy).toHaveBeenCalledWith('123', expect.any(AbortSignal));
+    expect(fetchSharedArticleBodySpy).toHaveBeenCalledWith('123', expect.any(AbortSignal));
     expect(fetchArticleSpy).not.toHaveBeenCalled();
     expect(fetchArticleBodySpy).not.toHaveBeenCalled();
   });
@@ -443,7 +550,7 @@ describe('ArticlePage — body fetch', () => {
     vi.spyOn(api, 'fetchArticle').mockResolvedValue(makeArticle({ body_status: 'missing' }));
 
     renderReader();
-    await waitFor(() => expect(fetchBodySpy).toHaveBeenCalledWith('42'));
+    await waitFor(() => expect(fetchBodySpy).toHaveBeenCalledWith('42', expect.any(AbortSignal)));
   });
 
   it('does not re-fetch when body_status is ok (cache already warm)', async () => {

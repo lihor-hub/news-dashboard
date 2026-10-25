@@ -27,10 +27,12 @@ export const ARTICLES_KEY = 'articles';
 // `InfiniteData` page envelope — not a flat `WorkflowArticle[]`. All cache reads
 // and optimistic writes below operate through the `pages` structure.
 type ArticleListCache = InfiniteData<TriageArticlePage>;
+type UndoIntent = { requested: boolean };
 
 interface ArticleQuerySnapshot {
   queryKey: QueryKey;
   data: ArticleListCache;
+  articleId: string;
 }
 
 function articleMatchesQuery(queryKey: QueryKey, article: WorkflowArticle) {
@@ -61,7 +63,7 @@ function snapshotArticleQueries(
     .getQueriesData<ArticleListCache>({ queryKey: [ARTICLES_KEY] })
     .flatMap(([queryKey, data]) => {
       if (!data || !cacheContainsArticle(data, id)) return [];
-      return [{ queryKey, data }];
+      return [{ queryKey, data, articleId: id }];
     });
 }
 
@@ -69,8 +71,28 @@ function restoreQuerySnapshots(
   queryClient: ReturnType<typeof useQueryClient>,
   snapshots: ArticleQuerySnapshot[]
 ) {
-  snapshots.forEach(({ queryKey, data }) => {
-    queryClient.setQueryData(queryKey, data);
+  snapshots.forEach(({ queryKey, data, articleId }) => {
+    queryClient.setQueryData<ArticleListCache>(queryKey, (current) => {
+      if (!current) return current;
+      // Roll back only this article. Restoring a whole list resurrects other
+      // articles removed by a later click (or by another mounted hook).
+      return {
+        ...current,
+        pages: current.pages.map((page, pageIndex) => {
+          const originalItems = data.pages[pageIndex]?.items ?? [];
+          const originalIndex = originalItems.findIndex((article) => article.id === articleId);
+          const items = page.items.filter((article) => article.id !== articleId);
+          if (originalIndex !== -1) {
+            // Use a surviving neighbour as the insertion anchor, since earlier
+            // articles may also have been optimistically removed.
+            const following = originalItems.slice(originalIndex + 1);
+            const anchor = items.findIndex((article) => following.some((a) => a.id === article.id));
+            items.splice(anchor === -1 ? items.length : anchor, 0, originalItems[originalIndex]);
+          }
+          return { ...page, items };
+        }),
+      };
+    });
   });
 }
 
@@ -126,7 +148,12 @@ function restoreToCache(queryClient: ReturnType<typeof useQueryClient>, article:
  */
 function settleArticleCaches(queryClient: ReturnType<typeof useQueryClient>) {
   void queryClient.invalidateQueries({ queryKey: [ARTICLES_KEY], refetchType: 'none' });
-  void queryClient.invalidateQueries({ queryKey: ['summary'] });
+  void queryClient.invalidateQueries({ queryKey: ['article'], refetchType: 'none' });
+  // One counts refresh per burst; an earlier response must not expose counts
+  // that predate still-pending optimistic removals.
+  if (queryClient.isMutating({ mutationKey: ['triage'] }) <= 1) {
+    void queryClient.invalidateQueries({ queryKey: ['summary'] });
+  }
 }
 
 function triageErrorMessage(err: unknown): string {
@@ -142,10 +169,17 @@ export function useTriageMutations() {
   const queryClient = useQueryClient();
 
   const setStateMutation = useMutation({
-    mutationFn: ({ article, newState }: { article: WorkflowArticle; newState: WorkflowState }) =>
-      patchArticleState(article.id, newState, article.starred),
+    mutationKey: ['triage'],
+    mutationFn: ({
+      article,
+      newState,
+    }: {
+      article: WorkflowArticle;
+      newState: WorkflowState;
+      undo?: UndoIntent;
+    }) => patchArticleState(article.id, newState, article.starred),
 
-    onMutate: ({ article, newState }) => {
+    onMutate: ({ article, newState, undo }) => {
       void queryClient.cancelQueries({ queryKey: [ARTICLES_KEY] });
       const snap = snapshot(article);
       const querySnapshots = snapshotArticleQueries(queryClient, article.id);
@@ -158,7 +192,7 @@ export function useTriageMutations() {
         patch.restored_at = now;
         patch.later_until = undefined;
       }
-      applyPatchToCache(queryClient, article.id, patch);
+      if (!undo?.requested) applyPatchToCache(queryClient, article.id, patch);
       return { snap, querySnapshots };
     },
 
@@ -174,17 +208,25 @@ export function useTriageMutations() {
   });
 
   const starMutation = useMutation({
-    mutationFn: ({ article, starred }: { article: WorkflowArticle; starred: boolean }) =>
-      patchArticleStar(article.id, starred),
+    mutationKey: ['triage'],
+    mutationFn: ({
+      article,
+      starred,
+    }: {
+      article: WorkflowArticle;
+      starred: boolean;
+      undo?: UndoIntent;
+    }) => patchArticleStar(article.id, starred),
 
-    onMutate: ({ article, starred }) => {
+    onMutate: ({ article, starred, undo }) => {
       void queryClient.cancelQueries({ queryKey: [ARTICLES_KEY] });
       const snap = snapshot(article);
       const querySnapshots = snapshotArticleQueries(queryClient, article.id);
-      applyPatchToCache(queryClient, article.id, {
-        starred,
-        starred_at: starred ? new Date().toISOString() : article.starred_at,
-      });
+      if (!undo?.requested)
+        applyPatchToCache(queryClient, article.id, {
+          starred,
+          starred_at: starred ? new Date().toISOString() : article.starred_at,
+        });
       return { snap, querySnapshots };
     },
 
@@ -200,16 +242,25 @@ export function useTriageMutations() {
   });
 
   const sendLaterMutation = useMutation({
-    mutationFn: async ({ article, days = 1 }: { article: WorkflowArticle; days?: number }) => {
+    mutationKey: ['triage'],
+    mutationFn: async ({
+      article,
+      days = 1,
+    }: {
+      article: WorkflowArticle;
+      days?: number;
+      undo?: UndoIntent;
+    }) => {
       await patchArticleLater(article.id, days);
     },
 
-    onMutate: ({ article, days = 1 }) => {
+    onMutate: ({ article, days = 1, undo }) => {
       void queryClient.cancelQueries({ queryKey: [ARTICLES_KEY] });
       const snap = snapshot(article);
       const querySnapshots = snapshotArticleQueries(queryClient, article.id);
       const until = new Date(Date.now() + days * 24 * 3600 * 1000).toISOString();
-      applyPatchToCache(queryClient, article.id, { state: 'later', later_until: until });
+      if (!undo?.requested)
+        applyPatchToCache(queryClient, article.id, { state: 'later', later_until: until });
       return { snap, querySnapshots };
     },
 
@@ -232,17 +283,19 @@ export function useTriageMutations() {
     const snap = snapshot(article);
     const querySnapshots = snapshotArticleQueries(queryClient, article.id);
     trackFeature(`triage_${newState}`);
-    setStateMutation.mutate({ article, newState });
+    const undo = { requested: false };
+    const pending = setStateMutation
+      .mutateAsync({ article, newState, undo })
+      .catch(() => undefined);
     toast(label, {
       id: TRIAGE_TOAST_ID,
       action: {
         label: 'Undo',
         onClick: () => {
           restoreQuerySnapshots(queryClient, querySnapshots);
-          void patchArticleState(snap.article.id, snap.article.state, snap.article.starred).then(
-            () => {
-              settleArticleCaches(queryClient);
-            }
+          undo.requested = true;
+          undoAfter(pending, () =>
+            patchArticleState(snap.article.id, snap.article.state, snap.article.starred)
           );
         },
       },
@@ -254,16 +307,18 @@ export function useTriageMutations() {
     const snap = snapshot(article);
     const querySnapshots = snapshotArticleQueries(queryClient, article.id);
     trackFeature(nextStarred ? 'star' : 'unstar');
-    starMutation.mutate({ article, starred: nextStarred });
+    const undo = { requested: false };
+    const pending = starMutation
+      .mutateAsync({ article, starred: nextStarred, undo })
+      .catch(() => undefined);
     toast(nextStarred ? 'Starred' : 'Unstarred', {
       id: TRIAGE_TOAST_ID,
       action: {
         label: 'Undo',
         onClick: () => {
           restoreQuerySnapshots(queryClient, querySnapshots);
-          void patchArticleStar(snap.article.id, snap.article.starred).then(() => {
-            settleArticleCaches(queryClient);
-          });
+          undo.requested = true;
+          undoAfter(pending, () => patchArticleStar(snap.article.id, snap.article.starred));
         },
       },
     });
@@ -273,21 +328,36 @@ export function useTriageMutations() {
     const snap = snapshot(article);
     const querySnapshots = snapshotArticleQueries(queryClient, article.id);
     trackFeature('snooze');
-    sendLaterMutation.mutate({ article, days });
+    const undo = { requested: false };
+    const pending = sendLaterMutation.mutateAsync({ article, days, undo }).catch(() => undefined);
     toast('Snoozed to tomorrow', {
       id: TRIAGE_TOAST_ID,
       action: {
         label: 'Undo',
         onClick: () => {
           restoreQuerySnapshots(queryClient, querySnapshots);
-          void patchArticleState(snap.article.id, snap.article.state, snap.article.starred).then(
-            () => {
-              settleArticleCaches(queryClient);
-            }
+          undo.requested = true;
+          undoAfter(pending, () =>
+            patchArticleState(snap.article.id, snap.article.state, snap.article.starred)
           );
         },
       },
     });
+  }
+
+  function undoAfter(pending: Promise<unknown>, revert: () => Promise<void>) {
+    // Undo is immediately visible, but its write must follow the original write
+    // on the server, even when the user clicks before that request has started.
+    void pending
+      .then(revert)
+      .then(() => settleArticleCaches(queryClient))
+      .catch((err) => {
+        toast.error(`Undo failed — ${err instanceof Error ? err.message : 'please retry'}`, {
+          id: TRIAGE_TOAST_ID,
+        });
+        void queryClient.invalidateQueries({ queryKey: [ARTICLES_KEY] });
+        void queryClient.invalidateQueries({ queryKey: ['article'] });
+      });
   }
 
   return { setState, toggleStar, sendLater };

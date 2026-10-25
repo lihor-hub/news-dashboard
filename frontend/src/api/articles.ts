@@ -23,12 +23,15 @@ export async function searchArticles(q: string, limit = 50): Promise<Article[]> 
   return data.items;
 }
 
-export async function fetchArticle(id: number | string): Promise<Article> {
-  return requestJson<Article>(`/api/articles/${id}`);
+export async function fetchArticle(id: number | string, signal?: AbortSignal): Promise<Article> {
+  return requestJson<Article>(`/api/articles/${id}`, { signal });
 }
 
-export async function fetchArticleBody(id: number | string): Promise<Article> {
-  return requestJson<Article>(`/api/articles/${id}/body`);
+export async function fetchArticleBody(
+  id: number | string,
+  signal?: AbortSignal
+): Promise<Article> {
+  return requestJson<Article>(`/api/articles/${id}/body`, { signal });
 }
 
 export async function saveSharedUrl(payload: {
@@ -66,12 +69,18 @@ export async function deleteArticleHighlight(
   });
 }
 
-export async function fetchSharedArticle(shareId: number | string): Promise<Article> {
-  return requestJson<Article>(`/api/shares/${shareId}/article`);
+export async function fetchSharedArticle(
+  shareId: number | string,
+  signal?: AbortSignal
+): Promise<Article> {
+  return requestJson<Article>(`/api/shares/${shareId}/article`, { signal });
 }
 
-export async function fetchSharedArticleBody(shareId: number | string): Promise<Article> {
-  return requestJson<Article>(`/api/shares/${shareId}/article/body`, { method: 'POST' });
+export async function fetchSharedArticleBody(
+  shareId: number | string,
+  signal?: AbortSignal
+): Promise<Article> {
+  return requestJson<Article>(`/api/shares/${shareId}/article/body`, { method: 'POST', signal });
 }
 
 export async function fetchArticleAudioUrl(id: number | string): Promise<string> {

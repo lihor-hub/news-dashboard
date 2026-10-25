@@ -1447,10 +1447,8 @@ def _upsert_uas(  # noqa: PLR0913
     restored_at: str | None = None,
     updated_at: str,
 ) -> None:
-    # Coordinate existing-row star updates with retention cleanup. Inserts already
-    # acquire a foreign-key key-share lock; this makes updates follow the same
-    # article-row locking protocol before changing protection state.
-    conn.execute("SELECT id FROM articles WHERE id = %s FOR UPDATE", (article_id,))
+    # Callers hold the article-row lock before reading UAS, coordinating with
+    # retention cleanup and preventing stale state/star values from being written.
     conn.execute(
         """
         INSERT INTO user_article_state(
@@ -2520,7 +2518,8 @@ def _get_article_row(conn: Any, article_id: int) -> dict[str, Any] | None:
 def _get_article_row_for_user(
     conn: Any, article_id: int, user_id: int | None
 ) -> dict[str, Any] | None:
-    row = get_visible_article_row(conn, article_id, user_id)
+    """Read and lock a visible article before a workflow mutation reads UAS."""
+    row = get_visible_article_row(conn, article_id, user_id, for_update=True)
     return _article_dict(row) if row else None
 
 
