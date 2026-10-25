@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { fetchArticle, fetchArticleBody, fetchSharedArticle, fetchSharedArticleBody } from '@/api';
 import { HttpError } from '@/api/core';
-import { adaptArticle, patchArticleState, patchArticleStar } from '@/api/workflowApi';
+import { adaptArticle } from '@/api/workflowApi';
+import { useTriageMutations } from '@/hooks/useTriageMutations';
 import type { WorkflowState } from '@/lib/workflowTypes';
 import { getOfflineArticle, removeOfflineArticle, saveOfflineArticle } from '@/lib/offline';
 import { trackArticleOpen, trackArticleClose } from '@/lib/analytics';
@@ -96,7 +97,8 @@ export function ArticleReader({
     refetch,
   } = useQuery({
     queryKey: articleQueryKey,
-    queryFn: () => (shareId ? fetchSharedArticle(shareId) : fetchArticle(id!)),
+    queryFn: ({ signal }) =>
+      shareId ? fetchSharedArticle(shareId, signal) : fetchArticle(id!, signal),
     enabled: !!articleKey,
     staleTime: 30_000,
   });
@@ -105,6 +107,7 @@ export function ArticleReader({
   const [showOriginal, setShowOriginal] = useState(false);
   const [offlineSavedArticleId, setOfflineSavedArticleId] = useState<string | null>(null);
   const [insightsRequest, setInsightsRequest] = useState(0);
+  const [bodyRequest, setBodyRequest] = useState<{ key: string; pending: boolean } | null>(null);
 
   useEffect(() => {
     setShowOriginal(false);
@@ -119,35 +122,44 @@ export function ArticleReader({
 
   // Trigger body fetch in parallel with metadata — fire at mount so we don't
   // wait for the GET /api/articles/:id round-trip before starting the slow scrape.
-  const bodyMutation = useMutation({
-    mutationFn: () => (shareId ? fetchSharedArticleBody(shareId) : fetchArticleBody(id!)),
-    onSuccess: (updated) => {
-      queryClient.setQueryData(articleQueryKey, updated);
-    },
-  });
-
   useEffect(() => {
     if (!articleKey) return;
-    // Skip if the React Query cache already has a fully-fetched body for this article.
     const cached = queryClient.getQueryData<{ body_status?: string }>(articleQueryKey);
     if (cached?.body_status === 'ok') return;
-    bodyMutation.mutate();
-    // Run once per article id/share id; bodyMutation is intentionally omitted from deps.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [articleKey]);
+    const controller = new AbortController();
+    setBodyRequest({ key: articleKey, pending: true });
+    const request = shareId
+      ? fetchSharedArticleBody(shareId, controller.signal)
+      : fetchArticleBody(id!, controller.signal);
+    void request
+      .then(async (updated) => {
+        if (controller.signal.aborted) return;
+        // A slower metadata response must not replace an already hydrated body.
+        await queryClient.cancelQueries({ queryKey: articleQueryKey, exact: true });
+        if (!controller.signal.aborted) queryClient.setQueryData(articleQueryKey, updated);
+      })
+      .catch(() => {
+        // Body hydration is best-effort; metadata and the original link remain usable.
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setBodyRequest({ key: articleKey, pending: false });
+      });
+    return () => controller.abort();
+  }, [articleKey, articleQueryKey, id, shareId, queryClient]);
 
   // Per-article dwell telemetry: record an open when the reader mounts (or the
   // user pages to a different article via prev/next, which swaps the id in
   // place) and a close on unmount/id change so the close carries dwell time.
   // This feeds the "Most-read articles" analytics panel via article_close
   // events; without it that panel stays empty.
+  const telemetryArticleId = rawArticle?.id;
   useEffect(() => {
-    if (!rawArticle) return;
-    const articleId = Number(rawArticle.id);
+    if (telemetryArticleId == null) return;
+    const articleId = Number(telemetryArticleId);
     if (!Number.isFinite(articleId)) return;
     trackArticleOpen(articleId);
     return () => trackArticleClose(articleId);
-  }, [rawArticle]);
+  }, [telemetryArticleId]);
 
   const goBack = onBack ?? noop;
   const afterAction = onActionComplete ?? goBack;
@@ -156,41 +168,24 @@ export function ArticleReader({
   // The floating bar must clear any host bottom chrome (shell nav, player).
   useBottomObstruction(!isPane);
 
-  // Triage mutations — inline (no extra hook so we stay self-contained)
-  const doAction = useCallback(
-    async (state: WorkflowState, label: string) => {
-      if (!article) return;
-      if (state === 'skipped' && article.starred) {
-        toast.error("Starred articles can't be skipped");
-        return;
-      }
-      try {
-        await patchArticleState(article.id, state, article.starred);
-        void queryClient.invalidateQueries({ queryKey: ['articles'] });
-        void queryClient.invalidateQueries({ queryKey: ['summary'] });
-        toast(label);
-        afterAction();
-      } catch {
-        toast.error('Action failed');
-      }
-    },
-    [article, queryClient, afterAction]
-  );
-
-  const doStar = useCallback(async () => {
+  const { setState, toggleStar } = useTriageMutations();
+  // Navigate immediately, not from a request completion that may belong to a
+  // reader the user has since left. Errors roll back through the shared hook.
+  const doAction = (state: WorkflowState, label: string) => {
     if (!article) return;
-    const next = !article.starred;
-    try {
-      await patchArticleStar(article.id, next);
-      void queryClient.invalidateQueries({ queryKey: ['article', id] });
-      void queryClient.invalidateQueries({ queryKey: ['articles'] });
-      void queryClient.invalidateQueries({ queryKey: ['summary'] });
-      toast(next ? 'Starred' : 'Unstarred');
-      afterAction();
-    } catch {
-      toast.error('Action failed');
+    if (state === 'skipped' && article.starred) {
+      toast.error("Starred articles can't be skipped");
+      return;
     }
-  }, [article, id, queryClient, afterAction]);
+    setState(article, state, label);
+    afterAction();
+  };
+
+  const doStar = () => {
+    if (!article) return;
+    toggleStar(article);
+    afterAction();
+  };
 
   async function saveCurrentArticleOffline() {
     if (!article) return;
@@ -304,7 +299,9 @@ export function ArticleReader({
   }
 
   const bodyLoading =
-    bodyMutation.isPending || (article.bodyStatus === 'missing' && bodyMutation.isIdle);
+    bodyRequest && bodyRequest.key === articleKey
+      ? bodyRequest.pending
+      : article.bodyStatus === 'missing';
 
   const actionBar = (
     <ArticleActionBar

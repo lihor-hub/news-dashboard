@@ -9,7 +9,7 @@ from fastapi.testclient import TestClient
 
 from news_dashboard.db import connect
 from news_dashboard.import_export import _upsert_article_state
-from news_dashboard.ingest.service import _upsert_uas
+from news_dashboard.ingest.service import _get_article_row_for_user, _upsert_uas
 from news_dashboard.main import app
 from news_dashboard.scheduler.retention import (
     ARTICLE_RETENTION_LOCK_KEY,
@@ -228,6 +228,10 @@ def test_all_existing_star_writers_lock_article_before_upsert() -> None:
     ingest_conn = MagicMock()
     archive_conn = MagicMock()
 
+    # Workflow writers lock the visible article before reading UAS, rather
+    # than waiting until the upsert (which would allow stale-state overwrites).
+    ingest_conn.execute.return_value.fetchone.return_value = None
+    _get_article_row_for_user(ingest_conn, 2, 1)
     _upsert_uas(
         ingest_conn,
         1,
@@ -251,12 +255,13 @@ def test_all_existing_star_writers_lock_article_before_upsert() -> None:
         updated_at="2026-09-29T00:00:00+00:00",
     )
 
-    for conn in (ingest_conn, archive_conn):
-        first_query = conn.execute.call_args_list[0]
-        assert first_query.args == (
-            "SELECT id FROM articles WHERE id = %s FOR UPDATE",
-            (2,),
-        )
+    ingest_query = ingest_conn.execute.call_args_list[0]
+    assert "FOR NO KEY UPDATE OF a" in ingest_query.args[0]
+    assert ingest_query.args[1] == (1, 2, 1)
+    assert archive_conn.execute.call_args_list[0].args == (
+        "SELECT id FROM articles WHERE id = %s FOR UPDATE",
+        (2,),
+    )
 
 
 def test_retention_api_gets_and_updates_policy_without_deleting(

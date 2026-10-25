@@ -439,9 +439,12 @@ def ensure_article_embedded(article_id: int, db_path: Any = None) -> None:
         text = embedding_text(row["title"], row["summary"], row["reason"], row["tags"])
         if not text:
             return
-        vector = _embed(text)
+    # Provider calls (including 429 retries/backoff) must not occupy a pooled
+    # PostgreSQL connection or leave an idle transaction holding article locks.
+    vector = _embed(text)
+    with connect(db_path) as conn:
         conn.execute(
-            "UPDATE articles SET embedding_vec=%s::vector WHERE id=%s",
+            "UPDATE articles SET embedding_vec=%s::vector WHERE id=%s AND embedding_vec IS NULL",
             (vector_literal(vector), article_id),
         )
 

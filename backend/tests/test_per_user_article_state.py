@@ -2,8 +2,13 @@
 
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
+from threading import Event
+from time import monotonic, sleep
+from typing import Any
 
 import pytest
 
@@ -17,6 +22,85 @@ from news_dashboard.ingest.service import (
     sync_sources,
     transition_article_state,
 )
+
+
+@pytest.mark.parametrize("action", ["done", "skipped", "later", "star"])
+def test_mutation_reads_user_state_after_acquiring_article_lock(
+    pg_clean: str, monkeypatch: pytest.MonkeyPatch, action: str
+) -> None:
+    """An in-flight competing action must not overwrite a newer state/star."""
+    from news_dashboard.ingest import service
+
+    sync_sources(pg_clean)
+    user_id = _make_user(pg_clean)
+    article_id = _insert_article(pg_clean)
+    set_article_starred(article_id, False, db_path=pg_clean, user_id=user_id)
+    connected = Event()
+    worker_pid: list[int] = []
+
+    @contextmanager
+    def worker_connection(*args: Any, **kwargs: Any) -> Any:
+        with connect(*args, **kwargs) as conn:
+            worker_pid.append(conn.info.backend_pid)
+            connected.set()
+            yield conn
+
+    monkeypatch.setattr(service, "connect", worker_connection)
+
+    def mutate() -> dict[str, Any] | None:
+        if action == "star":
+            return set_article_starred(article_id, True, db_path=pg_clean, user_id=user_id)
+        if action == "later":
+            return send_article_later(article_id, db_path=pg_clean, user_id=user_id)
+        return transition_article_state(article_id, action, db_path=pg_clean, user_id=user_id)
+
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        # Hold the same article lock as a competing action/retention cleanup.
+        with connect(pg_clean) as controller:
+            controller.execute("SELECT id FROM articles WHERE id = %s FOR UPDATE", (article_id,))
+            future = executor.submit(mutate)
+            assert connected.wait(5)
+            deadline = monotonic() + 5
+            while True:
+                waiting = controller.execute(
+                    "SELECT wait_event_type FROM pg_stat_activity WHERE pid = %s",
+                    (worker_pid[0],),
+                ).fetchone()
+                if waiting and waiting["wait_event_type"] == "Lock":
+                    break
+                assert monotonic() < deadline, "mutation did not wait for the article lock"
+                # Clear the transaction's cached activity snapshot before polling.
+                controller.execute("SELECT pg_stat_clear_snapshot()")
+                sleep(0.01)
+            controller.execute(
+                "UPDATE user_article_state SET state = %s, starred = %s"
+                " WHERE user_id = %s AND article_id = %s",
+                ("done" if action == "star" else "today", action != "star", user_id, article_id),
+            )
+        if action == "skipped":
+            with pytest.raises(ValueError, match="starred articles cannot be skipped"):
+                future.result(timeout=5)
+        else:
+            result = future.result(timeout=5)
+            assert result is not None
+            assert result["starred"] is True
+            assert result["state"] == ("done" if action == "star" else action)
+
+
+def test_state_mutation_does_not_block_recommendation_foreign_key_locks(pg_clean: str) -> None:
+    """FK inserts must not invert article/score lock order with state writes."""
+    sync_sources(pg_clean)
+    user_id = _make_user(pg_clean)
+    article_id = _insert_article(pg_clean)
+    with ThreadPoolExecutor(max_workers=1) as executor, connect(pg_clean) as conn:
+        conn.execute("SELECT id FROM articles WHERE id = %s FOR KEY SHARE", (article_id,))
+        future = executor.submit(
+            transition_article_state, article_id, "done", db_path=pg_clean, user_id=user_id
+        )
+        result = future.result(timeout=5)
+        assert result is not None
+        assert result["state"] == "done"
+
 
 # ── helpers ──────────────────────────────────────────────────────────────────
 

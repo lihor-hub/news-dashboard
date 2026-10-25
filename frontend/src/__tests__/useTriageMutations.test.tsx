@@ -109,7 +109,7 @@ describe('useTriageMutations — undo calls the API to revert server state', () 
     patchArticleStatePromise = Promise.resolve({});
   });
 
-  it('setState undo calls patchArticleState with original state', () => {
+  it('setState undo calls patchArticleState with original state', async () => {
     const { wrapper } = makeWrapper();
     const { result } = renderHook(() => useTriageMutations(), { wrapper });
     const article = makeArticle({ state: 'today', starred: false });
@@ -122,10 +122,12 @@ describe('useTriageMutations — undo calls the API to revert server state', () 
       capturedUndo()();
     });
 
-    expect(workflowApi.patchArticleState).toHaveBeenCalledWith('42', 'today', false);
+    await waitFor(() =>
+      expect(workflowApi.patchArticleState).toHaveBeenCalledWith('42', 'today', false)
+    );
   });
 
-  it('setState undo passes original starred flag', () => {
+  it('setState undo passes original starred flag', async () => {
     const { wrapper } = makeWrapper();
     const { result } = renderHook(() => useTriageMutations(), { wrapper });
     const article = makeArticle({ state: 'today', starred: true });
@@ -138,10 +140,12 @@ describe('useTriageMutations — undo calls the API to revert server state', () 
       capturedUndo()();
     });
 
-    expect(workflowApi.patchArticleState).toHaveBeenCalledWith('42', 'today', true);
+    await waitFor(() =>
+      expect(workflowApi.patchArticleState).toHaveBeenCalledWith('42', 'today', true)
+    );
   });
 
-  it('toggleStar undo calls patchArticleStar with original starred value', () => {
+  it('toggleStar undo calls patchArticleStar with original starred value', async () => {
     const { wrapper } = makeWrapper();
     const { result } = renderHook(() => useTriageMutations(), { wrapper });
     const article = makeArticle({ starred: false });
@@ -154,7 +158,7 @@ describe('useTriageMutations — undo calls the API to revert server state', () 
       capturedUndo()();
     });
 
-    expect(workflowApi.patchArticleStar).toHaveBeenCalledWith('42', false);
+    await waitFor(() => expect(workflowApi.patchArticleStar).toHaveBeenCalledWith('42', false));
   });
 
   it('emits feature events for triage actions so the analytics panel is populated', () => {
@@ -177,7 +181,7 @@ describe('useTriageMutations — undo calls the API to revert server state', () 
     expect(trackFeature).toHaveBeenCalledWith('snooze');
   });
 
-  it('sendLater undo calls patchArticleState with original state', () => {
+  it('sendLater undo calls patchArticleState with original state', async () => {
     const { wrapper } = makeWrapper();
     const { result } = renderHook(() => useTriageMutations(), { wrapper });
     const article = makeArticle({ state: 'today', starred: false });
@@ -190,7 +194,9 @@ describe('useTriageMutations — undo calls the API to revert server state', () 
       capturedUndo()();
     });
 
-    expect(workflowApi.patchArticleState).toHaveBeenCalledWith('42', 'today', false);
+    await waitFor(() =>
+      expect(workflowApi.patchArticleState).toHaveBeenCalledWith('42', 'today', false)
+    );
   });
 
   it('setState shows toast with Undo action label', () => {
@@ -424,6 +430,91 @@ describe('useTriageMutations — patches infinite-query caches (article feeds)',
 
     await waitFor(() => expect(workflowApi.patchArticleLater).toHaveBeenCalledWith('9', 1));
     expect(cachedItems(queryClient, key)).toEqual([]);
+  });
+});
+
+describe('useTriageMutations — overlapping actions', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    patchArticleStatePromise = Promise.resolve({});
+  });
+
+  it('does not resurrect a later dismissal when an earlier article fails', async () => {
+    let rejectFirst!: (reason: Error) => void;
+    const firstWrite = new Promise<void>((_resolve, reject) => {
+      rejectFirst = reject;
+    });
+    vi.mocked(workflowApi.patchArticleState).mockImplementationOnce(() => firstWrite);
+    const { wrapper, queryClient } = makeWrapper();
+    const first = makeArticle();
+    const second = makeArticle({ id: '43' });
+    const key = [ARTICLES_KEY, { state: 'today' }];
+    queryClient.setQueryData(key, infiniteList([first, second]));
+    const { result } = renderHook(() => useTriageMutations(), { wrapper });
+    act(() => result.current.setState(first, 'done', 'Read'));
+    await waitFor(() => expect(cachedItems(queryClient, key).map((a) => a.id)).toEqual(['43']));
+    act(() => result.current.setState(second, 'skipped', 'Skipped'));
+    await waitFor(() => expect(cachedItems(queryClient, key)).toEqual([]));
+    await act(async () => rejectFirst(new Error('Failed first write')));
+    await waitFor(() => expect(cachedItems(queryClient, key).map((a) => a.id)).toEqual(['42']));
+  });
+
+  it('undo restores only its article, not subsequent dismissals', async () => {
+    const { wrapper, queryClient } = makeWrapper();
+    const first = makeArticle();
+    const second = makeArticle({ id: '43' });
+    const key = [ARTICLES_KEY, { state: 'today' }];
+    queryClient.setQueryData(key, infiniteList([first, second]));
+    const { result } = renderHook(() => useTriageMutations(), { wrapper });
+    act(() => result.current.setState(first, 'done', 'Read'));
+    const undoFirst = capturedUndo();
+    await waitFor(() => expect(cachedItems(queryClient, key)).toHaveLength(1));
+    act(() => result.current.setState(second, 'skipped', 'Skipped'));
+    await waitFor(() => expect(cachedItems(queryClient, key)).toEqual([]));
+    act(() => undoFirst());
+    expect(cachedItems(queryClient, key).map((a) => a.id)).toEqual(['42']);
+    await waitFor(() =>
+      expect(workflowApi.patchArticleState).toHaveBeenCalledWith('42', 'today', false)
+    );
+  });
+
+  it('queues rapid undo behind the original request and preserves the optimistic restore', async () => {
+    let resolveWrite!: () => void;
+    const write = new Promise<void>((resolve) => {
+      resolveWrite = resolve;
+    });
+    vi.mocked(workflowApi.patchArticleState).mockImplementationOnce(() => write);
+    const { wrapper, queryClient } = makeWrapper();
+    const { result } = renderHook(() => useTriageMutations(), { wrapper });
+    act(() => {
+      result.current.setState(makeArticle(), 'done', 'Read');
+      capturedUndo()();
+    });
+    await waitFor(() => expect(workflowApi.patchArticleState).toHaveBeenCalledTimes(1));
+    expect(cachedItems(queryClient, [ARTICLES_KEY, { state: 'today' }])).toHaveLength(1);
+    await act(async () => resolveWrite());
+    await waitFor(() =>
+      expect(workflowApi.patchArticleState).toHaveBeenNthCalledWith(2, '42', 'today', false)
+    );
+    expect(cachedItems(queryClient, [ARTICLES_KEY, { state: 'today' }])).toHaveLength(1);
+  });
+
+  it('refreshes summary only when the last overlapping write settles', async () => {
+    let resolveFirst!: () => void;
+    const write = new Promise<void>((resolve) => {
+      resolveFirst = resolve;
+    });
+    vi.mocked(workflowApi.patchArticleState).mockImplementationOnce(() => write);
+    const { wrapper, queryClient } = makeWrapper();
+    const invalidate = vi.spyOn(queryClient, 'invalidateQueries');
+    const { result } = renderHook(() => useTriageMutations(), { wrapper });
+    act(() => result.current.setState(makeArticle(), 'done', 'Read'));
+    await waitFor(() => expect(workflowApi.patchArticleState).toHaveBeenCalledTimes(1));
+    act(() => result.current.setState(makeArticle({ id: '43' }), 'done', 'Read'));
+    await waitFor(() => expect(queryClient.isMutating({ mutationKey: ['triage'] })).toBe(1));
+    expect(invalidate).not.toHaveBeenCalledWith({ queryKey: ['summary'] });
+    await act(async () => resolveFirst());
+    await waitFor(() => expect(invalidate).toHaveBeenCalledWith({ queryKey: ['summary'] }));
   });
 });
 
