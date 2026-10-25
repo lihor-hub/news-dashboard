@@ -397,10 +397,28 @@ every Helm upgrade. Keep credentials in Kubernetes/GitHub secrets, never in
 this policy-only values input. YAML syntax, aliases, merge keys, comments, and
 multiple documents are intentionally not accepted.
 
-Automated and local live application of this overlay is disabled until the
-operator sets `INGRESS_CUTOVER_ENABLED=true` after completing the readiness
-checks in issue #1302. `scripts/deploy-local-k8s.sh --render` remains available
-without that activation.
+Application of the hardened ingress overlay remains disabled until the operator
+sets `INGRESS_CUTOVER_ENABLED=true` after completing the readiness checks in
+issue #1302. **Routine CI application updates do not require this migration.**
+While the flag is unset, CI updates only the existing application and ingestion
+images (plus an application startup grace period), preserving services, ingress,
+secrets, database/storage configuration, and Helm values. It requires both the
+existing Deployment and ingestion CronJob; it never creates a new installation.
+`scripts/deploy-local-k8s.sh --render` remains available without activation.
+
+CI builds amd64 and arm64 on separate native GitHub-hosted runners, then publishes
+one immutable multi-architecture digest. Superseded build work is cancellable;
+actual deployments on the mini PC remain serialized and are never cancelled by
+that policy. Deployment checks out the exact image source commit and skips stale
+runs rather than rolling production backwards. A `build-info.json` baked into both
+platform images identifies the source revision and version; CI verifies it over
+public HTTPS, not just application health. Image-only rollout or revision-check
+failures restore the previous application and ingestion images (not database
+migrations). The job summary distinguishes superseded runs, legacy image updates,
+and hardened ingress applies. Until cutover, Helm release values/history do not
+track these image-only changes; use the Deployment/CronJob images as the runtime
+source of truth and take a fresh PostgreSQL backup before upgrades that migrate
+data.
 
 For bundled or external PostgreSQL configuration and required credentials, see
 the [chart values reference](helm/news-dashboard/README.md#values-reference).

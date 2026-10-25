@@ -60,19 +60,16 @@ def test_rejects_missing_duplicate_or_invalid_architecture_digests(
 def test_publish_covers_both_platforms_and_attests_each_sbom_to_its_child() -> None:
     workflow = yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text())
     steps = workflow["jobs"]["publish"]["steps"]
-    qemu = next(
-        i
-        for i, step in enumerate(steps)
-        if step.get("uses", "").startswith("docker/setup-qemu-action@")
-    )
-    buildx = next(
-        i
-        for i, step in enumerate(steps)
-        if step.get("uses", "").startswith("docker/setup-buildx-action@")
-    )
-    assert qemu < buildx  # noqa: S101
-    build = next(step for step in steps if step.get("id") == "build")
-    assert build["with"]["platforms"] == "linux/amd64,linux/arm64"  # noqa: S101
+    native = workflow["jobs"]["build-platform"]
+    assert {entry["arch"] for entry in native["strategy"]["matrix"]["include"]} == {  # noqa: S101
+        "amd64",
+        "arm64",
+    }
+    build = next(step for step in native["steps"] if step.get("id") == "build")
+    assert build["with"]["platforms"] == "linux/${{ matrix.arch }}"  # noqa: S101
+    assert "push-by-digest=true" in build["with"]["outputs"]  # noqa: S101
+    index = next(step for step in steps if step.get("id") == "build")
+    assert '"${#sources[@]}" -eq 2' in index["run"]  # noqa: S101
     for architecture in ("amd64", "arm64"):
         sbom = next(step for step in steps if step.get("name") == f"Generate {architecture} SBOM")
         attestation = next(
