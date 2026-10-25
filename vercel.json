@@ -1,0 +1,26 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "services": {
+    "app": {
+      "root": ".",
+      "framework": "vite",
+      "buildCommand": "npm run build",
+      "outputDirectory": "frontend/dist",
+      "ignoreCommand": "sh deploy/vercel/ignore-build.sh",
+      "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }]
+    },
+    "api": {
+      "root": ".",
+      "runtime": "container",
+      "entrypoint": "deploy/vercel/Dockerfile",
+      "ignoreCommand": "sh deploy/vercel/ignore-build.sh"
+    }
+  },
+  "rewrites": [
+    { "source": "/api/(.*)", "destination": { "service": "api" } },
+    { "source": "/auth/(.*)", "destination": { "service": "api" } },
+    { "source": "/email/(.*)", "destination": { "service": "api" } },
+    { "source": "/(.*)", "destination": { "service": "app" } }
+  ],
+  "git": { "deploymentEnabled": { "main": false } }
+}

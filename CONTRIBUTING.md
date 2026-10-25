@@ -128,6 +128,10 @@ Don't hardcode a version literal anywhere else — read `VERSION` (or `app.versi
 4. Open a PR with a Conventional Commit or Scoped Commit title and a clear description.
 5. Link any related issue (`Closes #123`).
 
+PRs get a full-stack Vercel preview: frontend and demo backend, both built
+from your branch, read-only, sign in as `guest` / `demo`. See
+[PR previews](docs/pr-previews.md).
+
 ## Internationalization (i18n)
 
 This project uses `react-i18next` for internationalization. All user-facing strings should be externalized for translation.

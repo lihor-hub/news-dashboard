@@ -244,12 +244,8 @@ app:
     # Enable only when every public request reaches the app over HTTPS.
     enableHsts: false
     # Seeds deterministic sample data and a read-only "guest"/"demo" account
-    # on startup. Only for public demo/staging installs, never production.
+    # on startup. Only for public demo installs; rejected in production.
     demoMode: false
-    # Optional full-match regex of extra browser origins allowed to make
-    # cookie-authenticated mutations, for a frontend served from another host
-    # that proxies to this backend (e.g. Vercel PR previews). Leave empty.
-    csrfTrustedOriginRegex: ""
 
 ingestCronJob:
   enabled: true
