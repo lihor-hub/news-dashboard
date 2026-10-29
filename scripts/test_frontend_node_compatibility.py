@@ -9,9 +9,16 @@ import textwrap
 import unittest
 from pathlib import Path
 
-from scripts.test_desktop_ci_workflow import job
-
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def job(name: str) -> str:
+    workflow = (ROOT / ".github/workflows/ci.yml").read_text()
+    match = re.search(rf"^  {name}:\n(.*?)(?=^  [\w-]+:|\Z)", workflow, re.M | re.S)
+    if match is None:
+        message = f"Missing CI job: {name}"
+        raise AssertionError(message)
+    return match.group(1)
 
 
 class TestFrontendNodeCompatibility(unittest.TestCase):
