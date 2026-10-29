@@ -41,8 +41,13 @@ COPY --from=frontend /app/frontend/dist ./frontend/dist
 # Installation is complete before dropping the build-time package installer.
 # Removing pip also removes its vulnerable vendored dependency tree.
 COPY --from=dependencies /wheels /wheels
+COPY scripts/prune_selenium_manager.py /tmp/prune_selenium_manager.py
+# The app passes an explicit driver from webdriver-manager; Selenium Manager is
+# unused. Remove its binaries (and matching metadata), not just scanner evidence.
 RUN pip install --no-cache-dir --no-index --find-links=/wheels news-dashboard \
     && rm -rf /wheels \
+    && python /tmp/prune_selenium_manager.py \
+    && rm /tmp/prune_selenium_manager.py \
     && pip check \
     && pip uninstall -y pip \
     && chown -R appuser:appuser /app
