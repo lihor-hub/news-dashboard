@@ -75,6 +75,7 @@ jobs:
               - 'vite.config.ts'
               - 'index.html'
               - 'tsconfig*.json'
+              - 'vercel.json'
               - 'scripts/**'
               - '.github/workflows/ci.yml'
             desktop:

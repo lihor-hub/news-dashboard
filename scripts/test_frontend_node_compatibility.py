@@ -23,6 +23,14 @@ class TestFrontendNodeCompatibility(unittest.TestCase):
         if package["engines"] != lock["packages"][""]["engines"]:
             self.fail("Package and lockfile engine ranges must agree")
 
+    def test_vercel_serves_the_actual_frontend_build_output(self) -> None:
+        config = json.loads((ROOT / "vercel.json").read_text())
+        if config.get("framework") != "vite" or config.get("buildCommand") != "npm run build":
+            self.fail("Vercel must use the tested frontend build")
+        output = config["outputDirectory"]
+        if f"outDir: '{output}'" not in (ROOT / "vite.config.ts").read_text():
+            self.fail("Vercel output directory must agree with Vite")
+
     def test_compatibility_lane_is_selected_and_runs_real_checks(self) -> None:
         detect = job("detect-changes")
         frontend_filter = detect.split("            frontend:\n", 1)[1].split(
