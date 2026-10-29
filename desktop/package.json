@@ -16,10 +16,10 @@
   },
   "devDependencies": {
     "electron": "^44.9.1",
-    "electron-builder": "^26.15.3"
+    "electron-builder": "^26.18.0"
   },
   "dependencies": {
     "@sentry/node": "^11.8.0",
-    "electron-updater": "^6.8.9"
+    "electron-updater": "^6.8.11"
   }
 }
