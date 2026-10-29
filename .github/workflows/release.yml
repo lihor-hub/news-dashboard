@@ -15,7 +15,7 @@ name: Release
 #   release  →  android            (ubuntu)
 #            ↘  desktop            (macos + linux + windows) → desktop-publish
 #            ↘  helm               (OCI chart after image publication)
-#            ↘  sync-version-files (self-hosted)
+#            ↘  sync-version-files (ubuntu-latest)
 # android / desktop / helm / sync-version-files run only when a new tag was created.
 # sync-version-files opens a rolling PR so the committed VERSION,
 # pyproject.toml, and CHANGELOG.md catch up with the tag through the normal
@@ -365,7 +365,9 @@ jobs:
     name: Sync committed version files
     needs: release
     if: needs.release.outputs.released == 'true'
-    runs-on: [self-hosted]
+    # This job needs only git, Python, and gh. Use a clean hosted workspace:
+    # checkout's conditional credential include fails on the persistent runner.
+    runs-on: ubuntu-latest
     # Serialize concurrent releases: two runs force-pushing the same rolling
     # branch would otherwise race and leave it pointing at the older catch-up.
     concurrency:

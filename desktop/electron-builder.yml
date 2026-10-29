@@ -29,6 +29,10 @@ mac:
   # Skip code signing — no Apple Developer certificate.
   # Users bypass Gatekeeper on first launch: right-click → Open.
   identity: null
+  # oxc-parser ships separate, prebuilt binaries in architecture-named packages.
+  # Both app trees contain the same copies; preserve them rather than lipo them.
+  # Despite its name, x64ArchFiles is the universal merger's identical-file allowlist.
+  x64ArchFiles: "**/node_modules/@oxc-parser/binding-darwin-{arm64,x64}/*.node"
   target:
     - target: dmg
       arch:

@@ -29,6 +29,13 @@ class TestReleaseSyncJob(unittest.TestCase):
         if self.workflow.count("if: needs.release.outputs.released == 'true'") < 3:
             self.fail("sync-version-files must be gated on a new tag being created")
 
+    def test_sync_job_uses_a_clean_hosted_runner(self) -> None:
+        sync_job = self.workflow.split("  sync-version-files:\n", 1)[1]
+        if "runs-on: ubuntu-latest" not in sync_job:
+            self.fail("sync job must avoid the persistent runner's checkout credential failure")
+        if sync_job.count("secrets.VERSIONING_SYNC_TOKEN || github.token") != 2:
+            self.fail("checkout and PR creation must use the same optional sync token")
+
     def test_sync_job_updates_all_committed_version_files(self) -> None:
         for expected in (
             "> VERSION",
