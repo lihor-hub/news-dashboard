@@ -9,6 +9,20 @@ Production (`news.lihor.ro`, [`values-production.yaml`](../helm/news-dashboard/v
 is unaffected. It keeps its own release, namespace, and values, and the
 operator deploys it by hand.
 
+## Frontend Node.js compatibility
+
+The root frontend supports Node 24.18+ and Node 26. Vercel uses the latest
+supported Node 24 release selected by the root `package.json` engine range;
+CI's primary frontend lane and the production image remain on Node 26.
+A separate **Frontend compatibility (Node 24)** job verifies engine-strict
+installation, typechecking, frontend tests, and the production build. Its
+result is included in the required **Test & build** check.
+
+Do not bypass engine checks to make a preview deploy. If Vercel reports an
+unsupported Node version, check the deployment log and the root package and
+lockfile engine ranges. A green frontend build verifies Node compatibility;
+it does not by itself verify the preview's backend connectivity.
+
 ## Staging backend
 
 [`values-staging.yaml`](../helm/news-dashboard/values-staging.yaml) layers on
