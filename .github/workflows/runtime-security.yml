@@ -7,6 +7,8 @@ on:
       - 'Dockerfile'
       - 'pyproject.toml'
       - 'uv.lock'
+      - 'scripts/prune_selenium_manager.py'
+      - 'scripts/test_selenium_manager_pruning.py'
       - '.github/workflows/runtime-security.yml'
   workflow_dispatch:
 
@@ -39,6 +41,7 @@ jobs:
           docker build --tag news-dashboard-security:validation .
           docker run --rm news-dashboard-security:validation python -c 'import importlib.util, os; assert importlib.util.find_spec("pip") is None; assert os.getuid() != 0'
           docker run --rm news-dashboard-security:validation news-dashboard --help
+          docker run --rm news-dashboard-security:validation python -c 'from pathlib import Path; import selenium; assert not any(Path(selenium.__file__).parent.rglob("selenium-manager*"))'
       - name: Scan runtime with the existing vulnerability policy
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:

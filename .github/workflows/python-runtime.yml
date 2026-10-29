@@ -8,6 +8,8 @@ on:
       - 'Dockerfile'
       - 'pyproject.toml'
       - 'uv.lock'
+      - 'scripts/prune_selenium_manager.py'
+      - 'scripts/test_selenium_manager_pruning.py'
       - 'scripts/smoke-mcp-container.sh'
       - 'scripts/verify-oci-attestations.sh'
       - '.github/workflows/python-runtime.yml'
