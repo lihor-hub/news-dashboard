@@ -75,6 +75,8 @@ jobs:
               - 'vite.config.ts'
               - 'index.html'
               - 'tsconfig*.json'
+              - 'scripts/**'
+              - '.github/workflows/ci.yml'
             desktop:
               - 'desktop/**'
               - '.github/workflows/ci.yml'
@@ -296,6 +298,34 @@ jobs:
       - name: build (includes tsc)
         run: npm run build
 
+  # Vercel builds the static frontend on Node 24; production stays on Node 26.
+  # Keep compatibility tested and included in the required Test & build rollup.
+  frontend-node24:
+    name: Frontend compatibility (Node 24)
+    needs: detect-changes
+    runs-on: ubuntu-latest
+    if: |
+      github.event_name == 'push' ||
+      github.event_name == 'merge_group' ||
+      (github.event_name == 'workflow_dispatch' && inputs.full_suite) ||
+      (github.event_name == 'pull_request' && needs.detect-changes.outputs.frontend == 'true')
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: '24'
+          cache: npm
+      - name: Verify compatibility routing and result propagation
+        run: python3 -m unittest scripts.test_frontend_node_compatibility
+      - name: Install with engine compatibility enforced
+        run: npm ci --engine-strict
+      - name: TypeScript
+        run: npm run typecheck --silent
+      - name: Frontend tests
+        run: npm run test:frontend --silent
+      - name: Production frontend build
+        run: npm run build
+
   # Desktop unit tests run without packaging or signing credentials.
   desktop:
     name: Desktop tests
@@ -364,7 +394,7 @@ jobs:
   # (all-skipped = no relevant files changed, so the check still passes).
   test:
     name: Test & build
-    needs: [test-backend, test-frontend, test-a11y, mcp-container-smoke, desktop]
+    needs: [test-backend, test-frontend, frontend-node24, test-a11y, mcp-container-smoke, desktop]
     runs-on: ubuntu-latest
     if: always()
     steps:
@@ -372,6 +402,7 @@ jobs:
         run: |
           backend="${{ needs.test-backend.result }}"
           frontend="${{ needs.test-frontend.result }}"
+          node24="${{ needs.frontend-node24.result }}"
           desktop="${{ needs.desktop.result }}"
           a11y="${{ needs.test-a11y.result }}"
           mcp_container="${{ needs.mcp-container-smoke.result }}"
@@ -380,6 +411,9 @@ jobs:
           fi
           if [[ "$frontend" == "failure" || "$frontend" == "cancelled" ]]; then
             echo "Frontend tests failed or were cancelled ($frontend)" && exit 1
+          fi
+          if [[ "$node24" == "failure" || "$node24" == "cancelled" ]]; then
+            echo "Node 24 frontend compatibility failed or was cancelled ($node24)" && exit 1
           fi
           if [[ "$a11y" == "failure" || "$a11y" == "cancelled" ]]; then
             echo "Accessibility tests failed or were cancelled ($a11y)" && exit 1
@@ -390,7 +424,7 @@ jobs:
           if [[ "$desktop" == "failure" || "$desktop" == "cancelled" ]]; then
             echo "Desktop tests failed or were cancelled ($desktop)" && exit 1
           fi
-          echo "All test lanes passed (backend=$backend, frontend=$frontend, a11y=$a11y, mcp_container=$mcp_container, desktop=$desktop)"
+          echo "All test lanes passed (backend=$backend, frontend=$frontend, node24=$node24, a11y=$a11y, mcp_container=$mcp_container, desktop=$desktop)"
   # ── 7. COVERAGE UPLOAD ─────────────────────────────────────────────────────
   # Uploads coverage reports to Codecov for PR comments, status checks, and
   # coverage trends. Merge groups run the full test suite, so they also upload

@@ -19,7 +19,7 @@
   },
   "private": true,
   "engines": {
-    "node": ">=26 <27"
+    "node": "^24.18.0 || ^26.0.0"
   },
   "overrides": {
     "brace-expansion": "^5.0.12",
