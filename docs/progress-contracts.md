@@ -1,18 +1,18 @@
 # Progress program technical contracts (#1623 / #1628)
 
-Status: sequenced technical handoff. The daily foundation is implemented in #1624; the completion seams in section 10 are implemented in the uncommitted #1625 slice pending independent review. Earlier design-only statements describe their original tranche, not a claim that all future domains are implemented. Product authority is [approved policy](progress-approved-policy.md) and [approval comment](https://github.com/lihor-hub/news-dashboard/issues/1623#issuecomment-6526348156). Those override obsolete discovery approval labels, not their numeric policy. This document fixes implementation names and seams, not new product policy.
+Status: sequenced technical handoff. The daily foundation is implemented in #1624; the completion seams in section 10 are reviewed on held PR #1633 (#1625). Section 11 implements the combined #1625+#1626 candidate, uncommitted pending independent calibration/code review. No production activation is authorized by this document. Earlier design-only statements describe their original tranche, not a claim that all future domains are implemented. Product authority is [approved policy](progress-approved-policy.md) and [approval comment](https://github.com/lihor-hub/news-dashboard/issues/1623#issuecomment-6526348156). Those override obsolete discovery approval labels, not their numeric policy. This document fixes implementation names and seams, not new product policy.
 
 ## 1. Ownership and first delivery boundary
 
-| Issue | Owns | Shared-file handoff |
-| --- | --- | --- |
-| #1624 | Daily dates/state/awards, initial protected lifecycle controller, persistent indicator, welcome sheet/dialog, initial Reading DNA Progress section and daily controls | First implementation writer of `reading_progress`, protected-route host and initial home. Covers shell **and** `/a/:id` and `/shared/:shareId/article`. Hands these existing components to #1628 for extension, not replacement. |
-| #1625 | Completion transaction seam, immutable identity/read credit, all completion callers, article reader evidence and article-kind Reading List | Supplies connection-taking helper and caller-origin matrix; no independent reward store or lifecycle host. |
-| #1626 | Versioned deterministic taxonomy, frozen attribution including zero, topic/breadth predicates and UI fragment | Depends on #1625; calibration required before topic earning is enabled. |
-| #1627 | Activity windows/union/lifetime/day aggregates, consent revision/invalidation, conservative coverage and activity UI fragment | Reuses #1624 protected lifecycle boundary but a separate visible+focused recorder. Supplies settings/cleanup fragments to central editor. |
-| #1628 | Shared schema, award catalog/DTO/claims, progress preferences, archive/privacy integration, final collection/emblems/coordinator and Reading DNA composition | Central integration responsibility; domain writers provide sequenced fragments. Initial schema/claim primitives travel with #1624, not a second full reward implementation. |
-| #1629 | Historical/import coordination, resumable tooling, protected-horizon runbook and one introduction | No operational inventory, retention pause/drain or dry-run/apply authorized by implementation. |
-| #1630 / #1631 | Frozen recap / existing canonical and legacy email paths plus preview | Read-only consumers of shared contracts; mail overlap reconciled by delivery lead before edits. |
+| Issue         | Owns                                                                                                                                                                  | Shared-file handoff                                                                                                                                                                                                              |
+| ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| #1624         | Daily dates/state/awards, initial protected lifecycle controller, persistent indicator, welcome sheet/dialog, initial Reading DNA Progress section and daily controls | First implementation writer of `reading_progress`, protected-route host and initial home. Covers shell **and** `/a/:id` and `/shared/:shareId/article`. Hands these existing components to #1628 for extension, not replacement. |
+| #1625         | Completion transaction seam, immutable identity/read credit, all completion callers, article reader evidence and article-kind Reading List                            | Supplies connection-taking helper and caller-origin matrix; no independent reward store or lifecycle host.                                                                                                                       |
+| #1626         | Versioned deterministic taxonomy, frozen attribution including zero, topic/breadth predicates and UI fragment                                                         | Depends on #1625; calibration required before topic earning is enabled.                                                                                                                                                          |
+| #1627         | Activity windows/union/lifetime/day aggregates, consent revision/invalidation, conservative coverage and activity UI fragment                                         | Reuses #1624 protected lifecycle boundary but a separate visible+focused recorder. Supplies settings/cleanup fragments to central editor.                                                                                        |
+| #1628         | Shared schema, award catalog/DTO/claims, progress preferences, archive/privacy integration, final collection/emblems/coordinator and Reading DNA composition          | Central integration responsibility; domain writers provide sequenced fragments. Initial schema/claim primitives travel with #1624, not a second full reward implementation.                                                      |
+| #1629         | Historical/import coordination, resumable tooling, protected-horizon runbook and one introduction                                                                     | No operational inventory, retention pause/drain or dry-run/apply authorized by implementation.                                                                                                                                   |
+| #1630 / #1631 | Frozen recap / existing canonical and legacy email paths plus preview                                                                                                 | Read-only consumers of shared contracts; mail overlap reconciled by delivery lead before edits.                                                                                                                                  |
 
 One writer at a time, explicit paths staged. Scope of the first DDL tranche below is users' progress preferences, daily state/visits, and shared award/group fields required by the daily producer. **No read/topic/activity/backfill runtime tables yet.** No runtime edits are part of this contract-writing stage.
 
@@ -20,13 +20,13 @@ One writer at a time, explicit paths staged. Scope of the first DDL tranche belo
 
 Reuse `user_achievements`, unique `(user_id, achievement_key)`. Never derive credits from an award. Award definitions/predicates belong to domains; insertion, descriptor serialization and presentation grouping belong to the shared `reading_progress` service. Keys never change when copy/artwork changes.
 
-| Domain owner | Canonical keys (decimal suffixes are literal thresholds) |
-| --- | --- |
-| #1624 | `daily_streak_3`, `daily_streak_7`, `daily_streak_14`, `daily_streak_30`, `daily_streak_100` |
-| #1625 | `articles_read_1`, `articles_read_10`, `articles_read_50`, **`hundred_articles_read`**, `articles_read_500` |
-| #1626 | `topic_{topic_id}_{1|10|30|100|250}` (one emblem per level, not an extra badge); `breadth_3`, `breadth_5`, `breadth_10` require >=3 credits in each of that many tracks |
-| #1627 | `active_time_900`, `active_time_3600`, `active_time_18000`, `active_time_72000` (seconds, totals measured in integer milliseconds) |
-| Legacy quiz | `first_quiz_passed`, score >0 on an authorized submitted quiz, transactionally at submission |
+| Domain owner    | Canonical keys (decimal suffixes are literal thresholds)                                                                                                                     |
+| --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| #1624           | `daily_streak_3`, `daily_streak_7`, `daily_streak_14`, `daily_streak_30`, `daily_streak_100`                                                                                 |
+| #1625           | `articles_read_1`, `articles_read_10`, `articles_read_50`, **`hundred_articles_read`**, `articles_read_500`                                                                  |
+| #1626           | `topic_{topic_id}_{1                                                                                                                                                         | 10  | 30  | 100 | 250}`(one emblem per level, not an extra badge);`breadth_3`, `breadth_5`, `breadth_10` require >=3 credits in each of that many tracks |
+| #1627           | `active_time_900`, `active_time_3600`, `active_time_18000`, `active_time_72000` (seconds, totals measured in integer milliseconds)                                           |
+| Legacy quiz     | `first_quiz_passed`, score >0 on an authorized submitted quiz, transactionally at submission                                                                                 |
 | Retired earning | `seven_day_streak` (legacy UTC reading/open streak), `inbox_zero` (legacy global inbox criterion). Keep stored rows and original dates; never earn these anew after cutover. |
 
 Stable topic IDs: `python`, `large_language_models`, `ai_agents`, `ai_research`, `cloud_infrastructure`, `security`, `data_engineering`, `web_development`, `javascript_typescript`, `software_engineering`, `ruby`. Level names at 1/10/30/100/250: Explorer/Enthusiast/Regular/Trailblazer/Pathfinder. At 7 reads, Explorer toward Enthusiast, not already Enthusiast.
@@ -140,8 +140,8 @@ Displayed current is the cached last-earned streak if last credit is today or ye
   "current_streak_days": 3,
   "best_streak_days": 5,
   "visit_kind": "continuing",
-  "seven_days": [{"date": "2026-10-30", "visited": true, "credited": true}],
-  "welcome_target": {"expected_visit_date": "2026-10-30"},
+  "seven_days": [{ "date": "2026-10-30", "visited": true, "credited": true }],
+  "welcome_target": { "expected_visit_date": "2026-10-30" },
   "newly_unlocked": ["daily_streak_3"],
   "reward_group_id": "9f706788-a812-46ed-bd4d-e9745a9d4b6c"
 }
@@ -155,12 +155,18 @@ Shared reward descriptor (preserve legacy `unlocked_at` alias for existing calle
 
 ```json
 {
-  "key": "daily_streak_3", "title": "3-day daily streak",
+  "key": "daily_streak_3",
+  "title": "3-day daily streak",
   "description": "Visit on 3 consecutive saved-local dates.",
-  "unlocked": true, "unlocked_at": "2026-10-30T10:00:00Z",
-  "recorded_at": "2026-10-30T10:00:00Z", "earned_at": "2026-10-30T10:00:00Z",
-  "origin": "live", "date_precision": "exact", "criteria_version": 1,
-  "progress": 3, "target": 3,
+  "unlocked": true,
+  "unlocked_at": "2026-10-30T10:00:00Z",
+  "recorded_at": "2026-10-30T10:00:00Z",
+  "earned_at": "2026-10-30T10:00:00Z",
+  "origin": "live",
+  "date_precision": "exact",
+  "criteria_version": 1,
+  "progress": 3,
+  "target": 3,
   "href": "/reading-dna?reward=daily_streak_3#progress"
 }
 ```
@@ -179,11 +185,13 @@ Winning envelope:
 
 ```json
 {
-  "show": true, "reason": "claimed",
-  "target": {"group_id": "9f706788-a812-46ed-bd4d-e9745a9d4b6c"},
-  "authorization": {"welcome": false, "history": false, "rewards": true},
-  "welcome": null, "history": null,
-  "rewards": [{"key": "daily_streak_3"}]
+  "show": true,
+  "reason": "claimed",
+  "target": { "group_id": "9f706788-a812-46ed-bd4d-e9745a9d4b6c" },
+  "authorization": { "welcome": false, "history": false, "rewards": true },
+  "welcome": null,
+  "history": null,
+  "rewards": [{ "key": "daily_streak_3" }]
 }
 ```
 
@@ -208,11 +216,23 @@ With welcome enabled, win today's pending credited welcome or consume nothing fr
 
 ```json
 {
-  "show": true, "reason": "claimed",
-  "target": {"expected_visit_date": "2026-10-30", "historical_group_id": "dbe6e296-9520-4410-809f-45de3fcdf14c"},
-  "authorization": {"welcome": true, "history": true, "rewards": false},
-  "welcome": {"local_date": "2026-10-30", "current_streak_days": 3, "highlight_kind": "collection_summary"},
-  "history": {"group_id": "dbe6e296-9520-4410-809f-45de3fcdf14c", "credited_reads": 42, "exact_earned_dates_known": false},
+  "show": true,
+  "reason": "claimed",
+  "target": {
+    "expected_visit_date": "2026-10-30",
+    "historical_group_id": "dbe6e296-9520-4410-809f-45de3fcdf14c"
+  },
+  "authorization": { "welcome": true, "history": true, "rewards": false },
+  "welcome": {
+    "local_date": "2026-10-30",
+    "current_streak_days": 3,
+    "highlight_kind": "collection_summary"
+  },
+  "history": {
+    "group_id": "dbe6e296-9520-4410-809f-45de3fcdf14c",
+    "credited_reads": 42,
+    "exact_earned_dates_known": false
+  },
   "rewards": []
 }
 ```
@@ -234,6 +254,7 @@ SELECT pg_advisory_xact_lock(1623, %s); -- second key = authenticated INTEGER us
 Namespace 1623 is program-owned and distinct from the house single-bigint schema advisory lock. Do not hash Python strings or use process locks. Lock before reading mutable eligibility or acquiring article/Reading List/domain row locks. All cooperating visit, preference, credit, import, consent, claim, quiz, historical-batch and account-deletion writers use the same namespace. Pure GETs do not lock or write. Multi-account operations acquire ascending account IDs before any dependent rows; prefer bounded one-account transactions.
 
 Order within a transaction:
+
 1. Account advisory lock; confirm account exists/non-guest (deletion uses existing guards).
 2. User row when updating preferences/deleting; article rows in ascending ID with existing `FOR NO KEY UPDATE`, then Reading List rows by ID if needed. Do not weaken source authorization.
 3. UAS / daily-state / reader-evidence / activity-window / historical cursor rows as applicable (stable ascending keys for multiple rows).
@@ -270,11 +291,21 @@ First inserted read freezes provenance/effective date, including import-first/li
 ```typescript
 type Coverage = {
   status: 'partial' | 'unavailable' | 'unknown';
-  reasons: Array<'pre_measurement' | 'consent_gap' | 'global_gap_or_unknown' |
-    'timezone_change' | 'retention_unknown' | 'transport_incomplete'>;
+  reasons: Array<
+    | 'pre_measurement'
+    | 'consent_gap'
+    | 'global_gap_or_unknown'
+    | 'timezone_change'
+    | 'retention_unknown'
+    | 'transport_incomplete'
+  >;
 };
-type Activity = { total_ms: number; measured_since: string | null;
-  approximate: true; coverage: Coverage };
+type Activity = {
+  total_ms: number;
+  measured_since: string | null;
+  approximate: true;
+  coverage: Coverage;
+};
 ```
 
 Measured zero is not complete zero. Current env flag cannot prove past global availability: v1 does **not** emit `complete`. Missing day is unavailable/unknown, never implicitly zero. Show “measured active time; coverage incomplete.” Functional visit coverage is separate. <=400d frozen local-day aggregates; lifetime totals/awards survive aggregate pruning. No retroactive timezone rebucketing.
@@ -292,8 +323,13 @@ Live/import producers must all participate **before** protected historical horiz
 ### Recap, email and portability — #1628/#1630/#1631
 
 ```typescript
-type Period = { timezone: string; start_local_date: string; end_local_date: string;
-  start_at: string; end_at: string }; // half-open in both representations
+type Period = {
+  timezone: string;
+  start_local_date: string;
+  end_local_date: string;
+  start_at: string;
+  end_at: string;
+}; // half-open in both representations
 // Seven completed progress-local dates fixed from intended scheduled instant, before delay.
 type SaveRecap = { snapshot: StoredRecap; inserted: boolean };
 ```
@@ -318,7 +354,10 @@ Static source rechecked for this handoff: `db.py` existing users/achievements an
 
 The original contract-writing tranche defined DDL only and executed no runtime verification. Subsequent slice acceptance evidence belongs to each worker's handoff, not this design document. No operational historical inventory/backfill, production send or deployment is authorized by these contracts.
 
-## 10. Implemented #1625 completion handoff (uncommitted, review required)
+## 10. Implemented #1625 completion handoff (reviewed held dependency)
+
+This section records the intermediate #1625 handoff. Section 11 supersedes its temporary
+source-write and deferred-attribution behavior; the intermediate build must not ship alone.
 
 ### Storage and transaction entry
 
@@ -349,18 +388,18 @@ metadata or original recording date; unknown keys remain visible.
 
 ### Caller-origin matrix
 
-| Writer | Method / origin | Notes |
-| --- | --- | --- |
-| Modern `/state`, all shared triage/keyboard/row/bulk callers | manual / live | Default compatible declaration. |
-| Legacy `/status` read | legacy / live | Existing state mapping retained. |
-| Google Reader edit-tag | greader / live | Each authenticated declared read uses shared entry. |
-| Approved agent mark_done | agent / live | Existing approval boundary unchanged. |
-| Signed digest link | email / live | GET renders an accessible no-store confirmation, no workflow/credit mutation; POST verifies same token and declares Done. |
-| Listen queue ended | audio_finish / no credit | Validated modern origin; workflow-only, later explicit same-state Done can qualify. |
-| Reading List article Done | manual / live | Authorized raw URL uses credit v1, not Reading List normalization. Other kinds excluded. |
-| Personal archive restore | import / import | Resulting retained done_at OR current done; same item savepoint/outer account lock, including old/already-done IDs; foreign private sources skipped. Uploaded progress ignored. |
-| Third-party Reading List archived article | import / import | Self-reported completion, same URL dedup, unknown effective time, silent even on duplicate existing item. |
-| Authorized body evidence | automatic / live | Separate protocol below, no app-time inputs. |
+| Writer                                                       | Method / origin          | Notes                                                                                                                                                                           |
+| ------------------------------------------------------------ | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Modern `/state`, all shared triage/keyboard/row/bulk callers | manual / live            | Default compatible declaration.                                                                                                                                                 |
+| Legacy `/status` read                                        | legacy / live            | Existing state mapping retained.                                                                                                                                                |
+| Google Reader edit-tag                                       | greader / live           | Each authenticated declared read uses shared entry.                                                                                                                             |
+| Approved agent mark_done                                     | agent / live             | Existing approval boundary unchanged.                                                                                                                                           |
+| Signed digest link                                           | email / live             | GET renders an accessible no-store confirmation, no workflow/credit mutation; POST verifies same token and declares Done.                                                       |
+| Listen queue ended                                           | audio_finish / no credit | Validated modern origin; workflow-only, later explicit same-state Done can qualify.                                                                                             |
+| Reading List article Done                                    | manual / live            | Authorized raw URL uses credit v1, not Reading List normalization. Other kinds excluded.                                                                                        |
+| Personal archive restore                                     | import / import          | Resulting retained done_at OR current done; same item savepoint/outer account lock, including old/already-done IDs; foreign private sources skipped. Uploaded progress ignored. |
+| Third-party Reading List archived article                    | import / import          | Self-reported completion, same URL dedup, unknown effective time, silent even on duplicate existing item.                                                                       |
+| Authorized body evidence                                     | automatic / live         | Separate protocol below, no app-time inputs.                                                                                                                                    |
 
 First live/import winner permanently freezes provenance; a later distinct live read can cross
 a threshold using earlier import prerequisites. Silent import awards have no group/exact earned
@@ -433,3 +472,100 @@ Verification commands, raw logs, real-cookie Chromium evidence and actual limita
 `/Users/ioachimlihor/.bb/thread-storage/thr_dbjkmtks2a/`; the final handoff identifies exact files.
 Independent review, normal-hook publication and orchestrator merge gates are separate stages.
 No production writer activation, user-data historical operation, deployment or merge is claimed.
+
+## 11. Combined #1625+#1626 candidate — independent review still required
+
+### First-credit transaction and durable attribution
+
+`reading_progress/topics.py` owns taxonomy/rule v1, the eleven stable IDs/approved aliases,
+subject concepts, attribution and topic/breadth candidates. Label aliases normalize NFKC,
+casefold and collapsed whitespace; **aliases/tags/categories never establish eligibility**.
+Match title subject evidence OR two distinct summary subject concepts, with token/phrase
+boundaries. Synonyms within a concept count once. Title outranks summary, then ascending
+stable ID; select at most two. No automatic parent-topic expansion or remote AI call.
+Animal/mineral vocabulary rejects ambiguous Python/Ruby mentions only without explicit
+programming evidence (such as PyPI or Ruby on Rails); application-domain words cannot veto
+that evidence. TypeScripting is a bounded TypeScript inflection; bare Node in a title needs
+JavaScript ecosystem evidence in the summary. These context rules require independent
+calibration re-review, not implicit approval by test success.
+
+Every fresh `credit_read` insert calls `finalize_topics` immediately on the same connection
+and account lock **before any award call**. Zero is finalized too. Fresh writes never insert
+`user_read_credit_sources`, never classify a duplicate against later mutable article text,
+and cannot skip classification on manual/automatic/import/legacy/List/agent/GReader paths.
+The read, selected topic rows, finalization, threshold predicates and one `award_rewards`
+call with cause `read:<credit_id>` commit/rollback together. Read/topic/breadth candidates
+are combined even when all three thresholds cross in the same cause. Imports/historical
+origins remain silent and exact earned time unknown; existing awards/dates never change.
+
+Additive house DDL: `user_topic_credits(credit_id,topic_id,taxonomy_version,rule_version,
+evidence_code)` has PK `(credit_id,topic_id)`, credit CASCADE and `title|summary` evidence.
+The credit stores `topics_finalized_version` (rule) and `topics_taxonomy_version`, including
+zero-topic results. Credit->article remains SET NULL; account deletion cascades the entire
+personal chain. No retained source text or mutable count cache. Aggregate via the existing
+account credit index and topic credit PK. No initializer scan, retention protection, or
+operational historical work. The transitional source table remains for old-build fixture
+compatibility, not new writes: explicit finalization prefers and atomically deletes that
+frozen source. No runtime duplicate/GET/schema-init drain or operational drain was added.
+Because intermediate #1625 must not have been activated, an unexpected production pending
+source is an orchestrator rollout blocker, not permission to process user data.
+
+### Read-only DTO, UI and privacy
+
+Existing authenticated `GET /api/users/me/progress-rewards` adds `topics`:
+`{taxonomy_version,rule_version,attribution_cap:2,tracks,top_track_ids,breadth_count}`.
+Each of all eleven tracks has `{id,name,count,level,next_target,next_level,earned_levels}`.
+Counts are unbounded; next fields are NULL after 250. Top three are nonzero tracks sorted
+count DESC then ID ASC. Earned levels are shared permanent descriptors with original dates
+and provenance; `topic_id` identifies current catalog topic descriptors. Retired/unknown
+stored keys have no current topic ID and remain in the general collection. Current topic
+level descriptors render only once, in topic cards, not again as generic badges.
+Breadth descriptors remain the shared `breadth_3|5|10` collection entries, requiring three
+credits in each of that many distinct tracks. The topic fragment uses the existing rewards
+query/cache invalidation, account scoping and error/retry state; no second API/cache/host.
+
+`TopicProgress` supplies top-three/all-eleven toggle, exact progress, empty/final states,
+original earned dates, explicit reading-not-expertise wording and breadth progress.
+`RewardEmblem` supplies text topic symbols and progressively detailed level frames, with
+adjacent semantic text for color-independent meaning. No extra toast/celebration engine.
+Export-v2 adds owned topic credit rows; pending sources, if any, remain visible in export.
+Uploaded progress stays informational. Privacy describes functional permanence, unknown
+historical totals, account erasure and absence of new source snapshots.
+
+### Calibration evidence and publication gate
+
+`backend/tests/fixtures/topic_calibration_v1.json` contains 100 unique public-source examples,
+provenance, original title/publisher description (or explicitly missing description), human-
+readable provisional gold, and one public near miss per track. It is purposive English/HN
+technical sampling plus public natural-language near misses, **not random production data**.
+Publisher boilerplate/missing summaries, release/repository/PDF/video metadata, research vs
+release overlap and three-topic cap effects are explicitly retained, not relabeled to pass.
+All uncapped gold topics count in recall; cap misses are not discarded. Crafted unit fixtures
+supplement this corpus but do not count as empirical examples.
+
+Independent review `thr_ezmju7zmq2` adjudicated all 100 rows and required two substantive
+gold additions: JavaScript/TypeScript on the Node-to-Rails comparison and LLM on the career-
+impact story, retaining the existing subjects. Corrected gold exposed JS recall 6/8 (75%),
+below the unchanged 80% gate. Both corrections are now in the fixture with review provenance;
+all 100 URLs, near misses, uncapped gold and thresholds remain intact. Targeted classifier
+fixes yield an owner-rerun 85/86 selected pairs (98.837209%), JS recall 8/8 (100%), other
+per-track recall >=87.5%, >=7 positives and >=1 near miss each. Remaining research false
+positive and all six mismatches remain visible in worker evidence, including the cap miss.
+
+These are **development-corpus results, not held-out/deployment accuracy or a passed launch
+gate**. The same purposive HN-heavy corpus informed lexicon refinement. Initial failures,
+independent adjudication and owner correction logs are preserved in BB thread storage.
+Independent re-review of the actual corrected labels/rules is still required; the numeric
+regression and owner's full/real-browser passes do not substitute for that approval.
+
+**Do not publish/activate this combined candidate or release intermediate #1625 until that
+independent calibration/code review and required executed verification pass.** The sole
+implementation worker leaves this candidate uncommitted for those separate stages. No merge,
+operational inventory/drain/backfill, production sends or deployment occurred. Orchestrator
+owns PR #1633 integration, dependency order and the automatic-main-deploy scope conflict.
+
+Next owners: #1627 keeps automatic reader consent fences and separate app-time authority;
+#1628 extends the existing shared collection/descriptor/host, preserving `topic_id` dedup and
+unknown awards; #1629 uses `credit_read` with historical provenance and current immutable
+attribution, with no mutable-source replay or source snapshots; #1630/#1631 consume shared
+live earned times, never import recording times. No historical earned dates are invented.

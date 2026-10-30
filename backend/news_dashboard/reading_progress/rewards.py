@@ -14,6 +14,7 @@ from fastapi import HTTPException
 from psycopg.types.json import Jsonb
 
 from news_dashboard.db import connect, init_db
+from news_dashboard.reading_progress import topics
 
 DAILY_TARGETS = (3, 7, 14, 30, 100)
 READ_TARGETS = (1, 10, 50, 100, 500)
@@ -37,6 +38,23 @@ def reward_catalog() -> dict[str, tuple[int, str, str]]:
             read_key(n): (n, f"{n} articles read", f"Complete {n} qualifying article reads.")
             for n in READ_TARGETS
         },
+        **{
+            topics.topic_key(topic, n): (
+                n,
+                f"{name} · {level}",
+                f"Complete {n} qualifying reads in {name}.",
+            )
+            for topic, (name, _) in topics.TRACKS.items()
+            for n, level in topics.LEVELS
+        },
+        **{
+            f"breadth_{n}": (
+                n,
+                f"{n}-topic breadth",
+                f"Read at least 3 articles in each of {n} topics.",
+            )
+            for n in topics.BREADTH_TARGETS
+        },
         "first_quiz_passed": (1, "First quiz passed", "Submit a quiz with a correct answer."),
     }
 
@@ -55,6 +73,7 @@ def descriptor(row: Any) -> dict[str, Any]:
         title = "Legacy reading streak (7 days)"
     return {
         "key": key,
+        "topic_id": topics.reward_topic(key),
         "title": title,
         "description": definition[2] if definition else "Previously earned reward",
         "unlocked": True,
@@ -127,6 +146,7 @@ def daily_collection(user_id: int, *, database_url: str | None = None) -> dict[s
 
     init_db(database_url=database_url)
     with connect(database_url=database_url) as conn:
+        conn.execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY")
         user = account(conn, user_id)
         if user["is_guest"]:
             return {"items": [], "pending_reward_group_ids": []}
@@ -140,6 +160,7 @@ def daily_collection(user_id: int, *, database_url: str | None = None) -> dict[s
         items.extend(
             {
                 "key": key,
+                "topic_id": topics.reward_topic(key),
                 "title": title,
                 "description": description,
                 "unlocked": False,
@@ -166,6 +187,7 @@ def daily_collection(user_id: int, *, database_url: str | None = None) -> dict[s
             "reading_total": total,
             "next_reading_target": next((n for n in READ_TARGETS if n > total), None),
             "history_status": "reconciliation_pending",
+            "topics": topics.snapshot(conn, user_id, items),
         }
 
 

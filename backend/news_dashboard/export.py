@@ -299,6 +299,15 @@ def assemble_user_export(
             "daily_state": progress_rows("user_daily_visit_state", "user_id"),
             "daily_visits": progress_rows("user_daily_visits", "local_date"),
             "read_credits": progress_rows("user_read_credits", "recorded_at, id"),
+            "topic_credits": [
+                dict(row)
+                for row in conn.execute(
+                    """SELECT t.* FROM user_topic_credits t
+                       JOIN user_read_credits c ON c.id=t.credit_id
+                       WHERE c.user_id=%s ORDER BY t.credit_id,t.topic_id""",
+                    (user_id,),
+                ).fetchall()
+            ],
             "pending_attribution_sources": [
                 dict(row)
                 for row in conn.execute(
