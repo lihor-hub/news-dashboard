@@ -1,6 +1,6 @@
 # Progress program technical contracts (#1623 / #1628)
 
-Status: technical handoff for review before producer implementation; **not implemented or runtime-verified**. Product authority is [approved policy](progress-approved-policy.md) and [approval comment](https://github.com/lihor-hub/news-dashboard/issues/1623#issuecomment-6526348156). Those override obsolete discovery approval labels, not their numeric policy. This document fixes implementation names and seams, not new product policy.
+Status: sequenced technical handoff. The daily foundation is implemented in #1624; the completion seams in section 10 are implemented in the uncommitted #1625 slice pending independent review. Earlier design-only statements describe their original tranche, not a claim that all future domains are implemented. Product authority is [approved policy](progress-approved-policy.md) and [approval comment](https://github.com/lihor-hub/news-dashboard/issues/1623#issuecomment-6526348156). Those override obsolete discovery approval labels, not their numeric policy. This document fixes implementation names and seams, not new product policy.
 
 ## 1. Ownership and first delivery boundary
 
@@ -316,4 +316,120 @@ Before accepting #1624: real PostgreSQL boundary/concurrency/rollback tests (sam
 
 Static source rechecked for this handoff: `db.py` existing users/achievements and house advisory initializer; `reading_progress/service.py` catalog/GET writer/legacy UTC streak; `ingest/service.py` canonicalizer and connection-owning early-return transition; `article_visibility.py` authorization/lock; `user_settings/service.py` ZoneInfo validation and unfenced analytics preference; `import_export.py` outer restore transaction; `quizzes/service.py` submit transaction; `RequireAuth.tsx` and all protected `AppRouter.tsx` branches. Full discovery artifacts and independent review were reused, not repeated broad research. The required changes fit these existing seams; concurrency/schema/lifecycle correctness still needs implementation tests.
 
-This document defines DDL only; it did not initialize the app/schema, mutate DB data, run backend suites, backfill, send mail/push or claim browser/device/a11y verification. Bootstrap and secret-safe dedicated test DB readiness evidence are in the worker return artifact, not proof of vertical delivery.
+The original contract-writing tranche defined DDL only and executed no runtime verification. Subsequent slice acceptance evidence belongs to each worker's handoff, not this design document. No operational historical inventory/backfill, production send or deployment is authorized by these contracts.
+
+## 10. Implemented #1625 completion handoff (uncommitted, review required)
+
+### Storage and transaction entry
+
+`reading_progress/credits.py` freezes the v1 normalizer and SHA256 fixtures independently of
+future ingest-normalizer edits. `user_read_credits` has a bigserial credit ID, account/version/
+digest uniqueness, own article SET NULL, account CASCADE, first-wins origin/method/recorded_at/
+effective_at and nullable `topics_finalized_version`. A stored legacy badge never synthesizes
+credits. Lifetime totals count immutable rows; unread, archive and retention never decrement.
+The collection explicitly says historical reconciliation pending rather than presenting tracked
+zero as a complete lifetime total. No initialization/GET historical scan was added.
+
+`transition_article_state_on_connection(conn, article_id, state, *, user_id, method)` is the
+caller-connection entry; the public wrapper initializes before opening its transaction. The
+entry acquires `(1623,user_id)` before article `FOR NO KEY UPDATE`/UAS and does not commit.
+Same-state Done attempts credit; done→today restores workflow without revocation. Archive
+restore prelocks all authorized existing article rows in ascending ID before per-item savepoints,
+then processes URLs in stable sorted order for concurrent new inserts; URL conflicts use
+`DO NOTHING` plus lookup instead of taking an out-of-order no-op update lock. Per-item rollback
+and private-source checks remain unchanged. Guest workflow remains uncredited. Existing article/Reading List/quiz workflow and analytics opt-out
+use `lock_account(..., mutation=False)` and skip durable rewards for guests; dedicated progress
+mutations retain the default personal-account guard. This preserves existing guest workflow
+and consent rather than turning an award producer into an unrelated 403. `credit_read`/`credit_article` require the caller account lock and
+never initialize/connect/commit; insert, source freeze, total predicates, existing award insert
+and lazy live group are in the same transaction. Quiz submission uses the same award helper.
+`award_rewards` validates the daily/read/first-quiz catalog; GET achievement endpoints are now
+read-only. Retired open-streak/global-inbox earning stops without deleting any legacy award,
+metadata or original recording date; unknown keys remain visible.
+
+### Caller-origin matrix
+
+| Writer | Method / origin | Notes |
+| --- | --- | --- |
+| Modern `/state`, all shared triage/keyboard/row/bulk callers | manual / live | Default compatible declaration. |
+| Legacy `/status` read | legacy / live | Existing state mapping retained. |
+| Google Reader edit-tag | greader / live | Each authenticated declared read uses shared entry. |
+| Approved agent mark_done | agent / live | Existing approval boundary unchanged. |
+| Signed digest link | email / live | GET renders an accessible no-store confirmation, no workflow/credit mutation; POST verifies same token and declares Done. |
+| Listen queue ended | audio_finish / no credit | Validated modern origin; workflow-only, later explicit same-state Done can qualify. |
+| Reading List article Done | manual / live | Authorized raw URL uses credit v1, not Reading List normalization. Other kinds excluded. |
+| Personal archive restore | import / import | Resulting retained done_at OR current done; same item savepoint/outer account lock, including old/already-done IDs; foreign private sources skipped. Uploaded progress ignored. |
+| Third-party Reading List archived article | import / import | Self-reported completion, same URL dedup, unknown effective time, silent even on duplicate existing item. |
+| Authorized body evidence | automatic / live | Separate protocol below, no app-time inputs. |
+
+First live/import winner permanently freezes provenance; a later distinct live read can cross
+a threshold using earlier import prerequisites. Silent import awards have no group/exact earned
+time. One existing `hundred_articles_read` at 100; new keys are `articles_read_1/10/50/500`.
+`GET /progress-rewards` adds exact `reading_total`, `next_reading_target` and
+`history_status=reconciliation_pending` alongside the existing item/group contract. The
+existing ProgressSection renders this collection with vector/text earned/locked states,
+requirements, exact/unknown dates, empty/error/retry and next milestone.
+
+### Body protocol and privacy fence
+
+`POST /api/articles/{id}/reading-evidence` requires current real authorization and body_status
+ok plus a nonempty actual body (or its stored original-language variant). The client SHA256
+must match the selected current body. Start `{body_version}` carries zero evidence and issues
+a UUID token, sequence0, required_ms. Only one unexpired 20s lease/account; a second start
+returns409. Subsequent `{body_version,token,sequence,attentive_ms,end_ms,progress}` uses strict
+integer milliseconds <=15000, end<=attentive, finite progress0..1 and no unknown fields. Each
+sequence must be previous+1. Accepted duration is min(client amount, elapsed server time,15s);
+identical last-sequence replay returns the stored receipt without addition; changed replay,
+expired/foreign token, unauthorized/body-replaced article fail. Start after expiry can resume
+only the same article/body's pending aggregate; another body resets time. Pending logical TTL
+24h, existing daily telemetry cleanup removes expired rows; per-account request cleanup also
+runs. No reader aggregate/token/receipt is exported.
+
+Shared ArticleBody installs the hook for page and pane only after actual body hydration.
+250ms local geometry/focus/visibility/connection/idle sampling is aggregated into 10s evidence;
+no detailed interactions are sent. Geometry uses body bounds and ancestor scroll clipping,
+not header/summary/whole-reader progress. A short fully-visible body has progress1 but still
+requires the full time. Original-body changes reset the lease; server independently derives
+word threshold `clamp(30,120,ceil(words/8))`, using120s for unsupported unsegmented scripts.
+Final qualification also requires progress>=.9 and >=2000ms end evidence. Automatic completion
+uses shared credit and moves only today/later workflow to Done; it never overrides an explicit
+skip/archive, navigates or steals reader focus. No offline outbox/catch-up. Local evidence is
+not sent while hidden/unfocused/idle, and failed transport drops unsent time. Modified clients
+can simulate attention only up to bounded server elapsed time, as approved.
+
+Consent/global disable checked at issuance and acceptance; consent update takes account lock
+and deletes the reader row, invalidating every prior token even after reenable. #1627 must add
+its own consent-revision/window/gap state in this same transaction, not replace this fence.
+Manual progress remains independent. API/body focus approximations are not native-device parity.
+
+### Exact next-owner boundaries
+
+- **#1626:** Before any new production credit activation, install the calibrated classifier in
+  `credit_read`'s first-insert transaction; use frozen title/summary, including empty strings;
+  finalize version even for zero topics; delete its pending source atomically. Never reread
+  mutable article text for existing pending credits. This slice uses a separate temporary
+  `user_read_credit_sources(credit_id,title,summary)` with credit CASCADE specifically to
+  survive article retention and body replacement, not fake finalized zero. Source snapshots
+  are exported, account-erased and privacy-disclosed; they are not a permanent ledger copy.
+  This is the minimal transitional exception to the earlier no-title-copy design. A controlled
+  implementation-fixture drain is allowed; no operational historical backfill is authorized.
+  Add total/topic/breadth candidates to one cause `read:<credit_id>` and one shared award call;
+  do not create a second group engine. Rollout remains gated until calibration and integration.
+- **#1627:** Reuse the reader consent invalidation and account lock; generic active-time
+  accepted milliseconds can never qualify a read. Extend existing lifecycle, not the reader
+  hook, for app activity. Preserve connected/focused/body-only reader distinction.
+- **#1628:** Compose the existing collection/host and canonical destination. No independent
+  reading toast coordinator was added; live group IDs are ready for the shared coordinator.
+  Retain unknown descriptors and metadata; archive progress is informational. Existing archive
+  articles can independently earn import provenance, never restore uploaded awards or claims.
+- **#1629:** Consume the connection-taking credit helper with historical origin/unknown date,
+  frozen first attribution and same account lock. Implement cursors/introduction/eligibility
+  tooling; no horizon capture, retention pause/drain, inventory or dry-run/apply ran here.
+  Reconciliation status is deliberately pending until that owner has an authoritative state.
+- **#1630/#1631:** Read live effective/earned times for current-period outcomes, not recorded_at
+  of imports/legacy rewards. No recap/mail private-content outcome was implemented in #1625.
+
+Verification commands, raw logs, real-cookie Chromium evidence and actual limitations are in
+`/Users/ioachimlihor/.bb/thread-storage/thr_dbjkmtks2a/`; the final handoff identifies exact files.
+Independent review, normal-hook publication and orchestrator merge gates are separate stages.
+No production writer activation, user-data historical operation, deployment or merge is claimed.

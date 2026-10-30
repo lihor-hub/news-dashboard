@@ -10,8 +10,9 @@ from fastapi import (
     Depends,
     HTTPException,
     Query,
+    Request,
 )
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, HTMLResponse
 
 from news_dashboard.articles import service
 from news_dashboard.articles.models import (
@@ -32,6 +33,7 @@ from news_dashboard.ingest.service import (
     set_article_starred,
     transition_article_state,
 )
+from news_dashboard.reading_progress.reader import ReaderEvidence, accept_evidence
 from news_dashboard.shares.models import AddAnnotationRequest
 from news_dashboard.url_safety import UnsafeUrlError
 
@@ -39,20 +41,66 @@ router = APIRouter()
 public_router = APIRouter()
 
 
-@public_router.get("/api/articles/{article_id}/read")
-def mark_read_via_token(article_id: int, token: Annotated[str, Query()]) -> dict[str, Any]:
+@public_router.get("/api/articles/{article_id}/read", response_class=HTMLResponse)
+def confirm_read_via_token(article_id: int, token: Annotated[str, Query()]) -> HTMLResponse:
+    from html import escape
+    from urllib.parse import urlencode
+
+    from news_dashboard.digest import verify_read_token
+
+    if verify_read_token(article_id, token) is None:
+        raise HTTPException(status_code=403, detail="invalid or expired token")
+    action = escape(f"/api/articles/{article_id}/read?{urlencode({'token': token})}", quote=True)
+    return HTMLResponse(
+        '<!doctype html><html lang="en"><meta charset="utf-8">'
+        '<meta name="viewport" content="width=device-width, initial-scale=1">'
+        "<title>Confirm completed read</title><main><h1>Finished this article?</h1>"
+        "<p>Marking Done records a permanent qualifying read. Marking unread later "
+        "changes your list, not earned progress.</p>"
+        f'<form method="post" action="{action}"><button type="submit">'
+        "Confirm Done</button></form></main></html>",
+        # no-referrer makes browser form Origin null, rejected by the unchanged CSRF guard.
+        headers={"Cache-Control": "no-store", "Referrer-Policy": "same-origin"},
+    )
+
+
+@public_router.post("/api/articles/{article_id}/read", response_model=None)
+def mark_read_via_token(
+    article_id: int,
+    token: Annotated[str, Query()],
+    request: Request,
+) -> dict[str, Any] | HTMLResponse:
     from news_dashboard.digest import verify_read_token
 
     user_id = verify_read_token(article_id, token)
     if user_id is None:
         raise HTTPException(status_code=403, detail="invalid or expired token")
     try:
-        article = transition_article_state(article_id, "done", user_id=user_id)
+        article = transition_article_state(article_id, "done", user_id=user_id, method="email")
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     if not article:
         raise HTTPException(status_code=404, detail="article not found")
+    if "text/html" in request.headers.get("accept", ""):
+        return HTMLResponse(
+            '<!doctype html><html lang="en"><meta charset="utf-8">'
+            '<meta name="viewport" content="width=device-width, initial-scale=1">'
+            "<title>Read recorded</title><main><h1>Read recorded</h1>"
+            "<p>Recorded for the account that received this email. Sign in to that account "
+            "to view progress. Marking unread changes your list, not earned progress.</p>"
+            '<a href="/reading-dna#progress">View progress</a></main></html>',
+            headers={"Cache-Control": "no-store", "Referrer-Policy": "no-referrer"},
+        )
     return {"status": "marked_read", "article": article}
+
+
+@router.post("/api/articles/{article_id}/reading-evidence")
+def reading_evidence(
+    article_id: int,
+    payload: ReaderEvidence,
+    current_user: Annotated[dict[str, Any], Depends(require_auth)],
+) -> dict[str, Any]:
+    return accept_evidence(current_user["id"], article_id, payload)
 
 
 @router.get("/api/articles")
@@ -296,7 +344,9 @@ def update_status(
         )
 
     try:
-        article = transition_article_state(article_id, state, user_id=current_user["id"])
+        article = transition_article_state(
+            article_id, state, user_id=current_user["id"], method="legacy"
+        )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     if not article:
@@ -316,7 +366,12 @@ def update_state(
     background_tasks: BackgroundTasks,
 ) -> dict[str, Any]:
     try:
-        article = transition_article_state(article_id, payload.state, user_id=current_user["id"])
+        article = transition_article_state(
+            article_id,
+            payload.state,
+            user_id=current_user["id"],
+            method=payload.origin,
+        )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     if not article:

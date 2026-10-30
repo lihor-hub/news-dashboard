@@ -52,4 +52,9 @@ export const saveProgressPreferences = (
     body: JSON.stringify(patch),
   });
 export const fetchProgressRewards = () =>
-  requestJson<{ items: ProgressReward[] }>(`${base}/progress-rewards`);
+  requestJson<{
+    items: ProgressReward[];
+    reading_total?: number;
+    next_reading_target?: number | null;
+    history_status?: 'reconciliation_pending';
+  }>(`${base}/progress-rewards`);

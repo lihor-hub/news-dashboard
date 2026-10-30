@@ -92,6 +92,40 @@ uploaded archive; only validated progress preferences are restored. Account dele
 cascades these functional records. Existing delivered or forwarded email cannot be
 recalled or erased from recipients' mailboxes.
 
+## Permanent qualifying reads and optional automatic reading
+
+Manual Done (including authorized legacy, Google Reader and approved agent declarations)
+records one permanent qualifying read per account and versioned normalized URL identity.
+Article-kind Reading List items share that identity; other kinds and audio finishing alone
+do not qualify. Signed email links require a human confirmation POST; merely fetching the
+link does not record completion. Unread/Undo changes the list, never removes credit or badges.
+
+We retain a SHA-256 URL digest, provenance, recording time and any known live effective time
+until account deletion, even if article retention removes the article. This digest is
+pseudonymous and guessable, **not anonymous**. Different URLs for one story can count
+separately. Imported article completion evidence is self-reported, has unknown earned time,
+and earns silently; uploaded progress totals or reward claims are never trusted. Historical
+reconciliation is separately operated, not a scan performed by opening the collection.
+
+Automatic reading is optional analytics, separate from generic app-active time. It requires
+a loaded authorized body, visible focused connected reading with no five-minute idle gap,
+90% body progress, 30–120 attentive seconds based on body length, and two seconds at the end.
+This approximates attention, not comprehension. Unsupported word segmentation uses 120 seconds.
+No offline catch-up, external-page, summary-only or audio-only evidence qualifies. Consent and
+the instance analytics switch are checked server-side; opting out clears unfinished evidence
+but preserves functional manual progress and earned rewards. At most one aggregate reader
+lease per account stores a body hash, bounded durations, sequence and last bounded retry
+receipt, not a scroll trail or interaction log. Pending evidence becomes invalid after 24 hours
+and expired rows are removed by the existing telemetry cleanup and on the next reader request.
+
+During the sequenced topic integration, a separate account-owned pending source stores the
+first-credit title and summary (never the body or URL) so retention or later edits cannot
+reclassify the original read. The calibrated attribution producer consumes/deletes that
+source and freezes even a zero-topic result. This transitional build must not activate new
+production credit writers before that integration. Export includes credits and any pending
+attribution sources, never reader tokens or retry evidence. Account deletion cascades all of
+these records; article deletion clears its reference and unfinished evidence, not earned credit.
+
 ## Your data: export and deletion
 
 - **Download your data**: Settings → Data Export → "Download archive" (or

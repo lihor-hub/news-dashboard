@@ -386,8 +386,12 @@ def submit_quiz(
     db_path: Path | str | None = None,
     database_url: str | None = None,
 ) -> dict[str, Any]:
+    from news_dashboard.reading_progress.daily import lock_account, utc_now
+    from news_dashboard.reading_progress.rewards import award_rewards
+
     init_db(db_path, database_url=database_url)
     with connect(db_path, database_url=database_url) as conn:
+        user = lock_account(conn, user_id, mutation=False)
         row = conn.execute(
             "SELECT id, user_id, questions, score FROM user_quizzes WHERE id = %s AND user_id = %s",
             (quiz_id, user_id),
@@ -414,6 +418,22 @@ def submit_quiz(
             " submitted_at = NOW() WHERE id = %s AND user_id = %s",
             (score, json.dumps(submitted_answers), quiz_id, user_id),
         )
+        if score > 0 and not user["is_guest"]:
+            award_rewards(
+                conn,
+                user_id,
+                cause_key=f"quiz:{quiz_id}",
+                origin="live",
+                earned_at=utc_now(),
+                candidates=[
+                    {
+                        "key": "first_quiz_passed",
+                        "criteria_version": 1,
+                        "progress": 1,
+                        "target": 1,
+                    }
+                ],
+            )
 
     return {
         "quiz_id": quiz_id,

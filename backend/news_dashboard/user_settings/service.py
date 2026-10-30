@@ -156,8 +156,12 @@ def get_analytics_settings(user_id: int) -> dict[str, bool]:
 
 
 def update_analytics_settings(user_id: int, *, enabled: bool) -> dict[str, bool]:
-    """Persist per-user analytics consent."""
+    """Persist per-user analytics consent and invalidate article leases atomically."""
+    from news_dashboard.reading_progress.daily import lock_account
+
     with connect() as conn:
+        lock_account(conn, user_id, mutation=False)
+        conn.execute("DELETE FROM user_reader_evidence WHERE user_id=%s", (user_id,))
         conn.execute(
             "UPDATE users SET analytics_enabled = %s WHERE id = %s",
             (enabled, user_id),

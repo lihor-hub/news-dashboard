@@ -7,8 +7,6 @@ from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
-from psycopg.types.json import Jsonb
-
 from news_dashboard.db import connect, init_db
 
 QUALIFYING_ACTIVITY = "days with a finished article or article dwell event"
@@ -26,8 +24,8 @@ class AchievementDefinition:
 ACHIEVEMENTS: tuple[AchievementDefinition, ...] = (
     AchievementDefinition(
         key="seven_day_streak",
-        title="7-day streak",
-        description="Read on seven consecutive active days.",
+        title="Legacy reading streak (7 days)",
+        description="Retired criterion; previously earned rewards remain.",
         target=7,
         progress=lambda stats: stats["current_streak_days"],
     ),
@@ -47,8 +45,8 @@ ACHIEVEMENTS: tuple[AchievementDefinition, ...] = (
     ),
     AchievementDefinition(
         key="inbox_zero",
-        title="Inbox zero",
-        description="Clear every current article from Today.",
+        title="Inbox zero (retired)",
+        description="Retired criterion; previously earned rewards remain.",
         target=1,
         progress=lambda stats: 1 if stats["today_articles"] == 0 else 0,
     ),
@@ -161,8 +159,8 @@ def _achievement_stats(
             SELECT
               (
                 SELECT COUNT(*)
-                FROM user_article_state
-                WHERE user_id = %s AND state = 'done'
+                FROM user_read_credits
+                WHERE user_id = %s
               ) AS articles_read,
               (
                 SELECT COUNT(*)
@@ -193,23 +191,10 @@ def list_achievements(
 ) -> list[dict[str, Any]]:
     init_db(database_url=database_url)
     stats = _achievement_stats(user_id, now=now, database_url=database_url)
-    unlocked_now = [
-        definition for definition in ACHIEVEMENTS if definition.progress(stats) >= definition.target
-    ]
-
     with connect(database_url=database_url) as conn:
-        for definition in unlocked_now:
-            conn.execute(
-                """
-                INSERT INTO user_achievements(user_id, achievement_key, metadata)
-                VALUES (%s, %s, %s)
-                ON CONFLICT(user_id, achievement_key) DO NOTHING
-                """,
-                (user_id, definition.key, Jsonb({"progress": definition.progress(stats)})),
-            )
         rows = conn.execute(
             """
-            SELECT achievement_key, unlocked_at
+            SELECT *
             FROM user_achievements
             WHERE user_id = %s
             """,
@@ -217,7 +202,7 @@ def list_achievements(
         ).fetchall()
 
     unlocked = {row["achievement_key"]: row["unlocked_at"] for row in rows}
-    return [
+    items = [
         {
             "key": definition.key,
             "title": definition.title,
@@ -231,3 +216,8 @@ def list_achievements(
         }
         for definition in ACHIEVEMENTS
     ]
+    known = {definition.key for definition in ACHIEVEMENTS}
+    from news_dashboard.reading_progress.rewards import descriptor
+
+    items.extend(descriptor(row) for row in rows if row["achievement_key"] not in known)
+    return items

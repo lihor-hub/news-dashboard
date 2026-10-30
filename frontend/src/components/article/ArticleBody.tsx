@@ -1,4 +1,6 @@
+import { useRef } from 'react';
 import { AlertCircle, ExternalLink, Loader2 } from 'lucide-react';
+import { useQualifyingRead } from '@/hooks/useQualifyingRead';
 import { renderMarkdown } from '@/lib/renderMarkdown';
 import type { WorkflowArticle } from '@/lib/workflowTypes';
 
@@ -13,6 +15,16 @@ export function ArticleBody({
   showOriginal: boolean;
   onSelectText: () => void;
 }) {
+  const bodyRef = useRef<HTMLDivElement>(null);
+  const readingStatus = useQualifyingRead(
+    article.id,
+    !bodyLoading && article.bodyStatus === 'ok'
+      ? showOriginal && article.originalBody
+        ? article.originalBody
+        : (article.body ?? undefined)
+      : undefined,
+    bodyRef
+  );
   if (bodyLoading) {
     return (
       <div className="flex items-center gap-2 text-sm text-muted-foreground py-12">
@@ -42,15 +54,22 @@ export function ArticleBody({
   }
 
   return (
-    <div
-      className="reader-prose max-w-[70ch] text-reading md:text-[1.125rem]"
-      onMouseUp={onSelectText}
-      onKeyUp={onSelectText}
-      dangerouslySetInnerHTML={{
-        __html: renderMarkdown(
-          showOriginal && article.originalBody ? article.originalBody : article.body
-        ),
-      }}
-    />
+    <>
+      <p className="text-xs text-muted-foreground" role="status">
+        {readingStatus}
+      </p>
+      <div
+        ref={bodyRef}
+        data-qualifying-read-body
+        className="reader-prose max-w-[70ch] text-reading md:text-[1.125rem]"
+        onMouseUp={onSelectText}
+        onKeyUp={onSelectText}
+        dangerouslySetInnerHTML={{
+          __html: renderMarkdown(
+            showOriginal && article.originalBody ? article.originalBody : article.body
+          ),
+        }}
+      />
+    </>
   );
 }

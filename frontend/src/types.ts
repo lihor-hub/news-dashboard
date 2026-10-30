@@ -595,7 +595,7 @@ export interface Achievement {
   unlocked: boolean;
   unlocked_at: string | null;
   progress: number;
-  target: number;
+  target: number | null;
 }
 
 export interface RecommendationPreferences {
