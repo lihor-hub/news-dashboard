@@ -3,13 +3,14 @@ import { useNavigate, useLocation } from 'react-router';
 import { fetchMe, HttpError, sessionExpiredEvent } from '@/api';
 import { useAuth } from '@/contexts/auth';
 import { AppLogo } from './AppLogo';
+import { DailyProgress } from './DailyProgress';
 
 interface Props {
   children: ReactNode;
 }
 
 export function RequireAuth({ children }: Props) {
-  const { status, sessionExpired, setUser, setStatus, resetAuth } = useAuth();
+  const { user, status, sessionExpired, setUser, setStatus, resetAuth } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [startupError, setStartupError] = useState(false);
@@ -63,7 +64,8 @@ export function RequireAuth({ children }: Props) {
     );
   }
   if (sessionExpired) return <AuthStatusPanel title="Your session expired" />;
-  return <>{children}</>;
+  if (status !== 'authenticated' || !user) return null;
+  return user.is_guest ? <>{children}</> : <DailyProgress key={user.id}>{children}</DailyProgress>;
 }
 
 function isUnauthorized(error: unknown): boolean {

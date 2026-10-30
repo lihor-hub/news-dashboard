@@ -16,6 +16,7 @@ interface ChangelogResponse {
 
 export interface WhatsNewState {
   open: boolean;
+  ready: boolean;
   version: string;
   items: string[];
   dismiss: () => void;
@@ -23,6 +24,7 @@ export interface WhatsNewState {
 
 export function useWhatsNew(): WhatsNewState {
   const [open, setOpen] = useState(false);
+  const [ready, setReady] = useState(false);
   const [version, setVersion] = useState('');
   const [items, setItems] = useState<string[]>([]);
 
@@ -41,6 +43,9 @@ export function useWhatsNew(): WhatsNewState {
       })
       .catch(() => {
         // silently ignore — changelog is non-critical
+      })
+      .finally(() => {
+        if (!cancelled) setReady(true);
       });
     return () => {
       cancelled = true;
@@ -54,5 +59,5 @@ export function useWhatsNew(): WhatsNewState {
     setOpen(false);
   }, [version]);
 
-  return { open, version, items, dismiss };
+  return { open, ready, version, items, dismiss };
 }

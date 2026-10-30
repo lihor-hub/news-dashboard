@@ -101,6 +101,7 @@ describe('WhatsNewDialog', () => {
   function makeState(overrides?: Partial<ReturnType<typeof useWhatsNew>>) {
     return {
       open: true,
+      ready: true,
       version: '1.15.3',
       items: ['Show relevance score', 'Invalidate cache'],
       dismiss: vi.fn(),

@@ -70,6 +70,28 @@ in-app stats/analytics views. This data:
 - Is pruned automatically by a daily cleanup job after
   `ANALYTICS_RETENTION_DAYS` days (default `180`).
 
+## Functional daily progress
+
+Authenticated visible app visits store one saved-local calendar date, its timezone,
+first observation, whether it qualified for credit, and welcome consumption status.
+Daily streak counters and permanently earned rewards stay in PostgreSQL until account
+deletion. No device fingerprint, IP address, route log, or reading-history-derived
+visit backfill is used for this ledger. Guest visits do not create personal progress.
+
+This functional record is independent of optional analytics: turning analytics off,
+or disabling daily welcome popups or reward animations, does not stop daily credit.
+The two presentation preferences are independent and default on. Progress has its own
+saved timezone; changing it does not reschedule briefing email. Past dates stay frozen;
+travel can suppress a credit or restart a streak without removing the best or rewards.
+A welcome is consumed atomically across devices before display; a lost response or
+crash may lose feedback, but never earned progress. No offline retro-credit is recorded.
+
+Archive v2 includes account-scoped daily dates, counters, awards, presentation claims
+and progress preferences. Exported progress is informational, **not restored** from an
+uploaded archive; only validated progress preferences are restored. Account deletion
+cascades these functional records. Existing delivered or forwarded email cannot be
+recalled or erased from recipients' mailboxes.
+
 ## Your data: export and deletion
 
 - **Download your data**: Settings → Data Export → "Download archive" (or

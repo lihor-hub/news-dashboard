@@ -1,4 +1,5 @@
 // @vitest-environment happy-dom
+vi.mock('../components/ProgressSection', () => ({ ProgressSection: () => null }));
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';

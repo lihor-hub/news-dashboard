@@ -608,6 +608,24 @@ def _restore_preferences(conn: Any, user_id: int, preferences: Any) -> dict[str,
     if not isinstance(preferences, dict):
         return counts
 
+    progress = preferences.get("progress")
+    if progress is not None:
+        from news_dashboard.reading_progress.daily import (
+            ProgressPreferencesPatch,
+            update_preferences,
+        )
+
+        if not isinstance(progress, dict):
+            msg = "Progress preferences must be an object"
+            raise ArchiveImportError(msg)
+        try:
+            patch = ProgressPreferencesPatch.model_validate(
+                {k: v for k, v in progress.items() if k != "timezone_initialized"}
+            )
+        except ValueError as exc:
+            msg = "Invalid progress preferences"
+            raise ArchiveImportError(msg) from exc
+        update_preferences(conn, user_id, patch)
     sections = (
         _restore_recommendation_preferences(conn, user_id, preferences.get("recommendations")),
         _restore_onboarding(conn, user_id, preferences.get("onboarding")),
@@ -634,6 +652,9 @@ def restore_user_archive(
     validate_archive(payload)
 
     with connect(database_url=database_url) as conn:
+        from news_dashboard.reading_progress.daily import lock_account
+
+        lock_account(conn, user_id)
         articles = _restore_articles(conn, user_id, payload.get("articles") or [])
         briefings = _restore_briefings(conn, user_id, payload.get("briefings") or [])
         ai_memories = _restore_ai_memories(conn, user_id, payload.get("ai_memories") or [])

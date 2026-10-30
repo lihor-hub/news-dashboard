@@ -1,5 +1,12 @@
 import { lazy, Suspense } from 'react';
-import { createBrowserRouter, Navigate, Link, type RouteObject } from 'react-router';
+import {
+  createBrowserRouter,
+  Navigate,
+  Link,
+  useLocation,
+  useParams,
+  type RouteObject,
+} from 'react-router';
 import { RouterProvider } from 'react-router/dom';
 import { Loader2 } from 'lucide-react';
 import { FocusedArticleProvider } from './contexts/focusedArticle';
@@ -158,6 +165,13 @@ export function NotFound() {
   );
 }
 
+function LegacyProgressEntry({ briefing = false }: { briefing?: boolean }) {
+  const location = useLocation();
+  const { id } = useParams();
+  const path = briefing ? `/briefs/${encodeURIComponent(id ?? '')}` : '/settings';
+  return <Navigate to={`${path}${location.search}${location.hash}`} replace />;
+}
+
 // eslint-disable-next-line react-refresh/only-export-components
 export const routes: RouteObject[] = [
   {
@@ -231,6 +245,8 @@ export const routes: RouteObject[] = [
       },
       { path: 'briefs', element: withSuspense(BriefingsHistoryPage) },
       { path: 'briefs/:id', element: withSuspense(BriefingDetailPage) },
+      { path: 'briefings/:id', element: <LegacyProgressEntry briefing /> },
+      { path: 'settings/notifications', element: <LegacyProgressEntry /> },
       { path: 'topic-map', element: withSuspense(TopicMapPage) },
       { path: 'ai-stats', element: withSuspense(AiStatsPage) },
       {

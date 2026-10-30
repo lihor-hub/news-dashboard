@@ -356,7 +356,17 @@
   }
 }
 
+/* Portalled daily overlays must honor the same static-feedback choice as content. */
+body:has(.daily-welcome.progress-static) [data-state] {
+  animation: none !important;
+  transition: none !important;
+}
+
 @media (prefers-reduced-motion: reduce) {
+  body:has(.daily-welcome) [data-state] {
+    animation: none !important;
+    transition: none !important;
+  }
   :root {
     --duration-fast: 0ms;
     --duration-base: 0ms;

@@ -253,5 +253,6 @@ def auth_me(current_user: Annotated[dict[str, Any], Depends(require_auth)]) -> d
         "id": current_user["id"],
         "username": current_user["username"],
         "email": current_user.get("email"),
+        "is_guest": bool(current_user.get("is_guest", False)),
         "is_admin": bool(current_user["is_admin"]),
     }

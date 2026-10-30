@@ -266,7 +266,41 @@ def assemble_user_export(
         memories = _export_ai_memories(conn, user_id)
         memory_events = _export_ai_memory_events(conn, user_id)
         source_subscriptions = _export_source_subscriptions(conn, user_id)
+        from news_dashboard.reading_progress.daily import account
+        from news_dashboard.reading_progress.daily import preferences as progress_preferences
+
+        def progress_rows(table: str, order: str) -> list[dict[str, Any]]:
+            rows = conn.execute(
+                f"SELECT * FROM {table} WHERE user_id=%s ORDER BY {order}", (user_id,)
+            ).fetchall()
+            return [
+                {
+                    k: (
+                        v.isoformat()
+                        if hasattr(v, "isoformat")
+                        else str(v)
+                        if k in ("id", "reward_group_id") and v is not None
+                        else v
+                    )
+                    for k, v in dict(row).items()
+                    if k != "user_id"
+                }
+                for row in rows
+            ]
+
+        progress = {
+            "restore_notice": (
+                "Progress dates, rewards, counters and claims are informational "
+                "and are not restored. "
+                "Only validated progress preferences are restored."
+            ),
+            "daily_state": progress_rows("user_daily_visit_state", "user_id"),
+            "daily_visits": progress_rows("user_daily_visits", "local_date"),
+            "awards": progress_rows("user_achievements", "unlocked_at, achievement_key"),
+            "reward_groups": progress_rows("user_reward_groups", "recorded_at, id"),
+        }
         preferences = {
+            "progress": progress_preferences(account(conn, user_id)),
             "recommendations": _export_recommendation_preferences(conn, user_id),
             "onboarding": _export_onboarding(conn, user_id),
             "notifications": _export_notification_settings(conn, user_id),
@@ -282,4 +316,5 @@ def assemble_user_export(
         "ai_memory_events": memory_events,
         "source_subscriptions": source_subscriptions,
         "preferences": preferences,
+        "progress": progress,
     }
