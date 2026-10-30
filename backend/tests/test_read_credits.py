@@ -63,7 +63,10 @@ def test_same_state_unread_retention_and_first_source(reading_account: tuple[int
     first = rewards.daily_collection(uid)
     assert first["reading_total"] == 1
     assert first["next_reading_target"] == 10
-    assert [r["key"] for r in first["items"] if r["unlocked"]] == ["articles_read_1"]
+    assert {r["key"] for r in first["items"] if r["unlocked"]} == {
+        "articles_read_1",
+        "topic_python_1",
+    }
     transition_article_state(aid, "today", user_id=uid)
     transition_article_state(aid, "done", user_id=uid, method="greader")
     assert count() == 1
@@ -72,9 +75,13 @@ def test_same_state_unread_retention_and_first_source(reading_account: tuple[int
         row = conn.execute("SELECT * FROM user_read_credits").fetchone()
         assert row["article_id"] is None
         assert row["method"] == "manual"
-        source = conn.execute("SELECT * FROM user_read_credit_sources").fetchone()
-        assert source["title"] == "Python title"
-        assert source["summary"] == "first summary"
+        assert row["topics_finalized_version"] == 1
+        assert row["topics_taxonomy_version"] == 1
+        assert not conn.execute("SELECT * FROM user_read_credit_sources").fetchall()
+        assert (
+            conn.execute("SELECT topic_id FROM user_topic_credits").fetchone()["topic_id"]
+            == "python"
+        )
         daily.lock_account(conn, uid)
         assert not credits.credit_read(conn, uid, url="https://example.test/a", title="Changed")[
             "credit_inserted"
@@ -378,14 +385,33 @@ def test_three_way_automatic_manual_import_race(
             with connect() as conn:
                 daily.lock_account(conn, uid)
                 credits.credit_read(
-                    conn, uid, url="https://example.test/a", origin="import", method="import"
+                    conn,
+                    uid,
+                    url="https://example.test/a",
+                    title="Python title",
+                    origin="import",
+                    method="import",
                 )
 
     with ThreadPoolExecutor(max_workers=3) as pool:
         list(pool.map(write, ["automatic", "manual", "import"]))
     assert count() == 1
     result = rewards.daily_collection(uid)
-    assert len([r for r in result["items"] if r["unlocked"]]) == 1
+    assert {r["key"] for r in result["items"] if r["unlocked"]} == {
+        "articles_read_1",
+        "topic_python_1",
+    }
+    with connect() as conn:
+        credit = conn.execute("SELECT * FROM user_read_credits").fetchone()
+        assert credit["topics_finalized_version"] == credit["topics_taxonomy_version"] == 1
+        assert (
+            conn.execute("SELECT topic_id FROM user_topic_credits").fetchone()["topic_id"]
+            == "python"
+        )
+        assert not conn.execute("SELECT * FROM user_read_credit_sources").fetchall()
+        awards = conn.execute("SELECT * FROM user_achievements").fetchall()
+        assert all(award["origin"] == credit["origin"] for award in awards)
+        assert len({award["reward_group_id"] for award in awards}) == 1
 
 
 def test_archive_eligibility_unknown_date_silent_and_informational_progress(

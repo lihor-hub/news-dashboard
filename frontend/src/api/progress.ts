@@ -20,6 +20,7 @@ export interface ProgressPreferences {
 }
 export interface ProgressReward {
   key: string;
+  topic_id?: string | null;
   title: string;
   description: string;
   unlocked: boolean;
@@ -27,6 +28,23 @@ export interface ProgressReward {
   earned_at: string | null;
   recorded_at: string | null;
   origin: string | null;
+}
+export interface TopicTrack {
+  id: string;
+  name: string;
+  count: number;
+  level: string | null;
+  next_target: number | null;
+  next_level: string | null;
+  earned_levels: ProgressReward[];
+}
+export interface TopicProgress {
+  taxonomy_version: number;
+  rule_version: number;
+  attribution_cap: number;
+  tracks: TopicTrack[];
+  top_track_ids: string[];
+  breadth_count: number;
 }
 export interface Presentation {
   show: boolean;
@@ -54,6 +72,7 @@ export const saveProgressPreferences = (
 export const fetchProgressRewards = () =>
   requestJson<{
     items: ProgressReward[];
+    topics?: TopicProgress;
     reading_total?: number;
     next_reading_target?: number | null;
     history_status?: 'reconciliation_pending';

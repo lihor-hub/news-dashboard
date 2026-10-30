@@ -17,6 +17,7 @@ from news_dashboard.auth import create_user
 from news_dashboard.db import connect
 from news_dashboard.digest import _make_token
 from news_dashboard.main import SPAStaticFiles, app
+from news_dashboard.reading_progress import credits, daily  # noqa: A004
 
 pytestmark = [
     pytest.mark.postgres,
@@ -47,11 +48,23 @@ def test_read_to_badge_browser(pg_clean: str, monkeypatch: pytest.MonkeyPatch) -
                 (
                     f"https://example.test/read-{n}",
                     f"https://example.test/read-{n}",
-                    f"Live read article {n}",
+                    f"Live read article {n} " + {1: "Python", 2: "CSS", 3: "Ruby"}[n],
                 ),
             ).fetchone()["id"]
             for n in (1, 2, 3)
         ]
+    with connect() as conn:
+        daily.lock_account(conn, user["id"])
+        for title, total in (("Python", 9), ("CSS", 2), ("Ruby", 2)):
+            for n in range(total):
+                credits.credit_read(
+                    conn,
+                    user["id"],
+                    url=f"https://fixture.test/{title}/{n}",
+                    title=title,
+                    method="import",
+                    origin="import",
+                )
     root = Path(__file__).resolve().parents[2]
     dist = root / "frontend" / "dist"
     assert (dist / "index.html").exists(), "Build SPA first"
@@ -103,7 +116,9 @@ def test_read_to_badge_browser(pg_clean: str, monkeypatch: pytest.MonkeyPatch) -
         assert "READ_PROGRESS_LIVE_OK" in result.stdout
         with connect() as conn:
             rows = conn.execute(
-                "SELECT method FROM user_read_credits WHERE user_id=%s ORDER BY id", (user["id"],)
+                "SELECT method FROM user_read_credits WHERE user_id=%s "
+                "AND origin='live' ORDER BY id",
+                (user["id"],),
             ).fetchall()
             assert [row["method"] for row in rows] == ["manual", "automatic", "email"]
             assert (
@@ -114,6 +129,14 @@ def test_read_to_badge_browser(pg_clean: str, monkeypatch: pytest.MonkeyPatch) -
                 ).fetchone()["n"]
                 == 1
             )
+            topics = conn.execute(
+                "SELECT achievement_key,origin FROM user_achievements WHERE user_id=%s "
+                "AND achievement_key IN ('topic_python_10','breadth_3') ORDER BY achievement_key",
+                (user["id"],),
+            ).fetchall()
+            assert [row["achievement_key"] for row in topics] == ["breadth_3", "topic_python_10"]
+            assert all(row["origin"] == "live" for row in topics)
+            assert not conn.execute("SELECT * FROM user_read_credit_sources").fetchall()
     finally:
         server.should_exit = True
         thread.join(timeout=10)

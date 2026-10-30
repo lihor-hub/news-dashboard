@@ -6,6 +6,7 @@ from hashlib import sha256
 from typing import Any
 from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
+from news_dashboard.reading_progress import topics
 from news_dashboard.reading_progress.daily import utc_now
 from news_dashboard.reading_progress.rewards import READ_TARGETS, award_rewards, read_key
 
@@ -76,12 +77,7 @@ def credit_read(  # noqa: PLR0913 - caller-owned source/provenance, no hidden co
     }
     if row is None:
         return result
-    # Transitional first-credit source, consumed/deleted by calibrated #1626 attribution.
-    # Never classify later against changed article text or silently finalize zero topics.
-    conn.execute(
-        "INSERT INTO user_read_credit_sources(credit_id,title,summary) VALUES (%s,%s,%s)",
-        (row["id"], title or "", summary or ""),
-    )
+    topics.finalize_topics(conn, row["id"], title or "", summary or "")
     total = conn.execute(
         "SELECT COUNT(*) AS n FROM user_read_credits WHERE user_id=%s",
         (user_id,),
@@ -96,7 +92,8 @@ def credit_read(  # noqa: PLR0913 - caller-owned source/provenance, no hidden co
             {"key": read_key(n), "criteria_version": 1, "progress": total, "target": n}
             for n in READ_TARGETS
             if total >= n
-        ],
+        ]
+        + topics.candidates(conn, user_id),
     )
     return {**result, **rewards, "credit_inserted": True, "progress_changed": True}
 

@@ -118,12 +118,16 @@ lease per account stores a body hash, bounded durations, sequence and last bound
 receipt, not a scroll trail or interaction log. Pending evidence becomes invalid after 24 hours
 and expired rows are removed by the existing telemetry cleanup and on the next reader request.
 
-During the sequenced topic integration, a separate account-owned pending source stores the
-first-credit title and summary (never the body or URL) so retention or later edits cannot
-reclassify the original read. The calibrated attribution producer consumes/deletes that
-source and freezes even a zero-topic result. This transitional build must not activate new
-production credit writers before that integration. Export includes credits and any pending
-attribution sources, never reader tokens or retry evidence. Account deletion cascades all of
+Topic progression uses only the first qualifying read's title and summary, not your tags,
+interests or a remote AI service. At most two relevant tracks are frozen, including a result
+with no topics, with taxonomy/rule versions and a compact title/summary evidence code. New
+credits do not retain a title or summary copy. A transitional pending source, if present in
+an older build, must be consumed/deleted atomically using its original text, never later
+article text. No operational historical processing is performed automatically. Export includes
+owned credits, frozen topic attribution, awards and any transitional pending sources, never
+reader tokens or retry evidence. Uploaded progress remains informational, not reward authority.
+Counts and earned levels survive unread, content deletion and later classifier changes;
+historical totals remain incomplete pending reconciliation. Account deletion cascades all of
 these records; article deletion clears its reference and unfinished evidence, not earned credit.
 
 ## Your data: export and deletion

@@ -22,24 +22,26 @@ try {
   await page.evaluate((v) => localStorage.setItem('lastSeenVersion', v), version);
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
   await page.waitForURL('**/reading-dna#progress');
-  await page.getByText('No qualifying reads tracked yet.', { exact: false }).waitFor();
+  await page.getByText('Tracked qualifying reads:', { exact: false }).waitFor();
+  assert.match(await page.locator('#progress').innerText(), /Tracked qualifying reads: 13/);
   const manual = process.env.LIVE_READ_MANUAL_ID;
   const auto = process.env.LIVE_READ_AUTO_ID;
   await page.goto(`${base}/a/${manual}`);
   await page.getByRole('button', { name: 'Done', exact: true }).first().click();
   // Direct-reader Back crosses documents: the small workflow mutation must survive it.
   let manualTotal = 0;
-  for (let attempt = 0; attempt < 30 && manualTotal !== 1; attempt++) {
+  for (let attempt = 0; attempt < 30 && manualTotal !== 14; attempt++) {
     await page.waitForTimeout(100);
     manualTotal = (await (await context.request.get('/api/users/me/progress-rewards')).json())
       .reading_total;
   }
-  assert.equal(manualTotal, 1);
+  assert.equal(manualTotal, 14);
   await page.goto(`${base}/reading-dna#progress`);
-  await page.getByText('✓ Earned: 1 articles read', { exact: true }).waitFor();
-  assert.match(await page.locator('#progress').innerText(), /Tracked qualifying reads: 1/);
+  await page.getByText('✓ Earned: Python · Enthusiast.', { exact: false }).waitFor();
+  assert.match(await page.locator('#progress').innerText(), /Tracked qualifying reads: 14/);
+  assert.match(await page.locator('#progress').innerText(), /10 of 30 toward Regular/);
   await page.reload();
-  await page.getByText('✓ Earned: 1 articles read', { exact: true }).waitFor();
+  await page.getByText('✓ Earned: Python · Enthusiast.', { exact: false }).waitFor();
   // Explicit unread is a real authenticated compatibility call; it never revokes credit.
   assert.equal(
     (
@@ -63,7 +65,8 @@ try {
   await page.getByRole('button', { name: 'Undo', exact: true }).click();
   assert.equal((await undone).ok(), true);
   const one = await (await context.request.get('/api/users/me/progress-rewards')).json();
-  assert.equal(one.reading_total, 1);
+  assert.equal(one.reading_total, 14);
+  assert.equal(one.topics.tracks.find((t) => t.id === 'python').count, 10);
   await page.goto(`${base}/a/${auto}`);
   await page.locator('[data-qualifying-read-body]').waitFor();
   await page.bringToFront();
@@ -72,7 +75,7 @@ try {
   await page.waitForTimeout(2500);
   assert.equal(
     (await (await context.request.get('/api/users/me/progress-rewards')).json()).reading_total,
-    1
+    14
   );
   await page.getByText('Qualifying read recorded.', { exact: false }).waitFor({ timeout: 65000 });
   assert.match(page.url(), new RegExp(`/a/${auto}$`));
@@ -85,20 +88,27 @@ try {
   assert.match(page.url(), /\/today/);
   assert.equal(
     (await (await context.request.get('/api/users/me/progress-rewards')).json()).reading_total,
-    2
+    15
   );
   const emailPath = `/api/articles/${process.env.LIVE_READ_EMAIL_ID}/read?token=${encodeURIComponent(process.env.LIVE_READ_EMAIL_TOKEN)}`;
   assert.equal((await context.request.get(emailPath)).ok(), true);
   assert.equal(
     (await (await context.request.get('/api/users/me/progress-rewards')).json()).reading_total,
-    2
+    15
   );
   await page.goto(`${base}${emailPath}`);
   await page.getByRole('button', { name: 'Confirm Done', exact: true }).click();
   await page.getByRole('heading', { name: 'Read recorded', exact: true }).waitFor();
   await page.getByRole('link', { name: 'View progress', exact: true }).click();
   await page.getByText('Tracked qualifying reads:', { exact: false }).waitFor();
-  assert.match(await page.locator('#progress').innerText(), /Tracked qualifying reads: 3/);
+  assert.match(await page.locator('#progress').innerText(), /Tracked qualifying reads: 16/);
+  await page.getByText('✓ Earned: 3-topic breadth', { exact: true }).waitFor();
+  const allTopics = page.getByRole('button', { name: 'Show all topics' });
+  await allTopics.focus();
+  await page.keyboard.press('Enter');
+  assert.equal(await page.locator('#topic-tracks > li').count(), 11);
+  await page.getByRole('button', { name: 'Show top three topics' }).click();
+  assert.equal(await page.locator('#topic-tracks > li').count(), 3);
   await page.evaluate(readFileSync(require.resolve('axe-core/axe.min.js'), 'utf8'));
   const violations = await page.evaluate(
     async () =>
@@ -117,7 +127,7 @@ try {
   await page.locator('#progress').scrollIntoViewIfNeeded();
   if (storage) await page.screenshot({ path: `${storage}/read-collection-mobile.png` });
   console.log(
-    'READ_PROGRESS_LIVE_OK direct-manual/unread/SPA-retry/Undo=1; actual-time standalone automatic=2; actual-time pane reread=2; signed GET=2/human form POST=3; collection axe=0'
+    'READ_PROGRESS_LIVE_OK fixtures=13; manual=14/Python-Enthusiast; unread/SPA-retry/Undo=14; actual-time standalone automatic=15; actual-time pane reread=15; signed GET=15/human form POST=16/breadth3; all11/top3 keyboard; collection axe=0'
   );
 } catch (error) {
   console.log('FAILED_PAGE', await page.locator('body').innerText());

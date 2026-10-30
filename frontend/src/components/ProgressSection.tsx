@@ -12,6 +12,7 @@ import {
 import { SevenDayStrip } from './DailyProgress';
 import { Button } from './ui/button';
 import { RewardEmblem } from './RewardEmblem';
+import { TopicProgress } from './TopicProgress';
 
 export function ProgressSection() {
   const { user } = useAuth();
@@ -170,6 +171,7 @@ export function ProgressSection() {
               )}
             </div>
           )}
+          {rewards.data?.topics && <TopicProgress key={accountId} topics={rewards.data.topics} />}
           {rewards.isPending ? (
             <p>Loading rewards…</p>
           ) : rewards.isError ? (
@@ -181,30 +183,32 @@ export function ProgressSection() {
             </div>
           ) : (
             <ul className="grid gap-2 sm:grid-cols-2">
-              {rewards.data?.items.map((reward) => (
-                <li key={reward.key} className="rounded border p-3">
-                  <RewardEmblem target={reward.target} earned={reward.unlocked} />
-                  <p className="font-medium">
-                    {reward.unlocked ? '✓ Earned: ' : '◇ Locked: '}
-                    {reward.title}
-                  </p>
-                  <p className="text-sm">{reward.description}</p>
-                  {reward.unlocked && (
-                    <p className="text-xs text-muted-foreground">
-                      {reward.earned_at ? (
-                        <>
-                          <span>Earned </span>
-                          <time dateTime={reward.earned_at}>
-                            {new Date(reward.earned_at).toLocaleDateString()}
-                          </time>
-                        </>
-                      ) : (
-                        'Original earned date unknown; preserved reward.'
-                      )}
+              {rewards.data?.items
+                .filter((reward) => !reward.topic_id)
+                .map((reward) => (
+                  <li key={reward.key} className="rounded border p-3">
+                    <RewardEmblem target={reward.target} earned={reward.unlocked} />
+                    <p className="font-medium">
+                      {reward.unlocked ? '✓ Earned: ' : '◇ Locked: '}
+                      {reward.title}
                     </p>
-                  )}
-                </li>
-              ))}
+                    <p className="text-sm">{reward.description}</p>
+                    {reward.unlocked && (
+                      <p className="text-xs text-muted-foreground">
+                        {reward.earned_at ? (
+                          <>
+                            <span>Earned </span>
+                            <time dateTime={reward.earned_at}>
+                              {new Date(reward.earned_at).toLocaleDateString()}
+                            </time>
+                          </>
+                        ) : (
+                          'Original earned date unknown; preserved reward.'
+                        )}
+                      </p>
+                    )}
+                  </li>
+                ))}
             </ul>
           )}
         </>

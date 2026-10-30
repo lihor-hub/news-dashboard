@@ -655,8 +655,19 @@ POSTGRES_MULTIUSER_SCHEMA = [
         OR (origin <> 'live' AND effective_at IS NULL))
     )
     """,
+    """ALTER TABLE user_read_credits ADD COLUMN IF NOT EXISTS topics_taxonomy_version INTEGER""",
     """CREATE INDEX IF NOT EXISTS user_read_credits_period
        ON user_read_credits(user_id, effective_at)""",
+    """
+    CREATE TABLE IF NOT EXISTS user_topic_credits (
+      credit_id BIGINT NOT NULL REFERENCES user_read_credits(id) ON DELETE CASCADE,
+      topic_id TEXT NOT NULL,
+      taxonomy_version INTEGER NOT NULL CHECK (taxonomy_version > 0),
+      rule_version INTEGER NOT NULL CHECK (rule_version > 0),
+      evidence_code TEXT NOT NULL CHECK (evidence_code IN ('title', 'summary')),
+      PRIMARY KEY (credit_id, topic_id)
+    )
+    """,
     """
     CREATE TABLE IF NOT EXISTS user_reader_evidence (
       user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
