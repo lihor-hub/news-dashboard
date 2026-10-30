@@ -20,7 +20,7 @@ class AchievementResponse(BaseModel):
     unlocked: bool
     unlocked_at: str | None = None
     progress: int
-    target: int
+    target: int | None
 
 
 class AchievementsResponse(BaseModel):

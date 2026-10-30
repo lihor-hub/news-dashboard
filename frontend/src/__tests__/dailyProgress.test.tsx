@@ -81,6 +81,57 @@ afterEach(() => {
 });
 
 describe('daily visit protected host and home', () => {
+  it('shows permanent reading totals, next target, textual locked requirements and real dates', async () => {
+    vi.mocked(api.fetchProgressRewards).mockResolvedValue({
+      reading_total: 1,
+      next_reading_target: 10,
+      history_status: 'reconciliation_pending',
+      items: [
+        {
+          key: 'articles_read_1',
+          title: '1 articles read',
+          description: 'Complete 1 qualifying article reads.',
+          unlocked: true,
+          target: 1,
+          earned_at: '2026-01-01T12:00:00Z',
+          recorded_at: '2026-01-01T12:00:00Z',
+          origin: 'live',
+        },
+        {
+          key: 'articles_read_10',
+          title: '10 articles read',
+          description: 'Complete 10 qualifying article reads.',
+          unlocked: false,
+          target: 10,
+          earned_at: null,
+          recorded_at: null,
+          origin: null,
+        },
+      ],
+    });
+    renderHost('/reading-dna#progress');
+    expect(await screen.findByText('✓ Earned: 1 articles read')).toBeInTheDocument();
+    expect(screen.getByText('◇ Locked: 10 articles read')).toBeInTheDocument();
+    expect(screen.getByText('Complete 10 qualifying article reads.')).toBeInTheDocument();
+    expect(screen.getByText('Next reading milestone: 10 articles.')).toBeInTheDocument();
+    expect(screen.getByText(/not your complete lifetime total/)).toBeInTheDocument();
+    expect(
+      document.querySelector('time[datetime="2026-01-01T12:00:00Z"]')?.getAttribute('datetime')
+    ).toBe('2026-01-01T12:00:00Z');
+    expect(document.querySelector('svg[aria-hidden="true"]')).not.toBeNull();
+  });
+
+  it('distinguishes empty tracked reads and retryable errors instead of fabricating zero', async () => {
+    vi.mocked(api.fetchProgressRewards)
+      .mockRejectedValueOnce(new Error('offline'))
+      .mockResolvedValue({ items: [], reading_total: 0, next_reading_target: 1 });
+    renderHost('/reading-dna#progress');
+    const retry = await screen.findByRole('button', { name: 'Retry rewards' });
+    expect(screen.queryByText(/No qualifying reads tracked yet/)).not.toBeInTheDocument();
+    fireEvent.click(retry);
+    expect(await screen.findByText(/No qualifying reads tracked yet/)).toBeInTheDocument();
+  });
+
   it('shows a named static welcome, seven labeled dates, and Escape restores focus', async () => {
     renderHost();
     const control = screen.getByRole('button', { name: 'Reader control' });

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic import BaseModel, Field, field_validator
 
 
@@ -11,6 +13,7 @@ class StatusUpdate(BaseModel):
 
 class StateUpdate(BaseModel):
     state: str
+    origin: Literal["manual", "audio_finish"] = "manual"
 
 
 class StarUpdate(BaseModel):

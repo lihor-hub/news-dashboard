@@ -421,7 +421,7 @@ def _execute_tool(tool: str, article_id: int | None, *, user_id: int) -> str:
 
     try:
         if tool == "mark_done":
-            article = transition_article_state(article_id, "done", user_id=user_id)
+            article = transition_article_state(article_id, "done", user_id=user_id, method="agent")
         elif tool == "skip_article":
             article = transition_article_state(article_id, "skipped", user_id=user_id)
         elif tool == "archive_article":

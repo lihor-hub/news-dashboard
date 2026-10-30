@@ -42,6 +42,8 @@ EXPECTED_METHOD_PATHS = {
     ("PATCH", "/api/articles/{article_id}/later"),
     ("GET", "/api/articles/{article_id}/perspectives"),
     ("GET", "/api/articles/{article_id}/read"),
+    ("POST", "/api/articles/{article_id}/read"),
+    ("POST", "/api/articles/{article_id}/reading-evidence"),
     ("POST", "/api/articles/{article_id}/share"),
     ("PATCH", "/api/articles/{article_id}/star"),
     ("PATCH", "/api/articles/{article_id}/state"),

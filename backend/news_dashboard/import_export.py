@@ -152,17 +152,40 @@ def _resolve_article_id(conn: Any, item: dict[str, Any]) -> int | None:
         """
         INSERT INTO articles(url, canonical_url, title, source_slug, source_name, category, kind)
         VALUES (%s, %s, %s, %s, %s, %s, %s)
-        ON CONFLICT (url) DO UPDATE SET url = articles.url
+        ON CONFLICT (url) DO NOTHING
         RETURNING id
         """,
         (canonical_url, canonical_url, title, source_slug, source_name, category, kind),
     ).fetchone()
+    if row is None:
+        row = conn.execute("SELECT id FROM articles WHERE url = %s", (canonical_url,)).fetchone()
     return int(row["id"]) if row is not None else None
 
 
 def _restore_articles(conn: Any, user_id: int, articles: list[Any]) -> dict[str, int]:
     counts = {"added": 0, "updated": 0, "skipped": 0}
-    for item in articles:
+    urls = {
+        item["canonical_url"]
+        for item in articles
+        if isinstance(item, dict) and isinstance(item.get("canonical_url"), str)
+    }
+    # Accounts share article rows: lock existing IDs before any per-item savepoint,
+    # then resolve new URLs in one order to avoid unique-insert lock inversion too.
+    conn.execute(
+        """SELECT a.id FROM articles a JOIN sources s ON s.slug=a.source_slug
+           WHERE (a.canonical_url = ANY(%s) OR a.url = ANY(%s))
+             AND (s.owner_user_id IS NULL OR s.owner_user_id=%s)
+           ORDER BY a.id FOR UPDATE OF a""",
+        (list(urls), list(urls), user_id),
+    ).fetchall()
+    for item in sorted(
+        articles,
+        key=lambda item: (
+            item.get("canonical_url", "")
+            if isinstance(item, dict) and isinstance(item.get("canonical_url"), str)
+            else ""
+        ),
+    ):
         if not isinstance(item, dict):
             counts["skipped"] += 1
             continue
@@ -170,6 +193,15 @@ def _restore_articles(conn: Any, user_id: int, articles: list[Any]) -> dict[str,
             with conn.transaction():
                 article_id = _resolve_article_id(conn, item)
                 if article_id is None:
+                    counts["skipped"] += 1
+                    continue
+                authorized = conn.execute(
+                    """SELECT a.id FROM articles a JOIN sources s ON s.slug=a.source_slug
+                       WHERE a.id=%s AND (s.owner_user_id IS NULL OR s.owner_user_id=%s)
+                       FOR NO KEY UPDATE OF a""",
+                    (article_id, user_id),
+                ).fetchone()
+                if authorized is None:
                     counts["skipped"] += 1
                     continue
 
@@ -197,6 +229,18 @@ def _restore_articles(conn: Any, user_id: int, articles: list[Any]) -> dict[str,
                     restored_at=item.get("restored_at"),
                     updated_at=item.get("updated_at"),
                 )
+                evidence = conn.execute(
+                    """SELECT a.*, uas.state AS restored_state, uas.done_at AS restored_done_at
+                       FROM articles a JOIN user_article_state uas ON uas.article_id=a.id
+                       WHERE a.id=%s AND uas.user_id=%s""",
+                    (article_id, user_id),
+                ).fetchone()
+                if evidence and (
+                    evidence["restored_done_at"] or evidence["restored_state"] == "done"
+                ):
+                    from news_dashboard.reading_progress.credits import credit_article
+
+                    credit_article(conn, user_id, dict(evidence), method="import", origin="import")
                 counts["updated" if existing is not None else "added"] += 1
         except Exception:
             logger.exception("Failed to restore archived article state")

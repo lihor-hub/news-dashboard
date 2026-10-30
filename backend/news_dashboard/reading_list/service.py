@@ -151,7 +151,11 @@ def update_item(
     note: str | None = None,
     database_url: str | None = None,
 ) -> dict[str, Any] | None:
+    from news_dashboard.reading_progress.credits import credit_read
+    from news_dashboard.reading_progress.daily import lock_account
+
     with connect(database_url=database_url) as conn:
+        user = lock_account(conn, user_id, mutation=False)
         row = conn.execute(
             """
             UPDATE reading_list_items
@@ -167,6 +171,14 @@ def update_item(
             """,
             (status, note, status, status, item_id, user_id),
         ).fetchone()
+        if row and status == "done" and row["kind"] == "article" and not user["is_guest"]:
+            credit_read(
+                conn,
+                user_id,
+                url=row["url"],
+                title=row["title"] or "",
+                summary=row["summary"] or "",
+            )
     return _serialize(row) if row is not None else None
 
 
@@ -385,10 +397,14 @@ def import_items(
         raise ImportTooLargeError(message)
 
     init_db(database_url=database_url)
+    from news_dashboard.reading_progress.credits import credit_read
+    from news_dashboard.reading_progress.daily import lock_account
+
     added = 0
     skipped = 0
     failed = 0
     with connect(database_url=database_url) as conn:
+        user = lock_account(conn, user_id, mutation=False)
         for item in items:
             try:
                 _require_http_url(item.url)
@@ -434,4 +450,13 @@ def import_items(
                 added += 1
             else:
                 skipped += 1
+            if kind == "article" and item.status == "archived" and not user["is_guest"]:
+                credit_read(
+                    conn,
+                    user_id,
+                    url=item.url,
+                    title=item.title or "",
+                    method="import",
+                    origin="import",
+                )
     return {"added": added, "skipped": skipped, "failed": failed}

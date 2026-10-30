@@ -292,10 +292,22 @@ def assemble_user_export(
             "restore_notice": (
                 "Progress dates, rewards, counters and claims are informational "
                 "and are not restored. "
-                "Only validated progress preferences are restored."
+                "Only validated progress preferences are restored. Restored article completions "
+                "may independently establish silent import-provenance credit "
+                "with unknown earned dates."
             ),
             "daily_state": progress_rows("user_daily_visit_state", "user_id"),
             "daily_visits": progress_rows("user_daily_visits", "local_date"),
+            "read_credits": progress_rows("user_read_credits", "recorded_at, id"),
+            "pending_attribution_sources": [
+                dict(row)
+                for row in conn.execute(
+                    """SELECT s.credit_id,s.title,s.summary FROM user_read_credit_sources s
+                   JOIN user_read_credits c ON c.id=s.credit_id
+                   WHERE c.user_id=%s ORDER BY s.credit_id""",
+                    (user_id,),
+                ).fetchall()
+            ],
             "awards": progress_rows("user_achievements", "unlocked_at, achievement_key"),
             "reward_groups": progress_rows("user_reward_groups", "recorded_at, id"),
         }

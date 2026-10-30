@@ -321,7 +321,7 @@ def apply_edit_tag(user_id: int, article_id: int, *, add: list[str], remove: lis
     for tag in add:
         if tag == READ_TAG:
             with contextlib.suppress(ValueError):
-                transition_article_state(article_id, "done", user_id=user_id)
+                transition_article_state(article_id, "done", user_id=user_id, method="greader")
         elif tag == STARRED_TAG:
             with contextlib.suppress(ValueError):
                 set_article_starred(article_id, True, user_id=user_id)

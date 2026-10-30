@@ -196,7 +196,7 @@ export function ListenQueueProvider({ children }: { children: ReactNode }) {
     const handleEnded = () => {
       const article = queueRef.current[indexRef.current];
       if (article && markDoneRef.current) {
-        void patchArticleState(article.id, 'done', article.starred).catch(() => {
+        void patchArticleState(article.id, 'done', article.starred, 'audio_finish').catch(() => {
           // Best-effort — playback should still advance even if marking done fails.
         });
       }

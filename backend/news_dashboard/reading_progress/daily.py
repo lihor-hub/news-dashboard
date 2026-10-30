@@ -45,9 +45,9 @@ def utc_now() -> datetime:
     return datetime.now(timezone.utc)
 
 
-def lock_account(conn: Any, user_id: int) -> dict[str, Any]:
+def lock_account(conn: Any, user_id: int, *, mutation: bool = True) -> dict[str, Any]:
     conn.execute("SELECT pg_advisory_xact_lock(1623, %s)", (user_id,))
-    return account(conn, user_id, mutation=True)
+    return account(conn, user_id, mutation=mutation)
 
 
 def account(conn: Any, user_id: int, *, mutation: bool = False) -> dict[str, Any]:

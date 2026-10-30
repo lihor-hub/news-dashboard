@@ -418,6 +418,13 @@ def test_mark_read_via_token_succeeds_without_session(pg_clean: str) -> None:
     client = _fresh_client()
     resp = client.get(f"/api/articles/{article_id}/read", params={"token": token}, cookies={})
     assert resp.status_code == 200
+    assert "Confirm Done" in resp.text
+    with psycopg.connect(pg_clean) as conn:
+        credit_count = conn.execute("SELECT count(*) FROM user_read_credits").fetchone()
+        assert credit_count is not None
+        assert credit_count[0] == 0
+    resp = client.post(f"/api/articles/{article_id}/read", params={"token": token}, cookies={})
+    assert resp.status_code == 200
     assert resp.json()["status"] == "marked_read"
     with psycopg.connect(pg_clean) as conn:
         states = conn.execute(

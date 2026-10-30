@@ -11,6 +11,9 @@ import * as api from '../api';
 import * as workflowApi from '../api/workflowApi';
 import type { Article } from '../types';
 
+// These reader rendering tests have no authenticated account; evidence is tested separately.
+vi.mock('../contexts/auth', () => ({ useAuth: () => ({ user: null }) }));
+
 interface SavedOfflineArticle {
   id: string;
   title: string;

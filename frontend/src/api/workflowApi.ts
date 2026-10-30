@@ -141,11 +141,14 @@ export async function fetchTriageArticles(
 export async function patchArticleState(
   id: string,
   newState: WorkflowState,
-  _wasStarred: boolean
+  _wasStarred: boolean,
+  origin?: 'audio_finish'
 ): Promise<void> {
   await requestJson(`/api/articles/${id}/state`, {
     method: 'PATCH',
-    body: JSON.stringify({ state: newState }),
+    // Standalone reader actions can navigate back across a document boundary.
+    keepalive: true,
+    body: JSON.stringify({ state: newState, ...(origin ? { origin } : {}) }),
   });
 }
 
