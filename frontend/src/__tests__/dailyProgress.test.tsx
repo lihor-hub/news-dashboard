@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as api from '@/api/progress';
+import * as usersApi from '@/api';
 import { DailyProgress, SevenDayStrip } from '@/components/DailyProgress';
 import { ProgressSection } from '@/components/ProgressSection';
 
@@ -86,6 +87,53 @@ afterEach(() => {
 });
 
 describe('daily visit protected host and home', () => {
+  it('loads an owned legacy recap separately from lifetime progress', async () => {
+    blockers.ready = false;
+    const fetchRecap = vi.spyOn(usersApi, 'fetchRecap').mockResolvedValue({
+      id: 99,
+      user_id: 42,
+      week_start: '2026-01-01',
+      created_at: '2026-01-08T12:00:00Z',
+      narrative: null,
+      data: {
+        week_start: '2026-01-01',
+        week_end: '2026-01-07',
+        generated_at: '2026-01-08T12:00:00Z',
+        articles_read: 1,
+        minutes_read: 2,
+        current_streak_days: 0,
+        categories: [],
+        sources: [],
+      },
+    });
+    renderHost('/reading-dna?recap=99#progress');
+    await screen.findByText('This legacy recap has no frozen progress measurements.');
+    expect(fetchRecap).toHaveBeenCalledExactlyOnceWith(99);
+    expect(
+      screen.getByRole('heading', { name: 'Lifetime progress (separate from weekly snapshots)' })
+    ).toBeInTheDocument();
+    expect(screen.queryByText('Loading frozen weekly progress…')).not.toBeInTheDocument();
+  });
+
+  it('shows unavailable detail without replacing it with lifetime reward detail', async () => {
+    blockers.ready = false;
+    const fetchRecap = vi.spyOn(usersApi, 'fetchRecap').mockRejectedValue(new Error('404'));
+    renderHost('/reading-dna?recap=99&reward=articles_read_1#progress');
+    expect(await screen.findByRole('status')).toHaveTextContent('This recap is unavailable.');
+    expect(fetchRecap).toHaveBeenCalledExactlyOnceWith(99);
+    expect(screen.queryByRole('heading', { name: 'Reward not found' })).not.toBeInTheDocument();
+    expect(
+      screen.getByRole('heading', { name: 'Lifetime progress (separate from weekly snapshots)' })
+    ).toBeInTheDocument();
+  });
+
+  it.each(['0', 'bad', '9007199254740992'])('does not request invalid recap %s', async (id) => {
+    blockers.ready = false;
+    const fetchRecap = vi.spyOn(usersApi, 'fetchRecap');
+    renderHost(`/reading-dna?recap=${id}#progress`);
+    expect(await screen.findByRole('status')).toHaveTextContent('This recap is unavailable.');
+    expect(fetchRecap).not.toHaveBeenCalled();
+  });
   it('retains a completed historical summary with unknown dates and incomplete totals', async () => {
     blockers.ready = false;
     vi.mocked(api.fetchProgressRewards).mockResolvedValue({

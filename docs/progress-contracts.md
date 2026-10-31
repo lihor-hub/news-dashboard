@@ -862,6 +862,15 @@ publication, dependency order, required checks and automatic-main-deploy scope c
 
 ## 15. #1630 frozen weekly recap implementation candidate
 
+Postpublication coverage repair: PR #1639's reviewed runtime remains `1cd296ea` unchanged.
+The uncommitted repair adds only regression tests for period-end availability, mixed-zone
+coverage, invalid generation time, owner API transport, selected-detail failures, empty/frozen
+reward detail, and keyboard history pagination/retry. No DTO, DDL, privacy or next-owner seam
+below changes. Exact baseline-matched local coverage projection and executed evidence are in
+`thr_v4ejftmarj/1630-coverage-repair-handoff.md` thread storage. Next: independent review and
+verification, then orchestrator-owned stack integration and fresh exact-head CI/Codecov;
+local projection is not a remote green gate or permission to merge/deploy.
+
 Built atop reviewed #1629 `cf1b59bf`, with stacked dependency ancestry preserved. This is
 an uncommitted implementation candidate for **next independent review**, not independent
 approval, publication, merge, deployment or parent #1623 completion. Executed evidence and

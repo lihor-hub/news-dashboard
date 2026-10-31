@@ -126,6 +126,62 @@ def test_invalid_internal_period_does_not_initialize_saved_zone(owner: int) -> N
         )
 
 
+def test_naive_generation_does_not_initialize_saved_zone(owner: int) -> None:
+    with pytest.raises(ValueError, match="now must be timezone aware"):
+        service.assemble_weekly_recap(owner, now=datetime(2026, 3, 9))  # noqa: DTZ001
+    with connect() as conn:
+        assert (
+            conn.execute("SELECT progress_timezone FROM users WHERE id=%s", (owner,)).fetchone()[
+                "progress_timezone"
+            ]
+            is None
+        )
+
+
+def test_observations_starting_at_period_end_are_unavailable(owner: int) -> None:
+    period = recap_period(SCHEDULED, "America/New_York")
+    with connect() as conn:
+        conn.execute(
+            """INSERT INTO user_daily_visits(user_id,local_date,timezone,first_visited_at)
+            VALUES (%s,%s,%s,%s)""",
+            (owner, period["end_local_date"], period["timezone"], period["end_at"]),
+        )
+        conn.execute(
+            "INSERT INTO user_activity_totals(user_id,measured_since) VALUES (%s,%s)",
+            (owner, period["end_at"]),
+        )
+        progress = progress_snapshot(conn, owner, period)
+    assert progress["days_visited"] is None
+    assert progress["active_seconds"] is None
+    for metric in ("visits", "active_time"):
+        assert progress["coverage"][metric]["status"] == "unavailable"
+        assert progress["coverage"][metric]["measured_from"] is None
+    assert progress["rewards"] == []
+
+
+def test_mixed_zone_rows_and_day_flags_disclose_incomplete_coverage(owner: int) -> None:
+    with connect() as conn:
+        seed(conn, owner)
+        # Old observations need not have a timezone-change flag; the rows are evidence too.
+        conn.execute("UPDATE user_activity_totals SET coverage_flags=1 WHERE user_id=%s", (owner,))
+        conn.execute("UPDATE user_activity_days SET coverage_flags=25 WHERE user_id=%s", (owner,))
+        progress = progress_snapshot(conn, owner, recap_period(SCHEDULED, "America/New_York"))
+    assert progress["days_visited"] == 1
+    assert progress["active_seconds"] == 59
+    assert progress["coverage"]["visits"]["reasons"] == [
+        "frozen_observations_only",
+        "timezone_change",
+    ]
+    assert set(progress["coverage"]["active_time"]["reasons"]) == {
+        "global_gap_or_unknown",
+        "transport_incomplete",
+        "retention_unknown",
+        "missing_days",
+        "timezone_change",
+    }
+    assert progress["coverage"]["active_time"]["status"] == "partial"
+
+
 def test_progress_delay_provenance_partial_frozen_and_late(owner: int) -> None:
     with connect() as conn:
         seed(conn, owner)

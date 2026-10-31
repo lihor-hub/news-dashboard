@@ -108,6 +108,29 @@ describe('frozen recap progress', () => {
       '/recap?recap=99'
     );
   });
+  it('keeps empty measured weeks distinct from unavailable tracking and offers weekly detail', () => {
+    const recap = fixture(0, 0);
+    recap.data.progress!.rewards = [];
+    show(recap);
+    expect(screen.getByText(/0 rewards earned in this period/)).toBeInTheDocument();
+    expect(screen.getByText(/0 minutes measured/)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'View weekly progress' })).toHaveAttribute(
+      'href',
+      '/reading-dna?recap=99#progress'
+    );
+    expect(
+      screen.queryByText('Progress tracking was not available for this period.')
+    ).not.toBeInTheDocument();
+  });
+  it('focuses a missing frozen reward without substituting a current catalog reward', () => {
+    show(fixture(), true, 'not-in-snapshot');
+    expect(screen.getByRole('heading', { name: 'Reward not found in this recap' })).toHaveFocus();
+    expect(screen.getAllByRole('listitem')).toHaveLength(4);
+    expect(screen.getByRole('link', { name: 'Back to this recap' })).toHaveAttribute(
+      'href',
+      '/recap?recap=99'
+    );
+  });
   it('loads selected detail even when not in the last 12 list and hides legacy minutes for v2', async () => {
     vi.mocked(api.fetchRecaps).mockResolvedValue([]);
     vi.mocked(api.fetchRecap).mockResolvedValue(fixture());
