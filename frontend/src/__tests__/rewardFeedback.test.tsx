@@ -171,7 +171,7 @@ it('atomic welcome/history waits before live feedback; summary is not live autho
   await screen.findByRole('dialog');
   expect(api.claimDailyWelcome).toHaveBeenCalledExactlyOnceWith(daily.local_date, 'intro');
   expect(api.claimRewardGroup).not.toHaveBeenCalled();
-  expect(screen.getByText(/History added: 42/)).toBeTruthy();
+  expect(screen.getByText(/Historical credit: 42/)).toBeTruthy();
   expect(screen.queryByText(/From your recent collection/)).toBeNull();
   fireEvent.click(screen.getByRole('button', { name: 'Continue reading' }));
   await screen.findByText('Progress earned');

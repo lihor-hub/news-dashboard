@@ -144,6 +144,14 @@ pseudonymous and guessable, **not anonymous**. Different URLs for one story can 
 separately. Imported article completion evidence is self-reported, has unknown earned time,
 and earns silently; uploaded progress totals or reward claims are never trusted. Historical
 reconciliation is separately operated, not a scan performed by opening the collection.
+It uses retained account completion evidence (a saved completion date regardless of current
+list state, or current Done without a date), never reconstructs past visits or active time,
+and never treats uploaded dates as exact historical earned dates. Its account-owned policy,
+processing cutoff, protected source horizon, cursor and aggregate summary remain until account
+deletion. The summary stays in Progress after the one-time introduction is consumed. Export
+includes informational reconciliation state, not an operational protection reference; uploaded
+operator cursors, counters and claims are never restored. Already-deleted evidence cannot be
+recovered, so even a completed reconciliation may have incomplete lifetime totals.
 
 Automatic reading is optional analytics, separate from generic app-active time. It requires
 a loaded authorized body, visible focused connected reading with no five-minute idle gap,
@@ -165,7 +173,7 @@ article text. No operational historical processing is performed automatically. E
 owned credits, frozen topic attribution, awards and any transitional pending sources, never
 reader tokens or retry evidence. Uploaded progress remains informational, not reward authority.
 Counts and earned levels survive unread, content deletion and later classifier changes;
-historical totals remain incomplete pending reconciliation. Account deletion cascades all of
+historical totals may remain incomplete even after reconciliation. Account deletion cascades all of
 these records; article deletion clears its reference and unfinished evidence, not earned credit.
 
 ## Your data: export and deletion

@@ -154,6 +154,7 @@ def award_rewards(
 
 def daily_collection(user_id: int, *, database_url: str | None = None) -> dict[str, Any]:
     from news_dashboard.reading_progress.daily import account
+    from news_dashboard.reading_progress.history import snapshot
 
     init_db(database_url=database_url)
     with connect(database_url=database_url) as conn:
@@ -199,13 +200,17 @@ def daily_collection(user_id: int, *, database_url: str | None = None) -> dict[s
         total = conn.execute(
             "SELECT COUNT(*) AS n FROM user_read_credits WHERE user_id=%s", (user_id,)
         ).fetchone()["n"]
+        reconciliation = snapshot(conn, user_id)
         return {
             "items": items,
             "pending_reward_group_ids": [str(r["id"]) for r in pending],
             "historical_group_id": str(history["id"]) if history else None,
             "reading_total": total,
             "next_reading_target": next((n for n in READ_TARGETS if n > total), None),
-            "history_status": "reconciliation_pending",
+            "history_status": (
+                reconciliation["status"] if reconciliation else "reconciliation_pending"
+            ),
+            "historical_reconciliation": reconciliation,
             "topics": topics.snapshot(conn, user_id, items),
         }
 
@@ -223,7 +228,7 @@ def claim_reward(
         ).fetchone()
         if not group:
             raise HTTPException(404, "Not found")
-        if group["kind"] != "live":
+        if group["kind"] != "live" and not acknowledge:
             raise HTTPException(409, "wrong_claim_kind")
         if acknowledge:
             if not group["claimed_at"]:

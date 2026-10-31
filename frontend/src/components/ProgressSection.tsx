@@ -205,10 +205,34 @@ export function ProgressSection() {
                 Marking unread changes your list, not earned progress. Audio finishing alone does
                 not count. Article-kind Reading List items count; other kinds do not.
               </p>
-              {rewards.data.history_status === 'reconciliation_pending' && (
+              {rewards.data.historical_reconciliation?.status === 'complete' && (
+                <section aria-label="Historical reading summary" className="rounded border p-3">
+                  <h4 className="font-medium">Historical reading credit</h4>
+                  <p>
+                    {rewards.data.historical_reconciliation.credited_reads} qualifying reads added
+                    from retained completion evidence.{' '}
+                    {rewards.data.historical_reconciliation.preserved_rewards} existing rewards
+                    preserved.
+                  </p>
+                  <p className="text-sm text-muted-foreground">
+                    Original earned dates are unknown. Processing completed{' '}
+                    {rewards.data.historical_reconciliation.completed_at && (
+                      <time dateTime={rewards.data.historical_reconciliation.completed_at}>
+                        {new Date(
+                          rewards.data.historical_reconciliation.completed_at
+                        ).toLocaleDateString()}
+                      </time>
+                    )}
+                    . Deleted evidence cannot be recovered, so totals may be incomplete. No past
+                    visits or active time were reconstructed.
+                  </p>
+                </section>
+              )}
+              {rewards.data.history_status !== 'complete' && (
                 <p className="text-sm text-muted-foreground">
-                  Historical reconciliation is pending. This is not your complete lifetime total.
-                  All existing rewards remain preserved.
+                  Historical reconciliation is{' '}
+                  {rewards.data.history_status === 'running' ? 'in progress' : 'pending'}. This is
+                  not your complete lifetime total. All existing rewards remain preserved.
                 </p>
               )}
             </div>
