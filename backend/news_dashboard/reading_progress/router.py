@@ -7,7 +7,7 @@ from typing import Annotated, Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, BeforeValidator, ConfigDict
 
 from news_dashboard.auth import require_auth
 from news_dashboard.reading_progress import activity, daily, rewards, service
@@ -22,14 +22,28 @@ class EmptyRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+def exact_visit_date(value: Any) -> date:
+    if not isinstance(value, str) or len(value) != 10:
+        msg = "Use an ISO calendar date (YYYY-MM-DD)"
+        raise ValueError(msg)
+    parsed = date.fromisoformat(value)
+    if parsed.isoformat() != value:
+        msg = "Use an ISO calendar date (YYYY-MM-DD)"
+        raise ValueError(msg)
+    return parsed
+
+
+VisitDate = Annotated[date, BeforeValidator(exact_visit_date)]
+
+
 class WelcomeClaim(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    expected_visit_date: date
+    expected_visit_date: VisitDate
 
 
 class PresentationClaim(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    expected_visit_date: date | None
+    expected_visit_date: VisitDate | None
     historical_group_id: UUID | None = None
 
 

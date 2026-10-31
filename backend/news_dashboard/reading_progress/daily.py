@@ -10,7 +10,7 @@ from fastapi import HTTPException
 from pydantic import BaseModel, ConfigDict, StrictBool, field_validator
 
 from news_dashboard.db import connect, init_db
-from news_dashboard.reading_progress.rewards import award_rewards
+from news_dashboard.reading_progress.rewards import award_rewards, descriptor
 
 
 class ProgressPreferencesPatch(BaseModel):
@@ -256,6 +256,17 @@ def save_preferences(
         return update_preferences(conn, user_id, patch)
 
 
+def validate_history_summary(summary: Any) -> None:
+    if (
+        not isinstance(summary, dict)
+        or set(summary) - {"credited_reads", "exact_earned_dates_known"}
+        or type(summary.get("credited_reads")) is not int
+        or not 0 <= summary["credited_reads"] <= 9223372036854775807
+        or summary.get("exact_earned_dates_known", False) is not False
+    ):
+        raise HTTPException(409, "invalid_history_summary")
+
+
 def claim_presentation(  # noqa: PLR0911 - explicit losing receipts preserve bundle semantics
     user_id: int,
     expected_visit_date: date | None,
@@ -276,6 +287,7 @@ def claim_presentation(  # noqa: PLR0911 - explicit losing receipts preserve bun
                 raise HTTPException(404, "Not found")
             if history["kind"] != "historical_intro":
                 raise HTTPException(409, "wrong_claim_kind")
+            validate_history_summary(history["summary"])
         elif expected_visit_date is None:
             raise HTTPException(422, "History target required for inline mode")
         now = utc_now()
@@ -313,7 +325,25 @@ def claim_presentation(  # noqa: PLR0911 - explicit losing receipts preserve bun
                 (now, user_id, expected_visit_date),
             )
             result["authorization"]["welcome"] = True
-            result["welcome"] = {**daily, "highlight_kind": "collection_summary"}
+            recent = conn.execute(
+                """SELECT * FROM user_achievements WHERE user_id=%s AND origin='live'
+                   AND (earned_at AT TIME ZONE %s)::date >= %s
+                   AND (earned_at AT TIME ZONE %s)::date < %s
+                   ORDER BY (achievement_key LIKE 'topic_%%') DESC, earned_at DESC, id DESC
+                   LIMIT 1""",
+                (
+                    user_id,
+                    daily["timezone"],
+                    expected_visit_date - timedelta(days=7),
+                    daily["timezone"],
+                    expected_visit_date,
+                ),
+            ).fetchone()
+            result["welcome"] = {
+                **daily,
+                "highlight_kind": "collection_summary",
+                "recent_reward": descriptor(recent) if recent else None,
+            }
         elif user["daily_welcome_enabled"]:
             return result
         if history and history["claimed_at"] is None:
@@ -322,7 +352,11 @@ def claim_presentation(  # noqa: PLR0911 - explicit losing receipts preserve bun
                 (now, historical_group_id, user_id),
             )
             result["authorization"]["history"] = True
-            result["history"] = {"group_id": str(historical_group_id), **history["summary"]}
+            result["history"] = {
+                "group_id": str(historical_group_id),
+                "credited_reads": history["summary"]["credited_reads"],
+                "exact_earned_dates_known": False,
+            }
         if any(result["authorization"].values()):
             return {**result, "show": True, "reason": "claimed"}
         return {**result, "reason": "already_consumed"}

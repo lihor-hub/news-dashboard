@@ -2,6 +2,7 @@ import { requestJson } from './core';
 
 export interface DailyStreak {
   available: boolean;
+  recent_reward?: ProgressReward | null;
   timezone: string;
   local_date: string;
   server_now: string;
@@ -20,6 +21,9 @@ export interface ProgressPreferences {
 }
 export interface ProgressReward {
   key: string;
+  href?: string;
+  metadata?: unknown;
+  retired?: boolean;
   topic_id?: string | null;
   title: string;
   description: string;
@@ -50,16 +54,35 @@ export interface Presentation {
   show: boolean;
   authorization: { welcome: boolean; history: boolean; rewards: boolean };
   welcome: DailyStreak | null;
+  history?: { group_id: string; credited_reads: number; exact_earned_dates_known: boolean } | null;
+  rewards?: ProgressReward[];
 }
 const base = '/api/users/me';
 export const fetchDailyStreak = () => requestJson<DailyStreak>(`${base}/daily-streak`);
 export const recordDailyVisit = () =>
   requestJson<DailyStreak>(`${base}/daily-visit`, { method: 'POST', body: '{}' });
-export const claimDailyWelcome = (expected_visit_date: string) =>
+export const claimPresentation = (
+  expected_visit_date: string | null,
+  historical_group_id?: string
+) =>
   requestJson<Presentation>(`${base}/presentation/claim`, {
     method: 'POST',
-    body: JSON.stringify({ expected_visit_date }),
+    body: JSON.stringify({ expected_visit_date, historical_group_id }),
   });
+export const claimDailyWelcome = (date: string, history?: string) =>
+  claimPresentation(date, history);
+export const claimRewardGroup = (id: string) =>
+  requestJson<Presentation>(`${base}/reward-events/${encodeURIComponent(id)}/claim`, {
+    method: 'POST',
+    body: '{}',
+  });
+export const acknowledgeRewardGroup = (id: string) =>
+  requestJson(`${base}/reward-events/${encodeURIComponent(id)}/ack`, {
+    method: 'POST',
+    body: '{}',
+  });
+export const rewardHref = (key: string) =>
+  `/reading-dna?reward=${encodeURIComponent(key)}#progress`;
 export const fetchProgressPreferences = () =>
   requestJson<ProgressPreferences>(`${base}/progress-preferences`);
 export const saveProgressPreferences = (
@@ -72,6 +95,8 @@ export const saveProgressPreferences = (
 export const fetchProgressRewards = () =>
   requestJson<{
     items: ProgressReward[];
+    pending_reward_group_ids?: string[];
+    historical_group_id?: string | null;
     topics?: TopicProgress;
     reading_total?: number;
     next_reading_target?: number | null;

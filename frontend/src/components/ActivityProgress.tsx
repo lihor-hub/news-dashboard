@@ -11,7 +11,11 @@ export function ActivityProgress({ accountId }: { accountId: number }) {
     return (
       <div role="status">
         Active time is unavailable; saved progress has not changed.{' '}
-        <Button variant="outline" onClick={() => void activity.refetch()}>
+        <Button
+          variant="outline"
+          className="h-auto min-h-9 max-w-full whitespace-normal"
+          onClick={() => void activity.refetch()}
+        >
           Retry active time
         </Button>
       </div>

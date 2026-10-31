@@ -63,7 +63,8 @@ try {
   await dialog.waitFor({ state: 'hidden' });
   await page.waitForFunction(
     () =>
-      document.activeElement?.id === 'progress-heading' ||
+      // Explicit reward navigation now has a durable detail heading as its restore target.
+      document.activeElement?.id === 'reward-detail-heading' ||
       document.activeElement?.getAttribute('aria-label')?.startsWith('Daily streak:')
   );
   await page.reload();

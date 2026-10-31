@@ -362,6 +362,12 @@ body:has(.daily-welcome.progress-static) [data-state] {
   transition: none !important;
 }
 
+[data-sonner-toast].progress-static,
+[data-sonner-toast].progress-static * {
+  animation: none !important;
+  transition: none !important;
+}
+
 @media (prefers-reduced-motion: reduce) {
   body:has(.daily-welcome) [data-state] {
     animation: none !important;

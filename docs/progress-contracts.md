@@ -1,6 +1,6 @@
 # Progress program technical contracts (#1623 / #1628)
 
-Status: sequenced technical handoff. The daily foundation is implemented in #1624; the completion seams in section 10 are reviewed on held PR #1633 (#1625). Section 11 implements the combined #1625+#1626 candidate, uncommitted pending independent calibration/code review. No production activation is authorized by this document. Earlier design-only statements describe their original tranche, not a claim that all future domains are implemented. Product authority is [approved policy](progress-approved-policy.md) and [approval comment](https://github.com/lihor-hub/news-dashboard/issues/1623#issuecomment-6526348156). Those override obsolete discovery approval labels, not their numeric policy. This document fixes implementation names and seams, not new product policy.
+Status: sequenced technical handoff. The daily foundation is implemented in #1624; the completion seams in section 10 are reviewed on held PR #1633 (#1625). Section 11 implements the combined #1625+#1626 candidate, uncommitted pending independent calibration/code review. Section 13 records the complete #1628 implementation candidate atop reviewed four-core `4d564db8`, uncommitted pending separate independent review/verification. No production activation is authorized by this document. Earlier design-only statements describe their original tranche, not a claim that all future domains are implemented. Product authority is [approved policy](progress-approved-policy.md) and [approval comment](https://github.com/lihor-hub/news-dashboard/issues/1623#issuecomment-6526348156). Those override obsolete discovery approval labels, not their numeric policy. This document fixes implementation names and seams, not new product policy.
 
 ## 1. Ownership and first delivery boundary
 
@@ -702,3 +702,101 @@ aggregates with explicit missing/partial coverage (no current-zone rebucket); #1
 live earned badge timestamps without measurement in mail. Orchestrator owns dependency retarget,
 independent review/verification, publication/required checks and merge; this worker leaves all
 issue changes uncommitted and performs no deployment or production historical operation.
+
+## 13. #1628 grouped presentation and unified collection candidate
+
+This is an implementation handoff, not independent approval or publication. Existing daily,
+credit/topic and activity producers, catalog, account lock and `user_achievements` remain the
+only eligibility authorities. No DDL, second recorder/provider/page/store, event bus or request
+ledger was added. The unchanged archive-v2 export already includes owned awards, groups and
+presentation preferences; imports still restore only validated preferences from these sections.
+All personal records retain existing account cascades and original legacy/unknown dates.
+
+### Discovery, targets and summary
+
+`GET /api/users/me/progress-rewards` remains repeatable-read/read-only and now also exposes
+`historical_group_id: UUID|null`: at most one oldest unclaimed completed `historical_intro`
+group. Existing `pending_reward_group_ids` remains at most 20 oldest live IDs, ordered by
+`(recorded_at,id)`; claims invalidate/refetch to drain further groups. IDs are opaque exact
+targets, never authorization. Locked descriptors now also have canonical encoded detail hrefs.
+All current catalog topics remain deduplicated into their track cards, unknown keys into the
+permanent general collection. No historical producer or operational history scan runs here.
+
+`/presentation/claim` and compatibility `/daily-welcome/claim` accept only canonical
+`YYYY-MM-DD` strings for dates (no epoch, timestamp, week-date or boolean coercion); the
+canonical bundle still requires the expected-date key and permits null only for explicit
+history-inline mode. Existing account/kind/owner checks, stale-date no-consumption, winning
+bundle atomicity and false losing authorization envelopes remain. Historical summary payload
+is closed: `{credited_reads: nonnegative int8, exact_earned_dates_known?: false}`. Invalid
+stored summaries return 409 `invalid_history_summary` before either target is consumed. The
+response always supplies `exact_earned_dates_known:false`; no arbitrary JSON/URLs can leak
+through the introduction. **#1629 must produce exactly this server-owned summary**, only when
+its reconciliation completes, under the shared account lock and same source uniqueness.
+
+A winning welcome adds `recent_reward: descriptor|null`, selecting at most one live reward
+from the preceding seven completed saved-zone dates, excluding today. Prefer a topic level,
+then newest earned instant/id. The UI labels it “From your recent collection”, not newly earned;
+history, when won, replaces this secondary summary. The summary never claims/ACKs live groups
+and has no live-toast authorization. Exact earned times, legacy recording dates and unknown
+original dates stay distinct. Lost committed responses can lose feedback, never the record.
+
+### Existing protected coordinator
+
+`DailyProgress`, already keyed by the actual authenticated account in `RequireAuth`, now
+observes the same account-scoped rewards query as `ProgressSection`. Successful manual/automatic
+read, daily and activity invalidation paths remain reused. Host placement priority is onboarding,
+What's New, atomic welcome/history, then live feedback. Actual dialog presence is observed
+before starting claims. No claim is made while hidden or before preferences/daily/discovery
+and placement are ready. A home GET started before the visit is cancelled before caching the
+POST snapshot, so stale GET data cannot erase its exact welcome target.
+
+The host deliberately claims each discovered UUID at most once per mount; transport failures
+never become untargeted next-group retries. Server account serialization wins across devices.
+It verifies show+component authorization and fences async results by account generation; unmount
+invalidates callbacks, dismisses its own account-specific slot and prevents late ACKs. All new
+awards from one cause arrive together; concurrent live arrivals coalesce in that one Sonner
+slot. The unrelated triage Undo toast is untouched. Dismiss, View, swipe or timeout ACK only
+already claimed exact groups; ACK failure cannot replay a server-consumed group. No ACK or
+receipt is an eligibility input.
+
+`RewardFeedback` is nonblocking: no focus/scroll/navigation until the user follows its link.
+At most three names plus “and N more”, the existing polite Sonner region (no nested live region),
+eight seconds paused on hover,
+keyboard focus or hidden document. Static feedback is still usable with animation preference
+off. Sonner/reward CSS honors system reduced motion even when the preference is on. A timer
+restart when a genuinely new group joins the slot affords time for its new content. A modal
+that interrupts an already claimed live display can discard feedback rather than reauthorize it;
+the permanent collection is unaffected. History uses the same welcome bundle or, only with
+welcome disabled, one nonmodal inline summary; never a generic live-reward claim/toast.
+
+### Home, vector family and next owners
+
+`/reading-dna?reward=<encodeURIComponent(key)>#progress` is the sole detail destination,
+inside `ProgressSection`, not another page. All catalog and unknown/retired keys resolve
+against the authenticated owned collection. Unknown query keys get a named not-found section;
+no href from metadata is followed. Explicit navigation focuses the detail heading, background
+query updates do not refocus it. Generic and topic earned names link there; locked generic
+requirements have the same detail navigation. Each topic card uses the shared catalog to expose
+all five earned/locked levels with requirements and one detail link per level; the next-target
+summary is plain text so it does not duplicate a level link. Existing DNA/Learning, top-three/all eleven,
+unbounded final-topic counts, approximate time and incomplete coverage are preserved. Daily,
+preferences, activity and rewards expose independent loading/error/retry states; failed
+optimistic preference writes roll back only their own cached preference state.
+
+`RewardEmblem` is one local decorative SVG family: consistent shield/frame, escalating level
+detail, eleven distinct subject symbols plus daily/book/clock/breadth/quiz forms, restrained
+warm earned accents. Adjacent names, requirements, earned/locked shapes and dates carry
+meaning, not color or motion. No mascot, generated asset, casino effect or new dependency.
+
+- **#1629:** produce the closed summary above in a `historical_intro` group, not live groups
+  per historical/import read. Reuse exact discovery/bundle/inline claims and account lock.
+  Retention pause/drain, inventory, backfill dry-run/apply remain separately prohibited here.
+- **#1630/#1631:** continue read-only consumption of live earned times and canonical encoded
+  detail hrefs; never claim or ACK while generating recap/mail. Recap/mail work is not done here.
+- **Orchestrator:** separate independent review/fixes/verification and normal-hook publication;
+  preserve stacked base `bb/progress-active-time-1627`, resolve dependency retarget/required
+  checks and automatic-main-deploy scope conflict. This worker neither merges nor deploys.
+
+Exact executed commands, raw logs, acceptance matrix, browser screenshots and limitations
+belong to the #1628 implementation handoff in `thr_es5pqjkdvy` storage. Test-owned historical
+summary fixtures exercise the seam only; no operational historical account processing occurs.

@@ -180,6 +180,7 @@ def daily_collection(user_id: int, *, database_url: str | None = None) -> dict[s
                 "recorded_at": None,
                 "origin": None,
                 "date_precision": "unknown",
+                "href": f"/reading-dna?reward={quote(key, safe='')}#progress",
             }
             for key, (n, title, description) in reward_catalog().items()
             if key not in keys
@@ -189,12 +190,19 @@ def daily_collection(user_id: int, *, database_url: str | None = None) -> dict[s
                AND kind='live' AND claimed_at IS NULL ORDER BY recorded_at,id LIMIT 20""",
             (user_id,),
         ).fetchall()
+        history = conn.execute(
+            """SELECT id FROM user_reward_groups WHERE user_id=%s
+               AND kind='historical_intro' AND claimed_at IS NULL
+               ORDER BY recorded_at,id LIMIT 1""",
+            (user_id,),
+        ).fetchone()
         total = conn.execute(
             "SELECT COUNT(*) AS n FROM user_read_credits WHERE user_id=%s", (user_id,)
         ).fetchone()["n"]
         return {
             "items": items,
             "pending_reward_group_ids": [str(r["id"]) for r in pending],
+            "historical_group_id": str(history["id"]) if history else None,
             "reading_total": total,
             "next_reading_target": next((n for n in READ_TARGETS if n > total), None),
             "history_status": "reconciliation_pending",
