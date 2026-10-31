@@ -296,6 +296,15 @@ def assemble_user_export(
                 "may independently establish silent import-provenance credit "
                 "with unknown earned dates."
             ),
+            "activity": [
+                {
+                    key: value
+                    for key, value in row.items()
+                    if key not in {"recent_union", "union_updated_at", "rate_minute", "rate_count"}
+                }
+                for row in progress_rows("user_activity_totals", "user_id")
+            ],
+            "activity_days": progress_rows("user_activity_days", "local_date, timezone"),
             "daily_state": progress_rows("user_daily_visit_state", "user_id"),
             "daily_visits": progress_rows("user_daily_visits", "local_date"),
             "read_credits": progress_rows("user_read_credits", "recorded_at, id"),
@@ -318,7 +327,14 @@ def assemble_user_export(
                 ).fetchall()
             ],
             "awards": progress_rows("user_achievements", "unlocked_at, achievement_key"),
-            "reward_groups": progress_rows("user_reward_groups", "recorded_at, id"),
+            "reward_groups": [
+                {
+                    key: value
+                    for key, value in row.items()
+                    if key != "source_key" or not str(value).startswith("activity:")
+                }
+                for row in progress_rows("user_reward_groups", "recorded_at, id")
+            ],
         }
         preferences = {
             "progress": progress_preferences(account(conn, user_id)),

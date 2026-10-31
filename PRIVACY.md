@@ -70,6 +70,40 @@ in-app stats/analytics views. This data:
 - Is pruned automatically by a daily cleanup job after
   `ANALYTICS_RETENTION_DAYS` days (default `180`).
 
+## Approximate active time
+
+With usage analytics enabled both for your account and this instance, authenticated
+visible, focused, connected app use is measured approximately. It pauses after exactly
+five minutes without interaction. Quiet reading within that window counts; background
+audio, offline use, hidden/unfocused pages and offline catch-up do not. No click targets,
+keystrokes, pointer coordinates or persistent device fingerprints are recorded.
+Generic app time never qualifies an article read.
+
+A 15-second heartbeat consumes a server-anchored window of at most 30 seconds. Overlapping
+tabs/devices and retries are deduplicated with a 120-second logical accounting/retry horizon.
+A registered minute cleanup removes expired transient windows, payload hashes, receipts and
+interval unions within 180 seconds while the scheduler is running. An unavailable scheduler
+can delay physical deletion, but never extends the logical acceptance deadline. Frozen
+saved-progress-local day/zone aggregates are retained for 400 days; lifetime millisecond totals,
+measurement start, bounded coverage-gap flags and permanently earned 15-minute/1-hour/5-hour/
+20-hour badges remain until account deletion. Timezone edits never rebucket past days.
+Consent changes invalidate outstanding time windows and automatic-reading evidence under the
+same account lock. Presentation preferences do not stop measurement. Disabling measurement
+preserves existing totals and badges; reenabling cannot fill gaps.
+
+These totals are approximate engagement, not proof of learning or a complete lifetime record.
+Historic global availability is unknown, even when a total is zero; coverage is always partial
+or unknown. Network latency, suspension, OS termination and failed best-effort final sends can
+lose time. Web/mobile browsers, installed PWA, Electron's hosted renderer, Android TWA and iOS
+Safari/PWA share this conservative web lifecycle, not a native background service or a claim of
+native-device parity. There is no browser-extension tracker.
+
+Archive-v2 exports your owned totals, frozen day aggregates, coverage flags and badge dates,
+not activity window tokens, interval unions, payload hashes, receipts or rate counters.
+Uploaded time/rewards are informational only and cannot restore or earn progress. Account
+deletion cascades all activity rows. Legacy analytics time remains a separate estimate and is
+never converted into these totals or badges.
+
 ## Functional daily progress
 
 Authenticated visible app visits store one saved-local calendar date, its timezone,

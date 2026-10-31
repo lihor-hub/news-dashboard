@@ -569,3 +569,136 @@ Next owners: #1627 keeps automatic reader consent fences and separate app-time a
 unknown awards; #1629 uses `credit_read` with historical provenance and current immutable
 attribution, with no mutable-source replay or source snapshots; #1630/#1631 consume shared
 live earned times, never import recording times. No historical earned dates are invented.
+
+## 12. Implemented #1627 activity seam (uncommitted; independent review pending)
+
+This slice extends integrated `cb20399b` (#1625+#1626), not the intermediate credit snapshot.
+The combined predecessor's independent review/verification/publication evidence is in
+`thr_p2mnwju2r2/1626-combined-publication-handoff.md`; section 11's pending labels describe
+its earlier implementation handoff. This section is an implementation contract, not independent
+approval, activation, production operation or a parent-program completion claim.
+
+### Protocol and authority
+
+Authenticated personal-account routes, existing same-origin/auth boundary:
+
+- `GET /api/users/me/activity` is read-only, returns `{available,measurement_enabled,total_ms,
+  measured_since,approximate:true,coverage:{status,reasons},next_target_ms}`. Guests return
+  `{available:false}`; durable mutations reject guests. Zero without a first accepted interval
+  is explicitly unknown/pre-measurement, never complete zero. Global history is always unknown.
+- `POST /activity/window` with exactly `{}` issues `{available:true,window_id,duration_ms:30000}`.
+  Disabled measurement returns `{available:false,reason:measurement_disabled}` after invalidation.
+  Issuance grants no time. Saved progress timezone initializes once here as on the daily mutation.
+- `POST /activity/heartbeat` accepts exactly `{window_id,start_ms,end_ms}`. Offsets are strict
+  integer milliseconds, `0 <= start_ms < end_ms <= 30000`. UUID alone is not authorization.
+  Each window is consumed once; no sequence/renewed-window piggyback. New heartbeat gets a fresh
+  window via a separate POST, never reanchors a returned old window after a retry.
+- Window binds authenticated owner, `users.activity_revision`, frozen saved zone and integer
+  UTC epoch-ms server anchor, sampled **after** `(1623,user_id)` account lock. Mapped end must
+  already have elapsed, and receipt must precede the exact 30s lease boundary. Unknown/foreign
+  IDs uniformly 409, invalid shape 422, expiry/future/revision/hash conflict 409, no accumulation.
+- Canonical `start:end` SHA256 plus minimal ACK are stored with a consumed window. Exact replay
+  within 120s of issuance returns the original receipt with no second addition, changed payload
+  returns 409. At/after 120s even known receipts fail; pruning cannot recreate a UUID. No outbox.
+  Frontend retries an identical nonfinal body once after 1s, then drops it. Lost committed response
+  can lose UI feedback but not the saved total/badge. Final keepalive send is best effort only.
+
+`activity.py` computes uncovered integer-ms interval difference against a sorted/disjoint recent
+union, under the same account lock on the caller transaction. Union is retained logically for
+120s; new valid intervals are at most 30s old, so older overlap cannot remint. Total, frozen
+local-day splits (ZoneInfo midnight including DST), union, permanent awards/group and ACK commit
+or rollback together. Existing award helper/catalog is sole engine. `active_time_900|3600|18000|
+72000` thresholds are seconds, while storage and eligibility use exact integer ms. Live earning
+time is the accepting transaction's post-lock server crossing instant; original award dates never
+change. Cause is `activity:<SHA256 of window UUID bytes>` (single consumption, no extra sequence),
+so a permanent reward group does not retain the transient window token. Activity cause keys are
+also omitted from informational group exports. App time never
+reads or writes an article qualification row or read credit.
+
+### Storage, consent, coverage and cleanup
+
+House additive PostgreSQL DDL: account-cascading `user_activity_totals` (lifetime total/start,
+bounded flags, transient recent union/update and minute counter), `user_activity_windows`
+(UUID/owner/anchor/revision/zone/expiry/hash/ACK), `user_activity_days` keyed account/local-date/
+frozen-zone (ms, bounded monotone coverage bits and revision). No URL/body/device/click history.
+All writers and cleanup obey account-before-domain lock order. No initializer scan/backfill.
+
+At most 16 unconsumed live windows/account and 120 well-formed authenticated activity mutations/
+account/UTC minute, including starts/replays/disabled/invalid-window/capacity rejections. Invalid
+shape/auth fails before domain work; all rejections grant zero. Public wrappers commit only the
+rate counter before a protocol rejection, before any eligibility writes; successful total/day/
+award/ACK still commit atomically. 429 includes Retry-After for
+minute exhaustion. This simple account-level abuse bound accommodates normal four heartbeats
+plus four starts/minute/context (8 transactions/minute), not unlimited tabs. Rate bounds cap
+union fragmentation to <=240 accepted intervals in its logical horizon and retained windows
+likewise; JSON integer pairs avoid float/range codec rounding. Capacity is linear in connected
+contexts: 1,000 continuously active contexts mean roughly 133 small transactions/second before
+other app traffic; not a production load/SLA claim. Modified clients can simulate attention only
+up to elapsed server-bounded union, as approved; no surveillance or impossible anti-cheat claim.
+
+Consent changes under the shared account lock increment `activity_revision`, delete windows and
+reader evidence, and OR consent-gap coverage into lifetime/current frozen day. Settings PATCH and
+archive notification-preference restore both call connection-taking `activity.set_consent`; an
+unchanged consent value does not invent another gap or revision. Archive restore keeps the fence
+inside its existing outer account-locked transaction, with no hidden connection or commit. Reenabling cannot
+erase the flags. Presentation switches have no effect. Timezone changes also invalidate and mark
+a timezone gap, never rebucket. Both issuance and acceptance check saved analytics consent and
+process global enable; observing a disabled flag through either automatic protocol invalidates
+both protocols and commits before returning disabled. A current environment flag never proves
+past availability, including an unseen off/on transition; no new availability chronology exists.
+
+Coverage bits: 1 global-gap-or-unknown (always set), 2 consent gap, 4 timezone change,
+8 transport incomplete (reserved bounded reason), 16 retention unknown. No `complete` status.
+Missing dates/rows remain **unknown**, not implicit measured zero. Recap consumers must distinguish
+missing rows and frozen zones and carry these flags; present-day enable cannot repair a gap.
+No unbounded availability event log. Day revision is monotone `GREATEST`; flags use bitwise OR.
+
+Registered `activity_retention` interval job runs every 60s through existing scheduler recording,
+max_instances=1/coalesce=true. It removes windows at 120s from issuance and unions at 120s since
+last update (physical <=180s with running scheduler), also clearing expired minute-rate counters,
+keeping logical expiry independent of job availability. Per-account issuance also prunes old windows. Keep at most 400 local calendar dates
+per frozen zone (today and preceding 399); expired day pruning marks lifetime retention unknown.
+Lifetime totals/start/flags and permanent awards survive. Cleanup acquires the same account lock
+before totals/day rows, one account transaction at a time, including deletion races. A stopped
+scheduler delays physical deletion, not acceptance deadlines; operations remain orchestrator-owned.
+
+### Lifecycle, home and portability handoff
+
+`DailyProgress` protected account-keyed host calls the separate in-memory `startActivity` recorder
+for shell and standalone readers. 250ms sampling, 15s heartbeat, strict visible+document-focus+
+connection gate, trusted direct pointer/keyboard/touch/wheel input, exactly 300000ms idle
+clipping, monotonic clock and >30s timer/wall discontinuity discard. Foreground polling also catches
+missing focus events. Programmatic scroll events (which browsers may mark trusted) never reset
+idle; keyboard/touch/wheel input still supports user scrolling without recording its content.
+Pause/pagehide flush is bounded keepalive, offline drops, reconnect/resume
+starts a new zero baseline. No storage, service-worker queue or catch-up. Separate generation
+fences for consent vs windows avoid losing a pending consent response during focus transitions;
+logout synchronously stops before its request, and old account callbacks cannot revive a mount.
+
+`ActivityProgress` extends existing ProgressSection/cache and permanent RewardEmblem collection:
+readable floor-minute approximate total, measured-since, next target, unknown empty/disabled/
+error/retry coverage; earned/locked badges and original earned dates use the shared collection.
+Legacy Reading DNA analytics time is explicitly labeled a separate estimate. Privacy copy explains
+consent, undercount, retention and native limits. Archive-v2 adds owned aggregate counters/coverage/
+frozen days and existing badge dates, omitting union/windows/tokens/hash/ACK/rate data. Uploads
+remain informational; tampered time/award uploads cannot earn. Existing account cascade applies.
+
+Surface inventory: SPA desktop/mobile and installed PWA share this recorder; service worker never
+measures. Electron hosted renderer and Android Chrome TWA share the web path, iOS Safari/PWA is
+best effort under strict focus/visibility, not a native background service. Browser extension is
+not supported. OS kill/suspension/network failure can undercount. Executed desktop Chromium and
+mobile/touch Chromium tests do **not** establish native Electron/TWA/Safari/PWA/device parity;
+actual native minimize/lock/sleep/process-death testing remains unperformed and must precede any
+parity claim. Browser harness uses real password cookies/built SPA/PostgreSQL/asyncio+h11, with
+only test-process server and Playwright clocks controlled; no API/auth success mocks or runtime
+clock endpoint. It disables Playwright's forced-focus/backgrounding overrides for actual desktop
+focus-loss checks. Continuous exact 5-minute clipping is fake-clock unit-tested; real browser idle
+case combines the five-minute deadline with timer suspension. Collection-scoped axe, not a full
+manual screen-reader audit. Exact executed results/limits belong to the worker handoff.
+
+Next owners: #1628 composes this same home/catalog/claim host, not another activity engine;
+#1629 never converts legacy telemetry/history/import totals to time; #1630 reads frozen day/zone
+aggregates with explicit missing/partial coverage (no current-zone rebucket); #1631 consumes exact
+live earned badge timestamps without measurement in mail. Orchestrator owns dependency retarget,
+independent review/verification, publication/required checks and merge; this worker leaves all
+issue changes uncommitted and performs no deployment or production historical operation.

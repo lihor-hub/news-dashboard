@@ -2,6 +2,7 @@ import { lazy, Suspense, useEffect, useRef, useState, type ReactNode } from 'rea
 import { Link, useLocation, useNavigate } from 'react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/contexts/auth';
+import { startActivity } from '@/lib/activity';
 import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { useWhatsNew } from '@/hooks/useWhatsNew';
 import { useOnboardingWizard } from '@/hooks/useOnboardingWizard';
@@ -75,6 +76,15 @@ export function DailyProgress({ children }: { children: ReactNode }) {
     queryKey: ['progress-preferences', accountId],
     queryFn: fetchProgressPreferences,
   });
+
+  useEffect(
+    () =>
+      startActivity(() => {
+        void cache.invalidateQueries({ queryKey: ['activity', accountId] });
+        void cache.invalidateQueries({ queryKey: ['progress-rewards', accountId] });
+      }),
+    [accountId, cache]
+  );
 
   useEffect(() => {
     const observer = new MutationObserver(() => {

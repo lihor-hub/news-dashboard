@@ -49,6 +49,11 @@ export function formatDuration(ms?: number | null): string {
   return rest ? `${minutes}m ${rest}s` : `${minutes}m`;
 }
 
+export function activeDuration(ms: number): string {
+  const minutes = Math.floor(ms / 60000);
+  return minutes >= 60 ? `${Math.floor(minutes / 60)}h ${minutes % 60}m` : `${minutes} minutes`;
+}
+
 export function formatInteger(value: number): string {
   return new Intl.NumberFormat().format(value);
 }
