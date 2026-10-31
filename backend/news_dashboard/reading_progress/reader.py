@@ -16,6 +16,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from news_dashboard.analytics import analytics_globally_enabled
 from news_dashboard.article_visibility import get_visible_article_row
 from news_dashboard.db import connect, init_db
+from news_dashboard.reading_progress.activity import invalidate
 from news_dashboard.reading_progress.credits import credit_article
 from news_dashboard.reading_progress.daily import lock_account, utc_now
 
@@ -63,7 +64,7 @@ def accept_evidence(  # noqa: PLR0912 - one account-locked evidence transaction
             "SELECT analytics_enabled FROM users WHERE id=%s", (user_id,)
         ).fetchone()
         if not analytics_globally_enabled() or not consent["analytics_enabled"]:
-            conn.execute("DELETE FROM user_reader_evidence WHERE user_id=%s", (user_id,))
+            invalidate(conn, user_id)
             # Commit invalidation before returning a disabled result, not an exception rollback.
             return {"available": False, "reason": "automatic_reading_disabled", "credited": False}
         now = utc_now()

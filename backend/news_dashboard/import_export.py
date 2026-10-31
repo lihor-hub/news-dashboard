@@ -632,12 +632,14 @@ def _restore_notification_settings(conn: Any, user_id: int, data: Any) -> bool:
     if isinstance(recap_day, str) and recap_day in _VALID_RECAP_DAYS:
         updates["recap_day"] = recap_day
     if isinstance(data.get("analytics_enabled"), bool):
-        updates["analytics_enabled"] = data["analytics_enabled"]
+        from news_dashboard.reading_progress.activity import set_consent
+
+        set_consent(conn, user_id, data["analytics_enabled"])
     if isinstance(data.get("automatic_ai_enrichment_enabled"), bool):
         updates["auto_ai_enrichment_enabled"] = data["automatic_ai_enrichment_enabled"]
 
     if not updates:
-        return False
+        return isinstance(data.get("analytics_enabled"), bool)
 
     set_clauses = ", ".join(f"{key} = %s" for key in updates)
     conn.execute(

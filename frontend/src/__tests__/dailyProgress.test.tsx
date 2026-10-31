@@ -19,6 +19,11 @@ vi.mock('@/hooks/useWhatsNew', () => ({
 }));
 vi.mock('@/components/OnboardingWizard', () => ({ OnboardingWizard: () => null }));
 vi.mock('@/components/WhatsNewDialog', () => ({ WhatsNewDialog: () => null }));
+// Activity has its own clock/lifecycle suite; don't run its 250ms loop across nine fake hours.
+vi.mock('@/lib/activity', () => ({ startActivity: () => vi.fn() }));
+vi.mock('@/api/activity', () => ({
+  fetchActivity: vi.fn().mockResolvedValue({ available: false }),
+}));
 
 const daily: api.DailyStreak = {
   available: true,

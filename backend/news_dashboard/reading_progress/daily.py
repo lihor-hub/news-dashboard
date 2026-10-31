@@ -232,6 +232,10 @@ def update_preferences(conn: Any, user_id: int, patch: ProgressPreferencesPatch)
         "UPDATE users SET " + ", ".join(f"{key}=%s" for key in updates) + " WHERE id=%s",
         (*updates.values(), user_id),
     )
+    if updates["progress_timezone"] != effective_zone(user):
+        from news_dashboard.reading_progress.activity import ZONE_CHANGE, invalidate
+
+        invalidate(conn, user_id, flag=ZONE_CHANGE)
     user.update(updates)
     if updates.get("daily_welcome_enabled") is False:
         now = utc_now()

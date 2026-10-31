@@ -18,6 +18,7 @@ from news_dashboard.reading_progress import topics
 
 DAILY_TARGETS = (3, 7, 14, 30, 100)
 READ_TARGETS = (1, 10, 50, 100, 500)
+TIME_TARGETS = (900, 3600, 18000, 72000)
 
 
 def read_key(target: int) -> str:
@@ -54,6 +55,16 @@ def reward_catalog() -> dict[str, tuple[int, str, str]]:
                 f"Read at least 3 articles in each of {n} topics.",
             )
             for n in topics.BREADTH_TARGETS
+        },
+        **{
+            f"active_time_{seconds}": (
+                seconds,
+                f"{label} active time",
+                f"Accumulate approximately {label} of connected, visible and focused app use.",
+            )
+            for seconds, label in zip(
+                TIME_TARGETS, ("15 minutes", "1 hour", "5 hours", "20 hours"), strict=True
+            )
         },
         "first_quiz_passed": (1, "First quiz passed", "Submit a quiz with a correct answer."),
     }

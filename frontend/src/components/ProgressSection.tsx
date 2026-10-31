@@ -13,6 +13,7 @@ import { SevenDayStrip } from './DailyProgress';
 import { Button } from './ui/button';
 import { RewardEmblem } from './RewardEmblem';
 import { TopicProgress } from './TopicProgress';
+import { ActivityProgress } from './ActivityProgress';
 
 export function ProgressSection() {
   const { user } = useAuth();
@@ -142,6 +143,7 @@ export function ProgressSection() {
           )}
           {preferences.isError && <p role="status">Progress preferences are unavailable.</p>}
           {error && <p role="alert">{error}</p>}
+          {accountId !== undefined && <ActivityProgress key={accountId} accountId={accountId} />}
           <h3 className="font-medium">Permanent collection</h3>
           {rewards.data?.reading_total !== undefined && (
             <div className="space-y-1">

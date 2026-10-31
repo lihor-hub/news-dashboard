@@ -685,6 +685,45 @@ POSTGRES_MULTIUSER_SCHEMA = [
     )
     """,
     """
+    CREATE TABLE IF NOT EXISTS user_activity_totals (
+      user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+      total_ms BIGINT NOT NULL DEFAULT 0 CHECK (total_ms >= 0),
+      measured_since TIMESTAMPTZ,
+      coverage_flags INTEGER NOT NULL DEFAULT 1 CHECK (coverage_flags BETWEEN 1 AND 31),
+      recent_union JSONB NOT NULL DEFAULT '[]',
+      union_updated_at TIMESTAMPTZ,
+      rate_minute BIGINT NOT NULL DEFAULT 0,
+      rate_count INTEGER NOT NULL DEFAULT 0 CHECK (rate_count >= 0)
+    )
+    """,
+    "ALTER TABLE users ADD COLUMN IF NOT EXISTS activity_revision BIGINT NOT NULL DEFAULT 0",
+    """
+    CREATE TABLE IF NOT EXISTS user_activity_windows (
+      id UUID PRIMARY KEY,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      issued_ms BIGINT NOT NULL,
+      revision BIGINT NOT NULL,
+      timezone TEXT NOT NULL,
+      expires_at TIMESTAMPTZ NOT NULL,
+      payload_hash TEXT,
+      receipt JSONB,
+      CHECK ((payload_hash IS NULL) = (receipt IS NULL))
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS user_activity_windows_owner ON user_activity_windows(user_id)",
+    "CREATE INDEX IF NOT EXISTS user_activity_windows_expiry ON user_activity_windows(expires_at)",
+    """
+    CREATE TABLE IF NOT EXISTS user_activity_days (
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      local_date DATE NOT NULL,
+      timezone TEXT NOT NULL,
+      active_ms BIGINT NOT NULL DEFAULT 0 CHECK (active_ms >= 0),
+      coverage_flags INTEGER NOT NULL DEFAULT 1 CHECK (coverage_flags BETWEEN 1 AND 31),
+      revision BIGINT NOT NULL DEFAULT 0,
+      PRIMARY KEY(user_id,local_date,timezone)
+    )
+    """,
+    """
     CREATE TABLE IF NOT EXISTS user_read_credit_sources (
       credit_id BIGINT PRIMARY KEY REFERENCES user_read_credits(id) ON DELETE CASCADE,
       title TEXT NOT NULL,
