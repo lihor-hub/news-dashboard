@@ -8,6 +8,7 @@ import * as api from '@/api/progress';
 import { DailyProgress } from '@/components/DailyProgress';
 import { RewardFeedback } from '@/components/RewardFeedback';
 import { ProgressSection } from '@/components/ProgressSection';
+import { RewardDetail } from '@/components/RewardDetail';
 
 const state = vi.hoisted(() => ({ id: 42, onboarding: false }));
 vi.mock('@/contexts/auth', () => ({ useAuth: () => ({ user: { id: state.id } }) }));
@@ -200,6 +201,151 @@ it('drops in-flight old-account authorization after logout and clears its slot',
     })
   );
   await screen.findByRole('link', { name: /Daily streak/ });
+  expect(screen.queryByText('Progress earned')).toBeNull();
+  expect(api.acknowledgeRewardGroup).not.toHaveBeenCalled();
+});
+
+it('hidden documents and focus moving within feedback preserve the remaining dismissal time', async () => {
+  vi.useFakeTimers();
+  const close = vi.fn();
+  const visibility = vi.spyOn(document, 'visibilityState', 'get');
+  render(<RewardFeedback rewards={rewards.slice(0, 1)} onClose={close} onView={vi.fn()} />);
+  expect(screen.getByText('Award 0')).toBeInTheDocument();
+  expect(screen.queryByText(/and .* more/)).toBeNull();
+  await act(() => vi.advanceTimersByTimeAsync(2000));
+  visibility.mockReturnValue('hidden');
+  fireEvent(document, new Event('visibilitychange'));
+  await act(() => vi.advanceTimersByTimeAsync(10000));
+  expect(close).not.toHaveBeenCalled();
+  visibility.mockReturnValue('visible');
+  fireEvent(document, new Event('visibilitychange'));
+  act(() => screen.getByRole('link', { name: 'View achievement' }).focus());
+  act(() => screen.getByRole('button', { name: 'Dismiss celebration' }).focus());
+  await act(() => vi.advanceTimersByTimeAsync(10000));
+  expect(close).not.toHaveBeenCalled();
+  act(() => (document.activeElement as HTMLElement).blur());
+  await act(() => vi.advanceTimersByTimeAsync(5999));
+  expect(close).not.toHaveBeenCalled();
+  await act(() => vi.advanceTimersByTimeAsync(1));
+  expect(close).toHaveBeenCalledTimes(1);
+});
+
+it('unknown reward destinations give a focused not-found state and a safe collection link', () => {
+  render(
+    <MemoryRouter>
+      <RewardDetail requestedKey={'unknown?key&#/'} />
+    </MemoryRouter>
+  );
+  expect(screen.getByRole('heading', { name: 'Achievement not found' })).toHaveFocus();
+  expect(
+    screen.getByText('No matching achievement is available in your collection.')
+  ).toBeVisible();
+  expect(screen.getByRole('link', { name: 'Back to collection' })).toHaveAttribute(
+    'href',
+    '/reading-dna#progress'
+  );
+});
+
+it('locked detail shows requirements, not invented earned dates or provenance', () => {
+  render(
+    <MemoryRouter>
+      <RewardDetail
+        requestedKey="daily_streak_7"
+        reward={{
+          ...rewards[0],
+          key: 'daily_streak_7',
+          title: '7-day daily streak',
+          description: 'Visit on 7 consecutive saved-local dates.',
+          target: 7,
+          unlocked: false,
+          recorded_at: null,
+          origin: null,
+        }}
+      />
+    </MemoryRouter>
+  );
+  expect(screen.getByRole('heading', { name: '7-day daily streak' })).toHaveFocus();
+  expect(screen.getByText('◇ Locked · Visit on 7 consecutive saved-local dates.')).toBeVisible();
+  expect(screen.queryByText(/Provenance:/)).toBeNull();
+  expect(screen.queryByText(/Original earned date/)).toBeNull();
+  expect(document.querySelector('time')).toBeNull();
+});
+
+it('live detail keeps earned and recorded instants separate without refocusing on background refresh', () => {
+  const reward = { ...rewards[0], earned_at: '2026-01-02T12:00:00Z', origin: 'live' };
+  const view = render(
+    <MemoryRouter>
+      <RewardDetail requestedKey={reward.key} reward={reward} />
+    </MemoryRouter>
+  );
+  expect(screen.getByRole('heading', { name: reward.title })).toHaveFocus();
+  expect(screen.getByText('Provenance: live.')).toBeVisible();
+  expect([...document.querySelectorAll('time')].map((node) => node.dateTime)).toEqual([
+    reward.earned_at,
+    reward.recorded_at,
+  ]);
+  const back = screen.getByRole('link', { name: 'Back to collection' });
+  back.focus();
+  view.rerender(
+    <MemoryRouter>
+      <RewardDetail requestedKey={reward.key} reward={{ ...reward, title: 'Updated title' }} />
+    </MemoryRouter>
+  );
+  expect(back).toHaveFocus();
+  expect(screen.getByRole('heading', { name: 'Updated title' })).toBeVisible();
+});
+
+it('retired legacy detail preserves unknown earned time without manufacturing a recording date', () => {
+  render(
+    <MemoryRouter>
+      <RewardDetail
+        requestedKey={rewards[0].key}
+        reward={{ ...rewards[0], origin: null, recorded_at: null, retired: true }}
+      />
+    </MemoryRouter>
+  );
+  expect(screen.getByText('Original earned date unknown; preserved reward.')).toBeVisible();
+  expect(
+    screen.getByText('Provenance: legacy. Retired or original reward; permanently preserved.')
+  ).toBeVisible();
+  expect(document.querySelector('time')).toBeNull();
+});
+
+it('collection separates daily, active-time, breadth and quiz rewards with canonical links', async () => {
+  const items = [
+    { ...rewards[0], key: 'daily_streak_3', target: 3 },
+    { ...rewards[1], key: 'active_time_900', target: 900 },
+    { ...rewards[2], key: 'breadth_3', target: 3 },
+    { ...rewards[3], key: 'first_quiz_passed', target: 1 },
+  ];
+  vi.mocked(api.fetchProgressRewards).mockResolvedValue({ items });
+  host();
+  for (const [index, category] of [
+    'Daily visits',
+    'Approximate active time badges',
+    'Topic breadth',
+    'Learning',
+  ].entries()) {
+    const section = await screen.findByRole('region', { name: category });
+    expect(section.querySelector('a')).toHaveAttribute('href', api.rewardHref(items[index].key));
+    expect(section).toHaveTextContent(`✓ Earned: ${items[index].title}`);
+    const emblem = section.querySelector('svg');
+    expect(emblem).toHaveAttribute('aria-hidden', 'true');
+    expect(emblem).toHaveAttribute('focusable', 'false');
+  }
+  expect(api.claimRewardGroup).not.toHaveBeenCalled();
+});
+
+it('a losing live claim cannot authorize feedback or acknowledgement', async () => {
+  vi.mocked(api.claimRewardGroup).mockResolvedValue({
+    show: false,
+    authorization: { welcome: false, history: false, rewards: false },
+    welcome: null,
+    rewards: [],
+  });
+  host();
+  await waitFor(() => expect(api.claimRewardGroup).toHaveBeenCalledExactlyOnceWith('group-1'));
+  await act(async () => {});
   expect(screen.queryByText('Progress earned')).toBeNull();
   expect(api.acknowledgeRewardGroup).not.toHaveBeenCalled();
 });
