@@ -9,6 +9,7 @@ import * as workflowApi from '../api/workflowApi';
 import type { TriageArticlePage } from '../api/workflowApi';
 import { useTriageMutations, ARTICLES_KEY } from '../hooks/useTriageMutations';
 import { trackFeature } from '../lib/analytics';
+import { changePrivateSession } from '../lib/privateSession';
 
 // ─── Mocks ───────────────────────────────────────────────────────────────────
 
@@ -107,6 +108,50 @@ describe('useTriageMutations — undo calls the API to revert server state', () 
   beforeEach(() => {
     vi.clearAllMocks();
     patchArticleStatePromise = Promise.resolve({});
+  });
+
+  it('does not restore A snapshots into B lists after a delayed mutation fails', async () => {
+    await changePrivateSession(1);
+    let reject!: (error: Error) => void;
+    patchArticleStatePromise = new Promise((_, fail) => {
+      reject = fail;
+    });
+    const { wrapper, queryClient } = makeWrapper();
+    const { result } = renderHook(() => useTriageMutations(), { wrapper });
+    act(() => result.current.setState(makeArticle({ title: 'PRIVATE A' }), 'done', 'Done'));
+    await waitFor(() => expect(workflowApi.patchArticleState).toHaveBeenCalledOnce());
+    await changePrivateSession(null);
+    await changePrivateSession(2);
+    queryClient.clear();
+    queryClient.setQueryData(
+      [ARTICLES_KEY, { state: 'today' }],
+      infiniteList([makeArticle({ title: 'B article' })])
+    );
+    await act(async () => {
+      reject(new Error('Session changed'));
+    });
+    expect(cachedItems(queryClient, [ARTICLES_KEY, { state: 'today' }])[0].title).toBe('B article');
+    act(() => capturedUndo()());
+    expect(workflowApi.patchArticleState).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not send a queued Undo after switching accounts', async () => {
+    await changePrivateSession(1);
+    let resolve!: (value: unknown) => void;
+    patchArticleStatePromise = new Promise((done) => {
+      resolve = done;
+    });
+    const { wrapper } = makeWrapper();
+    const { result } = renderHook(() => useTriageMutations(), { wrapper });
+    act(() => result.current.setState(makeArticle(), 'done', 'Done'));
+    await waitFor(() => expect(workflowApi.patchArticleState).toHaveBeenCalledOnce());
+    act(() => capturedUndo()());
+    await changePrivateSession(null);
+    await changePrivateSession(2);
+    await act(async () => {
+      resolve({});
+    });
+    expect(workflowApi.patchArticleState).toHaveBeenCalledTimes(1);
   });
 
   it('setState undo calls patchArticleState with original state', async () => {

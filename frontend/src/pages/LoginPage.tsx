@@ -11,6 +11,7 @@ import {
 } from '@/api';
 import { useAuth } from '@/contexts/auth';
 import { AppLogo } from '@/components/AppLogo';
+import { forgetPrivatePage } from '@/lib/privateSession';
 
 type OtpStep = 'email' | 'code';
 type LoginMode = 'password' | 'otp';
@@ -63,6 +64,7 @@ function authErrorKey(action: AuthAction, error: unknown) {
 export function LoginPage() {
   const { t } = useTranslation();
   const { setUser } = useAuth();
+  useEffect(() => forgetPrivatePage(), []);
   const navigate = useNavigate();
   const location = useLocation();
   const locationState = location.state as { from?: string; sessionExpired?: boolean } | null;
@@ -124,7 +126,7 @@ export function LoginPage() {
     setLoading(true);
     try {
       const user = await loginUser(username, password);
-      setUser(user);
+      await setUser(user);
       void navigate(from, { replace: true });
     } catch (err) {
       setError(t(authErrorKey('password', err)));
@@ -171,7 +173,7 @@ export function LoginPage() {
     setLoading(true);
     try {
       const user = await loginWithOtp(otpEmail, otpCode);
-      setUser(user);
+      await setUser(user);
       void navigate(from, { replace: true });
     } catch (err) {
       setError(t(authErrorKey('otp-verify', err)));
@@ -335,6 +337,12 @@ export function LoginPage() {
               <div className="space-y-3 border-t border-border pt-4">
                 <a
                   href={keycloakLoginUrl}
+                  onClick={(event) => {
+                    event.preventDefault();
+                    void setUser(null)
+                      .then(() => window.location.assign(keycloakLoginUrl))
+                      .catch((error: unknown) => setError(String(error)));
+                  }}
                   className="flex w-full items-center justify-center rounded-md border border-border bg-surface px-4 py-2.5 text-sm font-medium text-foreground transition-opacity hover:opacity-90"
                 >
                   {t('auth.sign_in_with_keycloak')}
@@ -343,6 +351,14 @@ export function LoginPage() {
                   <div className="text-center">
                     <a
                       href={authConfig.registration_url}
+                      onClick={(event) => {
+                        event.preventDefault();
+                        const url = authConfig.registration_url;
+                        if (url)
+                          void setUser(null)
+                            .then(() => window.location.assign(url))
+                            .catch((error: unknown) => setError(String(error)));
+                      }}
                       className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors underline underline-offset-4"
                     >
                       {t('auth.create_account')}

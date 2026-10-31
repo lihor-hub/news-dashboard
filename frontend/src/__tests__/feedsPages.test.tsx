@@ -99,7 +99,9 @@ import { AdminOnlyGuard } from '../AppRouter';
 
 function SetUser({ user, children }: { user: User | null; children: ReactNode }) {
   const { setUser } = useAuth();
-  useEffect(() => setUser(user), [user, setUser]);
+  useEffect(() => {
+    void setUser(user);
+  }, [user, setUser]);
   return <>{children}</>;
 }
 

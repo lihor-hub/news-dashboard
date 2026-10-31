@@ -1,5 +1,6 @@
 import type { User } from '../types';
 import { requestJson } from './core';
+import { changePrivateSession } from '@/lib/privateSession';
 
 export interface AuthConfig {
   provider: 'password' | 'keycloak';
@@ -39,10 +40,12 @@ export async function loginWithOtp(email: string, otp: string): Promise<User> {
 }
 
 export async function logoutUser(): Promise<void> {
+  await changePrivateSession(null);
   const config = await fetchAuthConfig().catch(() => null);
   if (config?.provider === 'keycloak' && config.logout_url) {
     window.location.assign(config.logout_url);
     return;
   }
-  await fetch('/api/auth/logout', { credentials: 'same-origin' });
+  const response = await fetch('/api/auth/logout', { credentials: 'same-origin' });
+  if (!response.ok) throw new Error('Server sign-out failed');
 }

@@ -23,7 +23,7 @@ export function DeleteAccountSection() {
     setErrorMsg(null);
     try {
       await deleteOwnAccount(confirmation);
-      setUser(null);
+      await setUser(null);
       void navigate('/login', { replace: true });
     } catch (err) {
       setErrorMsg(err instanceof Error ? err.message : 'Could not delete account.');
