@@ -86,6 +86,29 @@ afterEach(() => {
 });
 
 describe('daily visit protected host and home', () => {
+  it('retains a completed historical summary with unknown dates and incomplete totals', async () => {
+    blockers.ready = false;
+    vi.mocked(api.fetchProgressRewards).mockResolvedValue({
+      items: [],
+      reading_total: 12,
+      history_status: 'complete',
+      historical_reconciliation: {
+        status: 'complete',
+        credited_reads: 12,
+        preserved_rewards: 2,
+        completed_at: '2026-01-02T12:00:00Z',
+      },
+    });
+    renderHost('/reading-dna#progress');
+    const summary = await screen.findByRole('region', { name: 'Historical reading summary' });
+    expect(summary).toHaveTextContent('12 qualifying reads added');
+    expect(summary).toHaveTextContent('2 existing rewards preserved');
+    expect(summary).toHaveTextContent('Original earned dates are unknown');
+    expect(summary).toHaveTextContent('Deleted evidence cannot be recovered');
+    expect(summary).toHaveTextContent('No past visits or active time were reconstructed');
+    expect(screen.queryByText(/Historical reconciliation is pending/)).not.toBeInTheDocument();
+    expect(summary.querySelector('time')?.dateTime).toBe('2026-01-02T12:00:00Z');
+  });
   it('shows permanent reading totals, next target, textual locked requirements and real dates', async () => {
     blockers.ready = false; // Collection assertions must not race an unrelated welcome modal.
     vi.mocked(api.fetchProgressRewards).mockResolvedValue({

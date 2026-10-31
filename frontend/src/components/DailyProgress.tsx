@@ -333,6 +333,11 @@ export function DailyProgress({ children }: { children: ReactNode }) {
     }
   }, [placementReady, collection.data, pref.data, cache, accountId, claimed]);
 
+  const dismissHistory = () => {
+    if (history) void acknowledgeRewardGroup(history.group_id).catch(() => undefined);
+    setHistory(null);
+  };
+
   const closeFeedback = useCallback(() => {
     toast.dismiss(toastId);
     if (!mounted.current) return;
@@ -423,14 +428,14 @@ export function DailyProgress({ children }: { children: ReactNode }) {
           className="fixed bottom-20 end-4 z-40 max-w-sm rounded-xl border bg-background p-4"
         >
           <p role="status">
-            History added: {history.credited_reads} qualifying reads. Original earned dates may be
-            unknown.
+            Historical credit: {history.credited_reads} qualifying reads added. Original earned
+            dates are unknown.
           </p>
-          <Link to="/reading-dna#progress" onClick={() => setHistory(null)}>
+          <Link to="/reading-dna#progress" onClick={dismissHistory}>
             View my progress
           </Link>
           {' · '}
-          <button onClick={() => setHistory(null)}>Dismiss history summary</button>
+          <button onClick={dismissHistory}>Dismiss history summary</button>
         </aside>
       )}
       <Root
@@ -438,7 +443,7 @@ export function DailyProgress({ children }: { children: ReactNode }) {
         onOpenChange={(open) => {
           if (!open) {
             setWelcome(null);
-            setHistory(null);
+            dismissHistory();
           }
         }}
       >
@@ -470,8 +475,8 @@ export function DailyProgress({ children }: { children: ReactNode }) {
           )}
           {history && (
             <p>
-              History added: {history.credited_reads} qualifying reads. Original earned dates may be
-              unknown.
+              Historical credit: {history.credited_reads} qualifying reads added. Original earned
+              dates are unknown.
             </p>
           )}
           <div className="flex flex-wrap gap-2">
@@ -479,7 +484,7 @@ export function DailyProgress({ children }: { children: ReactNode }) {
               onClick={() => {
                 viewProgress.current = true;
                 setWelcome(null);
-                setHistory(null);
+                dismissHistory();
                 void navigate('/reading-dna#progress');
               }}
             >
@@ -490,7 +495,7 @@ export function DailyProgress({ children }: { children: ReactNode }) {
               variant="outline"
               onClick={() => {
                 setWelcome(null);
-                setHistory(null);
+                dismissHistory();
               }}
             >
               Continue reading

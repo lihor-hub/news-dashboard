@@ -800,3 +800,62 @@ meaning, not color or motion. No mascot, generated asset, casino effect or new d
 Exact executed commands, raw logs, acceptance matrix, browser screenshots and limitations
 belong to the #1628 implementation handoff in `thr_es5pqjkdvy` storage. Test-owned historical
 summary fixtures exercise the seam only; no operational historical account processing occurs.
+
+## 14. #1629 historical tooling implementation candidate
+
+Built atop reviewed/published #1628 `feda2b59`, preserving stacked dependency ancestry.
+This is the sole implementation owner's uncommitted candidate for NEXT independent review,
+not independent approval, publication, deployment or operational execution authorization.
+
+`reading_progress/history.py` supplies caller-connection `prepare(conn,user_id,protection_ref)`
+and `batch(conn,user_id)`. Neither initializes, connects nor commits. Both acquire the shared
+account lock before domain rows. Prepare freezes server cutoff time, policy `historical-v1`,
+maximum retained account UAS article-ID horizon and count of preexisting preserved awards.
+Retry cannot replace/extend them. External protection reference is bounded and deliberately
+not exposed/exported; it is NOT proof of human approval or effective retention protection.
+The additive account-cascading `user_historical_credit_state` stores that state, cursor,
+scanned/eligible/inserted counters, running/complete status and completion processing time.
+No initializer scan, automatic scheduling or public backfill mutation API exists.
+
+Each batch waits for at most 200 stable ascending article rows, then rechecks/locks UAS.
+No SKIP LOCKED holes. Eligibility is retained account `done_at IS NOT NULL` regardless state,
+or current Done undated, with no uploaded-date filter. All source rows advance the cursor,
+not just eligible ones. EOF completes; exactly 200 rows requires another EOF batch. Account
+serialization fences cooperating live/manual/automatic/Reading List/import/delete writers,
+including duplicate operators. Shared immutable credit, calibrated first attribution including
+zero, awards, summary increments and cursor/completion commit or roll back together. Savepoints
+remain caller-owned. Source article deletion after credit keeps digest/topic/award permanence.
+No visits/time/exact earned dates are reconstructed. No legacy award/date/metadata is changed.
+
+Historical scan source is UAS article evidence, not list-kind/global/event/badge inference.
+Article-kind Reading List and archive writers retain the existing synchronous live/import
+hook. The protected horizon/cutoff is NOT a snapshot of future imports: restore of old IDs
+behind/beyond the cursor still credits immediately, first provenance wins. Operationally,
+all cooperating writers must be deployed before protected capture. See the separately gated
+[runbook](progress-historical-runbook.md) for inventory, all-delete-path retention protection,
+pause/drain, dry-run, prepare/apply and rollback authorizations. No real-user operation was run.
+
+Completion with inserted reads or preserved awards creates one server-owned group with
+stable source `historical:v1`, kind `historical_intro`, and the existing closed summary
+`{credited_reads,exact_earned_dates_known:false}`. No per-historical-read/live group. Group
+and completion share the transaction; rerun/crash cannot duplicate. Existing exact dated
+welcome/history bundle and popup-off null-date inline claim remain sole presentation authority.
+Existing `/reward-events/{id}/ack` now also accepts already-claimed owned history groups;
+claiming history through the live claim route still rejects it. Dismiss/CTA ACK cannot
+reauthorize feedback. Lost committed responses may lose the introduction, not progress.
+No second modal/host, mail, push or recap outcome was added.
+
+Read-only repeatable-read rewards DTO adds `historical_reconciliation: object|null` and
+`history_status: reconciliation_pending|running|complete`. Reconciliation includes policy,
+cutoff/horizon/cursor, status, scanned/eligible/credited/preserved counters and completed_at,
+not protection_ref or account ID. Dates here are processing dates, never earned dates.
+ProgressSection retains this summary after dismissal, labels unknown earned dates and
+explicitly discloses permanently missing/deleted evidence and potentially incomplete totals.
+Archive-v2 adds informational reconciliation state, omits protection_ref; import ignores all
+uploaded operator cursors/claims/counters. Account deletion cascades state, groups and credits.
+
+Next owners #1630/#1631: consume live credit effective_at/award earned_at only for live period
+outcomes. Do not treat historical recorded/completed_at as a current-period read/award, infer
+missing lifetime totals from badges, mutate this operator state, or claim presentation while
+generating recap/mail. The orchestrator owns independent review/verification, normal-hook
+publication, dependency order, required checks and automatic-main-deploy scope conflict.

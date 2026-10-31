@@ -100,5 +100,11 @@ export const fetchProgressRewards = () =>
     topics?: TopicProgress;
     reading_total?: number;
     next_reading_target?: number | null;
-    history_status?: 'reconciliation_pending';
+    history_status?: 'reconciliation_pending' | 'running' | 'complete';
+    historical_reconciliation?: {
+      status: 'running' | 'complete';
+      credited_reads: number;
+      preserved_rewards: number;
+      completed_at: string | null;
+    } | null;
   }>(`${base}/progress-rewards`);
