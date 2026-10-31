@@ -17,11 +17,13 @@ export function RequireAuth({ children }: Props) {
   const intendedRoute = `${location.pathname}${location.search}${location.hash}`;
 
   useEffect(() => {
+    let active = true;
     setStatus('checking');
     setStartupError(false);
     fetchMe()
-      .then((user) => setUser(user))
+      .then((user) => (active ? setUser(user) : undefined))
       .catch((error: unknown) => {
+        if (!active) return;
         if (isUnauthorized(error)) {
           resetAuth('session-expired');
           // Always route to the in-app login page. Even when Keycloak is enabled,
@@ -33,6 +35,9 @@ export function RequireAuth({ children }: Props) {
         setStatus('recoverable-error');
         setStartupError(true);
       });
+    return () => {
+      active = false;
+    };
     // Run once on mount only
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
