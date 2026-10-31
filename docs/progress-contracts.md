@@ -975,3 +975,71 @@ Orchestrator owns independent review/fixes/verification, safe dependency retarge
 affected revalidation, required checks, publication and any authorized merge/deployment-scope
 resolution. No production AI/push/send, historical user-data operation, merge or deployment
 was performed by this implementation worker; test external AI/push are stubbed at boundaries.
+
+## 16. #1631 existing-email progress implementation candidate
+
+Built atop reviewed/pushed recap `646ae873`; the full stacked ancestry is preserved. This
+is the sole implementation owner's uncommitted candidate for independent review, not
+self-approval, publication, merge, deployment or parent-program completion.
+
+`briefing_email.progress.select_progress(user_id, recipient, base_url, briefing?, now?,
+database_url?)` is the sole optional read-only selector. One invocation per existing mail
+attempt supplies both HTML and text. Canonical scheduled mail and explicit preview pass
+the actual saved briefing `since_at/until_at`; missing, naive, invalid, reversed or future
+bounds omit progress rather than invent a period. Legacy passes no briefing and uses the
+half-open trailing 24 hours ending at preparation. The attempt clock is sampled after
+optional news enrichment, not before generation. Labels use the independent effective saved
+progress timezone, including numeric UTC offsets across DST, not browser or briefing zone.
+Retries select from the actual briefing chosen for that attempt; no cursor, snapshot table,
+new eligibility write, recap recompute, campaign, tracking pixel or news-empty send exists.
+
+One PostgreSQL REPEATABLE READ READ ONLY transaction binds a unique non-guest current account
+mailbox, resolves the zone, then selects only known catalog awards with live provenance,
+actual half-open earned times and an owned live reward group. Unknown, retired, orphaned,
+imported/historical/legacy rows cannot become recent from their recording timestamp. SQL
+ranks the highest newly earned tier per topic, then newest earned time and stable key;
+the final result is bounded to two. Non-topic rewards keep their unique identity. Server
+catalog names are whitespace-normalized/bounded to120 characters; active-time titles say
+approximately. If no eligible award, the existing read-only daily snapshot supplies a
+current valid streak>=3 (today/yesterday in the effective zone), explicitly labeled at
+preparation for sending. Empty, stale, invalid-zone or uncertain optional content is omitted.
+No raw time/read counts or legacy UTC reading streak fallback is mailed.
+
+Mailbox parsing requires exactly one addr-spec, no header newlines or malformed/list input,
+local-part case exact and domain case normalized. Case-insensitive stored-email collisions
+(including guest collisions) conservatively suppress personal content. Canonical retains
+current consent/current recipient checks and excludes guests; a recipient change or new
+ambiguity drops the prepared progress before existing SMTP delivery. Preview rechecks its
+actual account/email/guest after render, fails on changed ownership, and omits newly ambiguous
+progress without applying scheduled-mail opt-out to an explicit preview. Legacy repeats
+binding after selection, omitting only progress, never changing deployment-owned subscription
+behavior. These are pre-send checks, not an atomic transaction with an external SMTP server;
+already-delivered/forwarded copies cannot be recalled.
+
+`progress.html.j2` and `progress.txt.j2` are dedicated accessible compact partials. The only
+canonical template anchors are after the entire story loop, immediately before the existing
+web-briefing CTA/footer. Legacy inserts the same HTML partial after its article table/before
+its existing footer; text appends the same text partial after article lines. A safe absolute
+HTTP(S) `/reading-dna#progress` URL with no userinfo/query is required; HTML autoescaping
+and readable text labels carry meaning independently of color/artwork. `email_theme.py`,
+news subjects/preheaders, research inputs, schedules, SMTP transport and unsubscribe links
+remain unchanged. SMTP/forwarding/deletion limits are disclosed in PRIVACY.md. No storage or
+archive changes are needed; existing cascades and informational restore remain authority.
+
+The existing authenticated destination/collection is reused without a second frontend page
+or auth bypass. New real-backed browser coverage uses the built SPA, dedicated PostgreSQL,
+real password/session cookies and actual OTP issuance/verification. Only SMTP and the external
+SSO provider boundary are fixtures; actual SSO state cookies, next-path validation, callback
+and session creation run. It covers generated email CTA, generic and reward path/query/hash,
+password/OTP/SSO continuation, reload/heading focus, forwarded-link viewer isolation, scoped
+axe and320/600px layout. Raw email opening and document GET are checked for zero visits,
+activity days and read credits before authentication. Chromium/fixture SSO evidence is not
+native-device, real-provider or real-mailbox-client certification.
+
+Next handoff: independent reviewer owns code/security/privacy review and any findings;
+implementation owner may fix those findings under the serialized DB lane. A separate verifier
+must actually rerun required acceptance, followed by normal-hook publication. Orchestrator
+alone owns dependency retarget/rebase if recap merges, affected revalidation, required CI,
+merge/deployment scope conflict and parent closure. Exact touched files/template anchors,
+commands, raw logs, screenshots and limitations are in `thr_6wfgrkgps2` thread storage. No
+production send/AI, historical inventory/retention/backfill operation or merge ran here.

@@ -436,10 +436,11 @@ def test_app_base_url_is_used_for_all_briefing_email_links(
     briefing_id = _seed_complete_briefing(pg_clean, user_id, now)
     captured: dict[str, str] = {}
 
-    def capture_links(
+    def capture_links(  # noqa: PLR0913 - mirrors renderer signature
         briefing: Mapping[str, Any],
         *,
         enrichment: Mapping[str, Any] | None = None,
+        progress: dict[str, Any] | None = None,
         local_date: date,
         timezone_name: str,
         briefing_url: str,
@@ -454,6 +455,7 @@ def test_app_base_url_is_used_for_all_briefing_email_links(
         return render_briefing_email(
             briefing,
             enrichment=enrichment,
+            progress=progress,
             local_date=local_date,
             timezone_name=timezone_name,
             briefing_url=briefing_url,

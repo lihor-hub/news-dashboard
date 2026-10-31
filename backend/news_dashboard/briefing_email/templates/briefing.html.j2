@@ -39,6 +39,7 @@
   {% endif %}
 </div>
 {% endfor %}
+{% if progress %}{% include 'progress.html.j2' %}{% endif %}
 {% if briefing_url %}
 <p style="margin:24px 0 8px;"><a href="{{ briefing_url }}"
   style="display:inline-block;padding:11px 16px;background:{{ colors.primary }};

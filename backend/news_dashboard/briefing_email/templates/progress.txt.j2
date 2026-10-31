@@ -1,0 +1,5 @@
+Your progress
+{% if progress.titles %}Earned during {{ progress.period }}
+{% for title in progress.titles %}- {{ title }}
+{% endfor %}{% else %}{{ progress.streak }}
+{% endif %}View my progress: {{ progress.href }}

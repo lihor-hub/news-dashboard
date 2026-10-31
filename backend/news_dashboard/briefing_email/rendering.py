@@ -60,10 +60,11 @@ def _as_mappings(value: object) -> list[Mapping[str, Any]]:
     return [cast("Mapping[str, Any]", item) for item in value if isinstance(item, Mapping)]
 
 
-def render_briefing_email(
+def render_briefing_email(  # noqa: PLR0913 - explicit optional mail sections
     briefing: Mapping[str, Any],
     *,
     enrichment: Mapping[str, Any] | None = None,
+    progress: dict[str, Any] | None = None,
     local_date: date,
     timezone_name: str,
     briefing_url: str,
@@ -71,6 +72,8 @@ def render_briefing_email(
     unsubscribe_url: str,
 ) -> RenderedEmail:
     """Render one saved briefing without performing I/O."""
+    from news_dashboard.briefing_email.progress import safe_progress_url
+
     content = _as_mapping(briefing.get("content"))
     sections = _as_mappings(content.get("sections"))
     articles = _as_mappings(briefing.get("articles"))
@@ -153,6 +156,7 @@ def render_briefing_email(
         "title": str(briefing.get("title") or "Daily briefing"),
         "summary": str(briefing.get("summary") or ""),
         "stories": stories,
+        "progress": progress if progress and safe_progress_url(progress.get("href")) else None,
         "local_date": local_date.strftime("%B %-d, %Y"),
         "timezone_name": timezone_name,
         "estimated_minutes": estimated_minutes,
