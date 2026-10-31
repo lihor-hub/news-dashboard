@@ -41,14 +41,23 @@ jobs:
       - name: Run Trivy vulnerability scanner on latest image
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
-          image-ref: ${{ env.IMAGE }}:latest
+          image-ref: ${{ env.IMAGE }}@sha256:591ba229bb5b451f0aa849ed8083dfbc0ea476377f525589df338a1a00cee633
           format: sarif
           output: trivy-results.sarif
           exit-code: '1'  # Fail on any vulnerabilities
           ignore-unfixed: true
           severity: CRITICAL,HIGH
 
+      - name: Check whether Trivy produced a report
+        if: ${{ !cancelled() }}
+        id: trivy-report
+        run: |
+          if [ -s trivy-results.sarif ]; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Upload Trivy scan results to GitHub Security tab
+        if: ${{ !cancelled() && steps.trivy-report.outputs.exists == 'true' }}
         uses: github/codeql-action/upload-sarif@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4
         with:
           sarif_file: trivy-results.sarif
