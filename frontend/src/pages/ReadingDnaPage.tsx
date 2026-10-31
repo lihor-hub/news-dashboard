@@ -357,6 +357,7 @@ function LearningCenter() {
     onMutate: () => setError(null),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: QUIZ_HISTORY_KEY });
+      void queryClient.invalidateQueries({ queryKey: ['progress-rewards'] });
     },
     onError: (err) => setError(err instanceof Error ? err.message : 'Failed to submit quiz'),
   });

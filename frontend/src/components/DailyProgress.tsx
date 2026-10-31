@@ -1,4 +1,6 @@
-import { lazy, Suspense, useEffect, useRef, useState, type ReactNode } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { toast } from 'sonner';
+import { RewardFeedback } from './RewardFeedback';
 import { Link, useLocation, useNavigate } from 'react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/contexts/auth';
@@ -8,6 +10,13 @@ import { useWhatsNew } from '@/hooks/useWhatsNew';
 import { useOnboardingWizard } from '@/hooks/useOnboardingWizard';
 import {
   claimDailyWelcome,
+  claimPresentation,
+  claimRewardGroup,
+  acknowledgeRewardGroup,
+  fetchProgressRewards,
+  rewardHref,
+  type ProgressReward,
+  type Presentation,
   fetchDailyStreak,
   fetchProgressPreferences,
   recordDailyVisit,
@@ -61,14 +70,38 @@ export function DailyProgress({ children }: { children: ReactNode }) {
     enabled: false, // Observe POSTs and home refreshes without creating a second recorder.
   });
   const [welcome, setWelcome] = useState<DailyStreak | null>(null);
+  const [history, setHistory] = useState<Presentation['history']>(null);
+  const [claimingPresentation, setClaimingPresentation] = useState(false);
+  const [feedback, setFeedback] = useState<ProgressReward[]>([]);
+  const groups = useRef(new Set<string>());
+  const attemptedGroups = useRef(new Set<string>());
+  const generation = useRef(0);
+  const mounted = useRef(false);
+  const readyNow = useRef(false);
+  const welcomeEnabled = useRef(false);
+  const toastId = `progress-rewards-${accountId}`;
+  const collection = useQuery({
+    queryKey: ['progress-rewards', accountId],
+    queryFn: fetchProgressRewards,
+  });
+  useEffect(() => {
+    generation.current += 1;
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+      generation.current += 1;
+      toast.dismiss(toastId);
+    };
+  }, [toastId]);
   const [failed, setFailed] = useState(false);
   const [revision, setRevision] = useState(0);
   const [otherDialog, setOtherDialog] = useState(false);
+  const [dialogPresent, setDialogPresent] = useState(false);
   const indicator = useRef<HTMLAnchorElement>(null);
   const continueButton = useRef<HTMLButtonElement>(null);
   const priorFocus = useRef<HTMLElement | null>(null);
   const viewProgress = useRef(false);
-  const claimed = useRef(new Set<string>());
+  const [claimed, setClaimed] = useState(() => new Set<string>());
   const desktop = useMediaQuery('(min-width: 640px)');
   const whatsNew = useWhatsNew();
   const onboarding = useOnboardingWizard();
@@ -87,9 +120,12 @@ export function DailyProgress({ children }: { children: ReactNode }) {
   );
 
   useEffect(() => {
-    const observer = new MutationObserver(() => {
+    const update = () => {
       setOtherDialog(!!document.querySelector('[role="dialog"]:not([data-daily-welcome])'));
-    });
+      setDialogPresent(!!document.querySelector('[role="dialog"]'));
+    };
+    const observer = new MutationObserver(update);
+    update();
     observer.observe(document.body, {
       childList: true,
       subtree: true,
@@ -123,6 +159,9 @@ export function DailyProgress({ children }: { children: ReactNode }) {
       try {
         const result = await recordDailyVisit();
         if (cancelled) return;
+        // A home GET started before this visit must not overwrite its fresh claim target.
+        await cache.cancelQueries({ queryKey: ['daily-streak', accountId] });
+        if (cancelled) return;
         setFailed(false);
         cache.setQueryData(['daily-streak', accountId], result);
         void cache.invalidateQueries({ queryKey: ['progress-rewards', accountId] });
@@ -155,30 +194,36 @@ export function DailyProgress({ children }: { children: ReactNode }) {
   }, [daily]);
 
   useEffect(() => {
-    if (pref.data?.daily_welcome_enabled === false || otherDialog) setWelcome(null);
+    welcomeEnabled.current = pref.data?.daily_welcome_enabled === true;
+    if (!welcomeEnabled.current || otherDialog) setWelcome(null);
   }, [pref.data?.daily_welcome_enabled, otherDialog]);
 
   useEffect(() => {
     const target = daily?.welcome_target?.expected_visit_date;
     if (
       !target ||
+      !collection.data ||
       !pref.data?.daily_welcome_enabled ||
       !onboarding.ready ||
       onboarding.open ||
       !whatsNew.ready ||
       whatsNew.open ||
       otherDialog ||
+      !!document.querySelector('[role="dialog"]') ||
       welcome ||
-      claimed.current.has(target) ||
+      claimed.has(target) ||
       document.visibilityState !== 'visible'
     )
       return;
-    let cancelled = false;
-    claimed.current.add(target);
-    void claimDailyWelcome(target)
+    const currentGeneration = generation.current;
+    setClaimed((previous) => new Set(previous).add(target));
+    setClaimingPresentation(true);
+    const historyTarget = collection.data?.historical_group_id;
+    void (historyTarget ? claimDailyWelcome(target, historyTarget) : claimDailyWelcome(target))
       .then((envelope) => {
         if (
-          cancelled ||
+          currentGeneration !== generation.current ||
+          !welcomeEnabled.current ||
           !envelope.show ||
           !envelope.authorization.welcome ||
           !envelope.welcome ||
@@ -192,13 +237,14 @@ export function DailyProgress({ children }: { children: ReactNode }) {
             : null;
         viewProgress.current = false;
         setWelcome(envelope.welcome);
+        if (envelope.authorization.history) setHistory(envelope.history);
       })
       .catch(() => {
         /* Consume-on-claim: a lost response must never re-authorize display. */
+      })
+      .finally(() => {
+        if (currentGeneration === generation.current) setClaimingPresentation(false);
       });
-    return () => {
-      cancelled = true;
-    };
   }, [
     daily,
     pref.data,
@@ -207,9 +253,120 @@ export function DailyProgress({ children }: { children: ReactNode }) {
     whatsNew.ready,
     whatsNew.open,
     otherDialog,
+    dialogPresent,
     welcome,
     revision,
+    collection.data,
+    claimed,
   ]);
+
+  const placementReady =
+    onboarding.ready &&
+    !onboarding.open &&
+    whatsNew.ready &&
+    !whatsNew.open &&
+    !otherDialog &&
+    !dialogPresent &&
+    !welcome &&
+    !history &&
+    !claimingPresentation &&
+    !!pref.data &&
+    !!daily?.available &&
+    !!collection.data &&
+    !(
+      daily?.welcome_target &&
+      pref.data.daily_welcome_enabled &&
+      !claimed.has(daily.welcome_target.expected_visit_date)
+    ) &&
+    document.visibilityState === 'visible';
+  useEffect(() => {
+    readyNow.current = placementReady;
+  }, [placementReady]);
+  useEffect(() => {
+    if (!placementReady || document.querySelector('[role="dialog"]')) return;
+    const currentGeneration = generation.current;
+    const historyTarget = collection.data?.historical_group_id;
+    if (!pref.data?.daily_welcome_enabled && historyTarget && !claimed.has(historyTarget)) {
+      setClaimed((previous) => new Set(previous).add(historyTarget));
+      setClaimingPresentation(true);
+      void claimPresentation(null, historyTarget)
+        .then((result) => {
+          if (
+            generation.current === currentGeneration &&
+            result.show &&
+            result.authorization.history
+          )
+            setHistory(result.history);
+        })
+        .catch(() => undefined)
+        .finally(() => {
+          if (generation.current === currentGeneration) setClaimingPresentation(false);
+        });
+      return;
+    }
+    for (const id of collection.data?.pending_reward_group_ids ?? []) {
+      if (attemptedGroups.current.has(id)) continue;
+      attemptedGroups.current.add(id);
+      void claimRewardGroup(id)
+        .then((result) => {
+          if (
+            generation.current !== currentGeneration ||
+            !readyNow.current ||
+            !result.show ||
+            !result.authorization.rewards ||
+            !result.rewards?.length
+          )
+            return;
+          groups.current.add(id);
+          setFeedback((previous) => [
+            ...previous,
+            ...result.rewards!.filter(
+              (reward) => !previous.some((item) => item.key === reward.key)
+            ),
+          ]);
+        })
+        .catch(() => undefined)
+        .finally(() => {
+          if (generation.current === currentGeneration)
+            void cache.invalidateQueries({ queryKey: ['progress-rewards', accountId] });
+        });
+    }
+  }, [placementReady, collection.data, pref.data, cache, accountId, claimed]);
+
+  const closeFeedback = useCallback(() => {
+    toast.dismiss(toastId);
+    if (!mounted.current) return;
+    setFeedback([]);
+    for (const id of groups.current) void acknowledgeRewardGroup(id).catch(() => undefined);
+    groups.current.clear();
+  }, [toastId]);
+  const viewFeedback = useCallback(() => {
+    const key = feedback[0]?.key;
+    closeFeedback();
+    if (key) void navigate(rewardHref(key));
+  }, [feedback, closeFeedback, navigate]);
+  useEffect(() => {
+    if (!placementReady || feedback.length === 0) {
+      toast.dismiss(toastId);
+      return;
+    }
+    toast.custom(
+      () => (
+        <RewardFeedback
+          key={feedback.map((r) => r.key).join(',')}
+          rewards={feedback}
+          onClose={closeFeedback}
+          onView={viewFeedback}
+        />
+      ),
+      {
+        id: toastId,
+        duration: Infinity,
+        className: pref.data?.reward_animations_enabled ? '' : 'progress-static',
+        onDismiss: closeFeedback,
+      }
+    );
+  }, [feedback, placementReady, toastId, closeFeedback, viewFeedback, pref.data]);
 
   const Root = desktop ? Dialog : Sheet;
   const Title = desktop ? DialogTitle : SheetTitle;
@@ -260,10 +417,29 @@ export function DailyProgress({ children }: { children: ReactNode }) {
           state={{ ...whatsNew, open: onboarding.ready && !onboarding.open && whatsNew.open }}
         />
       </Suspense>
+      {history && !welcome && !otherDialog && !onboarding.open && !whatsNew.open && (
+        <aside
+          aria-label="Progress history introduction"
+          className="fixed bottom-20 end-4 z-40 max-w-sm rounded-xl border bg-background p-4"
+        >
+          <p role="status">
+            History added: {history.credited_reads} qualifying reads. Original earned dates may be
+            unknown.
+          </p>
+          <Link to="/reading-dna#progress" onClick={() => setHistory(null)}>
+            View my progress
+          </Link>
+          {' · '}
+          <button onClick={() => setHistory(null)}>Dismiss history summary</button>
+        </aside>
+      )}
       <Root
         open={!!welcome}
         onOpenChange={(open) => {
-          if (!open) setWelcome(null);
+          if (!open) {
+            setWelcome(null);
+            setHistory(null);
+          }
         }}
       >
         <Content {...modalProps} {...(!desktop ? { side: 'bottom' as const } : {})}>
@@ -286,17 +462,37 @@ export function DailyProgress({ children }: { children: ReactNode }) {
               <SevenDayStrip daily={welcome} />
             </>
           )}
+          {welcome?.recent_reward && !history && (
+            <p>
+              From your recent collection: {welcome.recent_reward.title}. Already saved in your
+              achievements.
+            </p>
+          )}
+          {history && (
+            <p>
+              History added: {history.credited_reads} qualifying reads. Original earned dates may be
+              unknown.
+            </p>
+          )}
           <div className="flex flex-wrap gap-2">
             <Button
               onClick={() => {
                 viewProgress.current = true;
                 setWelcome(null);
+                setHistory(null);
                 void navigate('/reading-dna#progress');
               }}
             >
               View my progress
             </Button>
-            <Button ref={continueButton} variant="outline" onClick={() => setWelcome(null)}>
+            <Button
+              ref={continueButton}
+              variant="outline"
+              onClick={() => {
+                setWelcome(null);
+                setHistory(null);
+              }}
+            >
               Continue reading
             </Button>
           </div>

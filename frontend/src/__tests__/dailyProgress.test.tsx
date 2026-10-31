@@ -87,6 +87,7 @@ afterEach(() => {
 
 describe('daily visit protected host and home', () => {
   it('shows permanent reading totals, next target, textual locked requirements and real dates', async () => {
+    blockers.ready = false; // Collection assertions must not race an unrelated welcome modal.
     vi.mocked(api.fetchProgressRewards).mockResolvedValue({
       reading_total: 1,
       next_reading_target: 10,
@@ -117,6 +118,7 @@ describe('daily visit protected host and home', () => {
     renderHost('/reading-dna#progress');
     expect(await screen.findByText('✓ Earned: 1 articles read')).toBeInTheDocument();
     expect(screen.getByText('◇ Locked: 10 articles read')).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Qualifying reads' })).toBeInTheDocument();
     expect(screen.getByText('Complete 10 qualifying article reads.')).toBeInTheDocument();
     expect(screen.getByText('Next reading milestone: 10 articles.')).toBeInTheDocument();
     expect(screen.getByText(/not your complete lifetime total/)).toBeInTheDocument();
@@ -127,12 +129,16 @@ describe('daily visit protected host and home', () => {
   });
 
   it('distinguishes empty tracked reads and retryable errors instead of fabricating zero', async () => {
-    vi.mocked(api.fetchProgressRewards)
-      .mockRejectedValueOnce(new Error('offline'))
-      .mockResolvedValue({ items: [], reading_total: 0, next_reading_target: 1 });
+    blockers.ready = false; // This test owns reward loading/retry, not welcome placement.
+    vi.mocked(api.fetchProgressRewards).mockRejectedValue(new Error('offline'));
     renderHost('/reading-dna#progress');
     const retry = await screen.findByRole('button', { name: 'Retry rewards' });
     expect(screen.queryByText(/No qualifying reads tracked yet/)).not.toBeInTheDocument();
+    vi.mocked(api.fetchProgressRewards).mockResolvedValue({
+      items: [],
+      reading_total: 0,
+      next_reading_target: 1,
+    });
     fireEvent.click(retry);
     expect(await screen.findByText(/No qualifying reads tracked yet/)).toBeInTheDocument();
   });
@@ -176,6 +182,17 @@ describe('daily visit protected host and home', () => {
     fireEvent.click(checkbox);
     await screen.findByRole('alert');
     expect((checkbox as HTMLInputElement).checked).toBe(true);
+  });
+
+  it('failed animation preference save rolls back independently of welcome', async () => {
+    blockers.ready = false;
+    vi.mocked(api.saveProgressPreferences).mockRejectedValue(new Error('Save unavailable'));
+    renderHost('/reading-dna#progress');
+    const animation = await screen.findByLabelText('Reward animations');
+    fireEvent.click(animation);
+    await screen.findByRole('alert');
+    expect((animation as HTMLInputElement).checked).toBe(false);
+    expect((screen.getByLabelText('Daily welcome popup') as HTMLInputElement).checked).toBe(true);
   });
 
   it('disabled popup retains the visit recorder and persistent indicator', async () => {

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { useLocation } from 'react-router';
+import { Link, useLocation } from 'react-router';
+import { RewardDetail } from './RewardDetail';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/contexts/auth';
 import {
@@ -8,12 +9,22 @@ import {
   fetchProgressRewards,
   saveProgressPreferences,
   type ProgressPreferences,
+  rewardHref,
 } from '@/api/progress';
 import { SevenDayStrip } from './DailyProgress';
 import { Button } from './ui/button';
 import { RewardEmblem } from './RewardEmblem';
 import { TopicProgress } from './TopicProgress';
 import { ActivityProgress } from './ActivityProgress';
+
+function category(key: string) {
+  if (key.startsWith('daily_streak_')) return 'Daily visits';
+  if (key.startsWith('articles_read_') || key === 'hundred_articles_read')
+    return 'Qualifying reads';
+  if (key.startsWith('active_time_')) return 'Approximate active time badges';
+  if (key.startsWith('breadth_')) return 'Topic breadth';
+  return key === 'first_quiz_passed' ? 'Learning' : 'Preserved rewards';
+}
 
 export function ProgressSection() {
   const { user } = useAuth();
@@ -37,6 +48,7 @@ export function ProgressSection() {
     queryFn: fetchProgressRewards,
     enabled,
   });
+  const requestedKey = new URLSearchParams(location.search).get('reward');
   const [zone, setZone] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -44,8 +56,8 @@ export function ProgressSection() {
     if (preferences.data) setZone(preferences.data.progress_timezone);
   }, [preferences.data]);
   useEffect(() => {
-    if (location.hash === '#progress') heading.current?.focus();
-  }, [location.key, location.hash]);
+    if (location.hash === '#progress' && !requestedKey) heading.current?.focus();
+  }, [location.key, location.hash, requestedKey]);
   async function save(patch: Partial<Omit<ProgressPreferences, 'timezone_initialized'>>) {
     setSaving(true);
     setError(null);
@@ -66,7 +78,7 @@ export function ProgressSection() {
   return (
     <section
       id="progress"
-      className="scroll-mt-4 space-y-4 rounded-xl border p-4"
+      className="min-w-0 scroll-mt-4 space-y-4 rounded-xl border p-4 break-words"
       aria-labelledby="progress-heading"
     >
       <h2 id="progress-heading" tabIndex={-1} ref={heading} className="text-xl font-semibold">
@@ -76,10 +88,25 @@ export function ProgressSection() {
         <p>Sign in with a personal account to record daily progress.</p>
       ) : (
         <>
+          {requestedKey && rewards.isSuccess && (
+            <RewardDetail
+              requestedKey={requestedKey}
+              reward={rewards.data.items.find((reward) => reward.key === requestedKey)}
+            />
+          )}
           {daily.isPending ? (
             <p>Loading daily progress…</p>
           ) : daily.isError ? (
-            <p role="status">Daily progress is unavailable. Your saved progress has not changed.</p>
+            <div role="status">
+              Daily progress is unavailable. Your saved progress has not changed.{' '}
+              <Button
+                variant="outline"
+                className="h-auto min-h-9 max-w-full whitespace-normal"
+                onClick={() => void daily.refetch()}
+              >
+                Retry daily progress
+              </Button>
+            </div>
           ) : (
             daily.data?.available && (
               <>
@@ -95,9 +122,10 @@ export function ProgressSection() {
               </>
             )
           )}
+          {preferences.isPending && <p>Loading progress preferences…</p>}
           {preferences.data && (
-            <fieldset className="space-y-3" disabled={saving}>
-              <legend className="font-medium">Progress preferences</legend>
+            <fieldset className="min-w-0 space-y-3" disabled={saving}>
+              <legend className="max-w-full font-medium">Progress preferences</legend>
               <label className="flex items-center gap-2">
                 <input
                   type="checkbox"
@@ -121,10 +149,10 @@ export function ProgressSection() {
                   void save({ progress_timezone: zone });
                 }}
               >
-                <label className="grid gap-1 text-sm">
+                <label className="grid min-w-0 max-w-full gap-1 text-sm">
                   Progress timezone (IANA)
                   <input
-                    className="rounded border bg-background p-2"
+                    className="w-full min-w-0 rounded border bg-background p-2"
                     value={zone}
                     maxLength={255}
                     required
@@ -136,12 +164,24 @@ export function ProgressSection() {
                 </Button>
               </form>
               <p className="text-sm text-muted-foreground">
-                Neither control disables tracking. Email keeps its own timezone. Travel may suppress
-                a daily credit or start a fresh streak; past dates and earned rewards remain.
+                Neither control disables tracking. Automatic measurement still respects Privacy
+                &amp; analytics consent. Email keeps its own timezone. Travel may suppress a daily
+                credit or start a fresh streak; past dates and earned rewards remain.
               </p>
             </fieldset>
           )}
-          {preferences.isError && <p role="status">Progress preferences are unavailable.</p>}
+          {preferences.isError && (
+            <div role="status">
+              Progress preferences are unavailable.{' '}
+              <Button
+                variant="outline"
+                className="h-auto min-h-9 max-w-full whitespace-normal"
+                onClick={() => void preferences.refetch()}
+              >
+                Retry progress preferences
+              </Button>
+            </div>
+          )}
           {error && <p role="alert">{error}</p>}
           {accountId !== undefined && <ActivityProgress key={accountId} accountId={accountId} />}
           <h3 className="font-medium">Permanent collection</h3>
@@ -173,7 +213,13 @@ export function ProgressSection() {
               )}
             </div>
           )}
-          {rewards.data?.topics && <TopicProgress key={accountId} topics={rewards.data.topics} />}
+          {rewards.data?.topics && (
+            <TopicProgress
+              key={accountId}
+              topics={rewards.data.topics}
+              rewards={rewards.data.items}
+            />
+          )}
           {rewards.isPending ? (
             <p>Loading rewards…</p>
           ) : rewards.isError ? (
@@ -184,34 +230,63 @@ export function ProgressSection() {
               </Button>
             </div>
           ) : (
-            <ul className="grid gap-2 sm:grid-cols-2">
-              {rewards.data?.items
-                .filter((reward) => !reward.topic_id)
-                .map((reward) => (
-                  <li key={reward.key} className="rounded border p-3">
-                    <RewardEmblem target={reward.target} earned={reward.unlocked} />
-                    <p className="font-medium">
-                      {reward.unlocked ? '✓ Earned: ' : '◇ Locked: '}
-                      {reward.title}
-                    </p>
-                    <p className="text-sm">{reward.description}</p>
-                    {reward.unlocked && (
-                      <p className="text-xs text-muted-foreground">
-                        {reward.earned_at ? (
-                          <>
-                            <span>Earned </span>
-                            <time dateTime={reward.earned_at}>
-                              {new Date(reward.earned_at).toLocaleDateString()}
-                            </time>
-                          </>
-                        ) : (
-                          'Original earned date unknown; preserved reward.'
-                        )}
-                      </p>
-                    )}
-                  </li>
-                ))}
-            </ul>
+            <div className="space-y-4">
+              {[
+                'Daily visits',
+                'Qualifying reads',
+                'Topic breadth',
+                'Approximate active time badges',
+                'Learning',
+                'Preserved rewards',
+              ].map((name) => {
+                const items =
+                  rewards.data?.items.filter(
+                    (reward) => !reward.topic_id && category(reward.key) === name
+                  ) ?? [];
+                return (
+                  items.length > 0 && (
+                    <section key={name} aria-label={name} className="space-y-2">
+                      <h4 className="font-medium">{name}</h4>
+                      <ul className="grid gap-2 sm:grid-cols-2">
+                        {items.map((reward) => (
+                          <li key={reward.key} className="rounded border p-3">
+                            <RewardEmblem
+                              target={reward.target}
+                              earned={reward.unlocked}
+                              rewardKey={reward.key}
+                            />
+                            <p className="font-medium">
+                              <Link
+                                to={rewardHref(reward.key)}
+                                className="underline decoration-dotted underline-offset-4"
+                              >
+                                {reward.unlocked ? '✓ Earned: ' : '◇ Locked: '}
+                                {reward.title}
+                              </Link>
+                            </p>
+                            <p className="text-sm">{reward.description}</p>
+                            {reward.unlocked && (
+                              <p className="text-xs text-muted-foreground">
+                                {reward.earned_at ? (
+                                  <>
+                                    <span>Earned </span>
+                                    <time dateTime={reward.earned_at}>
+                                      {new Date(reward.earned_at).toLocaleDateString()}
+                                    </time>
+                                  </>
+                                ) : (
+                                  'Original earned date unknown; preserved reward.'
+                                )}
+                              </p>
+                            )}
+                          </li>
+                        ))}
+                      </ul>
+                    </section>
+                  )
+                );
+              })}
+            </div>
           )}
         </>
       )}

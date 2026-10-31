@@ -118,7 +118,11 @@ The two presentation preferences are independent and default on. Progress has it
 saved timezone; changing it does not reschedule briefing email. Past dates stay frozen;
 travel can suppress a credit or restart a streak without removing the best or rewards.
 A welcome is consumed atomically across devices before display; a lost response or
-crash may lose feedback, but never earned progress. No offline retro-credit is recorded.
+crash may lose feedback, but never earned progress. Live reward groups use the same
+consume-before-display rule; acknowledgement cannot replay a celebration. A daily welcome
+may repeat one recent collection summary, not authorize another newly-earned notification.
+Animation controls only change presentation; static feedback and the permanent collection
+remain usable, and system reduced motion always wins. No offline retro-credit is recorded.
 
 Archive v2 includes account-scoped daily dates, counters, awards, presentation claims
 and progress preferences. Exported progress is informational, **not restored** from an
