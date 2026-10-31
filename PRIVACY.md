@@ -104,6 +104,25 @@ Uploaded time/rewards are informational only and cannot restore or earn progress
 deletion cascades all activity rows. Legacy analytics time remains a separate estimate and is
 never converted into these totals or badges.
 
+## Frozen weekly progress recaps
+
+Weekly Recap saves seven completed dates in your independent progress timezone; delivery
+still uses your briefing schedule and timezone. Each snapshot keeps its original date labels,
+UTC boundaries, approximate active seconds, observed visit-day count, coverage limitations and
+live earned reward names/descriptions/dates. Old-zone daily records are never rebucketed.
+Only existing aggregate day records supply time; raw analytics estimates are not measured
+reading time. Unavailable measurement is distinct from measured zero, and unknown global
+availability means coverage is incomplete. Legacy recaps remain labeled legacy estimates.
+
+The first stored snapshot wins. Late observations, travel, catalog changes and aggregate
+pruning do not rewrite it. Frozen recaps remain in your authenticated private history until
+account deletion and cascade with your account. Archive-v2 exports include your snapshots;
+uploaded snapshots, earned times, visits and counters are informational and are **not restored**
+as trusted history. Only validated preferences restore from the new progress sections.
+New progress, coverage and reward descriptors are excluded from recap AI prompts and traces;
+existing legacy reading-summary inputs retain their existing AI behavior. This adds no new
+collection, campaign, public sharing link or email-open measurement.
+
 ## Functional daily progress
 
 Authenticated visible app visits store one saved-local calendar date, its timezone,

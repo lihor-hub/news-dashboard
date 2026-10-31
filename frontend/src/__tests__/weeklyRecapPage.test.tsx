@@ -1,13 +1,16 @@
 // @vitest-environment happy-dom
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { QueryClientProvider, QueryClient } from '@tanstack/react-query';
 import * as api from '../api';
+import { MemoryRouter } from 'react-router';
 import { WeeklyRecapPage } from '../pages/WeeklyRecapPage';
 import type { WeeklyRecap } from '../types';
 
 vi.mock('../api', () => ({
   fetchRecaps: vi.fn(),
+  fetchRecap: vi.fn(),
   fetchPersonalizationNudges: vi.fn(),
   applyPersonalizationNudge: vi.fn(),
   dismissPersonalizationNudge: vi.fn(),
@@ -18,7 +21,11 @@ function makeQc() {
 }
 
 function Wrapper({ children }: { children: React.ReactNode }) {
-  return <QueryClientProvider client={makeQc()}>{children}</QueryClientProvider>;
+  return (
+    <MemoryRouter>
+      <QueryClientProvider client={makeQc()}>{children}</QueryClientProvider>
+    </MemoryRouter>
+  );
 }
 
 const ENRICHED_RECAP: WeeklyRecap = {
@@ -78,6 +85,79 @@ beforeEach(() => {
 });
 
 describe('WeeklyRecapPage', () => {
+  it('loads history by keyboard, keeps it on failure, and retries the same offset', async () => {
+    const user = userEvent.setup();
+    const firstPage = Array.from({ length: 12 }, (_, index) => ({
+      ...LEGACY_RECAP,
+      id: index + 1,
+    }));
+    const older = { ...LEGACY_RECAP, id: 99 };
+    let resolveOlder!: (value: WeeklyRecap[]) => void;
+    vi.mocked(api.fetchRecaps)
+      .mockResolvedValueOnce(firstPage)
+      .mockRejectedValueOnce(new Error('Network unavailable'))
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveOlder = resolve;
+          })
+      );
+    render(<WeeklyRecapPage />, { wrapper: Wrapper });
+
+    const load = await screen.findByRole('button', { name: 'Load older recaps' });
+    load.focus();
+    await user.keyboard('{Enter}');
+    await screen.findByText('Could not load more recaps. Please retry.');
+    expect(screen.getAllByRole('link', { name: /Open recap:/ })).toHaveLength(11);
+    expect(load).toBeEnabled();
+    expect(load).toHaveFocus();
+    await user.keyboard('{Enter}');
+    expect(await screen.findByRole('button', { name: 'Loading…' })).toBeDisabled();
+    resolveOlder([older]);
+    await waitFor(() =>
+      expect(screen.queryByRole('button', { name: 'Loading…' })).not.toBeInTheDocument()
+    );
+    expect(screen.getAllByRole('link', { name: /Open recap:/ })).toHaveLength(12);
+    expect(screen.getAllByRole('link', { name: /Open recap:/ }).at(-1)).toHaveAttribute(
+      'href',
+      '/recap?recap=99'
+    );
+    expect(screen.queryByRole('button', { name: 'Load older recaps' })).not.toBeInTheDocument();
+    expect(vi.mocked(api.fetchRecaps).mock.calls).toEqual([[], [12], [12]]);
+  });
+
+  it.each(['0', '-1', 'abc', '9007199254740992'])(
+    'rejects invalid selected recap %s without fetching detail',
+    async (id) => {
+      vi.mocked(api.fetchRecaps).mockResolvedValue([LEGACY_RECAP]);
+      render(
+        <MemoryRouter initialEntries={[`/recap?recap=${id}`]}>
+          <WeeklyRecapPage />
+        </MemoryRouter>
+      );
+      await screen.findByText('Invalid recap ID');
+      expect(api.fetchRecap).not.toHaveBeenCalled();
+      expect(screen.queryByText('Nice reading week')).not.toBeInTheDocument();
+    }
+  );
+
+  it.each([new Error('Recap not found'), 'not an Error'])(
+    'shows selected-detail failures, not the latest recap',
+    async (error) => {
+      vi.mocked(api.fetchRecaps).mockResolvedValue([LEGACY_RECAP]);
+      vi.mocked(api.fetchRecap).mockRejectedValue(error);
+      render(
+        <MemoryRouter initialEntries={['/recap?recap=99']}>
+          <WeeklyRecapPage />
+        </MemoryRouter>
+      );
+      await screen.findByText(
+        error instanceof Error ? error.message : 'Failed to load weekly recaps'
+      );
+      expect(api.fetchRecap).toHaveBeenCalledWith(99);
+      expect(screen.queryByText('Nice reading week')).not.toBeInTheDocument();
+    }
+  );
   it('renders saved backlog, dwell profile, and nudges for an enriched recap', async () => {
     vi.mocked(api.fetchRecaps).mockResolvedValue([ENRICHED_RECAP]);
     render(<WeeklyRecapPage />, { wrapper: Wrapper });

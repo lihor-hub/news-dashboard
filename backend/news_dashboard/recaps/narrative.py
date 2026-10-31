@@ -16,6 +16,8 @@ def _fallback_narrative(recap: dict[str, Any]) -> str:
     categories: list[dict[str, Any]] = recap.get("categories") or []
     top_category = categories[0].get("category") if categories else None
 
+    if recap.get("snapshot_version") == 2:
+        return f"Your reading list recorded {articles_read} completed articles in this period."
     if articles_read <= 0:
         return "You didn't read any articles this week — your next recap is a fresh start."
     if top_category:
@@ -24,6 +26,50 @@ def _fallback_narrative(recap: dict[str, Any]) -> str:
             f"mostly {top_category}."
         )
     return f"You read {articles_read} articles in {minutes_read} minutes this week."
+
+
+def _legacy_fields(
+    value: Any, *, strings: tuple[str, ...] = (), numbers: tuple[str, ...] = ()
+) -> dict[str, Any]:
+    if not isinstance(value, dict):
+        return {}
+    # Only scalar legacy leaves may cross the model and tracing boundary.
+    return {
+        key: value[key]
+        for keys, types in ((strings, (str,)), (numbers, (int, float)))
+        for key in keys
+        if key in value and type(value[key]) in types
+    }
+
+
+def _legacy_metrics(recap: dict[str, Any]) -> dict[str, Any]:
+    metrics = _legacy_fields(
+        recap,
+        strings=("week_start", "week_end"),
+        numbers=("articles_read", "minutes_read", "current_streak_days"),
+    )
+    for key, fields in (
+        ("saved", ("starred_this_week", "read_from_backlog", "backlog_total")),
+        ("dwell", ("skims", "reads", "average_seconds")),
+    ):
+        if isinstance(recap.get(key), dict):
+            metrics[key] = _legacy_fields(recap[key], numbers=fields)
+    for key, strings, numbers in (
+        ("categories", ("category",), ("count",)),
+        ("sources", ("source",), ("count",)),
+        (
+            "nudges",
+            ("id", "kind", "title", "message", "reason", "action", "target", "target_label"),
+            ("skip_rate", "articles_last_30_days"),
+        ),
+    ):
+        if isinstance(recap.get(key), list):
+            metrics[key] = [
+                _legacy_fields(item, strings=strings, numbers=numbers)
+                for item in recap[key]
+                if isinstance(item, dict)
+            ]
+    return metrics
 
 
 def generate_recap_narrative(recap: dict[str, Any]) -> str:
@@ -54,7 +100,7 @@ def generate_recap_narrative(recap: dict[str, Any]) -> str:
 
         model = os.getenv("OPENAI_BRIEFING_MODEL", "gpt-4o-mini")
 
-        metrics = {k: v for k, v in recap.items() if k != "generated_at"}
+        metrics = _legacy_metrics(recap)
 
         prompt = (
             "Write a weekly reading review in the voice of 'here's your week in "
@@ -62,6 +108,9 @@ def generate_recap_narrative(recap: dict[str, Any]) -> str:
             "Write exactly 2 short paragraphs, roughly 60-120 words total. "
             "Ground everything strictly in the metrics below — do not invent "
             "facts, activity, or numbers that are not present in the data. "
+            "minutes_read is a legacy app-activity estimate, NOT measured reading time. "
+            "Do not infer reading duration from it. Article counts describe saved reading state, "
+            "not provenance-verified live progress. Streak and backlog are context at generation. "
             "If 'saved' or 'dwell' data is present, mention their reading "
             "backlog and skim-vs-read balance.\n\n"
             f"Recap metrics (JSON):\n{json.dumps(metrics, default=str)}\n\n"

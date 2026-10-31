@@ -304,19 +304,31 @@ def _run_per_user_briefings() -> tuple[str, str | None] | None:
     return status, msg
 
 
-def _generate_recap_for_user(user_id: int, *, push_enabled: bool = True) -> bool:
+def _generate_recap_for_user(
+    user_id: int, *, push_enabled: bool = True, period: dict[str, str] | None = None
+) -> bool:
     """Assemble, persist, and (optionally) push a weekly recap for one user."""
     from news_dashboard.push import generate_recap_push_hook, send_push_for_user
     from news_dashboard.recaps.narrative import generate_recap_narrative
-    from news_dashboard.recaps.service import assemble_weekly_recap, save_weekly_recap
+    from news_dashboard.recaps.service import (
+        assemble_weekly_recap,
+        fill_narrative,
+        save_weekly_recap,
+    )
 
     logger.info("Weekly recap: generating for user_id=%s", user_id)
     try:
-        recap = assemble_weekly_recap(user_id)
-        narrative = generate_recap_narrative(recap)
-        saved = save_weekly_recap(user_id, recap, narrative)
+        recap = assemble_weekly_recap(user_id, period=period)
+        result = save_weekly_recap(user_id, recap, None)
+        saved = result["snapshot"]
+        recap = saved["data"]
+        if recap.get("snapshot_version") == 2 and saved["narrative"] is None:
+            try:
+                fill_narrative(user_id, saved["id"], generate_recap_narrative(recap))
+            except Exception:
+                logger.warning("Weekly recap narrative unavailable for user_id=%s", user_id)
         logger.info("Weekly recap: complete for user_id=%s id=%s", user_id, saved.get("id"))
-        if push_enabled:
+        if push_enabled and result["inserted"]:
             try:
                 hook = generate_recap_push_hook(recap)
                 send_push_for_user(
@@ -347,7 +359,8 @@ def _run_weekly_recaps() -> tuple[str, str | None] | None:
     try:
         with connect() as conn:
             rows = conn.execute(
-                "SELECT id, recap_day, briefing_time, briefing_timezone, briefing_push_enabled"
+                "SELECT id, recap_day, briefing_time, briefing_timezone, "
+                "briefing_push_enabled, progress_timezone"
                 " FROM users WHERE recap_enabled = TRUE",
             ).fetchall()
         user_rows = [row_to_dict(r) for r in rows]
@@ -355,7 +368,10 @@ def _run_weekly_recaps() -> tuple[str, str | None] | None:
         logger.exception("Weekly recap: failed to query users")
         return "failure", str(exc)[:500]
 
-    scheduled_users: list[tuple[int, bool]] = []
+    from news_dashboard.reading_progress.daily import effective_zone
+    from news_dashboard.recaps.progress import recap_period
+
+    scheduled_users: list[tuple[int, bool, dict[str, str]]] = []
     for row in user_rows:
         tz_name: str = row.get("briefing_timezone") or "UTC"
         recap_time: str = row.get("briefing_time") or "09:00"
@@ -368,14 +384,18 @@ def _run_weekly_recaps() -> tuple[str, str | None] | None:
         day_matches = local_now.strftime("%a").lower() == recap_day
         time_matches = local_now.strftime("%H:%M") == recap_time
         if day_matches and time_matches:
-            scheduled_users.append((int(row["id"]), bool(row.get("briefing_push_enabled"))))
+            zone = effective_zone(
+                {"progress_timezone": row.get("progress_timezone"), "briefing_timezone": tz_name}
+            )
+            period = recap_period(now, zone)
+            scheduled_users.append((int(row["id"]), bool(row.get("briefing_push_enabled")), period))
 
     if not scheduled_users:
         return None  # nothing scheduled this minute — skip recording
 
     results = [
-        _generate_recap_for_user(uid, push_enabled=push_enabled)
-        for uid, push_enabled in scheduled_users
+        _generate_recap_for_user(uid, push_enabled=push_enabled, period=period)
+        for uid, push_enabled, period in scheduled_users
     ]
     succeeded = sum(1 for ok in results if ok)
     failed = len(results) - succeeded

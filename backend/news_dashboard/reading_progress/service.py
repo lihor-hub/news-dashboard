@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from contextlib import nullcontext
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 from typing import Any
@@ -86,9 +87,15 @@ def active_reading_days(
     user_id: int,
     *,
     database_url: str | None = None,
+    connection: Any = None,
 ) -> set[date]:
-    init_db(database_url=database_url)
-    with connect(database_url=database_url) as conn:
+    if connection is None:
+        init_db(database_url=database_url)
+    with (
+        nullcontext(connection)
+        if connection is not None
+        else connect(database_url=database_url) as conn
+    ):
         rows = conn.execute(
             """
             SELECT DISTINCT activity_day
@@ -117,8 +124,9 @@ def get_streak(
     *,
     now: datetime | None = None,
     database_url: str | None = None,
+    connection: Any = None,
 ) -> dict[str, Any]:
-    days = active_reading_days(user_id, database_url=database_url)
+    days = active_reading_days(user_id, database_url=database_url, connection=connection)
     today = _utc_today(now)
     if not days:
         return {

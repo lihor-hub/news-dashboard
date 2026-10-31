@@ -73,7 +73,9 @@ def _client_for(user_id: int) -> TestClient:
     return TestClient(app, raise_server_exceptions=True)
 
 
-def test_assemble_weekly_recap_aggregates_trailing_week(monkeypatch: Any, pg_clean: str) -> None:
+def test_assemble_weekly_recap_aggregates_completed_local_dates(
+    monkeypatch: Any, pg_clean: str
+) -> None:
     db_path = _setup_db(monkeypatch, pg_clean)
     user_id = _make_user(db_path, "alice")
     article_id = _insert_article(db_path, "science-weekly", "science")
@@ -98,7 +100,7 @@ def test_assemble_weekly_recap_aggregates_trailing_week(monkeypatch: Any, pg_cle
             (user_id, other_article_id, stale),
         )
 
-    recap = assemble_weekly_recap(user_id, now=now, database_url=db_path)
+    recap = assemble_weekly_recap(user_id, now=now + timedelta(days=1), database_url=db_path)
 
     assert recap["articles_read"] == 1
     assert recap["categories"][0]["category"] == "science"
@@ -143,7 +145,7 @@ def test_assemble_weekly_recap_saved_backlog_counts(monkeypatch: Any, pg_clean: 
             (user_id, stale_starred, start - timedelta(days=10)),
         )
 
-    recap = assemble_weekly_recap(user_id, now=now, database_url=db_path)
+    recap = assemble_weekly_recap(user_id, now=now + timedelta(days=1), database_url=db_path)
 
     assert recap["saved"]["starred_this_week"] == 3
     assert recap["saved"]["read_from_backlog"] == 1
@@ -170,7 +172,7 @@ def test_assemble_weekly_recap_dwell_profile_buckets_by_threshold(
             (user_id, 60_000, now),
         )
 
-    recap = assemble_weekly_recap(user_id, now=now, database_url=db_path)
+    recap = assemble_weekly_recap(user_id, now=now + timedelta(days=1), database_url=db_path)
 
     assert recap["dwell"] == {"skims": 1, "reads": 1, "average_seconds": 35.0}
 

@@ -1,7 +1,11 @@
 import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Flame, Loader2 } from 'lucide-react';
-import { fetchRecaps } from '../api';
+import { Link, useSearchParams } from 'react-router';
+import { fetchRecap, fetchRecaps } from '../api';
+import { RecapProgress } from '../components/RecapProgress';
+import { formatCalendarDate as recapDate } from '../lib/format';
+import { Button } from '../components/ui/button';
 import { NudgeCard } from '../components/FeedNudgeBanner';
 import type { WeeklyRecap, WeeklyRecapField } from '../types';
 
@@ -13,12 +17,31 @@ interface PageState {
 
 export function WeeklyRecapPage() {
   const [state, setState] = useState<PageState>({ recaps: [], loading: true, error: null });
+  const [params] = useSearchParams();
+  const selectedId = params.get('recap');
+  const [selected, setSelected] = useState<WeeklyRecap | null>(null);
+  const [hasMore, setHasMore] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
-    fetchRecaps()
-      .then((recaps) => {
-        if (!cancelled) setState({ recaps, loading: false, error: null });
+    setState((s) => ({ ...s, loading: true, error: null }));
+    setSelected(null);
+    const id = selectedId && /^[1-9]\d*$/.test(selectedId) ? Number(selectedId) : 0;
+    Promise.all([
+      fetchRecaps(),
+      selectedId
+        ? Number.isSafeInteger(id) && id > 0
+          ? fetchRecap(id)
+          : Promise.reject(new Error('Invalid recap ID'))
+        : Promise.resolve(null),
+    ])
+      .then(([recaps, chosen]) => {
+        if (!cancelled) {
+          setSelected(chosen);
+          setHasMore(recaps.length === 12);
+          setState({ recaps, loading: false, error: null });
+        }
       })
       .catch((err) => {
         if (!cancelled) {
@@ -32,10 +55,23 @@ export function WeeklyRecapPage() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [selectedId]);
 
   const { recaps, loading, error } = state;
-  const [latest, ...history] = recaps;
+  const latest = selectedId ? selected : recaps[0];
+  const history = recaps.filter((recap) => recap.id !== latest?.id);
+  async function loadMore() {
+    setLoadingMore(true);
+    try {
+      const more = await fetchRecaps(recaps.length);
+      setHasMore(more.length === 12);
+      setState((s) => ({ ...s, recaps: [...s.recaps, ...more] }));
+    } catch {
+      setState((s) => ({ ...s, error: 'Could not load more recaps. Please retry.' }));
+    } finally {
+      setLoadingMore(false);
+    }
+  }
 
   if (loading) {
     return (
@@ -64,13 +100,23 @@ export function WeeklyRecapPage() {
         </Panel>
       ) : (
         <>
+          <RecapProgress recap={latest} />
+          <p className="text-sm text-muted-foreground">
+            Reading-state summary below: legacy estimates, separate from live weekly progress.
+            Streak and backlog are context at generation.
+          </p>
           <section className="grid grid-cols-2 gap-2 md:grid-cols-4">
             <Metric label="Articles read" value={String(latest.data.articles_read)} />
-            <Metric label="Minutes read" value={`${latest.data.minutes_read}m`} />
-            <Metric label="Streak" value={`${latest.data.current_streak_days}d`} />
+            {!latest.data.progress && (
+              <Metric label="Legacy minutes estimate" value={`${latest.data.minutes_read}m`} />
+            )}
+            <Metric
+              label="Legacy reading streak at generation"
+              value={`${latest.data.current_streak_days}d`}
+            />
             <Metric
               label="Week"
-              value={`${formatDate(latest.data.week_start)} – ${formatDate(latest.data.week_end)}`}
+              value={`${recapDate(latest.data.week_start)} – ${recapDate(latest.data.week_end)}`}
             />
           </section>
 
@@ -107,7 +153,10 @@ export function WeeklyRecapPage() {
               <div className="grid grid-cols-3 gap-3 text-center">
                 <SavedStat label="Saved this week" value={latest.data.saved.starred_this_week} />
                 <SavedStat label="Read from backlog" value={latest.data.saved.read_from_backlog} />
-                <SavedStat label="Backlog" value={latest.data.saved.backlog_total} />
+                <SavedStat
+                  label="Backlog at generation (all-time)"
+                  value={latest.data.saved.backlog_total}
+                />
               </div>
             </Panel>
           )}
@@ -140,7 +189,10 @@ export function WeeklyRecapPage() {
             {history.map((recap) => (
               <li key={recap.id} className="flex items-center justify-between py-2 text-sm">
                 <span className="text-muted-foreground">
-                  {formatDate(recap.data.week_start)} – {formatDate(recap.data.week_end)}
+                  <Link className="underline" to={`/recap?recap=${recap.id}`}>
+                    Open recap: {recapDate(recap.data.week_start)} –{' '}
+                    {recapDate(recap.data.week_end)}
+                  </Link>
                 </span>
                 <span className="tabular-nums">{recap.data.articles_read} articles</span>
               </li>
@@ -148,12 +200,13 @@ export function WeeklyRecapPage() {
           </ul>
         </Panel>
       )}
+      {hasMore && (
+        <Button variant="outline" disabled={loadingMore} onClick={() => void loadMore()}>
+          {loadingMore ? 'Loading…' : 'Load older recaps'}
+        </Button>
+      )}
     </div>
   );
-}
-
-function formatDate(iso: string): string {
-  return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }
 
 function Metric({ label, value }: { label: string; value: string }) {

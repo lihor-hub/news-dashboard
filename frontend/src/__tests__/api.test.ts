@@ -29,6 +29,34 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+describe('recap owner API', () => {
+  it('unwraps paginated history and fetches the exact selected snapshot', async () => {
+    const snapshot = { id: 99, data: { snapshot_version: 2 } };
+    const { calls } = stubFetch((url) =>
+      jsonOk(url.includes('?') ? { items: [snapshot] } : snapshot)
+    );
+    expect(await api.fetchRecaps()).toEqual([snapshot]);
+    expect(await api.fetchRecaps(12)).toEqual([snapshot]);
+    expect(await api.fetchRecap(99)).toEqual(snapshot);
+    expect(calls.map(({ url }) => url)).toEqual([
+      '/api/recaps?offset=0',
+      '/api/recaps?offset=12',
+      '/api/recaps/99',
+    ]);
+    expect(calls.every(({ init }) => init?.credentials === 'same-origin')).toBe(true);
+  });
+
+  it('propagates owner-detail denial rather than returning an empty snapshot', async () => {
+    stubFetch(() => ({
+      ok: false,
+      status: 404,
+      statusText: 'Not Found',
+      json: async () => ({ detail: 'recap not found' }),
+    }));
+    await expect(api.fetchRecap(99)).rejects.toThrow('recap not found');
+  });
+});
+
 describe('requestJson', () => {
   it('sends JSON headers and same-origin credentials', async () => {
     const { calls } = stubFetch(() => jsonOk({ ok: 1 }));

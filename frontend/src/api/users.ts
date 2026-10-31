@@ -30,9 +30,13 @@ export async function fetchAchievements(): Promise<Achievement[]> {
   return data.items;
 }
 
-export async function fetchRecaps(): Promise<WeeklyRecap[]> {
-  const data = await requestJson<{ items: WeeklyRecap[] }>('/api/recaps');
+export async function fetchRecaps(offset = 0): Promise<WeeklyRecap[]> {
+  const data = await requestJson<{ items: WeeklyRecap[] }>(`/api/recaps?offset=${offset}`);
   return data.items;
+}
+
+export async function fetchRecap(id: number): Promise<WeeklyRecap> {
+  return requestJson<WeeklyRecap>(`/api/recaps/${id}`);
 }
 
 export async function fetchRecommendationPreferences(): Promise<RecommendationPreferences> {

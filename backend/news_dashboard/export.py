@@ -290,7 +290,8 @@ def assemble_user_export(
 
         progress = {
             "restore_notice": (
-                "Progress dates, rewards, counters and claims are informational "
+                "Progress dates, rewards, counters, claims and weekly recap snapshots "
+                "are informational "
                 "and are not restored. "
                 "Only validated progress preferences are restored. Restored article completions "
                 "may independently establish silent import-provenance credit "
@@ -340,6 +341,7 @@ def assemble_user_export(
                 for row in progress_rows("user_reward_groups", "recorded_at, id")
             ],
         }
+        weekly_recaps = progress_rows("user_weekly_recaps", "week_start, id")
         preferences = {
             "progress": progress_preferences(account(conn, user_id)),
             "recommendations": _export_recommendation_preferences(conn, user_id),
@@ -358,4 +360,5 @@ def assemble_user_export(
         "source_subscriptions": source_subscriptions,
         "preferences": preferences,
         "progress": progress,
+        "weekly_recaps": weekly_recaps,
     }
