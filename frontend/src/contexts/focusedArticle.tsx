@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, type ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, type ReactNode } from 'react';
 import type { WorkflowArticle } from '@/lib/workflowTypes';
 
 interface FocusedArticleCtx {
@@ -10,6 +10,11 @@ const Ctx = createContext<FocusedArticleCtx>({ article: null, set: (_a) => {} })
 
 export function FocusedArticleProvider({ children }: { children: ReactNode }) {
   const [article, set] = useState<WorkflowArticle | null>(null);
+  useEffect(() => {
+    const clear = () => set(null);
+    window.addEventListener('nd-private-data-cleared', clear);
+    return () => window.removeEventListener('nd-private-data-cleared', clear);
+  }, []);
   return <Ctx.Provider value={{ article, set }}>{children}</Ctx.Provider>;
 }
 

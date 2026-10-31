@@ -31,6 +31,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 WORKDIR /app
 RUN apt-get update \
     && apt-get upgrade -y \
+    && apt-get install -y --no-install-recommends tzdata \
     && rm -rf /var/lib/apt/lists/* \
     && adduser --disabled-password --gecos '' appuser \
     && mkdir -p /data \

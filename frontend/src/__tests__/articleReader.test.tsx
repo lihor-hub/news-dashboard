@@ -428,6 +428,11 @@ describe('ArticlePage — Open original link', () => {
 });
 
 describe('ArticlePage — offline saves', () => {
+  beforeEach(async () => {
+    const { changePrivateSession } = await import('../lib/privateSession');
+    await changePrivateSession(1);
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('{}'));
+  });
   it('records article metadata when saving for offline', async () => {
     vi.spyOn(api, 'fetchArticle').mockResolvedValue(
       makeArticle({ body_status: 'ok', body: 'Full text.' })

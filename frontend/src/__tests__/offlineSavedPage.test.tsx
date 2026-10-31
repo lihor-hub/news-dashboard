@@ -5,9 +5,12 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router';
 import { OfflineSavedPage } from '../pages/OfflineSavedPage';
 import { saveOfflineArticle } from '../lib/offline';
+import { changePrivateSession } from '../lib/privateSession';
 
 beforeEach(() => {
   window.localStorage.clear();
+  void changePrivateSession(1);
+  vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('{}'));
   Object.defineProperty(window, 'caches', {
     configurable: true,
     value: {

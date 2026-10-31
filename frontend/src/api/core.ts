@@ -1,3 +1,5 @@
+import { privateSessionRevision } from '@/lib/privateSession';
+
 export async function readErrorMessage(response: Response): Promise<string> {
   try {
     const body: unknown = await (response.json() as Promise<unknown>);
@@ -35,17 +37,23 @@ function shouldEmitSessionExpired(url: string): boolean {
 }
 
 export async function requestJson<T>(url: string, init?: RequestInit): Promise<T> {
+  const revision = privateSessionRevision();
   const response = await fetch(url, {
     headers: { 'Content-Type': 'application/json', ...(init?.headers ?? {}) },
     credentials: 'same-origin',
     ...init,
   });
+  if (revision !== privateSessionRevision()) throw new Error('Session changed');
   if (!response.ok) {
-    const error = new HttpError(response.status, await readErrorMessage(response));
+    const message = await readErrorMessage(response);
+    if (revision !== privateSessionRevision()) throw new Error('Session changed');
+    const error = new HttpError(response.status, message);
     if (response.status === 401 && shouldEmitSessionExpired(url)) {
       window.dispatchEvent(new CustomEvent(sessionExpiredEvent, { detail: { url } }));
     }
     throw error;
   }
-  return response.json() as Promise<T>;
+  const body = (await response.json()) as T;
+  if (revision !== privateSessionRevision()) throw new Error('Session changed');
+  return body;
 }

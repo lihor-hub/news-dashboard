@@ -5,6 +5,7 @@ import {
   type InfiniteData,
 } from '@tanstack/react-query';
 import { toast } from 'sonner';
+import { privateSessionRevision } from '../lib/privateSession';
 
 // Single shared ID so every triage toast replaces the previous one rather than
 // stacking — rapid actions (read, skip, star) should show only the latest.
@@ -27,12 +28,13 @@ export const ARTICLES_KEY = 'articles';
 // `InfiniteData` page envelope — not a flat `WorkflowArticle[]`. All cache reads
 // and optimistic writes below operate through the `pages` structure.
 type ArticleListCache = InfiniteData<TriageArticlePage>;
-type UndoIntent = { requested: boolean };
+type UndoIntent = { requested: boolean; revision: number };
 
 interface ArticleQuerySnapshot {
   queryKey: QueryKey;
   data: ArticleListCache;
   articleId: string;
+  revision: number;
 }
 
 function articleMatchesQuery(queryKey: QueryKey, article: WorkflowArticle) {
@@ -63,7 +65,7 @@ function snapshotArticleQueries(
     .getQueriesData<ArticleListCache>({ queryKey: [ARTICLES_KEY] })
     .flatMap(([queryKey, data]) => {
       if (!data || !cacheContainsArticle(data, id)) return [];
-      return [{ queryKey, data, articleId: id }];
+      return [{ queryKey, data, articleId: id, revision: privateSessionRevision() }];
     });
 }
 
@@ -71,7 +73,8 @@ function restoreQuerySnapshots(
   queryClient: ReturnType<typeof useQueryClient>,
   snapshots: ArticleQuerySnapshot[]
 ) {
-  snapshots.forEach(({ queryKey, data, articleId }) => {
+  snapshots.forEach(({ queryKey, data, articleId, revision }) => {
+    if (revision !== privateSessionRevision()) return;
     queryClient.setQueryData<ArticleListCache>(queryKey, (current) => {
       if (!current) return current;
       // Roll back only this article. Restoring a whole list resurrects other
@@ -180,6 +183,7 @@ export function useTriageMutations() {
     }) => patchArticleState(article.id, newState, article.starred),
 
     onMutate: ({ article, newState, undo }) => {
+      if (undo && undo.revision !== privateSessionRevision()) throw new Error('Session changed');
       void queryClient.cancelQueries({ queryKey: [ARTICLES_KEY] });
       const snap = snapshot(article);
       const querySnapshots = snapshotArticleQueries(queryClient, article.id);
@@ -219,6 +223,7 @@ export function useTriageMutations() {
     }) => patchArticleStar(article.id, starred),
 
     onMutate: ({ article, starred, undo }) => {
+      if (undo && undo.revision !== privateSessionRevision()) throw new Error('Session changed');
       void queryClient.cancelQueries({ queryKey: [ARTICLES_KEY] });
       const snap = snapshot(article);
       const querySnapshots = snapshotArticleQueries(queryClient, article.id);
@@ -255,6 +260,7 @@ export function useTriageMutations() {
     },
 
     onMutate: ({ article, days = 1, undo }) => {
+      if (undo && undo.revision !== privateSessionRevision()) throw new Error('Session changed');
       void queryClient.cancelQueries({ queryKey: [ARTICLES_KEY] });
       const snap = snapshot(article);
       const querySnapshots = snapshotArticleQueries(queryClient, article.id);
@@ -283,7 +289,7 @@ export function useTriageMutations() {
     const snap = snapshot(article);
     const querySnapshots = snapshotArticleQueries(queryClient, article.id);
     trackFeature(`triage_${newState}`);
-    const undo = { requested: false };
+    const undo = { requested: false, revision: privateSessionRevision() };
     const pending = setStateMutation
       .mutateAsync({ article, newState, undo })
       .catch(() => undefined);
@@ -292,6 +298,7 @@ export function useTriageMutations() {
       action: {
         label: 'Undo',
         onClick: () => {
+          if (undo.revision !== privateSessionRevision()) return;
           restoreQuerySnapshots(queryClient, querySnapshots);
           undo.requested = true;
           undoAfter(pending, () =>
@@ -307,7 +314,7 @@ export function useTriageMutations() {
     const snap = snapshot(article);
     const querySnapshots = snapshotArticleQueries(queryClient, article.id);
     trackFeature(nextStarred ? 'star' : 'unstar');
-    const undo = { requested: false };
+    const undo = { requested: false, revision: privateSessionRevision() };
     const pending = starMutation
       .mutateAsync({ article, starred: nextStarred, undo })
       .catch(() => undefined);
@@ -316,6 +323,7 @@ export function useTriageMutations() {
       action: {
         label: 'Undo',
         onClick: () => {
+          if (undo.revision !== privateSessionRevision()) return;
           restoreQuerySnapshots(queryClient, querySnapshots);
           undo.requested = true;
           undoAfter(pending, () => patchArticleStar(snap.article.id, snap.article.starred));
@@ -328,13 +336,14 @@ export function useTriageMutations() {
     const snap = snapshot(article);
     const querySnapshots = snapshotArticleQueries(queryClient, article.id);
     trackFeature('snooze');
-    const undo = { requested: false };
+    const undo = { requested: false, revision: privateSessionRevision() };
     const pending = sendLaterMutation.mutateAsync({ article, days, undo }).catch(() => undefined);
     toast('Snoozed to tomorrow', {
       id: TRIAGE_TOAST_ID,
       action: {
         label: 'Undo',
         onClick: () => {
+          if (undo.revision !== privateSessionRevision()) return;
           restoreQuerySnapshots(queryClient, querySnapshots);
           undo.requested = true;
           undoAfter(pending, () =>
@@ -346,10 +355,13 @@ export function useTriageMutations() {
   }
 
   function undoAfter(pending: Promise<unknown>, revert: () => Promise<void>) {
+    const revision = privateSessionRevision();
     // Undo is immediately visible, but its write must follow the original write
     // on the server, even when the user clicks before that request has started.
     void pending
-      .then(revert)
+      .then(() => {
+        if (revision === privateSessionRevision()) return revert();
+      })
       .then(() => settleArticleCaches(queryClient))
       .catch((err) => {
         toast.error(`Undo failed — ${err instanceof Error ? err.message : 'please retry'}`, {

@@ -6,6 +6,7 @@ import { ListenQueueProvider, useListenQueue } from '../contexts/listenQueue';
 import * as api from '../api';
 import * as workflowApi from '../api/workflowApi';
 import type { WorkflowArticle } from '../lib/workflowTypes';
+import { changePrivateSession } from '../lib/privateSession';
 
 type Listener = (...args: unknown[]) => void;
 
@@ -97,6 +98,30 @@ afterEach(() => {
 });
 
 describe('ListenQueueProvider', () => {
+  it('revokes audio arriving after logout instead of caching or playing it', async () => {
+    await changePrivateSession(1);
+    let release!: (url: string) => void;
+    vi.mocked(api.fetchArticleAudioUrl).mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          release = resolve;
+        })
+    );
+    const { result } = renderHook(() => useListenQueue(), { wrapper });
+    act(() => result.current.start([makeArticle()]));
+    await waitFor(() => expect(result.current.isLoading).toBe(true));
+    await act(async () => {
+      await changePrivateSession(null);
+    });
+    await act(async () => {
+      release('blob:private-A');
+    });
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:private-A');
+    expect(lastAudio.src).toBe('');
+    expect(result.current.queue).toEqual([]);
+    expect(result.current.isPlaying).toBe(false);
+  });
+
   it('builds a queue from a feed and starts playback on the first item', async () => {
     const { result } = renderHook(() => useListenQueue(), { wrapper });
     const articles = [

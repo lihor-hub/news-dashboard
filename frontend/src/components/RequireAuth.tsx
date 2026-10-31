@@ -17,15 +17,15 @@ export function RequireAuth({ children }: Props) {
   const intendedRoute = `${location.pathname}${location.search}${location.hash}`;
 
   useEffect(() => {
+    let active = true;
     setStatus('checking');
     setStartupError(false);
     fetchMe()
-      .then((user) => {
-        setUser(user);
-      })
+      .then((user) => (active ? setUser(user) : undefined))
       .catch((error: unknown) => {
+        if (!active) return;
         if (isUnauthorized(error)) {
-          setStatus('anonymous');
+          resetAuth('session-expired');
           // Always route to the in-app login page. Even when Keycloak is enabled,
           // the login page offers email OTP as the primary option with Keycloak as
           // a secondary choice, so we no longer redirect straight to Keycloak.
@@ -35,6 +35,9 @@ export function RequireAuth({ children }: Props) {
         setStatus('recoverable-error');
         setStartupError(true);
       });
+    return () => {
+      active = false;
+    };
     // Run once on mount only
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

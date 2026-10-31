@@ -71,6 +71,13 @@ The **Save offline** action in Later can cache the bodies currently shown in
 that queue. Caching is best-effort: an article whose body cannot be fetched is
 skipped while the rest continue.
 
+Signing out, session expiry, or changing accounts forgets locally cached article
+bodies, article lists, and the Offline Saved index, including in other open tabs.
+Sign in and download articles again to restore offline copies. Static app assets
+and server-side reading progress, saved articles, and other account data are not
+deleted by this local cleanup. If you sign out without a connection, local copies
+are still forgotten, but the app cannot confirm server sign-out until connected.
+
 Offline storage is local to that browser profile and is bounded by the app's
 cache policy. Do not treat it as account-wide synchronization, a server backup,
 or a promise that uncached pages, original websites, triage actions, Ask, or

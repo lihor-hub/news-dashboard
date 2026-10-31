@@ -41,6 +41,7 @@ class TestTrivyWorkflows(unittest.TestCase):
         for expected_command in (
             "apt-get update",
             "apt-get upgrade -y",
+            "apt-get install -y --no-install-recommends tzdata",
             "rm -rf /var/lib/apt/lists/*",
         ):
             if expected_command not in runtime_stage:

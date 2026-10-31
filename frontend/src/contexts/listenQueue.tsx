@@ -15,6 +15,7 @@ import {
   setMarkDoneOnFinish as persistMarkDoneOnFinish,
 } from '@/lib/listenQueueSettings';
 import { trackFeature } from '@/lib/analytics';
+import { privateSessionRevision } from '@/lib/privateSession';
 
 interface ListenQueueContextValue {
   queue: WorkflowArticle[];
@@ -76,7 +77,12 @@ export function ListenQueueProvider({ children }: { children: ReactNode }) {
   const loadAudioUrl = useCallback(async (article: WorkflowArticle): Promise<string> => {
     const cached = urlCacheRef.current.get(article.id);
     if (cached) return cached;
+    const revision = privateSessionRevision();
     const url = await fetchArticleAudioUrl(article.id);
+    if (revision !== privateSessionRevision()) {
+      URL.revokeObjectURL(url);
+      throw new Error('Session changed');
+    }
     urlCacheRef.current.set(article.id, url);
     return url;
   }, []);
@@ -126,6 +132,8 @@ export function ListenQueueProvider({ children }: { children: ReactNode }) {
       audio.removeAttribute('src');
     }
     revokeAll();
+    queueRef.current = [];
+    indexRef.current = -1;
     setQueue([]);
     setCurrentIndex(-1);
     setIsPlaying(false);
@@ -137,6 +145,11 @@ export function ListenQueueProvider({ children }: { children: ReactNode }) {
       navigator.mediaSession.playbackState = 'none';
     }
   }, [revokeAll]);
+
+  useEffect(() => {
+    window.addEventListener('nd-private-data-cleared', stop);
+    return () => window.removeEventListener('nd-private-data-cleared', stop);
+  }, [stop]);
 
   const start = useCallback(
     (articles: WorkflowArticle[], startIndex = 0) => {

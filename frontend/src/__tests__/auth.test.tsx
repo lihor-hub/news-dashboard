@@ -3,8 +3,8 @@
  * Tests for #130 — auth guard (RequireAuth) and login page.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { useEffect } from 'react';
-import { render, screen, waitFor } from '@testing-library/react';
+import { StrictMode, useEffect } from 'react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Routes, Route, useLocation } from 'react-router';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -12,6 +12,13 @@ import { AuthProvider, useAuth } from '../contexts/auth';
 import { RequireAuth } from '../components/RequireAuth';
 import { LoginPage } from '../pages/LoginPage';
 import * as api from '../api';
+import { changePrivateSession, privateSessionEpoch } from '../lib/privateSession';
+import * as privateSession from '../lib/privateSession';
+
+async function seedPriorAccount() {
+  await changePrivateSession(2);
+  localStorage.setItem('offline-articles:index:v1', 'PRIVATE_PREVIOUS_ACCOUNT');
+}
 
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
@@ -103,7 +110,86 @@ describe('RequireAuth', () => {
     vi.restoreAllMocks();
   });
 
+  it('verifies the session under StrictMode without publishing a cleaned-up auth check', async () => {
+    await seedPriorAccount();
+    const user = { id: 1, username: 'alice', is_admin: false, is_guest: true };
+    let finish!: () => void;
+    let decoding!: () => void;
+    const started = new Promise<void>((resolve) => {
+      decoding = resolve;
+    });
+    const delayed = new Response();
+    vi.spyOn(delayed, 'json').mockImplementation(() => {
+      decoding();
+      return new Promise((resolve) => {
+        finish = () => resolve(user);
+      });
+    });
+    vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(new Response(JSON.stringify(user)))
+      .mockResolvedValueOnce(delayed);
+    render(
+      <StrictMode>
+        <QueryClientProvider client={makeQc()}>
+          <AuthProvider>
+            <MemoryRouter>
+              <RequireAuth>
+                <div>Protected content</div>
+              </RequireAuth>
+            </MemoryRouter>
+          </AuthProvider>
+        </QueryClientProvider>
+      </StrictMode>
+    );
+    await act(async () => {
+      await started;
+    });
+    await act(async () => {
+      finish();
+    });
+    await waitFor(() => expect(screen.getByText('Protected content')).toBeTruthy());
+    expect(screen.queryByText('We could not verify your session')).toBeNull();
+    expect(privateSessionEpoch()).not.toBeNull();
+    expect(localStorage.getItem('offline-articles:index:v1')).toBeNull();
+  });
+
+  it.each([new api.HttpError(401, 'old session expired'), new Error('offline')])(
+    'ignores a cleaned-up auth check rejection: %s',
+    async (error) => {
+      let rejectOld!: (error: Error) => void;
+      vi.spyOn(api, 'fetchMe')
+        .mockImplementationOnce(
+          () =>
+            new Promise((_resolve, reject) => {
+              rejectOld = reject;
+            })
+        )
+        .mockResolvedValueOnce({ id: 1, username: 'alice', is_admin: false, is_guest: true });
+      render(
+        <StrictMode>
+          <QueryClientProvider client={makeQc()}>
+            <AuthProvider>
+              <MemoryRouter>
+                <RequireAuth>
+                  <div>Protected content</div>
+                </RequireAuth>
+              </MemoryRouter>
+            </AuthProvider>
+          </QueryClientProvider>
+        </StrictMode>
+      );
+      await screen.findByText('Protected content');
+      await act(async () => {
+        rejectOld(error);
+      });
+      expect(screen.getByText('Protected content')).toBeTruthy();
+      expect(screen.queryByText('We could not verify your session')).toBeNull();
+      expect(privateSessionEpoch()).not.toBeNull();
+    }
+  );
+
   it('renders children when /api/auth/me returns a user', async () => {
+    await seedPriorAccount();
     vi.spyOn(api, 'fetchMe').mockResolvedValue({
       id: 1,
       username: 'alice',
@@ -127,9 +213,12 @@ describe('RequireAuth', () => {
     await waitFor(() => {
       expect(screen.getByText('Protected content')).toBeTruthy();
     });
+    expect(privateSessionEpoch()).not.toBeNull();
+    expect(localStorage.getItem('offline-articles:index:v1')).toBeNull();
   });
 
   it('redirects to /login when /api/auth/me returns 401', async () => {
+    await seedPriorAccount();
     vi.spyOn(api, 'fetchMe').mockRejectedValue(new api.HttpError(401, 'Unauthorized'));
     vi.spyOn(api, 'fetchAuthConfig').mockResolvedValue({
       provider: 'password',
@@ -156,6 +245,8 @@ describe('RequireAuth', () => {
       expect(screen.getByText('Login page')).toBeTruthy();
     });
     expect(screen.queryByText('Protected content')).toBeNull();
+    expect(privateSessionEpoch()).toBeNull();
+    expect(localStorage.getItem('offline-articles:index:v1')).toBeNull();
   });
 
   it('shows the in-app login page (not an immediate Keycloak redirect) on 401 when Keycloak is enabled', async () => {
@@ -286,6 +377,7 @@ describe('RequireAuth', () => {
   });
 
   it('routes to login once with session-expired state after an authenticated API 401', async () => {
+    await seedPriorAccount();
     vi.spyOn(api, 'fetchMe').mockResolvedValue({
       id: 1,
       username: 'alice',
@@ -322,6 +414,8 @@ describe('RequireAuth', () => {
       expect(screen.getByText('Login page')).toBeTruthy();
     });
     expect(capturedState).toEqual({ from: '/today?q=ai#results', sessionExpired: true });
+    expect(privateSessionEpoch()).toBeNull();
+    expect(localStorage.getItem('offline-articles:index:v1')).toBeNull();
   });
 });
 
@@ -507,6 +601,7 @@ describe('LoginPage', () => {
   });
 
   it('redirects to / on successful login', async () => {
+    await seedPriorAccount();
     vi.spyOn(api, 'loginUser').mockResolvedValue({ id: 1, username: 'alice', is_admin: false });
 
     renderWithRouter(
@@ -527,6 +622,8 @@ describe('LoginPage', () => {
     await waitFor(() => {
       expect(screen.queryByRole('alert')).toBeNull();
     });
+    expect(privateSessionEpoch()).not.toBeNull();
+    expect(localStorage.getItem('offline-articles:index:v1')).toBeNull();
   });
 
   it('redirects back to the original path after login', async () => {
@@ -551,6 +648,42 @@ describe('LoginPage', () => {
       expect(api.loginUser).toHaveBeenCalledWith('alice', 'correct');
     });
   });
+
+  it.each([
+    ['Sign in with Keycloak', '/auth/login', false],
+    ['Create Account', '/auth/register', false],
+    ['Sign in with Keycloak', '/auth/login', true],
+    ['Create Account', '/auth/register', true],
+  ] as const)(
+    'revokes private state for %s to %s (worker failure=%s)',
+    async (label, url, fail) => {
+      await seedPriorAccount();
+      vi.spyOn(api, 'fetchAuthConfig').mockResolvedValue({
+        provider: 'keycloak',
+        keycloak_enabled: true,
+        login_url: '/auth/login',
+        logout_url: '/auth/logout',
+        registration_url: '/auth/register',
+      });
+      const assign = vi.spyOn(window.location, 'assign').mockImplementation(() => {
+        expect(privateSessionEpoch()).toBeNull();
+        expect(localStorage.getItem('offline-articles:index:v1')).toBeNull();
+      });
+      renderWithRouter(<LoginPage />);
+      const link = await screen.findByRole('link', { name: label });
+      if (fail)
+        vi.spyOn(privateSession, 'changePrivateSession').mockRejectedValueOnce(
+          new Error('worker unavailable')
+        );
+      await userEvent.click(link);
+      if (fail) {
+        expect(await screen.findByRole('alert')).toHaveTextContent('worker unavailable');
+        expect(assign).not.toHaveBeenCalled();
+      } else {
+        await waitFor(() => expect(assign).toHaveBeenCalledWith(url));
+      }
+    }
+  );
 
   it('renders Keycloak sign-in and registration links when Keycloak is enabled', async () => {
     vi.spyOn(api, 'fetchAuthConfig').mockResolvedValue({
@@ -729,6 +862,7 @@ describe('LoginPage', () => {
   });
 
   it('redirects after successful OTP verification', async () => {
+    await seedPriorAccount();
     vi.spyOn(api, 'requestOtp').mockResolvedValue(undefined);
     vi.spyOn(api, 'loginWithOtp').mockResolvedValue({
       id: 1,
@@ -754,6 +888,8 @@ describe('LoginPage', () => {
       expect(screen.getByText('Home')).toBeTruthy();
     });
     expect(api.loginWithOtp).toHaveBeenCalledWith('alice@example.com', '123456');
+    expect(privateSessionEpoch()).not.toBeNull();
+    expect(localStorage.getItem('offline-articles:index:v1')).toBeNull();
   });
 
   it('resends an OTP from the code step and clears the stale code', async () => {

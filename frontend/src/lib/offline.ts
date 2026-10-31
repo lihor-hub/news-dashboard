@@ -1,4 +1,6 @@
-const OFFLINE_ARTICLE_CACHE = 'offline-articles-v1';
+import { privateSessionEpoch } from './privateSession';
+
+const OFFLINE_ARTICLE_CACHE = 'nd-private-v2-';
 const OFFLINE_ARTICLE_INDEX_KEY = 'offline-articles:index:v1';
 
 export interface OfflineArticle {
@@ -26,7 +28,7 @@ function articleBodyCacheKey(articleId: string | number): string {
 }
 
 function readOfflineArticleIndex(): OfflineArticle[] {
-  if (typeof window === 'undefined') return [];
+  if (typeof window === 'undefined' || !privateSessionEpoch()) return [];
   const raw = window.localStorage.getItem(OFFLINE_ARTICLE_INDEX_KEY);
   if (!raw) return [];
   try {
@@ -58,17 +60,22 @@ function isOfflineArticle(value: unknown): value is OfflineArticle {
 
 export async function cacheArticleBody(articleId: string | number): Promise<void> {
   if (!isOfflineCacheSupported()) return;
-  const cache = await caches.open(OFFLINE_ARTICLE_CACHE);
-  await cache.add(articleBodyCacheKey(articleId));
+  const epoch = privateSessionEpoch();
+  if (!epoch) throw new Error('Sign in again to save articles offline');
+  // The service worker owns cache writes and fences them against session revocation.
+  const response = await fetch(articleBodyCacheKey(articleId), { credentials: 'same-origin' });
+  if (!response.ok || privateSessionEpoch() !== epoch) throw new Error('Offline save unavailable');
 }
 
 export async function cacheArticleBodies(articleIds: (string | number)[]): Promise<number> {
   if (!isOfflineCacheSupported()) return 0;
-  const cache = await caches.open(OFFLINE_ARTICLE_CACHE);
+  const epoch = privateSessionEpoch();
+  if (!epoch) return 0;
   let cached = 0;
   for (const articleId of articleIds) {
     try {
-      await cache.add(articleBodyCacheKey(articleId));
+      if (privateSessionEpoch() !== epoch) break;
+      await cacheArticleBody(articleId);
       cached += 1;
     } catch {
       // Keep caching the rest of the queue when one article body is unavailable.
@@ -91,7 +98,9 @@ export function isArticleSavedOffline(articleId: string | number): boolean {
 }
 
 export async function saveOfflineArticle(input: OfflineArticleInput): Promise<OfflineArticle> {
+  const epoch = privateSessionEpoch();
   await cacheArticleBody(input.id);
+  if (!epoch || privateSessionEpoch() !== epoch) throw new Error('Session changed');
   const id = String(input.id);
   const existing = getOfflineArticle(id);
   if (existing) return existing;
@@ -113,8 +122,9 @@ export async function saveOfflineArticle(input: OfflineArticleInput): Promise<Of
 export async function removeOfflineArticle(articleId: string | number): Promise<void> {
   const id = String(articleId);
   const existing = getOfflineArticle(id);
-  if (isOfflineCacheSupported()) {
-    const cache = await caches.open(OFFLINE_ARTICLE_CACHE);
+  const epoch = privateSessionEpoch();
+  if (isOfflineCacheSupported() && epoch) {
+    const cache = await caches.open(OFFLINE_ARTICLE_CACHE + epoch + '-bodies');
     await cache.delete(existing?.bodyCacheKey ?? articleBodyCacheKey(id));
   }
   writeOfflineArticleIndex(readOfflineArticleIndex().filter((article) => article.id !== id));
