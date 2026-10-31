@@ -31,6 +31,22 @@ class TestTrivyWorkflows(unittest.TestCase):
                 if expected_policy not in workflow:
                     self.fail(f"{path.relative_to(ROOT)} is missing {expected_policy}")
 
+    def test_ci_uploads_failed_scans_only_when_a_report_exists(self) -> None:
+        workflow = WORKFLOWS[0].read_text()
+        scan = workflow[workflow.index("  trivy:\n") :]
+        report_check = scan[scan.index("      - name: Check whether Trivy") :]
+        for expected in (
+            "if: ${{ !cancelled() }}",
+            "if [ -s trivy-results.sarif ]; then",
+            'echo "exists=true" >> "$GITHUB_OUTPUT"',
+            "if: ${{ !cancelled() && steps.trivy-report.outputs.exists == 'true' }}",
+        ):
+            if expected not in report_check:
+                self.fail(f"Trivy report preservation is missing {expected}")
+        for unwanted in ("continue-on-error", "hashFiles"):
+            if unwanted in scan:
+                self.fail(f"Trivy failure handling must not use {unwanted}")
+
     def test_runtime_image_applies_os_security_updates(self) -> None:
         dockerfile = DOCKERFILE.read_text()
         runtime_match = RUNTIME_STAGE.search(dockerfile)
