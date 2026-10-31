@@ -1,0 +1,10 @@
+<section aria-labelledby="email-progress-heading" style="margin:22px 0;padding:16px;border:1px solid {{ colors.border }};border-radius:8px;overflow-wrap:anywhere;">
+  <h2 id="email-progress-heading" style="margin:0 0 9px;color:{{ colors.primary }};font-size:18px;line-height:1.35;">Your progress</h2>
+  {% if progress.titles %}
+  <p style="margin:0 0 9px;color:{{ colors.muted }};font-size:12px;line-height:1.5;">Earned during {{ progress.period }}</p>
+  <ul style="margin:0 0 12px;padding-left:20px;color:{{ colors.foreground }};font-size:14px;line-height:1.6;">
+    {% for title in progress.titles %}<li>{{ title }}</li>{% endfor %}
+  </ul>
+  {% else %}<p style="margin:0 0 12px;color:{{ colors.foreground }};font-size:14px;line-height:1.6;">{{ progress.streak }}</p>{% endif %}
+  <a href="{{ progress.href }}" style="color:{{ colors.accent }};font-size:14px;line-height:1.6;">View my progress</a>
+</section>

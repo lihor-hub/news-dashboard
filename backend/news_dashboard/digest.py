@@ -14,6 +14,11 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from typing import Any
 
+from news_dashboard.briefing_email.progress import (
+    progress_recipient_matches,
+    render_progress,
+    select_progress,
+)
 from news_dashboard.db import init_db
 from news_dashboard.email_theme import (
     EMAIL_COLORS,
@@ -109,7 +114,9 @@ def _display_title(value: object, *, limit: int = 120) -> str:
     return compact_text(value, fallback="Untitled", limit=limit)
 
 
-def _render_html(articles: list[dict[str, Any]], *, user_id: int) -> str:
+def _render_html(
+    articles: list[dict[str, Any]], *, user_id: int, progress: dict[str, Any] | None = None
+) -> str:
     base = _base_url()
     rows = ""
     for a in articles:
@@ -158,6 +165,7 @@ def _render_html(articles: list[dict[str, Any]], *, user_id: int) -> str:
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
         {rows}
       </table>
+      {render_progress(progress, html=True)}
       <p style="margin:22px 0 0;color:{EMAIL_COLORS["muted"].email_hex};
                 font-size:11px;line-height:1.5;">
         You received this because you set up the News Dashboard digest.
@@ -170,7 +178,9 @@ def _render_html(articles: list[dict[str, Any]], *, user_id: int) -> str:
     )
 
 
-def _render_text(articles: list[dict[str, Any]], *, user_id: int) -> str:
+def _render_text(
+    articles: list[dict[str, Any]], *, user_id: int, progress: dict[str, Any] | None = None
+) -> str:
     base = _base_url()
     lines = [f"News Digest — {datetime.now(timezone.utc).strftime('%A, %B %d %Y')}", ""]
     for i, a in enumerate(articles, 1):
@@ -188,6 +198,7 @@ def _render_text(articles: list[dict[str, Any]], *, user_id: int) -> str:
             lines.append(f"   {summary}")
         lines.append(f"   Move to Done: {mark_read_url}")
         lines.append("")
+    lines.append(render_progress(progress, html=False))
     return "\n".join(lines)
 
 
@@ -264,8 +275,18 @@ def send_digest() -> bool:
     subject = (
         f"News Digest {date_str} — {len(articles)} new article{'s' if len(articles) != 1 else ''}"
     )
-    html_body = _render_html(articles, user_id=digest_user_id)
-    text_body = _render_text(articles, user_id=digest_user_id)
+    progress = select_progress(
+        digest_user_id,
+        recipient=digest_to,
+        base_url=_base_url(),
+    )
+    if progress and (
+        os.getenv("DIGEST_TO", "") != digest_to
+        or not progress_recipient_matches(digest_user_id, digest_to)
+    ):
+        progress = None
+    html_body = _render_html(articles, user_id=digest_user_id, progress=progress)
+    text_body = _render_text(articles, user_id=digest_user_id, progress=progress)
 
     _send_email(subject, html_body, text_body)
     return True

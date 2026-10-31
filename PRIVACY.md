@@ -123,6 +123,30 @@ New progress, coverage and reward descriptors are excluded from recap AI prompts
 existing legacy reading-summary inputs retain their existing AI behavior. This adds no new
 collection, campaign, public sharing link or email-open measurement.
 
+## Personal progress in existing email
+
+Existing daily briefing mail (including explicitly requested previews) and the configured
+legacy News Digest can include up to two live earned achievements/topic promotions, or a
+useful current daily streak. Briefing highlights use the saved reporting interval; the
+legacy digest uses the preceding 24 hours. Streaks are explicitly snapshots at preparation
+for sending in your saved progress timezone, not live-at-open status. Imported, historical,
+legacy and uncertain earned dates are never presented as newly earned. Overlapping mail
+periods/channels may repeat highlights; no new campaign or delivered-highlight cursor exists.
+
+Canonical mail retains its account recipient and subscription checks; previews remain an
+explicit request even with scheduled mail disabled. The operator-configured legacy digest
+only personalizes when exactly one matching non-guest account mailbox is unambiguous; this
+does not change its existing subscription mechanism. Ambiguous recipients lose only the
+optional progress section. The authenticated progress link contains no account identifier,
+tracking token or access grant; forwarded links show the signed-in viewer's own progress.
+Opening mail or fetching a link alone does not earn visits, reading credit or active time.
+
+Personal progress in delivered mail passes through your configured SMTP provider and the
+recipient mailbox, and can be retained or forwarded there. Account deletion cannot recall
+or erase these copies. Progress is not added to subjects, preheaders, AI enrichment or
+traces; no email-open tracking is introduced. No new progress data is stored by this mail
+feature, and existing account-erasure and informational archive rules are unchanged.
+
 ## Functional daily progress
 
 Authenticated visible app visits store one saved-local calendar date, its timezone,

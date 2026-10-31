@@ -15,6 +15,7 @@ from urllib.parse import quote, urlsplit
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from news_dashboard.briefing_email.enrichment import enrich_briefing_for_email
+from news_dashboard.briefing_email.progress import progress_recipient_matches, select_progress
 from news_dashboard.briefing_email.rendering import render_briefing_email
 from news_dashboard.briefing_email.tokens import make_unsubscribe_token
 from news_dashboard.db import active_database_url, connect, row_to_dict
@@ -289,15 +290,23 @@ def deliver_daily_briefing(  # noqa: PLR0911, PLR0912, PLR0915  # explicit ledge
         base_url = _base_url()
         token = make_unsubscribe_token(user_id)
         unsubscribe_url = f"{base_url}/email/briefing/unsubscribe?token={quote(token, safe='')}"
-        rendered = render_briefing_email(
-            briefing,
-            enrichment=enrichment,
-            local_date=local_date,
-            timezone_name=timezone_name,
-            briefing_url=f"{base_url}/briefings/{briefing_id}",
-            preferences_url=f"{base_url}/settings/notifications",
-            unsubscribe_url=unsubscribe_url,
+        progress_recipient = str(user_row["email"] or "") if user_row else ""
+        progress = select_progress(
+            user_id,
+            recipient=progress_recipient,
+            base_url=base_url,
+            briefing=briefing,
+            database_url=database_url,
         )
+        render_args: dict[str, Any] = {
+            "enrichment": enrichment,
+            "local_date": local_date,
+            "timezone_name": timezone_name,
+            "briefing_url": f"{base_url}/briefings/{briefing_id}",
+            "preferences_url": f"{base_url}/settings/notifications",
+            "unsubscribe_url": unsubscribe_url,
+        }
+        rendered = render_briefing_email(briefing, progress=progress, **render_args)
     except Exception:
         failed = _transition_delivery(
             delivery,
@@ -321,7 +330,8 @@ def deliver_daily_briefing(  # noqa: PLR0911, PLR0912, PLR0915  # explicit ledge
     try:
         with connect(database_url=database_url) as conn:
             consent = conn.execute(
-                "SELECT email, briefing_email_enabled FROM users WHERE id = %s", (user_id,)
+                "SELECT email, briefing_email_enabled, is_guest FROM users WHERE id = %s",
+                (user_id,),
             ).fetchone()
     except Exception:
         failed = _transition_delivery(
@@ -334,7 +344,7 @@ def deliver_daily_briefing(  # noqa: PLR0911, PLR0912, PLR0915  # explicit ledge
             next_attempt_at=instant + _RETRY_DELAY,
         )
         return DeliveryOutcome(failed.status, failed, briefing)
-    if consent is None or not bool(consent["briefing_email_enabled"]):
+    if consent is None or consent["is_guest"] or not bool(consent["briefing_email_enabled"]):
         stopped = _transition_delivery(
             rendered_state,
             "unsubscribed",
@@ -377,6 +387,13 @@ def deliver_daily_briefing(  # noqa: PLR0911, PLR0912, PLR0915  # explicit ledge
             error_code="smtp_not_configured",
         )
         return DeliveryOutcome(failed.status, failed, briefing)
+
+    if progress:
+        bound = recipient == progress_recipient.strip() and progress_recipient_matches(
+            user_id, recipient, database_url=database_url
+        )
+        if not bound:
+            rendered = render_briefing_email(briefing, **render_args)
 
     sending = _transition_delivery(
         rendered_state,
@@ -567,15 +584,32 @@ def send_preview(user_id: int, *, database_url: str | None = None) -> bool:
         unsubscribe_url = f"{base_url}/email/briefing/unsubscribe?token={quote(token, safe='')}"
         briefing_id = int(briefing["id"])
         enrichment = _safe_email_enrichment(briefing, user_id, database_url)
-        rendered = render_briefing_email(
-            briefing,
-            enrichment=enrichment,
-            local_date=datetime.now(zone).date(),
-            timezone_name=timezone_name,
-            briefing_url=f"{base_url}/briefings/{briefing_id}",
-            preferences_url=f"{base_url}/settings/notifications",
-            unsubscribe_url=unsubscribe_url,
+        progress = select_progress(
+            user_id,
+            recipient=str(user["email"]),
+            base_url=base_url,
+            briefing=briefing,
+            database_url=database_url,
         )
+        render_args: dict[str, Any] = {
+            "enrichment": enrichment,
+            "local_date": datetime.now(zone).date(),
+            "timezone_name": timezone_name,
+            "briefing_url": f"{base_url}/briefings/{briefing_id}",
+            "preferences_url": f"{base_url}/settings/notifications",
+            "unsubscribe_url": unsubscribe_url,
+        }
+        rendered = render_briefing_email(briefing, progress=progress, **render_args)
+        with connect(database_url=database_url) as conn:
+            current = conn.execute(
+                "SELECT email, is_guest FROM users WHERE id=%s", (user_id,)
+            ).fetchone()
+            if not current or current["is_guest"] or current["email"] != user["email"]:
+                raise PreviewUnavailableError(_MISSING_EMAIL)  # noqa: TRY301 - release cooldown
+        if progress and not progress_recipient_matches(
+            user_id, str(user["email"]), database_url=database_url
+        ):
+            rendered = render_briefing_email(briefing, **render_args)
         error = send_email(
             recipient=str(user["email"]).strip(),
             subject=rendered.subject,
