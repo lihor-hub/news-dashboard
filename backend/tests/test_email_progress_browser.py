@@ -94,9 +94,10 @@ def test_email_destination_real_auth_browser(
         return user
 
     monkeypatch.setattr("news_dashboard.auth_routes.router.exchange_keycloak_code", exchange)
+    # Keep the provider fixture outside the PWA's app-navigation fallback.
     monkeypatch.setattr(
         "news_dashboard.auth_routes.router.keycloak_authorization_url",
-        lambda state: base + "/__email_provider?" + urlencode({"state": state}),
+        lambda state: base + "/auth/__email_provider?" + urlencode({"state": state}),
     )
 
     def mail_fixture() -> HTMLResponse:
@@ -119,7 +120,7 @@ def test_email_destination_real_auth_browser(
     for route in static:
         app.routes.remove(route)
     app.add_api_route("/__email_fixture", mail_fixture)
-    app.add_api_route("/__email_provider", provider_fixture)
+    app.add_api_route("/auth/__email_provider", provider_fixture)
     app.mount("/", SPAStaticFiles(directory=dist, html=True), name="static")
     server = uvicorn.Server(
         uvicorn.Config(
@@ -199,5 +200,5 @@ def test_email_destination_real_auth_browser(
         app.routes[:] = [
             route
             for route in app.routes
-            if getattr(route, "path", "") not in {"/__email_fixture", "/__email_provider"}
+            if getattr(route, "path", "") not in {"/__email_fixture", "/auth/__email_provider"}
         ]
