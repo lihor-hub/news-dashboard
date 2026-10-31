@@ -71,7 +71,9 @@ export function DataExportSection() {
             Restore a previously downloaded archive into this account. Existing articles, briefings,
             AI memories, source subscriptions, and preferences are matched and updated rather than
             duplicated. Progress dates, counters, rewards and presentation claims are informational
-            and are not restored; only validated progress preferences are restored.
+            and are not restored; only validated progress preferences are restored. Restored article
+            completions may independently establish silent import-provenance read credit, with
+            unknown earned dates.
           </p>
           <button
             onClick={() => document.getElementById('archive-import-input')?.click()}

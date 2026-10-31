@@ -657,6 +657,16 @@ def _job_daily_recommendations() -> None:
     _run_and_record("recommendations", _run_daily_recommendation_recalc)
 
 
+def _job_activity_retention() -> None:
+    from news_dashboard.reading_progress.activity import cleanup_activity
+
+    def run() -> tuple[str, str | None]:
+        cleanup_activity()
+        return "success", "Expired activity accounting removed"
+
+    _run_and_record("activity_retention", run)
+
+
 def _job_analytics_retention() -> None:
     _run_and_record("analytics_retention", _run_analytics_retention)
 
@@ -896,6 +906,16 @@ def start_scheduler() -> None:
         minute=r_minute,
         id="recommendations",
         replace_existing=True,
+    )
+
+    scheduler.add_job(
+        _job_activity_retention,
+        trigger="interval",
+        seconds=60,
+        id="activity_retention",
+        replace_existing=True,
+        max_instances=1,
+        coalesce=True,
     )
 
     scheduler.add_job(

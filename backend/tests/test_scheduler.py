@@ -818,6 +818,19 @@ def test_start_scheduler_registers_analytics_retention_job(
     assert retention_call.kwargs["minute"] == "0"
 
 
+def test_start_scheduler_registers_minute_activity_cleanup(monkeypatch: pytest.MonkeyPatch) -> None:
+    mock_sched = _start_with_env(monkeypatch)
+    retention = next(
+        call
+        for call in mock_sched.add_job.call_args_list
+        if call.kwargs.get("id") == "activity_retention"
+    )
+    assert retention.kwargs["trigger"] == "interval"
+    assert retention.kwargs["seconds"] == 60
+    assert retention.kwargs["max_instances"] == 1
+    assert retention.kwargs["coalesce"] is True
+
+
 def test_start_scheduler_registers_article_retention_job(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

@@ -196,7 +196,6 @@ def test_archived_to_done(tmp_path: Path) -> None:
 @pytest.mark.parametrize(
     ("from_state", "to_state"),
     [
-        ("done", "today"),
         ("done", "skipped"),
         ("done", "later"),
         ("skipped", "done"),

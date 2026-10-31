@@ -105,6 +105,7 @@ def prune_old_events(
     cutoff = datetime.now(timezone.utc) - timedelta(days=retention_days)
     with connect(db_path, database_url=database_url) as conn:
         result = conn.execute("DELETE FROM user_events WHERE created_at < %s", (cutoff,))
+        conn.execute("DELETE FROM user_reader_evidence WHERE expires_at <= clock_timestamp()")
         return int(result.rowcount or 0)
 
 

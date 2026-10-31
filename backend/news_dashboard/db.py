@@ -638,6 +638,99 @@ POSTGRES_MULTIUSER_SCHEMA = [
     )
     """,
     """
+    CREATE TABLE IF NOT EXISTS user_read_credits (
+      id BIGSERIAL PRIMARY KEY,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      identity_version INTEGER NOT NULL DEFAULT 1 CHECK (identity_version = 1),
+      identity_digest TEXT NOT NULL CHECK (identity_digest ~ '^[0-9a-f]{64}$'),
+      article_id INTEGER REFERENCES articles(id) ON DELETE SET NULL,
+      origin TEXT NOT NULL CHECK (origin IN ('live', 'historical', 'import')),
+      method TEXT NOT NULL CHECK (method IN
+        ('manual', 'automatic', 'legacy', 'greader', 'agent', 'email', 'import', 'historical')),
+      recorded_at TIMESTAMPTZ NOT NULL,
+      effective_at TIMESTAMPTZ,
+      topics_finalized_version INTEGER,
+      UNIQUE (user_id, identity_version, identity_digest),
+      CHECK ((origin = 'live' AND effective_at IS NOT NULL)
+        OR (origin <> 'live' AND effective_at IS NULL))
+    )
+    """,
+    """ALTER TABLE user_read_credits ADD COLUMN IF NOT EXISTS topics_taxonomy_version INTEGER""",
+    """CREATE INDEX IF NOT EXISTS user_read_credits_period
+       ON user_read_credits(user_id, effective_at)""",
+    """
+    CREATE TABLE IF NOT EXISTS user_topic_credits (
+      credit_id BIGINT NOT NULL REFERENCES user_read_credits(id) ON DELETE CASCADE,
+      topic_id TEXT NOT NULL,
+      taxonomy_version INTEGER NOT NULL CHECK (taxonomy_version > 0),
+      rule_version INTEGER NOT NULL CHECK (rule_version > 0),
+      evidence_code TEXT NOT NULL CHECK (evidence_code IN ('title', 'summary')),
+      PRIMARY KEY (credit_id, topic_id)
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS user_reader_evidence (
+      user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+      article_id INTEGER NOT NULL REFERENCES articles(id) ON DELETE CASCADE,
+      body_version TEXT NOT NULL,
+      token UUID NOT NULL,
+      lease_until TIMESTAMPTZ NOT NULL,
+      updated_at TIMESTAMPTZ NOT NULL,
+      expires_at TIMESTAMPTZ NOT NULL,
+      attentive_ms INTEGER NOT NULL DEFAULT 0 CHECK (attentive_ms BETWEEN 0 AND 120000),
+      end_ms INTEGER NOT NULL DEFAULT 0 CHECK (end_ms BETWEEN 0 AND 2000),
+      sequence INTEGER NOT NULL DEFAULT 0 CHECK (sequence >= 0),
+      last_payload JSONB,
+      last_result JSONB
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS user_activity_totals (
+      user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+      total_ms BIGINT NOT NULL DEFAULT 0 CHECK (total_ms >= 0),
+      measured_since TIMESTAMPTZ,
+      coverage_flags INTEGER NOT NULL DEFAULT 1 CHECK (coverage_flags BETWEEN 1 AND 31),
+      recent_union JSONB NOT NULL DEFAULT '[]',
+      union_updated_at TIMESTAMPTZ,
+      rate_minute BIGINT NOT NULL DEFAULT 0,
+      rate_count INTEGER NOT NULL DEFAULT 0 CHECK (rate_count >= 0)
+    )
+    """,
+    "ALTER TABLE users ADD COLUMN IF NOT EXISTS activity_revision BIGINT NOT NULL DEFAULT 0",
+    """
+    CREATE TABLE IF NOT EXISTS user_activity_windows (
+      id UUID PRIMARY KEY,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      issued_ms BIGINT NOT NULL,
+      revision BIGINT NOT NULL,
+      timezone TEXT NOT NULL,
+      expires_at TIMESTAMPTZ NOT NULL,
+      payload_hash TEXT,
+      receipt JSONB,
+      CHECK ((payload_hash IS NULL) = (receipt IS NULL))
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS user_activity_windows_owner ON user_activity_windows(user_id)",
+    "CREATE INDEX IF NOT EXISTS user_activity_windows_expiry ON user_activity_windows(expires_at)",
+    """
+    CREATE TABLE IF NOT EXISTS user_activity_days (
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      local_date DATE NOT NULL,
+      timezone TEXT NOT NULL,
+      active_ms BIGINT NOT NULL DEFAULT 0 CHECK (active_ms >= 0),
+      coverage_flags INTEGER NOT NULL DEFAULT 1 CHECK (coverage_flags BETWEEN 1 AND 31),
+      revision BIGINT NOT NULL DEFAULT 0,
+      PRIMARY KEY(user_id,local_date,timezone)
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS user_read_credit_sources (
+      credit_id BIGINT PRIMARY KEY REFERENCES user_read_credits(id) ON DELETE CASCADE,
+      title TEXT NOT NULL,
+      summary TEXT NOT NULL
+    )
+    """,
+    """
     CREATE TABLE IF NOT EXISTS user_daily_visit_state (
       user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
       last_credited_date DATE,

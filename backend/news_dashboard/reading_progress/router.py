@@ -10,7 +10,7 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel, ConfigDict
 
 from news_dashboard.auth import require_auth
-from news_dashboard.reading_progress import daily, rewards, service
+from news_dashboard.reading_progress import activity, daily, rewards, service
 from news_dashboard.reading_progress.models import AchievementsResponse, ReadingStreakResponse
 
 router = APIRouter()
@@ -31,6 +31,23 @@ class PresentationClaim(BaseModel):
     model_config = ConfigDict(extra="forbid")
     expected_visit_date: date | None
     historical_group_id: UUID | None = None
+
+
+@router.get("/api/users/me/activity")
+def get_activity(current_user: CurrentUser) -> dict[str, Any]:
+    return activity.get_activity(current_user["id"])
+
+
+@router.post("/api/users/me/activity/window")
+def open_activity_window(_body: EmptyRequest, current_user: CurrentUser) -> dict[str, Any]:
+    return activity.open_window(current_user["id"])
+
+
+@router.post("/api/users/me/activity/heartbeat")
+def activity_heartbeat(
+    body: activity.ActivityHeartbeat, current_user: CurrentUser
+) -> dict[str, Any]:
+    return activity.heartbeat(current_user["id"], body)
 
 
 @router.get("/api/users/me/daily-streak")

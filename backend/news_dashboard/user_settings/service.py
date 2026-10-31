@@ -156,12 +156,13 @@ def get_analytics_settings(user_id: int) -> dict[str, bool]:
 
 
 def update_analytics_settings(user_id: int, *, enabled: bool) -> dict[str, bool]:
-    """Persist per-user analytics consent."""
+    """Persist consent and invalidate both automatic measurement protocols atomically."""
+    from news_dashboard.reading_progress.activity import set_consent
+    from news_dashboard.reading_progress.daily import lock_account
+
     with connect() as conn:
-        conn.execute(
-            "UPDATE users SET analytics_enabled = %s WHERE id = %s",
-            (enabled, user_id),
-        )
+        lock_account(conn, user_id, mutation=False)
+        set_consent(conn, user_id, enabled)
     return {"enabled": enabled, "global_enabled": analytics_globally_enabled()}
 
 

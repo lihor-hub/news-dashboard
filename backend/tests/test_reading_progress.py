@@ -149,15 +149,15 @@ def test_achievements_unlock_once_and_endpoint_returns_progress(
     )
 
     unlocked = {item["key"]: item for item in first if item["unlocked"]}
-    assert {"seven_day_streak", "first_quiz_passed", "inbox_zero"} <= set(unlocked)
-    assert unlocked["seven_day_streak"]["progress"] == 7
+    # GET no longer produces rewards from mutable legacy state, including quizzes.
+    assert unlocked == {}
     assert second == first
     with connect(database_url=database_url) as conn:
         count = conn.execute(
             "SELECT COUNT(*) AS count FROM user_achievements WHERE user_id = %s",
             (user_id,),
         ).fetchone()["count"]
-    assert count == 3
+    assert count == 0
 
     try:
         with _client_for(user_id) as client:

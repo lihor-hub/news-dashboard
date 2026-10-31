@@ -14,35 +14,87 @@ from fastapi import HTTPException
 from psycopg.types.json import Jsonb
 
 from news_dashboard.db import connect, init_db
+from news_dashboard.reading_progress import topics
 
 DAILY_TARGETS = (3, 7, 14, 30, 100)
+READ_TARGETS = (1, 10, 50, 100, 500)
+TIME_TARGETS = (900, 3600, 18000, 72000)
+
+
+def read_key(target: int) -> str:
+    return "hundred_articles_read" if target == 100 else f"articles_read_{target}"
+
+
+def reward_catalog() -> dict[str, tuple[int, str, str]]:
+    return {
+        **{
+            f"daily_streak_{n}": (
+                n,
+                f"{n}-day daily streak",
+                f"Visit on {n} consecutive saved-local dates.",
+            )
+            for n in DAILY_TARGETS
+        },
+        **{
+            read_key(n): (n, f"{n} articles read", f"Complete {n} qualifying article reads.")
+            for n in READ_TARGETS
+        },
+        **{
+            topics.topic_key(topic, n): (
+                n,
+                f"{name} · {level}",
+                f"Complete {n} qualifying reads in {name}.",
+            )
+            for topic, (name, _) in topics.TRACKS.items()
+            for n, level in topics.LEVELS
+        },
+        **{
+            f"breadth_{n}": (
+                n,
+                f"{n}-topic breadth",
+                f"Read at least 3 articles in each of {n} topics.",
+            )
+            for n in topics.BREADTH_TARGETS
+        },
+        **{
+            f"active_time_{seconds}": (
+                seconds,
+                f"{label} active time",
+                f"Accumulate approximately {label} of connected, visible and focused app use.",
+            )
+            for seconds, label in zip(
+                TIME_TARGETS, ("15 minutes", "1 hour", "5 hours", "20 hours"), strict=True
+            )
+        },
+        "first_quiz_passed": (1, "First quiz passed", "Submit a quiz with a correct answer."),
+    }
 
 
 def descriptor(row: Any) -> dict[str, Any]:
     key = row["achievement_key"]
-    target = (
-        int(key.removeprefix("daily_streak_"))
-        if key in {f"daily_streak_{n}" for n in DAILY_TARGETS}
-        else None
-    )
+    metadata = row["metadata"] if isinstance(row["metadata"], dict) else {}
+    progress = metadata.get("progress", 0)
+    if not isinstance(progress, int) or progress < 0:
+        progress = 0
+    definition = reward_catalog().get(key)
+    target = definition[0] if definition else None
     recorded = row["unlocked_at"].isoformat()
-    title = f"{target}-day daily streak" if target else key.replace("_", " ")
+    title = definition[1] if definition else key.replace("_", " ")
     if key == "seven_day_streak":
         title = "Legacy reading streak (7 days)"
     return {
         "key": key,
+        "topic_id": topics.reward_topic(key),
         "title": title,
-        "description": f"Visit on {target} consecutive saved-local dates."
-        if target
-        else "Previously earned reward",
+        "description": definition[2] if definition else "Previously earned reward",
         "unlocked": True,
         "unlocked_at": recorded,
         "recorded_at": recorded,
         "earned_at": row["earned_at"].isoformat() if row["earned_at"] else None,
         "origin": row["origin"],
         "date_precision": "exact" if row["earned_at"] else "unknown",
-        "criteria_version": row["metadata"].get("criteria_version", 1),
-        "progress": target or row["metadata"].get("progress", 0),
+        "criteria_version": metadata.get("criteria_version", 1),
+        "progress": target or progress,
         "target": target,
         "href": f"/reading-dna?reward={quote(key, safe='')}#progress",
         "retired": target is None,
@@ -68,8 +120,8 @@ def award_rewards(
     for candidate in candidates:
         target = candidate["target"]
         if (
-            target not in DAILY_TARGETS
-            or candidate["key"] != f"daily_streak_{target}"
+            candidate["key"] not in reward_catalog()
+            or reward_catalog()[candidate["key"]][0] != target
             or candidate["criteria_version"] != 1
             or candidate["progress"] < target
         ):
@@ -105,6 +157,7 @@ def daily_collection(user_id: int, *, database_url: str | None = None) -> dict[s
 
     init_db(database_url=database_url)
     with connect(database_url=database_url) as conn:
+        conn.execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY")
         user = account(conn, user_id)
         if user["is_guest"]:
             return {"items": [], "pending_reward_group_ids": []}
@@ -117,9 +170,10 @@ def daily_collection(user_id: int, *, database_url: str | None = None) -> dict[s
         keys = {row["achievement_key"] for row in rows}
         items.extend(
             {
-                "key": f"daily_streak_{n}",
-                "title": f"{n}-day daily streak",
-                "description": f"Visit on {n} consecutive saved-local dates.",
+                "key": key,
+                "topic_id": topics.reward_topic(key),
+                "title": title,
+                "description": description,
                 "unlocked": False,
                 "target": n,
                 "earned_at": None,
@@ -127,15 +181,25 @@ def daily_collection(user_id: int, *, database_url: str | None = None) -> dict[s
                 "origin": None,
                 "date_precision": "unknown",
             }
-            for n in DAILY_TARGETS
-            if f"daily_streak_{n}" not in keys
+            for key, (n, title, description) in reward_catalog().items()
+            if key not in keys
         )
         pending = conn.execute(
             """SELECT id FROM user_reward_groups WHERE user_id=%s
                AND kind='live' AND claimed_at IS NULL ORDER BY recorded_at,id LIMIT 20""",
             (user_id,),
         ).fetchall()
-        return {"items": items, "pending_reward_group_ids": [str(r["id"]) for r in pending]}
+        total = conn.execute(
+            "SELECT COUNT(*) AS n FROM user_read_credits WHERE user_id=%s", (user_id,)
+        ).fetchone()["n"]
+        return {
+            "items": items,
+            "pending_reward_group_ids": [str(r["id"]) for r in pending],
+            "reading_total": total,
+            "next_reading_target": next((n for n in READ_TARGETS if n > total), None),
+            "history_status": "reconciliation_pending",
+            "topics": topics.snapshot(conn, user_id, items),
+        }
 
 
 def claim_reward(

@@ -11,6 +11,9 @@ import {
 } from '@/api/progress';
 import { SevenDayStrip } from './DailyProgress';
 import { Button } from './ui/button';
+import { RewardEmblem } from './RewardEmblem';
+import { TopicProgress } from './TopicProgress';
+import { ActivityProgress } from './ActivityProgress';
 
 export function ProgressSection() {
   const { user } = useAuth();
@@ -140,29 +143,74 @@ export function ProgressSection() {
           )}
           {preferences.isError && <p role="status">Progress preferences are unavailable.</p>}
           {error && <p role="alert">{error}</p>}
-          <h3 className="font-medium">Daily streak collection</h3>
+          {accountId !== undefined && <ActivityProgress key={accountId} accountId={accountId} />}
+          <h3 className="font-medium">Permanent collection</h3>
+          {rewards.data?.reading_total !== undefined && (
+            <div className="space-y-1">
+              <p>
+                Tracked qualifying reads: <strong>{rewards.data.reading_total}</strong>
+              </p>
+              <p>
+                {rewards.data.next_reading_target
+                  ? `Next reading milestone: ${rewards.data.next_reading_target} articles.`
+                  : 'All reading milestones earned.'}
+              </p>
+              {rewards.data.reading_total === 0 && (
+                <p>
+                  No qualifying reads tracked yet. Choose Done after reading, or complete attentive
+                  reading of the loaded article body.
+                </p>
+              )}
+              <p className="text-sm text-muted-foreground">
+                Marking unread changes your list, not earned progress. Audio finishing alone does
+                not count. Article-kind Reading List items count; other kinds do not.
+              </p>
+              {rewards.data.history_status === 'reconciliation_pending' && (
+                <p className="text-sm text-muted-foreground">
+                  Historical reconciliation is pending. This is not your complete lifetime total.
+                  All existing rewards remain preserved.
+                </p>
+              )}
+            </div>
+          )}
+          {rewards.data?.topics && <TopicProgress key={accountId} topics={rewards.data.topics} />}
           {rewards.isPending ? (
             <p>Loading rewards…</p>
           ) : rewards.isError ? (
-            <p role="status">Rewards are unavailable.</p>
+            <div role="status">
+              Rewards are unavailable. Saved progress has not changed.{' '}
+              <Button variant="outline" onClick={() => void rewards.refetch()}>
+                Retry rewards
+              </Button>
+            </div>
           ) : (
             <ul className="grid gap-2 sm:grid-cols-2">
-              {rewards.data?.items.map((reward) => (
-                <li key={reward.key} className="rounded border p-3">
-                  <p className="font-medium">
-                    {reward.unlocked ? '✓ Earned: ' : '◇ Locked: '}
-                    {reward.title}
-                  </p>
-                  <p className="text-sm">{reward.description}</p>
-                  {reward.unlocked && (
-                    <p className="text-xs text-muted-foreground">
-                      {reward.earned_at
-                        ? `Earned ${new Date(reward.earned_at).toLocaleDateString()}`
-                        : 'Original earned date unknown; preserved reward.'}
+              {rewards.data?.items
+                .filter((reward) => !reward.topic_id)
+                .map((reward) => (
+                  <li key={reward.key} className="rounded border p-3">
+                    <RewardEmblem target={reward.target} earned={reward.unlocked} />
+                    <p className="font-medium">
+                      {reward.unlocked ? '✓ Earned: ' : '◇ Locked: '}
+                      {reward.title}
                     </p>
-                  )}
-                </li>
-              ))}
+                    <p className="text-sm">{reward.description}</p>
+                    {reward.unlocked && (
+                      <p className="text-xs text-muted-foreground">
+                        {reward.earned_at ? (
+                          <>
+                            <span>Earned </span>
+                            <time dateTime={reward.earned_at}>
+                              {new Date(reward.earned_at).toLocaleDateString()}
+                            </time>
+                          </>
+                        ) : (
+                          'Original earned date unknown; preserved reward.'
+                        )}
+                      </p>
+                    )}
+                  </li>
+                ))}
             </ul>
           )}
         </>

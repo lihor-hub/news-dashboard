@@ -201,7 +201,7 @@ export function ReadingDnaPage() {
           </section>
 
           <section className="grid grid-cols-1 gap-4 lg:grid-cols-[1.2fr_0.8fr]">
-            <Panel title="Time on app">
+            <Panel title="Legacy analytics time estimate">
               <div className="flex h-40 items-end gap-2">
                 {(dna?.monthly_time ?? []).map((point) => {
                   const max = Math.max(...(dna?.monthly_time ?? []).map((p) => p.minutes), 1);

@@ -296,7 +296,11 @@ export function ReadingListPage() {
   const updateMutation = useMutation({
     mutationFn: ({ id, status }: { id: number; status: ReadingListStatus }) =>
       updateReadingListItem(id, { status }),
-    onSuccess: invalidate,
+    onSuccess: () => {
+      invalidate();
+      void queryClient.invalidateQueries({ queryKey: ['progress-rewards'] });
+      void queryClient.invalidateQueries({ queryKey: ['achievements'] });
+    },
     onError: () => toast.error('Could not update reading-list item'),
   });
 

@@ -150,6 +150,8 @@ function restoreToCache(queryClient: ReturnType<typeof useQueryClient>, article:
  * cheap summary counts, which aren't derivable from the cache.
  */
 function settleArticleCaches(queryClient: ReturnType<typeof useQueryClient>) {
+  void queryClient.invalidateQueries({ queryKey: ['progress-rewards'] });
+  void queryClient.invalidateQueries({ queryKey: ['achievements'] });
   void queryClient.invalidateQueries({ queryKey: [ARTICLES_KEY], refetchType: 'none' });
   void queryClient.invalidateQueries({ queryKey: ['article'], refetchType: 'none' });
   // One counts refresh per burst; an earlier response must not expose counts

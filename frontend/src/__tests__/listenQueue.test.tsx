@@ -186,7 +186,7 @@ describe('ListenQueueProvider', () => {
     });
 
     await waitFor(() =>
-      expect(workflowApi.patchArticleState).toHaveBeenCalledWith('1', 'done', false)
+      expect(workflowApi.patchArticleState).toHaveBeenCalledWith('1', 'done', false, 'audio_finish')
     );
   });
 

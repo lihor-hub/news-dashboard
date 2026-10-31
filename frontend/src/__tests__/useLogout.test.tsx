@@ -5,10 +5,12 @@ import type { ReactNode } from 'react';
 import { toast } from 'sonner';
 import { logoutUser } from '../api';
 import { useLogout } from '../hooks/useLogout';
+import { stopActivity } from '../lib/activity';
 
 const resetAuth = vi.hoisted(() => vi.fn());
 vi.mock('../contexts/auth', () => ({ useAuth: () => ({ resetAuth }) }));
 vi.mock('../api', () => ({ logoutUser: vi.fn() }));
+vi.mock('../lib/activity', () => ({ stopActivity: vi.fn() }));
 vi.mock('sonner', () => ({ toast: { error: vi.fn() } }));
 
 function wrapper({ children }: { children: ReactNode }) {
@@ -22,6 +24,9 @@ describe('useLogout', () => {
     'revokes memory before server logout and navigates even on failure=%s',
     async (fail) => {
       let finish!: () => void;
+      resetAuth.mockImplementation(() => {
+        expect(stopActivity).toHaveBeenCalledExactlyOnceWith();
+      });
       vi.mocked(logoutUser).mockImplementation(() => {
         expect(resetAuth).toHaveBeenCalledWith('sign-out');
         return new Promise<void>((resolve, reject) => {

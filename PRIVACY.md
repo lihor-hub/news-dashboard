@@ -70,6 +70,40 @@ in-app stats/analytics views. This data:
 - Is pruned automatically by a daily cleanup job after
   `ANALYTICS_RETENTION_DAYS` days (default `180`).
 
+## Approximate active time
+
+With usage analytics enabled both for your account and this instance, authenticated
+visible, focused, connected app use is measured approximately. It pauses after exactly
+five minutes without interaction. Quiet reading within that window counts; background
+audio, offline use, hidden/unfocused pages and offline catch-up do not. No click targets,
+keystrokes, pointer coordinates or persistent device fingerprints are recorded.
+Generic app time never qualifies an article read.
+
+A 15-second heartbeat consumes a server-anchored window of at most 30 seconds. Overlapping
+tabs/devices and retries are deduplicated with a 120-second logical accounting/retry horizon.
+A registered minute cleanup removes expired transient windows, payload hashes, receipts and
+interval unions within 180 seconds while the scheduler is running. An unavailable scheduler
+can delay physical deletion, but never extends the logical acceptance deadline. Frozen
+saved-progress-local day/zone aggregates are retained for 400 days; lifetime millisecond totals,
+measurement start, bounded coverage-gap flags and permanently earned 15-minute/1-hour/5-hour/
+20-hour badges remain until account deletion. Timezone edits never rebucket past days.
+Consent changes invalidate outstanding time windows and automatic-reading evidence under the
+same account lock. Presentation preferences do not stop measurement. Disabling measurement
+preserves existing totals and badges; reenabling cannot fill gaps.
+
+These totals are approximate engagement, not proof of learning or a complete lifetime record.
+Historic global availability is unknown, even when a total is zero; coverage is always partial
+or unknown. Network latency, suspension, OS termination and failed best-effort final sends can
+lose time. Web/mobile browsers, installed PWA, Electron's hosted renderer, Android TWA and iOS
+Safari/PWA share this conservative web lifecycle, not a native background service or a claim of
+native-device parity. There is no browser-extension tracker.
+
+Archive-v2 exports your owned totals, frozen day aggregates, coverage flags and badge dates,
+not activity window tokens, interval unions, payload hashes, receipts or rate counters.
+Uploaded time/rewards are informational only and cannot restore or earn progress. Account
+deletion cascades all activity rows. Legacy analytics time remains a separate estimate and is
+never converted into these totals or badges.
+
 ## Functional daily progress
 
 Authenticated visible app visits store one saved-local calendar date, its timezone,
@@ -91,6 +125,44 @@ and progress preferences. Exported progress is informational, **not restored** f
 uploaded archive; only validated progress preferences are restored. Account deletion
 cascades these functional records. Existing delivered or forwarded email cannot be
 recalled or erased from recipients' mailboxes.
+
+## Permanent qualifying reads and optional automatic reading
+
+Manual Done (including authorized legacy, Google Reader and approved agent declarations)
+records one permanent qualifying read per account and versioned normalized URL identity.
+Article-kind Reading List items share that identity; other kinds and audio finishing alone
+do not qualify. Signed email links require a human confirmation POST; merely fetching the
+link does not record completion. Unread/Undo changes the list, never removes credit or badges.
+
+We retain a SHA-256 URL digest, provenance, recording time and any known live effective time
+until account deletion, even if article retention removes the article. This digest is
+pseudonymous and guessable, **not anonymous**. Different URLs for one story can count
+separately. Imported article completion evidence is self-reported, has unknown earned time,
+and earns silently; uploaded progress totals or reward claims are never trusted. Historical
+reconciliation is separately operated, not a scan performed by opening the collection.
+
+Automatic reading is optional analytics, separate from generic app-active time. It requires
+a loaded authorized body, visible focused connected reading with no five-minute idle gap,
+90% body progress, 30–120 attentive seconds based on body length, and two seconds at the end.
+This approximates attention, not comprehension. Unsupported word segmentation uses 120 seconds.
+No offline catch-up, external-page, summary-only or audio-only evidence qualifies. Consent and
+the instance analytics switch are checked server-side; opting out clears unfinished evidence
+but preserves functional manual progress and earned rewards. At most one aggregate reader
+lease per account stores a body hash, bounded durations, sequence and last bounded retry
+receipt, not a scroll trail or interaction log. Pending evidence becomes invalid after 24 hours
+and expired rows are removed by the existing telemetry cleanup and on the next reader request.
+
+Topic progression uses only the first qualifying read's title and summary, not your tags,
+interests or a remote AI service. At most two relevant tracks are frozen, including a result
+with no topics, with taxonomy/rule versions and a compact title/summary evidence code. New
+credits do not retain a title or summary copy. A transitional pending source, if present in
+an older build, must be consumed/deleted atomically using its original text, never later
+article text. No operational historical processing is performed automatically. Export includes
+owned credits, frozen topic attribution, awards and any transitional pending sources, never
+reader tokens or retry evidence. Uploaded progress remains informational, not reward authority.
+Counts and earned levels survive unread, content deletion and later classifier changes;
+historical totals remain incomplete pending reconciliation. Account deletion cascades all of
+these records; article deletion clears its reference and unfinished evidence, not earned credit.
 
 ## Your data: export and deletion
 

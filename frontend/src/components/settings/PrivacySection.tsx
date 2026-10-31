@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Switch } from '@/components/ui/switch';
 import { setAnalyticsAllowed, startAnalytics, stopAnalytics } from '@/lib/analytics';
 import { fetchAnalyticsSettings, updateAnalyticsSettings } from '@/api';
+import { refreshActivityConsent, pauseActivity } from '@/lib/activity';
 
 export function PrivacySection() {
   const [enabled, setEnabled] = useState(true);
@@ -35,7 +36,9 @@ export function PrivacySection() {
     setEnabled(next);
     setSaving(true);
     try {
+      if (!next) pauseActivity();
       await updateAnalyticsSettings({ enabled: next });
+      refreshActivityConsent();
       setAnalyticsAllowed(next && globalEnabled);
       if (next && globalEnabled) {
         startAnalytics();
@@ -44,6 +47,7 @@ export function PrivacySection() {
       }
     } catch {
       setEnabled(!next);
+      refreshActivityConsent();
     } finally {
       setSaving(false);
     }
@@ -60,7 +64,9 @@ export function PrivacySection() {
             <div className="text-xs font-medium text-foreground">Usage analytics</div>
             <p className="text-xs text-muted-foreground">
               Lets Radar track route views, time-on-app, and article dwell time to improve your
-              recommendations and reading insights.
+              recommendations and reading insights. Also enables approximate connected, visible,
+              focused app time and automatic article-reading evidence. Pauses after five minutes
+              idle. Opting out preserves earned badges and manual reading progress.
             </p>
           </div>
           <Switch

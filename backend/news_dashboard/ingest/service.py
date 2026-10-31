@@ -73,6 +73,7 @@ _ALLOWED_TRANSITIONS: frozenset[tuple[str, str]] = frozenset(
         ("later", "skipped"),
         ("later", "archived"),
         ("done", "archived"),
+        ("done", "today"),
         ("skipped", "today"),
         ("skipped", "archived"),
         ("archived", "today"),
@@ -2523,95 +2524,102 @@ def _get_article_row_for_user(
     return _article_dict(row) if row else None
 
 
-def transition_article_state(  # noqa: PLR0912
+def transition_article_state(
     article_id: int,
     new_state: str,
     db_path: Path | str | None = None,
     user_id: int | None = None,
+    *,
+    method: str = "manual",
 ) -> dict[str, Any] | None:
     """Apply a state transition, enforcing allowed-transition rules.
 
     Raises ValueError for invalid states, disallowed transitions, or
     the starred-cannot-skip rule.
     """
+    init_db(db_path)
+    with connect(db_path) as conn:
+        return transition_article_state_on_connection(
+            conn,
+            article_id,
+            new_state,
+            user_id=user_id,
+            method=method,
+        )
+
+
+def transition_article_state_on_connection(
+    conn: Any,
+    article_id: int,
+    new_state: str,
+    *,
+    user_id: int | None = None,
+    method: str = "manual",
+) -> dict[str, Any] | None:
+    from news_dashboard.reading_progress.credits import credit_article
+    from news_dashboard.reading_progress.daily import lock_account
+
     if new_state not in VALID_STATES:
         message = f"invalid state: {new_state!r} (expected one of {sorted(VALID_STATES)})"
         raise ValueError(message)
+    if method not in {"manual", "automatic", "legacy", "greader", "agent", "email", "audio_finish"}:
+        msg = "invalid completion method"
+        raise ValueError(msg)
+    personal = False
+    if user_id is not None:
+        personal = not lock_account(conn, user_id, mutation=False)["is_guest"]
+    base = _get_article_row_for_user(conn, article_id, user_id)
+    if base is None:
+        return None
 
-    init_db(db_path)
-    with connect(db_path) as conn:
-        base = _get_article_row_for_user(conn, article_id, user_id)
-        if base is None:
-            return None
+    uas = _get_uas_row(conn, article_id, user_id) if user_id is not None else None
+    current = _merge_uas(dict(base), uas) if user_id is not None else base
+    current_state = str(current.get("state") or "today")
+    current_starred = bool(current.get("starred", False))
+    if current_state != new_state and (current_state, new_state) not in _ALLOWED_TRANSITIONS:
+        message = f"transition {current_state!r} → {new_state!r} is not allowed"
+        raise ValueError(message)
+    if current_state != new_state and new_state == "skipped" and current_starred:
+        message = "starred articles cannot be skipped"
+        raise ValueError(message)
+    if user_id is not None and personal and new_state == "done" and method != "audio_finish":
+        credit_article(conn, user_id, base, method=method)
+    if current_state == new_state:
+        return current
 
-        uas: dict[str, Any] | None = None
-        if user_id is not None:
-            uas = _get_uas_row(conn, article_id, user_id)
-            current_state = str((uas or {}).get("state") or "today")
-            current_starred = bool((uas or {}).get("starred", False))
-        else:
-            current_state = str(base.get("state") or "today")
-            current_starred = bool(base.get("starred", False))
+    ts = now_iso()
+    if user_id is not None:
+        _upsert_uas(
+            conn,
+            user_id,
+            article_id,
+            state=new_state,
+            starred=current_starred,
+            done_at=ts if new_state == "done" else None,
+            skipped_at=ts if new_state == "skipped" else None,
+            archived_at=ts if new_state == "archived" else None,
+            restored_at=ts if new_state == "today" else None,
+            later_until=None if new_state == "today" else (uas or {}).get("later_until"),
+            updated_at=ts,
+        )
+        return _merge_uas(dict(base), _get_uas_row(conn, article_id, user_id))
 
-        if current_state == new_state:
-            if user_id is not None:
-                return _merge_uas(base, uas)
-            return base
-
-        if (current_state, new_state) not in _ALLOWED_TRANSITIONS:
-            message = f"transition {current_state!r} → {new_state!r} is not allowed"
-            raise ValueError(message)
-
-        if new_state == "skipped" and current_starred:
-            message = "starred articles cannot be skipped"
-            raise ValueError(message)
-
-        ts = now_iso()
-
-        if user_id is not None:
-            # `uas` was fetched above — reuse it; don't re-query before the write.
-            _upsert_uas(
-                conn,
-                user_id,
-                article_id,
-                state=new_state,
-                starred=current_starred,
-                done_at=ts if new_state == "done" else None,
-                skipped_at=ts if new_state == "skipped" else None,
-                archived_at=ts if new_state == "archived" else None,
-                restored_at=ts if new_state == "today" else None,
-                later_until=None if new_state == "today" else (uas or {}).get("later_until"),
-                updated_at=ts,
-            )
-            # Re-read UAS to get the post-write COALESCE values; reuse `base` (article unchanged).
-            result: dict[str, Any] | None = _merge_uas(
-                dict(base),
-                _get_uas_row(conn, article_id, user_id),
-            )
-        else:
-            timestamp_sets: list[str] = ["state = %s", "updated_at = %s"]
-            params: list[Any] = [new_state, ts]
-
-            if new_state == "done":
-                timestamp_sets.append("done_at = %s")
-                params.append(ts)
-            elif new_state == "skipped":
-                timestamp_sets.append("skipped_at = %s")
-                params.append(ts)
-            elif new_state == "archived":
-                timestamp_sets.append("archived_at = %s")
-                params.append(ts)
-            elif new_state == "today":
-                timestamp_sets.append("restored_at = %s")
-                timestamp_sets.append("later_until = NULL")
-                params.append(ts)
-
-            set_clause = ", ".join(timestamp_sets)
-            params.append(article_id)
-            conn.execute(f"UPDATE articles SET {set_clause} WHERE id = %s", params)
-            result = _get_article_row(conn, article_id)
-
-    return result
+    timestamp_sets = ["state = %s", "updated_at = %s"]
+    params: list[Any] = [new_state, ts]
+    timestamp_column = {
+        "done": "done_at",
+        "skipped": "skipped_at",
+        "archived": "archived_at",
+        "today": "restored_at",
+    }.get(new_state)
+    if timestamp_column:
+        timestamp_sets.append(f"{timestamp_column} = %s")
+        params.append(ts)
+    if new_state == "today":
+        timestamp_sets.append("later_until = NULL")
+    params.append(article_id)
+    conn.execute(f"UPDATE articles SET {', '.join(timestamp_sets)} WHERE id = %s", params)
+    return _get_article_row(conn, article_id)
 
 
 def set_article_starred(
