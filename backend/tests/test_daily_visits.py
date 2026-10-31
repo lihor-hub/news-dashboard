@@ -406,3 +406,223 @@ def test_api_real_auth_validation_guest_and_isolation(visit_account: VisitAccoun
             conn.execute("UPDATE users SET is_guest=TRUE WHERE id=%s", (uid,))
         assert client.post("/api/users/me/daily-visit", json={}).status_code == 403
         assert client.get("/api/users/me/daily-streak").json() == {"available": False}
+
+
+def test_pending_discovery_is_bounded_owned_read_only_and_history_typed(
+    visit_account: VisitAccount,
+) -> None:
+    uid, clock = visit_account
+    live = [uuid4() for _ in range(23)]
+    intro = uuid4()
+    with connect() as conn:
+        for index, group in enumerate(live):
+            conn.execute(
+                """INSERT INTO user_reward_groups(id,user_id,source_key,kind,recorded_at)
+                   VALUES (%s,%s,%s,'live',%s)""",
+                (group, uid, f"fixture:{index}", clock[0] + timedelta(seconds=index)),
+            )
+        conn.execute(
+            """INSERT INTO user_reward_groups(id,user_id,source_key,kind,recorded_at,summary)
+               VALUES (%s,%s,'fixture:intro','historical_intro',%s,%s)""",
+            (intro, uid, clock[0], Jsonb({"credited_reads": 42})),
+        )
+    first = rewards.daily_collection(uid)
+    assert first == rewards.daily_collection(uid)
+    assert first["pending_reward_group_ids"] == [str(group) for group in live[:20]]
+    assert first["historical_group_id"] == str(intro)
+    assert not daily.claim_presentation(uid, None, intro)["show"]  # Welcome is enabled.
+    with pytest.raises(HTTPException) as exc:
+        rewards.claim_reward(uid, intro)
+    assert exc.value.status_code == 409
+    with pytest.raises(HTTPException) as exc:
+        rewards.claim_reward(uid, live[0], acknowledge=True)
+    assert exc.value.status_code == 409
+    daily.save_preferences(uid, daily.ProgressPreferencesPatch(daily_welcome_enabled=False))
+    won = daily.claim_presentation(uid, None, intro)
+    assert won["authorization"] == {"welcome": False, "history": True, "rewards": False}
+    assert not daily.claim_presentation(uid, None, intro)["show"]
+    assert rewards.daily_collection(uid)["historical_group_id"] is None
+
+
+def test_two_device_live_claim_lost_response_ack_and_rollback(
+    visit_account: VisitAccount,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    uid, clock = visit_account
+    ids = []
+    for index, target in enumerate((3, 7)):
+        with connect() as conn:
+            daily.lock_account(conn, uid)
+            result = rewards.award_rewards(
+                conn,
+                uid,
+                cause_key=f"fixture:{index}",
+                origin="live",
+                earned_at=clock[0],
+                candidates=[
+                    {
+                        "key": f"daily_streak_{target}",
+                        "criteria_version": 1,
+                        "progress": target,
+                        "target": target,
+                    }
+                ],
+            )
+            ids.append(result["reward_group_id"])
+    barrier = Barrier(2)
+
+    def claim() -> dict[str, Any]:
+        barrier.wait()
+        return rewards.claim_reward(uid, ids[0])
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        futures = [pool.submit(claim) for _ in range(2)]
+        assert sum(f.result()["show"] for f in futures) == 1
+    assert not rewards.claim_reward(uid, ids[0])["show"]  # Lost winning response.
+    assert rewards.daily_collection(uid)["pending_reward_group_ids"] == [ids[1]]
+    assert rewards.claim_reward(uid, ids[0], acknowledge=True)["acknowledged"]
+    assert rewards.claim_reward(uid, ids[0], acknowledge=True)["acknowledged"]
+    original = rewards.descriptor
+
+    def fail(row: Any) -> Any:
+        msg = "Serialization failure"
+        raise RuntimeError(msg)
+
+    monkeypatch.setattr(rewards, "descriptor", fail)
+    with pytest.raises(RuntimeError):
+        rewards.claim_reward(uid, ids[1])
+    monkeypatch.setattr(rewards, "descriptor", original)
+    assert rewards.claim_reward(uid, ids[1])["show"]
+    assert len([item for item in rewards.daily_collection(uid)["items"] if item["unlocked"]]) == 2
+
+
+def test_welcome_one_previous_seven_saved_dates_summary_is_not_toast_authority(
+    visit_account: VisitAccount,
+) -> None:
+    uid, clock = visit_account
+    clock[0] = datetime(2026, 1, 10, 12, tzinfo=timezone.utc)
+    with connect() as conn:
+        daily.lock_account(conn, uid)
+        group = rewards.award_rewards(
+            conn,
+            uid,
+            cause_key="fixture:recent",
+            origin="live",
+            earned_at=clock[0] - timedelta(days=7),
+            candidates=[
+                {"key": "topic_python_10", "criteria_version": 1, "progress": 10, "target": 10},
+                {"key": "articles_read_10", "criteria_version": 1, "progress": 10, "target": 10},
+            ],
+        )["reward_group_id"]
+        rewards.award_rewards(
+            conn,
+            uid,
+            cause_key="fixture:today",
+            origin="live",
+            earned_at=clock[0],
+            candidates=[
+                {"key": "daily_streak_3", "criteria_version": 1, "progress": 3, "target": 3}
+            ],
+        )
+    daily.record_visit(uid)
+    receipt = daily.claim_presentation(uid, clock[0].date())
+    assert receipt["welcome"]["recent_reward"]["key"] == "topic_python_10"
+    assert receipt["authorization"]["rewards"] is False
+    assert rewards.claim_reward(uid, group)["show"]  # Summary never consumes the live group.
+    clock[0] += timedelta(days=1)
+    daily.record_visit(uid)
+    next_day = daily.claim_presentation(uid, clock[0].date())
+    assert next_day["welcome"]["recent_reward"]["key"] == "daily_streak_3"
+
+
+@pytest.mark.parametrize("welcome", [True, False])
+@pytest.mark.parametrize("animations", [True, False])
+def test_presentation_preferences_independent_and_leave_records(
+    visit_account: VisitAccount,
+    welcome: bool,
+    animations: bool,
+) -> None:
+    uid, _ = visit_account
+    daily.record_visit(uid)
+    daily.save_preferences(uid, daily.ProgressPreferencesPatch(daily_welcome_enabled=welcome))
+    daily.save_preferences(
+        uid, daily.ProgressPreferencesPatch(reward_animations_enabled=animations)
+    )
+    result = daily.get_preferences(uid)
+    assert result["daily_welcome_enabled"] is welcome
+    assert result["reward_animations_enabled"] is animations
+    assert daily.get_daily_streak(uid)["current_streak_days"] == 1
+
+
+@pytest.mark.parametrize(
+    "value", [True, 1767225600, "2026-01-01T00:00:00Z", "2026-W01-1", "20260101"]
+)
+def test_presentation_targets_are_exact_calendar_strings(value: Any) -> None:
+    from news_dashboard.reading_progress.router import PresentationClaim, WelcomeClaim
+
+    for model in (PresentationClaim, WelcomeClaim):
+        with pytest.raises(ValidationError):
+            model.model_validate({"expected_visit_date": value})
+
+
+def test_invalid_history_bundle_rolls_back_both_targets(visit_account: VisitAccount) -> None:
+    uid, clock = visit_account
+    group = uuid4()
+    daily.record_visit(uid)
+    with connect() as conn:
+        conn.execute(
+            """INSERT INTO user_reward_groups(id,user_id,source_key,kind,recorded_at,summary)
+            VALUES (%s,%s,'fixture:invalid','historical_intro',%s,%s)""",
+            (group, uid, clock[0], Jsonb({"credited_reads": 42, "url": "private-unexpected"})),
+        )
+    with pytest.raises(HTTPException) as exc:
+        daily.claim_presentation(uid, clock[0].date(), group)
+    assert exc.value.status_code == 409
+    assert daily.get_daily_streak(uid)["welcome_target"] is not None
+    with connect() as conn:
+        assert (
+            conn.execute(
+                "SELECT claimed_at FROM user_reward_groups WHERE id=%s", (group,)
+            ).fetchone()["claimed_at"]
+            is None
+        )
+
+
+def test_two_device_atomic_bundle_and_independent_patch_races(visit_account: VisitAccount) -> None:
+    uid, clock = visit_account
+    group = uuid4()
+    daily.record_visit(uid)
+    with connect() as conn:
+        conn.execute(
+            """INSERT INTO user_reward_groups(id,user_id,source_key,kind,recorded_at,summary)
+            VALUES (%s,%s,'fixture:race','historical_intro',%s,%s)""",
+            (group, uid, clock[0], Jsonb({"credited_reads": 42})),
+        )
+    barrier = Barrier(2)
+
+    def bundle() -> dict[str, Any]:
+        barrier.wait()
+        return daily.claim_presentation(uid, clock[0].date(), group)
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        futures = [pool.submit(bundle) for _ in range(2)]
+        receipts = [future.result() for future in futures]
+    assert sum(r["authorization"]["welcome"] for r in receipts) == 1
+    assert sum(r["authorization"]["history"] for r in receipts) == 1
+    assert any(r["authorization"]["welcome"] and r["authorization"]["history"] for r in receipts)
+    barrier = Barrier(2)
+
+    def patch(key: str) -> None:
+        barrier.wait()
+        daily.save_preferences(uid, daily.ProgressPreferencesPatch.model_validate({key: False}))
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        patch_futures = [
+            pool.submit(patch, key)
+            for key in ("daily_welcome_enabled", "reward_animations_enabled")
+        ]
+        for future in patch_futures:
+            future.result()
+    saved = daily.get_preferences(uid)
+    assert saved["daily_welcome_enabled"] is False
+    assert saved["reward_animations_enabled"] is False

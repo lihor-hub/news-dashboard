@@ -1,9 +1,17 @@
 import { useState } from 'react';
-import type { TopicProgress as TopicProgressData } from '@/api/progress';
+import { Link } from 'react-router';
+import { rewardHref } from '@/api/progress';
+import type { ProgressReward, TopicProgress as TopicProgressData } from '@/api/progress';
 import { Button } from './ui/button';
 import { RewardEmblem } from './RewardEmblem';
 
-export function TopicProgress({ topics }: { topics: TopicProgressData }) {
+export function TopicProgress({
+  topics,
+  rewards,
+}: {
+  topics: TopicProgressData;
+  rewards: ProgressReward[];
+}) {
   const [all, setAll] = useState(false);
   const tracks = all
     ? topics.tracks
@@ -22,6 +30,7 @@ export function TopicProgress({ topics }: { topics: TopicProgressData }) {
       )}
       <Button
         variant="outline"
+        className="h-auto min-h-9 max-w-full whitespace-normal"
         aria-expanded={all}
         aria-controls="topic-tracks"
         onClick={() => setAll(!all)}
@@ -36,7 +45,7 @@ export function TopicProgress({ topics }: { topics: TopicProgressData }) {
               target={track.count}
               earned={track.count > 0}
               level={track.level}
-              symbol={track.name.slice(0, 2)}
+              topicId={track.id}
             />
             <p>
               {track.level ?? 'Not started'} · {track.count} qualifying reads
@@ -46,19 +55,29 @@ export function TopicProgress({ topics }: { topics: TopicProgressData }) {
                 ? `${track.count} of ${track.next_target} toward ${track.next_level}`
                 : `Pathfinder · ${track.count} reads; all levels earned.`}
             </p>
-            <ul aria-label={`${track.name} earned levels`}>
-              {track.earned_levels.map((reward) => (
-                <li key={reward.key} className="text-sm">
-                  <span>✓ Earned: {reward.title}. </span>
-                  {reward.earned_at ? (
-                    <time dateTime={reward.earned_at}>
-                      Earned {new Date(reward.earned_at).toLocaleDateString()}
-                    </time>
-                  ) : (
-                    'Original earned date unknown; preserved reward.'
-                  )}
-                </li>
-              ))}
+            <ul aria-label={`${track.name} levels`}>
+              {rewards
+                .filter((reward) => reward.topic_id === track.id)
+                .map((reward) => (
+                  <li key={reward.key} className="text-sm">
+                    <span>
+                      {reward.unlocked ? '✓ Earned: ' : '◇ Locked: '}
+                      <Link to={rewardHref(reward.key)} className="underline">
+                        {reward.title}
+                      </Link>
+                      .{' '}
+                    </span>
+                    <p>{reward.description}</p>
+                    {reward.unlocked &&
+                      (reward.earned_at ? (
+                        <time dateTime={reward.earned_at}>
+                          Earned {new Date(reward.earned_at).toLocaleDateString()}
+                        </time>
+                      ) : (
+                        'Original earned date unknown; preserved reward.'
+                      ))}
+                  </li>
+                ))}
             </ul>
           </li>
         ))}

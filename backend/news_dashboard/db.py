@@ -785,6 +785,25 @@ POSTGRES_MULTIUSER_SCHEMA = [
     """,
     """CREATE INDEX IF NOT EXISTS user_reward_groups_pending
        ON user_reward_groups(user_id, recorded_at, id) WHERE claimed_at IS NULL""",
+    """
+    CREATE TABLE IF NOT EXISTS user_historical_credit_state (
+      user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+      policy_version TEXT NOT NULL CHECK (policy_version = 'historical-v1'),
+      cutoff_at TIMESTAMPTZ NOT NULL,
+      protection_ref TEXT NOT NULL CHECK (char_length(protection_ref) BETWEEN 1 AND 200),
+      upper_article_id BIGINT NOT NULL CHECK (upper_article_id >= 0),
+      cursor_article_id BIGINT NOT NULL DEFAULT 0,
+      status TEXT NOT NULL DEFAULT 'running' CHECK (status IN ('running','complete')),
+      scanned BIGINT NOT NULL DEFAULT 0 CHECK (scanned >= 0),
+      eligible BIGINT NOT NULL DEFAULT 0 CHECK (eligible >= 0 AND eligible <= scanned),
+      credited_reads BIGINT NOT NULL DEFAULT 0
+        CHECK (credited_reads >= 0 AND credited_reads <= eligible),
+      preserved_rewards BIGINT NOT NULL CHECK (preserved_rewards >= 0),
+      completed_at TIMESTAMPTZ,
+      CHECK (cursor_article_id BETWEEN 0 AND upper_article_id),
+      CHECK ((status = 'complete') = (completed_at IS NOT NULL))
+    )
+    """,
     "ALTER TABLE user_achievements ADD COLUMN IF NOT EXISTS earned_at TIMESTAMPTZ",
     """ALTER TABLE user_achievements ADD COLUMN IF NOT EXISTS origin TEXT NOT NULL DEFAULT 'legacy'
        CONSTRAINT user_achievements_origin

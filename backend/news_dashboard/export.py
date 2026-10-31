@@ -308,6 +308,10 @@ def assemble_user_export(
             "daily_state": progress_rows("user_daily_visit_state", "user_id"),
             "daily_visits": progress_rows("user_daily_visits", "local_date"),
             "read_credits": progress_rows("user_read_credits", "recorded_at, id"),
+            "historical_reconciliation": [
+                {key: value for key, value in row.items() if key != "protection_ref"}
+                for row in progress_rows("user_historical_credit_state", "user_id")
+            ],
             "topic_credits": [
                 dict(row)
                 for row in conn.execute(
