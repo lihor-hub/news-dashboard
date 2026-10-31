@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { ProgressSection } from '@/components/ProgressSection';
 import type { ReactNode } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
@@ -127,6 +128,8 @@ export function ReadingDnaPage() {
         </div>
       )}
 
+      <ProgressSection />
+
       <div className="flex gap-1 border-b border-border">
         <TabButton active={tab === 'dna'} onClick={() => setTab('dna')}>
           Reading DNA
@@ -141,7 +144,7 @@ export function ReadingDnaPage() {
           <section className="grid grid-cols-2 gap-2 md:grid-cols-5">
             <Metric label="Window" value={`${dna?.range_days ?? 30}d`} />
             <Metric label="Avg dwell" value={`${dna?.average_dwell_seconds ?? 0}s`} />
-            <Metric label="Streak" value={`${streak?.current_streak_days ?? 0}d`} />
+            <Metric label="Legacy reading streak" value={`${streak?.current_streak_days ?? 0}d`} />
             <Metric
               label="Read"
               value={String(dna?.categories.reduce((sum, item) => sum + item.done, 0) ?? 0)}
@@ -153,7 +156,7 @@ export function ReadingDnaPage() {
           </section>
 
           <section className="grid grid-cols-1 gap-4 lg:grid-cols-[0.8fr_1.2fr]">
-            <Panel title="Reading streak">
+            <Panel title="Legacy reading streak">
               <div className="flex items-start gap-3">
                 <div className="flex size-10 shrink-0 items-center justify-center rounded bg-primary/10 text-primary">
                   <Flame className="size-5" />

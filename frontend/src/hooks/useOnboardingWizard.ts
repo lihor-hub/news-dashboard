@@ -5,6 +5,7 @@ const SESSION_KEY = 'onboarding-skipped';
 
 export interface OnboardingWizardState {
   open: boolean;
+  ready: boolean;
   skip: () => void;
   openWizard: () => void;
   close: () => void;
@@ -12,6 +13,7 @@ export interface OnboardingWizardState {
 
 export function useOnboardingWizard(): OnboardingWizardState {
   const [open, setOpen] = useState(false);
+  const [ready, setReady] = useState(!!sessionStorage.getItem(SESSION_KEY));
 
   useEffect(() => {
     if (sessionStorage.getItem(SESSION_KEY)) return;
@@ -23,6 +25,9 @@ export function useOnboardingWizard(): OnboardingWizardState {
       })
       .catch(() => {
         // non-critical, stay closed
+      })
+      .finally(() => {
+        if (!cancelled) setReady(true);
       });
     return () => {
       cancelled = true;
@@ -42,5 +47,5 @@ export function useOnboardingWizard(): OnboardingWizardState {
     setOpen(false);
   }, []);
 
-  return { open, skip, openWizard, close };
+  return { open, ready, skip, openWizard, close };
 }

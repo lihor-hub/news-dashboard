@@ -70,7 +70,8 @@ export function DataExportSection() {
           <p className="text-xs text-muted-foreground mb-2">
             Restore a previously downloaded archive into this account. Existing articles, briefings,
             AI memories, source subscriptions, and preferences are matched and updated rather than
-            duplicated.
+            duplicated. Progress dates, counters, rewards and presentation claims are informational
+            and are not restored; only validated progress preferences are restored.
           </p>
           <button
             onClick={() => document.getElementById('archive-import-input')?.click()}

@@ -15,6 +15,8 @@ export default [
       // Stale git worktrees — lint runs on the whole tree so exclude them explicitly
       '.claude/worktrees/**',
       '.worktrees/**',
+      // BB workflow scripts are harness inputs, not application JavaScript.
+      '.bb/**',
       // Python virtual environment — contains playwright/patchright JS bundles
       '.venv/**',
     ],

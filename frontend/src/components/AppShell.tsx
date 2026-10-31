@@ -18,8 +18,7 @@ import { DifyChatWidget } from './DifyChatWidget';
 import { HubTabs } from './HubTabs';
 import { NavLink } from './NavLink';
 import { ThemeSwitcher } from './ThemeSwitcher';
-import { useWhatsNew } from '@/hooks/useWhatsNew';
-import { useOnboardingWizard } from '@/hooks/useOnboardingWizard';
+
 import { useElectronBriefNotifier } from '@/hooks/useElectronBriefNotifier';
 import { useLogout } from '@/hooks/useLogout';
 import { cn } from '@/lib/utils';
@@ -46,12 +45,6 @@ const CommandPalette = lazy(() =>
 );
 const ShortcutOverlay = lazy(() =>
   import('./ShortcutOverlay').then((m) => ({ default: m.ShortcutOverlay }))
-);
-const WhatsNewDialog = lazy(() =>
-  import('./WhatsNewDialog').then((m) => ({ default: m.WhatsNewDialog }))
-);
-const OnboardingWizard = lazy(() =>
-  import('./OnboardingWizard').then((m) => ({ default: m.OnboardingWizard }))
 );
 
 type RouteCounts = Partial<Record<string, number | null>>;
@@ -330,8 +323,6 @@ export function AppShell() {
   const countsByRoute = useCountsByRoute();
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
-  const whatsNew = useWhatsNew();
-  const onboarding = useOnboardingWizard();
   const online = useOnlineStatus();
   useElectronBriefNotifier((path) => void navigate(path));
 
@@ -471,8 +462,6 @@ export function AppShell() {
             }}
           />
           <ShortcutOverlay open={shortcutsOpen} onOpenChange={setShortcutsOpen} />
-          <WhatsNewDialog state={whatsNew} />
-          <OnboardingWizard open={onboarding.open} onClose={onboarding.skip} />
         </Suspense>
       </ErrorBoundary>
       <ListenQueuePlayer />

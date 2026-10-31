@@ -50,6 +50,7 @@ export interface Article {
 }
 
 export interface User {
+  is_guest?: boolean;
   id: number;
   username: string;
   email?: string | null;

@@ -6,6 +6,8 @@ import * as api from '../api';
 import { ReadingDnaPage } from '../pages/ReadingDnaPage';
 import type { Achievement, ReadingDna, ReadingStreak } from '../types';
 
+vi.mock('../components/ProgressSection', () => ({ ProgressSection: () => null }));
+
 function renderPage() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
@@ -68,7 +70,9 @@ describe('ReadingDnaPage reading progress', () => {
   it('renders streak and achievement progress on Reading DNA', async () => {
     renderPage();
 
-    await waitFor(() => expect(screen.getByText('Reading streak')).toBeTruthy());
+    await waitFor(() =>
+      expect(screen.getByRole('heading', { name: 'Legacy reading streak' })).toBeTruthy()
+    );
     expect(screen.getByText('Longest streak: 9 days')).toBeTruthy();
     expect(screen.getByText('7-day streak')).toBeTruthy();
     expect(screen.getByText('Unlocked')).toBeTruthy();

@@ -6,6 +6,8 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ReadingDnaPage } from '../pages/ReadingDnaPage';
 import * as api from '../api';
 
+vi.mock('../components/ProgressSection', () => ({ ProgressSection: () => null }));
+
 vi.mock('../api', () => ({
   fetchGoals: vi.fn(),
   fetchLatestQuiz: vi.fn(),

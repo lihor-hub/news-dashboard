@@ -250,6 +250,7 @@ def update_password(user_id: int, new_password: str) -> bool:
 
 def delete_user(user_id: int) -> bool:
     with connect() as conn:
+        conn.execute("SELECT pg_advisory_xact_lock(1623, %s)", (user_id,))
         cursor = conn.execute("DELETE FROM users WHERE id=%s", (user_id,))
         return bool(cursor.rowcount > 0)
 

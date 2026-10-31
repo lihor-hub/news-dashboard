@@ -638,6 +638,82 @@ POSTGRES_MULTIUSER_SCHEMA = [
     )
     """,
     """
+    CREATE TABLE IF NOT EXISTS user_daily_visit_state (
+      user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+      last_credited_date DATE,
+      current_streak_days INTEGER NOT NULL DEFAULT 0 CHECK (current_streak_days >= 0),
+      best_streak_days INTEGER NOT NULL DEFAULT 0 CHECK (best_streak_days >= current_streak_days),
+      next_credit_at TIMESTAMPTZ,
+      CHECK ((last_credited_date IS NULL AND next_credit_at IS NULL AND current_streak_days = 0)
+        OR (last_credited_date IS NOT NULL AND next_credit_at IS NOT NULL
+            AND current_streak_days > 0))
+    )
+    """,
+    """ALTER TABLE users ADD COLUMN IF NOT EXISTS progress_timezone TEXT
+       CONSTRAINT progress_timezone_length
+       CHECK (char_length(progress_timezone) BETWEEN 1 AND 255)""",
+    """ALTER TABLE users ADD COLUMN IF NOT EXISTS
+       daily_welcome_enabled BOOLEAN NOT NULL DEFAULT TRUE""",
+    """ALTER TABLE users ADD COLUMN IF NOT EXISTS
+       reward_animations_enabled BOOLEAN NOT NULL DEFAULT TRUE""",
+    """
+    CREATE TABLE IF NOT EXISTS user_daily_visits (
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      local_date DATE NOT NULL,
+      timezone TEXT NOT NULL CHECK (char_length(timezone) BETWEEN 1 AND 255),
+      first_visited_at TIMESTAMPTZ NOT NULL,
+      credited BOOLEAN NOT NULL DEFAULT FALSE,
+      visit_kind TEXT CHECK (visit_kind IN ('first', 'continuing', 'restart')),
+      welcome_status TEXT NOT NULL DEFAULT 'pending'
+        CHECK (welcome_status IN ('pending', 'claimed', 'suppressed')),
+      welcome_consumed_at TIMESTAMPTZ,
+      PRIMARY KEY (user_id, local_date),
+      CHECK (credited = (visit_kind IS NOT NULL)),
+      CHECK ((welcome_status = 'pending' AND welcome_consumed_at IS NULL)
+        OR (welcome_status IN ('claimed', 'suppressed') AND welcome_consumed_at IS NOT NULL)),
+      CHECK (welcome_status <> 'claimed' OR credited)
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS user_reward_groups (
+      id UUID PRIMARY KEY,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      source_key TEXT NOT NULL CHECK (char_length(source_key) BETWEEN 1 AND 200),
+      kind TEXT NOT NULL CHECK (kind IN ('live', 'historical_intro')),
+      recorded_at TIMESTAMPTZ NOT NULL,
+      claimed_at TIMESTAMPTZ,
+      acknowledged_at TIMESTAMPTZ,
+      summary JSONB,
+      UNIQUE (user_id, source_key), UNIQUE (user_id, id),
+      CHECK (acknowledged_at IS NULL OR claimed_at IS NOT NULL),
+      CHECK ((kind = 'live' AND summary IS NULL)
+        OR (kind = 'historical_intro' AND summary IS NOT NULL AND jsonb_typeof(summary) = 'object'))
+    )
+    """,
+    """CREATE INDEX IF NOT EXISTS user_reward_groups_pending
+       ON user_reward_groups(user_id, recorded_at, id) WHERE claimed_at IS NULL""",
+    "ALTER TABLE user_achievements ADD COLUMN IF NOT EXISTS earned_at TIMESTAMPTZ",
+    """ALTER TABLE user_achievements ADD COLUMN IF NOT EXISTS origin TEXT NOT NULL DEFAULT 'legacy'
+       CONSTRAINT user_achievements_origin
+       CHECK (origin IN ('live', 'historical', 'import', 'legacy'))""",
+    "ALTER TABLE user_achievements ADD COLUMN IF NOT EXISTS reward_group_id UUID",
+    """DO $$ BEGIN
+      IF NOT EXISTS (SELECT 1 FROM pg_constraint
+          WHERE conrelid = 'user_achievements'::regclass
+          AND conname = 'user_achievements_earned_time') THEN
+        ALTER TABLE user_achievements ADD CONSTRAINT user_achievements_earned_time
+          CHECK ((origin = 'live' AND earned_at IS NOT NULL)
+              OR (origin <> 'live' AND earned_at IS NULL));
+        ALTER TABLE user_achievements ADD CONSTRAINT user_achievements_live_group
+          CHECK (reward_group_id IS NULL OR origin = 'live');
+        ALTER TABLE user_achievements ADD CONSTRAINT user_achievements_group_owner
+          FOREIGN KEY (user_id, reward_group_id) REFERENCES user_reward_groups(user_id, id)
+          DEFERRABLE INITIALLY DEFERRED;
+      END IF;
+    END $$""",
+    """CREATE INDEX IF NOT EXISTS user_achievements_group
+       ON user_achievements(user_id, reward_group_id) WHERE reward_group_id IS NOT NULL""",
+    """
     CREATE TABLE IF NOT EXISTS scheduled_job_runs (
       id           SERIAL PRIMARY KEY,
       job_name     TEXT NOT NULL,
