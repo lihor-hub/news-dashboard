@@ -859,3 +859,110 @@ outcomes. Do not treat historical recorded/completed_at as a current-period read
 missing lifetime totals from badges, mutate this operator state, or claim presentation while
 generating recap/mail. The orchestrator owns independent review/verification, normal-hook
 publication, dependency order, required checks and automatic-main-deploy scope conflict.
+
+## 15. #1630 frozen weekly recap implementation candidate
+
+Built atop reviewed #1629 `cf1b59bf`, with stacked dependency ancestry preserved. This is
+an uncommitted implementation candidate for **next independent review**, not independent
+approval, publication, merge, deployment or parent #1623 completion. Executed evidence and
+limits are recorded in `thr_dqdi3yywkc/1630-implementation-handoff.md` thread storage.
+
+### Period, measurements and coverage
+
+`recaps.progress.recap_period(scheduled_for, zone)` accepts an aware intended scheduled
+instant, maps it to the reporting local date, and independently converts each local midnight
+to UTC. The half-open interval covers the preceding seven completed local dates (167/169h
+across DST). Scheduler matching remains in `briefing_timezone`; all matched users' reporting
+periods are derived before sequential generation begins. `progress_timezone` initializes
+once on generation if still absent, using the frozen intended zone (valid briefing fallback
+else UTC), independently of briefing delivery. No catch-up scheduler or new job/store exists.
+The separate learning-recap subsystem is unchanged.
+
+`assemble_weekly_recap(..., period=...)` validates the internal period, initializes preferences
+under the existing account lock, then reads every core progress/legacy metric in **one
+PostgreSQL REPEATABLE READ READ ONLY transaction**. Legacy streak gains only an optional
+caller-connection seam; its UTC reading semantics remain unchanged. Existing nudges remain
+explicitly current-at-generation contextual suggestions, calculated outside the measurement
+transaction; they are not weekly measured progress. Every week-scoped reading/category/source/
+heartbeat/starred/backlog-read/dwell query has both inclusive start and exclusive end bounds.
+Backlog total and reading streak remain clearly labeled generation-time/lifetime context.
+
+Existing JSONB `data` adds:
+
+- `snapshot_version:2` and `period:{timezone,start_local_date,end_local_date,start_at,end_at,
+scheduled_for,snapshot_at}`. Local and UTC end are **exclusive**. Existing `week_start` is
+  the first included date; `week_end` is the **last included** date for display. Legacy rows
+  retain their original fields/meaning; never infer v2 semantics for them.
+- `progress:{days_visited:number|null,active_seconds:number|null,coverage,rewards}`. Seconds
+  preserve source millisecond precision, including positive sub-second time, so positive time
+  cannot become false measured zero. Display floors whole minutes, with a positive <60-second
+  value shown as “Less than a minute measured.” Numeric zero is measured zero; null unavailable.
+- `coverage.{visits,active_time,rewards}:{status,measured_from,reasons}`. Visit counts use actual
+  frozen daily presence (including uncredited observations), never legacy UTC streaks. Count
+  only saved reporting-zone dates and in-period first-observation instants, never reproject
+  old zones. A known prior observation allows a partial zero; no pre-rollout observation means
+  unavailable. Sparse/missing observations remain conservatively partial, including travel.
+- Active seconds sum **only** existing matching-zone `user_activity_days.active_ms`. No raw
+  heartbeat or lifetime counter substitution. Missing rows are unavailable, and source totals/
+  day flags, consent gaps, timezone changes and retention uncertainty remain explicit. Current
+  enable/consent cannot prove past global availability: v2 never claims complete active time.
+- Rewards select only `origin='live' AND earned_at >= start_at AND earned_at < end_at`, ordered
+  by `(earned_at,achievement_key)`. Frozen allowlisted fields are `{key,title,description,
+topic_id,earned_at}` from the existing descriptor. No arbitrary metadata, claim/group state,
+  route, session or new eligibility engine. A topic emblem appears once, not badge+promotion.
+  Imports/history/legacy/unknown exact dates are never fabricated from recording time.
+
+### Persistence, network work and API
+
+`save_weekly_recap` v2 returns `{snapshot:actual_stored_row,inserted:boolean}`. Existing
+unique `(user_id,week_start)` and JSONB suffice: insert DO NOTHING, then read the actual
+winner. Account lock precedes persistence. Legacy collisions stay untouched, and even a
+stale legacy save cannot overwrite an existing v2 row. Legacy-to-legacy saves retain their
+prior update/return contract for old callers. No new table, migration or operational scan.
+
+Scheduler uses only the stored winner. Narrative runs **after** the snapshot transaction,
+from an explicit allowlist of legacy metrics; progress/period/coverage/rewards/provenance and
+future arbitrary keys never enter model prompts or traces. Legacy minutes are expressly an
+app-activity estimate, never measured reading time. Conditional NULL narrative fill is the
+only enrichment: it cannot rewrite JSON or a legacy collision. A losing/retrying generator
+may fill a missing v2 narrative but cannot push. Only the insertion winner sends the existing
+recap push from stored data. Narrative failure does not undo a completed snapshot; retry can
+fill once. Crash/network failure can lose push; no outbox, campaign or exactly-once claim.
+
+Authenticated `GET /api/recaps`, `/latest`, and positive-ID `/{recap_id}` (declared after
+latest) return the same stored JSON. Detail queries ID **and authenticated owner**; foreign/
+missing uniformly 404, invalid positive ID 422, anonymous 401. Query parameters never select
+an authorized owner. None of these GETs computes eligibility, earns, visits or claims.
+
+### User-facing selection, portability and handoff
+
+Weekly Recap uses selectable `?recap=<id>` history, owner-scoped detail fetch for reloads
+beyond the latest12, and existing offset pagination for older history. One compact
+`RecapProgress` card shows frozen local dates/zone, measured/partial/unavailable/zero/<1min,
+up to3 reward names and full count. V2 hides raw legacy Minutes read; legacy rows label it
+“Legacy minutes estimate.” Calendar labels format in UTC from date-only values, independently
+of browser zone. Error states do not display a previous selected snapshot as the new one.
+
+Shared `/reading-dna?recap=<id>#progress` loads the same frozen card/reward list inside the
+existing ProgressSection, **separately from labeled lifetime progress**, without replacing
+DNA/Learning or the existing collection/provider. Reward detail uses
+`?recap=<id>&reward=<encodeURIComponent(key)>#progress`, preserving frozen names/descriptions/
+dates rather than resolving old reports through today's catalog. Explicit navigation focuses
+the frozen heading, including keyboard/reload/back; background lifetime refetches do not
+refocus it. Back-to-recap is a native link to the selected snapshot. No disconnected page.
+
+Archive remains v2, adding owner-scoped `weekly_recaps` ordered `(week_start,id)`, with
+existing snapshot JSON/narrative/timestamps. No user_id/secrets/windows are added to that
+section. Import ignores uploaded snapshots and progress authority; only validated preferences
+restore, while article restore independently retains its silent import credit semantics.
+Export UI/notice and privacy copy explicitly disclose information-only snapshots, retention
+until account deletion and irreversible frozen late omissions. Existing account FK cascade
+requires no custom delete or retention rewrite. No new data collection was introduced.
+
+Next #1631 owner: consume the existing live earned-time authority and approved mail selector
+contract, not recap generation or claim/ACK operations. This slice changes **no email** or
+learning-recap code. Respect the separate orchestrator reconciliation of dirty email hunks.
+Orchestrator owns independent review/fixes/verification, safe dependency retarget/rebase and
+affected revalidation, required checks, publication and any authorized merge/deployment-scope
+resolution. No production AI/push/send, historical user-data operation, merge or deployment
+was performed by this implementation worker; test external AI/push are stubbed at boundaries.

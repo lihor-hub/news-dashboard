@@ -15,6 +15,7 @@ from unittest.mock import MagicMock, call, patch
 import pytest
 
 from news_dashboard.briefings.service import BriefingAINotConfiguredError, BriefingGenerationError
+from news_dashboard.recaps.progress import recap_period
 from news_dashboard.scheduler.retention import CleanupResult
 from news_dashboard.scheduler.service import (
     _job_article_retention,
@@ -541,7 +542,11 @@ def test_run_weekly_recaps_sends_push_when_enabled() -> None:
         ]
     )
     now = datetime(2026, 6, 29, 9, 0, 0, tzinfo=timezone.utc)
-    recap = {"articles_read": 5, "categories": [{"category": "science", "count": 3}]}
+    recap = {
+        "snapshot_version": 2,
+        "articles_read": 5,
+        "categories": [{"category": "science", "count": 3}],
+    }
 
     with (
         patch("news_dashboard.scheduler.service.datetime") as mock_dt,
@@ -551,8 +556,12 @@ def test_run_weekly_recaps_sends_push_when_enabled() -> None:
         ) as assemble,
         patch(
             "news_dashboard.recaps.service.save_weekly_recap",
-            return_value={"id": 1, **recap},
+            return_value={
+                "snapshot": {"id": 1, "data": recap, "narrative": None},
+                "inserted": True,
+            },
         ) as save,
+        patch("news_dashboard.recaps.service.fill_narrative") as fill,
         patch(
             "news_dashboard.recaps.narrative.generate_recap_narrative",
             return_value="Your week in review...",
@@ -564,10 +573,11 @@ def test_run_weekly_recaps_sends_push_when_enabled() -> None:
         _run_weekly_recaps()
 
     assert "recap_enabled" in fake_conn.sql
-    assemble.assert_called_once_with(42)
+    assemble.assert_called_once_with(42, period=recap_period(now, "UTC"))
     narrative.assert_called_once_with(recap)
     hook.assert_called_once_with(recap)
-    save.assert_called_once_with(42, recap, "Your week in review...")
+    save.assert_called_once_with(42, recap, None)
+    fill.assert_called_once_with(42, 1, "Your week in review...")
     send_push.assert_called_once_with(42, "Nice week!", "", target_url="/recap")
 
 
@@ -584,7 +594,7 @@ def test_run_weekly_recaps_generates_but_skips_push_when_disabled() -> None:
         ]
     )
     now = datetime(2026, 6, 29, 9, 0, 0, tzinfo=timezone.utc)
-    recap = {"articles_read": 5, "categories": []}
+    recap = {"snapshot_version": 2, "articles_read": 5, "categories": []}
 
     with (
         patch("news_dashboard.scheduler.service.datetime") as mock_dt,
@@ -592,8 +602,12 @@ def test_run_weekly_recaps_generates_but_skips_push_when_disabled() -> None:
         patch("news_dashboard.recaps.service.assemble_weekly_recap", return_value=recap),
         patch(
             "news_dashboard.recaps.service.save_weekly_recap",
-            return_value={"id": 1, **recap},
+            return_value={
+                "snapshot": {"id": 1, "data": recap, "narrative": None},
+                "inserted": True,
+            },
         ) as save,
+        patch("news_dashboard.recaps.service.fill_narrative"),
         patch(
             "news_dashboard.recaps.narrative.generate_recap_narrative",
             return_value="Your week in review...",
@@ -605,7 +619,7 @@ def test_run_weekly_recaps_generates_but_skips_push_when_disabled() -> None:
         _run_weekly_recaps()
 
     narrative.assert_called_once_with(recap)
-    save.assert_called_once_with(42, recap, "Your week in review...")
+    save.assert_called_once_with(42, recap, None)
     hook.assert_not_called()
     send_push.assert_not_called()
 

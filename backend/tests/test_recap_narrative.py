@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from typing import Any
 from unittest.mock import patch
 
@@ -105,6 +106,10 @@ def test_generate_recap_narrative_mentions_saved_and_dwell(monkeypatch: pytest.M
     recap = _make_recap(
         saved={"starred_this_week": 2, "read_from_backlog": 1, "backlog_total": 8},
         dwell={"skims": 3, "reads": 9, "average_seconds": 42.0},
+        snapshot_version=2,
+        progress={"rewards": [{"key": "PRIVATE_TOPIC_REWARD"}], "coverage": "PRIVATE_COVERAGE"},
+        period={"timezone": "PRIVATE_ZONE"},
+        unexpected_future_field="PRIVATE_FUTURE",
     )
 
     with (
@@ -120,6 +125,104 @@ def test_generate_recap_narrative_mentions_saved_and_dwell(monkeypatch: pytest.M
     assert "backlog_total" in prompt
     assert "average_seconds" in prompt
     assert "generated_at" not in prompt
+    assert "PRIVATE_" not in prompt
+    assert '"progress"' not in prompt
+    assert '"period"' not in prompt
+
+
+@pytest.mark.parametrize("container", [{"private": "PRIVATE_SCALAR"}, ["PRIVATE_SCALAR"]])
+def test_generate_recap_narrative_projects_legacy_leaves_before_model_and_tracing(
+    container: object,
+) -> None:
+    from langchain_core.callbacks import BaseCallbackHandler
+
+    traced_inputs: list[str] = []
+    prompts: list[str] = []
+
+    class CaptureTrace(BaseCallbackHandler):
+        def on_chain_start(self, serialized: Any, inputs: Any, **_kwargs: Any) -> None:
+            del serialized
+            traced_inputs.append(str(inputs))
+
+    def invoke(prompt: Any) -> AIMessage:
+        prompts.append(prompt.messages[0].content)
+        return AIMessage(content="Narrative.")
+
+    recap = _make_recap(
+        categories=[
+            {"category": "science", "count": 5, "topic_provenance": "PRIVATE_CATEGORY"},
+            {"category": container, "count": container},
+            container,
+        ],
+        sources=[
+            {"source": "Example News", "count": 4, "coverage": "PRIVATE_SOURCE"},
+            {"source": container, "count": container},
+            container,
+        ],
+        saved={
+            "starred_this_week": 2,
+            "read_from_backlog": 1,
+            "backlog_total": container,
+            "progress": "PRIVATE_SAVED",
+        },
+        dwell={
+            "skims": 3,
+            "reads": 9,
+            "average_seconds": container,
+            "coverage": "PRIVATE_DWELL",
+        },
+        nudges=[
+            {
+                "id": "source:example",
+                "kind": "source",
+                "title": "Noisy source",
+                "message": "Try another source.",
+                "reason": "low_signal",
+                "skip_rate": 0.9,
+                "articles_last_30_days": 50,
+                "action": "disable_source",
+                "target": "example",
+                "target_label": "Example News",
+                "progress": "PRIVATE_NUDGE",
+            },
+            {"message": container, "skip_rate": container},
+            container,
+        ],
+        week_start=container,
+        minutes_read=container,
+        progress={"private": "PRIVATE_PROGRESS"},
+    )
+    with (
+        patch("news_dashboard.ai_client.get_chat_model", return_value=RunnableLambda(invoke)),
+        patch("news_dashboard.ai_client.free_llm_config", return_value=("fake-key", None)),
+        patch("news_dashboard.ai_client.langfuse_enabled", return_value=True),
+        patch("langfuse.langchain.CallbackHandler", return_value=CaptureTrace()),
+    ):
+        assert generate_recap_narrative(recap) == "Narrative."
+
+    assert len(prompts) == 1
+    assert traced_inputs
+    assert all("PRIVATE_" not in value for value in [*prompts, *traced_inputs])
+    metrics = json.loads(prompts[0].split("Recap metrics (JSON):\n")[1].split("\n\n")[0])
+    assert "week_start" not in metrics
+    assert "minutes_read" not in metrics
+    assert metrics["articles_read"] == 12
+    assert metrics["categories"][0] == {"category": "science", "count": 5}
+    assert metrics["sources"][0] == {"source": "Example News", "count": 4}
+    assert metrics["saved"] == {"starred_this_week": 2, "read_from_backlog": 1}
+    assert metrics["dwell"] == {"skims": 3, "reads": 9}
+    assert metrics["nudges"][0] == {
+        "id": "source:example",
+        "kind": "source",
+        "title": "Noisy source",
+        "message": "Try another source.",
+        "reason": "low_signal",
+        "skip_rate": 0.9,
+        "articles_last_30_days": 50,
+        "action": "disable_source",
+        "target": "example",
+        "target_label": "Example News",
+    }
 
 
 def test_generate_recap_narrative_traces_callback_attribution_and_literal_braces(

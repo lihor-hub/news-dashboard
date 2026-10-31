@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router';
 import { RewardDetail } from './RewardDetail';
+import { fetchRecap } from '@/api';
+import { RecapProgress } from './RecapProgress';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/contexts/auth';
 import {
@@ -49,6 +51,14 @@ export function ProgressSection() {
     enabled,
   });
   const requestedKey = new URLSearchParams(location.search).get('reward');
+  const recapParam = new URLSearchParams(location.search).get('recap');
+  const recapId = recapParam && /^[1-9]\d*$/.test(recapParam) ? Number(recapParam) : 0;
+  const recap = useQuery({
+    queryKey: ['recap', accountId, recapId],
+    queryFn: () => fetchRecap(recapId),
+    enabled: enabled && Number.isSafeInteger(recapId) && recapId > 0,
+    retry: false,
+  });
   const [zone, setZone] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -88,7 +98,16 @@ export function ProgressSection() {
         <p>Sign in with a personal account to record daily progress.</p>
       ) : (
         <>
-          {requestedKey && rewards.isSuccess && (
+          {recapParam &&
+            (recap.data ? (
+              <RecapProgress recap={recap.data} full rewardKey={requestedKey} />
+            ) : recapId <= 0 || !Number.isSafeInteger(recapId) || recap.isError ? (
+              <p role="status">This recap is unavailable.</p>
+            ) : (
+              <p>Loading frozen weekly progress…</p>
+            ))}
+          <h3 className="font-semibold">Lifetime progress (separate from weekly snapshots)</h3>
+          {!recapParam && requestedKey && rewards.isSuccess && (
             <RewardDetail
               requestedKey={requestedKey}
               reward={rewards.data.items.find((reward) => reward.key === requestedKey)}

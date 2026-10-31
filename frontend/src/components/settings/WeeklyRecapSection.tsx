@@ -105,7 +105,9 @@ export function WeeklyRecapSection() {
               ))}
             </select>
             <p className="text-xs text-muted-foreground">
-              Delivered at your daily brief time, in your briefing timezone.
+              Delivered at your daily brief time, in your briefing timezone. The report covers seven
+              completed dates in your separate progress timezone. Frozen reports do not change with
+              late activity or travel.
             </p>
           </div>
         )}

@@ -3,11 +3,13 @@ import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import { QueryClientProvider, QueryClient } from '@tanstack/react-query';
 import * as api from '../api';
+import { MemoryRouter } from 'react-router';
 import { WeeklyRecapPage } from '../pages/WeeklyRecapPage';
 import type { WeeklyRecap } from '../types';
 
 vi.mock('../api', () => ({
   fetchRecaps: vi.fn(),
+  fetchRecap: vi.fn(),
   fetchPersonalizationNudges: vi.fn(),
   applyPersonalizationNudge: vi.fn(),
   dismissPersonalizationNudge: vi.fn(),
@@ -18,7 +20,11 @@ function makeQc() {
 }
 
 function Wrapper({ children }: { children: React.ReactNode }) {
-  return <QueryClientProvider client={makeQc()}>{children}</QueryClientProvider>;
+  return (
+    <MemoryRouter>
+      <QueryClientProvider client={makeQc()}>{children}</QueryClientProvider>
+    </MemoryRouter>
+  );
 }
 
 const ENRICHED_RECAP: WeeklyRecap = {

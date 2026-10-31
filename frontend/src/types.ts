@@ -523,7 +523,37 @@ export interface WeeklyRecapDwell {
   average_seconds: number;
 }
 
+export interface RecapCoverage {
+  status: 'unavailable' | 'partial' | 'complete';
+  measured_from: string | null;
+  reasons: string[];
+}
+
+export interface RecapReward {
+  key: string;
+  title: string;
+  description: string;
+  topic_id: string | null;
+  earned_at: string;
+}
+
 export interface WeeklyRecapData {
+  snapshot_version?: 2;
+  period?: {
+    timezone: string;
+    start_local_date: string;
+    end_local_date: string;
+    start_at: string;
+    end_at: string;
+    scheduled_for: string;
+    snapshot_at: string;
+  };
+  progress?: {
+    days_visited: number | null;
+    active_seconds: number | null;
+    coverage: { visits: RecapCoverage; active_time: RecapCoverage; rewards: RecapCoverage };
+    rewards: RecapReward[];
+  };
   week_start: string;
   week_end: string;
   generated_at: string;

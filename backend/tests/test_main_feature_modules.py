@@ -141,6 +141,7 @@ EXPECTED_METHOD_PATHS = {
     ("GET", "/api/ready"),
     ("GET", "/api/recaps"),
     ("GET", "/api/recaps/latest"),
+    ("GET", "/api/recaps/{recap_id}"),
     ("GET", "/api/recommendations/health"),
     ("POST", "/api/recommendations/recalculate"),
     ("POST", "/api/recommendations/recalculate-mine"),

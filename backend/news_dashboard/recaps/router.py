@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Path, Query
 
 from news_dashboard.auth import require_auth
 from news_dashboard.recaps import service
@@ -30,6 +30,17 @@ def get_latest_recap_endpoint(
     current_user: Annotated[dict[str, Any], Depends(require_auth)],
 ) -> dict[str, Any]:
     recap = service.get_latest_recap(current_user["id"])
+    if not recap:
+        raise HTTPException(status_code=404, detail="no recap available")
+    return recap
+
+
+@router.get("/api/recaps/{recap_id}")
+def get_recap_endpoint(
+    recap_id: Annotated[int, Path(gt=0)],
+    current_user: Annotated[dict[str, Any], Depends(require_auth)],
+) -> dict[str, Any]:
+    recap = service.get_recap(current_user["id"], recap_id)
     if not recap:
         raise HTTPException(status_code=404, detail="no recap available")
     return recap
