@@ -5,6 +5,7 @@ import { MemoryRouter } from 'react-router';
 import { Toaster, toast } from 'sonner';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import * as api from '@/api/progress';
+import { fetchActivity } from '@/api/activity';
 import { DailyProgress } from '@/components/DailyProgress';
 import { RewardFeedback } from '@/components/RewardFeedback';
 import { ProgressSection } from '@/components/ProgressSection';
@@ -90,6 +91,43 @@ afterEach(() => {
   toast.dismiss();
   vi.restoreAllMocks();
   vi.useRealTimers();
+});
+
+it('keeps activity and topic siblings distinct when the collection refreshes', async () => {
+  const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+  vi.mocked(fetchActivity).mockResolvedValueOnce({
+    available: true,
+    measurement_enabled: true,
+    total_ms: 0,
+    measured_since: null,
+    approximate: true,
+    coverage: { status: 'unknown', reasons: ['pre_measurement'] },
+    next_target_ms: 900000,
+  });
+  const collection = {
+    items: rewards,
+    pending_reward_group_ids: [],
+    topics: {
+      taxonomy_version: 1,
+      rule_version: 1,
+      attribution_cap: 2,
+      tracks: [],
+      top_track_ids: [],
+      breadth_count: 0,
+    },
+  };
+  vi.mocked(api.fetchProgressRewards).mockResolvedValue(collection);
+  const { client } = host();
+  await screen.findByRole('heading', { name: 'Topic progression' });
+  await screen.findByRole('heading', { name: 'Approximate active time' });
+  await act(async () => {
+    client.setQueryData(['progress-rewards', state.id], { ...collection, reading_total: 1 });
+  });
+  expect(screen.getAllByRole('heading', { name: 'Approximate active time' })).toHaveLength(1);
+  expect(screen.getAllByRole('heading', { name: 'Topic progression' })).toHaveLength(1);
+  expect(
+    errors.mock.calls.filter((args) => args.some((arg) => String(arg).includes('same key')))
+  ).toEqual([]);
 });
 
 it('groups <=3 names +N in one static slot, preserves Undo and reader focus, navigation focuses detail', async () => {

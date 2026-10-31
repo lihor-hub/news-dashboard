@@ -183,7 +183,9 @@ export function ProgressSection() {
             </div>
           )}
           {error && <p role="alert">{error}</p>}
-          {accountId !== undefined && <ActivityProgress key={accountId} accountId={accountId} />}
+          {accountId !== undefined && (
+            <ActivityProgress key={`activity-${accountId}`} accountId={accountId} />
+          )}
           <h3 className="font-medium">Permanent collection</h3>
           {rewards.data?.reading_total !== undefined && (
             <div className="space-y-1">
@@ -239,7 +241,7 @@ export function ProgressSection() {
           )}
           {rewards.data?.topics && (
             <TopicProgress
-              key={accountId}
+              key={`topics-${accountId}`}
               topics={rewards.data.topics}
               rewards={rewards.data.items}
             />
