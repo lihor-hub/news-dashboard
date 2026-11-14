@@ -59,8 +59,10 @@ test('capture product screenshots', async ({ page }) => {
   // 1. Today feed — the primary triage view, used as the README hero shot.
   await page.goto('/today');
   await page.waitForLoadState('networkidle');
-  const firstArticleLink = page.locator('a[href^="/a/"]').first();
+  const firstArticleLink = page.locator('a[href^="/today?a="]').first();
   await expect(firstArticleLink).toBeVisible();
+  await firstArticleLink.click();
+  await expect(page.getByTestId('summary-card')).toBeVisible();
   await page.screenshot({ path: path.join(OUT_DIR, 'today-feed.png') });
 
   // 2. Article intelligence — open the seeded article with cached AI output. A
