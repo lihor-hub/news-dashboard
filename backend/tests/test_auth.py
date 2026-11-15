@@ -83,15 +83,15 @@ def test_tampered_token_rejected() -> None:
 
 
 def test_expired_token_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
-    import itsdangerous
+    from itsdangerous import TimestampSigner
 
+    monkeypatch.setenv("SESSION_DAYS", "1")
+    monkeypatch.setattr(TimestampSigner, "get_timestamp", lambda _self: 1)
     token = create_session_token(1, is_admin=False)
+    monkeypatch.setattr(TimestampSigner, "get_timestamp", lambda _self: 86401)
+    assert verify_session_token(token) == {"user_id": 1, "is_admin": False}
 
-    def reject_all(self: Any, *a: Any, **kw: Any) -> Any:
-        msg = "forced"
-        raise itsdangerous.SignatureExpired(msg)
-
-    monkeypatch.setattr(itsdangerous.URLSafeTimedSerializer, "loads", reject_all)
+    monkeypatch.setattr(TimestampSigner, "get_timestamp", lambda _self: 86402)
     assert verify_session_token(token) is None
 
 
