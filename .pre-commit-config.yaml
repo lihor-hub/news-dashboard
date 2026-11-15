@@ -34,21 +34,24 @@ repos:
         require_serial: true
       - id: mypy
         name: mypy
-        entry: .venv/bin/mypy backend
+        entry: .venv/bin/mypy backend scripts
         language: system
-        types: [python]
+        types: [file]
+        files: (\.pyi?$|^(pyproject\.toml|uv\.lock|\.pre-commit-config\.yaml)$)
         pass_filenames: false
       - id: ty
         name: ty
-        entry: .venv/bin/ty check backend
+        entry: .venv/bin/ty check backend scripts
         language: system
-        types: [python]
+        types: [file]
+        files: (\.pyi?$|^(pyproject\.toml|uv\.lock|\.pre-commit-config\.yaml)$)
         pass_filenames: false
       - id: pyrefly
         name: pyrefly
-        entry: .venv/bin/pyrefly check backend
+        entry: .venv/bin/pyrefly check backend scripts
         language: system
-        types: [python]
+        types: [file]
+        files: (\.pyi?$|^(pyproject\.toml|uv\.lock|\.pre-commit-config\.yaml)$)
         pass_filenames: false
       - id: vulture
         name: vulture (dead code)
@@ -88,30 +91,40 @@ repos:
       # Enable with: pre-commit install --hook-type pre-push
       - id: ruff-push
         name: ruff (pre-push)
-        entry: .venv/bin/ruff check backend
+        entry: .venv/bin/ruff check backend scripts
+        language: system
+        types: [python]
+        pass_filenames: false
+        stages: [pre-push]
+      - id: ruff-format-push
+        name: ruff-format (pre-push)
+        entry: .venv/bin/ruff format --check backend scripts
         language: system
         types: [python]
         pass_filenames: false
         stages: [pre-push]
       - id: mypy-push
         name: mypy (pre-push)
-        entry: mypy backend
+        entry: .venv/bin/mypy backend scripts
         language: system
-        types: [python]
+        types: [file]
+        files: (\.pyi?$|^(pyproject\.toml|uv\.lock|\.pre-commit-config\.yaml)$)
         pass_filenames: false
         stages: [pre-push]
       - id: ty-push
         name: ty (pre-push)
-        entry: ty check backend
+        entry: .venv/bin/ty check backend scripts
         language: system
-        types: [python]
+        types: [file]
+        files: (\.pyi?$|^(pyproject\.toml|uv\.lock|\.pre-commit-config\.yaml)$)
         pass_filenames: false
         stages: [pre-push]
       - id: pyrefly-push
         name: pyrefly (pre-push)
-        entry: pyrefly check backend
+        entry: .venv/bin/pyrefly check backend scripts
         language: system
-        types: [python]
+        types: [file]
+        files: (\.pyi?$|^(pyproject\.toml|uv\.lock|\.pre-commit-config\.yaml)$)
         pass_filenames: false
         stages: [pre-push]
       - id: pytest

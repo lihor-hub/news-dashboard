@@ -23,8 +23,8 @@ ci-install:
 
 ## lint: run all linters without modifying files
 lint:
-	ruff check backend
-	ruff format --check backend
+	ruff check backend scripts
+	ruff format --check backend scripts
 	vulture backend backend/vulture_whitelist.py --min-confidence 80
 	npm run lint --silent
 	npm run format:check --silent
@@ -35,18 +35,18 @@ dead-code:
 	vulture backend backend/vulture_whitelist.py --min-confidence 80
 	npm run dead-code --silent
 
-## format: auto-format backend and frontend code
+## format: auto-format backend, scripts, and frontend code
 format:
-	ruff check backend --fix
-	ruff format backend
+	ruff check backend scripts --fix
+	ruff format backend scripts
 	npm run lint:fix --silent
 	npm run format --silent
 
 ## typecheck: run static type checkers
 typecheck:
-	mypy backend
-	PYTHONPATH=.:backend ty check backend
-	pyrefly check backend
+	mypy backend scripts
+	ty check backend scripts
+	pyrefly check backend scripts
 	npm run typecheck --silent
 
 ## test: run backend + frontend test suites (everyday development loop)
