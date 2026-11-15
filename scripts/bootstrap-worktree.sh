@@ -12,7 +12,7 @@ if [ ! -f .env ] && [ "$main_checkout" != "$PWD" ] && [ -f "$main_checkout/.env"
   echo "Copied .env from $main_checkout"
 fi
 
-# uv sync --frozen (not `make install`'s pip install -e) keeps uv.lock untouched.
+# Frozen sync keeps uv.lock untouched; worktrees also need the optional crawl extras.
 [ -d .venv ] || uv sync --frozen --all-extras
 [ -d node_modules ] || npm ci
 
