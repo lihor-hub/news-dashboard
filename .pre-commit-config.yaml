@@ -16,15 +16,22 @@ repos:
       - id: check-merge-conflict
       - id: detect-private-key
 
-  - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.16.0
-    hooks:
-      - id: ruff
-        args: [--fix]
-      - id: ruff-format
-
   - repo: local
     hooks:
+      # Use the uv.lock-installed Ruff, just like the local type checkers.
+      - id: ruff
+        name: ruff
+        entry: .venv/bin/ruff check
+        args: [--fix]
+        language: system
+        types_or: [python, pyi, jupyter]
+        require_serial: true
+      - id: ruff-format
+        name: ruff-format
+        entry: .venv/bin/ruff format
+        language: system
+        types_or: [python, pyi, jupyter]
+        require_serial: true
       - id: mypy
         name: mypy
         entry: .venv/bin/mypy backend
@@ -81,7 +88,7 @@ repos:
       # Enable with: pre-commit install --hook-type pre-push
       - id: ruff-push
         name: ruff (pre-push)
-        entry: ruff check backend
+        entry: .venv/bin/ruff check backend
         language: system
         types: [python]
         pass_filenames: false
