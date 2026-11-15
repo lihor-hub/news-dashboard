@@ -50,4 +50,4 @@ if __name__ == "__main__":
     if len(sys.argv) != 4:
         message = "Usage: verify-deployed-build.py BASE_URL REVISION VERSION"
         raise SystemExit(message)
-    verify(*sys.argv[1:])
+    verify(sys.argv[1], sys.argv[2], sys.argv[3])

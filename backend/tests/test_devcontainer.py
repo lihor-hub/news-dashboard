@@ -10,7 +10,7 @@ import sys
 from pathlib import Path
 
 import pytest
-import yaml  # type: ignore[import-untyped]  # PyYAML ships no inline typing.
+import yaml
 
 ROOT = Path(__file__).resolve().parents[2]
 

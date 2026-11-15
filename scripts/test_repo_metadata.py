@@ -69,7 +69,7 @@ class TestReadmeVersionBadge(unittest.TestCase):
         m = re.search(r"img\.shields\.io/badge/version-\d+\.\d+\.\d+", readme)
         assert m is None, (
             "README.md pins a hardcoded version badge "
-            f"({m.group(0) if m else ''}); use the dynamic github/v/tag badge instead"
+            f"({m.group(0)}); use the dynamic github/v/tag badge instead"
         )
 
     def test_readme_uses_dynamic_tag_badge(self) -> None:
@@ -103,14 +103,15 @@ class TestDependabotNpmProjects(unittest.TestCase):
 
     def test_expected_npm_projects_are_covered_exactly_once(self) -> None:
         dependabot = (ROOT / ".github" / "dependabot.yml").read_text()
-        directories = [
-            re.search(
+        directories = []
+        for match in self._NPM_UPDATE.finditer(dependabot):
+            directory = re.search(
                 r'^    directory: "(?P<directory>[^"]+)"$',
                 match.group("configuration"),
                 re.MULTILINE,
-            )["directory"]
-            for match in self._NPM_UPDATE.finditer(dependabot)
-        ]
+            )
+            assert directory is not None, "npm update must declare a directory"
+            directories.append(directory["directory"])
 
         assert sorted(directories) == ["/", "/desktop", "/website"]
 

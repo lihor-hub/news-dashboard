@@ -17,7 +17,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-import yaml  # type: ignore[import-untyped]
+import yaml
 
 REPO_ROOT = Path(__file__).parent.parent.parent
 CI_FILE = REPO_ROOT / ".github" / "workflows" / "ci.yml"
