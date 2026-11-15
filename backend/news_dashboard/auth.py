@@ -14,7 +14,7 @@ from urllib.parse import urlencode
 import bcrypt
 import httpx
 from fastapi import Depends, HTTPException, Request
-from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
+from itsdangerous import BadSignature, URLSafeTimedSerializer
 
 from news_dashboard.db import connect, init_db, row_to_dict
 
@@ -163,7 +163,7 @@ def verify_session_token(token: str) -> dict[str, Any] | None:
     try:
         payload = s.loads(token, max_age=max_age)
         return {"user_id": payload["u"], "is_admin": bool(payload["a"])}
-    except (BadSignature, SignatureExpired, KeyError):
+    except (BadSignature, KeyError):
         return None
 
 

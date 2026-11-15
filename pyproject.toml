@@ -258,11 +258,21 @@ extra-paths = ["backend", "backend/tests"]
 [tool.ty.src]
 include = ["backend", "backend/tests"]
 
+[tool.ty.terminal]
+error-on-warning = true
+
 # ── pyrefly (Meta type checker) ──────────────────────────────────────────────
 [tool.pyrefly]
 python-version = "3.15"
 project-includes = ["backend"]
 search-path = ["backend", "backend/tests"]
+check-unannotated-defs = true
+
+[tool.pyrefly.errors]
+implicit-any-parameter = "error"
+unannotated-return = "error"
+deprecated = "error"
+unreachable-except-clause = "error"
 
 # ── vulture (dead code) ──────────────────────────────────────────────────────
 [tool.vulture]

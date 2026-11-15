@@ -143,7 +143,7 @@ def send_email(
                 if config.username and config.password:
                     server.login(config.username, config.password)
                 server.send_message(message)
-    except (OSError, smtplib.SMTPException):
+    except OSError:
         logger.warning("SMTP email delivery failed")
         return "smtp_error"
     return None

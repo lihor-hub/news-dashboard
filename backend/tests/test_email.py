@@ -358,25 +358,47 @@ def test_send_email_uses_implicit_tls() -> None:
     assert fake_cls.init_args[0][:2] == ("smtp.example.net", 465)
 
 
-def test_send_email_returns_safe_error_text() -> None:
+@pytest.mark.parametrize("tls_mode", ["none", "starttls", "ssl"])
+@pytest.mark.parametrize(
+    "error",
+    [
+        OSError("provider rejected reader@example.com with secret detail"),
+        smtplib.SMTPException("provider rejected reader@example.com with secret detail"),
+        smtplib.SMTPAuthenticationError(535, b"reader@example.com secret detail"),
+    ],
+)
+def test_send_email_returns_safe_error_text(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+    tls_mode: str,
+    error: OSError,
+) -> None:
     class _FailingSMTP(_FakeSMTP):
-        def __enter__(self) -> _FailingSMTP:
-            msg = "provider rejected reader@example.com with secret detail"
-            raise smtplib.SMTPException(msg)
+        def send_message(self, msg: Message) -> None:
+            assert msg["To"] == "reader@example.com"
+            raise error
 
     env = {
-        "SMTP_HOST": "smtp.example.net",
-        "SMTP_FROM": "briefings@example.net",
-        "SMTP_TLS": "none",
+        "OTP_SMTP_HOST": "smtp.example.net",
+        "OTP_SMTP_PORT": "465" if tls_mode == "ssl" else "587",
+        "OTP_SMTP_FROM": "briefings@example.net",
+        "OTP_SMTP_USER": "relay-user",
+        "OTP_SMTP_PASS": "relay-pass",
+        "OTP_SMTP_TLS": tls_mode,
     }
-    with patch.dict("os.environ", env, clear=True), patch.object(smtplib, "SMTP", _FailingSMTP):
-        result = send_email(
-            recipient="reader@example.com",
-            subject="Daily brief",
-            text_body="text",
-            html_body="<p>html</p>",
-        )
+    for name, value in env.items():
+        monkeypatch.setenv(name, value)
+    monkeypatch.setattr(smtplib, "SMTP_SSL" if tls_mode == "ssl" else "SMTP", _FailingSMTP)
+    result = send_email(
+        recipient="reader@example.com",
+        subject="Daily brief",
+        text_body="text",
+        html_body="<p>html</p>",
+    )
     assert result == "smtp_error"
+    assert "SMTP email delivery failed" in caplog.text
+    assert "reader@example.com" not in caplog.text
+    assert "secret detail" not in caplog.text
 
 
 @pytest.mark.parametrize("tls_mode", ["none", "starttls", "ssl"])
