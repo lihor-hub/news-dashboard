@@ -15,14 +15,15 @@ def test_ruff_hooks_use_the_project_environment() -> None:
         for hook in repo["hooks"]
         if hook["id"].startswith("ruff")
     }
-    assert set(hooks) == {"ruff", "ruff-format", "ruff-push"}  # noqa: S101
+    assert set(hooks) == {"ruff", "ruff-format", "ruff-push", "ruff-format-push"}  # noqa: S101
     for repo in repos:
         if any(hook["id"] in hooks for hook in repo["hooks"]):
             assert repo["repo"] == "local"  # noqa: S101
     for name, command in (
         ("ruff", "check"),
         ("ruff-format", "format"),
-        ("ruff-push", "check backend"),
+        ("ruff-push", "check backend scripts"),
+        ("ruff-format-push", "format --check backend scripts"),
     ):
         assert hooks[name]["entry"] == f".venv/bin/ruff {command}"  # noqa: S101
         assert hooks[name]["language"] == "system"  # noqa: S101
@@ -31,5 +32,6 @@ def test_ruff_hooks_use_the_project_environment() -> None:
         assert hooks[name]["types_or"] == ["python", "pyi", "jupyter"]  # noqa: S101
         assert hooks[name]["require_serial"] is True  # noqa: S101
         assert hooks[name].get("pass_filenames", True) is True  # noqa: S101
-    assert hooks["ruff-push"]["pass_filenames"] is False  # noqa: S101
-    assert hooks["ruff-push"]["stages"] == ["pre-push"]  # noqa: S101
+    for name in ("ruff-push", "ruff-format-push"):
+        assert hooks[name]["pass_filenames"] is False  # noqa: S101
+        assert hooks[name]["stages"] == ["pre-push"]  # noqa: S101

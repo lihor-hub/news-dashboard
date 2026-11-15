@@ -135,7 +135,7 @@ exclude_also = [
 # PEP 758 syntax, which mypy's parser does not support yet.
 target-version = "py313"
 line-length = 100
-src = ["backend"]
+src = ["backend", "scripts"]
 
 [tool.ruff.lint]
 select = [
@@ -233,7 +233,8 @@ docstring-code-format = true
 # ── mypy ─────────────────────────────────────────────────────────────────────
 [tool.mypy]
 python_version = "3.15"
-files = ["backend"]
+files = ["backend", "scripts"]
+mypy_path = ["backend", "backend/tests", "scripts"]
 strict = true
 warn_unreachable = true
 pretty = true
@@ -252,17 +253,14 @@ disallow_untyped_decorators = false
 
 # ── ty (Astral type checker) ─────────────────────────────────────────────────
 [tool.ty.environment]
-# Resolve the `news_dashboard` package from backend/, mirroring mypy's
-# files=["backend"] and pytest's pythonpath=["backend"]. Without this, ty falls
-# back to whatever editable install is on sys.path (possibly a stale worktree).
-# backend/tests is included too: pytest has no backend/tests/__init__.py, so it
-# inserts that directory onto sys.path at collection time, letting test modules
-# do `from conftest import ...` as a bare top-level import.
+# Resolve local packages and bare test/helper imports without relying on a
+# potentially stale editable install. Pytest adds backend/tests and scripts
+# to sys.path at collection time; all type checkers mirror those paths.
 python-version = "3.15"
-extra-paths = ["backend", "backend/tests"]
+extra-paths = ["backend", "backend/tests", "scripts"]
 
 [tool.ty.src]
-include = ["backend", "backend/tests"]
+include = ["backend", "scripts"]
 
 [tool.ty.terminal]
 error-on-warning = true
@@ -270,8 +268,8 @@ error-on-warning = true
 # ── pyrefly (Meta type checker) ──────────────────────────────────────────────
 [tool.pyrefly]
 python-version = "3.15"
-project-includes = ["backend"]
-search-path = ["backend", "backend/tests"]
+project-includes = ["backend", "scripts"]
+search-path = ["backend", "backend/tests", "scripts"]
 check-unannotated-defs = true
 
 [tool.pyrefly.errors]

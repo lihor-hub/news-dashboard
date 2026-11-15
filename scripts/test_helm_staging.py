@@ -7,6 +7,7 @@ import subprocess
 from pathlib import Path
 
 import yaml
+
 from manifest_values import mapping_at, sequence_at, value_at
 
 ROOT = Path(__file__).resolve().parents[1]

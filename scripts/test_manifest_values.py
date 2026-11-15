@@ -1,6 +1,7 @@
 """Malformed manifest shapes must fail instead of acquiring unchecked types."""
 
 import pytest
+
 from manifest_values import mapping_at, sequence_at, value_at
 
 

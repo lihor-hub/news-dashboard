@@ -116,19 +116,19 @@ jobs:
       - run: uv sync --frozen --all-extras
       - run: echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
       - name: ruff (lint)
-        run: ruff check backend
+        run: ruff check backend scripts
       - name: ruff (format check)
-        run: ruff format --check backend
+        run: ruff format --check backend scripts
       - name: mypy
-        run: mypy backend
+        run: mypy backend scripts
       - name: ty
-        run: ty check backend
+        run: ty check backend scripts
       - name: pyrefly
-        run: pyrefly check backend
+        run: pyrefly check backend scripts
       - name: vulture (dead code)
         run: vulture backend backend/vulture_whitelist.py --min-confidence 80
       - name: Delivery regression tests
-        run: pytest scripts/test_ci_delivery.py scripts/test_ci_deploy_namespace.py scripts/test_image_platforms.py scripts/test_ci_python_lock.py -n 0 --noconftest -q
+        run: pytest scripts/test_ci_delivery.py scripts/test_ci_deploy_namespace.py scripts/test_image_platforms.py scripts/test_ci_python_lock.py scripts/test_python_quality_scope.py scripts/test_ruff_hooks.py -n 0 --noconftest -q
 
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:

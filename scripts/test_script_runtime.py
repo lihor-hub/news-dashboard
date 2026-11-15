@@ -8,9 +8,10 @@ from pathlib import Path
 from unittest.mock import MagicMock
 from urllib.request import Request
 
-import ensure_demo_database
 import psycopg
 import pytest
+
+import ensure_demo_database
 
 ROOT = Path(__file__).resolve().parents[1]
 
