@@ -10,6 +10,7 @@ test ! -e .venv/stale-python314-marker
 test "$(command -v python)" = /workspace/.venv/bin/python
 test "$(node -p 'process.versions.node.split(".")[0]')" = 26
 python -VV
+test "$(uv --version)" = 'uv 0.13.1'
 node --version
 npm --version
 rustc --version
@@ -19,17 +20,25 @@ jq --version
 zsh --version
 cat /etc/os-release
 python - <<'PY'
+import importlib.metadata
 import json
 import os
 import platform
 import sys
 import sysconfig
+import tomllib
+from pathlib import Path
 
 import psycopg
 
 assert sys.version_info[:2] == (3, 15)
 assert sys.version_info.releaselevel == 'final'
 assert not sysconfig.get_config_var('Py_GIL_DISABLED')
+locked = {package['name']: package['version'] for package in tomllib.loads(Path('uv.lock').read_text())['package']}
+for tool in ('ruff', 'mypy', 'ty', 'pyrefly', 'pre-commit', 'vulture'):
+    installed = importlib.metadata.version(tool)
+    assert installed == locked[tool], (tool, installed, locked[tool])
+    print(f'{tool}=={installed}')
 for key, database in [('DATABASE_URL', 'news_dashboard'), ('TEST_DATABASE_URL', 'news_dashboard_test')]:
     with psycopg.connect(os.environ[key]) as conn:
         row = conn.execute("SELECT current_database(), current_user, current_setting('max_parallel_workers_per_gather')").fetchone()
@@ -38,8 +47,8 @@ for key, database in [('DATABASE_URL', 'news_dashboard'), ('TEST_DATABASE_URL', 
             assert conn.execute("SELECT count(*) FROM sources").fetchone()[0] > 0
 print(json.dumps({'python': sys.version, 'machine': platform.machine(), 'os': platform.platform(), 'gil_disabled': sysconfig.get_config_var('Py_GIL_DISABLED')}))
 PY
-python -m pip check
-python -m pip freeze
+uv pip check
+uv pip freeze
 for tool in git make gcc cargo rustc helm jq zsh psql ruff mypy ty pyrefly pre-commit news-dashboard; do
     command -v "$tool"
 done

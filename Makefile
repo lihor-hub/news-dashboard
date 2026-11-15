@@ -8,15 +8,15 @@
 help:
 	@awk '/^## [[:alnum:]_-]+: / { name = $$2; sub(/:$$/, "", name); description = $$0; sub(/^## [[:alnum:]_-]+: /, "", description); printf "  %-18s %s\n", name, description }' $(MAKEFILE_LIST)
 
-## install: install backend (editable + dev tools) and update local frontend dependencies
+## install: install locked backend (editable + dev tools) and update local frontend dependencies
 install:
-	pip install -e '.[dev]'
+	uv sync --frozen --extra dev
 	npm install
 	pre-commit install
 
-## ci-install: install backend and exact frontend dependencies from package-lock.json
+## ci-install: install locked backend and exact frontend dependencies from package-lock.json
 ci-install:
-	pip install -e '.[dev]'
+	uv sync --frozen --extra dev
 	npm ci
 	pre-commit install
 

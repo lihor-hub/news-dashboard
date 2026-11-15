@@ -11,6 +11,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && echo 'vscode ALL=(root) NOPASSWD:ALL' > /etc/sudoers.d/vscode \
     && chmod 0440 /etc/sudoers.d/vscode
 
+# Keep the locked installer available even when the project venv is rebuilt.
+RUN /usr/local/bin/python -m pip install --no-cache-dir uv==0.13.1
+
 # Helm/jq are required by repository chart and OCI regression tests.
 ARG TARGETARCH
 ARG HELM_VERSION=4.3.1
