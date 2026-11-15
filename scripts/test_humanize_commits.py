@@ -20,24 +20,24 @@ _INTERNAL_ONLY = """- chore: make API docs exposure configurable (#646) (#817)
 
 
 class TestHumanizeCommits(unittest.TestCase):
-    def test_internal_only_collapses_to_stability_bullet(self):
+    def test_internal_only_collapses_to_stability_bullet(self) -> None:
         # A release with nothing user-facing must never leak "chore:"/"ci:" etc.
         out = humanize_commits(_INTERNAL_ONLY)
         self.assertEqual(out, "- Stability and performance improvements.")
 
-    def test_empty_input_is_stability_bullet(self):
+    def test_empty_input_is_stability_bullet(self) -> None:
         self.assertEqual(humanize_commits(""), "- Stability and performance improvements.")
         self.assertEqual(humanize_commits("   \n  \n"), "- Stability and performance improvements.")
 
-    def test_strips_conventional_prefix_and_pr_refs(self):
+    def test_strips_conventional_prefix_and_pr_refs(self) -> None:
         out = humanize_commits("- feat: add dark mode (#123)")
         self.assertEqual(out, "- Add dark mode")
 
-    def test_strips_scoped_prefix(self):
+    def test_strips_scoped_prefix(self) -> None:
         out = humanize_commits("- fix(reader): stop losing your place when you rotate")
         self.assertEqual(out, "- Stop losing your place when you rotate")
 
-    def test_keeps_user_facing_drops_internal(self):
+    def test_keeps_user_facing_drops_internal(self) -> None:
         commits = """- feat: share articles with friends (#301)
 - chore: bump deps
 - fix: correct the relevance score (#310)
@@ -48,40 +48,40 @@ class TestHumanizeCommits(unittest.TestCase):
             "- Share articles with friends\n- Correct the relevance score",
         )
 
-    def test_accepts_lines_without_leading_dash(self):
+    def test_accepts_lines_without_leading_dash(self) -> None:
         out = humanize_commits("feat: brand new inbox")
         self.assertEqual(out, "- Brand new inbox")
 
-    def test_capitalizes_first_letter(self):
+    def test_capitalizes_first_letter(self) -> None:
         out = humanize_commits("- feat: lowercase start stays readable")
         self.assertTrue(out.startswith("- Lowercase"))
 
 
 class TestSanitizeReleaseNotes(unittest.TestCase):
-    def test_clean_bullets_pass_through_unchanged(self):
+    def test_clean_bullets_pass_through_unchanged(self) -> None:
         notes = "- Add dark mode (#123)\n- [See the docs](https://example.com)"
         self.assertEqual(sanitize_release_notes(notes), notes)
 
-    def test_strips_fenced_code_block(self):
+    def test_strips_fenced_code_block(self) -> None:
         notes = "```\n- Some code snippet\n```\n- Real bullet"
         self.assertEqual(sanitize_release_notes(notes), "- Real bullet")
 
-    def test_strips_think_block_and_stray_tags(self):
+    def test_strips_think_block_and_stray_tags(self) -> None:
         notes = "<think>reasoning about the release</think>\n- Add feature\n</think>"
         self.assertEqual(sanitize_release_notes(notes), "- Add feature")
 
-    def test_drops_prompt_narration_lines(self):
+    def test_drops_prompt_narration_lines(self) -> None:
         notes = (
             "The user wants me to write release notes for this commit.\n"
             "- Stability and performance improvements."
         )
         self.assertEqual(sanitize_release_notes(notes), "- Stability and performance improvements.")
 
-    def test_reasoning_only_input_returns_none(self):
+    def test_reasoning_only_input_returns_none(self) -> None:
         notes = "The user wants me to summarize this release.\nI should keep it short."
         self.assertIsNone(sanitize_release_notes(notes))
 
-    def test_empty_input_returns_none(self):
+    def test_empty_input_returns_none(self) -> None:
         self.assertIsNone(sanitize_release_notes(""))
 
 

@@ -1,3 +1,4 @@
+from collections.abc import Iterator
 from urllib.parse import quote, urlsplit
 
 import pytest
@@ -104,7 +105,7 @@ def test_row_to_dict_from_iterable_keys() -> None:
         def __init__(self) -> None:
             self._d = {"x": 10, "y": 20}
 
-        def __iter__(self):  # type: ignore[no-untyped-def]
+        def __iter__(self) -> Iterator[str]:
             return iter(self._d)
 
         def __getitem__(self, key: str) -> int:
