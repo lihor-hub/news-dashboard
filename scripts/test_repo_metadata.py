@@ -45,6 +45,13 @@ class TestPythonRuntime(unittest.TestCase):
         assert project["tool"]["ruff"]["target-version"] == "py313"
 
 
+class TestLoggingRules(unittest.TestCase):
+    def test_named_logger_rules_are_selected(self) -> None:
+        project = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+        selected = project["tool"]["ruff"]["lint"]["select"]
+        assert {"G", "LOG001", "LOG015"} <= set(selected)
+
+
 class TestVersionConsistency(unittest.TestCase):
     def test_pyproject_version_matches_version_file(self) -> None:
         version_file = (ROOT / "VERSION").read_text().strip()

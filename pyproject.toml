@@ -151,6 +151,7 @@ select = [
   "DTZ",        # flake8-datetimez
   "EM",         # flake8-errmsg
   "G",          # flake8-logging-format
+  "LOG001", "LOG015",  # use getLogger(), not direct Logger instances or root logging calls
   "ISC",        # implicit string concatenation
   "PIE",        # flake8-pie
   "PT",         # flake8-pytest-style
