@@ -10,7 +10,7 @@ test ! -e .venv/stale-python314-marker
 test "$(command -v python)" = /workspace/.venv/bin/python
 test "$(node -p 'process.versions.node.split(".")[0]')" = 26
 python -VV
-test "$(uv --version)" = 'uv 0.13.1'
+test "$(uv --version | cut -d ' ' -f 2)" = 0.13.1
 node --version
 npm --version
 rustc --version
