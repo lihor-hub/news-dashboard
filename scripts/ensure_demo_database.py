@@ -14,6 +14,7 @@ import sys
 from urllib.parse import urlsplit, urlunsplit
 
 import psycopg
+from psycopg import sql
 
 
 def _demo_database_url() -> str:
@@ -37,7 +38,7 @@ def main() -> None:
     with psycopg.connect(admin_url, autocommit=True) as conn:
         exists = conn.execute("SELECT 1 FROM pg_database WHERE datname = %s", (db_name,)).fetchone()
         if not exists:
-            conn.execute(f'CREATE DATABASE "{db_name}"')
+            conn.execute(sql.SQL("CREATE DATABASE {}").format(sql.Identifier(db_name)))
             print(f"created database {db_name}")
         else:
             print(f"database {db_name} already exists")

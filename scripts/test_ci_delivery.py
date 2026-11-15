@@ -9,38 +9,42 @@ from pathlib import Path
 
 import pytest
 import yaml
+from manifest_values import mapping_at, sequence_at, value_at
 
 ROOT = Path(__file__).resolve().parents[1]
 SHA = "a" * 40
 DIGEST = "sha256:" + "b" * 64
 
 
-def workflow() -> dict:
+def workflow() -> object:
     return yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text())
 
 
 def test_native_builds_do_not_block_the_production_runner() -> None:
-    jobs = workflow()["jobs"]
-    build = jobs["build-platform"]
+    jobs = mapping_at(workflow(), "jobs")
+    build = mapping_at(jobs, "build-platform")
     assert build["runs-on"] == "${{ matrix.runner }}"  # noqa: S101
-    assert build["strategy"]["matrix"]["include"] == [  # noqa: S101
+    assert value_at(build, "strategy", "matrix", "include") == [  # noqa: S101
         {"arch": "amd64", "runner": "ubuntu-24.04"},
         {"arch": "arm64", "runner": "ubuntu-24.04-arm"},
     ]
-    assert build["concurrency"]["cancel-in-progress"] is True  # noqa: S101
-    assert "matrix.arch" in build["concurrency"]["group"]  # noqa: S101
-    assert jobs["publish"]["runs-on"] == "ubuntu-24.04"  # noqa: S101
-    assert jobs["deploy"]["concurrency"]["cancel-in-progress"] is False  # noqa: S101
-    assert not any("setup-qemu-action" in s.get("uses", "") for s in build["steps"])  # noqa: S101
+    assert value_at(build, "concurrency", "cancel-in-progress") is True  # noqa: S101
+    group = value_at(build, "concurrency", "group")
+    assert isinstance(group, str)  # noqa: S101
+    assert "matrix.arch" in group  # noqa: S101
+    assert value_at(jobs, "publish", "runs-on") == "ubuntu-24.04"  # noqa: S101
+    assert value_at(jobs, "deploy", "concurrency", "cancel-in-progress") is False  # noqa: S101
+    uses = [mapping_at(s).get("uses", "") for s in sequence_at(build, "steps")]
+    assert all(isinstance(use, str) and "setup-qemu-action" not in use for use in uses)  # noqa: S101
 
 
 def test_deploy_uses_the_run_commit_and_preserves_the_cutover_gate() -> None:
-    jobs = workflow()["jobs"]
-    steps = jobs["deploy"]["steps"]
+    steps = [mapping_at(s) for s in sequence_at(workflow(), "jobs", "deploy", "steps")]
     checkout = steps[0]
-    assert checkout["with"]["ref"] == "${{ github.sha }}"  # noqa: S101
+    assert value_at(checkout, "with", "ref") == "${{ github.sha }}"  # noqa: S101
     deploy = next(s for s in steps if s.get("id") == "deploy")
     script = deploy["run"]
+    assert isinstance(script, str)  # noqa: S101
     assert "git checkout --detach FETCH_HEAD" not in script  # noqa: S101
     assert "cd ~/news-dashboard" not in script  # noqa: S101
     assert "deploy-image-only.sh" in script  # noqa: S101
@@ -49,23 +53,25 @@ def test_deploy_uses_the_run_commit_and_preserves_the_cutover_gate() -> None:
     assert "live release unchanged" not in script  # noqa: S101
     assert "GITHUB_STEP_SUMMARY" in script  # noqa: S101
     smoke = next(s for s in steps if s.get("name") == "Smoke test public TLS Ingress")
-    assert "verify-deployed-build.py" in smoke["run"]  # noqa: S101
+    smoke_script = smoke["run"]
+    assert isinstance(smoke_script, str)  # noqa: S101
+    assert "verify-deployed-build.py" in smoke_script  # noqa: S101
 
 
 def test_build_identity_is_baked_before_both_platform_builds() -> None:
-    jobs = workflow()["jobs"]
-    prep = jobs["prepare-image"]
+    jobs = mapping_at(workflow(), "jobs")
+    steps = [mapping_at(s) for s in sequence_at(jobs, "prepare-image", "steps")]
     bake = next(
-        s
-        for s in prep["steps"]
-        if s.get("name") == "Bake version + changelog into the build context"
+        s for s in steps if s.get("name") == "Bake version + changelog into the build context"
     )
-    assert "public/build-info.json" in bake["run"]  # noqa: S101
-    assert bake["env"]["BUILD_REVISION"] == "${{ github.sha }}"  # noqa: S101
-    assert "prepare-image" in jobs["build-platform"]["needs"]  # noqa: S101
+    script = bake["run"]
+    assert isinstance(script, str)  # noqa: S101
+    assert "public/build-info.json" in script  # noqa: S101
+    assert value_at(bake, "env", "BUILD_REVISION") == "${{ github.sha }}"  # noqa: S101
+    assert "prepare-image" in sequence_at(jobs, "build-platform", "needs")  # noqa: S101
+    uses = [mapping_at(s).get("uses", "") for s in sequence_at(jobs, "build-platform", "steps")]
     assert any(  # noqa: S101
-        s.get("uses", "").startswith("actions/download-artifact@")
-        for s in jobs["build-platform"]["steps"]
+        isinstance(use, str) and use.startswith("actions/download-artifact@") for use in uses
     )
 
 

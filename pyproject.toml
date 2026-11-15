@@ -71,6 +71,7 @@ dev = [
   "vulture>=2.14",
   "Pillow>=11.0.0",
   "types-protobuf>=7.35.1.20260906",
+  "types-pyyaml>=6.0.12.20261113",
 ]
 
 [project.scripts]
@@ -240,6 +241,10 @@ pretty = true
 [[tool.mypy.overrides]]
 module = ["feedparser.*", "apscheduler.*", "testcontainers.*", "pywebpush.*", "py_vapid.*", "webdriver_manager.*", "selenium.*"]
 ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = ["crawl4ai.*"]
+follow_untyped_imports = true
 
 [[tool.mypy.overrides]]
 module = ["tests.*"]

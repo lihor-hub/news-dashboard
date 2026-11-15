@@ -6,7 +6,7 @@ from contextlib import nullcontext
 from pathlib import Path
 
 import pytest
-import yaml  # type: ignore[import-untyped]
+import yaml
 
 ROOT = Path(__file__).resolve().parents[2]
 SMOKE_SCRIPT = ROOT / "scripts" / "smoke-mcp-container.sh"

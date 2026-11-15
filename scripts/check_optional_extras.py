@@ -9,6 +9,7 @@ import json
 import os
 import platform
 import sys
+from collections.abc import Callable
 from importlib.metadata import version
 from typing import Any
 
@@ -39,6 +40,7 @@ def _require(condition: bool, message: str) -> None:
 
 async def _browser_smoke() -> dict[str, Any]:
     from crawl4ai import AsyncWebCrawler, BrowserConfig, CacheMode, CrawlerRunConfig
+    from crawl4ai.async_crawler_strategy import AsyncPlaywrightCrawlerStrategy
 
     from news_dashboard.body_fetch import _normalize_crawl4ai_result
     from news_dashboard.content_extraction import assess_extracted_text
@@ -54,7 +56,11 @@ async def _browser_smoke() -> dict[str, Any]:
 
     browser = BrowserConfig(headless=True, extra_args=["--host-resolver-rules=MAP * ~NOTFOUND"])
     async with AsyncWebCrawler(config=browser) as crawler:
-        crawler.crawler_strategy.set_hook("on_page_context_created", block_page_network)
+        strategy = crawler.crawler_strategy
+        if not isinstance(strategy, AsyncPlaywrightCrawlerStrategy):
+            message = "Expected Playwright strategy"
+            raise TypeError(message)
+        strategy.set_hook("on_page_context_created", block_page_network)
         result = await crawler.arun(
             url="raw:" + HTML,
             config=CrawlerRunConfig(cache_mode=CacheMode.BYPASS, process_in_browser=True),
@@ -75,6 +81,7 @@ async def _browser_smoke() -> dict[str, Any]:
 def main() -> None:
     for name in ("fastuuid", "scipy", "shapely", "litellm", "crawl4ai"):
         importlib.import_module(name)
+    from fastuuid import UUID
     from litellm._uuid import uuid4
 
     from news_dashboard.body_fetch import (
@@ -84,7 +91,12 @@ def main() -> None:
     )
     from news_dashboard.content_extraction import assess_extracted_text
 
-    _require(uuid4().version == 4, "LiteLLM UUID helper did not generate UUIDv4")
+    generate_uuid: Callable[[], object] = uuid4
+    identifier = generate_uuid()
+    _require(
+        isinstance(identifier, UUID) and identifier.version == 4,
+        "LiteLLM UUID helper did not generate UUIDv4",
+    )
     result = asyncio.run(_browser_smoke())
     # Exercise the application's exact lazy-import adapter as well as its
     # normalization/quality functions. raw: contains no external resources.

@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import cast
 
 import pytest
-import yaml  # type: ignore[import-untyped]
+import yaml
 
 REPO_ROOT = Path(__file__).parent.parent.parent
 COMPOSE_FILES = (
