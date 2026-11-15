@@ -9,7 +9,8 @@ mountpoint -q node_modules
 sudo chown -R "$(id -u):$(id -g)" .venv node_modules
 /usr/local/bin/python -c 'import sys, sysconfig; assert sys.version_info[:2] == (3, 15) and sys.version_info.releaselevel == "final"; assert not sysconfig.get_config_var("Py_GIL_DISABLED")'
 /usr/local/bin/python -m venv --clear .venv
-uv sync --frozen --extra dev
+# Developer checks include the optional SDK smoke scripts, matching main CI.
+uv sync --frozen --all-extras
 npm ci
 .venv/bin/pre-commit install --hook-type pre-commit --hook-type pre-push
 .venv/bin/news-dashboard init

@@ -47,18 +47,19 @@ def test_devcontainer_rebuild_recovers_stale_venv_without_touching_host() -> Non
     assert config["features"]["ghcr.io/devcontainers/features/node:1"]["version"] == "26"
 
 
-def test_devcontainer_and_make_install_locked_dev_dependencies() -> None:
+def test_devcontainer_and_make_install_locked_developer_dependencies() -> None:
     dockerfile = (ROOT / ".devcontainer/Dockerfile").read_text(encoding="utf-8")
     installer = (ROOT / ".devcontainer/post-create.sh").read_text(encoding="utf-8")
     makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
     bootstrap = "RUN /usr/local/bin/python -m pip install --no-cache-dir uv==0.13.1"
     assert dockerfile.index(bootstrap) < dockerfile.index("USER vscode")
-    assert "uv sync --frozen --extra dev" in installer
+    assert "uv sync --frozen --all-extras" in installer
     assert "pip install" not in installer
-    assert "--all-extras" not in installer
+    for header in ("libffi-dev", "libxml2-dev", "libxslt1-dev", "zlib1g-dev"):
+        assert header in dockerfile
     for target in ("install", "ci-install"):
         recipe = makefile.split(f"\n{target}:\n", 1)[1].split("\n\n", 1)[0]
-        assert recipe.splitlines()[0] == "\tuv sync --frozen --extra dev"
+        assert recipe.splitlines()[0] == "\tuv sync --frozen --all-extras"
 
 
 @pytest.mark.parametrize("exit_code", [0, 7])

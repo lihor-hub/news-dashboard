@@ -8,15 +8,16 @@
 help:
 	@awk '/^## [[:alnum:]_-]+: / { name = $$2; sub(/:$$/, "", name); description = $$0; sub(/^## [[:alnum:]_-]+: /, "", description); printf "  %-18s %s\n", name, description }' $(MAKEFILE_LIST)
 
-## install: install locked backend (editable + dev tools) and update local frontend dependencies
+# Full developer checks include optional SDK smoke scripts, matching main CI.
+## install: install locked backend (all extras + dev tools) and update local frontend dependencies
 install:
-	uv sync --frozen --extra dev
+	uv sync --frozen --all-extras
 	npm install
 	pre-commit install
 
 ## ci-install: install locked backend and exact frontend dependencies from package-lock.json
 ci-install:
-	uv sync --frozen --extra dev
+	uv sync --frozen --all-extras
 	npm ci
 	pre-commit install
 
