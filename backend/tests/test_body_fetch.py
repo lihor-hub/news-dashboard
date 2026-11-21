@@ -1155,8 +1155,8 @@ def _make_selenium_client_mock(fetch_spa_html_impl: object) -> object:
     from unittest.mock import MagicMock
 
     mod = ModuleType("news_dashboard.selenium_client")
-    mod.fetch_spa_html = fetch_spa_html_impl  # type: ignore[attr-defined]  # ty: ignore[unresolved-attribute]
-    mod.public_renderer_egress_proxy = (  # type: ignore[attr-defined]  # ty: ignore[unresolved-attribute]
+    mod.fetch_spa_html = fetch_spa_html_impl  # type: ignore[attr-defined]  # ty: ignore[missing-attribute]
+    mod.public_renderer_egress_proxy = (  # type: ignore[attr-defined]  # ty: ignore[missing-attribute]
         lambda: "http://renderer-proxy.example"
     )
     mod.__spec__ = MagicMock()
