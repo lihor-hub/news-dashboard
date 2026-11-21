@@ -31,7 +31,7 @@ class TestFrontendNodeCompatibility(unittest.TestCase):
             self.fail("Package and lockfile engine ranges must agree")
 
     def test_vercel_serves_the_actual_frontend_build_output(self) -> None:
-        config = json.loads((ROOT / "vercel.json").read_text())
+        config = json.loads((ROOT / "vercel.json").read_text())["services"]["app"]
         if config.get("framework") != "vite" or config.get("buildCommand") != "npm run build":
             self.fail("Vercel must use the tested frontend build")
         output = config["outputDirectory"]
